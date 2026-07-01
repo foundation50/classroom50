@@ -76,7 +76,7 @@ jobs:
       # source). Uses an SSH deploy key (least privilege, no expiry) that has
       # write access to ONLY the preview repo.
       - name: Publish to preview repo
-        uses: peaceiris/actions-gh-pages@v4
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           deploy_key: ${{ secrets.PREVIEW_DEPLOY_KEY }}
           external_repository: foundation50/classroom50-web-preview
