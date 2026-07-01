@@ -1,10 +1,8 @@
 # Classroom 50
 
-Classroom 50 is an open-source [GitHub Classroom](https://classroom.github.com/) alternative developed by the [Fifty Foundation](https://fifty.foundation/), GitHub's official open-source partner for educational software tools. Classroom 50 includes both a command-line interface and a web interface that enable teachers to distribute programming assignments in repositories, configure auto-grading via GitHub Actions, and review student submissions.
+Classroom 50 is a free and open-source tool for managing and grading programming assignments via GitHub. Designed by the [Fifty Foundation](https://fifty.foundation) as an open-source alternative to GitHub Classroom, Classroom 50 supports creating assignments, defining auto-graded correctness tests, and managing submissions.
 
-Classroom 50 will be available starting on July 1. Until then, you can [sign up for email updates](https://fifty.foundation/) or [try the pre-release version](#try-the-pre-release) of the tool.
-
-**Starting July 1, this page will host the full setup guide for a new GitHub classroom.**
+Classroom 50 exists both as a web application (available at [https://classroom50.org](https://classroom50.org/)) and as a command-line tool.
 
 ## Features
 
@@ -26,14 +24,19 @@ To use Classroom 50, you'll need:
 - A GitHub account
 - A GitHub organization with at least the Team plan (free via GitHub Education for verified teachers).
 
-## Try the Pre-Release
+## Try Classroom 50
 
-**Note that this is a pre-release version of Classroom 50. Starting July 1, you may need to re-create any classrooms configured during the pre-release period.**
+> Note: If you used the pre-release version of Classroom 50 before July 1, 2026, you will likely need to reset your Classroom 50 organization before using the current version. To reset your organization, delete the `classroom50` repository in your GitHub organization. Note that this will remove all existing classrooms and student data.
 
-The command-line interface is feature-complete enough to run a class with today; the web interface is still in development. To kick the tires:
+### Web Interface
+
+1. Follow the [Web Teacher Guide](Web-Teacher-Guide) to set up your classroom with Classroom 50.
+2. Students can follow the steps in the [Web Student Guide](Web-Student-Guide) to accept and submit assignments.
+
+### CLI
 
 1. Follow the [Installation](Installation) guide. Go and the [GitHub CLI (`gh`)](https://cli.github.com/) are the only prerequisites.
-2. Walk through the [CLI Teacher Guide](CLI-Teacher-Guide) to set up your org, scaffold a classroom, add a roster, register assignments, and collect scores.
+2. Walk through the [CLI Teacher Guide](CLI-Teacher-Guide) to set up your classroom with Classroom 50.
 3. Students can follow the steps in the [CLI Student Guide](CLI-Student-Guide) to accept and submit assignments.
 
 ## Get Help

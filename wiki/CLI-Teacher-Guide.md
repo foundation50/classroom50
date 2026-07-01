@@ -1,8 +1,6 @@
 # Classroom 50 CLI - Teacher Guide
 
-**This guide is under active development; the complete version will be available on July 1.** It currently documents the command-line setup path. Starting July 1, teachers will be able to set up a classroom either from the command line or from the web interface, and this guide will cover both. See the [overview](Home) for more.
-
-End-to-end walkthrough for instructors. Each step assumes the previous ones are done. Install the CLI first — see [Installation](Installation).
+This is an end-to-end walkthrough of the Classroom 50 CLI for instructors. Each step assumes the previous ones are done. Install the CLI first — see [Installation](Installation).
 
 ## 1. Set up the organization (one-time, on github.com)
 

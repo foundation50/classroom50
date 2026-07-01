@@ -1,17 +1,16 @@
 # Classroom 50
 
-An open-source [GitHub Classroom](https://classroom.github.com/) alternative developed by the [Fifty Foundation](https://fifty.foundation/). Prototype monorepo — work in progress; general availability lands July 1. End-user docs and setup guides live in the [wiki](https://github.com/foundation50/classroom50/wiki); subscribe to [fifty.foundation](https://fifty.foundation/) for launch updates.
+Classroom 50 is a free and open-source tool for managing and grading programming assignments via GitHub. Designed by the [Fifty Foundation](https://fifty.foundation) as an open-source alternative to GitHub Classroom, Classroom 50 supports creating assignments, defining auto-graded correctness tests, and managing submissions.
 
 Each top-level folder is a self-contained piece that may eventually ship from its own repository.
 
 ## Layout
 
-| Folder                   | Contents                                                                  |
-| ------------------------ | ------------------------------------------------------------------------- |
-| [cli/](cli/)             | Command-line tools, packaged as `gh` CLI extensions.                      |
+| Folder                   | Contents                                                                        |
+| ------------------------ | ------------------------------------------------------------------------------- |
+| [cli/](cli/)             | Command-line tools, packaged as `gh` CLI extensions.                            |
 | [templates/](templates/) | Example assignment templates teachers can copy when setting up classroom repos. |
-
-The web frontend (the teacher GUI deployed to [classroom50.org](https://classroom50.org)) is not yet part of this repository; it will be open-sourced in a future release.
+| [web/](web/)             | Web frontend for Classroom 50.                                                  |
 
 Reusable GitHub Actions workflows live in [`.github/workflows/`](.github/workflows/) (GitHub requires that location for `uses:` references). The autograde runner is scaffolded into each teacher's `classroom50` config repo; see the [Autograders](https://github.com/foundation50/classroom50/wiki/Autograders) wiki page.
 
