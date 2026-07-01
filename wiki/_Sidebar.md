@@ -2,7 +2,6 @@
 - **Web Interface**
   - [Web Teacher Guide](Web-Teacher-Guide)
   - [Web Student Guide](Web-Student-Guide)
-  - [Web Interface (Preview)](Web-Interface)
 - **Command-Line Interface**
   - [Installation](Installation)
   - [CLI Teacher Guide](CLI-Teacher-Guide)
