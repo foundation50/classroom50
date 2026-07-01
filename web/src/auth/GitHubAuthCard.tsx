@@ -86,6 +86,14 @@ export function GitHubAuthCard() {
                   />
                   <span>{auth.error}</span>
                 </div>
+              ) : auth.sessionExpired ? (
+                <div className="alert alert-warning items-start text-sm">
+                  <AlertTriangle
+                    aria-hidden="true"
+                    className="size-4 shrink-0"
+                  />
+                  <span>Your session expired — sign in again to continue.</span>
+                </div>
               ) : null}
 
               <div className="space-y-3">

@@ -29,6 +29,7 @@ export function GitHubProvider({
   children,
 }: PropsWithChildren<{ token: string | null }>) {
   const [observed, setObserved] = useState<Observed | null>(null)
+  const { expireSession } = useGithubAuth()
 
   // Stamp each observation with the active token so a value carried over from a
   // previous token is ignored on read, rather than cleared via an effect (which
@@ -36,6 +37,13 @@ export function GitHubProvider({
   const onResponse = useCallback(
     (signal: GitHubResponseSignal) => {
       if (!token) return
+      // A live 401 means the token is revoked/expired: tear the session down so
+      // the _authed guard redirects to /login instead of stranding the user on
+      // a dead authed page. expireSession() no-ops once the token is cleared.
+      if (signal.status === 401) {
+        expireSession()
+        return
+      }
       // Keep the prior reference when the signal is unchanged so React bails
       // out — onResponse fires on every API response and the steady state is an
       // unchanging 200 + scopes header.
@@ -48,7 +56,7 @@ export function GitHubProvider({
           : { token, signal },
       )
     },
-    [token],
+    [token, expireSession],
   )
 
   const client = useMemo(() => {
