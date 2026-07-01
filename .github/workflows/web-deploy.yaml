@@ -1,22 +1,20 @@
 name: web Deploy to GitHub Pages
 
 # Builds the web app (web/) and publishes it to classroom50.org via this
-# monorepo's GitHub Pages on every merge to v1 (scoped to web/** so unrelated
+# repo's GitHub Pages on every merge to main (scoped to web/** so unrelated
 # CLI changes don't redeploy the site). Manual runs available via the Actions
 # tab.
 #
-# DOMAIN CUTOVER (one-time, manual): classroom50.org is a custom domain and
-# GitHub Pages allows only ONE repo per custom domain. The standalone
-# foundation50/classroom50-web repo currently owns it. Before this workflow's
-# deploy can succeed on the domain, that repo's Pages custom domain must be
-# released and this repo's Pages enabled (Settings -> Pages, source: GitHub
-# Actions) with the classroom50.org custom domain. The web/CNAME file carries
-# the domain into the published artifact. The Vite build serves from root "/"
-# (default base), which is correct for classroom50.org.
+# Production deploy: main is the release branch (day-to-day work lands on
+# `preview`, which deploys to preview.classroom50.org via web-deploy-preview.yaml;
+# a release PR merges preview -> main). classroom50.org is this repo's Pages
+# custom domain (Settings -> Pages, source: GitHub Actions). The web/CNAME file
+# carries the domain into the published artifact. The Vite build serves from
+# root "/" (default base), which is correct for classroom50.org.
 
 on:
   push:
-    branches: [v1]
+    branches: [main]
     paths:
       - 'web/**'
       - '.github/workflows/web-deploy.yaml'
