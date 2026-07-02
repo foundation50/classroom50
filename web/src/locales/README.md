@@ -14,11 +14,35 @@ file or pasting a URL to it.
    the JSON structure exactly as they are.
 3. Save it as `<code>.json` (e.g. `de.json`, `pt-BR.json`).
 
-An LLM does this well. A prompt that works:
+An LLM does this well. Use the ready-made prompt in
+[`TRANSLATION_PROMPT.md`](./TRANSLATION_PROMPT.md) — it is language-agnostic and
+encodes the rules that matter here (keys/placeholders preserved, concatenated
+`_prefix`/`_suffix` fragments reassembled for the target word order, GitHub UI
+labels kept findable, consistent terminology).
 
-> Translate the JSON values in this file to German. Keep every key and the
-> nesting structure unchanged. Keep `{{placeholders}}` exactly as written.
-> Return only the JSON.
+### Example: translating with an agent
+
+Point the agent at the prompt and name a target language, e.g.:
+
+> Follow @src/locales/TRANSLATION_PROMPT.md and produce a Korean translation.
+
+The agent should then:
+
+1. Read [`TRANSLATION_PROMPT.md`](./TRANSLATION_PROMPT.md) and translate
+   [`en.json`](./en.json) into the target language.
+2. Save the result as `<code>.json` in this folder (e.g. `ko.json`).
+3. Verify integrity against the base before finishing:
+
+   ```bash
+   cd src/locales
+   python verify_locale.py ko.json
+   ```
+
+   Do not ship a pack that does not print `RESULT: PASS`. The checker
+   ([`verify_locale.py`](./verify_locale.py)) flags any dropped/added/renamed
+   key, non-string value, or placeholder mismatch — the failure modes that
+   silently break a pack. It mirrors the installer's own validation, so a
+   passing pack also installs cleanly.
 
 ### Rules the installer enforces
 
