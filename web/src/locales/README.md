@@ -67,7 +67,7 @@ same dotted keys are added/modified/removed in each. So per language the CI:
 - **translates only the changed/added keys** and writes them in, deletes removed
   keys, and **leaves every other key exactly as published.**
 
-The marker lives in the translations repo and *holds the state we diff against*,
+The marker lives in the translations repo and _holds the state we diff against_,
 so the effective diff is always "everything unpublished since this language last
 published" — independent of run cadence, re-runs, or how many `en.json` commits
 happened in between. The publish PR bumps each produced language's
@@ -88,7 +88,7 @@ retries that language with a full retranslation — which re-emits every key —
 only fails the language if it still doesn't pass.
 
 **Retiring a language.** Removing a code from [`targets.json`](./targets.json)
-only stops CI from *updating* it — the workflow never deletes files from the
+only stops CI from _updating_ it — the workflow never deletes files from the
 translations repo, so the language's `<code>.json` and `markers/<code>.json`
 stay published (and still offered to users via the registry's `index.json`)
 until you delete them there by hand. To fully retire a language, remove it from
