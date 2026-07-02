@@ -50,10 +50,7 @@ export function useLanguage() {
 
   const removePack = useCallback((code: string) => removePackImpl(code), [])
 
-  const packCoverage = useCallback(
-    (code: string) => readPackCoverage(code),
-    [],
-  )
+  const packCoverage = useCallback((code: string) => readPackCoverage(code), [])
 
   return {
     lang: i18n.language,

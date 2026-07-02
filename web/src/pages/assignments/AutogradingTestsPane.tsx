@@ -219,7 +219,9 @@ const AutogradingTestModal = ({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder={t("assignments.autograder.runCommandPlaceholder")}
+                  placeholder={t(
+                    "assignments.autograder.runCommandPlaceholder",
+                  )}
                   aria-invalid={field.state.meta.errors.length > 0}
                   aria-describedby={
                     field.state.meta.errors.length > 0
@@ -561,9 +563,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 <tr>
                   <th scope="col">{t("assignments.autograder.testName")}</th>
                   <th scope="col">{t("assignments.autograder.colType")}</th>
-                  <th scope="col">
-                    {t("assignments.autograder.runCommand")}
-                  </th>
+                  <th scope="col">{t("assignments.autograder.runCommand")}</th>
                   <th scope="col">{t("assignments.autograder.points")}</th>
                   <th scope="col" className="w-28">
                     <span className="sr-only">

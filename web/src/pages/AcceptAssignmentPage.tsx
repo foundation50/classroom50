@@ -586,7 +586,9 @@ const AcceptAssignmentPage = () => {
               className={`badge ${pastDue ? "badge-error badge-soft" : ""}`}
             >
               {assignmentData?.due
-                ? t("accept.due", { date: formatDueDateTime(assignmentData.due) })
+                ? t("accept.due", {
+                    date: formatDueDateTime(assignmentData.due),
+                  })
                 : t("accept.noDueDate")}
             </span>
           </div>
@@ -636,9 +638,7 @@ const AcceptAssignmentPage = () => {
               <div className="alert alert-error items-start">
                 <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
                 <div>
-                  <div className="font-bold">
-                    {t("accept.errorTitle")}
-                  </div>
+                  <div className="font-bold">{t("accept.errorTitle")}</div>
                   <div className="mt-1 whitespace-pre-wrap text-sm">
                     {acceptMutation.error instanceof Error
                       ? acceptMutation.error.message

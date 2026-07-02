@@ -718,28 +718,28 @@ export const SidebarFooter = () => {
 
   return (
     <>
-    <div
-      ref={footerRef}
-      className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
-      onClick={() => setMenuOpen((open) => !open)}
-      role="button"
-      tabIndex={0}
-      aria-haspopup="menu"
-      aria-expanded={menuOpen}
-      aria-label={t("nav.accountMenu")}
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          setMenuOpen((open) => !open)
-        }
-
-        if (event.key === "Escape") {
-          setMenuOpen(false)
-        }
-      }}
-    >
       <div
-        className={`
+        ref={footerRef}
+        className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
+        onClick={() => setMenuOpen((open) => !open)}
+        role="button"
+        tabIndex={0}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={t("nav.accountMenu")}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            setMenuOpen((open) => !open)
+          }
+
+          if (event.key === "Escape") {
+            setMenuOpen(false)
+          }
+        }}
+      >
+        <div
+          className={`
         absolute bottom-full z-50 mb-3
         ${collapsed ? "left-2 w-48" : "left-6 right-6"}
         origin-bottom rounded-box
@@ -751,190 +751,192 @@ export const SidebarFooter = () => {
             : "pointer-events-none translate-y-2 scale-95 opacity-0"
         }
       `}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
-          {canPreviewRoles && (
-            <>
-              <li>
-                <details key={menuOpen ? "open" : "closed"}>
-                  <summary>
-                    <Eye aria-hidden="true" className="size-4" />
-                    <span className="flex-1">{t("nav.viewAs")}</span>
-                  </summary>
-                  <ul>
-                    {(["self", "ta", "student"] as const).map((option) => {
-                      const active =
-                        option === "self" ? viewAs === null : viewAs === option
-                      const label =
-                        option === "self"
-                          ? t("nav.viewAsMyself", {
-                              role:
-                                roleLabel(actualClassroomRole) ??
-                                t("nav.viewAsMyselfFallback"),
-                            })
-                          : option === "ta"
-                            ? t("nav.viewAsTA")
-                            : t("nav.viewAsStudent")
-                      return (
-                        <li key={option}>
-                          <button
-                            type="button"
-                            className={active ? "active font-semibold" : ""}
-                            onClick={() => {
-                              selectViewAs(option === "self" ? null : option)
-                              setMenuOpen(false)
-                            }}
-                          >
-                            {active ? (
-                              <Check aria-hidden="true" className="size-4" />
-                            ) : (
-                              <span className="size-4" />
-                            )}
-                            {label}
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </details>
-              </li>
-              <div className="divider my-1" />
-            </>
-          )}
-          <li>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                toggleTheme()
-              }}
-              aria-pressed={isDark}
-            >
-              {isDark ? (
-                <Moon aria-hidden="true" className="size-4" />
-              ) : (
-                <Sun aria-hidden="true" className="size-4" />
-              )}
-              <span className="flex-1 text-left">
-                {isDark ? t("nav.darkMode") : t("nav.lightMode")}
-              </span>
-              <input
-                type="checkbox"
-                className="toggle toggle-sm toggle-primary pointer-events-none"
-                checked={isDark}
-                readOnly
-                tabIndex={-1}
-                aria-hidden="true"
-              />
-            </button>
-          </li>
-          <li>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                setMenuOpen(false)
-                langDialogRef.current?.showModal()
-              }}
-            >
-              <Languages aria-hidden="true" className="size-4" />
-              <span className="flex-1 text-left">{t("nav.language")}</span>
-            </button>
-          </li>
-          <div className="divider my-1" />
-          <li>
-            <a
-              href="https://github.com/foundation50/classroom50/discussions"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MessageCircleQuestionMark
-                aria-hidden="true"
-                className="size-4"
-              />
-              {t("nav.help")}
-            </a>
-          </li>
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
+            {canPreviewRoles && (
+              <>
+                <li>
+                  <details key={menuOpen ? "open" : "closed"}>
+                    <summary>
+                      <Eye aria-hidden="true" className="size-4" />
+                      <span className="flex-1">{t("nav.viewAs")}</span>
+                    </summary>
+                    <ul>
+                      {(["self", "ta", "student"] as const).map((option) => {
+                        const active =
+                          option === "self"
+                            ? viewAs === null
+                            : viewAs === option
+                        const label =
+                          option === "self"
+                            ? t("nav.viewAsMyself", {
+                                role:
+                                  roleLabel(actualClassroomRole) ??
+                                  t("nav.viewAsMyselfFallback"),
+                              })
+                            : option === "ta"
+                              ? t("nav.viewAsTA")
+                              : t("nav.viewAsStudent")
+                        return (
+                          <li key={option}>
+                            <button
+                              type="button"
+                              className={active ? "active font-semibold" : ""}
+                              onClick={() => {
+                                selectViewAs(option === "self" ? null : option)
+                                setMenuOpen(false)
+                              }}
+                            >
+                              {active ? (
+                                <Check aria-hidden="true" className="size-4" />
+                              ) : (
+                                <span className="size-4" />
+                              )}
+                              {label}
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </details>
+                </li>
+                <div className="divider my-1" />
+              </>
+            )}
+            <li>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleTheme()
+                }}
+                aria-pressed={isDark}
+              >
+                {isDark ? (
+                  <Moon aria-hidden="true" className="size-4" />
+                ) : (
+                  <Sun aria-hidden="true" className="size-4" />
+                )}
+                <span className="flex-1 text-left">
+                  {isDark ? t("nav.darkMode") : t("nav.lightMode")}
+                </span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm toggle-primary pointer-events-none"
+                  checked={isDark}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                  langDialogRef.current?.showModal()
+                }}
+              >
+                <Languages aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-left">{t("nav.language")}</span>
+              </button>
+            </li>
+            <div className="divider my-1" />
+            <li>
+              <a
+                href="https://github.com/foundation50/classroom50/discussions"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircleQuestionMark
+                  aria-hidden="true"
+                  className="size-4"
+                />
+                {t("nav.help")}
+              </a>
+            </li>
 
-          <li>
-            <button type="button" className="text-error" onClick={signOut}>
-              <LogOut aria-hidden="true" className="size-4" />
-              {t("nav.signOut")}
-            </button>
-          </li>
-        </ul>
-      </div>
-
-      <div
-        className={`flex w-full items-center gap-4 text-left ${collapsed ? "justify-center" : "justify-start"}`}
-        title={collapsed ? name : undefined}
-      >
-        <div className="avatar avatar-placeholder">
-          <img
-            src={avatar_img}
-            alt={t("nav.avatarAlt", { name })}
-            className={`rounded-full ${collapsed ? "w-10" : "w-12"}`}
-          />
+            <li>
+              <button type="button" className="text-error" onClick={signOut}>
+                <LogOut aria-hidden="true" className="size-4" />
+                {t("nav.signOut")}
+              </button>
+            </li>
+          </ul>
         </div>
 
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-neutral-content">
-              {name}
-            </div>
-
-            {org ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-neutral-content/60">
-                  {labelPending ? (
-                    <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
-                  ) : (
-                    roleLabelText
-                  )}
-                </span>
-                {viewAs && canPreviewRoles ? (
-                  <span
-                    className="badge badge-warning badge-xs gap-1"
-                    title={t("nav.rolePreviewTooltip")}
-                  >
-                    <Eye aria-hidden="true" className="size-3" />
-                    {t("nav.preview")}
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+        <div
+          className={`flex w-full items-center gap-4 text-left ${collapsed ? "justify-center" : "justify-start"}`}
+          title={collapsed ? name : undefined}
+        >
+          <div className="avatar avatar-placeholder">
+            <img
+              src={avatar_img}
+              alt={t("nav.avatarAlt", { name })}
+              className={`rounded-full ${collapsed ? "w-10" : "w-12"}`}
+            />
           </div>
-        )}
-      </div>
-    </div>
 
-    <dialog
-      ref={langDialogRef}
-      className="modal"
-      aria-labelledby={langDialogTitleId}
-    >
-      <div className="modal-box max-w-md text-base-content">
-        <form method="dialog">
-          <button
-            className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-            aria-label={t("common.close")}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </form>
-        <h3 id={langDialogTitleId} className="text-lg font-bold">
-          {t("nav.languageDialogTitle")}
-        </h3>
-        <p className="mt-1 mb-4 text-sm text-base-content/70">
-          {t("nav.languageDialogDescription")}
-        </p>
-        <LanguageSwitcher />
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium text-neutral-content">
+                {name}
+              </div>
+
+              {org ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-neutral-content/60">
+                    {labelPending ? (
+                      <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
+                    ) : (
+                      roleLabelText
+                    )}
+                  </span>
+                  {viewAs && canPreviewRoles ? (
+                    <span
+                      className="badge badge-warning badge-xs gap-1"
+                      title={t("nav.rolePreviewTooltip")}
+                    >
+                      <Eye aria-hidden="true" className="size-3" />
+                      {t("nav.preview")}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
-      <form method="dialog" className="modal-backdrop">
-        <button>{t("common.close")}</button>
-      </form>
-    </dialog>
+
+      <dialog
+        ref={langDialogRef}
+        className="modal"
+        aria-labelledby={langDialogTitleId}
+      >
+        <div className="modal-box max-w-md text-base-content">
+          <form method="dialog">
+            <button
+              className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+              aria-label={t("common.close")}
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          </form>
+          <h3 id={langDialogTitleId} className="text-lg font-bold">
+            {t("nav.languageDialogTitle")}
+          </h3>
+          <p className="mt-1 mb-4 text-sm text-base-content/70">
+            {t("nav.languageDialogDescription")}
+          </p>
+          <LanguageSwitcher />
+        </div>
+        <form method="dialog" className="modal-backdrop">
+          <button>{t("common.close")}</button>
+        </form>
+      </dialog>
     </>
   )
 }
@@ -991,7 +993,9 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const onMembers = selected === "members"
   if (!org) return null
 
-  const classesLabel = showTeacherUi ? t("nav.myClasses") : t("nav.myAssignments")
+  const classesLabel = showTeacherUi
+    ? t("nav.myClasses")
+    : t("nav.myAssignments")
 
   return (
     <div className="py-4">

@@ -355,9 +355,7 @@ function ClassroomResources({
                 aria-hidden="true"
                 className="mt-0.5 size-4 shrink-0 text-warning"
               />
-              <span>
-                {t("published.unlistedWarning")}
-              </span>
+              <span>{t("published.unlistedWarning")}</span>
             </div>
           )}
           {resources.map((r) => (

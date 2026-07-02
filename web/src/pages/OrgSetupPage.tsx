@@ -104,9 +104,7 @@ const OrgSteps = ({
             {nextStep && (
               <EnterDiv className="alert alert-success">
                 <CheckCircle2 aria-hidden="true" className="size-5 shrink-0" />
-                <div>
-                  {t("setup.setupComplete")}
-                </div>
+                <div>{t("setup.setupComplete")}</div>
               </EnterDiv>
             )}
             <InitStepBoard steps={steps} org={org} />
@@ -143,11 +141,7 @@ const OrgSteps = ({
 
 const NotAdminAlert = () => {
   const { t } = useTranslation()
-  return (
-    <div className="alert alert-error">
-      {t("setup.notAdmin")}
-    </div>
-  )
+  return <div className="alert alert-error">{t("setup.notAdmin")}</div>
 }
 
 const NotTeamOrEnterpriseWarning = () => {

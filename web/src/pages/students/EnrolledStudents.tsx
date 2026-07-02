@@ -188,7 +188,9 @@ const UnenrollStudentButton = ({
       onRemoveStudent(student.username || student.email, result.teamWarning)
       setOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("students.somethingWentWrong"))
+      setError(
+        err instanceof Error ? err.message : t("students.somethingWentWrong"),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -537,7 +539,9 @@ const MatchAccountButton = ({
       setSelected(null)
       setFilter("")
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("students.somethingWentWrong"))
+      setError(
+        err instanceof Error ? err.message : t("students.somethingWentWrong"),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -690,7 +694,9 @@ const MatchAccountButton = ({
                   aria-hidden="true"
                 />
               ) : selectedCandidate ? (
-                t("students.confirmMatchWith", { login: selectedCandidate.login })
+                t("students.confirmMatchWith", {
+                  login: selectedCandidate.login,
+                })
               ) : (
                 t("students.confirmMatch")
               )}
@@ -831,24 +837,42 @@ const EnrolledStudents = ({
   const reconcileMutation = useMutation({
     mutationFn: () => reconcileOnboarding(client, { org, classroom }),
     onSuccess: (result) => {
-      const parts = [t("students.reconcileEnrolled", { count: result.reconciled.length })]
+      const parts = [
+        t("students.reconcileEnrolled", { count: result.reconciled.length }),
+      ]
       if (result.deleted.length > 0) {
-        parts.push(t("students.reconcileDeleted", { count: result.deleted.length }))
+        parts.push(
+          t("students.reconcileDeleted", { count: result.deleted.length }),
+        )
       }
       if (result.archived.length > 0) {
-        parts.push(t("students.reconcileArchived", { count: result.archived.length }))
+        parts.push(
+          t("students.reconcileArchived", { count: result.archived.length }),
+        )
       }
       if (result.pending.length > 0) {
-        parts.push(t("students.reconcilePending", { count: result.pending.length }))
+        parts.push(
+          t("students.reconcilePending", { count: result.pending.length }),
+        )
       }
       if (result.needsAttention.length > 0) {
-        parts.push(t("students.reconcileNeedsAttention", { count: result.needsAttention.length }))
+        parts.push(
+          t("students.reconcileNeedsAttention", {
+            count: result.needsAttention.length,
+          }),
+        )
       }
       if (result.needsMatch.length > 0) {
-        parts.push(t("students.reconcileNeedsMatch", { count: result.needsMatch.length }))
+        parts.push(
+          t("students.reconcileNeedsMatch", {
+            count: result.needsMatch.length,
+          }),
+        )
       }
       if (result.unmatched.length > 0) {
-        parts.push(t("students.reconcileUnmatched", { count: result.unmatched.length }))
+        parts.push(
+          t("students.reconcileUnmatched", { count: result.unmatched.length }),
+        )
       }
       const summary = parts.join(", ")
       setReconcileSummary(
@@ -870,7 +894,9 @@ const EnrolledStudents = ({
       invalidateInviteQueries()
     },
     onError: (err) => {
-      setReconcileSummary(t("students.reconcileFailed", { error: getErrorMessage(err) }))
+      setReconcileSummary(
+        t("students.reconcileFailed", { error: getErrorMessage(err) }),
+      )
     },
   })
 
@@ -1113,7 +1139,9 @@ const EnrolledStudents = ({
               aria-label={
                 status === "none"
                   ? t("students.sendInviteAria", { username: student.username })
-                  : t("students.resendInviteAria", { username: student.username })
+                  : t("students.resendInviteAria", {
+                      username: student.username,
+                    })
               }
               onClick={() => void handleResend(student)}
             >
@@ -1144,7 +1172,9 @@ const EnrolledStudents = ({
               type="button"
               className="btn btn-xs btn-primary"
               disabled={isMarking}
-              aria-label={t("students.markEnrolledAria", { username: student.username })}
+              aria-label={t("students.markEnrolledAria", {
+                username: student.username,
+              })}
               title={t("students.markEnrolledTitle")}
               onClick={() =>
                 void runMarkEnrolled(() => handleMarkEnrolled(student))
@@ -1266,7 +1296,9 @@ const EnrolledStudents = ({
               role="alert"
               className="alert alert-info alert-soft overflow-hidden"
             >
-              <span className="text-sm">{t("students.enrollmentSummary", { summary: reconcileSummary })}</span>
+              <span className="text-sm">
+                {t("students.enrollmentSummary", { summary: reconcileSummary })}
+              </span>
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
@@ -1334,7 +1366,9 @@ const EnrolledStudents = ({
                   {t("students.readyHeading")}
                 </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.readySubtitle", { count: readyToConfirm.length })}
+                  {t("students.readySubtitle", {
+                    count: readyToConfirm.length,
+                  })}
                 </span>
               </div>
               <button
@@ -1349,7 +1383,9 @@ const EnrolledStudents = ({
                   aria-hidden="true"
                   className={`size-4 ${reconcileMutation.isPending ? "animate-spin" : ""}`}
                 />
-                {t("students.confirmEnrollment", { count: readyToConfirm.length })}
+                {t("students.confirmEnrollment", {
+                  count: readyToConfirm.length,
+                })}
               </button>
             </div>
             <ul className="divide-y divide-base-300 bg-base-100">
@@ -1364,7 +1400,9 @@ const EnrolledStudents = ({
       {/* Invite students: share links. */}
       <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-          <h2 className="text-lg font-semibold">{t("students.inviteStudents")}</h2>
+          <h2 className="text-lg font-semibold">
+            {t("students.inviteStudents")}
+          </h2>
         </div>
         <OnboardingLink org={org} classroom={classroom} />
         <InviteLink
@@ -1386,9 +1424,7 @@ const EnrolledStudents = ({
             role="alert"
             className="alert alert-warning alert-soft mx-6 my-4"
           >
-            <span className="text-sm">
-              {t("students.reportsErrored")}
-            </span>
+            <span className="text-sm">{t("students.reportsErrored")}</span>
           </div>
         ) : null}
       </div>
@@ -1407,7 +1443,9 @@ const EnrolledStudents = ({
           >
             <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-base-300">
               <div className="flex flex-col">
-                <h2 className="text-lg font-semibold">{t("students.awaitingHeading")}</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("students.awaitingHeading")}
+                </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
                   {t("students.awaitingSubtitle")}
                 </span>
@@ -1441,7 +1479,9 @@ const EnrolledStudents = ({
       {rosterReady ? (
         <EnterDiv className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-            <h2 className="text-lg font-semibold">{t("students.enrolledHeading")}</h2>
+            <h2 className="text-lg font-semibold">
+              {t("students.enrolledHeading")}
+            </h2>
             <div className="flex items-center gap-3">
               {hasSections && enrolled.length > 0 && (
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/70">
@@ -1466,7 +1506,9 @@ const EnrolledStudents = ({
                   <div key={section}>
                     <div className="flex items-center justify-between bg-base-200/60 px-6 py-2">
                       <h3 className="text-sm font-semibold text-base-content/70">
-                        {section === NO_SECTION ? t("students.noSection") : section}
+                        {section === NO_SECTION
+                          ? t("students.noSection")
+                          : section}
                       </h3>
                       <span className="badge badge-ghost badge-sm">
                         {group.length}
@@ -1509,8 +1551,10 @@ const EnrolledStudents = ({
             <span className="font-semibold text-base-content">
               {nonMemberStudents.length}
             </span>{" "}
-            {t("students.resendAllBodyStudents", { count: nonMemberStudents.length })})
-            {t("students.resendAllBodySuffix")}
+            {t("students.resendAllBodyStudents", {
+              count: nonMemberStudents.length,
+            })}
+            ){t("students.resendAllBodySuffix")}
           </>
         }
         confirmText="resend"

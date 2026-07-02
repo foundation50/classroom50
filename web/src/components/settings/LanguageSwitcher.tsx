@@ -99,7 +99,10 @@ export const LanguageSwitcher = () => {
           {installedLangs.map((c) => {
             const cov = packCoverage(c)
             return (
-              <li key={c} className="flex flex-row items-center justify-between">
+              <li
+                key={c}
+                className="flex flex-row items-center justify-between"
+              >
                 <span className="flex items-center gap-2">
                   {c}
                   {cov !== null && cov < 1 && (

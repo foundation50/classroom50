@@ -95,9 +95,7 @@ const SubmissionsControls = ({
         aria-label={t("submissions.filters.submissionAria")}
       >
         <option value="all">{t("submissions.filters.allSubmissions")}</option>
-        <option value="submitted">
-          {t("submissions.filters.submitted")}
-        </option>
+        <option value="submitted">{t("submissions.filters.submitted")}</option>
         <option value="on-time">{t("submissions.filters.onTime")}</option>
         <option value="late">{t("submissions.filters.late")}</option>
         {!isGroup && (

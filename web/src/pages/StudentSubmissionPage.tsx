@@ -271,9 +271,7 @@ const StudentSubmissionPage = () => {
               secret={secret}
             />
           ) : (
-            <MissingParams
-              message={t("submissions.student.missingParams")}
-            />
+            <MissingParams message={t("submissions.student.missingParams")} />
           )}
         </DrawerContent>
         <DrawerSidebar selected="assignments" />

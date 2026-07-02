@@ -145,8 +145,7 @@ function OrgCard({
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="badge badge-neutral gap-1">
                   <Lock aria-hidden="true" className="size-3" />
-                  {t("orgs.card.noAccessBadge_prefix")}{" "}
-                  <code>classroom50</code>{" "}
+                  {t("orgs.card.noAccessBadge_prefix")} <code>classroom50</code>{" "}
                   {t("orgs.card.noAccessBadge_suffix")}
                 </span>
               </div>

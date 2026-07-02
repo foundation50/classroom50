@@ -337,7 +337,9 @@ const EditStudent = ({
                 <span>
                   {t("students.githubLabel")}{" "}
                   <span className="font-mono">@{student.username}</span>
-                  {student.github_id ? t("students.githubIdSuffix", { id: student.github_id }) : ""}
+                  {student.github_id
+                    ? t("students.githubIdSuffix", { id: student.github_id })
+                    : ""}
                 </span>
               </div>
             ) : null}

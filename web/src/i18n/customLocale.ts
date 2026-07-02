@@ -108,7 +108,9 @@ export function parseBundle(text: string): FlatBundle {
   const flat = flattenBundle(json)
   const result = flatBundleSchema.safeParse(flat)
   if (!result.success) {
-    throw new LanguagePackError(result.error.issues[0]?.message ?? "Invalid language pack")
+    throw new LanguagePackError(
+      result.error.issues[0]?.message ?? "Invalid language pack",
+    )
   }
   return result.data
 }
@@ -116,7 +118,9 @@ export function parseBundle(text: string): FlatBundle {
 export function normalizeLangCode(code: string): string {
   const result = langCodeSchema.safeParse(code)
   if (!result.success) {
-    throw new LanguagePackError(result.error.issues[0]?.message ?? "Invalid language code")
+    throw new LanguagePackError(
+      result.error.issues[0]?.message ?? "Invalid language code",
+    )
   }
   return result.data
 }
@@ -254,7 +258,9 @@ export function hydratePacks(): string[] {
 export function installPack(codeInput: string, bundle: FlatBundle): string {
   const code = normalizeLangCode(codeInput)
   if (code === BASE_LANG) {
-    throw new LanguagePackError(`"${BASE_LANG}" is the built-in base language and can't be replaced.`)
+    throw new LanguagePackError(
+      `"${BASE_LANG}" is the built-in base language and can't be replaced.`,
+    )
   }
   const pack: LanguagePack = { code, bundle }
   // Re-read immediately before writing so a concurrent install in another tab
@@ -439,7 +445,8 @@ export function subscribeToPackChanges(onChange: () => void): () => void {
   let removeStorage: () => void = () => {}
   if (typeof window !== "undefined") {
     const handler = (event: StorageEvent) => {
-      if (event.key !== PACKS_STORAGE_KEY && event.key !== LANG_STORAGE_KEY) return
+      if (event.key !== PACKS_STORAGE_KEY && event.key !== LANG_STORAGE_KEY)
+        return
       // Reconcile this tab's i18next instance with the change another tab made:
       // add/remove bundles (hydratePacks) and apply the (possibly new) active
       // language. If the active language's pack was removed, fall back to the

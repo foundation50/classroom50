@@ -10,13 +10,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 // ("forbidden"): access is ultimately enforced by GitHub, so this is a UX
 // concern, and a 404 avoids confirming the resource exists to someone whose
 // role can't see it. Reused across teacher-only pages and future TA roles.
-const NotFound = ({
-  title,
-  message,
-}: {
-  title?: string
-  message?: string
-}) => {
+const NotFound = ({ title, message }: { title?: string; message?: string }) => {
   const { t } = useTranslation()
   const resolvedTitle = title ?? t("notFound.title")
   const resolvedMessage = message ?? t("notFound.message")

@@ -280,7 +280,9 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                 disabled={!canSubmit || isSubmitting || !team}
                 className="btn btn-primary w-full"
               >
-                {!isSubmitting ? t("students.addButton") : t("students.submitting")}
+                {!isSubmitting
+                  ? t("students.addButton")
+                  : t("students.submitting")}
               </button>
             )}
           </form.Subscribe>

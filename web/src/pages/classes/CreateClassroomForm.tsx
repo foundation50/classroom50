@@ -104,7 +104,9 @@ const CreateClassroomForm = ({
       }}
     >
       <div className="card-body">
-        <h3 className="text-lg font-bold pb-4">{t("classes.form.basicInfo")}</h3>
+        <h3 className="text-lg font-bold pb-4">
+          {t("classes.form.basicInfo")}
+        </h3>
 
         <form.Field name="name">
           {(field) => (
@@ -272,7 +274,9 @@ const CreateClassroomForm = ({
                               name={secretField.name}
                               type="text"
                               className="input w-full font-mono"
-                              placeholder={t("classes.form.accessKeyPlaceholder")}
+                              placeholder={t(
+                                "classes.form.accessKeyPlaceholder",
+                              )}
                               value={secretField.state.value}
                               onBlur={secretField.handleBlur}
                               onChange={(e) =>

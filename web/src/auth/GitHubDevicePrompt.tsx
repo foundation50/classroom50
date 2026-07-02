@@ -69,7 +69,9 @@ export function GitHubDevicePrompt({
         <StepNumber value={1} done={device.progress >= 1} />
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{t("auth.deviceStep1Title")}</h2>
+          <h2 className="text-sm font-semibold">
+            {t("auth.deviceStep1Title")}
+          </h2>
 
           <div className="my-3 select-all rounded-xl border border-base-300 bg-base-200 px-4 py-3 text-center font-mono text-3xl font-bold tracking-[0.2em]">
             {device.userCode}
@@ -101,7 +103,9 @@ export function GitHubDevicePrompt({
         <StepNumber value={2} done={device.progress >= 2} />
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{t("auth.deviceStep2Title")}</h2>
+          <h2 className="text-sm font-semibold">
+            {t("auth.deviceStep2Title")}
+          </h2>
 
           <a
             className="btn btn-outline btn-primary btn-sm mt-3 w-full"
@@ -126,7 +130,9 @@ export function GitHubDevicePrompt({
         <StepNumber value={3} done={false} />
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">{t("auth.deviceStep3Title")}</h2>
+          <h2 className="text-sm font-semibold">
+            {t("auth.deviceStep3Title")}
+          </h2>
 
           <p className="mt-2 text-xs leading-relaxed text-base-content/70">
             {t("auth.deviceStep3Hint")}

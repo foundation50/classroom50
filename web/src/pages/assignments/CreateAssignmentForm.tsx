@@ -832,7 +832,9 @@ const CreateAssignmentForm = ({
                         name={field.name}
                         type="text"
                         className="input w-full max-w-xs"
-                        placeholder={t("assignments.form.dockerImagePlaceholder")}
+                        placeholder={t(
+                          "assignments.form.dockerImagePlaceholder",
+                        )}
                         value={field.state.value}
                         onBlur={normalizeOnBlur(field)}
                         onChange={(e) => field.handleChange(e.target.value)}

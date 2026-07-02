@@ -82,9 +82,9 @@ describe("loadFromUrl scheme gate", () => {
     await expect(loadFromUrl("file:///etc/passwd", "de")).rejects.toThrow(
       /http\(s\)/,
     )
-    await expect(
-      loadFromUrl("data:application/json,{}", "de"),
-    ).rejects.toThrow(/http\(s\)/)
+    await expect(loadFromUrl("data:application/json,{}", "de")).rejects.toThrow(
+      /http\(s\)/,
+    )
   })
 
   it("rejects a malformed URL", async () => {

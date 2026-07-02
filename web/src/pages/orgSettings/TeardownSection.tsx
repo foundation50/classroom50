@@ -101,8 +101,7 @@ const TeardownSection = ({ org }: { org: string }) => {
         <>
           {t("orgSettings.teardown.description_prefix")}{" "}
           <strong>{t("orgSettings.teardown.description_every")}</strong>{" "}
-          {t("orgSettings.teardown.description_mid")}{" "}
-          <code>classroom50</code>{" "}
+          {t("orgSettings.teardown.description_mid")} <code>classroom50</code>{" "}
           {t("orgSettings.teardown.description_suffix")}
         </>
       }
@@ -120,7 +119,9 @@ const TeardownSection = ({ org }: { org: string }) => {
         type="button"
         className={`btn btn-error btn-sm ${error || done ? "mt-4" : ""}`}
         disabled={!isOwner || openMutation.isPending}
-        title={isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")}
+        title={
+          isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")
+        }
         onClick={() => {
           if (!openMutation.isPending) openMutation.mutate()
         }}
@@ -204,10 +205,9 @@ const TeardownSection = ({ org }: { org: string }) => {
             ) {
               throw err
             }
-            throw new Error(
-              t("orgSettings.teardown.executeError"),
-              { cause: err },
-            )
+            throw new Error(t("orgSettings.teardown.executeError"), {
+              cause: err,
+            })
           }
         }}
         onClose={() => setOpen(false)}

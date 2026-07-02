@@ -159,9 +159,7 @@ const ArchiveClassroomButton = ({
         }}
         className="btn btn-sm btn-ghost"
         title={
-          archived
-            ? t("classes.unarchiveTitle")
-            : t("classes.archiveTitle")
+          archived ? t("classes.unarchiveTitle") : t("classes.archiveTitle")
         }
       >
         {archived ? (
@@ -203,9 +201,7 @@ const ArchiveClassroomButton = ({
             </>
           )
         }
-        confirmLabel={
-          archived ? t("classes.unarchive") : t("classes.archive")
-        }
+        confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
@@ -468,7 +464,9 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                     !canSubmit || isSubmitting || submitted || isDefaultValue
                   }
                   title={
-                    isDefaultValue ? t("classes.form.noChangesToSave") : undefined
+                    isDefaultValue
+                      ? t("classes.form.noChangesToSave")
+                      : undefined
                   }
                 >
                   {isSubmitting ? (

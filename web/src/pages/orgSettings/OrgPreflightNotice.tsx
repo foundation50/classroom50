@@ -35,7 +35,8 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
   // Both categories are hard failures, so the banner is always an error; it
   // just names every failing one at once.
   const failing: string[] = []
-  if (tokenMissing) failing.push(t("orgSettings.preflight.categoryServiceToken"))
+  if (tokenMissing)
+    failing.push(t("orgSettings.preflight.categoryServiceToken"))
   if (policyFail) failing.push(t("orgSettings.preflight.categoryOrgPolicy"))
 
   if (failing.length === 0) return null

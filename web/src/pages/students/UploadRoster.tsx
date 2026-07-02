@@ -174,7 +174,9 @@ const UploadRoster = ({
       })
       setPhase("preview")
     } catch (err) {
-      setError(err instanceof Error ? err.message : t("students.couldNotReadFile"))
+      setError(
+        err instanceof Error ? err.message : t("students.couldNotReadFile"),
+      )
       setPhase("error")
     } finally {
       input.value = ""
@@ -219,9 +221,7 @@ const UploadRoster = ({
       <div className="card card-border bg-base-100 shadow-sm">
         <div className="card-body">
           <p className="font-bold">{t("students.uploadRosterTitle")}</p>
-          <span>
-            {t("students.uploadRosterHint")}
-          </span>
+          <span>{t("students.uploadRosterHint")}</span>
           <input
             ref={fileInputRef}
             type="file"
@@ -263,7 +263,9 @@ const UploadRoster = ({
                 {t("students.importStudentsTitle")}
               </h3>
               {fileName && (
-                <p className="text-sm opacity-70 mt-1">{t("students.fileLabel", { fileName })}</p>
+                <p className="text-sm opacity-70 mt-1">
+                  {t("students.fileLabel", { fileName })}
+                </p>
               )}
             </div>
 
@@ -293,7 +295,9 @@ const UploadRoster = ({
                     <thead>
                       <tr>
                         <th scope="col">#</th>
-                        <th scope="col">{t("students.githubUsernameColumn")}</th>
+                        <th scope="col">
+                          {t("students.githubUsernameColumn")}
+                        </th>
                       </tr>
                     </thead>
                     <tbody>
@@ -348,13 +352,13 @@ const UploadRoster = ({
                     total: progress.total,
                   })}
                 </span>
-                <span>{t("students.progressPercent", { percent: progressPercent })}</span>
+                <span>
+                  {t("students.progressPercent", { percent: progressPercent })}
+                </span>
               </div>
 
               <div className="mt-6 alert">
-                <span>
-                  {t("students.keepTabOpen")}
-                </span>
+                <span>{t("students.keepTabOpen")}</span>
               </div>
             </div>
           )}
@@ -363,7 +367,9 @@ const UploadRoster = ({
             <div className="mt-6 space-y-4">
               <div className="alert alert-success">
                 <span>
-                  {t("students.addedCount", { count: result.addedStudents.length })}
+                  {t("students.addedCount", {
+                    count: result.addedStudents.length,
+                  })}
                 </span>
               </div>
 
@@ -402,8 +408,7 @@ const UploadRoster = ({
                       key: teamResult.username,
                       label: teamResult.username,
                       detail:
-                        teamResult.message ??
-                        t("students.couldNotAddToTeam"),
+                        teamResult.message ?? t("students.couldNotAddToTeam"),
                     }))}
                 />
               )}

@@ -97,9 +97,7 @@ const EditClassroomContent = ({
       }
     >
       {!cl ? (
-        <div className="alert alert-error">
-          {t("classes.couldNotLoad")}
-        </div>
+        <div className="alert alert-error">{t("classes.couldNotLoad")}</div>
       ) : (
         <>
           <div className="flex justify-between">

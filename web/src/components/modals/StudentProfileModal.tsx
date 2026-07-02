@@ -67,12 +67,18 @@ export const StudentProfileModal = ({
         </span>
       ),
     },
-    { label: t("components.modals.studentProfile.email"), value: student.email || "—" },
+    {
+      label: t("components.modals.studentProfile.email"),
+      value: student.email || "—",
+    },
     {
       label: t("components.modals.studentProfile.section"),
       value: student.section?.trim() || "—",
     },
-    { label: t("components.modals.studentProfile.enrollment"), value: statusLabel },
+    {
+      label: t("components.modals.studentProfile.enrollment"),
+      value: statusLabel,
+    },
   ]
 
   return (

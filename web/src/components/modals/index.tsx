@@ -31,7 +31,8 @@ export function ConfirmModal({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
   const { t } = useTranslation()
-  const resolvedConfirmLabel = confirmLabel ?? t("components.confirmModal.confirm")
+  const resolvedConfirmLabel =
+    confirmLabel ?? t("components.confirmModal.confirm")
   const resolvedCancelLabel = cancelLabel ?? t("common.cancel")
   const [hasAcknowledged, setHasAcknowledged] = useState(false)
   const [typedText, setTypedText] = useState("")

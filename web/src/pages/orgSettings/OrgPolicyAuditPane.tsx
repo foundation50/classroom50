@@ -223,7 +223,9 @@ function AuditBody({
       >
         <Icon className={`mt-0.5 size-5 shrink-0 ${banner.iconClassName}`} />
         <div className="min-w-0">
-          <p className="font-semibold text-base-content">{t(banner.titleKey)}</p>
+          <p className="font-semibold text-base-content">
+            {t(banner.titleKey)}
+          </p>
           {!report.readOk && (
             <p className="mt-1 text-base-content/70">
               {t("orgSettings.audit.readError")}

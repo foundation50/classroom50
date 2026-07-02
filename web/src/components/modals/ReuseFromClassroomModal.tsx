@@ -91,7 +91,9 @@ export const ReuseFromClassroomModal = ({
       title={t("components.modals.reuseFromClassroom.title")}
       description={
         <>
-          {t("components.modals.reuseFromClassroom.description_prefix", { org })}{" "}
+          {t("components.modals.reuseFromClassroom.description_prefix", {
+            org,
+          })}{" "}
           <span className="font-semibold text-base-content">{classroom}</span>
           {t("components.modals.reuseFromClassroom.description_suffix")}
         </>
@@ -148,7 +150,9 @@ export const ReuseFromClassroomModal = ({
               >
                 <option value="" disabled>
                   {sourceLoading
-                    ? t("components.modals.reuseFromClassroom.loadingAssignments")
+                    ? t(
+                        "components.modals.reuseFromClassroom.loadingAssignments",
+                      )
                     : sourceAssignments.length === 0
                       ? t("components.modals.reuseFromClassroom.noAssignments")
                       : t(

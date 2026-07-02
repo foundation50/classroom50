@@ -584,7 +584,9 @@ export function GroupCollaboratorsModal({
                 {draftCollaborators.length === 0 &&
                   markedForRemoval.length === 0 && (
                     <li className="px-4 py-6 text-center text-sm text-base-content/70">
-                      {t("components.modals.groupCollaborators.noCollaborators")}
+                      {t(
+                        "components.modals.groupCollaborators.noCollaborators",
+                      )}
                     </li>
                   )}
               </ul>

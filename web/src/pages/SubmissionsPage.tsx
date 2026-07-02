@@ -442,9 +442,7 @@ const SubmissionsPageContent = () => {
   }
 
   if (!org || !classroom || !assignment) {
-    return (
-      <MissingParams message={t("submissions.missingParams")} />
-    )
+    return <MissingParams message={t("submissions.missingParams")} />
   }
 
   return (
@@ -855,9 +853,7 @@ const SubmissionsPageContent = () => {
             ) : null}
           </div>
           <div className="mb-2 flex items-center justify-end gap-1 text-sm text-base-content/70">
-            <span>
-              {t("submissions.updated", { when: scoresLastUpdated })}
-            </span>
+            <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
 
             <button
               type="button"
