@@ -64,8 +64,8 @@ jobs:
           else
             codes=$(jq -c . web/src/locales/targets.json)
           fi
-          # Every code becomes ${{ matrix.code }} interpolated into later run: blocks,
-          # so reject anything that isn't a plain BCP-47 tag. This is the injection
+          # Each code is later interpolated as matrix.code into run: blocks, so
+          # reject anything that isn't a plain BCP-47 tag. This is the injection
           # gate for the workflow_dispatch `only` input; downstream steps also read
           # the code from env rather than interpolating it directly.
           bad=$(printf '%s' "$codes" | jq -r '.[] | select(test("^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$") | not)')
