@@ -1,0 +1,12 @@
+{
+  "common": {
+    "goToDashboard": "Go to dashboard"
+  },
+  "notFound": {
+    "title": "Page not found",
+    "message": "This page doesn't exist, or you don't have access to it."
+  },
+  "missingParams": {
+    "message": "This page is missing a required parameter."
+  }
+}
