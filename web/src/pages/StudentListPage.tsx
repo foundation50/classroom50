@@ -17,6 +17,7 @@ import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
 import { countEnrolled, toStudent } from "@/util/roster"
+import { useTranslation } from "react-i18next"
 
 const StudentListContent = ({
   org,
@@ -25,6 +26,7 @@ const StudentListContent = ({
   org: string
   classroom: string
 }) => {
+  const { t } = useTranslation()
   const { students } = useGetStudents(org, classroom)
   const { data: classData } = useGetClassroom(org, classroom)
   const client = useGitHubClient()
@@ -35,14 +37,14 @@ const StudentListContent = ({
   // falls back to the CSV "enrolled" signal rather than flashing 0.
   const rosterStatus = useRosterStatus(org, classroom, students)
   const enrolledCount = countEnrolled(rosterStatus, students)
-  const className = classData?.name || classData?.short_name || "Untitled class"
+  const className =
+    classData?.name || classData?.short_name || t("students.untitledClass")
 
   return (
     <>
-      <h1 className="text-lg pt-8 pb-2 font-bold">Students</h1>
+      <h1 className="text-lg pt-8 pb-2 font-bold">{t("nav.students")}</h1>
       <h3 className="pb-10">
-        {enrolledCount} {enrolledCount === 1 ? "student" : "students"} enrolled
-        in {className}
+        {t("students.enrolledIn", { count: enrolledCount, className })}
       </h3>
       <div className="grid grid-cols-12 gap-2">
         <div className="col-span-5 px-4">
@@ -76,7 +78,8 @@ const StudentListContent = ({
 }
 
 const StudentListPage = () => {
-  useDocumentTitle("Students")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.students"))
   const { org = "", classroom = "" } = useParams({ strict: false })
 
   return (
@@ -84,7 +87,7 @@ const StudentListPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="Students" />
+          <Breadcrumb endpoint={t("nav.students")} />
           <RequireTeacher>
             <StudentListContent org={org} classroom={classroom} />
           </RequireTeacher>

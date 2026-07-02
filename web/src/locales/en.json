@@ -127,7 +127,10 @@
     "unenrollStudent": "Unenroll student",
     "added": "Added {{label}}.",
     "count_one": "{{count}} Student",
-    "count_other": "{{count}} Students"
+    "count_other": "{{count}} Students",
+    "untitledClass": "Untitled class",
+    "enrolledIn_one": "{{count}} student enrolled in {{className}}",
+    "enrolledIn_other": "{{count}} students enrolled in {{className}}"
   },
   "language": {
     "label": "Language",
@@ -158,6 +161,189 @@
     "classroomCreated": "Classroom created. It may take a moment to appear.",
     "invited": "Invited {{who}} to the {{org}} organization.",
     "staffAdded": "Added @{{username}} as {{role}}."
+  },
+  "orgs": {
+    "headingCl50": "Classroom 50 Organizations",
+    "headingSetUp": "Set Up New Classroom 50 Organization",
+    "loadingTitle": "Loading your organizations…",
+    "loadingSubtitle": "This may take a moment.",
+    "emptyTitle": "No Classroom 50 organizations yet",
+    "emptyBody": "Organizations you belong to that use Classroom 50 will appear here. If you expect one, ask your instructor to confirm you've been added, then refresh.",
+    "showUnsupported": "Show unsupported organizations",
+    "missingNotice": {
+      "title": "Not seeing your organization?",
+      "body": "Classroom 50 can only show GitHub organizations that you have explicitly granted access to during sign-in. If an organization is missing, you may need to update your OAuth permissions.",
+      "manageOauth": "Manage GitHub OAuth access",
+      "refreshing": "Refreshing…",
+      "refresh": "Refresh list"
+    },
+    "card": {
+      "noAccessBadge_prefix": "No",
+      "noAccessBadge_suffix": "access",
+      "planTitleFree": "Free plan — Classroom 50 needs a Team or Enterprise organization",
+      "planTitlePaid": "GitHub plan — Classroom 50 can be set up on Team and Enterprise plans",
+      "viewOnGitHub": "View on GitHub",
+      "openOnGitHub": "Open {{org}} on GitHub",
+      "open": "Open",
+      "setUp": "Set Up",
+      "askTeacher": "Ask a teacher for access"
+    }
+  },
+  "assignments": {
+    "studentCount_one": "{{count}} Student",
+    "studentCount_other": "{{count}} Students",
+    "archived": "Archived",
+    "archivedNotice_prefix": "This classroom is archived — new assignments and student accepts are disabled. Unarchive it from",
+    "archivedNotice_link": "Classroom Settings",
+    "archivedNotice_suffix": "to make changes.",
+    "studentHeading": "Classroom Assignments",
+    "studentViewAll_prefix": "View all assignments for the",
+    "studentViewAll_suffix": "classroom.",
+    "newButton": {
+      "assignment": "Assignment",
+      "moreOptions": "More assignment options",
+      "reuse": "Reuse assignment"
+    }
+  },
+  "published": {
+    "pageHeading": "Published resources",
+    "pageSubheadingPrefix": "Everything publicly served from",
+    "pageSubheadingSuffix": "’s GitHub Pages site.",
+    "copyUrl": "Copy URL",
+    "openUrl": "Open URL",
+    "optional": "Optional",
+    "unlisted": "Unlisted",
+    "publicPath": "Public path",
+    "resourceCount_one": "{{count}} published resource",
+    "resourceCount_other": "{{count}} published resources",
+    "servedUnlistedSuffix": " · served at an unlisted URL",
+    "unlistedWarning": "This classroom uses an unlisted URL: its resources are served at an unguessable path instead of a guessable one. This is obscurity, not access control — the link is the only thing guarding the data, anyone who has it can read the file, and links can leak (browser history, referrers, search crawlers). Share the per-assignment accept link or CLI command (which include the key) from each assignment's page.",
+    "banner": {
+      "title": "Everything below is served publicly over the internet",
+      "body": "Your classroom50 config repo is private, but its GitHub Pages site is public by design — students and the autograder fetch these files without authenticating. Only the allow-listed files below are published; anything else in the repo (your roster, internal classroom fields, service token) stays private. A classroom can use an unlisted URL to make its files harder to find, but that is obscurity, not access control — the files are still public to anyone who has the link."
+    },
+    "orgLevel": "Organization-level",
+    "orgLevelServedPrefix": "Served at the root of",
+    "perClassroom": "Per-classroom",
+    "perClassroomDescription": "Assignment manifests and autograders for each classroom.",
+    "noClassrooms": "No classrooms yet. Once you create one and it publishes, its resources will appear here.",
+    "kind": {
+      "engine": "Engine",
+      "data": "Classroom data"
+    },
+    "status": {
+      "checking": "Checking",
+      "public": "Public",
+      "notPublished": "Not published",
+      "notPublishedTitle": "Not published yet",
+      "unreachable": "Unreachable",
+      "unreachableTitle": "Could not reach the URL"
+    },
+    "resources": {
+      "classroomsIndex": {
+        "label": "Classrooms index",
+        "description": "Public list of this org's classrooms with allow-listed fields only (name, term, short name). Internal data such as the GitHub team is deliberately stripped. Lets students confirm this is a real Classroom 50 org."
+      },
+      "runner": {
+        "label": "Autograde runner engine",
+        "description": "The generic grading bootstrap fetched by every student repo's autograde workflow. Org-agnostic — identical for every organization, contains no classroom data."
+      },
+      "feedbackPr": {
+        "label": "Feedback PR helper",
+        "description": "Generic helper that opens/refreshes the per-submission Feedback PR. Org-agnostic — contains no classroom data."
+      },
+      "assignmentsManifest": {
+        "label": "Assignments manifest",
+        "description": "Every assignment's slug, mode, template, autograder, runtime, declarative tests, and allowed-files list for this classroom. Read by students (accept/submit) and the autograde runner."
+      },
+      "classroomAutograder": {
+        "label": "Classroom default autograder",
+        "description": "The fallback grading script used when an assignment has no per-assignment autograder. Only present if you ran autograder set-default."
+      },
+      "autograderBundle": {
+        "label": "Autograder bundle — {{name}}",
+        "description": "Per-assignment grading bundle (autograder.py + fixtures + materialized tests) downloaded by the autograde runner at grade time."
+      },
+      "autograderShim": {
+        "label": "Autograder workflow shim — {{name}}",
+        "description": "Non-default autograder workflow shim fetched when a student accepts an assignment that overrides the default runner."
+      }
+    }
+  },
+  "getStarted": {
+    "badge": "Onboarding",
+    "continueToAssignment": "Continue to your assignment",
+    "notInvited": {
+      "title": "Nothing to do here yet",
+      "body_prefix": "We couldn't find an invitation for your account to the",
+      "body_suffix": "organization.",
+      "waitingTitle": "Waiting on an invitation",
+      "waitingBody_prefix": "If your instructor has invited you to",
+      "waitingBody_suffix": ", check your email for the GitHub invitation and accept it, then return to this page and refresh. Otherwise, there's nothing you need to do here right now."
+    },
+    "pending": {
+      "title": "Pending confirmation",
+      "enrolledTitle": "You're enrolled",
+      "message": "Your details are in — your instructor just needs to confirm your enrollment. There's nothing more for you to do here.",
+      "takingBack": "Taking you back to your assignment…",
+      "enrolledManual": "You're enrolled. If you're not redirected automatically, continue to your assignment below."
+    },
+    "allSet": {
+      "title": "You're all set",
+      "message": "You already have access to this classroom — there's nothing more you need to do here. You can accept assignments your instructor shares with you."
+    },
+    "form": {
+      "title": "Confirm your enrollment",
+      "titleWithReturn": "Confirm your enrollment before accepting the assignment",
+      "subtitle_prefix": "This links your GitHub account to your instructor's class roster for",
+      "subtitle_suffix": ".",
+      "checkingUser": "Checking GitHub user...",
+      "firstName": "First name",
+      "firstNamePlaceholder": "Ada",
+      "lastName": "Last name",
+      "lastNamePlaceholder": "Lovelace",
+      "email": "Your university email",
+      "emailHint": "Enter the email your instructor used to invite you, so they can match you to the class roster.",
+      "emailPlaceholder": "student@university.edu",
+      "genericError": "Something went wrong. Please try again.",
+      "confirming": "Confirming...",
+      "confirm": "Confirm enrollment"
+    }
+  },
+  "setup": {
+    "pageHeading": "Setup Classroom 50",
+    "pageSubheading": "This will set up your GitHub organization to use Classroom 50.",
+    "loadingSetup": "Loading organization setup",
+    "runSetup": "Run setup",
+    "nextServiceToken": "Next: service token",
+    "back": "Back",
+    "setupComplete": "Organization setup is complete. Review the steps below, then continue to set the service token.",
+    "allSetTitle": "You're all set!",
+    "allSetBody": "Your organization is ready to use Classroom 50. Head to your organization to create your first classroom and assignments.",
+    "goToOrg": "Go to {{org}}",
+    "yourOrganization": "your organization",
+    "notAdmin": "Classroom 50 setup requires org owner permissions. Ask an org owner to run setup.",
+    "notTeamOrEnterprise": "GitHub Pages from a private repository may require GitHub Team or Enterprise Cloud. You can continue setup, but published assignments may not be accessible until Pages is available for this org."
+  },
+  "assignmentSettings": {
+    "heading": "Assignment Settings",
+    "editSuccess": "Your assignment has been edited successfully!",
+    "loading": "Loading assignment",
+    "archivedNotice_prefix": "This classroom is archived — its assignments are read-only. Unarchive it in",
+    "archivedNotice_link": "Classroom Settings",
+    "archivedNotice_suffix": "to edit assignments.",
+    "notAccepted_prefix": "You do not have this assignment yet! Do you need to",
+    "notAccepted_link": "accept it",
+    "notAccepted_suffix": "first?",
+    "individual_prefix": "This is an individual assignment — there are no group settings to manage. View your",
+    "individual_link": "submission and autograder results",
+    "individual_suffix": ".",
+    "groupMembers": "Group members",
+    "viewRepository": "View repository",
+    "collaboratorsHint_prefix": "Add or remove collaborators for this assignment repository. This assignment allows up to",
+    "collaboratorsHint_suffix_one": "student in addition to the group owner.",
+    "collaboratorsHint_suffix_other": "students in addition to the group owner.",
+    "manageCollaborators": "Manage collaborators"
   },
   "formatDate": {
     "invalidDate": "Invalid date"
