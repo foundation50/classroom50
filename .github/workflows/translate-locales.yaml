@@ -1,13 +1,20 @@
 name: Translate locales
 
 # Regenerates each target-language pack from web/src/locales/en.json with AWS
-# Bedrock and opens a pull request per language on the language repo
-# (vars.LANGUAGE_PACKS_REPO); a human merges to publish.
+# Bedrock and opens a SINGLE pull request on the language repo
+# (vars.LANGUAGE_PACKS_REPO) carrying every language that regenerated cleanly; a
+# human merges it once to publish. One PR -> one merge -> one GitHub Pages
+# deploy (the old per-language PRs meant N merges and N racing deploys).
 #
 # Each run reads the language repo's current <code>.json (which may hold human
 # PR fixes) and regenerates the whole file, preserving good translations and
 # only retranslating changed English. No per-key delta, no sidecar state — the
 # published file is the next run's baseline.
+#
+# Languages fan out in parallel and each uploads its generated pack as an
+# artifact; a final aggregate job collects them into one branch/PR. A language
+# that fails to translate or gate is simply left out of the PR (and called out
+# in the job summary + PR body) rather than sinking the rest.
 #
 # Auth: Bedrock via an API key in AWS_BEARER_TOKEN_BEDROCK (boto3 auto-detects
 # it; no IAM/OIDC); the cross-repo PR uses a fine-grained PAT
@@ -34,7 +41,8 @@ on:
         default: ''
 
 # Serialize whole runs on a ref so a burst of en.json pushes doesn't open
-# duplicate PRs; jobs within a run don't contend (each pushes its own branch).
+# duplicate PRs; jobs within a run don't contend (the single aggregate job owns
+# the shared PR branch).
 concurrency:
   group: translate-locales-${{ github.ref }}
   cancel-in-progress: false
@@ -77,12 +85,16 @@ jobs:
           echo "codes=$codes" >> "$GITHUB_OUTPUT"
           echo "Languages: $codes"
 
+  # Translate + gate each language in parallel, then upload the generated pack as
+  # an artifact. No PR here — the aggregate job below collects every artifact
+  # into one PR. fail-fast: false so one language's failure leaves the rest to
+  # publish; a failed leg just uploads no artifact and is reported later.
   translate:
     needs: matrix
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
-      fail-fast: false # one language failing must not sink the rest
+      fail-fast: false
       matrix:
         code: ${{ fromJson(needs.matrix.outputs.codes) }}
     steps:
@@ -112,6 +124,9 @@ jobs:
           CODE: ${{ matrix.code }}
         run: |
           set -euo pipefail
+          # Emit into a fresh out dir (not langrepo) so the artifact is exactly
+          # the generated file; --current still reads the published baseline.
+          mkdir -p out
           current="langrepo/${CODE}.json"
           # --current is optional; a missing file means first-time generation.
           python scripts/translate_locales.py \
@@ -119,7 +134,7 @@ jobs:
             --base web/src/locales/en.json \
             --prompt web/src/locales/TRANSLATION_PROMPT.md \
             --current "$current" \
-            --out "$current"
+            --out "out/${CODE}.json"
 
       - name: Structural gate (verify_locale.py)
         env:
@@ -131,62 +146,168 @@ jobs:
           gate=$(mktemp -d)
           cp web/src/locales/en.json "$gate/en.json"
           cp web/src/locales/verify_locale.py "$gate/verify_locale.py"
-          cp "langrepo/${CODE}.json" "$gate/${CODE}.json"
+          cp "out/${CODE}.json" "$gate/${CODE}.json"
           ( cd "$gate" && python verify_locale.py "${CODE}.json" )
 
-      - name: Open pull request on the language repo
+      - name: Upload generated pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: pack-${{ matrix.code }}
+          path: out/${{ matrix.code }}.json
+          if-no-files-found: error
+          retention-days: 1
+
+  # Collect every successfully generated pack into ONE branch and open/update a
+  # single PR on the language repo. Runs even if some translate legs failed
+  # (if: always()), so partial success still publishes what worked. Fails only
+  # if the matrix job itself failed or nothing at all was produced.
+  open-pr:
+    needs: [matrix, translate]
+    if: ${{ always() && needs.matrix.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v7
+
+      - name: Checkout language repo
+        uses: actions/checkout@v7
+        with:
+          repository: ${{ vars.LANGUAGE_PACKS_REPO }}
+          token: ${{ secrets.LANGUAGE_PACKS_REPO_TOKEN }}
+          path: langrepo
+
+      - name: Download generated packs
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pack-*
+          path: packs
+          merge-multiple: true
+
+      - name: Assemble branch and open a single PR
         env:
           GH_TOKEN: ${{ secrets.LANGUAGE_PACKS_REPO_TOKEN }}
           TARGET_REPO: ${{ vars.LANGUAGE_PACKS_REPO }}
-          CODE: ${{ matrix.code }}
           SOURCE_SHA: ${{ github.sha }}
+          ALL_CODES: ${{ needs.matrix.outputs.codes }}
         run: |
           set -euo pipefail
+
+          # Which languages were requested vs. which actually produced a pack.
+          # download-artifact with merge-multiple flattens every pack-<code>
+          # artifact into packs/<code>.json.
+          mapfile -t requested < <(printf '%s' "$ALL_CODES" | jq -r '.[]')
+          produced=()
+          for code in "${requested[@]}"; do
+            if [ -f "packs/${code}.json" ]; then
+              produced+=("$code")
+            fi
+          done
+
+          failed=()
+          for code in "${requested[@]}"; do
+            case " ${produced[*]} " in
+              *" ${code} "*) ;;
+              *) failed+=("$code") ;;
+            esac
+          done
+
+          # Nothing generated at all — every language failed. Report and stop.
+          if [ ${#produced[@]} -eq 0 ]; then
+            echo "::error::No language packs were generated; all ${#requested[@]} language(s) failed."
+            {
+              echo "## Translate locales"
+              echo "No packs generated — all requested languages failed:"
+              printf -- '- %s\n' "${failed[@]}"
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+
           cd langrepo
 
-          # Nothing to publish if the regenerated file matches what's checked out.
-          if [ -z "$(git status --porcelain -- "${CODE}.json")" ]; then
-            echo "No change for ${CODE}; skipping PR."
-            exit 0
-          fi
+          short=$(printf '%s' "$SOURCE_SHA" | cut -c1-7)
+          branch="translate/batch"
+          default_branch=$(gh repo view "$TARGET_REPO" --json defaultBranchRef --jq .defaultBranchRef.name)
 
           git config user.name "classroom50-sync[bot]"
           git config user.email "classroom50-sync@users.noreply.github.com"
 
-          short=$(printf '%s' "$SOURCE_SHA" | cut -c1-7)
-          branch="translate/${CODE}"
-          default_branch=$(gh repo view "$TARGET_REPO" --json defaultBranchRef --jq .defaultBranchRef.name)
-
-          # Preserve the generated file, reset the per-language branch to the
-          # latest default branch (so the PR diff is only this language's change
-          # and is idempotent across runs), then restore the generated file.
-          generated=$(mktemp)
-          cp "${CODE}.json" "$generated"
+          # Reset the shared batch branch to the latest default branch, then drop
+          # every generated pack on top — so the PR diff is only these languages'
+          # changes and is idempotent across runs.
           git fetch origin "$default_branch"
           git checkout -B "$branch" "origin/${default_branch}"
-          cp "$generated" "${CODE}.json"
+          for code in "${produced[@]}"; do
+            cp "../packs/${code}.json" "${code}.json"
+            git add "${code}.json"
+          done
 
-          git add "${CODE}.json"
           if git diff --cached --quiet; then
-            echo "No net change for ${CODE} vs ${default_branch}; skipping PR."
+            echo "No net change vs ${default_branch} for any language; skipping PR."
+            {
+              echo "## Translate locales"
+              echo "Regenerated ${#produced[@]} language(s); none differed from the published packs, so no PR was opened."
+            } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
-          git commit -m "Update ${CODE} translation from en.json@${short}"
+
+          # Commit body lists the languages carried; failures (if any) are noted.
+          {
+            echo "Update ${#produced[@]} translation(s) from en.json@${short}"
+            echo
+            echo "Languages: ${produced[*]}"
+            if [ ${#failed[@]} -gt 0 ]; then
+              echo "Skipped (failed this run): ${failed[*]}"
+            fi
+          } > /tmp/commit_msg.txt
+          git commit -F /tmp/commit_msg.txt
+
           # Single writer per branch, and each run resets it to the default
-          # branch + generated file, so plain --force is correct.
+          # branch + generated files, so plain --force is correct.
           # --force-with-lease would reject on "stale info" (we only fetch the
           # default branch, not this branch's tracking ref).
           git push --force origin "$branch"
 
-          # Open a PR if none is already open for this branch.
+          # PR body: what's included, what was skipped, and the review reminder.
+          {
+            echo "Machine translations regenerated from \`en.json@${short}\` via AWS Bedrock."
+            echo "Merging publishes all of these in a single GitHub Pages deploy."
+            echo
+            echo "**Included (${#produced[@]}):** ${produced[*]}"
+            if [ ${#failed[@]} -gt 0 ]; then
+              echo
+              echo "**Skipped — failed this run (${#failed[@]}):** ${failed[*]}"
+              echo "They'll be retried on the next run and are not in this PR."
+            fi
+            echo
+            echo "Review the diff before merging."
+          } > /tmp/pr_body.txt
+
+          title="Update ${#produced[@]} translation(s) from en.json@${short}"
+
+          # Open a PR if none is already open for this branch; otherwise the
+          # forced push above already refreshed it.
           existing=$(gh pr list --repo "$TARGET_REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -z "$existing" ]; then
             gh pr create \
               --repo "$TARGET_REPO" \
               --base "$default_branch" \
               --head "$branch" \
-              --title "Update ${CODE} translation from en.json@${short}" \
-              --body "Machine translation regenerated from \`en.json@${short}\` via AWS Bedrock. Review the diff before merging to publish."
+              --title "$title" \
+              --body-file /tmp/pr_body.txt
           else
-            echo "PR #${existing} already open for ${branch}; branch updated."
+            # Keep the open PR's title/body in step with this run's contents.
+            gh pr edit "$existing" --repo "$TARGET_REPO" \
+              --title "$title" --body-file /tmp/pr_body.txt
+            echo "PR #${existing} already open for ${branch}; branch and description updated."
           fi
+
+          # Job summary mirrors the PR body for at-a-glance run status.
+          {
+            echo "## Translate locales"
+            echo "Included ${#produced[@]}: ${produced[*]}"
+            if [ ${#failed[@]} -gt 0 ]; then
+              echo
+              echo "Skipped ${#failed[@]}: ${failed[*]}"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
