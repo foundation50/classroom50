@@ -20,10 +20,9 @@ export const NAMESPACE = "translation"
 export const MAX_PACK_BYTES = 512 * 1024
 export const MAX_PACK_KEYS = 5000
 
-// Public registry of machine-generated + human-reviewed language packs
-// (published from the classroom50-language-packs repo via GitHub Pages). The
-// base URL is overridable at build time for forks/self-hosting; it hosts one
-// `<code>.json` per language plus an `index.json` manifest listing them.
+// Registry of machine-generated + human-reviewed packs, served from the
+// classroom50-language-packs repo via GitHub Pages. Base URL is overridable for
+// forks; it hosts one `<code>.json` per language plus an `index.json` manifest.
 export const LANGUAGE_REGISTRY_BASE_URL = (
   import.meta.env.VITE_LANGUAGE_REGISTRY_URL ||
   "https://fifty.foundation/classroom50-language-packs"
@@ -31,8 +30,7 @@ export const LANGUAGE_REGISTRY_BASE_URL = (
 
 const REGISTRY_INDEX_URL = `${LANGUAGE_REGISTRY_BASE_URL}/index.json`
 
-// Cap the manifest fetch — it's a small JSON list, so anything large is
-// suspicious. Reuses the per-pack byte handling for the packs themselves.
+// The manifest is a small JSON list; anything larger is suspect.
 const MAX_REGISTRY_BYTES = 64 * 1024
 
 // Dotted keys to translated strings, e.g. { "notFound.title": "..." }. Nested
@@ -510,9 +508,8 @@ export async function prepareFromUrl(
 
 // ---- Built-in registry ------------------------------------------------------
 
-// Fetch the registry manifest and return the list of offered language codes.
-// Invalid entries are skipped; a fetch/parse failure throws LanguagePackError
-// so the UI can surface a friendly message. Never throws for an empty list.
+// Fetch the manifest and return the offered language codes. Invalid entries are
+// skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
 export async function fetchRegistry(): Promise<RegistryLanguage[]> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -558,7 +555,7 @@ export async function fetchRegistry(): Promise<RegistryLanguage[]> {
     throw new LanguagePackError("Language registry manifest is malformed.")
   }
 
-  // Keep only well-formed entries, drop the base language, and dedupe.
+  // Keep well-formed entries, drop the base language, dedupe.
   const seen = new Set<string>()
   const langs: RegistryLanguage[] = []
   for (const entry of parsed.data.languages) {
@@ -577,8 +574,7 @@ function packUrl(code: string): string {
   return `${LANGUAGE_REGISTRY_BASE_URL}/${code}.json`
 }
 
-// HEAD-probe a pack URL to confirm it's actually fetchable, without downloading
-// the body. Returns true only on an ok response; any error/timeout is false.
+// HEAD-probe a pack URL to confirm it's fetchable without downloading the body.
 async function packIsReachable(code: string): Promise<boolean> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -595,12 +591,9 @@ async function packIsReachable(code: string): Promise<boolean> {
   }
 }
 
-// Fetch the registry, then confirm each offered pack is actually reachable
-// (HEAD, no body download) and return only the codes that resolve. This catches
-// manifest/pack drift — a code listed in index.json whose <code>.json is
-// missing or not yet deployed won't be offered to the user. Probes run in
-// parallel; the manifest fetch still throws on failure (surfaced by the UI),
-// but individual unreachable packs are silently dropped.
+// Fetch the manifest, then keep only packs that actually resolve (parallel HEAD
+// probes). Catches manifest/pack drift — a code listed but not yet deployed
+// won't be offered. Manifest-fetch failure still throws; dead packs are dropped.
 export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
   const offered = await fetchRegistry()
   const results = await Promise.all(
@@ -612,10 +605,8 @@ export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
   return results.filter((r) => r.ok).map((r) => r.lang)
 }
 
-// Prepare a preview for a registry language by resolving its pack URL and
-// reusing the URL loader (which enforces the same size cap, timeout, and
-// validation as a user-pasted URL). The code is passed explicitly so it doesn't
-// depend on URL inference.
+// Preview a registry language by reusing the URL loader (same size/timeout/
+// validation guardrails). The code is explicit so it doesn't rely on inference.
 export async function prepareFromBuiltIn(code: string): Promise<PackPreview> {
   const resolved = normalizeLangCode(code)
   return prepareFromUrl(packUrl(resolved), resolved)
@@ -636,16 +627,13 @@ export async function commitPack(
 
 export const LANG_QUERY_PARAM = "lang"
 
-// Build a shareable URL that deep-links a language: the current site origin +
-// path with `?lang=<code>` set (replacing any existing one). A recipient
-// opening it gets that language applied automatically (see applyLangFromQuery).
-// Returns null when there's no window (SSR/tests without a location).
+// Build a shareable URL that deep-links a language: current origin + path with
+// `?lang=<code>` set. Opening it applies that language (see applyLangFromQuery).
 export function shareUrlForLang(code: string): string | null {
   if (typeof window === "undefined") return null
   try {
     const url = new URL(window.location.href)
-    // Share a clean landing URL: keep origin + path, drop other transient
-    // query params, and set only the language.
+    // Clean landing URL: keep origin + path, set only the language.
     url.search = ""
     url.hash = ""
     url.searchParams.set(LANG_QUERY_PARAM, normalizeLangCode(code))
@@ -656,16 +644,11 @@ export function shareUrlForLang(code: string): string | null {
 }
 
 // Apply a `?lang=<code>` deep link so a shared URL lands the visitor in that
-// language with no manual switching. Behavior (see the settings docs):
-// - `en` (base) switches immediately, no pack needed.
-// - An already-installed code just switches.
-// - Otherwise the code must be offered by the registry; its pack is fetched and
-//   installed, then activated. A `?lang=` always wins for the visit.
-// - The param is stripped from the URL afterward (win or fail) so a refresh or
-//   bookmark doesn't keep re-forcing it and the address bar stays clean.
-// - Any invalid code / unavailable pack / fetch error is swallowed — a shared
-//   link must never break the app; the visitor simply stays where they were.
-// Safe to call once at startup; a no-op when the param is absent.
+// language: `en` and already-installed codes just switch; otherwise the code
+// must be offered by the registry, then its pack is fetched, installed, and
+// activated. Always wins for the visit. The param is stripped afterward (win or
+// fail) so a reload doesn't re-fire it. Errors are swallowed — a shared link
+// must never break the app. No-op when the param is absent.
 export async function applyLangFromQuery(): Promise<void> {
   if (typeof window === "undefined") return
 
@@ -677,7 +660,6 @@ export async function applyLangFromQuery(): Promise<void> {
   }
   if (!requested) return
 
-  // Whatever happens below, remove the param so it doesn't re-fire on reload.
   const stripParam = () => {
     try {
       const url = new URL(window.location.href)
@@ -688,7 +670,7 @@ export async function applyLangFromQuery(): Promise<void> {
         url.pathname + url.search + url.hash,
       )
     } catch {
-      // Non-fatal: a stale param is harmless beyond re-running this once.
+      // A stale param is harmless beyond re-running this once.
     }
   }
 
@@ -702,21 +684,19 @@ export async function applyLangFromQuery(): Promise<void> {
       return
     }
 
-    // Already installed — just switch, no network.
+    // Already installed — switch without a network call.
     if (installedSnapshot.includes(code) || code in readStoredPacks()) {
       await selectLang(code)
       return
     }
 
-    // Not installed: only honor codes the registry actually offers, then
-    // fetch + install + activate.
+    // Only honor codes the registry offers, then fetch + install + activate.
     const offered = await fetchRegistry()
     if (!offered.some((l) => l.code === code)) return
     const preview = await prepareFromBuiltIn(code)
     await commitPack(preview.code, preview.bundle)
   } catch {
-    // Invalid code, unavailable pack, or network failure — leave the active
-    // language untouched.
+    // Invalid code, unavailable pack, or network failure — stay put.
   } finally {
     stripParam()
   }

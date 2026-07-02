@@ -1,27 +1,20 @@
 name: Translate locales
 
 # Regenerates each target-language pack from web/src/locales/en.json with AWS
-# Bedrock and opens a pull request per language on the separate translations
-# repo (vars.LANGUAGE_PACKS_REPO). A human reviews the diff and merges to publish.
+# Bedrock and opens a pull request per language on the language repo
+# (vars.LANGUAGE_PACKS_REPO); a human merges to publish.
 #
-# Design (see the plan): each run reads back the language repo's CURRENT
-# <code>.json (which may contain human PR corrections) and asks the model to
-# regenerate the WHOLE file — preserving good translations, retranslating only
-# where the English changed. That keeps translations stable and lets the model
-# honor TRANSLATION_PROMPT.md's whole-sentence / plural / terminology rules.
-# There is no per-key delta and no sidecar state; the published file is the
-# baseline for the next run.
+# Each run reads the language repo's current <code>.json (which may hold human
+# PR fixes) and regenerates the whole file, preserving good translations and
+# only retranslating changed English. No per-key delta, no sidecar state — the
+# published file is the next run's baseline.
 #
-# Auth: Bedrock via an Amazon Bedrock API key (bearer token) in the
-# AWS_BEARER_TOKEN_BEDROCK env var, which boto3's bedrock-runtime client
-# auto-detects — no OIDC role or IAM trust policy needed. The cross-repo PR
-# uses a fine-grained PAT (secrets.LANGUAGE_PACKS_REPO_TOKEN) scoped to only the
-# language repo with Contents + Pull requests write.
+# Auth: Bedrock via an API key in AWS_BEARER_TOKEN_BEDROCK (boto3 auto-detects
+# it; no IAM/OIDC); the cross-repo PR uses a fine-grained PAT
+# (LANGUAGE_PACKS_REPO_TOKEN, scoped to the language repo, Contents + PRs write).
 #
-# One-time setup — repo variables: LANGUAGE_PACKS_REPO (owner/repo), AWS_REGION,
-# AWS_BEDROCK_MODEL_ID; repo secrets: LANGUAGE_PACKS_REPO_TOKEN (fine-grained
-# PAT) and AWS_BEARER_TOKEN_BEDROCK (an Amazon Bedrock API key with permission
-# to invoke the chosen model).
+# Setup — variables: LANGUAGE_PACKS_REPO (owner/repo), AWS_REGION,
+# AWS_BEDROCK_MODEL_ID; secrets: LANGUAGE_PACKS_REPO_TOKEN, AWS_BEARER_TOKEN_BEDROCK.
 
 on:
   push:
@@ -120,9 +113,8 @@ jobs:
       - name: Structural gate (verify_locale.py)
         run: |
           set -euo pipefail
-          # verify_locale.py reads en.json from CWD and takes exactly one argv;
-          # run it from a dir holding both en.json and the generated pack. Treat
-          # ANY non-zero exit as a failure (2 = setup error, 1 = validation FAIL).
+          # verify_locale.py reads en.json from CWD and takes one argv, so run it
+          # from a dir holding both. Any non-zero exit fails (2 = setup, 1 = FAIL).
           gate=$(mktemp -d)
           cp web/src/locales/en.json "$gate/en.json"
           cp web/src/locales/verify_locale.py "$gate/verify_locale.py"
@@ -167,11 +159,10 @@ jobs:
             exit 0
           fi
           git commit -m "Update ${CODE} translation from en.json@${short}"
-          # Each language owns its own translate/<code> branch (single writer),
-          # and we always intend to reset it to the latest default branch plus
-          # the freshly generated file. Plain --force is correct here;
-          # --force-with-lease would reject on "stale info" because we fetch only
-          # the default branch, not this branch's remote-tracking ref.
+          # Single writer per branch, and each run resets it to the default
+          # branch + generated file, so plain --force is correct.
+          # --force-with-lease would reject on "stale info" (we only fetch the
+          # default branch, not this branch's tracking ref).
           git push --force origin "$branch"
 
           # Open a PR if none is already open for this branch.

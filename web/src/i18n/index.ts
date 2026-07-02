@@ -35,10 +35,9 @@ if (stored !== BASE_LANG && installed.includes(stored)) {
   void i18n.changeLanguage(stored)
 }
 
-// A `?lang=<code>` deep link overrides the stored choice for this visit,
-// installing the pack from the registry if needed. Fire-and-forget so startup
-// isn't blocked on a network fetch; it activates reactively when it resolves
-// and self-heals (swallows errors, strips the param) so a shared link is safe.
+// A `?lang=<code>` deep link overrides the stored choice for this visit.
+// Fire-and-forget so startup isn't blocked; it activates when it resolves and
+// swallows errors, so a shared link is always safe.
 void applyLangFromQuery()
 
 export default i18n

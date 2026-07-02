@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """Regenerate a target-language pack from the base en.json using AWS Bedrock.
 
-Reads the base locale and the language repo's current translation (if any),
-then asks a Bedrock model to reproduce each top-level section of the target
-file: existing good translations are preserved, strings whose English changed
-are retranslated, and missing keys are filled. Translating one section per call
-(with the full English file as context) keeps each response small enough to
-avoid truncation while still letting the model honor TRANSLATION_PROMPT.md's
-whole-sentence fragment reassembly, plural, and file-wide terminology rules —
-fragment/plural sibling groups never span two top-level sections.
+Reads en.json and the language repo's current translation (if any), then asks a
+Bedrock model to reproduce each top-level section: existing good translations
+are preserved, changed English is retranslated, missing keys are filled.
+Translating one section per call (with the full English file as context) keeps
+each response small enough to avoid truncation while honoring
+TRANSLATION_PROMPT.md's fragment/plural/terminology rules — fragment and plural
+sibling groups never span two top-level sections.
 
 Usage:
     python translate_locales.py \
@@ -18,13 +17,10 @@ Usage:
         --current langrepo/ja.json \
         --out langrepo/ja.json
 
-Auth: set an Amazon Bedrock API key in AWS_BEARER_TOKEN_BEDROCK — boto3's
-bedrock-runtime client auto-detects it (no IAM role / OIDC needed). Standard
-AWS credential chains (env vars, profiles, assumed roles) still work if that
-variable is unset.
+Auth: set an Amazon Bedrock API key in AWS_BEARER_TOKEN_BEDROCK (boto3 picks it
+up automatically); the standard AWS credential chain works too if it's unset.
 
-Exit codes: 0 on success, non-zero on failure (so CI can gate a language).
-The structural check (verify_locale.py) is invoked separately by the caller.
+Exit codes: 0 on success, non-zero on failure so CI can gate a language.
 """
 
 from __future__ import annotations
@@ -40,15 +36,12 @@ import boto3
 from botocore.config import Config
 from botocore.exceptions import ClientError
 
-# Anthropic-on-Bedrock message API version. Overridable for non-Anthropic models
-# via BEDROCK_ANTHROPIC_VERSION, though the payload shape below assumes the
-# Anthropic Messages schema (the documented default for Claude on Bedrock).
+# Anthropic Messages API version on Bedrock; the payload below assumes that
+# schema. Overridable via BEDROCK_ANTHROPIC_VERSION.
 ANTHROPIC_VERSION = os.environ.get("BEDROCK_ANTHROPIC_VERSION", "bedrock-2023-05-31")
 
-# Bounds a single InvokeModel response. We translate one top-level section per
-# call (see main), so this need only fit the largest section's translated
-# output, not the whole file. Kept generous as a safety margin for verbose
-# scripts; overridable via BEDROCK_MAX_TOKENS.
+# Bounds one response. We translate a single section per call, so this only
+# needs to fit the largest section; kept generous. Overridable.
 DEFAULT_MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "20000"))
 
 MAX_ATTEMPTS = 5
@@ -87,13 +80,11 @@ def build_section_message(
     section_base_raw: str,
     section_current_raw: str | None,
 ) -> str:
-    """Assemble the user turn for translating a single top-level section.
+    """Build the user turn for translating one top-level section.
 
-    The full English file is included as read-only CONTEXT so terminology stays
-    consistent across the whole pack, but the model is asked to translate and
-    return only the current section's subtree. Chunking by top-level section
-    never splits a fragment/plural sibling group, since those always share a
-    top-level parent.
+    The full English file rides along as read-only context for terminology
+    consistency, but only the current section is translated and returned.
+    Chunking by top-level section never splits a fragment/plural sibling group.
     """
     parts = [
         f"Target locale code: {code}",
@@ -263,10 +254,9 @@ def main() -> int:
             eprint(f"[{args.code}] existing translation is not valid JSON: {err}")
             return 1
 
-    # Translate one top-level section per call. Sections are the natural chunk
-    # boundary: they keep each response small enough to avoid truncation, and no
-    # fragment/plural sibling group spans two top-level sections. The full
-    # English file rides along as context so terminology stays consistent.
+    # Translate one section per call: small enough to avoid truncation, and no
+    # fragment/plural group spans two sections. Full English rides along as
+    # context for terminology consistency.
     translated: dict = {}
     for section, section_value in base.items():
         section_base_obj: dict = {section: section_value}
@@ -297,8 +287,7 @@ def main() -> int:
         if list(section_result.keys()) == [section]:
             section_result = section_result[section]
 
-        # Per-section parity: fail fast on the offending section rather than
-        # after assembling the whole file.
+        # Fail on the offending section rather than after the whole file.
         section_missing = check_key_parity(section_base_obj, {section: section_result})
         if section_missing:
             eprint(

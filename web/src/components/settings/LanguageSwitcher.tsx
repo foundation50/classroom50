@@ -23,9 +23,7 @@ import {
 } from "@/i18n/customLocale"
 
 // Settings UI for language packs. Uploading/fetching only *prepares* a pack
-// (parse + preview) — nothing is applied until the user confirms. The code is
-// inferred from the file name / URL; the manual code field appears only when
-// inference fails.
+// (parse + preview); nothing applies until the user confirms.
 export const LanguageSwitcher = ({
   onApplied,
 }: {
@@ -52,8 +50,7 @@ export const LanguageSwitcher = ({
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
-  // Accordion: at most one section is open at a time so the modal can't grow
-  // unbounded when the user explores multiple sections.
+  // Accordion: at most one section open at a time so the modal stays bounded.
   const [openSection, setOpenSection] = useState<
     "share" | "installed" | "add" | "install" | null
   >(null)
@@ -105,9 +102,8 @@ export const LanguageSwitcher = ({
     await runPrepare(() => prepareFromUrl(url.trim(), code.trim() || undefined))
   }
 
-  // Lazily load the registry the first time the Browse section opens. Only
-  // packs that are actually reachable (HEAD-probed) are offered, so a listed-
-  // but-undeployed language never appears as a dead entry.
+  // Lazily load the registry when Browse first opens. Only HEAD-reachable packs
+  // are offered, so a listed-but-undeployed language never shows as a dead entry.
   const loadRegistry = async () => {
     if (registry || registryBusy) return
     setRegistryBusy(true)
@@ -125,11 +121,9 @@ export const LanguageSwitcher = ({
     }
   }
 
-  // Controlled accordion: the native <details> toggle fights React's `open`
-  // prop (clicking a closed section closes the open one but doesn't open the
-  // clicked one until a second click). So we intercept the summary click,
-  // prevent the native toggle, and drive the open section ourselves — opening a
-  // section closes any other. Opening "add" lazily loads the registry.
+  // Controlled accordion: driving the native <details> via its own toggle event
+  // fights React's `open` prop (a closed section needs two clicks to open), so
+  // we intercept the summary click and set the open section ourselves.
   const toggleSection = (
     event: React.MouseEvent,
     section: "share" | "installed" | "add" | "install",
@@ -169,8 +163,7 @@ export const LanguageSwitcher = ({
     setError(null)
   }
 
-  // The language to share: an explicit pick, else the active language. Falls
-  // back to the base language so the control is always meaningful.
+  // Language to share: explicit pick, else the active language.
   const shareCode = shareCodeOverride ?? lang ?? BASE_LANG
   const shareUrl = shareUrlForLang(shareCode)
 
@@ -181,8 +174,7 @@ export const LanguageSwitcher = ({
       setShareCopied(true)
       window.setTimeout(() => setShareCopied(false), 2000)
     } catch {
-      // Clipboard blocked (permissions/insecure context): leave the URL visible
-      // in the field so the user can copy it manually.
+      // Clipboard blocked (insecure context): leave the URL for manual copy.
       setShareCopied(false)
     }
   }
