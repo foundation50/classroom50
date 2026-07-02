@@ -7,9 +7,18 @@ import i18n from "@/i18n"
 // codes ("en", "ja"), so the app's language code passes through directly. The
 // bare base language "en" is mapped to "en-US" to preserve the exact US-style
 // output the app (and its tests) expect; other languages use their own code.
+// A sideloaded pack can carry a syntactically-odd code (e.g. "123") that
+// `Intl.DateTimeFormat` rejects with a RangeError, so we validate it against
+// Intl and fall back to "en-US" rather than let every date render throw.
 const resolveLocale = (): string => {
   const lang = i18n.language || "en-US"
-  return lang === "en" ? "en-US" : lang
+  const candidate = lang === "en" ? "en-US" : lang
+  try {
+    Intl.getCanonicalLocales(candidate)
+    return candidate
+  } catch {
+    return "en-US"
+  }
 }
 
 // `Intl.DateTimeFormat`'s locale is fixed at construction, so build formatters

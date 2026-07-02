@@ -960,16 +960,13 @@ const CreateAssignmentForm = ({
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
                       <p className="mt-1.5 text-sm text-base-content/70">
-                        {t("assignments.form.allowedFilesHelp_1")}{" "}
-                        <code>.gitignore</code>
-                        {t("assignments.form.allowedFilesHelp_2")}{" "}
-                        <code>!</code>
-                        {t("assignments.form.allowedFilesHelp_3")}{" "}
-                        <code>*</code> {t("assignments.form.allowedFilesHelp_4")}{" "}
-                        <code>!hello.py</code>{" "}
-                        {t("assignments.form.allowedFilesHelp_5")}{" "}
-                        <code>hello.py</code>
-                        {t("assignments.form.allowedFilesHelp_6")}
+                        {t("assignments.form.allowedFilesHelp", {
+                          gitignore: ".gitignore",
+                          bang: "!",
+                          star: "*",
+                          example: "!hello.py",
+                          result: "hello.py",
+                        })}
                       </p>
                       {error ? (
                         <p

@@ -19,6 +19,7 @@ export const LanguageSwitcher = () => {
     loadFromFile,
     loadFromUrl,
     removePack,
+    packCoverage,
   } = useLanguage()
 
   const [code, setCode] = useState("")
@@ -95,19 +96,29 @@ export const LanguageSwitcher = () => {
 
       {installedLangs.length > 0 && (
         <ul className="menu bg-base-200 rounded-box w-full max-w-xs">
-          {installedLangs.map((c) => (
-            <li key={c} className="flex flex-row items-center justify-between">
-              <span>{c}</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs"
-                aria-label={t("language.removePack", { code: c })}
-                onClick={() => removePack(c)}
-              >
-                <Trash2 className="size-4" aria-hidden="true" />
-              </button>
-            </li>
-          ))}
+          {installedLangs.map((c) => {
+            const cov = packCoverage(c)
+            return (
+              <li key={c} className="flex flex-row items-center justify-between">
+                <span className="flex items-center gap-2">
+                  {c}
+                  {cov !== null && cov < 1 && (
+                    <span className="badge badge-ghost badge-xs">
+                      {Math.round(cov * 100)}%
+                    </span>
+                  )}
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  aria-label={t("language.removePack", { code: c })}
+                  onClick={() => removePack(c)}
+                >
+                  <Trash2 className="size-4" aria-hidden="true" />
+                </button>
+              </li>
+            )
+          })}
         </ul>
       )}
 

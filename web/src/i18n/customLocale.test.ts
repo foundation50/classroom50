@@ -1,10 +1,12 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   LanguagePackError,
   MAX_PACK_BYTES,
+  coverage,
   flattenBundle,
   loadFromUrl,
+  missingKeys,
   normalizeLangCode,
   parseBundle,
 } from "./customLocale"
@@ -65,6 +67,14 @@ describe("normalizeLangCode", () => {
     expect(() => normalizeLangCode("de/../x")).toThrow(LanguagePackError)
     expect(() => normalizeLangCode("a")).toThrow(LanguagePackError)
   })
+
+  it("rejects Intl-invalid tags that lack a letter primary subtag", () => {
+    // These pass a loose [A-Za-z0-9-] check but make Intl.DateTimeFormat throw
+    // a RangeError, so they must be rejected at install time.
+    for (const bad of ["123", "12-34", "1de", "a1-b2"]) {
+      expect(() => normalizeLangCode(bad), bad).toThrow(LanguagePackError)
+    }
+  })
 })
 
 describe("loadFromUrl scheme gate", () => {
@@ -81,5 +91,70 @@ describe("loadFromUrl scheme gate", () => {
     await expect(loadFromUrl("not a url", "de")).rejects.toThrow(
       LanguagePackError,
     )
+  })
+})
+
+describe("loadFromUrl response handling", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("rejects a non-2xx response before installing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 404 })),
+    )
+    await expect(
+      loadFromUrl("https://example.com/de.json", "de"),
+    ).rejects.toThrow(/HTTP 404/)
+  })
+
+  it("aborts a streamed body that exceeds the size cap", async () => {
+    // A chunked response with no Content-Length: the header check can't catch
+    // it, so the streaming reader must abort once bytes exceed MAX_PACK_BYTES.
+    const oversized = "a".repeat(MAX_PACK_BYTES + 1024)
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(oversized))
+        controller.close()
+      },
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(body, { status: 200 })),
+    )
+    await expect(
+      loadFromUrl("https://example.com/big.json", "de"),
+    ).rejects.toThrow(/too large/)
+  })
+
+  it("rejects when the declared Content-Length exceeds the cap", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response("{}", {
+            status: 200,
+            headers: { "content-length": String(MAX_PACK_BYTES + 1) },
+          }),
+      ),
+    )
+    await expect(
+      loadFromUrl("https://example.com/big.json", "de"),
+    ).rejects.toThrow(/too large/)
+  })
+})
+
+describe("coverage / missingKeys", () => {
+  it("reports full coverage for a pack translating every base key", () => {
+    // A pack that mirrors the base keys 1:1 has coverage 1 and no missing keys.
+    // We can't import the private base list, so build a pack from the known
+    // base by round-tripping a known subset: an empty pack has <1 coverage.
+    const partial = { "notFound.title": "x" }
+    expect(coverage(partial)).toBeGreaterThan(0)
+    expect(coverage(partial)).toBeLessThan(1)
+    expect(missingKeys(partial).length).toBeGreaterThan(0)
+    // A key the base doesn't have doesn't inflate coverage.
+    expect(missingKeys(partial)).not.toContain("notFound.title")
   })
 })

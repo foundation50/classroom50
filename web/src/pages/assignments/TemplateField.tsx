@@ -196,17 +196,18 @@ const TemplateVerificationNote = ({
           </Note>
         )
       }
-      const where = verification.inOrg
-        ? ""
-        : t("assignments.template.okWhere", { owner: verification.owner })
+      const okPrefixKey = verification.inOrg
+        ? verification.visibility === "public"
+          ? "assignments.template.okPrefixPublicInOrg"
+          : "assignments.template.okPrefixPrivateInOrg"
+        : verification.visibility === "public"
+          ? "assignments.template.okPrefixPublic"
+          : "assignments.template.okPrefixPrivate"
       return (
         <Note tone="success" icon={CheckCircle2}>
-          {verification.visibility === "public"
-            ? t("assignments.template.okVisibilityPublic")
-            : t("assignments.template.okVisibilityPrivate")}
-          {t("assignments.template.okTemplate", { where })}{" "}
+          {t(okPrefixKey, { owner: verification.owner })}{" "}
           <Code>{verification.branch}</Code>
-          {t("assignments.template.okStudentsAccess")}
+          {t("assignments.template.okSuffix")}
         </Note>
       )
     }

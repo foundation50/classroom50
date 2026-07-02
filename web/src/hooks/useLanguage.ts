@@ -7,6 +7,7 @@ import {
   installedCodes as readInstalledCodes,
   loadFromFile as loadFile,
   loadFromUrl as loadUrl,
+  packCoverage as readPackCoverage,
   removePack as removePackImpl,
   selectLang,
   subscribeToPackChanges,
@@ -49,6 +50,11 @@ export function useLanguage() {
 
   const removePack = useCallback((code: string) => removePackImpl(code), [])
 
+  const packCoverage = useCallback(
+    (code: string) => readPackCoverage(code),
+    [],
+  )
+
   return {
     lang: i18n.language,
     availableLangs,
@@ -57,6 +63,7 @@ export function useLanguage() {
     loadFromFile,
     loadFromUrl,
     removePack,
+    packCoverage,
   }
 }
 

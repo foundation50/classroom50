@@ -31,14 +31,19 @@ export type LanguagePack = {
   bundle: FlatBundle
 }
 
-// Language code: a BCP-47-ish token (letters, digits, hyphen). Deliberately
-// permissive but bounded so a pasted code can't smuggle in odd characters.
+// Language code: a BCP-47-ish tag. Must start with a 2-3 letter primary
+// language subtag, optionally followed by `-`-separated alphanumeric subtags
+// (region/script/variant). This rejects codes like "123" or "12-34" that pass a
+// looser check but make `Intl.DateTimeFormat` throw a RangeError downstream.
 const langCodeSchema = z
   .string()
   .trim()
   .min(2)
   .max(35)
-  .regex(/^[A-Za-z0-9-]+$/, "Language code may only contain letters, digits, and hyphens")
+  .regex(
+    /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/,
+    "Language code must be a valid BCP-47 tag (e.g. de, pt-BR)",
+  )
 
 const flatBundleSchema = z
   .record(z.string(), z.string())
@@ -224,15 +229,25 @@ function registerPack(pack: LanguagePack): void {
   i18n.addResourceBundle(pack.code, NAMESPACE, pack.bundle, true, true)
 }
 
-// Register every valid stored pack with i18next. Called at startup and on
-// cross-tab storage events.
+// Register the stored packs with i18next, reconciling against what was
+// previously registered: add survivors and drop any bundle whose pack is gone
+// (e.g. removed in another tab). Called at startup and on cross-tab storage
+// events. Returns the currently-installed codes.
 export function hydratePacks(): string[] {
   const packs = readStoredPacks()
+  const codes = Object.keys(packs)
+  // Drop bundles for packs that no longer exist (cross-tab removal). Without
+  // this, a pack removed in another tab stays registered here until reload.
+  for (const code of installedSnapshot) {
+    if (!(code in packs)) {
+      i18n.removeResourceBundle(code, NAMESPACE)
+    }
+  }
   for (const pack of Object.values(packs)) {
     registerPack(pack)
   }
   refreshSnapshot()
-  return Object.keys(packs)
+  return codes
 }
 
 // Install (or replace) a pack: register it and persist. Returns the code.
@@ -242,6 +257,9 @@ export function installPack(codeInput: string, bundle: FlatBundle): string {
     throw new LanguagePackError(`"${BASE_LANG}" is the built-in base language and can't be replaced.`)
   }
   const pack: LanguagePack = { code, bundle }
+  // Re-read immediately before writing so a concurrent install in another tab
+  // (which shares this origin's localStorage) is merged in rather than clobbered
+  // by a stale snapshot — the classic lost-update on a read-modify-write.
   const packs = readStoredPacks()
   packs[code] = pack
   writeStoredPacks(packs)
@@ -268,6 +286,30 @@ export function installedCodes(): string[] {
 
 export function availableLangs(): string[] {
   return availableSnapshot
+}
+
+// The base English keys, flattened once, as the source of truth for coverage.
+const baseKeys = Object.keys(flattenBundle(en))
+
+// Report which base keys a pack does NOT translate. Missing keys fall back to
+// English at runtime (i18next fallbackLng), so this is a completeness signal a
+// caller can surface (e.g. "translates 412/540 strings") — not an error.
+export function missingKeys(bundle: FlatBundle): string[] {
+  return baseKeys.filter((key) => !(key in bundle))
+}
+
+// Fraction of base keys a pack covers, 0..1. Useful for a "78% translated"
+// badge in the language switcher.
+export function coverage(bundle: FlatBundle): number {
+  if (baseKeys.length === 0) return 1
+  const translated = baseKeys.length - missingKeys(bundle).length
+  return translated / baseKeys.length
+}
+
+// Coverage for an installed pack by code (0..1), or null if not installed.
+export function packCoverage(code: string): number | null {
+  const pack = readStoredPacks()[code]
+  return pack ? coverage(pack.bundle) : null
 }
 
 // Switch the active language and persist the choice.
@@ -328,18 +370,64 @@ export async function loadFromUrl(url: string, code: string): Promise<string> {
     )
   }
 
+  // Enforce the size cap during download, not just from the declared header:
+  // a chunked response omits Content-Length (Number(null) === 0, which would
+  // pass a header-only check), so stream the body and abort once we exceed the
+  // cap rather than buffering an arbitrarily large body into memory.
   const declared = Number(res.headers.get("content-length"))
   if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
+    controller.abort()
     throw new LanguagePackError(
       `Language pack is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
     )
   }
 
-  const text = await res.text()
+  const text = await readCappedText(res, controller)
   const bundle = parseBundle(text)
   const installed = installPack(code, bundle)
   await selectLang(installed)
   return installed
+}
+
+// Read a response body, aborting if the running byte total exceeds the cap.
+// Falls back to res.text() when the body isn't a readable stream (older
+// environments / test mocks), where parseBundle's own byte check still applies.
+async function readCappedText(
+  res: Response,
+  controller: AbortController,
+): Promise<string> {
+  const body = res.body
+  if (!body || typeof body.getReader !== "function") {
+    return res.text()
+  }
+  const reader = body.getReader()
+  const chunks: Uint8Array[] = []
+  let total = 0
+  try {
+    for (;;) {
+      const { done, value } = await reader.read()
+      if (done) break
+      if (value) {
+        total += value.byteLength
+        if (total > MAX_PACK_BYTES) {
+          controller.abort()
+          throw new LanguagePackError(
+            `Language pack is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
+          )
+        }
+        chunks.push(value)
+      }
+    }
+  } finally {
+    reader.releaseLock()
+  }
+  const merged = new Uint8Array(total)
+  let offset = 0
+  for (const chunk of chunks) {
+    merged.set(chunk, offset)
+    offset += chunk.byteLength
+  }
+  return new TextDecoder().decode(merged)
 }
 
 // Subscribe to installed-pack changes (same-tab installs/removes and cross-tab
@@ -352,8 +440,17 @@ export function subscribeToPackChanges(onChange: () => void): () => void {
   if (typeof window !== "undefined") {
     const handler = (event: StorageEvent) => {
       if (event.key !== PACKS_STORAGE_KEY && event.key !== LANG_STORAGE_KEY) return
-      hydratePacks()
-      refreshSnapshot()
+      // Reconcile this tab's i18next instance with the change another tab made:
+      // add/remove bundles (hydratePacks) and apply the (possibly new) active
+      // language. If the active language's pack was removed, fall back to the
+      // base language so we never render a pack that's no longer installed.
+      const installed = hydratePacks()
+      const stored = getStoredLang()
+      const target =
+        stored !== BASE_LANG && !installed.includes(stored) ? BASE_LANG : stored
+      if (target !== i18n.language) {
+        void i18n.changeLanguage(target)
+      }
     }
     window.addEventListener("storage", handler)
     removeStorage = () => window.removeEventListener("storage", handler)
