@@ -1,14 +1,15 @@
-import { useCallback, useSyncExternalStore } from "react"
+import { useSyncExternalStore } from "react"
 import { useTranslation } from "react-i18next"
 
 import {
   BASE_LANG,
   availableLangs as readAvailableLangs,
+  commitPack,
   installedCodes as readInstalledCodes,
-  loadFromFile as loadFile,
-  loadFromUrl as loadUrl,
-  packCoverage as readPackCoverage,
-  removePack as removePackImpl,
+  packCoverage,
+  prepareFromFile,
+  prepareFromUrl,
+  removePack,
   selectLang,
   subscribeToPackChanges,
 } from "@/i18n/customLocale"
@@ -19,9 +20,14 @@ const SERVER_AVAILABLE = [BASE_LANG]
 const SERVER_INSTALLED: string[] = []
 
 // React hook over the i18n custom-locale layer. Exposes the active language plus
-// the multi-pack install / list / switch / remove API. Language changes come
-// from i18next's own event, and pack changes (including cross-tab) come from the
-// storage listener, so the component re-renders on either.
+// the multi-pack prepare / preview / commit / list / switch / remove API.
+// Loading a pack is a two-step flow: prepare (parse + preview, no side effects)
+// then commit (install + activate). Language changes come from i18next's own
+// event, and pack changes (including cross-tab) come from the storage listener,
+// so the component re-renders on either.
+//
+// The pack operations are module-level functions with stable identity, so they
+// are returned directly rather than wrapped in useCallback.
 export function useLanguage() {
   const { i18n } = useTranslation()
 
@@ -36,29 +42,14 @@ export function useLanguage() {
     () => SERVER_INSTALLED,
   )
 
-  const setLang = useCallback((code: string) => selectLang(code), [])
-
-  const loadFromFile = useCallback(
-    (file: File, code: string) => loadFile(file, code),
-    [],
-  )
-
-  const loadFromUrl = useCallback(
-    (url: string, code: string) => loadUrl(url, code),
-    [],
-  )
-
-  const removePack = useCallback((code: string) => removePackImpl(code), [])
-
-  const packCoverage = useCallback((code: string) => readPackCoverage(code), [])
-
   return {
     lang: i18n.language,
     availableLangs,
     installedLangs,
-    setLang,
-    loadFromFile,
-    loadFromUrl,
+    setLang: selectLang,
+    prepareFromFile,
+    prepareFromUrl,
+    commitPack,
     removePack,
     packCoverage,
   }

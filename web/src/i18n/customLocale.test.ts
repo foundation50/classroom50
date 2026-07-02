@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import {
   LanguagePackError,
   MAX_PACK_BYTES,
+  UndetectableCodeError,
   coverage,
   flattenBundle,
-  loadFromUrl,
+  inferLangCode,
   missingKeys,
   normalizeLangCode,
   parseBundle,
+  prepareFromUrl,
 } from "./customLocale"
 
 // The security-relevant guarantees of the sideload layer live in these pure
@@ -77,20 +79,49 @@ describe("normalizeLangCode", () => {
   })
 })
 
+describe("inferLangCode", () => {
+  it("infers a code from a bare file name", () => {
+    expect(inferLangCode("de.json")).toBe("de")
+    expect(inferLangCode("pt-BR.json")).toBe("pt-BR")
+    expect(inferLangCode("zh-Hans-CN.JSON")).toBe("zh-Hans-CN")
+  })
+
+  it("infers a code from the last URL path segment", () => {
+    expect(inferLangCode("https://example.com/locales/zh-CN.json")).toBe(
+      "zh-CN",
+    )
+    expect(inferLangCode("/some/path/fr.json?ref=main")).toBe("fr")
+    expect(inferLangCode("https://example.com/de.json#frag")).toBe("de")
+  })
+
+  it("returns null when no valid code can be extracted", () => {
+    expect(inferLangCode("translation.json")).toBeNull()
+    expect(inferLangCode("123.json")).toBeNull()
+    expect(inferLangCode("")).toBeNull()
+    expect(inferLangCode("https://example.com/download?id=42")).toBeNull()
+  })
+})
+
 describe("loadFromUrl scheme gate", () => {
   it("rejects non-http(s) schemes before fetching", async () => {
-    await expect(loadFromUrl("file:///etc/passwd", "de")).rejects.toThrow(
+    await expect(prepareFromUrl("file:///etc/passwd", "de")).rejects.toThrow(
       /http\(s\)/,
     )
-    await expect(loadFromUrl("data:application/json,{}", "de")).rejects.toThrow(
-      /http\(s\)/,
-    )
+    await expect(
+      prepareFromUrl("data:application/json,{}", "de"),
+    ).rejects.toThrow(/http\(s\)/)
   })
 
   it("rejects a malformed URL", async () => {
-    await expect(loadFromUrl("not a url", "de")).rejects.toThrow(
+    await expect(prepareFromUrl("not a url", "de")).rejects.toThrow(
       LanguagePackError,
     )
+  })
+
+  it("throws UndetectableCodeError when no code is given or inferable", async () => {
+    await expect(
+      prepareFromUrl("https://example.com/download"),
+    ).rejects.toThrow(UndetectableCodeError)
   })
 })
 
@@ -105,7 +136,7 @@ describe("loadFromUrl response handling", () => {
       vi.fn(async () => new Response("nope", { status: 404 })),
     )
     await expect(
-      loadFromUrl("https://example.com/de.json", "de"),
+      prepareFromUrl("https://example.com/de.json", "de"),
     ).rejects.toThrow(/HTTP 404/)
   })
 
@@ -124,7 +155,7 @@ describe("loadFromUrl response handling", () => {
       vi.fn(async () => new Response(body, { status: 200 })),
     )
     await expect(
-      loadFromUrl("https://example.com/big.json", "de"),
+      prepareFromUrl("https://example.com/big.json", "de"),
     ).rejects.toThrow(/too large/)
   })
 
@@ -140,8 +171,31 @@ describe("loadFromUrl response handling", () => {
       ),
     )
     await expect(
-      loadFromUrl("https://example.com/big.json", "de"),
+      prepareFromUrl("https://example.com/big.json", "de"),
     ).rejects.toThrow(/too large/)
+  })
+
+  it("returns a preview (code inferred, coverage, sample) without installing", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              nav: { roleStudent: "Studentin" },
+              notFound: { title: "x" },
+            }),
+            { status: 200 },
+          ),
+      ),
+    )
+    const preview = await prepareFromUrl("https://example.com/de.json")
+    expect(preview.code).toBe("de")
+    expect(preview.keyCount).toBe(2)
+    expect(preview.coverage).toBeGreaterThan(0)
+    expect(preview.coverage).toBeLessThan(1)
+    // The sample surfaces real translated strings pulled from the bundle.
+    expect(preview.sample).toContain("Studentin")
   })
 })
 

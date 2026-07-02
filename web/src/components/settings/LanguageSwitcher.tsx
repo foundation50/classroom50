@@ -1,23 +1,40 @@
 import { useState } from "react"
-import { Loader2, Trash2, Upload } from "lucide-react"
+import { Check, Loader2, Trash2, Upload, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
-import { BASE_LANG, LanguagePackError } from "@/i18n/customLocale"
+import {
+  BASE_LANG,
+  LanguagePackError,
+  type PackPreview,
+  UndetectableCodeError,
+  languageLabel,
+} from "@/i18n/customLocale"
 
 // Settings UI for language packs: switch between installed languages, install a
-// new pack via file upload or a pasted URL, and remove installed packs. All
-// load failures (oversized, invalid JSON, CORS/network, bad scheme) surface in a
-// single inline error without changing the active language.
-export const LanguageSwitcher = () => {
+// new pack via file upload or a pasted URL, and remove installed packs.
+//
+// Installing is a two-step flow. Uploading/fetching only *prepares* a pack
+// (parse + preview) — no storage or active-language change happens yet. The
+// preview card shows the detected language code, translation coverage, and a
+// few sample strings; the pack is applied only after the user confirms. The
+// code is inferred from the file name / URL; the manual code field is revealed
+// only when inference fails. All load failures surface in a single inline error
+// without changing the active language.
+export const LanguageSwitcher = ({
+  onApplied,
+}: {
+  onApplied?: () => void
+} = {}) => {
   const { t } = useTranslation()
   const {
     lang,
     availableLangs,
     installedLangs,
     setLang,
-    loadFromFile,
-    loadFromUrl,
+    prepareFromFile,
+    prepareFromUrl,
+    commitPack,
     removePack,
     packCoverage,
   } = useLanguage()
@@ -26,47 +43,62 @@ export const LanguageSwitcher = () => {
   const [url, setUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
+  // Revealed only when a code couldn't be inferred from the file name / URL.
+  const [needsCode, setNeedsCode] = useState(false)
+  // A parsed-but-not-yet-applied pack awaiting confirmation.
+  const [preview, setPreview] = useState<PackPreview | null>(null)
 
   const showError = (err: unknown) => {
-    if (err instanceof LanguagePackError) setError(err.message)
-    else setError(t("language.errorGeneric"))
+    if (err instanceof UndetectableCodeError) {
+      setNeedsCode(true)
+      setError(t("language.errorCodeUndetectable"))
+    } else if (err instanceof LanguagePackError) {
+      setError(err.message)
+    } else {
+      setError(t("language.errorGeneric"))
+    }
+  }
+
+  const runPrepare = async (prepare: () => Promise<PackPreview>) => {
+    setError(null)
+    setPreview(null)
+    setBusy(true)
+    try {
+      setPreview(await prepare())
+    } catch (err) {
+      showError(err)
+    } finally {
+      setBusy(false)
+    }
   }
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     event.target.value = "" // allow re-selecting the same file
     if (!file) return
-    if (!code.trim()) {
-      setError(t("language.errorCodeFirst"))
-      return
-    }
-    setError(null)
-    setBusy(true)
-    try {
-      await loadFromFile(file, code.trim())
-      setCode("")
-    } catch (err) {
-      showError(err)
-    } finally {
-      setBusy(false)
-    }
+    await runPrepare(() => prepareFromFile(file, code.trim() || undefined))
   }
 
   const handleUrl = async () => {
-    if (!code.trim()) {
-      setError(t("language.errorCodeFirst"))
-      return
-    }
     if (!url.trim()) {
       setError(t("language.errorUrlRequired"))
       return
     }
-    setError(null)
+    await runPrepare(() => prepareFromUrl(url.trim(), code.trim() || undefined))
+  }
+
+  const handleConfirm = async () => {
+    if (!preview) return
     setBusy(true)
     try {
-      await loadFromUrl(url.trim(), code.trim())
+      await commitPack(preview.code, preview.bundle)
+      // Reset the install form on success.
+      setPreview(null)
       setCode("")
       setUrl("")
+      setNeedsCode(false)
+      setError(null)
+      onApplied?.()
     } catch (err) {
       showError(err)
     } finally {
@@ -74,72 +106,94 @@ export const LanguageSwitcher = () => {
     }
   }
 
+  const handleCancel = () => {
+    setPreview(null)
+    setError(null)
+  }
+
   return (
-    <div className="flex flex-col gap-4">
-      <div>
-        <label className="label" htmlFor="lang-select">
-          <span className="label-text font-bold">{t("language.label")}</span>
+    <div className="flex flex-col gap-5">
+      <div className="flex flex-col gap-1">
+        <label className="label py-0" htmlFor="lang-select">
+          <span className="label-text font-bold">
+            {t("language.activeLabel")}
+          </span>
         </label>
         <select
           id="lang-select"
-          className="select select-bordered w-full max-w-xs"
+          className="select select-bordered w-full"
           value={lang}
           onChange={(e) => void setLang(e.target.value)}
         >
           {availableLangs.map((c) => (
             <option key={c} value={c}>
-              {c === BASE_LANG ? t("language.baseName") : c}
+              {c === BASE_LANG ? t("language.baseName") : languageLabel(c, lang)}
             </option>
           ))}
         </select>
       </div>
 
       {installedLangs.length > 0 && (
-        <ul className="menu bg-base-200 rounded-box w-full max-w-xs">
-          {installedLangs.map((c) => {
-            const cov = packCoverage(c)
-            return (
-              <li
-                key={c}
-                className="flex flex-row items-center justify-between"
-              >
-                <span className="flex items-center gap-2">
-                  {c}
-                  {cov !== null && cov < 1 && (
-                    <span className="badge badge-ghost badge-xs">
-                      {Math.round(cov * 100)}%
+        <div className="flex flex-col gap-1">
+          <span className="label-text font-bold">
+            {t("language.installedTitle")}
+          </span>
+          <ul className="menu bg-base-200 rounded-box w-full gap-1">
+            {installedLangs.map((c) => {
+              const cov = packCoverage(c)
+              return (
+                <li key={c}>
+                  <div className="flex flex-row items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      {languageLabel(c, lang)}
+                      {cov !== null && cov < 1 && (
+                        <span className="badge badge-ghost badge-sm">
+                          {Math.round(cov * 100)}%
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs"
-                  aria-label={t("language.removePack", { code: c })}
-                  onClick={() => removePack(c)}
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                </button>
-              </li>
-            )
-          })}
-        </ul>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      aria-label={t("language.removePack", { code: c })}
+                      onClick={() => removePack(c)}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </div>
       )}
 
-      <div className="flex flex-col gap-2 max-w-xs">
+      <div className="flex flex-col gap-3">
         <p className="text-xs text-base-content/70">
           {t("language.installHint")}
         </p>
-        <input
-          type="text"
-          className="input input-bordered input-sm"
-          placeholder={t("language.codePlaceholder")}
-          value={code}
-          onChange={(e) => setCode(e.target.value)}
-          disabled={busy}
-        />
 
-        <label className="btn btn-sm btn-outline">
-          {busy ? (
+        {needsCode && (
+          <div className="flex flex-col gap-1">
+            <label className="label py-0" htmlFor="lang-code">
+              <span className="label-text text-xs">
+                {t("language.codeOptionalLabel")}
+              </span>
+            </label>
+            <input
+              id="lang-code"
+              type="text"
+              className="input input-bordered input-sm w-full"
+              placeholder={t("language.codePlaceholder")}
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              disabled={busy}
+            />
+          </div>
+        )}
+
+        <label className="btn btn-sm btn-outline w-full">
+          {busy && !preview ? (
             <Loader2 className="size-4 animate-spin" aria-hidden="true" />
           ) : (
             <Upload className="size-4" aria-hidden="true" />
@@ -157,7 +211,7 @@ export const LanguageSwitcher = () => {
         <div className="flex flex-row gap-2">
           <input
             type="url"
-            className="input input-bordered input-sm flex-1"
+            className="input input-bordered input-sm flex-1 min-w-0"
             placeholder={t("language.urlPlaceholder")}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -174,8 +228,62 @@ export const LanguageSwitcher = () => {
         </div>
       </div>
 
+      {preview && (
+        <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-100 p-4">
+          <div className="flex items-center justify-between">
+            <span className="font-bold">
+              {t("language.previewTitle", {
+                code: languageLabel(preview.code, lang),
+              })}
+            </span>
+            <span className="badge badge-ghost badge-sm">
+              {t("language.previewCoverage", {
+                percent: Math.round(preview.coverage * 100),
+                keys: preview.keyCount,
+              })}
+            </span>
+          </div>
+          {preview.sample.length > 0 && (
+            <div className="flex flex-col gap-1">
+              <span className="text-xs font-semibold text-base-content/70">
+                {t("language.previewSampleLabel")}
+              </span>
+              <ul className="list-disc pl-5 text-sm text-base-content/80">
+                {preview.sample.map((s, i) => (
+                  <li key={i}>{s}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          <div className="flex flex-row justify-end gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={handleCancel}
+              disabled={busy}
+            >
+              <X className="size-4" aria-hidden="true" />
+              {t("language.previewCancel")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              onClick={() => void handleConfirm()}
+              disabled={busy}
+            >
+              {busy ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Check className="size-4" aria-hidden="true" />
+              )}
+              {t("language.previewConfirm", { code: preview.code })}
+            </button>
+          </div>
+        </div>
+      )}
+
       {error && (
-        <div className="alert alert-error max-w-xs" role="alert">
+        <div className="alert alert-error" role="alert">
           <span className="text-sm">{error}</span>
         </div>
       )}

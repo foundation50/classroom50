@@ -56,6 +56,7 @@ import {
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 
 const SIDEBAR_COLLAPSED_KEY = "classroom50:sidebar-collapsed"
 const MOBILE_DRAWER_ID = "app-drawer"
@@ -911,32 +912,37 @@ export const SidebarFooter = () => {
         </div>
       </div>
 
-      <dialog
-        ref={langDialogRef}
-        className="modal"
-        aria-labelledby={langDialogTitleId}
-      >
-        <div className="modal-box max-w-md text-base-content">
-          <form method="dialog">
-            <button
-              className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-              aria-label={t("common.close")}
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
+      {createPortal(
+        <dialog
+          ref={langDialogRef}
+          className="modal"
+          aria-labelledby={langDialogTitleId}
+        >
+          <div className="modal-box max-w-md text-base-content">
+            <form method="dialog">
+              <button
+                className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+                aria-label={t("common.close")}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </form>
+            <h3 id={langDialogTitleId} className="text-lg font-bold">
+              {t("nav.languageDialogTitle")}
+            </h3>
+            <p className="mt-1 mb-4 text-sm text-base-content/70">
+              {t("nav.languageDialogDescription")}
+            </p>
+            <LanguageSwitcher
+              onApplied={() => langDialogRef.current?.close()}
+            />
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button>{t("common.close")}</button>
           </form>
-          <h3 id={langDialogTitleId} className="text-lg font-bold">
-            {t("nav.languageDialogTitle")}
-          </h3>
-          <p className="mt-1 mb-4 text-sm text-base-content/70">
-            {t("nav.languageDialogDescription")}
-          </p>
-          <LanguageSwitcher />
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>{t("common.close")}</button>
-        </form>
-      </dialog>
+        </dialog>,
+        document.body,
+      )}
     </>
   )
 }

@@ -68,6 +68,16 @@ export class LanguagePackError extends Error {
   }
 }
 
+// Thrown by the loaders when no language code was supplied and none could be
+// inferred from the file name / URL. The UI catches this specifically to reveal
+// the code input and show a translated hint rather than the raw message.
+export class UndetectableCodeError extends LanguagePackError {
+  constructor(message = "Couldn't detect the language code — enter it below.") {
+    super(message)
+    this.name = "UndetectableCodeError"
+  }
+}
+
 // Flatten nested translation JSON ({ notFound: { title } }) into dotted keys
 // ({ "notFound.title" }). Rejects non-string leaves so a pack can't inject
 // objects/arrays where i18next expects a string.
@@ -123,6 +133,48 @@ export function normalizeLangCode(code: string): string {
     )
   }
   return result.data
+}
+
+// Human-readable label for a language code, e.g. "Japanese (ja)" or, when
+// localized into the currently active UI language, "日本語 (ja)". Falls back to
+// the bare code when Intl.DisplayNames is unavailable or can't resolve the tag.
+export function languageLabel(code: string, uiLocale?: string): string {
+  const name = languageName(code, uiLocale)
+  return name ? `${name} (${code})` : code
+}
+
+// The common name for a language code (localized to uiLocale, defaulting to the
+// active i18next language), or null when it can't be resolved.
+export function languageName(code: string, uiLocale?: string): string | null {
+  if (typeof Intl === "undefined" || typeof Intl.DisplayNames !== "function") {
+    return null
+  }
+  try {
+    const locale = uiLocale || i18n.language || BASE_LANG
+    const display = new Intl.DisplayNames([locale], { type: "language" })
+    const name = display.of(code)
+    // DisplayNames returns the input unchanged when it can't resolve the tag.
+    return name && name !== code ? name : null
+  } catch {
+    return null
+  }
+}
+
+// Best-effort language-code inference from a file name or URL. Strips a
+// trailing `.json` extension from the last path segment and returns it only if
+// it is a valid language code, so `de.json` -> "de", `.../zh-CN.json` ->
+// "zh-CN", while `translation.json` or a codeless URL yields null (the caller
+// then asks the user to type the code).
+export function inferLangCode(source: string): string | null {
+  if (!source) return null
+  // Drop query/hash and take the last path segment (works for both bare file
+  // names and full URLs since neither contains a leading scheme after split).
+  const withoutQuery = source.split(/[?#]/)[0] ?? ""
+  const segment = withoutQuery.split("/").pop() ?? ""
+  const base = segment.replace(/\.json$/i, "").trim()
+  if (!base) return null
+  const result = langCodeSchema.safeParse(base)
+  return result.success ? result.data : null
 }
 
 function byteLength(text: string): number {
@@ -327,26 +379,80 @@ export async function selectLang(code: string): Promise<void> {
 
 // ---- Loaders ----------------------------------------------------------------
 
-export async function loadFromFile(file: File, code: string): Promise<string> {
+// A parsed-but-not-yet-installed pack. `prepareFrom*` returns this so the UI
+// can show a preview (detected code, coverage, sample strings) and require
+// explicit confirmation before anything touches localStorage or i18next.
+export type PackPreview = {
+  code: string
+  bundle: FlatBundle
+  coverage: number
+  keyCount: number
+  sample: string[]
+}
+
+// Representative keys shown in the preview so the user sees real translated
+// text before applying. Chosen from the app's core classroom vocabulary
+// (teacher, student, class, assignment) plus a common action. Missing keys are
+// simply skipped.
+const SAMPLE_KEYS = [
+  "nav.roleInstructor",
+  "nav.roleStudent",
+  "nav.myClasses",
+  "nav.assignment",
+  "common.save",
+] as const
+
+function buildPreview(code: string, bundle: FlatBundle): PackPreview {
+  const sample = SAMPLE_KEYS.map((key) => bundle[key]).filter(
+    (value): value is string => typeof value === "string",
+  )
+  return {
+    code,
+    bundle,
+    coverage: coverage(bundle),
+    keyCount: Object.keys(bundle).length,
+    sample,
+  }
+}
+
+// Resolve the language code from an explicit value or by inferring it from the
+// source (file name / URL). Throws when neither yields a valid code so the UI
+// can prompt the user to type it.
+function resolveCode(explicit: string | undefined, source: string): string {
+  const typed = explicit?.trim()
+  if (typed) return normalizeLangCode(typed)
+  const inferred = inferLangCode(source)
+  if (inferred) return inferred
+  throw new UndetectableCodeError()
+}
+
+// Parse a file into a preview without persisting or switching. The code is
+// optional: when omitted it is inferred from the file name.
+export async function prepareFromFile(
+  file: File,
+  code?: string,
+): Promise<PackPreview> {
   if (file.size > MAX_PACK_BYTES) {
     throw new LanguagePackError(
       `File is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
     )
   }
+  const resolved = resolveCode(code, file.name)
   const text = await file.text()
   const bundle = parseBundle(text)
-  const installed = installPack(code, bundle)
-  await selectLang(installed)
-  return installed
+  return buildPreview(resolved, bundle)
 }
 
 const FETCH_TIMEOUT_MS = 10_000
 
-// Fetch a pack from a user-pasted URL. Requires http/https, bounds the response
-// size, times out, and translates every failure into a LanguagePackError with a
-// message the UI can show. Never changes the active language on failure — the
-// caller only calls selectLang after a successful install.
-export async function loadFromUrl(url: string, code: string): Promise<string> {
+// Fetch a pack from a user-pasted URL and return a preview without installing.
+// Requires http/https, bounds the response size, times out, and translates
+// every failure into a LanguagePackError the UI can show. The code is optional:
+// when omitted it is inferred from the URL's last path segment.
+export async function prepareFromUrl(
+  url: string,
+  code?: string,
+): Promise<PackPreview> {
   let parsed: URL
   try {
     parsed = new URL(url)
@@ -356,6 +462,8 @@ export async function loadFromUrl(url: string, code: string): Promise<string> {
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new LanguagePackError("Only http(s) URLs are supported.")
   }
+
+  const resolved = resolveCode(code, parsed.pathname)
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
@@ -390,6 +498,15 @@ export async function loadFromUrl(url: string, code: string): Promise<string> {
 
   const text = await readCappedText(res, controller)
   const bundle = parseBundle(text)
+  return buildPreview(resolved, bundle)
+}
+
+// Install and activate a previewed pack. This is the only step (after a
+// confirmed preview) that mutates localStorage and i18next.
+export async function commitPack(
+  code: string,
+  bundle: FlatBundle,
+): Promise<string> {
   const installed = installPack(code, bundle)
   await selectLang(installed)
   return installed

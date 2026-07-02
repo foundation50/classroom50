@@ -1,0 +1,102 @@
+# Language packs
+
+The web app ships with English built in ([`en.json`](./en.json)) and lets anyone
+add more languages at runtime — no rebuild, no PR. A "language pack" is a JSON
+file with the same shape as `en.json`, translated into another language. You
+install it from the account menu (avatar → Language), either by uploading the
+file or pasting a URL to it.
+
+## Creating a pack
+
+1. Copy [`en.json`](./en.json) — it is the single source of truth for every
+   translatable string.
+2. Translate the **values** into your target language. Leave the **keys** and
+   the JSON structure exactly as they are.
+3. Save it as `<code>.json` (e.g. `de.json`, `pt-BR.json`).
+
+An LLM does this well. A prompt that works:
+
+> Translate the JSON values in this file to German. Keep every key and the
+> nesting structure unchanged. Keep `{{placeholders}}` exactly as written.
+> Return only the JSON.
+
+### Rules the installer enforces
+
+Packs are validated on install and re-validated every time they are loaded
+from storage. A pack is rejected when it breaks any of these:
+
+- **Valid JSON object.** Nested objects are fine (they are flattened to dotted
+  keys internally); every leaf value must be a **string** — no arrays, numbers,
+  booleans, or null.
+- **Language code** must be a plausible BCP-47 tag: a 2-3 letter language
+  subtag, optionally followed by `-` subtags (`de`, `ja`, `pt-BR`,
+  `zh-Hans-CN`). It is detected from the file name / URL (e.g. `pt-BR.json` ->
+  `pt-BR`); you are only prompted to type it when it can't be detected.
+- **Size cap:** 512 KB per pack file.
+- **Key cap:** 5,000 keys per pack.
+- `en` itself can't be replaced — it is the built-in base.
+
+### Placeholders and plurals
+
+- Values may contain `{{name}}`-style placeholders (about 190 keys use them).
+  Keep them **verbatim** — the app substitutes runtime data (usernames, repo
+  names, counts) into them. A translated value that drops or renames a
+  placeholder will render incorrectly.
+- Plural forms use i18next's `_one` / `_other` key suffixes (e.g.
+  `students.count_one`, `students.count_other`). Languages with different
+  plural rules can use the other i18next plural suffixes (`_zero`, `_few`,
+  `_many`, ...) for the same base key.
+- GitHub-sourced data (usernames, org/repo/classroom names) is interpolated,
+  never translated.
+
+### Partial packs are fine
+
+A pack does not need to translate every key. Missing keys fall back to
+English at runtime, and the language switcher shows a coverage badge (e.g.
+"78%") next to partially translated packs. This means a pack made for an older
+version of the app keeps working after new strings are added — the new strings
+just show in English until the pack is updated.
+
+## Installing
+
+Account menu (avatar in the sidebar) → **Language**:
+
+- **Upload:** pick the `.json` file — the language code is detected from the
+  file name (enter it manually only if detection fails). A preview shows the
+  detected code, translation coverage, and sample strings; the pack is applied
+  only after you confirm.
+- **URL:** paste a link to the raw JSON (e.g. a public
+  `raw.githubusercontent.com` link) and press Fetch — the code is detected from
+  the URL. Only `http(s)` URLs are accepted, the response is size-capped while
+  downloading, and the host must allow CORS — if the fetch fails, download the
+  file and use the upload path instead. As with upload, you confirm from the
+  preview before it is applied.
+
+Installed packs persist in the browser's `localStorage` and survive reloads.
+Multiple packs can be installed side by side and switched between; removing a
+pack that is currently active falls back to English. Language changes and
+pack installs/removals sync across open tabs.
+
+### Storage format (for tools)
+
+Programmatic producers can target the same storage the UI uses (all under the
+app's origin):
+
+- `classroom50:custom-locales` — a JSON map of
+  `{ [code]: { code, bundle } }`, where `bundle` is the **flattened** pack
+  (dotted keys, string values).
+- `classroom50:lang` — the active language code.
+
+Values written here are untrusted input: they are re-validated on every load,
+and anything failing validation is dropped (falling back to English). The
+validation/installation API lives in
+[`../i18n/customLocale.ts`](../i18n/customLocale.ts) (`parseBundle`,
+`installPack`, `missingKeys`, `coverage`).
+
+## Known limitations
+
+- Relative timestamps ("3 days ago") are English-only for now (date-fns
+  locales are not sideloaded). Absolute dates follow the active language via
+  `Intl`.
+- A handful of strings asserted by unit tests in the `orgMembers` logic files
+  remain English.
