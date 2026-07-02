@@ -1,0 +1,88 @@
+name: Publish Pages
+
+# Publishes the merged language packs on `main` to GitHub Pages, so the packs
+# are reachable at a public URL even while THIS repository stays private.
+# (GitHub Pages sites are public regardless of repo visibility.)
+#
+# This workflow lives in the language-packs repo (foundation50/classroom50-language-packs),
+# NOT in classroom50. It is a downstream companion to classroom50's
+# translate-locales.yaml, which opens the per-language PRs a human merges here.
+#
+# Allow-list publisher: only the files enumerated in the "Assemble Pages
+# artifact" step are deployed, so a stray file merged into the repo is private
+# by default. Triggers are limited to push-to-main and workflow_dispatch — never
+# pull_request — so a fork PR cannot alter this workflow to leak private paths.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '*.json'
+      - '.github/workflows/publish-pages.yaml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Assemble Pages artifact (allow-list) + manifest
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          mkdir -p _site
+
+          # Publish each <code>.json language pack at the site root, and build
+          # an index.json manifest the client uses to list only the languages
+          # that are actually published (a coverage/availability signal), rather
+          # than hardcoding the full target list.
+          python3 - <<'PY'
+          import json, glob, os
+
+          os.makedirs("_site", exist_ok=True)
+          langs = []
+          for path in sorted(glob.glob("*.json")):
+              code = os.path.splitext(os.path.basename(path))[0]
+              if code == "index":  # never treat the manifest as a pack
+                  continue
+              try:
+                  with open(path, encoding="utf-8") as fh:
+                      bundle = json.load(fh)
+              except (OSError, ValueError) as err:
+                  print(f"::warning::skipping {path}: {err}")
+                  continue
+              # Copy the pack verbatim to the site root.
+              with open(os.path.join("_site", f"{code}.json"), "w", encoding="utf-8") as out:
+                  json.dump(bundle, out, ensure_ascii=False)
+              langs.append({"code": code})
+
+          with open("_site/index.json", "w", encoding="utf-8") as fh:
+              json.dump({"languages": langs}, fh, ensure_ascii=False)
+          print(f"Published {len(langs)} language pack(s): {[l['code'] for l in langs]}")
+          PY
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

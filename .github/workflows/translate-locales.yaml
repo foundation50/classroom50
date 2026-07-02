@@ -58,7 +58,7 @@ jobs:
     outputs:
       codes: ${{ steps.build.outputs.codes }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Build language matrix
         id: build
@@ -84,16 +84,16 @@ jobs:
         code: ${{ fromJson(needs.matrix.outputs.codes) }}
     steps:
       - name: Checkout this repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
 
       - name: Checkout language repo
-        uses: actions/checkout@v6
+        uses: actions/checkout@v7
         with:
           repository: ${{ vars.LANGUAGE_PACKS_REPO }}
           token: ${{ secrets.LANGUAGE_PACKS_REPO_TOKEN }} # kept in http.extraheader, not a remote URL
           path: langrepo
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
