@@ -2,11 +2,13 @@
 """Regenerate a target-language pack from the base en.json using AWS Bedrock.
 
 Reads the base locale and the language repo's current translation (if any),
-then asks a Bedrock model to produce the COMPLETE target file: existing good
-translations are preserved, strings whose English changed are retranslated, and
-missing keys are filled. Emitting the whole file (rather than a per-key patch)
-keeps the translation stable and lets the model honor TRANSLATION_PROMPT.md's
-whole-sentence fragment reassembly, plural, and file-wide terminology rules.
+then asks a Bedrock model to reproduce each top-level section of the target
+file: existing good translations are preserved, strings whose English changed
+are retranslated, and missing keys are filled. Translating one section per call
+(with the full English file as context) keeps each response small enough to
+avoid truncation while still letting the model honor TRANSLATION_PROMPT.md's
+whole-sentence fragment reassembly, plural, and file-wide terminology rules —
+fragment/plural sibling groups never span two top-level sections.
 
 Usage:
     python translate_locales.py \
@@ -43,10 +45,11 @@ from botocore.exceptions import ClientError
 # Anthropic Messages schema (the documented default for Claude on Bedrock).
 ANTHROPIC_VERSION = os.environ.get("BEDROCK_ANTHROPIC_VERSION", "bedrock-2023-05-31")
 
-# Bounds a single InvokeModel response. Claude models on Bedrock accept large
-# max_tokens; a full pack (~1200 keys) fits comfortably for current models, but
-# the caller can lower this and rely on chunking if a smaller model is chosen.
-DEFAULT_MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "16000"))
+# Bounds a single InvokeModel response. We translate one top-level section per
+# call (see main), so this need only fit the largest section's translated
+# output, not the whole file. Kept generous as a safety margin for verbose
+# scripts; overridable via BEDROCK_MAX_TOKENS.
+DEFAULT_MAX_TOKENS = int(os.environ.get("BEDROCK_MAX_TOKENS", "20000"))
 
 MAX_ATTEMPTS = 5
 BASE_BACKOFF_SECONDS = 2.0
@@ -77,42 +80,59 @@ def flatten(obj: dict, prefix: str = "") -> dict[str, object]:
     return out
 
 
-def load_json(path: Path) -> dict:
-    return json.loads(path.read_text(encoding="utf-8"))
+def build_section_message(
+    code: str,
+    section: str,
+    base_full_raw: str,
+    section_base_raw: str,
+    section_current_raw: str | None,
+) -> str:
+    """Assemble the user turn for translating a single top-level section.
 
-
-def build_user_message(code: str, base_raw: str, current_raw: str | None) -> str:
-    """Assemble the user turn: English source + existing translation + task."""
+    The full English file is included as read-only CONTEXT so terminology stays
+    consistent across the whole pack, but the model is asked to translate and
+    return only the current section's subtree. Chunking by top-level section
+    never splits a fragment/plural sibling group, since those always share a
+    top-level parent.
+    """
     parts = [
         f"Target locale code: {code}",
         "",
-        "BASE (en.json) — the source of truth. Translate its VALUES:",
+        "FULL ENGLISH FILE (en.json) — CONTEXT ONLY, for terminology consistency. "
+        "Do NOT translate or return this whole file:",
         "```json",
-        base_raw.strip(),
+        base_full_raw.strip(),
+        "```",
+        "",
+        f'SECTION TO TRANSLATE — the "{section}" subtree of the file above. '
+        "Translate its VALUES into the target locale:",
+        "```json",
+        section_base_raw.strip(),
         "```",
     ]
-    if current_raw is not None:
+    if section_current_raw is not None:
         parts += [
             "",
-            "EXISTING TRANSLATION — the current published pack for this locale. It "
-            "may contain human corrections. Preserve translations that are still "
-            "correct for the current English; only change values whose English "
-            "source changed, and add any keys missing here:",
+            f'EXISTING TRANSLATION of the "{section}" section — may contain human '
+            "corrections. Preserve values that are still correct for the current "
+            "English; only change values whose English source changed, and add any "
+            "keys missing here:",
             "```json",
-            current_raw.strip(),
+            section_current_raw.strip(),
             "```",
         ]
     else:
         parts += [
             "",
-            "There is no existing translation for this locale — produce a complete "
-            "first translation of every value.",
+            f'There is no existing translation for the "{section}" section — '
+            "produce a complete first translation of every value in it.",
         ]
     parts += [
         "",
-        "Return the COMPLETE target file as a single JSON object with exactly the "
-        "same keys and nesting as the BASE. Return only the JSON — no markdown "
-        "fences, no commentary.",
+        f'Return ONLY the translated "{section}" object as a single JSON object '
+        f'whose top-level key is "{section}", with exactly the same keys and '
+        "nesting as the section shown. Return only the JSON — no markdown fences, "
+        "no commentary.",
     ]
     return "\n".join(parts)
 
@@ -235,20 +255,59 @@ def main() -> int:
         config=Config(retries={"max_attempts": 0}, read_timeout=300),
     )
 
-    user_message = build_user_message(args.code, base_raw, current_raw)
+    current: dict = {}
+    if current_raw is not None:
+        try:
+            current = json.loads(current_raw)
+        except json.JSONDecodeError as err:
+            eprint(f"[{args.code}] existing translation is not valid JSON: {err}")
+            return 1
 
-    eprint(f"[{args.code}] invoking {args.model_id} ...")
-    try:
-        text = invoke_model(client, args.model_id, system_prompt, user_message)
-    except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
-        eprint(f"[{args.code}] Bedrock invocation failed: {err}")
-        return 1
+    # Translate one top-level section per call. Sections are the natural chunk
+    # boundary: they keep each response small enough to avoid truncation, and no
+    # fragment/plural sibling group spans two top-level sections. The full
+    # English file rides along as context so terminology stays consistent.
+    translated: dict = {}
+    for section, section_value in base.items():
+        section_base_obj: dict = {section: section_value}
 
-    try:
-        translated = parse_model_json(text)
-    except json.JSONDecodeError as err:
-        eprint(f"[{args.code}] model did not return valid JSON: {err}")
-        return 1
+        section_base_raw = json.dumps(section_base_obj, ensure_ascii=False, indent=2)
+        section_current_raw: str | None = None
+        if section in current:
+            section_current_raw = json.dumps(
+                {section: current[section]}, ensure_ascii=False, indent=2
+            )
+
+        message = build_section_message(
+            args.code, section, base_raw, section_base_raw, section_current_raw
+        )
+
+        eprint(f"[{args.code}] invoking {args.model_id} for section '{section}' ...")
+        try:
+            text = invoke_model(client, args.model_id, system_prompt, message)
+            section_result = parse_model_json(text)
+        except json.JSONDecodeError as err:
+            eprint(f"[{args.code}] section '{section}' returned invalid JSON: {err}")
+            return 1
+        except Exception as err:  # noqa: BLE001 - surface any Bedrock failure per-language
+            eprint(f"[{args.code}] section '{section}' failed: {err}")
+            return 1
+
+        # Accept either { "<section>": {...} } or the bare section object.
+        if list(section_result.keys()) == [section]:
+            section_result = section_result[section]
+
+        # Per-section parity: fail fast on the offending section rather than
+        # after assembling the whole file.
+        section_missing = check_key_parity(section_base_obj, {section: section_result})
+        if section_missing:
+            eprint(
+                f"[{args.code}] section '{section}' is missing "
+                f"{len(section_missing)} key(s); first few: {section_missing[:5]}"
+            )
+            return 1
+
+        translated[section] = section_result
 
     missing = check_key_parity(base, translated)
     if missing:
