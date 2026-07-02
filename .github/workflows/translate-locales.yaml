@@ -137,7 +137,7 @@ jobs:
             echo "${CODE}: changed=$(jq 'length' diff/changed.json) removed=$(jq 'length' diff/removed.json)"
           fi
 
-      - name: Translate ${{ matrix.code }}
+      - name: Translate and gate ${{ matrix.code }}
         env:
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           BEDROCK_MODEL_ID: ${{ vars.AWS_BEDROCK_MODEL_ID }}
@@ -146,33 +146,50 @@ jobs:
           FULL: ${{ steps.diff.outputs.full }}
         run: |
           set -euo pipefail
-          # Out dir (not langrepo) so the artifact is exactly the patched file;
-          # --current reads the published baseline (missing = first-time gen).
           mkdir -p out
-          full_flag=""
-          [ "${FULL:-false}" = "true" ] && full_flag="--full"
-          python scripts/translate_locales.py \
-            --code "$CODE" \
-            --base web/src/locales/en.json \
-            --prompt web/src/locales/TRANSLATION_PROMPT.md \
-            --current "langrepo/${CODE}.json" \
-            --changed-keys diff/changed.json \
-            --removed-keys diff/removed.json \
-            $full_flag \
-            --out "out/${CODE}.json"
 
-      - name: Structural gate (verify_locale.py)
-        env:
-          CODE: ${{ matrix.code }}
-        run: |
-          set -euo pipefail
-          # verify_locale.py reads en.json from CWD and takes one argv, so run it
-          # from a dir holding both. Any non-zero exit fails (2 = setup, 1 = FAIL).
-          gate=$(mktemp -d)
-          cp web/src/locales/en.json "$gate/en.json"
-          cp web/src/locales/verify_locale.py "$gate/verify_locale.py"
-          cp "out/${CODE}.json" "$gate/${CODE}.json"
-          ( cd "$gate" && python verify_locale.py "${CODE}.json" )
+          # verify_locale.py reads en.json from CWD and takes one argv, so gate
+          # from a temp dir holding both. Exit 2 = setup error, 1 = FAIL.
+          gate() {
+            local g; g=$(mktemp -d)
+            cp web/src/locales/en.json "$g/en.json"
+            cp web/src/locales/verify_locale.py "$g/verify_locale.py"
+            cp "out/${CODE}.json" "$g/${CODE}.json"
+            ( cd "$g" && python verify_locale.py "${CODE}.json" )
+          }
+
+          translate() {
+            # Out dir (not langrepo) so the artifact is exactly the patched file;
+            # --current reads the published baseline (missing = first-time gen).
+            python scripts/translate_locales.py \
+              --code "$CODE" \
+              --base web/src/locales/en.json \
+              --prompt web/src/locales/TRANSLATION_PROMPT.md \
+              --current "langrepo/${CODE}.json" \
+              --changed-keys diff/changed.json \
+              --removed-keys diff/removed.json \
+              "$@" \
+              --out "out/${CODE}.json"
+          }
+
+          if [ "${FULL:-false}" = "true" ]; then
+            translate --full
+            gate
+          else
+            # Patch mode: translate only the diff onto the published pack. The gate
+            # validates the WHOLE pack, so a pre-existing defect on an untouched
+            # key (stale placeholder, orphan variant a hand-edit left) would fail
+            # a language forever — patching never re-emits those keys. On gate
+            # FAIL, self-heal by falling back to a full retranslation, which
+            # re-emits every key, then re-gate. If that still fails, the language
+            # legitimately fails this run (and is retried next run).
+            translate
+            if ! gate; then
+              echo "::warning::${CODE}: patched pack failed the structural gate; retrying with a full retranslation."
+              translate --full
+              gate
+            fi
+          fi
 
       - name: Upload generated pack
         uses: actions/upload-artifact@v7

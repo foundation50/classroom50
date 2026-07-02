@@ -82,7 +82,17 @@ The generator
 this same `TRANSLATION_PROMPT.md` as its system prompt and gates output with
 `verify_locale.py`, so machine and hand-made packs follow one contract. A
 language with no marker yet, or a manual `workflow_dispatch`, falls back to a
-full first-time translation.
+full first-time translation. If a patched pack ever fails the structural gate
+(e.g. a pre-existing defect on a key this run didn't touch), CI automatically
+retries that language with a full retranslation — which re-emits every key — and
+only fails the language if it still doesn't pass.
+
+**Retiring a language.** Removing a code from [`targets.json`](./targets.json)
+only stops CI from *updating* it — the workflow never deletes files from the
+translations repo, so the language's `<code>.json` and `markers/<code>.json`
+stay published (and still offered to users via the registry's `index.json`)
+until you delete them there by hand. To fully retire a language, remove it from
+`targets.json` here **and** delete both files from the translations repo.
 
 ### Community contributions are durable
 
