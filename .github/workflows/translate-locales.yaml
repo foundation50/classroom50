@@ -150,7 +150,7 @@ jobs:
           ( cd "$gate" && python verify_locale.py "${CODE}.json" )
 
       - name: Upload generated pack
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: pack-${{ matrix.code }}
           path: out/${{ matrix.code }}.json
@@ -178,7 +178,7 @@ jobs:
           path: langrepo
 
       - name: Download generated packs
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: pack-*
           path: packs
