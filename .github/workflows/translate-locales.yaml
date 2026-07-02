@@ -1,31 +1,29 @@
 name: Translate locales
 
-# Regenerates each target-language pack from web/src/locales/en.json with AWS
-# Bedrock and opens a SINGLE pull request on the language repo
-# (vars.LANGUAGE_PACKS_REPO) carrying every language that regenerated cleanly; a
-# human merges it once to publish. One PR -> one merge -> one GitHub Pages
-# deploy (the old per-language PRs meant N merges and N racing deploys).
+# Patches target-language packs from web/src/locales/en.json with AWS Bedrock and
+# opens ONE pull request on the language repo (vars.LANGUAGE_PACKS_REPO) carrying
+# every language that patched cleanly; a human merges it to publish.
 #
-# Each run reads the language repo's current <code>.json (which may hold human
-# PR fixes) and regenerates the whole file, preserving good translations and
-# only retranslating changed English. No per-key delta, no sidecar state — the
-# published file is the next run's baseline.
+# Patch model: every pack shares en.json's key structure, so its diff maps 1:1
+# onto each language. Per language we diff our en.json against that language's
+# baseline marker (markers/<code>.json in the language repo — a copy of the
+# en.json the pack was last built against), translate ONLY the changed/added
+# keys onto the published <code>.json, delete removed keys, and leave every other
+# key untouched. So community edits to published packs survive across runs.
 #
-# Languages fan out in parallel and each uploads its generated pack as an
-# artifact; a final aggregate job collects them into one branch/PR. A language
-# that fails to translate or gate is simply left out of the PR (and called out
-# in the job summary + PR body) rather than sinking the rest.
+# The publish PR bumps each produced language's marker to the current en.json
+# alongside its pack, so the marker advances iff the pack does — a failed
+# language keeps its old marker and is caught up next run, regardless of run
+# cadence. No marker yet (or a manual workflow_dispatch) => full translation.
 #
-# Auth: Bedrock via an API key in AWS_BEARER_TOKEN_BEDROCK (boto3 auto-detects
-# it; no IAM/OIDC); the cross-repo PR uses a fine-grained PAT
-# (LANGUAGE_PACKS_REPO_TOKEN, scoped to the language repo, Contents + PRs write).
-#
-# Setup — variables: LANGUAGE_PACKS_REPO (owner/repo), AWS_REGION,
-# AWS_BEDROCK_MODEL_ID; secrets: LANGUAGE_PACKS_REPO_TOKEN, AWS_BEARER_TOKEN_BEDROCK.
+# Auth: Bedrock via AWS_BEARER_TOKEN_BEDROCK (boto3 auto-detects it); the
+# cross-repo PR uses LANGUAGE_PACKS_REPO_TOKEN (Contents + PRs write).
+# Setup — variables: LANGUAGE_PACKS_REPO, AWS_REGION, AWS_BEDROCK_MODEL_ID;
+# secrets: LANGUAGE_PACKS_REPO_TOKEN, AWS_BEARER_TOKEN_BEDROCK.
 
 on:
   push:
-    branches: [main, preview, feat/bedrock-translation-ci]
+    branches: [main, preview, feat/locale-marker-patch]
     paths:
       - 'web/src/locales/en.json'
       - 'web/src/locales/targets.json'
@@ -52,12 +50,13 @@ permissions:
 
 jobs:
   # Resolve the language matrix from targets.json (or the workflow_dispatch
-  # `only` input) so the translate job can fan out over fromJson.
+  # `only` input); force full retranslation on dispatch (no baseline behind it).
   matrix:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
       codes: ${{ steps.build.outputs.codes }}
+      full: ${{ steps.build.outputs.full }}
     steps:
       - uses: actions/checkout@v7
 
@@ -65,6 +64,7 @@ jobs:
         id: build
         env:
           ONLY: ${{ github.event.inputs.only }}
+          EVENT: ${{ github.event_name }}
         run: |
           set -euo pipefail
           if [ -n "${ONLY:-}" ]; then
@@ -72,10 +72,8 @@ jobs:
           else
             codes=$(jq -c . web/src/locales/targets.json)
           fi
-          # Each code is later interpolated as matrix.code into run: blocks, so
-          # reject anything that isn't a plain BCP-47 tag. This is the injection
-          # gate for the workflow_dispatch `only` input; downstream steps also read
-          # the code from env rather than interpolating it directly.
+          # Each code is interpolated as matrix.code into run: blocks, so reject
+          # anything that isn't a plain BCP-47 tag (injection gate for `only`).
           bad=$(printf '%s' "$codes" | jq -r '.[] | select(test("^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$") | not)')
           if [ -n "$bad" ]; then
             echo "Rejected non-BCP-47 language code(s):" >&2
@@ -83,12 +81,12 @@ jobs:
             exit 1
           fi
           echo "codes=$codes" >> "$GITHUB_OUTPUT"
+          [ "$EVENT" = "workflow_dispatch" ] && echo "full=true" >> "$GITHUB_OUTPUT" || echo "full=false" >> "$GITHUB_OUTPUT"
           echo "Languages: $codes"
 
-  # Translate + gate each language in parallel, then upload the generated pack as
-  # an artifact. No PR here — the aggregate job below collects every artifact
-  # into one PR. fail-fast: false so one language's failure leaves the rest to
-  # publish; a failed leg just uploads no artifact and is reported later.
+  # Patch + gate each language in parallel (each diffs against its own marker,
+  # so a lagging language catches up), then upload its pack for open-pr to
+  # collect. fail-fast: false so one failure doesn't sink the rest.
   translate:
     needs: matrix
     runs-on: ubuntu-latest
@@ -116,24 +114,51 @@ jobs:
 
       - run: pip install -r scripts/requirements.txt
 
+      - name: Diff ${{ matrix.code }} against its published marker
+        id: diff
+        env:
+          CODE: ${{ matrix.code }}
+          FULL: ${{ needs.matrix.outputs.full }}
+        run: |
+          set -euo pipefail
+          mkdir -p diff
+          marker="langrepo/markers/${CODE}.json"
+          # No marker (first publish) or forced full: empty diff -> full pass.
+          if [ "${FULL:-false}" = "true" ] || [ ! -f "$marker" ]; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+            echo "[]" > diff/changed.json
+            echo "[]" > diff/removed.json
+          else
+            # Effective diff: our en.json vs the marker (previous en from stdin).
+            echo "full=false" >> "$GITHUB_OUTPUT"
+            python scripts/locale_diff.py \
+              --current web/src/locales/en.json \
+              --out-dir diff < "$marker"
+            echo "${CODE}: changed=$(jq 'length' diff/changed.json) removed=$(jq 'length' diff/removed.json)"
+          fi
+
       - name: Translate ${{ matrix.code }}
         env:
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           BEDROCK_MODEL_ID: ${{ vars.AWS_BEDROCK_MODEL_ID }}
           AWS_REGION: ${{ vars.AWS_REGION }}
           CODE: ${{ matrix.code }}
+          FULL: ${{ steps.diff.outputs.full }}
         run: |
           set -euo pipefail
-          # Emit into a fresh out dir (not langrepo) so the artifact is exactly
-          # the generated file; --current still reads the published baseline.
+          # Out dir (not langrepo) so the artifact is exactly the patched file;
+          # --current reads the published baseline (missing = first-time gen).
           mkdir -p out
-          current="langrepo/${CODE}.json"
-          # --current is optional; a missing file means first-time generation.
+          full_flag=""
+          [ "${FULL:-false}" = "true" ] && full_flag="--full"
           python scripts/translate_locales.py \
             --code "$CODE" \
             --base web/src/locales/en.json \
             --prompt web/src/locales/TRANSLATION_PROMPT.md \
-            --current "$current" \
+            --current "langrepo/${CODE}.json" \
+            --changed-keys diff/changed.json \
+            --removed-keys diff/removed.json \
+            $full_flag \
             --out "out/${CODE}.json"
 
       - name: Structural gate (verify_locale.py)
@@ -157,10 +182,10 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-  # Collect every successfully generated pack into ONE branch and open/update a
-  # single PR on the language repo. Runs even if some translate legs failed
-  # (if: always()), so partial success still publishes what worked. Fails only
-  # if the matrix job itself failed or nothing at all was produced.
+  # Collect every produced pack into ONE branch and open/update a single PR on
+  # the language repo. Runs even if some translate legs failed (if: always()),
+  # so partial success still publishes. Fails only if matrix failed or nothing
+  # was produced.
   open-pr:
     needs: [matrix, translate]
     if: ${{ always() && needs.matrix.result == 'success' }}
@@ -193,15 +218,12 @@ jobs:
         run: |
           set -euo pipefail
 
-          # Which languages were requested vs. which actually produced a pack.
-          # download-artifact with merge-multiple flattens every pack-<code>
-          # artifact into packs/<code>.json.
+          # Requested languages vs. those that produced a pack (merge-multiple
+          # flattens each pack-<code> artifact to packs/<code>.json).
           mapfile -t requested < <(printf '%s' "$ALL_CODES" | jq -r '.[]')
           produced=()
           for code in "${requested[@]}"; do
-            if [ -f "packs/${code}.json" ]; then
-              produced+=("$code")
-            fi
+            [ -f "packs/${code}.json" ] && produced+=("$code")
           done
 
           failed=()
@@ -212,7 +234,7 @@ jobs:
             esac
           done
 
-          # Nothing generated at all — every language failed. Report and stop.
+          # Every language failed — report and stop.
           if [ ${#produced[@]} -eq 0 ]; then
             echo "::error::No language packs were generated; all ${#requested[@]} language(s) failed."
             {
@@ -232,26 +254,28 @@ jobs:
           git config user.name "classroom50-sync[bot]"
           git config user.email "classroom50-sync@users.noreply.github.com"
 
-          # Reset the shared batch branch to the latest default branch, then drop
-          # every generated pack on top — so the PR diff is only these languages'
-          # changes and is idempotent across runs.
+          # Reset the batch branch to the default branch, then drop each produced
+          # pack + its bumped marker (the en.json we built against) on top.
           git fetch origin "$default_branch"
           git checkout -B "$branch" "origin/${default_branch}"
+          mkdir -p markers
           for code in "${produced[@]}"; do
             cp "../packs/${code}.json" "${code}.json"
-            git add "${code}.json"
+            cp "../web/src/locales/en.json" "markers/${code}.json"
+            git add "${code}.json" "markers/${code}.json"
           done
 
+          # A real en.json change always moves at least a marker; this mainly
+          # guards the idempotent re-run (same PR already assembled).
           if git diff --cached --quiet; then
             echo "No net change vs ${default_branch} for any language; skipping PR."
             {
               echo "## Translate locales"
-              echo "Regenerated ${#produced[@]} language(s); none differed from the published packs, so no PR was opened."
+              echo "Regenerated ${#produced[@]} language(s); nothing differed from the published packs/markers, so no PR was opened."
             } >> "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
 
-          # Commit body lists the languages carried; failures (if any) are noted.
           {
             echo "Update ${#produced[@]} translation(s) from en.json@${short}"
             echo
@@ -262,22 +286,22 @@ jobs:
           } > /tmp/commit_msg.txt
           git commit -F /tmp/commit_msg.txt
 
-          # Single writer per branch, and each run resets it to the default
-          # branch + generated files, so plain --force is correct.
-          # --force-with-lease would reject on "stale info" (we only fetch the
-          # default branch, not this branch's tracking ref).
+          # Single writer per branch, reset to default each run, so plain --force
+          # is correct (--force-with-lease rejects on stale info — we never fetch
+          # this branch's tracking ref).
           git push --force origin "$branch"
 
-          # PR body: what's included, what was skipped, and the review reminder.
           {
-            echo "Machine translations regenerated from \`en.json@${short}\` via AWS Bedrock."
-            echo "Merging publishes all of these in a single GitHub Pages deploy."
+            echo "Machine translations patched from \`en.json@${short}\` via AWS Bedrock."
+            echo "Only keys whose English changed since each language's last publish were"
+            echo "re-translated; every other key (including community edits) is untouched."
+            echo "Each \`markers/<code>.json\` is bumped so the next run diffs against it."
             echo
             echo "**Included (${#produced[@]}):** ${produced[*]}"
             if [ ${#failed[@]} -gt 0 ]; then
               echo
               echo "**Skipped — failed this run (${#failed[@]}):** ${failed[*]}"
-              echo "They'll be retried on the next run and are not in this PR."
+              echo "Their markers are NOT bumped, so they're caught up next run."
             fi
             echo
             echo "Review the diff before merging."
@@ -285,8 +309,7 @@ jobs:
 
           title="Update ${#produced[@]} translation(s) from en.json@${short}"
 
-          # Open a PR if none is already open for this branch; otherwise the
-          # forced push above already refreshed it.
+          # Open a PR if none is open for this branch; else the push refreshed it.
           existing=$(gh pr list --repo "$TARGET_REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
           if [ -z "$existing" ]; then
             gh pr create \
@@ -296,10 +319,9 @@ jobs:
               --title "$title" \
               --body-file /tmp/pr_body.txt
           else
-            # Keep the open PR's title/body in step with this run's contents.
             gh pr edit "$existing" --repo "$TARGET_REPO" \
               --title "$title" --body-file /tmp/pr_body.txt
-            echo "PR #${existing} already open for ${branch}; branch and description updated."
+            echo "PR #${existing} already open for ${branch}; updated."
           fi
 
           # Job summary mirrors the PR body for at-a-glance run status.
