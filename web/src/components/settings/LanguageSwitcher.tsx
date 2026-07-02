@@ -1,5 +1,5 @@
 import { useState } from "react"
-import { Check, Loader2, Trash2, Upload, X } from "lucide-react"
+import { Check, ChevronRight, Loader2, Trash2, Upload, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
@@ -39,6 +39,8 @@ export const LanguageSwitcher = ({
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
+  const [installOpen, setInstallOpen] = useState(false)
+  const [installedOpen, setInstalledOpen] = useState(false)
 
   const showError = (err: unknown) => {
     if (err instanceof UndetectableCodeError) {
@@ -130,99 +132,130 @@ export const LanguageSwitcher = ({
       </div>
 
       {installedLangs.length > 0 && (
-        <div className="flex flex-col gap-1">
-          <span className="label-text font-bold">
+        <details
+          className="collapse border border-base-300 rounded-box bg-base-100"
+          open={installedOpen}
+          onToggle={(e) =>
+            setInstalledOpen((e.target as HTMLDetailsElement).open)
+          }
+        >
+          <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+            <ChevronRight
+              className={`size-4 transition-transform ${
+                installedOpen ? "rotate-90" : ""
+              }`}
+              aria-hidden="true"
+            />
             {t("language.installedTitle")}
-          </span>
-          <ul className="menu bg-base-200 rounded-box w-full gap-1">
-            {installedLangs.map((c) => {
-              const cov = coverages[c]
-              return (
-                <li key={c}>
-                  <div className="flex flex-row items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      {languageLabel(c, lang)}
-                      {cov !== undefined && cov < 1 && (
-                        <span className="badge badge-ghost badge-sm">
-                          {Math.round(cov * 100)}%
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      aria-label={t("language.removePack", { code: c })}
-                      onClick={() => removePack(c)}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
+          </summary>
+          <div className="collapse-content">
+            <ul className="menu bg-base-200 rounded-box w-full gap-1">
+              {installedLangs.map((c) => {
+                const cov = coverages[c]
+                return (
+                  <li key={c}>
+                    <div className="flex flex-row items-center justify-between">
+                      <span className="flex items-center gap-2">
+                        {languageLabel(c, lang)}
+                        {cov !== undefined && cov < 1 && (
+                          <span className="badge badge-ghost badge-sm">
+                            {Math.round(cov * 100)}%
+                          </span>
+                        )}
+                      </span>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs"
+                        aria-label={t("language.removePack", { code: c })}
+                        onClick={() => removePack(c)}
+                      >
+                        <Trash2 className="size-4" aria-hidden="true" />
+                      </button>
+                    </div>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        </details>
       )}
 
-      <div className="flex flex-col gap-3">
-        <p className="text-xs text-base-content/70">
-          {t("language.installHint")}
-        </p>
+      <details
+        className="collapse border border-base-300 rounded-box bg-base-100"
+        open={installOpen || needsCode || Boolean(preview) || Boolean(error)}
+        onToggle={(e) => setInstallOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            className={`size-4 transition-transform ${
+              installOpen || needsCode || preview || error ? "rotate-90" : ""
+            }`}
+            aria-hidden="true"
+          />
+          {t("language.installTitle")}
+        </summary>
+        <div className="collapse-content">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-base-content/70">
+              {t("language.installHint")}
+            </p>
 
-        {needsCode && (
-          <div className="flex flex-col gap-1">
-            <label className="label py-0" htmlFor="lang-code">
-              <span className="label-text text-xs">
-                {t("language.codeOptionalLabel")}
-              </span>
+            {needsCode && (
+              <div className="flex flex-col gap-1">
+                <label className="label py-0" htmlFor="lang-code">
+                  <span className="label-text text-xs">
+                    {t("language.codeOptionalLabel")}
+                  </span>
+                </label>
+                <input
+                  id="lang-code"
+                  type="text"
+                  className="input input-bordered input-sm w-full"
+                  placeholder={t("language.codePlaceholder")}
+                  value={code}
+                  onChange={(e) => setCode(e.target.value)}
+                  disabled={busy}
+                />
+              </div>
+            )}
+
+            <label className="btn btn-sm btn-outline w-full">
+              {busy && !preview ? (
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+              ) : (
+                <Upload className="size-4" aria-hidden="true" />
+              )}
+              {t("language.uploadFile")}
+              <input
+                type="file"
+                accept="application/json,.json"
+                className="hidden"
+                onChange={(e) => void handleFile(e)}
+                disabled={busy}
+              />
             </label>
-            <input
-              id="lang-code"
-              type="text"
-              className="input input-bordered input-sm w-full"
-              placeholder={t("language.codePlaceholder")}
-              value={code}
-              onChange={(e) => setCode(e.target.value)}
-              disabled={busy}
-            />
+
+            <div className="flex flex-row gap-2">
+              <input
+                type="url"
+                className="input input-bordered input-sm flex-1 min-w-0"
+                placeholder={t("language.urlPlaceholder")}
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                disabled={busy}
+              />
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => void handleUrl()}
+                disabled={busy}
+              >
+                {t("language.fetch")}
+              </button>
+            </div>
           </div>
-        )}
-
-        <label className="btn btn-sm btn-outline w-full">
-          {busy && !preview ? (
-            <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-          ) : (
-            <Upload className="size-4" aria-hidden="true" />
-          )}
-          {t("language.uploadFile")}
-          <input
-            type="file"
-            accept="application/json,.json"
-            className="hidden"
-            onChange={(e) => void handleFile(e)}
-            disabled={busy}
-          />
-        </label>
-
-        <div className="flex flex-row gap-2">
-          <input
-            type="url"
-            className="input input-bordered input-sm flex-1 min-w-0"
-            placeholder={t("language.urlPlaceholder")}
-            value={url}
-            onChange={(e) => setUrl(e.target.value)}
-            disabled={busy}
-          />
-          <button
-            type="button"
-            className="btn btn-sm btn-primary"
-            onClick={() => void handleUrl()}
-            disabled={busy}
-          >
-            {t("language.fetch")}
-          </button>
         </div>
-      </div>
+      </details>
 
       {preview && (
         <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-100 p-4">

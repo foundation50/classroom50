@@ -285,6 +285,7 @@
     "baseName": "English (base)",
     "activeLabel": "Active language",
     "installedTitle": "Installed packs",
+    "installTitle": "Install a language pack",
     "installHint": "Install a language pack: translate the base en.json and load it here. The language code is detected from the file name; enter it below only if that fails.",
     "codePlaceholder": "Language code (e.g. de)",
     "codeOptionalLabel": "Language code (optional)",
