@@ -1,0 +1,183 @@
+name: Translate locales
+
+# Regenerates each target-language pack from web/src/locales/en.json with AWS
+# Bedrock and opens a pull request per language on the separate translations
+# repo (vars.LANGUAGE_PACKS_REPO). A human reviews the diff and merges to publish.
+#
+# Design (see the plan): each run reads back the language repo's CURRENT
+# <code>.json (which may contain human PR corrections) and asks the model to
+# regenerate the WHOLE file — preserving good translations, retranslating only
+# where the English changed. That keeps translations stable and lets the model
+# honor TRANSLATION_PROMPT.md's whole-sentence / plural / terminology rules.
+# There is no per-key delta and no sidecar state; the published file is the
+# baseline for the next run.
+#
+# Auth: Bedrock via an Amazon Bedrock API key (bearer token) in the
+# AWS_BEARER_TOKEN_BEDROCK env var, which boto3's bedrock-runtime client
+# auto-detects — no OIDC role or IAM trust policy needed. The cross-repo PR
+# uses a fine-grained PAT (secrets.LANGUAGE_PACKS_REPO_TOKEN) scoped to only the
+# language repo with Contents + Pull requests write.
+#
+# One-time setup — repo variables: LANGUAGE_PACKS_REPO (owner/repo), AWS_REGION,
+# AWS_BEDROCK_MODEL_ID; repo secrets: LANGUAGE_PACKS_REPO_TOKEN (fine-grained
+# PAT) and AWS_BEARER_TOKEN_BEDROCK (an Amazon Bedrock API key with permission
+# to invoke the chosen model).
+
+on:
+  push:
+    branches: [main, preview, feat/bedrock-translation-ci]
+    paths:
+      - 'web/src/locales/en.json'
+      - 'web/src/locales/targets.json'
+      - 'web/src/locales/TRANSLATION_PROMPT.md'
+      - 'scripts/translate_locales.py'
+      - 'scripts/requirements.txt'
+      - '.github/workflows/translate-locales.yaml'
+  workflow_dispatch:
+    inputs:
+      only:
+        description: 'Comma-separated locale codes to run (blank = all in targets.json)'
+        required: false
+        default: ''
+
+# Serialize whole runs on a ref so a burst of en.json pushes doesn't open
+# duplicate PRs; jobs within a run don't contend (each pushes its own branch).
+concurrency:
+  group: translate-locales-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # Resolve the language matrix from targets.json (or the workflow_dispatch
+  # `only` input) so the translate job can fan out over fromJson.
+  matrix:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      codes: ${{ steps.build.outputs.codes }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Build language matrix
+        id: build
+        env:
+          ONLY: ${{ github.event.inputs.only }}
+        run: |
+          set -euo pipefail
+          if [ -n "${ONLY:-}" ]; then
+            codes=$(printf '%s' "$ONLY" | tr ',' '\n' | sed 's/[[:space:]]//g' | grep -v '^$' | jq -R . | jq -cs .)
+          else
+            codes=$(jq -c . web/src/locales/targets.json)
+          fi
+          echo "codes=$codes" >> "$GITHUB_OUTPUT"
+          echo "Languages: $codes"
+
+  translate:
+    needs: matrix
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false # one language failing must not sink the rest
+      matrix:
+        code: ${{ fromJson(needs.matrix.outputs.codes) }}
+    steps:
+      - name: Checkout this repo
+        uses: actions/checkout@v6
+
+      - name: Checkout language repo
+        uses: actions/checkout@v6
+        with:
+          repository: ${{ vars.LANGUAGE_PACKS_REPO }}
+          token: ${{ secrets.LANGUAGE_PACKS_REPO_TOKEN }} # kept in http.extraheader, not a remote URL
+          path: langrepo
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: scripts/requirements.txt
+
+      - run: pip install -r scripts/requirements.txt
+
+      - name: Translate ${{ matrix.code }}
+        env:
+          AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
+          BEDROCK_MODEL_ID: ${{ vars.AWS_BEDROCK_MODEL_ID }}
+          AWS_REGION: ${{ vars.AWS_REGION }}
+        run: |
+          set -euo pipefail
+          current="langrepo/${{ matrix.code }}.json"
+          # --current is optional; a missing file means first-time generation.
+          python scripts/translate_locales.py \
+            --code "${{ matrix.code }}" \
+            --base web/src/locales/en.json \
+            --prompt web/src/locales/TRANSLATION_PROMPT.md \
+            --current "$current" \
+            --out "$current"
+
+      - name: Structural gate (verify_locale.py)
+        run: |
+          set -euo pipefail
+          # verify_locale.py reads en.json from CWD and takes exactly one argv;
+          # run it from a dir holding both en.json and the generated pack. Treat
+          # ANY non-zero exit as a failure (2 = setup error, 1 = validation FAIL).
+          gate=$(mktemp -d)
+          cp web/src/locales/en.json "$gate/en.json"
+          cp web/src/locales/verify_locale.py "$gate/verify_locale.py"
+          cp "langrepo/${{ matrix.code }}.json" "$gate/${{ matrix.code }}.json"
+          ( cd "$gate" && python verify_locale.py "${{ matrix.code }}.json" )
+
+      - name: Open pull request on the language repo
+        env:
+          GH_TOKEN: ${{ secrets.LANGUAGE_PACKS_REPO_TOKEN }}
+          TARGET_REPO: ${{ vars.LANGUAGE_PACKS_REPO }}
+          CODE: ${{ matrix.code }}
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          cd langrepo
+
+          # Nothing to publish if the regenerated file matches what's checked out.
+          if [ -z "$(git status --porcelain -- "${CODE}.json")" ]; then
+            echo "No change for ${CODE}; skipping PR."
+            exit 0
+          fi
+
+          git config user.name "classroom50-sync[bot]"
+          git config user.email "classroom50-sync@users.noreply.github.com"
+
+          short=$(printf '%s' "$SOURCE_SHA" | cut -c1-7)
+          branch="translate/${CODE}"
+          default_branch=$(gh repo view "$TARGET_REPO" --json defaultBranchRef --jq .defaultBranchRef.name)
+
+          # Preserve the generated file, reset the per-language branch to the
+          # latest default branch (so the PR diff is only this language's change
+          # and is idempotent across runs), then restore the generated file.
+          generated=$(mktemp)
+          cp "${CODE}.json" "$generated"
+          git fetch origin "$default_branch"
+          git checkout -B "$branch" "origin/${default_branch}"
+          cp "$generated" "${CODE}.json"
+
+          git add "${CODE}.json"
+          if git diff --cached --quiet; then
+            echo "No net change for ${CODE} vs ${default_branch}; skipping PR."
+            exit 0
+          fi
+          git commit -m "Update ${CODE} translation from en.json@${short}"
+          git push --force-with-lease origin "$branch"
+
+          # Open a PR if none is already open for this branch.
+          existing=$(gh pr list --repo "$TARGET_REPO" --head "$branch" --state open --json number --jq '.[0].number // empty')
+          if [ -z "$existing" ]; then
+            gh pr create \
+              --repo "$TARGET_REPO" \
+              --base "$default_branch" \
+              --head "$branch" \
+              --title "Update ${CODE} translation from en.json@${short}" \
+              --body "Machine translation regenerated from \`en.json@${short}\` via AWS Bedrock. Review the diff before merging to publish."
+          else
+            echo "PR #${existing} already open for ${branch}; branch updated."
+          fi

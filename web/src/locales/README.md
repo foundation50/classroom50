@@ -44,8 +44,21 @@ The agent should then:
    silently break a pack. It mirrors the installer's own validation, so a
    passing pack also installs cleanly.
 
-### Rules the installer enforces
+### Automated packs (CI)
 
+The target languages in [`targets.json`](./targets.json) are also produced
+automatically: a GitHub Actions workflow
+([`.github/workflows/translate-locales.yaml`](../../../.github/workflows/translate-locales.yaml))
+regenerates each target from `en.json` with AWS Bedrock whenever `en.json`
+changes, then opens a pull request on a separate public translations repo for a
+human to review and merge. The generator
+([`scripts/translate_locales.py`](../../../scripts/translate_locales.py)) uses
+this same `TRANSLATION_PROMPT.md` as its system prompt and gates output with
+`verify_locale.py`, so machine and hand-made packs follow one contract. Hand
+edits are safe: the next run reads the published pack back as its baseline and
+only re-touches strings whose English changed.
+
+### Rules the installer enforces
 Packs are validated on install and re-validated every time they are loaded
 from storage. A pack is rejected when it breaks any of these:
 
