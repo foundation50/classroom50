@@ -455,12 +455,13 @@ describe("applyLangFromQuery", () => {
 
   it("ignores a valid code the registry does not offer (no pack fetch)", async () => {
     stubWindow(`https://app.example/?${LANG_QUERY_PARAM}=zz`)
-    const fetchMock = vi.fn(
-      async (_input: RequestInfo | URL) =>
-        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
-          status: 200,
-        }),
-    )
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      // Only the manifest should ever be requested for an unoffered code.
+      expect(String(input)).toMatch(/index\.json$/)
+      return new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+        status: 200,
+      })
+    })
     vi.stubGlobal("fetch", fetchMock)
     await applyLangFromQuery()
     // Only the registry manifest is fetched; no <code>.json for an unoffered code.
