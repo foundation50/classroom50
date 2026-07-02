@@ -133,18 +133,19 @@ export function applyViewAs(
   return ROLE_RANK[viewAs] < ROLE_RANK[actual] ? viewAs : actual
 }
 
-// Human label per the product mapping: owner + instructor => "Instructor",
-// ta => "TA", student => "Student", unresolved => null (so callers show a
-// skeleton rather than guessing mid-load).
-export function roleLabel(role: EffectiveRole): string | null {
+// Translation key for the human role label per the product mapping:
+// owner + instructor => "nav.roleInstructor", ta => "nav.roleTa",
+// student => "nav.roleStudent", unresolved => null (so callers show a skeleton
+// rather than guessing mid-load). Callers pass the returned key through t().
+export function roleLabelKey(role: EffectiveRole): string | null {
   switch (role) {
     case "owner":
     case "instructor":
-      return "Instructor"
+      return "nav.roleInstructor"
     case "ta":
-      return "TA"
+      return "nav.roleTa"
     case "student":
-      return "Student"
+      return "nav.roleStudent"
     case "unresolved":
       return null
   }

@@ -32,7 +32,7 @@ import duck from "@/assets/duck.png"
 import { useCourseTeacherAccess } from "../../hooks/useCourseTeacherAccess"
 import {
   useClassroomRole,
-  roleLabel,
+  roleLabelKey,
   isStaffRole,
   type ViewAsRole,
 } from "@/hooks/useClassroomRole"
@@ -680,7 +680,8 @@ export const SidebarFooter = () => {
   // owner or a definite student, else blank.
   let roleLabelText: string | null
   if (classroom) {
-    roleLabelText = classroomRoleLoading ? null : roleLabel(classroomRole)
+    const key = classroomRoleLoading ? null : roleLabelKey(classroomRole)
+    roleLabelText = key ? t(key) : null
   } else if (isOrgSetup || isOwner) {
     roleLabelText = t("nav.roleInstructor")
   } else if (!orgMembershipLoading && !roleLoading && isStudent) {
@@ -772,9 +773,12 @@ export const SidebarFooter = () => {
                         const label =
                           option === "self"
                             ? t("nav.viewAsMyself", {
-                                role:
-                                  roleLabel(actualClassroomRole) ??
-                                  t("nav.viewAsMyselfFallback"),
+                                role: (() => {
+                                  const key = roleLabelKey(actualClassroomRole)
+                                  return key
+                                    ? t(key)
+                                    : t("nav.viewAsMyselfFallback")
+                                })(),
                               })
                             : option === "ta"
                               ? t("nav.viewAsTA")

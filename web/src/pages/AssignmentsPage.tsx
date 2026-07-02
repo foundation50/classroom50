@@ -19,7 +19,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
-import { useClassroomRole, roleLabel } from "@/hooks/useClassroomRole"
+import { useClassroomRole, roleLabelKey } from "@/hooks/useClassroomRole"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { isClassroomArchived } from "@/types/classroom"
 import { OrgRepos } from "./ClassesPage"
@@ -108,7 +108,8 @@ const TeacherAssignmentsView = ({
   )
   const { user } = useGithubAuth()
   const { role: myRole } = useClassroomRole(org, classroom, user?.login)
-  const myRoleLabel = roleLabel(myRole)
+  const myRoleLabelKey = roleLabelKey(myRole)
+  const myRoleLabel = myRoleLabelKey ? t(myRoleLabelKey) : null
   const archived = isClassroomArchived(classroomData ?? {})
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 

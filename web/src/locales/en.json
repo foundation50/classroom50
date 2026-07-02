@@ -52,6 +52,7 @@
     "avatarAlt": "{{name}}'s avatar",
     "roleInstructor": "Instructor",
     "roleStudent": "Student",
+    "roleTa": "TA",
     "viewAs": "View as",
     "viewAsMyself": "Myself ({{role}})",
     "viewAsMyselfFallback": "staff",
