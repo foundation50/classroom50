@@ -16,6 +16,8 @@ import {
   Check,
   Sun,
   Moon,
+  Languages,
+  X,
 } from "lucide-react"
 import {
   Link,
@@ -43,11 +45,13 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
+import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import type { Classroom } from "@/types/classroom"
 import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ReactNode,
@@ -689,6 +693,8 @@ export const SidebarFooter = () => {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
+  const langDialogRef = useRef<HTMLDialogElement | null>(null)
+  const langDialogTitleId = useId()
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
@@ -711,6 +717,7 @@ export const SidebarFooter = () => {
   }, [menuOpen])
 
   return (
+    <>
     <div
       ref={footerRef}
       className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
@@ -822,6 +829,19 @@ export const SidebarFooter = () => {
               />
             </button>
           </li>
+          <li>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                setMenuOpen(false)
+                langDialogRef.current?.showModal()
+              }}
+            >
+              <Languages aria-hidden="true" className="size-4" />
+              <span className="flex-1 text-left">{t("nav.language")}</span>
+            </button>
+          </li>
           <div className="divider my-1" />
           <li>
             <a
@@ -888,6 +908,34 @@ export const SidebarFooter = () => {
         )}
       </div>
     </div>
+
+    <dialog
+      ref={langDialogRef}
+      className="modal"
+      aria-labelledby={langDialogTitleId}
+    >
+      <div className="modal-box max-w-md text-base-content">
+        <form method="dialog">
+          <button
+            className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+            aria-label={t("common.close")}
+          >
+            <X className="size-4" aria-hidden="true" />
+          </button>
+        </form>
+        <h3 id={langDialogTitleId} className="text-lg font-bold">
+          {t("nav.languageDialogTitle")}
+        </h3>
+        <p className="mt-1 mb-4 text-sm text-base-content/70">
+          {t("nav.languageDialogDescription")}
+        </p>
+        <LanguageSwitcher />
+      </div>
+      <form method="dialog" className="modal-backdrop">
+        <button>{t("common.close")}</button>
+      </form>
+    </dialog>
+    </>
   )
 }
 

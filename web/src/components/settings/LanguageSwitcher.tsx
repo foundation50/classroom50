@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Loader2, Trash2, Upload } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
 import { BASE_LANG, LanguagePackError } from "@/i18n/customLocale"
@@ -9,6 +10,7 @@ import { BASE_LANG, LanguagePackError } from "@/i18n/customLocale"
 // load failures (oversized, invalid JSON, CORS/network, bad scheme) surface in a
 // single inline error without changing the active language.
 export const LanguageSwitcher = () => {
+  const { t } = useTranslation()
   const {
     lang,
     availableLangs,
@@ -26,7 +28,7 @@ export const LanguageSwitcher = () => {
 
   const showError = (err: unknown) => {
     if (err instanceof LanguagePackError) setError(err.message)
-    else setError("Couldn't install the language pack.")
+    else setError(t("language.errorGeneric"))
   }
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -34,7 +36,7 @@ export const LanguageSwitcher = () => {
     event.target.value = "" // allow re-selecting the same file
     if (!file) return
     if (!code.trim()) {
-      setError("Enter a language code (e.g. de, fr, ja) first.")
+      setError(t("language.errorCodeFirst"))
       return
     }
     setError(null)
@@ -51,11 +53,11 @@ export const LanguageSwitcher = () => {
 
   const handleUrl = async () => {
     if (!code.trim()) {
-      setError("Enter a language code (e.g. de, fr, ja) first.")
+      setError(t("language.errorCodeFirst"))
       return
     }
     if (!url.trim()) {
-      setError("Enter a URL to fetch the pack from.")
+      setError(t("language.errorUrlRequired"))
       return
     }
     setError(null)
@@ -75,7 +77,7 @@ export const LanguageSwitcher = () => {
     <div className="flex flex-col gap-4">
       <div>
         <label className="label" htmlFor="lang-select">
-          <span className="label-text font-bold">Language</span>
+          <span className="label-text font-bold">{t("language.label")}</span>
         </label>
         <select
           id="lang-select"
@@ -85,7 +87,7 @@ export const LanguageSwitcher = () => {
         >
           {availableLangs.map((c) => (
             <option key={c} value={c}>
-              {c === BASE_LANG ? "English (base)" : c}
+              {c === BASE_LANG ? t("language.baseName") : c}
             </option>
           ))}
         </select>
@@ -99,7 +101,7 @@ export const LanguageSwitcher = () => {
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
-                aria-label={`Remove ${c} language pack`}
+                aria-label={t("language.removePack", { code: c })}
                 onClick={() => removePack(c)}
               >
                 <Trash2 className="size-4" aria-hidden="true" />
@@ -111,13 +113,12 @@ export const LanguageSwitcher = () => {
 
       <div className="flex flex-col gap-2 max-w-xs">
         <p className="text-xs text-base-content/70">
-          Install a language pack: translate the base <code>en.json</code> and
-          load it here.
+          {t("language.installHint")}
         </p>
         <input
           type="text"
           className="input input-bordered input-sm"
-          placeholder="Language code (e.g. de)"
+          placeholder={t("language.codePlaceholder")}
           value={code}
           onChange={(e) => setCode(e.target.value)}
           disabled={busy}
@@ -129,7 +130,7 @@ export const LanguageSwitcher = () => {
           ) : (
             <Upload className="size-4" aria-hidden="true" />
           )}
-          Upload JSON file
+          {t("language.uploadFile")}
           <input
             type="file"
             accept="application/json,.json"
@@ -143,7 +144,7 @@ export const LanguageSwitcher = () => {
           <input
             type="url"
             className="input input-bordered input-sm flex-1"
-            placeholder="…or paste a URL"
+            placeholder={t("language.urlPlaceholder")}
             value={url}
             onChange={(e) => setUrl(e.target.value)}
             disabled={busy}
@@ -154,7 +155,7 @@ export const LanguageSwitcher = () => {
             onClick={() => void handleUrl()}
             disabled={busy}
           >
-            Fetch
+            {t("language.fetch")}
           </button>
         </div>
       </div>

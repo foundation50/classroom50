@@ -54,6 +54,9 @@
     "rolePreviewTooltip": "You are previewing a role. Your real access is unchanged.",
     "darkMode": "Dark mode",
     "lightMode": "Light mode",
+    "language": "Language",
+    "languageDialogTitle": "Language",
+    "languageDialogDescription": "Switch languages or install a translated language pack.",
     "help": "Classroom 50 Help",
     "signOut": "Sign Out"
   },
