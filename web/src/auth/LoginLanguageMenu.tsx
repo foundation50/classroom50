@@ -77,31 +77,29 @@ export function LoginLanguageMenu() {
     }
   }
 
-  const switchInstalled = async (code: string) => {
+  // Guarded switch: the ref-lock + spinner-code bookkeeping is identical for
+  // both entry points; only the awaited work differs. `action` returns whether
+  // to close the menu (true on a successful switch/install).
+  const runSwitch = async (code: string, action: () => Promise<boolean>) => {
     if (switchingRef.current) return
     switchingRef.current = true
     setSwitchingCode(code)
     try {
-      await setLang(code)
-      closeMenu()
+      if (await action()) closeMenu()
     } finally {
       setSwitchingCode(null)
       switchingRef.current = false
     }
   }
 
-  const installAndSwitch = async (code: string) => {
-    if (switchingRef.current) return
-    switchingRef.current = true
-    setSwitchingCode(code)
-    try {
-      const preview = await prepareAndCommit(code)
-      if (preview) closeMenu()
-    } finally {
-      setSwitchingCode(null)
-      switchingRef.current = false
-    }
-  }
+  const switchInstalled = (code: string) =>
+    runSwitch(code, async () => {
+      await setLang(code)
+      return true
+    })
+
+  const installAndSwitch = (code: string) =>
+    runSwitch(code, async () => (await prepareAndCommit(code)) !== null)
 
   // Fetch + install + activate a registry pack. Returns the installed code, or
   // null on failure (the menu stays open so the user can retry another).

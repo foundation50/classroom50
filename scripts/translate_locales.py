@@ -205,7 +205,7 @@ def parse_model_json(text: str) -> dict:
 
 
 def check_key_parity(base: dict, translated: dict) -> list[str]:
-    """Return base keys the translation dropped (excluding plural additions)."""
+    """Return base keys the translation dropped."""
     base_keys = set(flatten(base))
     trans_keys = set(flatten(translated))
     return sorted(base_keys - trans_keys)

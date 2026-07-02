@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   Check,
   ChevronRight,
@@ -12,6 +12,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import {
   BASE_LANG,
   LanguagePackError,
@@ -21,6 +22,8 @@ import {
   languageLabel,
   shareUrlForLang,
 } from "@/i18n/customLocale"
+
+type AccordionSectionId = "share" | "installed" | "add" | "install"
 
 // Settings UI for language packs. Uploading/fetching only *prepares* a pack
 // (parse + preview); nothing applies until the user confirms.
@@ -51,9 +54,9 @@ export const LanguageSwitcher = ({
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
   // Accordion: at most one section open at a time so the modal stays bounded.
-  const [openSection, setOpenSection] = useState<
-    "share" | "installed" | "add" | "install" | null
-  >(null)
+  const [openSection, setOpenSection] = useState<AccordionSectionId | null>(
+    null,
+  )
   const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryError, setRegistryError] = useState<string | null>(null)
@@ -61,20 +64,9 @@ export const LanguageSwitcher = ({
   const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
     null,
   )
-  const [shareCopied, setShareCopied] = useState(false)
   // Synchronous re-entry lock for prepares: `busy` is async React state, so a
   // fast second click can fire before it re-renders. A ref flips immediately.
   const preparingRef = useRef(false)
-  // Handle for the "Copied" reset timer so rapid re-clicks don't stack timers
-  // (a stale one would flip the checkmark back early); also cleared on unmount.
-  const copyTimerRef = useRef<number | null>(null)
-  const clearCopyTimer = () => {
-    if (copyTimerRef.current !== null) {
-      window.clearTimeout(copyTimerRef.current)
-      copyTimerRef.current = null
-    }
-  }
-  useEffect(() => clearCopyTimer, [])
 
   const showError = (err: unknown) => {
     if (err instanceof UndetectableCodeError) {
@@ -153,7 +145,7 @@ export const LanguageSwitcher = ({
   // we intercept the summary click and set the open section ourselves.
   const toggleSection = (
     event: React.MouseEvent,
-    section: "share" | "installed" | "add" | "install",
+    section: AccordionSectionId,
   ) => {
     event.preventDefault()
     const next = openSection === section ? null : section
@@ -203,21 +195,11 @@ export const LanguageSwitcher = ({
   const shareCode = shareCodeOverride ?? lang ?? BASE_LANG
   const shareUrl = shareUrlForLang(shareCode)
 
-  const handleCopyShare = async () => {
-    if (!shareUrl) return
-    try {
-      await navigator.clipboard.writeText(shareUrl)
-      setShareCopied(true)
-      clearCopyTimer()
-      copyTimerRef.current = window.setTimeout(() => {
-        setShareCopied(false)
-        copyTimerRef.current = null
-      }, 2000)
-    } catch {
-      // Clipboard blocked (insecure context): leave the URL for manual copy.
-      setShareCopied(false)
-    }
-  }
+  const {
+    copied: shareCopied,
+    copy: copyShareUrl,
+    reset: resetShareCopied,
+  } = useCopyToClipboard(shareUrl ?? "")
 
   // One storage read for all installed packs (vs. one per pack), memoized so
   // unrelated re-renders (typing, accordion toggles, copy timer) don't re-parse
@@ -281,8 +263,7 @@ export const LanguageSwitcher = ({
               value={shareCode}
               onChange={(e) => {
                 setShareCodeOverride(e.target.value)
-                clearCopyTimer()
-                setShareCopied(false)
+                resetShareCopied()
               }}
             >
               {availableLangs.map((c) => (
@@ -307,7 +288,7 @@ export const LanguageSwitcher = ({
             <button
               type="button"
               className="btn btn-sm btn-primary"
-              onClick={() => void handleCopyShare()}
+              onClick={() => void copyShareUrl()}
               disabled={!shareUrl}
             >
               {shareCopied ? (
@@ -562,13 +543,10 @@ const AccordionSection = ({
   onToggle,
   children,
 }: {
-  section: "share" | "installed" | "add" | "install"
+  section: AccordionSectionId
   title: string
   open: boolean
-  onToggle: (
-    event: React.MouseEvent,
-    section: "share" | "installed" | "add" | "install",
-  ) => void
+  onToggle: (event: React.MouseEvent, section: AccordionSectionId) => void
   children: React.ReactNode
 }) => (
   <details
