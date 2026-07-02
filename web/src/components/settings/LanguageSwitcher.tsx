@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import {
   Check,
   ChevronRight,
@@ -62,6 +62,19 @@ export const LanguageSwitcher = ({
     null,
   )
   const [shareCopied, setShareCopied] = useState(false)
+  // Synchronous re-entry lock for prepares: `busy` is async React state, so a
+  // fast second click can fire before it re-renders. A ref flips immediately.
+  const preparingRef = useRef(false)
+  // Handle for the "Copied" reset timer so rapid re-clicks don't stack timers
+  // (a stale one would flip the checkmark back early); also cleared on unmount.
+  const copyTimerRef = useRef<number | null>(null)
+  const clearCopyTimer = () => {
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current)
+      copyTimerRef.current = null
+    }
+  }
+  useEffect(() => clearCopyTimer, [])
 
   const showError = (err: unknown) => {
     if (err instanceof UndetectableCodeError) {
@@ -74,14 +87,22 @@ export const LanguageSwitcher = ({
     }
   }
 
-  const runPrepare = async (prepare: () => Promise<PackPreview>) => {
+  const runPrepare = async (
+    prepare: () => Promise<PackPreview>,
+    // The accordion section this prepare belongs to. On preview/error we keep it
+    // open so the resulting preview/error card stays visually tied to its origin
+    // (the cards render below all sections; a detached preview is confusing).
+    section: "add" | "install",
+  ) => {
     setError(null)
     setPreview(null)
     setBusy(true)
     try {
       setPreview(await prepare())
+      setOpenSection(section)
     } catch (err) {
       showError(err)
+      setOpenSection(section)
     } finally {
       setBusy(false)
     }
@@ -91,7 +112,10 @@ export const LanguageSwitcher = ({
     const file = event.target.files?.[0]
     event.target.value = "" // allow re-selecting the same file
     if (!file) return
-    await runPrepare(() => prepareFromFile(file, code.trim() || undefined))
+    await runPrepare(
+      () => prepareFromFile(file, code.trim() || undefined),
+      "install",
+    )
   }
 
   const handleUrl = async () => {
@@ -99,7 +123,10 @@ export const LanguageSwitcher = ({
       setError(t("language.errorUrlRequired"))
       return
     }
-    await runPrepare(() => prepareFromUrl(url.trim(), code.trim() || undefined))
+    await runPrepare(
+      () => prepareFromUrl(url.trim(), code.trim() || undefined),
+      "install",
+    )
   }
 
   // Lazily load the registry when Browse first opens. Only HEAD-reachable packs
@@ -135,9 +162,18 @@ export const LanguageSwitcher = ({
   }
 
   const handleBuiltIn = async (builtInCode: string) => {
+    // Guard synchronously: two fast clicks would otherwise race two prepares
+    // over the shared preview/preparingCode, letting the last fetch to resolve
+    // win and install a pack that isn't the one last clicked.
+    if (preparingRef.current) return
+    preparingRef.current = true
     setPreparingCode(builtInCode)
-    await runPrepare(() => prepareFromBuiltIn(builtInCode))
-    setPreparingCode(null)
+    try {
+      await runPrepare(() => prepareFromBuiltIn(builtInCode), "add")
+    } finally {
+      setPreparingCode(null)
+      preparingRef.current = false
+    }
   }
 
   const handleConfirm = async () => {
@@ -172,7 +208,11 @@ export const LanguageSwitcher = ({
     try {
       await navigator.clipboard.writeText(shareUrl)
       setShareCopied(true)
-      window.setTimeout(() => setShareCopied(false), 2000)
+      clearCopyTimer()
+      copyTimerRef.current = window.setTimeout(() => {
+        setShareCopied(false)
+        copyTimerRef.current = null
+      }, 2000)
     } catch {
       // Clipboard blocked (insecure context): leave the URL for manual copy.
       setShareCopied(false)
@@ -244,6 +284,7 @@ export const LanguageSwitcher = ({
                 value={shareCode}
                 onChange={(e) => {
                   setShareCodeOverride(e.target.value)
+                  clearCopyTimer()
                   setShareCopied(false)
                 }}
               >

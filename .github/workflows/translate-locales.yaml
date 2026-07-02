@@ -64,6 +64,16 @@ jobs:
           else
             codes=$(jq -c . web/src/locales/targets.json)
           fi
+          # Every code becomes ${{ matrix.code }} interpolated into later run: blocks,
+          # so reject anything that isn't a plain BCP-47 tag. This is the injection
+          # gate for the workflow_dispatch `only` input; downstream steps also read
+          # the code from env rather than interpolating it directly.
+          bad=$(printf '%s' "$codes" | jq -r '.[] | select(test("^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$") | not)')
+          if [ -n "$bad" ]; then
+            echo "Rejected non-BCP-47 language code(s):" >&2
+            printf '%s\n' "$bad" >&2
+            exit 1
+          fi
           echo "codes=$codes" >> "$GITHUB_OUTPUT"
           echo "Languages: $codes"
 
@@ -99,18 +109,21 @@ jobs:
           AWS_BEARER_TOKEN_BEDROCK: ${{ secrets.AWS_BEARER_TOKEN_BEDROCK }}
           BEDROCK_MODEL_ID: ${{ vars.AWS_BEDROCK_MODEL_ID }}
           AWS_REGION: ${{ vars.AWS_REGION }}
+          CODE: ${{ matrix.code }}
         run: |
           set -euo pipefail
-          current="langrepo/${{ matrix.code }}.json"
+          current="langrepo/${CODE}.json"
           # --current is optional; a missing file means first-time generation.
           python scripts/translate_locales.py \
-            --code "${{ matrix.code }}" \
+            --code "$CODE" \
             --base web/src/locales/en.json \
             --prompt web/src/locales/TRANSLATION_PROMPT.md \
             --current "$current" \
             --out "$current"
 
       - name: Structural gate (verify_locale.py)
+        env:
+          CODE: ${{ matrix.code }}
         run: |
           set -euo pipefail
           # verify_locale.py reads en.json from CWD and takes one argv, so run it
@@ -118,8 +131,8 @@ jobs:
           gate=$(mktemp -d)
           cp web/src/locales/en.json "$gate/en.json"
           cp web/src/locales/verify_locale.py "$gate/verify_locale.py"
-          cp "langrepo/${{ matrix.code }}.json" "$gate/${{ matrix.code }}.json"
-          ( cd "$gate" && python verify_locale.py "${{ matrix.code }}.json" )
+          cp "langrepo/${CODE}.json" "$gate/${CODE}.json"
+          ( cd "$gate" && python verify_locale.py "${CODE}.json" )
 
       - name: Open pull request on the language repo
         env:

@@ -644,11 +644,13 @@ export function shareUrlForLang(code: string): string | null {
 }
 
 // Apply a `?lang=<code>` deep link so a shared URL lands the visitor in that
-// language: `en` and already-installed codes just switch; otherwise the code
-// must be offered by the registry, then its pack is fetched, installed, and
-// activated. Always wins for the visit. The param is stripped afterward (win or
-// fail) so a reload doesn't re-fire it. Errors are swallowed — a shared link
-// must never break the app. No-op when the param is absent.
+// language and makes it their new active language: `en` and already-installed
+// codes just switch; otherwise the code must be offered by the registry, then
+// its pack is fetched, installed, and activated. The chosen language is
+// persisted (via selectLang -> setStoredLang), so it sticks across reloads —
+// this is a durable switch, not a one-visit override. The param is stripped
+// afterward (win or fail) so a reload doesn't re-fire it. Errors are swallowed
+// — a shared link must never break the app. No-op when the param is absent.
 export async function applyLangFromQuery(): Promise<void> {
   if (typeof window === "undefined") return
 

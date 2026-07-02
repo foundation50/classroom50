@@ -34,7 +34,13 @@ from pathlib import Path
 
 import boto3
 from botocore.config import Config
-from botocore.exceptions import ClientError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionError as BotoConnectionError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 
 # Anthropic Messages API version on Bedrock; the payload below assumes that
 # schema. Overridable via BEDROCK_ANTHROPIC_VERSION.
@@ -152,6 +158,24 @@ def invoke_model(client, model_id: str, system_prompt: str, user_message: str) -
             last_err = err
             sleep_for = BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
             eprint(f"  bedrock {code}, retry {attempt}/{MAX_ATTEMPTS} in {sleep_for:.0f}s")
+            time.sleep(sleep_for)
+        except (
+            ReadTimeoutError,
+            ConnectTimeoutError,
+            EndpointConnectionError,
+            BotoConnectionError,
+        ) as err:
+            # Transport transients aren't ClientError, so they'd otherwise skip
+            # backoff and fail the language on a single blip (boto's own retries
+            # are disabled via Config(max_attempts=0)). Retry them the same way.
+            if attempt == MAX_ATTEMPTS:
+                raise
+            last_err = err
+            sleep_for = BASE_BACKOFF_SECONDS * (2 ** (attempt - 1))
+            eprint(
+                f"  bedrock transport error ({type(err).__name__}), "
+                f"retry {attempt}/{MAX_ATTEMPTS} in {sleep_for:.0f}s"
+            )
             time.sleep(sleep_for)
 
     # Unreachable in practice (the final attempt either returns or raises).

@@ -4,6 +4,7 @@ import {
   LANG_QUERY_PARAM,
   LanguagePackError,
   MAX_PACK_BYTES,
+  PACKS_STORAGE_KEY,
   UndetectableCodeError,
   applyLangFromQuery,
   availableBuiltInLangs,
@@ -273,6 +274,30 @@ describe("fetchRegistry", () => {
     )
     await expect(fetchRegistry()).rejects.toThrow(LanguagePackError)
   })
+
+  it("rejects a streamed manifest larger than the registry cap (no content-length)", async () => {
+    // A chunked response omits content-length, so the cap must be enforced while
+    // streaming. Emit >64KB (MAX_REGISTRY_BYTES) across chunks via a real stream.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        const chunk = new TextEncoder().encode("x".repeat(16 * 1024))
+        let sent = 0
+        const body = new ReadableStream<Uint8Array>({
+          pull(controller) {
+            if (sent >= 80 * 1024) {
+              controller.close()
+              return
+            }
+            sent += chunk.byteLength
+            controller.enqueue(chunk)
+          },
+        })
+        return new Response(body, { status: 200 })
+      }),
+    )
+    await expect(fetchRegistry()).rejects.toThrow(/too large/i)
+  })
 })
 
 describe("availableBuiltInLangs", () => {
@@ -414,13 +439,22 @@ describe("applyLangFromQuery", () => {
 
   // Minimal window stub: a mutable location URL + a history.replaceState that
   // records the URL it was asked to set, so we can assert the param is stripped.
-  const stubWindow = (href: string) => {
+  // Optionally seeds an in-memory localStorage so the already-installed branch
+  // (which reads stored packs) can be exercised.
+  const stubWindow = (href: string, storageSeed?: Record<string, string>) => {
     let currentHref = href
     const replaced: string[] = []
+    const store = new Map<string, string>(Object.entries(storageSeed ?? {}))
+    const localStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    }
     const win = {
       get location() {
         return { href: currentHref } as Location
       },
+      localStorage: localStorage as unknown as Storage,
       history: {
         state: null,
         replaceState: (_state: unknown, _title: string, url: string) => {
@@ -440,6 +474,37 @@ describe("applyLangFromQuery", () => {
     vi.stubGlobal("fetch", fetchMock)
     await applyLangFromQuery()
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("switches to en for ?lang=en without any network call", async () => {
+    const { replaced } = stubWindow(
+      `https://app.example/?${LANG_QUERY_PARAM}=en`,
+    )
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await applyLangFromQuery()
+    // BASE_LANG is built in — no manifest or pack fetch, and the param is stripped.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(replaced.at(-1)).not.toContain(`${LANG_QUERY_PARAM}=`)
+  })
+
+  it("switches to an already-installed code without fetching the registry", async () => {
+    // Seed a stored pack so the already-installed fast path is taken.
+    const stored = {
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        ja: { code: "ja", bundle: { "nav.roleStudent": "受講者" } },
+      }),
+    }
+    const { replaced } = stubWindow(
+      `https://app.example/?${LANG_QUERY_PARAM}=ja`,
+      stored,
+    )
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await applyLangFromQuery()
+    // Installed pack switches with no manifest/pack fetch; param still stripped.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(replaced.at(-1)).not.toContain(`${LANG_QUERY_PARAM}=`)
   })
 
   it("ignores an invalid ?lang= code without fetching, and strips the param", async () => {
