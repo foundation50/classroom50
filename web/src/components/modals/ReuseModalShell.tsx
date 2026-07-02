@@ -1,5 +1,7 @@
 import { Copy, TriangleAlert, X } from "lucide-react"
 import { useEffect, useId, type ReactNode, type RefObject } from "react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
 // alerts, Cancel/Reuse footer — so each only supplies its title, description,
@@ -39,6 +41,7 @@ export const ReuseModalShell = ({
 
   const closeDialog = () => dialogRef.current?.close()
   const titleId = useId()
+  const { t } = useTranslation()
 
   return (
     <dialog
@@ -51,7 +54,7 @@ export const ReuseModalShell = ({
         <form method="dialog">
           <button
             className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-            aria-label="Close"
+            aria-label={t("common.close")}
             disabled={isPending}
           >
             <X className="size-4" aria-hidden="true" />
@@ -92,7 +95,7 @@ export const ReuseModalShell = ({
             disabled={isPending}
             onClick={closeDialog}
           >
-            {warning ? "Done" : "Cancel"}
+            {warning ? t("common.done") : t("common.cancel")}
           </button>
           {showSubmit && !warning ? (
             <button
@@ -107,12 +110,12 @@ export const ReuseModalShell = ({
                     className="loading loading-spinner loading-sm"
                     aria-hidden="true"
                   />
-                  Copying…
+                  {t("components.modals.reuseShell.copying")}
                 </>
               ) : (
                 <>
-                  <Copy aria-hidden="true" className="size-4" /> Reuse
-                  assignment
+                  <Copy aria-hidden="true" className="size-4" />{" "}
+                  {t("components.modals.reuseShell.reuseAssignment")}
                 </>
               )}
             </button>
@@ -121,7 +124,7 @@ export const ReuseModalShell = ({
       </div>
 
       <form method="dialog" className="modal-backdrop">
-        <button disabled={isPending}>close</button>
+        <button disabled={isPending}>{t("common.close")}</button>
       </form>
     </dialog>
   )
@@ -133,6 +136,7 @@ export default ReuseModalShell
 // order; otherwise preview the normalized form or fall back to `uniqueHint`.
 // `classroomLabel`/`uniqueHint` carry each modal's wording.
 export const reuseSlugStatus = ({
+  t,
   loading,
   error,
   slugTaken,
@@ -142,6 +146,7 @@ export const reuseSlugStatus = ({
   classroomLabel,
   uniqueHint,
 }: {
+  t: TFunction
   loading: boolean
   error: boolean
   slugTaken: boolean
@@ -151,12 +156,16 @@ export const reuseSlugStatus = ({
   classroomLabel: string
   uniqueHint: string
 }): string => {
-  if (loading) return "Checking existing assignments…"
-  if (error)
-    return "Couldn’t check existing slugs — you can still try; we’ll re-check on save."
+  if (loading) return t("components.modals.reuseShell.slug.checking")
+  if (error) return t("components.modals.reuseShell.slug.checkError")
   if (slugTaken)
-    return `“${normalizedSlug}” is already used in ${classroomLabel} — pick another.`
+    return t("components.modals.reuseShell.slug.taken", {
+      slug: normalizedSlug,
+      classroom: classroomLabel,
+    })
   if (slugTouched && normalizedSlug !== displayedSlug)
-    return `Will be saved as “${normalizedSlug}”.`
+    return t("components.modals.reuseShell.slug.willBeSaved", {
+      slug: normalizedSlug,
+    })
   return uniqueHint
 }

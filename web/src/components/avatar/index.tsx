@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next"
+
 const Avatar = ({
   initials,
   name,
@@ -14,6 +16,7 @@ const Avatar = ({
   // When provided, the avatar circle + name become a button opening details.
   onClick?: () => void
 }) => {
+  const { t } = useTranslation()
   const identity = (
     <>
       <div className="avatar avatar-placeholder">
@@ -43,7 +46,7 @@ const Avatar = ({
         type="button"
         className="group/avatar flex items-center gap-3 cursor-pointer"
         onClick={onClick}
-        title="View student details"
+        title={t("components.avatar.viewDetails")}
       >
         {identity}
       </button>

@@ -6,6 +6,7 @@
     "save": "Save",
     "loading": "Loading...",
     "working": "Working...",
+    "done": "Done",
     "skipToMainContent": "Skip to main content"
   },
   "notFound": {
@@ -1297,6 +1298,129 @@
     "warnArchived": "{{who}} is still on the archived classroom \"{{classroom}}\"; unarchive it to remove them from that roster.",
     "warnUnenrollFailed": "Couldn't unenroll {{who}} from \"{{classroom}}\" ({{reason}}); removed the others.",
     "warnOnboardingRepo": "Couldn't delete the leftover onboarding repository \"{{repo}}\" ({{reason}}); you can remove it manually."
+  },
+  "components": {
+    "avatar": {
+      "viewDetails": "View student details"
+    },
+    "banner": {
+      "dismiss": "Dismiss"
+    },
+    "breadcrumb": {
+      "label": "Breadcrumb",
+      "classes": "Classes",
+      "assignments": "Assignments"
+    },
+    "planBadge": {
+      "label": "{{name}} plan"
+    },
+    "notices": {
+      "emptyRoster": {
+        "hasRows_prefix": "No students have joined the",
+        "hasRows_suffix": "organization yet. An assignment's accept link only works for students who are organization members, so invited students must accept their invite first.",
+        "empty_prefix": "This classroom has no students yet. An assignment's accept link only works for students who are members of the",
+        "empty_suffix": "organization, so add and enroll students before sharing it.",
+        "manageRoster": "Manage roster",
+        "addStudents": "Add students"
+      }
+    },
+    "confirmModal": {
+      "confirm": "Confirm",
+      "no": "No",
+      "yesContinue": "Yes, continue",
+      "dangerousPrompt": "Are you sure you want to continue? This action may be difficult or impossible to undo.",
+      "genericError": "Something went wrong.",
+      "typeToConfirm_prefix": "To confirm, type",
+      "typeToConfirm_suffix": "below.",
+      "typeAriaLabel": "Type {{text}} to confirm"
+    },
+    "modals": {
+      "studentProfile": {
+        "statusEnrolled": "Enrolled",
+        "statusInvited": "Invited",
+        "github": "GitHub",
+        "notLinkedYet": "Not linked yet",
+        "email": "Email",
+        "section": "Section",
+        "enrollment": "Enrollment",
+        "openRepo": "Open assignment repo"
+      },
+      "groupCollaborators": {
+        "title": "Group collaborators",
+        "viewRepository": "View repository",
+        "loading": "Loading collaborators",
+        "saved": "Collaborators saved!",
+        "onlyOwner_prefix": "Only the group owner",
+        "onlyOwner_suffix": "can manage collaborators for this repository.",
+        "groupMembers": "Group members",
+        "personCount_one": "{{count}} person",
+        "personCount_other": "{{count}} people",
+        "ownerBadge": "Owner",
+        "couldntAdd": "Couldn't add — check the username and org membership.",
+        "removeUser": "Remove {{username}}",
+        "couldntRemove": "Couldn't remove",
+        "removing": "Removing",
+        "undo": "Undo",
+        "noCollaborators": "No collaborators yet.",
+        "tooMany": "This assignment has a maximum group size of {{max}} (including the owner).",
+        "mustBeUnique": "Collaborators must be unique.",
+        "addPlaceholder": "Add a GitHub username (e.g. octocat)",
+        "addAriaLabel": "Add a GitHub username",
+        "add": "Add",
+        "groupFull": "Group is full — remove someone to add another collaborator.",
+        "discardChanges": "Discard changes",
+        "saveCollaborators": "Save collaborators",
+        "removedNote_one": "Removed {{count}} collaborator.",
+        "removedNote_other": "Removed {{count}} collaborators.",
+        "failure": {
+          "rateLimited": "GitHub rate limit hit — wait a moment and try again.",
+          "forbidden": "You don't have permission to change collaborators on this repository.",
+          "notFound": "Username not found, or not a member of the GitHub organization.",
+          "conflict": "Already a collaborator, or the request was rejected by GitHub."
+        },
+        "error": {
+          "addAndRemove": "Some collaborators could not be added or removed.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}",
+          "add": "Some collaborators could not be added.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}",
+          "remove": "Some collaborators could not be removed.{{removedNote}} Check the highlighted usernames and Save again to retry.{{suffix}}"
+        }
+      },
+      "reuseShell": {
+        "copying": "Copying…",
+        "reuseAssignment": "Reuse assignment",
+        "slug": {
+          "checking": "Checking existing assignments…",
+          "checkError": "Couldn’t check existing slugs — you can still try; we’ll re-check on save.",
+          "taken": "“{{slug}}” is already used in {{classroom}} — pick another.",
+          "willBeSaved": "Will be saved as “{{slug}}”."
+        }
+      },
+      "reuseAssignment": {
+        "title": "Reuse assignment",
+        "description_prefix": "Copy",
+        "description_suffix": "into another classroom in {{org}}. Name, template, tests, runtime, due date, and other settings are copied; student repositories and scores are not.",
+        "noTargets": "There are no other classrooms in {{org}} to reuse this assignment into. Create another classroom first.",
+        "targetClassroom": "Target classroom",
+        "chooseClassroom": "Choose a classroom…",
+        "slugLabel": "Slug in the new classroom",
+        "chooseClassroomFirst": "Choose a classroom first.",
+        "uniqueHint": "Must be unique within the target classroom."
+      },
+      "reuseFromClassroom": {
+        "title": "Reuse an existing assignment",
+        "description_prefix": "Copy an assignment from another classroom in {{org}} into",
+        "description_suffix": ". Name, template, tests, runtime, due date, and other settings are copied; student repositories and scores are not.",
+        "noSources": "There are no other classrooms in {{org}} to reuse an assignment from.",
+        "sourceClassroom": "Source classroom",
+        "chooseClassroom": "Choose a classroom…",
+        "assignment": "Assignment",
+        "loadingAssignments": "Loading assignments…",
+        "noAssignments": "No assignments in this classroom",
+        "chooseAssignment": "Choose an assignment…",
+        "loadError": "Couldn’t load assignments for {{classroom}}.",
+        "slugLabel": "Slug in {{classroom}}",
+        "uniqueHint": "Must be unique within this classroom."
+      }
+    }
   },
   "formatDate": {
     "invalidDate": "Invalid date"

@@ -1,4 +1,5 @@
 import type { ComponentPropsWithoutRef } from "react"
+import { useTranslation } from "react-i18next"
 
 type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl"
 
@@ -21,13 +22,15 @@ type SpinnerSize = "xs" | "sm" | "md" | "lg" | "xl"
  */
 export function Spinner({
   size = "md",
-  label = "Loading…",
+  label,
   className,
   ...props
 }: {
   size?: SpinnerSize
   label?: string
 } & Omit<ComponentPropsWithoutRef<"span">, "children">) {
+  const { t } = useTranslation()
+  const resolvedLabel = label ?? t("common.loading")
   return (
     <span
       role="status"
@@ -38,7 +41,7 @@ export function Spinner({
         className={`loading loading-spinner loading-${size}`}
         aria-hidden="true"
       />
-      <span className="sr-only">{label}</span>
+      <span className="sr-only">{resolvedLabel}</span>
     </span>
   )
 }

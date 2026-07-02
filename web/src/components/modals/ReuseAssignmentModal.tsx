@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -26,6 +27,7 @@ export const ReuseAssignmentModal = ({
 }) => {
   const { classes } = useGetClasses(org)
   const dialogRef = useRef<HTMLDialogElement | null>(null)
+  const { t } = useTranslation()
 
   // Sibling classrooms only — can't reuse into the assignment's own classroom.
   const targets = useMemo(
@@ -66,16 +68,14 @@ export const ReuseAssignmentModal = ({
   return (
     <ReuseModalShell
       dialogRef={dialogRef}
-      title="Reuse assignment"
+      title={t("components.modals.reuseAssignment.title")}
       description={
         <>
-          Copy{" "}
+          {t("components.modals.reuseAssignment.description_prefix")}{" "}
           <span className="font-semibold text-base-content">
             {assignment.name || assignment.slug}
           </span>{" "}
-          into another classroom in {org}. Name, template, tests, runtime, due
-          date, and other settings are copied; student repositories and scores
-          are not.
+          {t("components.modals.reuseAssignment.description_suffix", { org })}
         </>
       }
       isPending={reuse.isPending}
@@ -88,14 +88,13 @@ export const ReuseAssignmentModal = ({
     >
       {targets.length === 0 ? (
         <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-          There are no other classrooms in {org} to reuse this assignment into.
-          Create another classroom first.
+          {t("components.modals.reuseAssignment.noTargets", { org })}
         </div>
       ) : (
         <div className="mt-6 space-y-4">
           <label className="form-control w-full">
             <span className="label-text mb-1 font-medium">
-              Target classroom
+              {t("components.modals.reuseAssignment.targetClassroom")}
             </span>
             <select
               className="select select-bordered w-full"
@@ -104,7 +103,7 @@ export const ReuseAssignmentModal = ({
               onChange={(e) => handlePickTarget(e.target.value)}
             >
               <option value="" disabled>
-                Choose a classroom…
+                {t("components.modals.reuseAssignment.chooseClassroom")}
               </option>
               {targets.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -116,7 +115,7 @@ export const ReuseAssignmentModal = ({
 
           <label className="form-control w-full">
             <span className="label-text mb-1 font-medium">
-              Slug in the new classroom
+              {t("components.modals.reuseAssignment.slugLabel")}
             </span>
             <input
               type="text"
@@ -134,8 +133,9 @@ export const ReuseAssignmentModal = ({
               }`}
             >
               {!targetClassroom
-                ? "Choose a classroom first."
+                ? t("components.modals.reuseAssignment.chooseClassroomFirst")
                 : reuseSlugStatus({
+                    t,
                     loading: targetLoading,
                     error: targetError,
                     slugTaken: reuse.slugTaken,
@@ -143,7 +143,9 @@ export const ReuseAssignmentModal = ({
                     normalizedSlug: reuse.normalizedSlug,
                     displayedSlug: reuse.displayedSlug,
                     classroomLabel: targetClassroom,
-                    uniqueHint: "Must be unique within the target classroom.",
+                    uniqueHint: t(
+                      "components.modals.reuseAssignment.uniqueHint",
+                    ),
                   })}
             </span>
           </label>

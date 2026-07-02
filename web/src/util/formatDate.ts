@@ -1,22 +1,37 @@
 import type { DueMeta } from "@/types/classroom"
 import { formatDistanceToNow } from "date-fns"
 
-const dueDateFormatter = new Intl.DateTimeFormat("en-US", {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-})
+import i18n from "@/i18n"
+
+// The active i18next language drives Intl formatting. `Intl` accepts BCP-47
+// codes ("en", "ja"), so the app's language code passes through directly. The
+// bare base language "en" is mapped to "en-US" to preserve the exact US-style
+// output the app (and its tests) expect; other languages use their own code.
+const resolveLocale = (): string => {
+  const lang = i18n.language || "en-US"
+  return lang === "en" ? "en-US" : lang
+}
+
+// `Intl.DateTimeFormat`'s locale is fixed at construction, so build formatters
+// lazily off the current language rather than once at module load.
+const dueDateFormatter = () =>
+  new Intl.DateTimeFormat(resolveLocale(), {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  })
 
 // `undefined` locale uses the viewer's locale, so the timezone abbreviation is
 // region-correct ("BST", not "GMT+1" as a fixed `en-US` would render).
-const dueDateTimeFormatter = new Intl.DateTimeFormat(undefined, {
-  month: "short",
-  day: "numeric",
-  year: "numeric",
-  hour: "numeric",
-  minute: "2-digit",
-  timeZoneName: "short",
-})
+const dueDateTimeFormatter = () =>
+  new Intl.DateTimeFormat(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZoneName: "short",
+  })
 
 // Legacy bare calendar date (YYYY-MM-DD), vs a full RFC 3339 timestamp.
 const isBareDate = (dateString: string): boolean =>
@@ -33,10 +48,10 @@ const parseDueDate = (dateString: string): Date => {
 export const formatDueDate = (dateString: string): string => {
   const date = parseDueDate(dateString)
   if (Number.isNaN(date.getTime())) {
-    return "Invalid date"
+    return i18n.t("formatDate.invalidDate")
   }
 
-  return dueDateFormatter.format(date)
+  return dueDateFormatter().format(date)
 }
 
 // Bare dates have no time, so fall back to date-only instead of a misleading
@@ -48,10 +63,10 @@ export const formatDueDateTime = (dateString: string): string => {
 
   const date = parseDueDate(dateString)
   if (Number.isNaN(date.getTime())) {
-    return "Invalid date"
+    return i18n.t("formatDate.invalidDate")
   }
 
-  return dueDateTimeFormatter.format(date)
+  return dueDateTimeFormatter().format(date)
 }
 
 // Relative "x ago" for an invitation timestamp. Returns null on missing/invalid.
@@ -59,6 +74,10 @@ export const formatInvitedAt = (dateString?: string | null): string | null => {
   if (!dateString) return null
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return null
+  // TODO(i18n): relative-time output is English-only. Localizing it requires
+  // passing a date-fns `locale` option keyed off `i18n.language`, which means
+  // sideloading per-language date-fns locales (deferred — the installed set is
+  // unknown and the locale bundles are heavy).
   return formatDistanceToNow(date, { addSuffix: true })
 }
 

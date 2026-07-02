@@ -1,4 +1,5 @@
 import GitHub from "@/assets/github.svg?react"
+import { useTranslation } from "react-i18next"
 
 // Shared GitHub-plan badge (org's billing plan). GitHub only returns the plan
 // name to org owners, so callers pass `undefined` for non-owners and nothing
@@ -13,6 +14,7 @@ const PlanBadge = ({
   title?: string
   className?: string
 }) => {
+  const { t } = useTranslation()
   if (!name) return null
 
   return (
@@ -21,7 +23,7 @@ const PlanBadge = ({
       title={title}
     >
       <GitHub className="size-3" aria-hidden="true" />
-      {name} plan
+      {t("components.planBadge.label", { name })}
     </span>
   )
 }
