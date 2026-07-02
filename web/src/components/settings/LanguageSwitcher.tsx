@@ -52,14 +52,15 @@ export const LanguageSwitcher = ({
   const [busy, setBusy] = useState(false)
   const [needsCode, setNeedsCode] = useState(false)
   const [preview, setPreview] = useState<PackPreview | null>(null)
-  const [installOpen, setInstallOpen] = useState(false)
-  const [installedOpen, setInstalledOpen] = useState(false)
-  const [browseOpen, setBrowseOpen] = useState(false)
+  // Accordion: at most one section is open at a time so the modal can't grow
+  // unbounded when the user explores multiple sections.
+  const [openSection, setOpenSection] = useState<
+    "share" | "installed" | "add" | "install" | null
+  >(null)
   const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
   const [registryBusy, setRegistryBusy] = useState(false)
   const [registryError, setRegistryError] = useState<string | null>(null)
   const [preparingCode, setPreparingCode] = useState<string | null>(null)
-  const [shareOpen, setShareOpen] = useState(false)
   const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
     null,
   )
@@ -124,9 +125,19 @@ export const LanguageSwitcher = ({
     }
   }
 
-  const handleBrowseToggle = (open: boolean) => {
-    setBrowseOpen(open)
-    if (open) void loadRegistry()
+  // Controlled accordion: the native <details> toggle fights React's `open`
+  // prop (clicking a closed section closes the open one but doesn't open the
+  // clicked one until a second click). So we intercept the summary click,
+  // prevent the native toggle, and drive the open section ourselves — opening a
+  // section closes any other. Opening "add" lazily loads the registry.
+  const toggleSection = (
+    event: React.MouseEvent,
+    section: "share" | "installed" | "add" | "install",
+  ) => {
+    event.preventDefault()
+    const next = openSection === section ? null : section
+    setOpenSection(next)
+    if (next === "add") void loadRegistry()
   }
 
   const handleBuiltIn = async (builtInCode: string) => {
@@ -209,13 +220,15 @@ export const LanguageSwitcher = ({
 
       <details
         className="collapse border border-base-300 rounded-box bg-base-100"
-        open={shareOpen}
-        onToggle={(e) => setShareOpen((e.target as HTMLDetailsElement).open)}
+        open={openSection === "share"}
       >
-        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+        <summary
+          className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden"
+          onClick={(e) => toggleSection(e, "share")}
+        >
           <ChevronRight
             className={`size-4 transition-transform ${
-              shareOpen ? "rotate-90" : ""
+              openSection === "share" ? "rotate-90" : ""
             }`}
             aria-hidden="true"
           />
@@ -284,22 +297,22 @@ export const LanguageSwitcher = ({
       {installedLangs.length > 0 && (
         <details
           className="collapse border border-base-300 rounded-box bg-base-100"
-          open={installedOpen}
-          onToggle={(e) =>
-            setInstalledOpen((e.target as HTMLDetailsElement).open)
-          }
+          open={openSection === "installed"}
         >
-          <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+          <summary
+            className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden"
+            onClick={(e) => toggleSection(e, "installed")}
+          >
             <ChevronRight
               className={`size-4 transition-transform ${
-                installedOpen ? "rotate-90" : ""
+                openSection === "installed" ? "rotate-90" : ""
               }`}
               aria-hidden="true"
             />
             {t("language.installedTitle")}
           </summary>
           <div className="collapse-content">
-            <ul className="menu bg-base-200 rounded-box w-full gap-1">
+            <ul className="menu bg-base-200 rounded-box max-h-56 w-full flex-nowrap gap-1 overflow-y-auto">
               {installedLangs.map((c) => {
                 const cov = coverages[c]
                 return (
@@ -332,15 +345,15 @@ export const LanguageSwitcher = ({
 
       <details
         className="collapse border border-base-300 rounded-box bg-base-100"
-        open={browseOpen}
-        onToggle={(e) =>
-          handleBrowseToggle((e.target as HTMLDetailsElement).open)
-        }
+        open={openSection === "add"}
       >
-        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+        <summary
+          className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden"
+          onClick={(e) => toggleSection(e, "add")}
+        >
           <ChevronRight
             className={`size-4 transition-transform ${
-              browseOpen ? "rotate-90" : ""
+              openSection === "add" ? "rotate-90" : ""
             }`}
             aria-hidden="true"
           />
@@ -375,7 +388,7 @@ export const LanguageSwitcher = ({
               )}
 
             {offered.length > 0 && (
-              <ul className="menu bg-base-200 rounded-box w-full gap-1">
+              <ul className="menu bg-base-200 rounded-box max-h-56 w-full flex-nowrap gap-1 overflow-y-auto">
                 {offered.map((l) => (
                   <li key={l.code}>
                     <button
@@ -404,13 +417,15 @@ export const LanguageSwitcher = ({
 
       <details
         className="collapse border border-base-300 rounded-box bg-base-100"
-        open={installOpen || needsCode || Boolean(preview) || Boolean(error)}
-        onToggle={(e) => setInstallOpen((e.target as HTMLDetailsElement).open)}
+        open={openSection === "install" || needsCode}
       >
-        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+        <summary
+          className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden"
+          onClick={(e) => toggleSection(e, "install")}
+        >
           <ChevronRight
             className={`size-4 transition-transform ${
-              installOpen || needsCode || preview || error ? "rotate-90" : ""
+              openSection === "install" || needsCode ? "rotate-90" : ""
             }`}
             aria-hidden="true"
           />
