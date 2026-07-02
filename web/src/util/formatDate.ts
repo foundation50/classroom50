@@ -3,13 +3,10 @@ import { formatDistanceToNow } from "date-fns"
 
 import i18n from "@/i18n"
 
-// The active i18next language drives Intl formatting. `Intl` accepts BCP-47
-// codes ("en", "ja"), so the app's language code passes through directly. The
-// bare base language "en" is mapped to "en-US" to preserve the exact US-style
-// output the app (and its tests) expect; other languages use their own code.
-// A sideloaded pack can carry a syntactically-odd code (e.g. "123") that
-// `Intl.DateTimeFormat` rejects with a RangeError, so we validate it against
-// Intl and fall back to "en-US" rather than let every date render throw.
+// Drive Intl formatting off the active language. Bare "en" maps to "en-US" to
+// preserve the exact US-style output the app/tests expect. A sideloaded pack
+// can carry a code Intl rejects with a RangeError, so validate and fall back to
+// "en-US" rather than let every date render throw.
 const resolveLocale = (): string => {
   const lang = i18n.language || "en-US"
   const candidate = lang === "en" ? "en-US" : lang
@@ -21,7 +18,7 @@ const resolveLocale = (): string => {
   }
 }
 
-// `Intl.DateTimeFormat`'s locale is fixed at construction, so build formatters
+// Intl.DateTimeFormat's locale is fixed at construction, so build formatters
 // lazily off the current language rather than once at module load.
 const dueDateFormatter = () =>
   new Intl.DateTimeFormat(resolveLocale(), {
@@ -83,10 +80,8 @@ export const formatInvitedAt = (dateString?: string | null): string | null => {
   if (!dateString) return null
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return null
-  // TODO(i18n): relative-time output is English-only. Localizing it requires
-  // passing a date-fns `locale` option keyed off `i18n.language`, which means
-  // sideloading per-language date-fns locales (deferred — the installed set is
-  // unknown and the locale bundles are heavy).
+  // TODO(i18n): relative-time output is English-only. Localizing needs per-
+  // language date-fns locales (deferred — bundles are heavy).
   return formatDistanceToNow(date, { addSuffix: true })
 }
 

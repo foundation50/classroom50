@@ -3,18 +3,16 @@ import { z } from "zod"
 
 import en from "@/locales/en.json"
 
-// Sideloadable language packs. English is the bundled base; users install extra
-// languages at runtime (file upload or remote URL) and switch between them. The
-// stored payload is arbitrary user-supplied JSON, so every entry point enforces
-// a size cap, a shape/key-count check, and re-validation on rehydration. Mirrors
-// the useTheme localStorage + cross-tab `storage` listener mechanics.
+// Sideloadable language packs: English is the bundled base; users install extra
+// languages at runtime (file/URL) and switch between them. Stored packs are
+// untrusted user JSON, so every entry point enforces a size cap, shape/key-count
+// check, and re-validation on rehydration.
 
 export const LANG_STORAGE_KEY = "classroom50:lang"
 export const PACKS_STORAGE_KEY = "classroom50:custom-locales"
 
 export const BASE_LANG = "en"
 
-// i18next groups resources under a namespace; we use the default single one.
 export const NAMESPACE = "translation"
 
 // Guardrails against oversized input freezing the tab or blowing the ~5MB
@@ -22,8 +20,8 @@ export const NAMESPACE = "translation"
 export const MAX_PACK_BYTES = 512 * 1024
 export const MAX_PACK_KEYS = 5000
 
-// A flat map of dotted keys to translated strings, e.g. { "notFound.title": "..." }.
-// Nested JSON is accepted on input and flattened before validation/registration.
+// Dotted keys to translated strings, e.g. { "notFound.title": "..." }. Nested
+// JSON is accepted on input and flattened before validation.
 export type FlatBundle = Record<string, string>
 
 export type LanguagePack = {
@@ -31,10 +29,8 @@ export type LanguagePack = {
   bundle: FlatBundle
 }
 
-// Language code: a BCP-47-ish tag. Must start with a 2-3 letter primary
-// language subtag, optionally followed by `-`-separated alphanumeric subtags
-// (region/script/variant). This rejects codes like "123" or "12-34" that pass a
-// looser check but make `Intl.DateTimeFormat` throw a RangeError downstream.
+// BCP-47-ish tag: 2-3 letter primary subtag plus optional `-` subtags. Rejects
+// codes like "123" that pass a looser check but make Intl throw a RangeError.
 const langCodeSchema = z
   .string()
   .trim()
@@ -68,9 +64,8 @@ export class LanguagePackError extends Error {
   }
 }
 
-// Thrown by the loaders when no language code was supplied and none could be
-// inferred from the file name / URL. The UI catches this specifically to reveal
-// the code input and show a translated hint rather than the raw message.
+// Thrown when no code was supplied and none could be inferred. The UI catches
+// this specifically to reveal the code input.
 export class UndetectableCodeError extends LanguagePackError {
   constructor(message = "Couldn't detect the language code — enter it below.") {
     super(message)
@@ -78,9 +73,8 @@ export class UndetectableCodeError extends LanguagePackError {
   }
 }
 
-// Flatten nested translation JSON ({ notFound: { title } }) into dotted keys
-// ({ "notFound.title" }). Rejects non-string leaves so a pack can't inject
-// objects/arrays where i18next expects a string.
+// Flatten nested JSON into dotted keys. Rejects non-string leaves so a pack
+// can't inject objects/arrays where i18next expects a string.
 export function flattenBundle(input: unknown, prefix = ""): FlatBundle {
   if (input === null || typeof input !== "object" || Array.isArray(input)) {
     throw new LanguagePackError("Language pack must be a JSON object")
@@ -101,8 +95,8 @@ export function flattenBundle(input: unknown, prefix = ""): FlatBundle {
   return out
 }
 
-// Parse + validate raw JSON text into a FlatBundle. Enforces the byte cap before
-// parsing so an oversized string never reaches JSON.parse.
+// Parse + validate raw JSON. Enforces the byte cap before parsing so an
+// oversized string never reaches JSON.parse.
 export function parseBundle(text: string): FlatBundle {
   if (byteLength(text) > MAX_PACK_BYTES) {
     throw new LanguagePackError(
@@ -135,16 +129,15 @@ export function normalizeLangCode(code: string): string {
   return result.data
 }
 
-// Human-readable label for a language code, e.g. "Japanese (ja)" or, when
-// localized into the currently active UI language, "日本語 (ja)". Falls back to
-// the bare code when Intl.DisplayNames is unavailable or can't resolve the tag.
+// Label for a language code, e.g. "Japanese (ja)". Falls back to the bare code
+// when Intl.DisplayNames is unavailable or can't resolve the tag.
 export function languageLabel(code: string, uiLocale?: string): string {
   const name = languageName(code, uiLocale)
   return name ? `${name} (${code})` : code
 }
 
-// The common name for a language code (localized to uiLocale, defaulting to the
-// active i18next language), or null when it can't be resolved.
+// Common name for a language code (localized to uiLocale, defaulting to the
+// active language), or null when it can't be resolved.
 export function languageName(code: string, uiLocale?: string): string | null {
   if (typeof Intl === "undefined" || typeof Intl.DisplayNames !== "function") {
     return null
@@ -160,15 +153,11 @@ export function languageName(code: string, uiLocale?: string): string | null {
   }
 }
 
-// Best-effort language-code inference from a file name or URL. Strips a
-// trailing `.json` extension from the last path segment and returns it only if
-// it is a valid language code, so `de.json` -> "de", `.../zh-CN.json` ->
-// "zh-CN", while `translation.json` or a codeless URL yields null (the caller
-// then asks the user to type the code).
+// Infer a language code from a file name / URL: the last path segment minus a
+// `.json` extension, if it's a valid code. `de.json` -> "de", `zh-CN.json` ->
+// "zh-CN", `translation.json` -> null.
 export function inferLangCode(source: string): string | null {
   if (!source) return null
-  // Drop query/hash and take the last path segment (works for both bare file
-  // names and full URLs since neither contains a leading scheme after split).
   const withoutQuery = source.split(/[?#]/)[0] ?? ""
   const segment = withoutQuery.split("/").pop() ?? ""
   const base = segment.replace(/\.json$/i, "").trim()
@@ -195,9 +184,8 @@ function getStorage(): Storage | null {
   }
 }
 
-// Read + re-validate all persisted packs. A tampered or corrupt localStorage
-// value is not trusted: anything that fails validation is dropped rather than
-// registered. Returns only the packs that pass.
+// Read + re-validate all persisted packs; untrusted storage is not trusted, so
+// anything failing validation is dropped rather than registered.
 export function readStoredPacks(): Record<string, LanguagePack> {
   const storage = getStorage()
   if (!storage) return {}
@@ -263,8 +251,8 @@ function setStoredLang(code: string): void {
 
 // ---- Registration -----------------------------------------------------------
 
-// Cached, stable-identity snapshots so useSyncExternalStore doesn't loop: a new
-// array is created only when the set of installed packs actually changes.
+// Stable-identity snapshots so useSyncExternalStore doesn't loop: a new array
+// is created only when the set of installed packs actually changes.
 let installedSnapshot: string[] = []
 let availableSnapshot: string[] = [BASE_LANG]
 const listeners = new Set<() => void>()
@@ -285,15 +273,11 @@ function registerPack(pack: LanguagePack): void {
   i18n.addResourceBundle(pack.code, NAMESPACE, pack.bundle, true, true)
 }
 
-// Register the stored packs with i18next, reconciling against what was
-// previously registered: add survivors and drop any bundle whose pack is gone
-// (e.g. removed in another tab). Called at startup and on cross-tab storage
-// events. Returns the currently-installed codes.
+// Register stored packs with i18next, dropping bundles whose pack is gone (e.g.
+// removed in another tab). Runs at startup and on cross-tab storage events.
 export function hydratePacks(): string[] {
   const packs = readStoredPacks()
   const codes = Object.keys(packs)
-  // Drop bundles for packs that no longer exist (cross-tab removal). Without
-  // this, a pack removed in another tab stays registered here until reload.
   for (const code of installedSnapshot) {
     if (!(code in packs)) {
       i18n.removeResourceBundle(code, NAMESPACE)
@@ -315,9 +299,8 @@ export function installPack(codeInput: string, bundle: FlatBundle): string {
     )
   }
   const pack: LanguagePack = { code, bundle }
-  // Re-read immediately before writing so a concurrent install in another tab
-  // (which shares this origin's localStorage) is merged in rather than clobbered
-  // by a stale snapshot — the classic lost-update on a read-modify-write.
+  // Re-read before writing so a concurrent install in another tab isn't
+  // clobbered by a stale snapshot (lost update on read-modify-write).
   const packs = readStoredPacks()
   packs[code] = pack
   writeStoredPacks(packs)
@@ -349,15 +332,13 @@ export function availableLangs(): string[] {
 // The base English keys, flattened once, as the source of truth for coverage.
 const baseKeys = Object.keys(flattenBundle(en))
 
-// Report which base keys a pack does NOT translate. Missing keys fall back to
-// English at runtime (i18next fallbackLng), so this is a completeness signal a
-// caller can surface (e.g. "translates 412/540 strings") — not an error.
+// Base keys that a pack should translate. Missing keys fall back to English at
+// runtime, so this is a completeness signal, not an error.
 export function missingKeys(bundle: FlatBundle): string[] {
   return baseKeys.filter((key) => !(key in bundle))
 }
 
-// Fraction of base keys a pack covers, 0..1. Useful for a "78% translated"
-// badge in the language switcher.
+// Fraction of base keys a pack covers, 0..1.
 export function coverage(bundle: FlatBundle): number {
   if (baseKeys.length === 0) return 1
   const translated = baseKeys.length - missingKeys(bundle).length
@@ -379,9 +360,8 @@ export async function selectLang(code: string): Promise<void> {
 
 // ---- Loaders ----------------------------------------------------------------
 
-// A parsed-but-not-yet-installed pack. `prepareFrom*` returns this so the UI
-// can show a preview (detected code, coverage, sample strings) and require
-// explicit confirmation before anything touches localStorage or i18next.
+// A parsed-but-not-yet-installed pack. Lets the UI preview and confirm before
+// anything touches localStorage or i18next.
 export type PackPreview = {
   code: string
   bundle: FlatBundle
@@ -390,10 +370,8 @@ export type PackPreview = {
   sample: string[]
 }
 
-// Representative keys shown in the preview so the user sees real translated
-// text before applying. Chosen from the app's core classroom vocabulary
-// (teacher, student, class, assignment) plus a common action. Missing keys are
-// simply skipped.
+// Sample keys shown in the preview so the user sees real translated text before
+// applying (core classroom vocabulary plus a common action).
 const SAMPLE_KEYS = [
   "nav.roleInstructor",
   "nav.roleStudent",
@@ -415,9 +393,8 @@ function buildPreview(code: string, bundle: FlatBundle): PackPreview {
   }
 }
 
-// Resolve the language code from an explicit value or by inferring it from the
-// source (file name / URL). Throws when neither yields a valid code so the UI
-// can prompt the user to type it.
+// Resolve the code from an explicit value or by inferring it from the source.
+// Throws when neither yields a valid code.
 function resolveCode(explicit: string | undefined, source: string): string {
   const typed = explicit?.trim()
   if (typed) return normalizeLangCode(typed)
@@ -426,8 +403,8 @@ function resolveCode(explicit: string | undefined, source: string): string {
   throw new UndetectableCodeError()
 }
 
-// Parse a file into a preview without persisting or switching. The code is
-// optional: when omitted it is inferred from the file name.
+// Parse a file into a preview without persisting or switching. Code is inferred
+// from the file name when omitted.
 export async function prepareFromFile(
   file: File,
   code?: string,
@@ -445,10 +422,9 @@ export async function prepareFromFile(
 
 const FETCH_TIMEOUT_MS = 10_000
 
-// Fetch a pack from a user-pasted URL and return a preview without installing.
-// Requires http/https, bounds the response size, times out, and translates
-// every failure into a LanguagePackError the UI can show. The code is optional:
-// when omitted it is inferred from the URL's last path segment.
+// Fetch a pack from a URL into a preview. Requires http/https, bounds the
+// response size, times out, and maps every failure to a LanguagePackError. Code
+// is inferred from the URL's last path segment when omitted.
 export async function prepareFromUrl(
   url: string,
   code?: string,
@@ -484,10 +460,8 @@ export async function prepareFromUrl(
     )
   }
 
-  // Enforce the size cap during download, not just from the declared header:
-  // a chunked response omits Content-Length (Number(null) === 0, which would
-  // pass a header-only check), so stream the body and abort once we exceed the
-  // cap rather than buffering an arbitrarily large body into memory.
+  // A chunked response omits Content-Length (Number(null) === 0 passes a
+  // header-only check), so also enforce the cap while streaming (below).
   const declared = Number(res.headers.get("content-length"))
   if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
     controller.abort()
@@ -501,8 +475,8 @@ export async function prepareFromUrl(
   return buildPreview(resolved, bundle)
 }
 
-// Install and activate a previewed pack. This is the only step (after a
-// confirmed preview) that mutates localStorage and i18next.
+// Install and activate a previewed pack — the only step that mutates
+// localStorage and i18next.
 export async function commitPack(
   code: string,
   bundle: FlatBundle,
@@ -513,8 +487,7 @@ export async function commitPack(
 }
 
 // Read a response body, aborting if the running byte total exceeds the cap.
-// Falls back to res.text() when the body isn't a readable stream (older
-// environments / test mocks), where parseBundle's own byte check still applies.
+// Falls back to res.text() when the body isn't a readable stream (test mocks).
 async function readCappedText(
   res: Response,
   controller: AbortController,
@@ -554,8 +527,7 @@ async function readCappedText(
 }
 
 // Subscribe to installed-pack changes (same-tab installs/removes and cross-tab
-// storage events). Returns an unsubscribe function. Mirrors useTheme's storage
-// listener, extended with same-tab notification for useSyncExternalStore.
+// storage events). Returns an unsubscribe function.
 export function subscribeToPackChanges(onChange: () => void): () => void {
   listeners.add(onChange)
 
@@ -564,10 +536,8 @@ export function subscribeToPackChanges(onChange: () => void): () => void {
     const handler = (event: StorageEvent) => {
       if (event.key !== PACKS_STORAGE_KEY && event.key !== LANG_STORAGE_KEY)
         return
-      // Reconcile this tab's i18next instance with the change another tab made:
-      // add/remove bundles (hydratePacks) and apply the (possibly new) active
-      // language. If the active language's pack was removed, fall back to the
-      // base language so we never render a pack that's no longer installed.
+      // Reconcile with another tab's change. If the active language's pack was
+      // removed elsewhere, fall back to base so we never render a missing pack.
       const installed = hydratePacks()
       const stored = getStoredLang()
       const target =

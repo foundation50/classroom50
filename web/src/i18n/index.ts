@@ -10,10 +10,8 @@ import {
   hydratePacks,
 } from "./customLocale"
 
-// Single i18next instance for the app. English is bundled as the base; custom
-// language packs are registered at runtime (see customLocale.ts). react-i18next
-// reads this default instance, so components just call useTranslation() with no
-// provider needed.
+// Single i18next instance. English is bundled as the base; custom packs are
+// registered at runtime (see customLocale.ts). No provider needed.
 void i18n.use(initReactI18next).init({
   resources: {
     [BASE_LANG]: { [NAMESPACE]: en },
@@ -28,7 +26,7 @@ void i18n.use(initReactI18next).init({
   returnNull: false,
 })
 
-// Re-hydrate + re-validate any installed packs, then apply the persisted choice.
+// Re-hydrate + re-validate installed packs, then apply the persisted choice.
 // Runs after init so addResourceBundle has an instance to attach to.
 const installed = hydratePacks()
 const stored = getStoredLang()

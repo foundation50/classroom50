@@ -11,16 +11,10 @@ import {
   languageLabel,
 } from "@/i18n/customLocale"
 
-// Settings UI for language packs: switch between installed languages, install a
-// new pack via file upload or a pasted URL, and remove installed packs.
-//
-// Installing is a two-step flow. Uploading/fetching only *prepares* a pack
-// (parse + preview) — no storage or active-language change happens yet. The
-// preview card shows the detected language code, translation coverage, and a
-// few sample strings; the pack is applied only after the user confirms. The
-// code is inferred from the file name / URL; the manual code field is revealed
-// only when inference fails. All load failures surface in a single inline error
-// without changing the active language.
+// Settings UI for language packs. Uploading/fetching only *prepares* a pack
+// (parse + preview) — nothing is applied until the user confirms. The code is
+// inferred from the file name / URL; the manual code field appears only when
+// inference fails.
 export const LanguageSwitcher = ({
   onApplied,
 }: {
@@ -43,9 +37,7 @@ export const LanguageSwitcher = ({
   const [url, setUrl] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  // Revealed only when a code couldn't be inferred from the file name / URL.
   const [needsCode, setNeedsCode] = useState(false)
-  // A parsed-but-not-yet-applied pack awaiting confirmation.
   const [preview, setPreview] = useState<PackPreview | null>(null)
 
   const showError = (err: unknown) => {
@@ -92,7 +84,6 @@ export const LanguageSwitcher = ({
     setBusy(true)
     try {
       await commitPack(preview.code, preview.bundle)
-      // Reset the install form on success.
       setPreview(null)
       setCode("")
       setUrl("")
@@ -127,7 +118,9 @@ export const LanguageSwitcher = ({
         >
           {availableLangs.map((c) => (
             <option key={c} value={c}>
-              {c === BASE_LANG ? t("language.baseName") : languageLabel(c, lang)}
+              {c === BASE_LANG
+                ? t("language.baseName")
+                : languageLabel(c, lang)}
             </option>
           ))}
         </select>
