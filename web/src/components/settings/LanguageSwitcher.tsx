@@ -129,8 +129,8 @@ export const LanguageSwitcher = ({
     )
   }
 
-  // Lazily load the registry when Browse first opens. Only HEAD-reachable packs
-  // are offered, so a listed-but-undeployed language never shows as a dead entry.
+  // Lazily load the registry when Browse first opens; every language the
+  // manifest lists is offered (the publish workflow only lists deployed packs).
   const loadRegistry = async () => {
     if (registry || registryBusy) return
     setRegistryBusy(true)

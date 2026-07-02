@@ -6,6 +6,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubAuthedPanel } from "./GitHubAuthedPanel"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
+import { LoginLanguageMenu } from "./LoginLanguageMenu"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -26,7 +27,10 @@ export function GitHubAuthCard() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-base-200 px-4 py-8">
-      <section className="card w-full max-w-lg rounded-xl border border-base-300 bg-base-100 shadow-sm">
+      <section className="card relative w-full max-w-lg rounded-xl border border-base-300 bg-base-100 shadow-sm">
+        <div className="absolute right-3 top-3 z-10">
+          <LoginLanguageMenu />
+        </div>
         <header className="flex items-center gap-4 border-b border-base-200 px-7 py-6">
           <div className="flex size-12 shrink-0 items-center justify-center rounded-full bg-primary/10 text-primary">
             <GraduationCap aria-hidden="true" className="size-6" />

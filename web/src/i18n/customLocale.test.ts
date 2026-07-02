@@ -305,11 +305,13 @@ describe("availableBuiltInLangs", () => {
     vi.unstubAllGlobals()
   })
 
-  it("returns only packs whose HEAD probe succeeds", async () => {
+  it("returns every language the manifest lists (no per-pack probe)", async () => {
+    let headProbes = 0
     vi.stubGlobal(
       "fetch",
       vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const u = String(input)
+        if (init?.method === "HEAD") headProbes += 1
         if (/index\.json$/.test(u)) {
           return new Response(
             JSON.stringify({
@@ -318,33 +320,13 @@ describe("availableBuiltInLangs", () => {
             { status: 200 },
           )
         }
-        // HEAD probes: ja + es exist, de is missing (drift).
-        if (init?.method === "HEAD") {
-          const ok = /\/(ja|es)\.json$/.test(u)
-          return new Response(null, { status: ok ? 200 : 404 })
-        }
         return new Response("{}", { status: 200 })
       }),
     )
     const langs = await availableBuiltInLangs()
-    expect(langs.map((l) => l.code).sort()).toEqual(["es", "ja"])
-  })
-
-  it("drops a pack whose HEAD probe errors out", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const u = String(input)
-        if (/index\.json$/.test(u)) {
-          return new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
-            status: 200,
-          })
-        }
-        if (init?.method === "HEAD") throw new TypeError("network")
-        return new Response("{}", { status: 200 })
-      }),
-    )
-    expect(await availableBuiltInLangs()).toEqual([])
+    expect(langs.map((l) => l.code).sort()).toEqual(["de", "es", "ja"])
+    // The manifest is trusted; no HEAD probes are issued.
+    expect(headProbes).toBe(0)
   })
 
   it("propagates a manifest fetch failure", async () => {

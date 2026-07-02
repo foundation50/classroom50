@@ -574,35 +574,12 @@ function packUrl(code: string): string {
   return `${LANGUAGE_REGISTRY_BASE_URL}/${code}.json`
 }
 
-// HEAD-probe a pack URL to confirm it's fetchable without downloading the body.
-async function packIsReachable(code: string): Promise<boolean> {
-  const controller = new AbortController()
-  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  try {
-    const res = await fetch(packUrl(code), {
-      method: "HEAD",
-      signal: controller.signal,
-    })
-    return res.ok
-  } catch {
-    return false
-  } finally {
-    clearTimeout(timeout)
-  }
-}
-
-// Fetch the manifest, then keep only packs that actually resolve (parallel HEAD
-// probes). Catches manifest/pack drift — a code listed but not yet deployed
-// won't be offered. Manifest-fetch failure still throws; dead packs are dropped.
+// Languages offered for install: exactly what the registry manifest lists. The
+// publish workflow builds index.json from the packs it actually deploys, so a
+// listed code always resolves — no per-pack probe needed (an earlier HEAD-probe
+// pass silently dropped languages when a cross-origin HEAD hiccuped).
 export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
-  const offered = await fetchRegistry()
-  const results = await Promise.all(
-    offered.map(async (lang) => ({
-      lang,
-      ok: await packIsReachable(lang.code),
-    })),
-  )
-  return results.filter((r) => r.ok).map((r) => r.lang)
+  return fetchRegistry()
 }
 
 // Preview a registry language by reusing the URL loader (same size/timeout/
