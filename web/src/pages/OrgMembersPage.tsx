@@ -1,4 +1,6 @@
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Link, useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
@@ -44,6 +46,7 @@ const runInviteMember = async (
   row: OrgMemberRow,
   notify: (input: NotifyInput) => void,
   onDone: () => void,
+  t: TFunction,
 ) => {
   const label = row.username || row.email
   try {
@@ -52,15 +55,17 @@ const runInviteMember = async (
     notify({
       tone: "success",
       durationMs: 6000,
-      message: `Invited ${who} to the ${org} organization.`,
+      message: t("toasts.invited", { who, org }),
     })
     onDone()
   } catch (err) {
     notify({
       tone: "error",
-      message: `Couldn't invite ${label}: ${
-        err instanceof Error ? err.message : "something went wrong"
-      }`,
+      message: t("orgMembers.inviteFailed", {
+        label,
+        reason:
+          err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
+      }),
     })
   }
 }
@@ -71,37 +76,48 @@ const initialsFor = (row: OrgMemberRow) =>
 
 // GitHub identity line: makes it explicit these are GitHub members by showing
 // the @username and the immutable numeric GitHub id together.
-const GitHubIdentity = ({ row }: { row: OrgMemberRow }) => (
-  <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
-    <GitHub aria-hidden="true" className="size-3.5 opacity-50" />
-    {row.username ? (
-      <span className="font-mono">@{row.username}</span>
-    ) : (
-      <span className="italic">no GitHub username</span>
-    )}
-    {row.github_id ? (
-      <span className="text-base-content/70">· id {row.github_id}</span>
-    ) : null}
-  </span>
-)
+const GitHubIdentity = ({ row }: { row: OrgMemberRow }) => {
+  const { t } = useTranslation()
+  return (
+    <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
+      <GitHub aria-hidden="true" className="size-3.5 opacity-50" />
+      {row.username ? (
+        <span className="font-mono">@{row.username}</span>
+      ) : (
+        <span className="italic">{t("orgMembers.noGitHubUsername")}</span>
+      )}
+      {row.github_id ? (
+        <span className="text-base-content/70">
+          {t("orgMembers.idSuffix", { id: row.github_id })}
+        </span>
+      ) : null}
+    </span>
+  )
+}
 
 const ClassificationBadge = ({ row }: { row: OrgMemberRow }) => {
+  const { t } = useTranslation()
   if (row.classification === "on-roster-not-member") {
     return (
       <span className="badge badge-sm badge-error badge-soft gap-1">
-        <AlertTriangle aria-hidden="true" className="size-3" /> Not an org
-        member
+        <AlertTriangle aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeNotMember")}
       </span>
     )
   }
   if (row.classification === "member-no-roster") {
     return (
       <span className="badge badge-sm badge-ghost gap-1">
-        <Info aria-hidden="true" className="size-3" /> No classroom
+        <Info aria-hidden="true" className="size-3" />{" "}
+        {t("orgMembers.badgeNoClassroom")}
       </span>
     )
   }
-  return <span className="badge badge-sm badge-success badge-soft">Member</span>
+  return (
+    <span className="badge badge-sm badge-success badge-soft">
+      {t("orgMembers.badgeMember")}
+    </span>
+  )
 }
 
 const MemberDetail = ({
@@ -117,6 +133,7 @@ const MemberDetail = ({
   onClose: () => void
   onRemoved: () => void
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const { notify } = useToast()
   const [confirming, setConfirming] = useState(false)
@@ -131,7 +148,7 @@ const MemberDetail = ({
     if (inviting) return
     setInviting(true)
     try {
-      await runInviteMember(client, org, row, notify, onRemoved)
+      await runInviteMember(client, org, row, notify, onRemoved, t)
     } finally {
       setInviting(false)
     }
@@ -141,7 +158,7 @@ const MemberDetail = ({
     if (working) return
     setWorking(true)
     try {
-      const result = await removeMemberFromOrg(client, { org, row })
+      const result = await removeMemberFromOrg(client, { org, row }, t)
       if (result.warnings.length > 0) {
         notify({
           tone: "warning",
@@ -152,22 +169,24 @@ const MemberDetail = ({
         notify({
           tone: "success",
           durationMs: 6000,
-          message: `${label} was removed from the ${org} organization${
-            result.unenrolledClassrooms.length
-              ? ` and unenrolled from ${result.unenrolledClassrooms.length} classroom${
-                  result.unenrolledClassrooms.length === 1 ? "" : "s"
-                }`
-              : ""
-          }.`,
+          message: result.unenrolledClassrooms.length
+            ? t("orgMembers.removedWithUnenroll", {
+                label,
+                org,
+                count: result.unenrolledClassrooms.length,
+              })
+            : t("orgMembers.removed", { label, org }),
         })
       }
       onRemoved()
     } catch (err) {
       notify({
         tone: "error",
-        message: `Couldn't remove ${label}: ${
-          err instanceof Error ? err.message : "something went wrong"
-        }`,
+        message: t("orgMembers.removeFailed", {
+          label,
+          reason:
+            err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
+        }),
       })
     } finally {
       setWorking(false)
@@ -184,12 +203,14 @@ const MemberDetail = ({
       />
       <div className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto bg-base-100 shadow-xl">
         <div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">Member details</h2>
+          <h2 className="text-lg font-semibold">
+            {t("orgMembers.detailTitle")}
+          </h2>
           <button
             type="button"
             className="btn btn-ghost btn-sm btn-square"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             <X aria-hidden="true" className="size-4" />
           </button>
@@ -219,14 +240,16 @@ const MemberDetail = ({
             className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
           >
             <ExternalLink aria-hidden="true" className="size-3.5" />
-            Manage on GitHub
+            {t("orgMembers.manageOnGitHub")}
           </a>
 
           <div>
-            <h3 className="mb-2 text-sm font-semibold">Classroom access</h3>
+            <h3 className="mb-2 text-sm font-semibold">
+              {t("orgMembers.classroomAccess")}
+            </h3>
             {row.classrooms.length === 0 ? (
               <p className="text-sm text-base-content/70">
-                Not on any classroom roster.
+                {t("orgMembers.noRoster")}
               </p>
             ) : (
               <ul className="divide-y divide-base-300 rounded-box border border-base-300">
@@ -242,7 +265,7 @@ const MemberDetail = ({
                       {access.classroom}
                       {access.archived ? (
                         <span className="badge badge-xs badge-ghost ml-2">
-                          archived
+                          {t("orgMembers.archived")}
                         </span>
                       ) : null}
                     </span>
@@ -266,20 +289,17 @@ const MemberDetail = ({
 
           {isSelf ? (
             <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              This is your signed-in account, so it can&apos;t be removed from
-              the organization here.
+              {t("orgMembers.selfNotice")}
             </div>
           ) : !row.isMember ? (
             row.github_id ? (
               <div className="rounded-box border border-warning/30 bg-warning/5 p-4 text-sm">
                 <p className="text-base-content/80">
-                  {label} is on a classroom roster but is{" "}
+                  {t("orgMembers.notMemberPrefix", { label })}{" "}
                   <span className="font-semibold">
-                    not an organization member
+                    {t("orgMembers.notMemberEmphasis")}
                   </span>
-                  . Invite them to restore their access. The invite is sent to
-                  their GitHub account by id, so it works even if their username
-                  changed.
+                  {t("orgMembers.notMemberSuffix")}
                 </p>
                 <button
                   type="button"
@@ -293,21 +313,19 @@ const MemberDetail = ({
                         className="loading loading-spinner loading-xs"
                         aria-hidden="true"
                       />
-                      Inviting...
+                      {t("orgMembers.inviting")}
                     </>
                   ) : (
                     <>
                       <UserPlus aria-hidden="true" className="size-4" />
-                      Invite to organization
+                      {t("orgMembers.inviteToOrg")}
                     </>
                   )}
                 </button>
               </div>
             ) : (
               <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-                This student is on a roster but is not an organization member.
-                They have no GitHub id on file yet, so invite them from their
-                classroom&apos;s Students page.
+                {t("orgMembers.notMemberNoId")}
               </div>
             )
           ) : confirming ? (
@@ -315,20 +333,25 @@ const MemberDetail = ({
               <p className="text-base-content/80">
                 {activeClassrooms.length > 0 ? (
                   <>
-                    {label} will first be unenrolled from{" "}
+                    {t("orgMembers.confirmUnenrollPrefix", { label })}{" "}
                     <span className="font-semibold">
-                      {activeClassrooms.length} classroom
-                      {activeClassrooms.length === 1 ? "" : "s"}
+                      {t("orgMembers.confirmClassroomCount", {
+                        count: activeClassrooms.length,
+                      })}
                     </span>{" "}
-                    ({activeClassrooms.map((c) => c.classroom).join(", ")}),
-                    then removed from the{" "}
-                    <span className="font-semibold">{org}</span> organization.
-                    Their assignment repositories are not deleted.
+                    {t("orgMembers.confirmUnenrollMid", {
+                      classrooms: activeClassrooms
+                        .map((c) => c.classroom)
+                        .join(", "),
+                    })}{" "}
+                    <span className="font-semibold">{org}</span>{" "}
+                    {t("orgMembers.confirmUnenrollSuffix")}
                   </>
                 ) : (
                   <>
-                    {label} will be removed from the{" "}
-                    <span className="font-semibold">{org}</span> organization.
+                    {t("orgMembers.confirmRemovePrefix", { label })}{" "}
+                    <span className="font-semibold">{org}</span>{" "}
+                    {t("orgMembers.confirmRemoveSuffix")}
                   </>
                 )}
               </p>
@@ -339,7 +362,7 @@ const MemberDetail = ({
                   disabled={working}
                   onClick={() => setConfirming(false)}
                 >
-                  Cancel
+                  {t("common.cancel")}
                 </button>
                 <button
                   type="button"
@@ -353,10 +376,10 @@ const MemberDetail = ({
                         className="loading loading-spinner loading-xs"
                         aria-hidden="true"
                       />
-                      Removing...
+                      {t("orgMembers.removing")}
                     </>
                   ) : (
-                    "Remove from organization"
+                    t("orgMembers.removeFromOrg")
                   )}
                 </button>
               </div>
@@ -367,7 +390,7 @@ const MemberDetail = ({
               className="btn btn-error btn-outline btn-sm self-start"
               onClick={() => setConfirming(true)}
             >
-              Remove from organization
+              {t("orgMembers.removeFromOrg")}
             </button>
           )}
         </div>
@@ -377,7 +400,8 @@ const MemberDetail = ({
 }
 
 const OrgMembersPage = () => {
-  useDocumentTitle("Members")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.members"))
   const { org } = useParams({ strict: false })
   const client = useGitHubClient()
   const { notify } = useToast()
@@ -420,7 +444,7 @@ const OrgMembersPage = () => {
     if (!org || invitingKey) return
     setInvitingKey(row.key)
     try {
-      await runInviteMember(client, org, row, notify, () => refresh(row))
+      await runInviteMember(client, org, row, notify, () => refresh(row), t)
     } finally {
       setInvitingKey(null)
     }
@@ -460,11 +484,13 @@ const OrgMembersPage = () => {
         <DrawerContent className="p-10 bg-base-200 xl:px-50">
           <RequireTeacher allow="owner">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Members</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {t("orgMembers.heading")}
+              </h1>
               <p className="mt-1 text-sm text-base-content/70">
-                Everyone in the{" "}
-                <span className="font-mono font-semibold">{org}</span> GitHub
-                organization and the classrooms they belong to.
+                {t("orgMembers.subtitlePrefix")}{" "}
+                <span className="font-mono font-semibold">{org}</span>{" "}
+                {t("orgMembers.subtitleSuffix")}
               </p>
               <a
                 href={`https://github.com/orgs/${org}/people`}
@@ -473,7 +499,7 @@ const OrgMembersPage = () => {
                 className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
               >
                 <ExternalLink aria-hidden="true" className="size-3.5" />
-                Manage organization members on GitHub
+                {t("orgMembers.manageMembersOnGitHub")}
               </a>
             </div>
 
@@ -493,9 +519,7 @@ const OrgMembersPage = () => {
               >
                 <AlertTriangle className="size-4" aria-hidden="true" />
                 <span>
-                  {discrepancyCount} student
-                  {discrepancyCount === 1 ? " is" : "s are"} on a roster but not
-                  an organization member.
+                  {t("orgMembers.discrepancy", { count: discrepancyCount })}
                 </span>
               </div>
             ) : null}
@@ -504,8 +528,8 @@ const OrgMembersPage = () => {
               <input
                 type="search"
                 className="input input-bordered w-full max-w-sm"
-                placeholder="Search by name, username, or email"
-                aria-label="Search members"
+                placeholder={t("orgMembers.searchPlaceholder")}
+                aria-label={t("orgMembers.searchLabel")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
@@ -518,15 +542,15 @@ const OrgMembersPage = () => {
                     className="loading loading-spinner loading-md"
                     aria-hidden="true"
                   />
-                  <span className="text-sm">Loading members...</span>
+                  <span className="text-sm">{t("orgMembers.loading")}</span>
                 </div>
               ) : isError ? (
                 <div className="px-6 py-10 text-center text-sm text-error">
-                  Couldn&apos;t load organization members.
+                  {t("orgMembers.loadError")}
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="px-6 py-10 text-center text-sm text-base-content/70">
-                  No members match your search.
+                  {t("orgMembers.noMatch")}
                 </div>
               ) : (
                 <motion.ul
@@ -580,14 +604,15 @@ const OrgMembersPage = () => {
                                   aria-hidden="true"
                                   className="size-3.5"
                                 />
-                                Invite
+                                {t("orgMembers.invite")}
                               </>
                             )}
                           </button>
                         ) : null}
                         <span className="hidden text-xs text-base-content/70 sm:inline">
-                          {row.classrooms.length} classroom
-                          {row.classrooms.length === 1 ? "" : "s"}
+                          {t("orgMembers.classroomCount", {
+                            count: row.classrooms.length,
+                          })}
                         </span>
                         <ClassificationBadge row={row} />
                         <ChevronRight

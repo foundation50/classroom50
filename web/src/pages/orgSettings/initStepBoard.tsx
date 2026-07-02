@@ -7,6 +7,7 @@ import {
   ExternalLink,
 } from "lucide-react"
 import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 
 import type {
   InitStepId,
@@ -35,7 +36,10 @@ export const INIT_STEP_ORDER: InitStepId[] = [
 // Per-step explanation shared by the wizard and the re-run surface. `what`
 // says what we change on the org/repo, `why` says why Classroom 50 needs it,
 // and `remediation` is the actionable next step a teacher takes when the step
-// warns or errors (paired with the GitHub deep link below).
+// warns or errors (paired with the GitHub deep link below). The three text
+// fields hold i18n keys (resolved with `t()` at render), so translations live
+// in the locale files while this map stays the single source of truth for
+// which steps exist and where they deep-link.
 type InitStepMeta = {
   what: string
   why: string
@@ -54,73 +58,63 @@ const repoSettingsBase = (org: string) =>
 
 export const INIT_STEP_META: Record<InitStepId, InitStepMeta> = {
   orgDefaults: {
-    what: "Locks down organization member privileges to safe defaults (base permissions, repo creation, visibility changes, and related settings).",
-    why: "Stops students from changing or deleting each other's repositories, or making private classroom work public.",
-    remediation:
-      "Open the org member-privileges page and apply the flagged settings by hand — some are controlled by an enterprise policy and can only be set there.",
+    what: "orgSettings.steps.orgDefaults.what",
+    why: "orgSettings.steps.orgDefaults.why",
+    remediation: "orgSettings.steps.orgDefaults.remediation",
     settingsUrl: (org) => `${orgSettingsBase(org)}/member_privileges`,
   },
   orgActions: {
-    what: "Enables GitHub Actions for the organization.",
-    why: "Autograding and the published assignment site run as Actions workflows, so they can't run until Actions is enabled.",
-    remediation:
-      "Open the org Actions settings and allow Actions to run (set the policy to allow all actions, or at minimum the workflows Classroom 50 ships).",
+    what: "orgSettings.steps.orgActions.what",
+    why: "orgSettings.steps.orgActions.why",
+    remediation: "orgSettings.steps.orgActions.remediation",
     settingsUrl: (org) => `${orgSettingsBase(org)}/actions`,
   },
   orgPrCreation: {
-    what: "Allows GitHub Actions to create and approve pull requests in the organization.",
-    why: "Some Classroom 50 workflows open pull requests on a student's behalf; without this they fail with a permissions error.",
-    remediation:
-      'Open the org Actions settings and enable "Allow GitHub Actions to create and approve pull requests".',
+    what: "orgSettings.steps.orgPrCreation.what",
+    why: "orgSettings.steps.orgPrCreation.why",
+    remediation: "orgSettings.steps.orgPrCreation.remediation",
     settingsUrl: (org) => `${orgSettingsBase(org)}/actions`,
   },
   configRepo: {
-    what: "Creates the private classroom50 configuration repository in the organization.",
-    why: "Classroom 50 has no backend — this repo holds all classroom config, manifests, workflows, and scores.",
-    remediation:
-      "This is a required step. Re-run setup; if it keeps failing, confirm you have owner permissions and that an org/enterprise policy isn't blocking private repository creation.",
+    what: "orgSettings.steps.configRepo.what",
+    why: "orgSettings.steps.configRepo.why",
+    remediation: "orgSettings.steps.configRepo.remediation",
     settingsUrl: () => null,
   },
   skeleton: {
-    what: "Commits or updates the workflow and script files Classroom 50 needs in the classroom50 repository.",
-    why: "These bundled files run autograding, publishing, and scoring; re-running setup also upgrades them to the latest version.",
-    remediation:
-      "This is a required step. Re-run setup; if it keeps failing, check that you can push to the classroom50 repo's default branch.",
+    what: "orgSettings.steps.skeleton.what",
+    why: "orgSettings.steps.skeleton.why",
+    remediation: "orgSettings.steps.skeleton.remediation",
     settingsUrl: () => null,
   },
   branchProtection: {
-    what: "Protects the classroom50 repository's main branch.",
-    why: "Keeps the source-of-truth config and scores from being force-pushed or deleted.",
-    remediation:
-      "Open the repository branch settings and protect the main branch, or re-run setup to re-apply it.",
+    what: "orgSettings.steps.branchProtection.what",
+    why: "orgSettings.steps.branchProtection.why",
+    remediation: "orgSettings.steps.branchProtection.remediation",
     settingsUrl: (org) => `${repoSettingsBase(org)}/branches`,
   },
   workflowPermissions: {
-    what: "Sets the default GITHUB_TOKEN workflow permissions for the classroom50 repository.",
-    why: "Autograding and publishing workflows need write access to commit results and deploy Pages.",
-    remediation:
-      "Open the repository Actions settings and set workflow permissions to read and write, or re-run setup.",
+    what: "orgSettings.steps.workflowPermissions.what",
+    why: "orgSettings.steps.workflowPermissions.why",
+    remediation: "orgSettings.steps.workflowPermissions.remediation",
     settingsUrl: (org) => `${repoSettingsBase(org)}/actions`,
   },
   reusableWorkflowAccess: {
-    what: "Allows other repositories in the org to use the reusable workflows in classroom50.",
-    why: "Assignment repos call the shared autograding workflow from classroom50; without access sharing, their runs fail.",
-    remediation:
-      'Open the repository Actions settings and, under "Access", allow access from repositories in the organization. Or re-run setup.',
+    what: "orgSettings.steps.reusableWorkflowAccess.what",
+    why: "orgSettings.steps.reusableWorkflowAccess.why",
+    remediation: "orgSettings.steps.reusableWorkflowAccess.remediation",
     settingsUrl: (org) => `${repoSettingsBase(org)}/actions`,
   },
   pages: {
-    what: "Enables GitHub Pages for the classroom50 repository (built from Actions).",
-    why: "Published assignment instructions and dashboards are served from this Pages site.",
-    remediation:
-      "Open the repository Pages settings and enable Pages with the GitHub Actions source. Pages from a private repo may require GitHub Team or Enterprise.",
+    what: "orgSettings.steps.pages.what",
+    why: "orgSettings.steps.pages.why",
+    remediation: "orgSettings.steps.pages.remediation",
     settingsUrl: (org) => `${repoSettingsBase(org)}/pages`,
   },
   rulesets: {
-    what: "Creates organization rulesets that protect classroom and assignment repositories.",
-    why: "Rulesets enforce the classroom guardrails (protected branches, restricted deletions) across every repo the org creates.",
-    remediation:
-      "Open the org rulesets page to review them, or re-run setup to re-apply. Rulesets may require GitHub Team or Enterprise.",
+    what: "orgSettings.steps.rulesets.what",
+    why: "orgSettings.steps.rulesets.why",
+    remediation: "orgSettings.steps.rulesets.remediation",
     settingsUrl: (org) => `${orgSettingsBase(org)}/rules`,
   },
 }
@@ -129,44 +123,52 @@ export const initialInitSteps: Record<InitStepId, InitStepUpdate> = {
   orgDefaults: {
     id: "orgDefaults",
     status: "pending",
-    title: "Organization safety defaults",
+    title: "orgSettings.steps.orgDefaults.title",
   },
   orgActions: {
     id: "orgActions",
     status: "pending",
-    title: "Actions permissions",
+    title: "orgSettings.steps.orgActions.title",
   },
   orgPrCreation: {
     id: "orgPrCreation",
     status: "pending",
-    title: "Actions pull request creation",
+    title: "orgSettings.steps.orgPrCreation.title",
   },
   configRepo: {
     id: "configRepo",
     status: "pending",
-    title: "Config repository",
+    title: "orgSettings.steps.configRepo.title",
   },
-  skeleton: { id: "skeleton", status: "pending", title: "Skeleton files" },
+  skeleton: {
+    id: "skeleton",
+    status: "pending",
+    title: "orgSettings.steps.skeleton.title",
+  },
   branchProtection: {
     id: "branchProtection",
     status: "pending",
-    title: "Branch protection",
+    title: "orgSettings.steps.branchProtection.title",
   },
   workflowPermissions: {
     id: "workflowPermissions",
     status: "pending",
-    title: "Workflow permissions",
+    title: "orgSettings.steps.workflowPermissions.title",
   },
   reusableWorkflowAccess: {
     id: "reusableWorkflowAccess",
     status: "pending",
-    title: "Reusable workflow access",
+    title: "orgSettings.steps.reusableWorkflowAccess.title",
   },
-  pages: { id: "pages", status: "pending", title: "GitHub Pages" },
+  pages: {
+    id: "pages",
+    status: "pending",
+    title: "orgSettings.steps.pages.title",
+  },
   rulesets: {
     id: "rulesets",
     status: "pending",
-    title: "Branch protection rulesets",
+    title: "orgSettings.steps.rulesets.title",
   },
 }
 
@@ -218,6 +220,7 @@ export const InitStep = ({
   // omitted; the explanation and remediation text still render.
   org?: string
 }) => {
+  const { t } = useTranslation()
   const meta = INIT_STEP_META[id]
   const needsAttention = status === "warning" || status === "error"
   // Auto-expand the steps that need action so the teacher sees the fix without
@@ -255,9 +258,9 @@ export const InitStep = ({
             />
           )}
           <div className="min-w-0">
-            <div className="font-semibold">{title}</div>
+            <div className="font-semibold">{t(title)}</div>
             <p className="mt-1 text-sm text-base-content/70">
-              {message || meta.what}
+              {message || t(meta.what)}
             </p>
           </div>
         </div>
@@ -268,10 +271,12 @@ export const InitStep = ({
 
       {open && (
         <div className="border-t border-base-200 px-4 pb-4 pt-3 pl-10 text-sm">
-          <p className="text-base-content/70">{meta.what}</p>
+          <p className="text-base-content/70">{t(meta.what)}</p>
           <p className="mt-1 text-base-content/70">
-            <span className="font-medium text-base-content/70">Why: </span>
-            {meta.why}
+            <span className="font-medium text-base-content/70">
+              {t("orgSettings.steps.whyLabel")}{" "}
+            </span>
+            {t(meta.why)}
           </p>
 
           {needsAttention && (
@@ -283,9 +288,11 @@ export const InitStep = ({
               }`}
             >
               <p className="font-medium text-base-content/80">
-                {status === "error" ? "How to fix" : "What to do"}
+                {status === "error"
+                  ? t("orgSettings.steps.howToFix")
+                  : t("orgSettings.steps.whatToDo")}
               </p>
-              <p className="mt-1 text-base-content/70">{meta.remediation}</p>
+              <p className="mt-1 text-base-content/70">{t(meta.remediation)}</p>
               {settingsUrl && (
                 <a
                   href={settingsUrl}
@@ -293,7 +300,7 @@ export const InitStep = ({
                   rel="noreferrer"
                   className="mt-2 inline-flex items-center gap-1 text-base-content/70 hover:text-primary"
                 >
-                  Open the relevant GitHub settings
+                  {t("orgSettings.steps.openGitHubSettings")}
                   <ExternalLink aria-hidden="true" className="size-3.5" />
                 </a>
               )}
