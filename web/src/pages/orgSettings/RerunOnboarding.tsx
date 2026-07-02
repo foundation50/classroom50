@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useTranslation } from "react-i18next"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -53,6 +54,7 @@ const SummaryBanner = ({
 // Owner-gated; shows the same badge board the wizard uses. This is the
 // "repair everything" path that complements the per-concern audit (U5/U6).
 const RerunOnboarding = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const runRerun = useSafeSubmit()
@@ -121,15 +123,15 @@ const RerunOnboarding = ({ org }: { org: string }) => {
 
   return (
     <SettingsSection
-      title="Re-run setup"
-      description="Re-apply every Classroom 50 organization setting. Safe to run any time — it only changes settings that have drifted."
+      title={t("orgSettings.rerun.title")}
+      description={t("orgSettings.rerun.description")}
       action={
         <button
           type="button"
           className="btn btn-primary btn-sm"
           disabled={!isOwner || mutation.isPending}
           title={
-            isOwner ? undefined : "Requires organization owner permissions"
+            isOwner ? undefined : t("orgSettings.rerun.requiresOwnerTitle")
           }
           onClick={() => {
             if (!mutation.isPending) void runRerun(() => mutation.mutateAsync())
@@ -141,18 +143,17 @@ const RerunOnboarding = ({ org }: { org: string }) => {
                 className="loading loading-spinner loading-sm"
                 aria-hidden="true"
               />
-              Re-running…
+              {t("orgSettings.rerun.running")}
             </>
           ) : (
-            "Re-run setup"
+            t("orgSettings.rerun.button")
           )}
         </button>
       }
     >
       {!isOwner && (
         <SummaryBanner tone="warning">
-          Re-running setup requires organization owner permissions. Ask an org
-          owner to run it.
+          {t("orgSettings.rerun.requiresOwnerNote")}
         </SummaryBanner>
       )}
 
@@ -161,25 +162,19 @@ const RerunOnboarding = ({ org }: { org: string }) => {
           <InitStepBoard steps={steps} org={org} />
           {failed && (
             <SummaryBanner tone="error" className="mt-3">
-              Re-run setup did not complete — a required step failed. Review the
-              steps above, resolve the issue, and run it again.
+              {t("orgSettings.rerun.failed")}
             </SummaryBanner>
           )}
           {done && !failed && warningCount > 0 && (
             <SummaryBanner tone="warning" className="mt-3">
-              Setup finished, but{" "}
-              {warningCount === 1
-                ? "1 step needs attention"
-                : `${warningCount} steps need attention`}
-              . See the message on each flagged step above — some settings may
-              be controlled by an organization or enterprise policy and have to
-              be set on GitHub.
+              {t("orgSettings.rerun.finishedWithWarnings", {
+                count: warningCount,
+              })}
             </SummaryBanner>
           )}
           {done && !failed && warningCount === 0 && (
             <SummaryBanner tone="success" className="mt-3">
-              Setup re-applied successfully — every organization setting is in
-              place.
+              {t("orgSettings.rerun.success")}
             </SummaryBanner>
           )}
         </div>

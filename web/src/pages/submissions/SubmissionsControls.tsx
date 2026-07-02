@@ -1,4 +1,5 @@
 import { Search, X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import type {
   SubmissionFilters,
@@ -33,6 +34,7 @@ const SubmissionsControls = ({
   passingAvailable?: boolean
   sections?: string[]
 }) => {
+  const { t } = useTranslation()
   const hasActiveFilter =
     filters.submission !== "all" ||
     filters.passing !== "all" ||
@@ -52,10 +54,14 @@ const SubmissionsControls = ({
         <input
           type="search"
           className="grow"
-          placeholder={isGroup ? "Search group or member…" : "Search student…"}
+          placeholder={
+            isGroup
+              ? t("submissions.filters.searchGroupPlaceholder")
+              : t("submissions.filters.searchStudentPlaceholder")
+          }
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
-          aria-label="Search submissions"
+          aria-label={t("submissions.filters.searchAria")}
         />
       </label>
 
@@ -66,9 +72,9 @@ const SubmissionsControls = ({
           onChange={(e) =>
             onFiltersChange({ ...filters, section: e.target.value })
           }
-          aria-label="Filter by section"
+          aria-label={t("submissions.filters.sectionAria")}
         >
-          <option value="all">All sections</option>
+          <option value="all">{t("submissions.filters.allSections")}</option>
           {sections.map((section) => (
             <option key={section} value={section}>
               {section}
@@ -86,17 +92,17 @@ const SubmissionsControls = ({
             submission: e.target.value as SubmissionFilters["submission"],
           })
         }
-        aria-label="Filter by submission status"
+        aria-label={t("submissions.filters.submissionAria")}
       >
-        <option value="all">All submissions</option>
-        <option value="submitted">Submitted</option>
-        <option value="on-time">On time</option>
-        <option value="late">Late</option>
+        <option value="all">{t("submissions.filters.allSubmissions")}</option>
+        <option value="submitted">{t("submissions.filters.submitted")}</option>
+        <option value="on-time">{t("submissions.filters.onTime")}</option>
+        <option value="late">{t("submissions.filters.late")}</option>
         {!isGroup && (
           // A grade requires a submission, so "Not submitted" is mutually
           // exclusive with a passing/failing filter — disable it then.
           <option value="not-submitted" disabled={filters.passing !== "all"}>
-            Not submitted
+            {t("submissions.filters.notSubmitted")}
           </option>
         )}
       </select>
@@ -114,11 +120,11 @@ const SubmissionsControls = ({
               passing: e.target.value as SubmissionFilters["passing"],
             })
           }
-          aria-label="Filter by passing status"
+          aria-label={t("submissions.filters.passingAria")}
         >
-          <option value="all">All grades</option>
-          <option value="passing">Passing</option>
-          <option value="failing">Failing</option>
+          <option value="all">{t("submissions.filters.allGrades")}</option>
+          <option value="passing">{t("submissions.filters.passing")}</option>
+          <option value="failing">{t("submissions.filters.failing")}</option>
         </select>
       )}
 
@@ -132,11 +138,13 @@ const SubmissionsControls = ({
               accepted: e.target.value as SubmissionFilters["accepted"],
             })
           }
-          aria-label="Filter by acceptance status"
+          aria-label={t("submissions.filters.acceptedAria")}
         >
-          <option value="all">All acceptance</option>
-          <option value="accepted">Accepted</option>
-          <option value="not-accepted">Not accepted</option>
+          <option value="all">{t("submissions.filters.allAcceptance")}</option>
+          <option value="accepted">{t("submissions.filters.accepted")}</option>
+          <option value="not-accepted">
+            {t("submissions.filters.notAccepted")}
+          </option>
         </select>
       )}
 
@@ -146,7 +154,8 @@ const SubmissionsControls = ({
           className="btn btn-ghost btn-sm"
           onClick={clearAll}
         >
-          <X aria-hidden="true" className="size-4" /> Clear
+          <X aria-hidden="true" className="size-4" />{" "}
+          {t("submissions.filters.clear")}
         </button>
       )}
 
@@ -154,12 +163,14 @@ const SubmissionsControls = ({
         className="select select-bordered select-sm ml-auto w-auto min-w-0"
         value={sort}
         onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
-        aria-label="Sort submissions"
+        aria-label={t("submissions.filters.sortAria")}
       >
-        <option value="recent">Newest first</option>
-        <option value="oldest">Oldest first</option>
-        <option value="name-asc">Name A–Z</option>
-        <option value="name-desc">Name Z–A</option>
+        <option value="recent">{t("submissions.filters.sortRecent")}</option>
+        <option value="oldest">{t("submissions.filters.sortOldest")}</option>
+        <option value="name-asc">{t("submissions.filters.sortNameAsc")}</option>
+        <option value="name-desc">
+          {t("submissions.filters.sortNameDesc")}
+        </option>
       </select>
     </div>
   )

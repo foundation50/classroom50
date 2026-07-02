@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import type { ReactNode } from "react"
+import { useTranslation } from "react-i18next"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -35,6 +36,7 @@ export const TemplateField = ({
   org?: string
   classroom?: string
 }) => {
+  const { t } = useTranslation()
   const client = useOptionalGitHubClient()
   const { user, isLoadingUser } = useGithubAuth()
   const viewerLogin = user?.login
@@ -113,7 +115,7 @@ export const TemplateField = ({
           aria-hidden="true"
           className="size-4 text-base-content/30 opacity-70"
         />
-        Template Repository
+        {t("assignments.template.label")}
       </label>
       <input
         id={field.name}
@@ -121,7 +123,7 @@ export const TemplateField = ({
         type="text"
         autoComplete="off"
         spellCheck={false}
-        placeholder="<owner>/<repo>"
+        placeholder={t("assignments.template.placeholder")}
         className="input w-full"
         value={rawValue}
         onBlur={normalizeOnBlur(field)}
@@ -135,10 +137,7 @@ export const TemplateField = ({
         teamHasAccess={teamHasAccess}
       />
 
-      <p className="label pt-2">
-        Optional. Students receive a copy of this repository. Leave blank for an
-        empty repo with just the autograder.
-      </p>
+      <p className="label pt-2">{t("assignments.template.help")}</p>
     </>
   )
 }
@@ -156,18 +155,19 @@ const TemplateVerificationNote = ({
   // read, false if it'll be granted on create, undefined if N/A or unresolved.
   teamHasAccess?: boolean
 }) => {
+  const { t } = useTranslation()
   if (pending) {
     return (
       <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
         <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />
-        Checking template access…
+        {t("assignments.template.checking")}
       </p>
     )
   }
 
   if (!verification || verification.kind === "empty") return null
 
-  const fallbackOrg = org ?? "your org"
+  const fallbackOrg = org ?? t("assignments.template.fallbackOrg")
 
   switch (verification.kind) {
     case "ok": {
@@ -178,27 +178,36 @@ const TemplateVerificationNote = ({
         if (teamHasAccess === true) {
           return (
             <Note tone="success" icon={CheckCircle2}>
-              Private template in {verification.owner} (branch{" "}
-              <Code>{verification.branch}</Code>). The classroom team already
-              has read access — students can copy it.
+              {t("assignments.template.privateHasAccess_1", {
+                owner: verification.owner,
+              })}{" "}
+              <Code>{verification.branch}</Code>
+              {t("assignments.template.privateHasAccess_2")}
             </Note>
           )
         }
         return (
           <Note tone="success" icon={CheckCircle2}>
-            Private template in {verification.owner} (branch{" "}
-            <Code>{verification.branch}</Code>). The classroom team doesn't have
-            access yet; it'll be added automatically when you create the
-            assignment, so students can copy it.
+            {t("assignments.template.privateWillGrant_1", {
+              owner: verification.owner,
+            })}{" "}
+            <Code>{verification.branch}</Code>
+            {t("assignments.template.privateWillGrant_2")}
           </Note>
         )
       }
-      const where = verification.inOrg ? "" : ` in ${verification.owner}`
+      const okPrefixKey = verification.inOrg
+        ? verification.visibility === "public"
+          ? "assignments.template.okPrefixPublicInOrg"
+          : "assignments.template.okPrefixPrivateInOrg"
+        : verification.visibility === "public"
+          ? "assignments.template.okPrefixPublic"
+          : "assignments.template.okPrefixPrivate"
       return (
         <Note tone="success" icon={CheckCircle2}>
-          {verification.visibility === "public" ? "Public" : "Private"} template
-          {where}, branch <Code>{verification.branch}</Code>. Students can
-          access it.
+          {t(okPrefixKey, { owner: verification.owner })}{" "}
+          <Code>{verification.branch}</Code>
+          {t("assignments.template.okSuffix")}
         </Note>
       )
     }
@@ -210,10 +219,9 @@ const TemplateVerificationNote = ({
           icon={Info}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          Reachable in {verification.owner} (branch{" "}
-          <Code>{verification.branch}</Code>). If {verification.owner} restricts
-          third-party apps, students can't copy it until an owner approves
-          Classroom 50.
+          {t("assignments.template.okVerify_1", { owner: verification.owner })}{" "}
+          <Code>{verification.branch}</Code>
+          {t("assignments.template.okVerify_2", { owner: verification.owner })}
         </Note>
       )
 
@@ -227,16 +235,21 @@ const TemplateVerificationNote = ({
     case "not-visible":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.owner}/{verification.repo} isn't visible to you. Make it
-          public or copy it into {fallbackOrg}.
+          {t("assignments.template.notVisible", {
+            owner: verification.owner,
+            repo: verification.repo,
+            org: fallbackOrg,
+          })}
         </Note>
       )
 
     case "not-template":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.owner}/{verification.repo} isn't a template repo. Enable
-          it in the repo's Settings.
+          {t("assignments.template.notTemplate", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
         </Note>
       )
 
@@ -247,39 +260,50 @@ const TemplateVerificationNote = ({
           icon={AlertTriangle}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          {verification.owner} blocked access to {verification.repo}. It
-          restricts third-party apps; an owner must approve Classroom 50.
+          {t("assignments.template.restricted", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
         </Note>
       )
 
     case "unknown":
       return (
         <Note tone="neutral" icon={HelpCircle}>
-          Couldn't verify {verification.owner}/{verification.repo} now. It's
-          rechecked when students accept.
+          {t("assignments.template.unknown", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
         </Note>
       )
 
     case "private-out-of-org":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.owner}/{verification.repo} is private and outside{" "}
-          {fallbackOrg}. Make it public or copy it into {fallbackOrg}.
+          {t("assignments.template.privateOutOfOrg", {
+            owner: verification.owner,
+            repo: verification.repo,
+            org: fallbackOrg,
+          })}
         </Note>
       )
 
     case "no-branch":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {verification.owner}/{verification.repo} has no default branch. Push a
-          commit, or add <Code>@&lt;branch&gt;</Code>.
+          {t("assignments.template.noBranch_1", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}{" "}
+          <Code>@&lt;branch&gt;</Code>
+          {t("assignments.template.noBranch_2")}
         </Note>
       )
 
     case "rate-limited":
       return (
         <Note tone="neutral" icon={HelpCircle}>
-          GitHub rate limit hit. Try again shortly.
+          {t("assignments.template.rateLimited")}
         </Note>
       )
 
@@ -303,19 +327,22 @@ const Note = ({
   icon: typeof Info
   policy?: { owner: string; href: string }
   children: ReactNode
-}) => (
-  <InlineNote tone={tone} icon={icon} className="mt-1.5">
-    <span>{children}</span>
-    {policy && (
-      <a
-        href={policy.href}
-        target="_blank"
-        rel="noreferrer"
-        className="mt-1 flex items-center gap-1 font-semibold underline"
-      >
-        Check {policy.owner}'s OAuth app policy
-        <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
-      </a>
-    )}
-  </InlineNote>
-)
+}) => {
+  const { t } = useTranslation()
+  return (
+    <InlineNote tone={tone} icon={icon} className="mt-1.5">
+      <span>{children}</span>
+      {policy && (
+        <a
+          href={policy.href}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 flex items-center gap-1 font-semibold underline"
+        >
+          {t("assignments.template.policyLink", { owner: policy.owner })}
+          <ExternalLink aria-hidden="true" className="size-3.5 shrink-0" />
+        </a>
+      )}
+    </InlineNote>
+  )
+}

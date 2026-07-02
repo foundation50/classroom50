@@ -14,6 +14,7 @@ import { useNavigate, useParams } from "@tanstack/react-router"
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   DEFAULT_ONBOARDING_CLEANUP,
   isClassroomArchived,
@@ -42,6 +43,7 @@ const DeleteClassroomButton = ({
   classroom: string
   onDeleteClassroom: () => void
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const [open, setOpen] = useState(false)
   const deleteClassroomMutation = useMutation({
@@ -58,26 +60,26 @@ const DeleteClassroomButton = ({
           setOpen(true)
         }}
         className="btn btn-circle btn-sm btn-ghost text-error"
-        aria-label="Delete classroom"
+        aria-label={t("classes.deleteClassroomAria")}
       >
         <Trash2 className="size-4" aria-hidden="true" />
       </button>
 
       <ConfirmModal
         open={open}
-        title="Delete classroom?"
+        title={t("classes.deleteClassroomTitle")}
         description={
           <>
-            This will remove the{" "}
+            {t("classes.deleteClassroomBody_1")}{" "}
             <span className="font-semibold text-base-content">{classroom}</span>{" "}
-            classroom from the{" "}
+            {t("classes.deleteClassroomBody_2")}{" "}
             <span className="font-semibold text-base-content">{org}</span>{" "}
-            organization. Student assignment repositories will not be deleted.
+            {t("classes.deleteClassroomBody_3")}
           </>
         }
         confirmText={`${org}/${classroom}`}
-        confirmLabel="Delete classroom"
-        cancelLabel="Keep classroom"
+        confirmLabel={t("classes.deleteClassroomConfirm")}
+        cancelLabel={t("classes.deleteClassroomCancel")}
         dangerous
         onConfirm={async () => {
           await deleteClassroomMutation.mutateAsync({
@@ -106,6 +108,7 @@ const ArchiveClassroomButton = ({
   // Current lifecycle state, so the button shows the opposite action.
   archived: boolean
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const { notify } = useToast()
   const queryClient = useQueryClient()
@@ -155,46 +158,51 @@ const ArchiveClassroomButton = ({
           setOpen(true)
         }}
         className="btn btn-sm btn-ghost"
-        title={archived ? "Unarchive classroom" : "Archive classroom"}
+        title={
+          archived ? t("classes.unarchiveTitle") : t("classes.archiveTitle")
+        }
       >
         {archived ? (
           <>
-            <ArchiveRestore aria-hidden="true" className="size-4" /> Unarchive
+            <ArchiveRestore aria-hidden="true" className="size-4" />{" "}
+            {t("classes.unarchive")}
           </>
         ) : (
           <>
-            <Archive aria-hidden="true" className="size-4" /> Archive
+            <Archive aria-hidden="true" className="size-4" />{" "}
+            {t("classes.archive")}
           </>
         )}
       </button>
 
       <ConfirmModal
         open={open}
-        title={archived ? "Unarchive classroom?" : "Archive classroom?"}
+        title={
+          archived
+            ? t("classes.unarchiveConfirmTitle")
+            : t("classes.archiveConfirmTitle")
+        }
         description={
           archived ? (
             <>
-              Restore{" "}
+              {t("classes.unarchiveBody_prefix")}{" "}
               <span className="font-semibold text-base-content">
                 {classroom}
               </span>{" "}
-              to active: it returns to the default classes list and can accept
-              new assignments and students again.
+              {t("classes.unarchiveBody_suffix")}
             </>
           ) : (
             <>
-              Archive{" "}
+              {t("classes.archiveBody_prefix")}{" "}
               <span className="font-semibold text-base-content">
                 {classroom}
               </span>
-              : it drops out of the default classes list and stops accepting new
-              assignments and students. Its roster and assignments are kept, and
-              you can unarchive it later.
+              {t("classes.archiveBody_suffix")}
             </>
           )
         }
-        confirmLabel={archived ? "Unarchive" : "Archive"}
-        cancelLabel="Cancel"
+        confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
+        cancelLabel={t("common.cancel")}
         confirmText=""
         needsConfirm={false}
         dangerous={false}
@@ -205,15 +213,27 @@ const ArchiveClassroomButton = ({
               tone: "success",
               durationMs: 5000,
               message: archived
-                ? `"${classroom}" was unarchived.`
-                : `"${classroom}" was archived.`,
+                ? t("classes.unarchivedToast", { classroom })
+                : t("classes.archivedToast", { classroom }),
             })
           } catch (err) {
             notify({
               tone: "error",
-              message: `Couldn't ${archived ? "unarchive" : "archive"} "${classroom}": ${
-                err instanceof Error ? err.message : "something went wrong"
-              }`,
+              message: archived
+                ? t("classes.unarchiveFailed", {
+                    classroom,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : t("classes.somethingWentWrong"),
+                  })
+                : t("classes.archiveFailed", {
+                    classroom,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : t("classes.somethingWentWrong"),
+                  }),
             })
           }
         }}
@@ -224,6 +244,7 @@ const ArchiveClassroomButton = ({
 }
 
 const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
+  const { t } = useTranslation()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
@@ -243,7 +264,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
         const errors: Partial<Record<keyof EditClassroomFormValues, string>> =
           {}
         if (!value.name.trim()) {
-          errors.name = "Classroom name is required."
+          errors.name = t("validation.classroomNameRequired")
         }
 
         return Object.keys(errors).length > 0
@@ -277,11 +298,11 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       <div className="card-body">
         <div className="flex justify-between">
           <div className="flex items-center gap-3 pb-4">
-            <h3 className="text-lg font-bold">Basic Information</h3>
+            <h3 className="text-lg font-bold">{t("classes.form.basicInfo")}</h3>
             <GitHubLink
               href={`https://github.com/${org}/classroom50/tree/main/${classroom}`}
-              label="Config repo"
-              title="Open this classroom's folder in the classroom50 config repo on GitHub"
+              label={t("classes.configRepo")}
+              title={t("classes.configRepoTitle")}
             />
           </div>
           <div className="flex items-center gap-2">
@@ -305,8 +326,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
 
         {archived ? (
           <ArchivedClassroomNotice className="mb-2">
-            This classroom is archived — settings are read-only. Use Unarchive
-            above to make changes.
+            {t("classes.archivedReadOnlyNotice")}
           </ArchivedClassroomNotice>
         ) : null}
 
@@ -315,7 +335,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             {(field) => (
               <>
                 <label htmlFor={field.name} className="label font-bold">
-                  Classroom Name<span className="text-error">*</span>
+                  {t("classes.form.name")}
+                  <span className="text-error">*</span>
                 </label>
 
                 <input
@@ -331,7 +352,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                       : undefined
                   }
                   className="input w-full mb-4"
-                  placeholder="e.g., AP CS Principles"
+                  placeholder={t("classes.form.namePlaceholder")}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -352,7 +373,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
 
           <>
             <label htmlFor="classroom-slug-display" className="label font-bold">
-              Classroom Slug<span className="text-error">*</span>
+              {t("classes.form.slug")}
+              <span className="text-error">*</span>
             </label>
 
             <input
@@ -360,7 +382,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               type="text"
               disabled
               className="input w-full mb-4"
-              placeholder="e.g., ap-cs-principles"
+              placeholder={t("classes.form.slugPlaceholder")}
               value={classroom}
             />
           </>
@@ -369,7 +391,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             {(field) => (
               <>
                 <label htmlFor={field.name} className="label font-bold">
-                  Classroom Term
+                  {t("classes.form.term")}
                 </label>
 
                 <input
@@ -377,7 +399,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                   name={field.name}
                   type="text"
                   className="input w-full mb-4"
-                  placeholder="e.g., Fall 2026"
+                  placeholder={t("classes.form.termPlaceholder")}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -396,11 +418,10 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
             {(field) => (
               <>
                 <label htmlFor={field.name} className="label font-bold">
-                  Onboarding repo cleanup
+                  {t("classes.form.onboardingCleanup")}
                 </label>
                 <p className="text-sm text-base-content/70 mb-2">
-                  What to do with a student&apos;s onboarding repository once
-                  their GitHub identity is reconciled into the roster.
+                  {t("classes.form.onboardingCleanupHint")}
                 </p>
 
                 <select
@@ -414,12 +435,14 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                   }
                 >
                   <option value="delete">
-                    Delete (default; removes the repo after reconcile)
+                    {t("classes.form.onboardingCleanupDelete")}
                   </option>
                   <option value="archive">
-                    Archive (reversible; hides the repo)
+                    {t("classes.form.onboardingCleanupArchive")}
                   </option>
-                  <option value="keep">Keep (leave the repo untouched)</option>
+                  <option value="keep">
+                    {t("classes.form.onboardingCleanupKeep")}
+                  </option>
                 </select>
               </>
             )}
@@ -440,7 +463,11 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                   disabled={
                     !canSubmit || isSubmitting || submitted || isDefaultValue
                   }
-                  title={isDefaultValue ? "No changes to save" : undefined}
+                  title={
+                    isDefaultValue
+                      ? t("classes.form.noChangesToSave")
+                      : undefined
+                  }
                 >
                   {isSubmitting ? (
                     <>
@@ -448,10 +475,10 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                         className="loading loading-spinner loading-sm"
                         aria-hidden="true"
                       />
-                      Saving...
+                      {t("classes.form.saving")}
                     </>
                   ) : (
-                    "Save Classroom"
+                    t("classes.form.saveButton")
                   )}
                 </button>
               )}

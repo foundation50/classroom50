@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { githubKeys } from "@/hooks/github/queries"
 import useGetClassroom from "@/hooks/useGetClassroom"
+import { useTranslation } from "react-i18next"
 import {
   type EditClassroomInput,
   type EditClassroomResult,
@@ -33,6 +34,7 @@ const EditClassroomContent = ({
   org: string
   classroom: string
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
@@ -53,8 +55,8 @@ const EditClassroomContent = ({
         tone: "error",
         message:
           err instanceof GitHubAPIError && err.status === 409
-            ? "Couldn't save — another change landed first. Please try again."
-            : `Couldn't save classroom settings: ${err.message}`,
+            ? t("toasts.classroomSaveConflict")
+            : t("toasts.classroomSaveFailed", { message: err.message }),
       })
     },
     onSuccess: () => {
@@ -80,7 +82,7 @@ const EditClassroomContent = ({
       notify({
         tone: "success",
         durationMs: 5000,
-        message: "Classroom settings saved.",
+        message: t("toasts.classroomSettingsSaved"),
       })
     },
   })
@@ -90,25 +92,25 @@ const EditClassroomContent = ({
       loading={loadingClassroom}
       fallback={
         <div className="flex">
-          <Spinner className="m-auto" label="Loading classroom" />
+          <Spinner className="m-auto" label={t("classes.loadingClassroom")} />
         </div>
       }
     >
       {!cl ? (
-        <div className="alert alert-error">Could not load classroom data.</div>
+        <div className="alert alert-error">{t("classes.couldNotLoad")}</div>
       ) : (
         <>
           <div className="flex justify-between">
             <div>
               <h1 className="text-xl pt-8 pb-2 font-bold">
-                Classroom Settings
+                {t("documentTitle.classroomSettings")}
               </h1>
               <p className="pb-10 text-sm text-base-content/70">
-                Configuration for the{" "}
+                {t("classes.settingsSubtitle_prefix")}{" "}
                 <span className="font-semibold">
                   {cl.name || cl.short_name || classroom}
                 </span>{" "}
-                classroom.
+                {t("classes.settingsSubtitle_suffix")}
               </p>
             </div>
           </div>
@@ -142,7 +144,8 @@ const EditClassroomContent = ({
 }
 
 const EditClassroomPage = () => {
-  useDocumentTitle("Classroom Settings")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.classroomSettings"))
   const { org, classroom } = useParams({ strict: false })
 
   return (
@@ -150,10 +153,10 @@ const EditClassroomPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="Settings" />
+          <Breadcrumb endpoint={t("nav.settings")} />
           <RequireTeacher allow="instructor">
             {!org || !classroom ? (
-              <MissingParams message="Missing organization or classroom." />
+              <MissingParams message={t("classes.missingOrgOrClassroom")} />
             ) : (
               <EditClassroomContent org={org} classroom={classroom} />
             )}

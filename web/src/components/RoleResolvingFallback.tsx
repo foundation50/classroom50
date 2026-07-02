@@ -8,7 +8,7 @@ const RoleResolvingFallback = ({
   className?: string
 }) => (
   <div className={`flex items-center justify-center ${className}`}>
-    <Spinner size="lg" label="Loading" />
+    <Spinner size="lg" />
   </div>
 )
 

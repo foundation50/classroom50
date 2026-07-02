@@ -1,4 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Plus, Trash2, UsersRound } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
@@ -27,16 +29,16 @@ const rejectedItems = <T,>(
 
 // Map a rejected add/remove to a human-readable reason. Collapsing every
 // status into "bad username" hides real causes like a 429 rate limit or a 403.
-const describeFailure = (reason: unknown): string | null => {
+const describeFailure = (reason: unknown, t: TFunction): string | null => {
   if (reason instanceof GitHubAPIError) {
     if (reason.isRateLimited)
-      return "GitHub rate limit hit — wait a moment and try again."
+      return t("components.modals.groupCollaborators.failure.rateLimited")
     if (reason.status === 403)
-      return "You don't have permission to change collaborators on this repository."
+      return t("components.modals.groupCollaborators.failure.forbidden")
     if (reason.status === 404)
-      return "Username not found, or not a member of the GitHub organization."
+      return t("components.modals.groupCollaborators.failure.notFound")
     if (reason.status === 422)
-      return "Already a collaborator, or the request was rejected by GitHub."
+      return t("components.modals.groupCollaborators.failure.conflict")
     return reason.message
   }
   return reason instanceof Error ? reason.message : null
@@ -97,6 +99,7 @@ export function GroupCollaboratorsModal({
   // tick late, so a rapid double-click could start two overlapping saves.
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
+  const { t } = useTranslation()
 
   const {
     data: collaborators,
@@ -329,26 +332,35 @@ export function GroupCollaboratorsModal({
           ) ?? null
         const detail =
           firstReason && firstReason.status === "rejected"
-            ? describeFailure(firstReason.reason)
+            ? describeFailure(firstReason.reason, t)
             : null
         const suffix = detail ? ` ${detail}` : ""
 
         // Name what changed so a partial apply isn't read as a full save.
         const removedNote = succeededRemoves
-          ? ` Removed ${succeededRemoves} collaborator${succeededRemoves === 1 ? "" : "s"}.`
+          ? ` ${t("components.modals.groupCollaborators.removedNote", { count: succeededRemoves })}`
           : ""
 
         if (failedAdds.length && failedRemoves.length) {
           setSubmitError(
-            `Some collaborators could not be added or removed.${removedNote} Check the highlighted usernames and Save again to retry.${suffix}`,
+            t("components.modals.groupCollaborators.error.addAndRemove", {
+              removedNote,
+              suffix,
+            }),
           )
         } else if (failedAdds.length) {
           setSubmitError(
-            `Some collaborators could not be added.${removedNote} Check the highlighted usernames and Save again to retry.${suffix}`,
+            t("components.modals.groupCollaborators.error.add", {
+              removedNote,
+              suffix,
+            }),
           )
         } else {
           setSubmitError(
-            `Some collaborators could not be removed.${removedNote} Check the highlighted usernames and Save again to retry.${suffix}`,
+            t("components.modals.groupCollaborators.error.remove", {
+              removedNote,
+              suffix,
+            }),
           )
         }
 
@@ -397,7 +409,8 @@ export function GroupCollaboratorsModal({
 
           <div className="min-w-0 flex-1">
             <h3 id={titleId} className="text-lg font-bold">
-              {assignmentName || "Group collaborators"}
+              {assignmentName ||
+                t("components.modals.groupCollaborators.title")}
             </h3>
             {repoName && (
               <a
@@ -407,7 +420,7 @@ export function GroupCollaboratorsModal({
                 rel="noreferrer"
               >
                 <GitHub aria-hidden="true" className="size-4" />
-                View repository
+                {t("components.modals.groupCollaborators.viewRepository")}
               </a>
             )}
           </div>
@@ -415,13 +428,16 @@ export function GroupCollaboratorsModal({
 
         {loadingCollaborators ? (
           <div className="flex py-10">
-            <Spinner className="m-auto" label="Loading collaborators" />
+            <Spinner
+              className="m-auto"
+              label={t("components.modals.groupCollaborators.loading")}
+            />
           </div>
         ) : (
           <>
             {saved && (
               <div className="alert alert-success alert-soft mt-4 text-sm">
-                Collaborators saved!
+                {t("components.modals.groupCollaborators.saved")}
               </div>
             )}
 
@@ -433,22 +449,26 @@ export function GroupCollaboratorsModal({
 
             {!canManage && (
               <div className="alert alert-info alert-soft mt-4 text-sm">
-                Only the group owner
+                {t("components.modals.groupCollaborators.onlyOwner_prefix")}
                 {ownerDisplayLogin ? (
                   <>
                     {" "}
                     (<span className="font-mono">{ownerDisplayLogin}</span>)
                   </>
                 ) : null}{" "}
-                can manage collaborators for this repository.
+                {t("components.modals.groupCollaborators.onlyOwner_suffix")}
               </div>
             )}
 
             <div className="mt-4">
               <div className="mb-2 flex items-center justify-between gap-4">
-                <span className="text-sm font-medium">Group members</span>
+                <span className="text-sm font-medium">
+                  {t("components.modals.groupCollaborators.groupMembers")}
+                </span>
                 <span className="text-xs text-base-content/70">
-                  {personCount} {personCount === 1 ? "person" : "people"}
+                  {t("components.modals.groupCollaborators.personCount", {
+                    count: personCount,
+                  })}
                 </span>
               </div>
 
@@ -468,7 +488,7 @@ export function GroupCollaboratorsModal({
                       />
                     </span>
                     <span className="badge badge-primary badge-soft badge-sm">
-                      Owner
+                      {t("components.modals.groupCollaborators.ownerBadge")}
                     </span>
                   </li>
                 )}
@@ -499,8 +519,9 @@ export function GroupCollaboratorsModal({
                         />
                         {isInvalid && (
                           <span className="mt-0.5 block text-xs text-error">
-                            Couldn't add — check the username and org
-                            membership.
+                            {t(
+                              "components.modals.groupCollaborators.couldntAdd",
+                            )}
                           </span>
                         )}
                       </span>
@@ -508,7 +529,10 @@ export function GroupCollaboratorsModal({
                         <button
                           type="button"
                           className="btn btn-ghost btn-sm btn-square text-base-content/70 hover:text-error"
-                          aria-label={`Remove ${username}`}
+                          aria-label={t(
+                            "components.modals.groupCollaborators.removeUser",
+                            { username },
+                          )}
                           onClick={() => removeFromDraft(username)}
                         >
                           <Trash2 aria-hidden="true" className="size-4" />
@@ -538,7 +562,11 @@ export function GroupCollaboratorsModal({
                         />
                       </span>
                       <span className="text-xs font-medium text-error/70">
-                        {failedToRemove ? "Couldn't remove" : "Removing"}
+                        {failedToRemove
+                          ? t(
+                              "components.modals.groupCollaborators.couldntRemove",
+                            )
+                          : t("components.modals.groupCollaborators.removing")}
                       </span>
                       {canManage && (
                         <button
@@ -546,7 +574,7 @@ export function GroupCollaboratorsModal({
                           className="btn btn-ghost btn-sm text-error"
                           onClick={() => restoreToDraft(username)}
                         >
-                          Undo
+                          {t("components.modals.groupCollaborators.undo")}
                         </button>
                       )}
                     </li>
@@ -556,20 +584,23 @@ export function GroupCollaboratorsModal({
                 {draftCollaborators.length === 0 &&
                   markedForRemoval.length === 0 && (
                     <li className="px-4 py-6 text-center text-sm text-base-content/70">
-                      No collaborators yet.
+                      {t(
+                        "components.modals.groupCollaborators.noCollaborators",
+                      )}
                     </li>
                   )}
               </ul>
 
               {tooMany && (
                 <p className="mt-2 text-sm text-error">
-                  This assignment has a maximum group size of{" "}
-                  {maxGroupSize ?? 1} (including the owner).
+                  {t("components.modals.groupCollaborators.tooMany", {
+                    max: maxGroupSize ?? 1,
+                  })}
                 </p>
               )}
               {hasDuplicates && (
                 <p className="mt-2 text-sm text-error">
-                  Collaborators must be unique.
+                  {t("components.modals.groupCollaborators.mustBeUnique")}
                 </p>
               )}
 
@@ -577,8 +608,12 @@ export function GroupCollaboratorsModal({
                 <div className="mt-3 flex flex-col gap-2 sm:flex-row">
                   <input
                     className="input input-bordered flex-1"
-                    placeholder="Add a GitHub username (e.g. octocat)"
-                    aria-label="Add a GitHub username"
+                    placeholder={t(
+                      "components.modals.groupCollaborators.addPlaceholder",
+                    )}
+                    aria-label={t(
+                      "components.modals.groupCollaborators.addAriaLabel",
+                    )}
                     value={newCollaborator}
                     onChange={(e) => setNewCollaborator(e.target.value)}
                     onKeyDown={(e) => {
@@ -594,14 +629,14 @@ export function GroupCollaboratorsModal({
                     onClick={addPendingUsername}
                   >
                     <Plus aria-hidden="true" className="size-4" />
-                    Add
+                    {t("components.modals.groupCollaborators.add")}
                   </button>
                 </div>
               )}
 
               {canManage && isFull && (
                 <p className="mt-3 text-xs text-base-content/70">
-                  Group is full — remove someone to add another collaborator.
+                  {t("components.modals.groupCollaborators.groupFull")}
                 </p>
               )}
             </div>
@@ -615,7 +650,7 @@ export function GroupCollaboratorsModal({
             disabled={isSaving}
             onClick={() => onClose()}
           >
-            Cancel
+            {t("common.cancel")}
           </button>
           {canManage && hasChanges && (
             <button
@@ -624,7 +659,7 @@ export function GroupCollaboratorsModal({
               disabled={isSaving}
               onClick={discardChanges}
             >
-              Discard changes
+              {t("components.modals.groupCollaborators.discardChanges")}
             </button>
           )}
           {canManage && (
@@ -643,14 +678,14 @@ export function GroupCollaboratorsModal({
               {isSaving && (
                 <span className="loading loading-spinner" aria-hidden="true" />
               )}
-              Save collaborators
+              {t("components.modals.groupCollaborators.saveCollaborators")}
             </button>
           )}
         </div>
       </div>
 
       <form method="dialog" className="modal-backdrop">
-        <button disabled={isSaving}>close</button>
+        <button disabled={isSaving}>{t("common.close")}</button>
       </form>
     </dialog>
   )

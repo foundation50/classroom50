@@ -23,6 +23,7 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
+import { useTranslation } from "react-i18next"
 
 const EditAssignmentFormStudent = ({
   org,
@@ -33,6 +34,7 @@ const EditAssignmentFormStudent = ({
   classroom: string
   assignment: string
 }) => {
+  const { t } = useTranslation()
   const { user } = useGithubAuth()
   const { isLoading: loadingRepo, assignment: assignmentRepo } =
     useGetAssignmentRepo(org, classroom, assignment, user?.login)
@@ -56,7 +58,7 @@ const EditAssignmentFormStudent = ({
   if (loadingPublic || loadingRepo) {
     return (
       <div className="flex">
-        <Spinner className="m-auto" label="Loading assignment" />
+        <Spinner className="m-auto" label={t("assignmentSettings.loading")} />
       </div>
     )
   }
@@ -65,15 +67,15 @@ const EditAssignmentFormStudent = ({
     return (
       <EnterDiv className="alert alert-warning mt-6">
         <div>
-          You do not have this assignment yet! Do you need to{" "}
+          {t("assignmentSettings.notAccepted_prefix")}{" "}
           <Link
             className="underline"
             to="/$org/$classroom/assignments/$assignment/accept"
             params={{ org, classroom, assignment }}
           >
-            accept it
+            {t("assignmentSettings.notAccepted_link")}
           </Link>{" "}
-          first?
+          {t("assignmentSettings.notAccepted_suffix")}
         </div>
       </EnterDiv>
     )
@@ -84,16 +86,15 @@ const EditAssignmentFormStudent = ({
       <div className="mt-6">
         <div className="alert alert-info">
           <div>
-            This is an individual assignment — there are no group settings to
-            manage. View your{" "}
+            {t("assignmentSettings.individual_prefix")}{" "}
             <Link
               className="underline"
               to="/$org/$classroom/assignments/$assignment/submission"
               params={{ org, classroom, assignment }}
             >
-              submission and autograder results
+              {t("assignmentSettings.individual_link")}
             </Link>
-            .
+            {t("assignmentSettings.individual_suffix")}
           </div>
         </div>
       </div>
@@ -112,7 +113,7 @@ const EditAssignmentFormStudent = ({
             <div>
               <h1 className="card-title text-xl">{assignmentData?.name}</h1>
               <p className="text-sm font-medium text-base-content/70">
-                Group members
+                {t("assignmentSettings.groupMembers")}
               </p>
               <a
                 className="link mt-1 inline-flex items-center gap-1.5 text-sm"
@@ -121,16 +122,16 @@ const EditAssignmentFormStudent = ({
                 rel="noreferrer"
               >
                 <GitHub aria-hidden="true" className="size-4" />
-                View repository
+                {t("assignmentSettings.viewRepository")}
               </a>
               <p className="mt-2 text-sm text-base-content/70">
-                Add or remove collaborators for this assignment repository. This
-                assignment allows up to{" "}
+                {t("assignmentSettings.collaboratorsHint_prefix")}{" "}
                 <span className="font-semibold text-base-content">
                   {maxCollaborators}
                 </span>{" "}
-                student{maxCollaborators === 1 ? "" : "s"} in addition to the
-                group owner.
+                {t("assignmentSettings.collaboratorsHint_suffix", {
+                  count: maxCollaborators,
+                })}
               </p>
             </div>
           </div>
@@ -142,7 +143,7 @@ const EditAssignmentFormStudent = ({
               onClick={() => setCollaboratorsOpen(true)}
             >
               <UsersRound aria-hidden="true" className="size-4" />
-              Manage collaborators
+              {t("assignmentSettings.manageCollaborators")}
             </button>
           </div>
         </div>
@@ -165,7 +166,8 @@ const EditAssignmentFormStudent = ({
 }
 
 const EditAssignmentPage = () => {
-  useDocumentTitle("Assignment Settings")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.assignmentSettings"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const router = useRouter()
   const { isTeacher, isStudent } = useCourseTeacherAccess(org)
@@ -185,31 +187,32 @@ const EditAssignmentPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="Assignment Settings" />
+          <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
           {editError && (
             <div className="alert alert-error mt-6">{editError}</div>
           )}
           {editSuccess && (
             <div className="alert alert-success mt-6">
-              Your assignment has been edited successfully!
+              {t("assignmentSettings.editSuccess")}
             </div>
           )}
           {editWarning && (
             <div className="alert alert-warning mt-6">{editWarning}</div>
           )}
-          <h1 className="text-2xl font-bold mt-4 mb-6">Assignment Settings</h1>
+          <h1 className="text-2xl font-bold mt-4 mb-6">
+            {t("assignmentSettings.heading")}
+          </h1>
           {isTeacher && archived && (
             <ArchivedClassroomNotice>
-              This classroom is archived — its assignments are read-only.
-              Unarchive it in{" "}
+              {t("assignmentSettings.archivedNotice_prefix")}{" "}
               <Link
                 className="link"
                 to="/$org/$classroom/edit"
                 params={{ org: org ?? "", classroom: classroom ?? "" }}
               >
-                Classroom Settings
+                {t("assignmentSettings.archivedNotice_link")}
               </Link>{" "}
-              to edit assignments.
+              {t("assignmentSettings.archivedNotice_suffix")}
             </ArchivedClassroomNotice>
           )}
           {isTeacher && org && classroom && assignment && (

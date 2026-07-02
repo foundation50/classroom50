@@ -7,6 +7,7 @@ import {
   UsersRound,
 } from "lucide-react"
 import { Fragment, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
 import {
@@ -138,6 +139,7 @@ const GroupMembers = ({
   repoHref: string
   repoLabel: string
 }) => {
+  const { t } = useTranslation()
   // enabled: false — reads the cache the Members modal populates, never fetches.
   const { data: liveCollaborators } = useGetRepoCollaborators(org, repoName, {
     enabled: false,
@@ -157,7 +159,7 @@ const GroupMembers = ({
         href={repoHref}
         target="_blank"
         rel="noreferrer"
-        title="Open the shared group repository"
+        title={t("submissions.table.openGroupRepo")}
       >
         <GitHub aria-hidden="true" className="size-4 shrink-0" />
         <span className="font-mono text-sm">{repoLabel}</span>
@@ -205,6 +207,7 @@ const GroupMembers = ({
 // would fan out to one request per repo on table mount. On click we refetch and
 // act on the result.
 const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
+  const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const [resolving, setResolving] = useState(false)
@@ -239,8 +242,8 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
         className="btn btn-ghost btn-sm btn-square text-base-content/70 disabled:opacity-60"
         disabled={resolving}
         onClick={handleReview}
-        aria-label="Open feedback pull request"
-        title="Review"
+        aria-label={t("submissions.table.reviewAria")}
+        title={t("submissions.table.review")}
       >
         {resolving ? (
           <span
@@ -256,7 +259,7 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
           {errorMsg ? (
             <>
               <h3 id={titleId} className="text-lg font-bold">
-                Couldn't check for a feedback PR
+                {t("submissions.reviewModal.errorTitle")}
               </h3>
               <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
                 {errorMsg}
@@ -265,14 +268,12 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
           ) : (
             <>
               <h3 id={titleId} className="text-lg font-bold">
-                No feedback pull request yet
+                {t("submissions.reviewModal.emptyTitle")}
               </h3>
               <p className="mt-2 text-sm leading-6 text-base-content/70">
-                No Feedback PR has been opened for{" "}
-                <span className="font-mono">{repo}</span> yet. It's created by
-                the assignment's autograde workflow after a graded submission —
-                if the student hasn't submitted (or the assignment has the
-                Feedback PR disabled), there's nothing to review yet.
+                {t("submissions.reviewModal.emptyBody_prefix")}{" "}
+                <span className="font-mono">{repo}</span>{" "}
+                {t("submissions.reviewModal.emptyBody_suffix")}
               </p>
             </>
           )}
@@ -283,19 +284,19 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
               target="_blank"
               rel="noreferrer"
             >
-              Open repo PRs
+              {t("submissions.reviewModal.openRepoPrs")}
             </a>
             <button
               type="button"
               className="btn btn-sm"
               onClick={() => dialogRef.current?.close()}
             >
-              Close
+              {t("common.close")}
             </button>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
-          <button>close</button>
+          <button>{t("common.close")}</button>
         </form>
       </dialog>
     </>
@@ -321,6 +322,7 @@ const RegradeButton = ({
   // to the `owner` login. Omitted for group repos (owner is the founder/group).
   displayName?: string
 }) => {
+  const { t } = useTranslation()
   const { regrade, phase, anyRegrading } = useTriggerRegrade({
     org,
     classroom,
@@ -335,14 +337,14 @@ const RegradeButton = ({
   const [confirmOpen, setConfirmOpen] = useState(false)
 
   const title = inFlight
-    ? "Regrade in progress…"
+    ? t("submissions.rowRegrade.titleInFlight")
     : blocked
-      ? "Another regrade is in progress"
+      ? t("submissions.rowRegrade.titleBlocked")
       : phase === "completed"
-        ? "Regrade started — grading runs in the background; collect to see new scores"
+        ? t("submissions.rowRegrade.titleCompleted")
         : phase === "failed"
-          ? "Regrade failed to start — try again"
-          : "Regrade this submission"
+          ? t("submissions.rowRegrade.titleFailed")
+          : t("submissions.rowRegrade.title")
 
   const handleClick = () => {
     if (inFlight || blocked) return
@@ -356,7 +358,7 @@ const RegradeButton = ({
         className={`${ACTION_BTN} text-base-content/70 disabled:opacity-60`}
         disabled={inFlight || blocked}
         onClick={handleClick}
-        aria-label={`Regrade ${owner}'s submission`}
+        aria-label={t("submissions.rowRegrade.aria", { owner })}
         title={title}
       >
         {inFlight ? (
@@ -373,25 +375,29 @@ const RegradeButton = ({
       </button>
       <ConfirmModal
         open={confirmOpen}
-        title={`Regrade ${displayName || owner}'s submission?`}
+        title={t("submissions.rowRegrade.confirmTitle", {
+          name: displayName || owner,
+        })}
         description={
           <>
-            This re-runs the autograder on{" "}
+            {t("submissions.rowRegrade.confirmBody1_prefix")}{" "}
             <span className="font-semibold text-base-content">
               {displayName || owner}
             </span>
-            {displayName ? ` (${owner})` : ""}&apos;s latest commit for this
-            assignment. Their submission time doesn&apos;t change.
+            {displayName ? ` (${owner})` : ""}
+            {t("submissions.rowRegrade.confirmBody1_suffix")}
             <br />
             <br />
-            Grading runs in the background and can take a few minutes; use{" "}
-            <span className="font-semibold">Collect now</span> afterward to pull
-            the new score.
+            {t("submissions.rowRegrade.confirmBody2_prefix")}{" "}
+            <span className="font-semibold">
+              {t("submissions.collect.label")}
+            </span>{" "}
+            {t("submissions.rowRegrade.confirmBody2_suffix")}
           </>
         }
         confirmText="regrade"
-        confirmLabel="Regrade"
-        cancelLabel="Cancel"
+        confirmLabel={t("submissions.rowRegrade.confirmLabel")}
+        cancelLabel={t("common.cancel")}
         dangerous={false}
         needsConfirm={false}
         onConfirm={async () => {
@@ -416,58 +422,63 @@ const SubmissionHistory = ({
   isGroup: boolean
   students: Student[]
   thresholdFraction: number | null
-}) => (
-  <ol className="flex flex-col gap-2">
-    {submissions.map((s, i) => (
-      <li
-        key={`${s.datetime}-${s.commit}`}
-        className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-box border border-base-content/5 bg-base-100 px-3 py-2 text-sm"
-      >
-        <span className="text-base-content/70 w-6 shrink-0">
-          #{submissions.length - i}
-        </span>
-        <span className="w-44 shrink-0">{formatDateTime(s.datetime)}</span>
-        <span
-          className={`badge badge-soft badge-sm ${scoreToBadgeType(s.score, s["max-score"], thresholdFraction)}`}
+}) => {
+  const { t } = useTranslation()
+  return (
+    <ol className="flex flex-col gap-2">
+      {submissions.map((s, i) => (
+        <li
+          key={`${s.datetime}-${s.commit}`}
+          className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-box border border-base-content/5 bg-base-100 px-3 py-2 text-sm"
         >
-          {s.score}/{s["max-score"]}
-        </span>
-        {s.late ? (
+          <span className="text-base-content/70 w-6 shrink-0">
+            #{submissions.length - i}
+          </span>
+          <span className="w-44 shrink-0">{formatDateTime(s.datetime)}</span>
           <span
-            className="badge badge-sm badge-error badge-soft"
-            title="Pushed after the deadline."
+            className={`badge badge-soft badge-sm ${scoreToBadgeType(s.score, s["max-score"], thresholdFraction)}`}
           >
-            Late
+            {s.score}/{s["max-score"]}
           </span>
-        ) : null}
-        {isGroup && s.submittedBy ? (
-          <span className="text-base-content/70">
-            by {getName(s.submittedBy, students) || s.submittedBy}
+          {s.late ? (
+            <span
+              className="badge badge-sm badge-error badge-soft"
+              title={t("submissions.table.lateHistoryTitle")}
+            >
+              {t("submissions.table.late")}
+            </span>
+          ) : null}
+          {isGroup && s.submittedBy ? (
+            <span className="text-base-content/70">
+              {t("submissions.table.submittedBy", {
+                name: getName(s.submittedBy, students) || s.submittedBy,
+              })}
+            </span>
+          ) : null}
+          <span className="ml-auto flex gap-3">
+            <HistoryLink
+              href={safeHttpUrl(s.commit)}
+              icon={GitCommitHorizontal}
+              label={t("submissions.table.commit")}
+            />
+            <HistoryLink
+              href={safeHttpUrl(s.release)}
+              icon={ScrollText}
+              label={t("submissions.table.details")}
+            />
           </span>
-        ) : null}
-        <span className="ml-auto flex gap-3">
-          <HistoryLink
-            href={safeHttpUrl(s.commit)}
-            icon={GitCommitHorizontal}
-            label="Commit"
-          />
-          <HistoryLink
-            href={safeHttpUrl(s.release)}
-            icon={ScrollText}
-            label="Details"
-          />
-        </span>
+        </li>
+      ))}
+      <li className="text-xs text-base-content/70">
+        {t("submissions.table.fullHistory_prefix")}{" "}
+        <a className="link" href={repoHref} target="_blank" rel="noreferrer">
+          {t("submissions.table.fullHistory_link")}
+        </a>{" "}
+        {t("submissions.table.fullHistory_suffix")}
       </li>
-    ))}
-    <li className="text-xs text-base-content/70">
-      Open the{" "}
-      <a className="link" href={repoHref} target="_blank" rel="noreferrer">
-        repository
-      </a>{" "}
-      for the full commit history.
-    </li>
-  </ol>
-)
+    </ol>
+  )
+}
 
 const SubmissionsTable = ({
   scores,
@@ -500,6 +511,7 @@ const SubmissionsTable = ({
   // (badges render neutral).
   thresholdFraction?: number | null
 }) => {
+  const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const toggle = (owner: string) =>
@@ -533,22 +545,28 @@ const SubmissionsTable = ({
       <EnterDiv className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
         <table className="table">
           <caption className="sr-only">
-            {isGroup ? "Group submissions" : "Student submissions"}
+            {isGroup
+              ? t("submissions.table.captionGroup")
+              : t("submissions.table.captionStudent")}
           </caption>
           <thead>
             <tr>
-              <th scope="col">{isGroup ? "Group" : "Student"}</th>
-              <th scope="col">Submissions</th>
-              <th scope="col">Score</th>
-              <th scope="col">Last Submitted</th>
-              <th scope="col">Actions</th>
+              <th scope="col">
+                {isGroup
+                  ? t("submissions.table.colGroup")
+                  : t("submissions.table.colStudent")}
+              </th>
+              <th scope="col">{t("submissions.table.colSubmissions")}</th>
+              <th scope="col">{t("submissions.table.colScore")}</th>
+              <th scope="col">{t("submissions.table.colLastSubmitted")}</th>
+              <th scope="col">{t("submissions.table.colActions")}</th>
             </tr>
           </thead>
           <tbody>
             {!scores?.length && !nonSubmitters.length && (
               <tr>
                 <td colSpan={5} className="text-center text-base-content/70">
-                  No submissions match the current filters.
+                  {t("submissions.table.emptyState")}
                 </td>
               </tr>
             )}
@@ -601,8 +619,8 @@ const SubmissionsTable = ({
                             aria-expanded={isOpen}
                             title={
                               isOpen
-                                ? "Hide submissions"
-                                : "Show all submissions"
+                                ? t("submissions.table.hideSubmissions")
+                                : t("submissions.table.showSubmissions")
                             }
                             onClick={() => toggle(rest.owner)}
                           >
@@ -610,11 +628,15 @@ const SubmissionsTable = ({
                               aria-hidden="true"
                               className={`size-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`}
                             />
-                            {submissionCount} Submissions
+                            {t("submissions.table.submissionCount", {
+                              count: submissionCount,
+                            })}
                           </button>
                         ) : (
                           <label className="badge max-xl:text-xs whitespace-nowrap">
-                            {submissionCount} Submission
+                            {t("submissions.table.submissionCount", {
+                              count: submissionCount,
+                            })}
                           </label>
                         )}
                       </td>
@@ -634,18 +656,20 @@ const SubmissionsTable = ({
                             {late ? (
                               <span
                                 className="badge badge-sm badge-error badge-soft"
-                                title="The latest submission was pushed after the deadline."
+                                title={t("submissions.table.lateRowTitle")}
                               >
-                                Late
+                                {t("submissions.table.late")}
                               </span>
                             ) : null}
                           </div>
                           {rest.gradedAt && rest.gradedAt !== datetime ? (
                             <span
                               className="whitespace-nowrap text-xs text-base-content/70"
-                              title="When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time."
+                              title={t("submissions.table.gradedAtTitle")}
                             >
-                              Graded {formatDateTime(rest.gradedAt)}
+                              {t("submissions.table.gradedAt", {
+                                date: formatDateTime(rest.gradedAt),
+                              })}
                             </span>
                           ) : null}
                         </div>
@@ -657,8 +681,8 @@ const SubmissionsTable = ({
                               type="button"
                               className="btn btn-ghost btn-sm btn-square text-base-content/70"
                               onClick={() => setManageOwner(rest.owner)}
-                              aria-label="View and manage group members"
-                              title="Members"
+                              aria-label={t("submissions.table.membersAria")}
+                              title={t("submissions.table.members")}
                             >
                               <UsersRound
                                 aria-hidden="true"
@@ -669,27 +693,31 @@ const SubmissionsTable = ({
                           <ActionIconLink
                             href={repoHref}
                             icon={GitHub}
-                            label={`Open repository ${repo}`}
-                            title="View repo"
-                            emptyLabel={`Open repository ${repo}`}
-                            emptyTitle="View repo"
+                            label={t("submissions.table.openRepoLabel", {
+                              repo,
+                            })}
+                            title={t("submissions.table.viewRepo")}
+                            emptyLabel={t("submissions.table.openRepoLabel", {
+                              repo,
+                            })}
+                            emptyTitle={t("submissions.table.viewRepo")}
                           />
                           <ActionIconLink
                             href={safeHttpUrl(rest.commit)}
                             icon={GitCommitHorizontal}
-                            label="View latest commit"
-                            title="Commit"
-                            emptyLabel="No commit yet"
-                            emptyTitle="No commit yet"
+                            label={t("submissions.table.viewCommit")}
+                            title={t("submissions.table.commit")}
+                            emptyLabel={t("submissions.table.noCommit")}
+                            emptyTitle={t("submissions.table.noCommit")}
                           />
                           <ReviewButton org={org} repo={repo} />
                           <ActionIconLink
                             href={safeHttpUrl(rest.release)}
                             icon={ScrollText}
-                            label="View autograder details"
-                            title="Details"
-                            emptyLabel="No autograder details yet"
-                            emptyTitle="No details yet"
+                            label={t("submissions.table.viewDetails")}
+                            title={t("submissions.table.details")}
+                            emptyLabel={t("submissions.table.noDetailsLabel")}
+                            emptyTitle={t("submissions.table.noDetails")}
                           />
                           <RegradeButton
                             org={org}
@@ -742,7 +770,7 @@ const SubmissionsTable = ({
                 </td>
                 <td>
                   <span className="badge badge-ghost whitespace-nowrap">
-                    Not submitted
+                    {t("submissions.table.notSubmitted")}
                   </span>
                 </td>
                 <td>—</td>

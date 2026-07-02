@@ -1,6 +1,7 @@
 import { Link } from "@tanstack/react-router"
 import { FileQuestion } from "lucide-react"
 import { useEffect, useRef } from "react"
+import { useTranslation } from "react-i18next"
 
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
@@ -9,14 +10,11 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 // ("forbidden"): access is ultimately enforced by GitHub, so this is a UX
 // concern, and a 404 avoids confirming the resource exists to someone whose
 // role can't see it. Reused across teacher-only pages and future TA roles.
-const NotFound = ({
-  title = "Page not found",
-  message = "This page doesn't exist, or you don't have access to it.",
-}: {
-  title?: string
-  message?: string
-}) => {
-  useDocumentTitle(title)
+const NotFound = ({ title, message }: { title?: string; message?: string }) => {
+  const { t } = useTranslation()
+  const resolvedTitle = title ?? t("notFound.title")
+  const resolvedMessage = message ?? t("notFound.message")
+  useDocumentTitle(resolvedTitle)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
   // Client-side navigation doesn't reload the page, so a screen reader isn't
@@ -33,12 +31,12 @@ const NotFound = ({
       </div>
       <div>
         <h1 ref={headingRef} tabIndex={-1} className="text-2xl font-bold">
-          {title}
+          {resolvedTitle}
         </h1>
-        <p className="mt-1 max-w-md text-base-content/70">{message}</p>
+        <p className="mt-1 max-w-md text-base-content/70">{resolvedMessage}</p>
       </div>
       <Link to="/" className="btn btn-primary btn-sm">
-        Go to dashboard
+        {t("common.goToDashboard")}
       </Link>
     </div>
   )

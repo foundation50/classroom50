@@ -1,5 +1,6 @@
 import { useParams, Link } from "@tanstack/react-router"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   BookOpen,
   BookText,
@@ -48,6 +49,7 @@ const ClassCard = ({
   org: string
   filter: ClassFilter
 }) => {
+  const { t } = useTranslation()
   const { data: classroomData } = useGetClassroom(org, cl.path)
   const { students } = useGetStudents(org, cl.path)
   const { isTeacher } = useCourseTeacherAccess(org)
@@ -73,8 +75,8 @@ const ClassCard = ({
           to="/$org/$classroom/edit"
           params={{ org, classroom: cl.name }}
           className="btn btn-ghost btn-sm btn-circle absolute right-3 top-3 z-10 text-base-content/70 hover:text-primary"
-          aria-label={`Edit ${cl.name}`}
-          title="Edit assignment"
+          aria-label={t("classes.editClassAria", { name: cl.name })}
+          title={t("classes.editClassTitle")}
         >
           <Pencil aria-hidden="true" className="size-4" />
         </Link>
@@ -82,20 +84,24 @@ const ClassCard = ({
       <div className="card-body gap-4">
         <div className="flex items-center gap-2">
           <label className="h-6 badge badge-soft badge-primary">
-            {classroomData?.term || "No Term Specified"}
+            {classroomData?.term || t("classes.noTermSpecified")}
           </label>
           {archived ? (
-            <span className="h-6 badge badge-soft badge-neutral">Archived</span>
+            <span className="h-6 badge badge-soft badge-neutral">
+              {t("classes.archived")}
+            </span>
           ) : null}
         </div>
         <h1 className="text-xl h-8">
           {classroomData?.name ||
             classroomData?.short_name ||
-            "Unknown Class Name"}
+            t("classes.unknownClassName")}
         </h1>
         <div className="flex gap-2 h-6">
           <UsersRound aria-hidden="true" />
-          {students ? `${students.length} Students` : "No Students"}
+          {students
+            ? t("classes.studentCount", { count: students.length })
+            : t("classes.noStudents")}
         </div>
         <Link
           type="button"
@@ -104,43 +110,46 @@ const ClassCard = ({
           className="btn btn-outline btn-primary w-full"
         >
           <BookText aria-hidden="true" />
-          View Assignments
+          {t("classes.viewAssignments")}
         </Link>
       </div>
     </EnterDiv>
   )
 }
 
-const CreateClassroomPane = ({ org }: { org: string }) => (
-  <div className="card border border-dashed border-base-300 bg-base-100 shadow-sm">
-    <div className="card-body items-center py-12 text-center">
-      <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
-        <Plus aria-hidden="true" className="size-7" />
-      </div>
+const CreateClassroomPane = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
+  return (
+    <div className="card border border-dashed border-base-300 bg-base-100 shadow-sm">
+      <div className="card-body items-center py-12 text-center">
+        <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+          <Plus aria-hidden="true" className="size-7" />
+        </div>
 
-      <h2 className="card-title text-xl">No classrooms yet</h2>
+        <h2 className="card-title text-xl">{t("classes.empty.title")}</h2>
 
-      <p className="max-w-md text-base-content/70">
-        Create your first classroom to start adding assignments, importing
-        students, and managing submissions.
-      </p>
+        <p className="max-w-md text-base-content/70">
+          {t("classes.empty.body")}
+        </p>
 
-      <div className="card-actions mt-4">
-        <Link
-          to="/$org/classes/new"
-          params={{ org }}
-          type="button"
-          className="btn btn-primary"
-        >
-          <Plus aria-hidden="true" className="size-4" />
-          Create classroom
-        </Link>
+        <div className="card-actions mt-4">
+          <Link
+            to="/$org/classes/new"
+            params={{ org }}
+            type="button"
+            className="btn btn-primary"
+          >
+            <Plus aria-hidden="true" className="size-4" />
+            {t("classes.empty.createButton")}
+          </Link>
+        </div>
       </div>
     </div>
-  </div>
-)
+  )
+}
 
 const JoinOrgCard = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const run = useSafeSubmit()
@@ -162,17 +171,17 @@ const JoinOrgCard = ({ org }: { org: string }) => {
           <Plus aria-hidden="true" className="size-7" />
         </div>
 
-        <h2 className="card-title text-xl">Join this classroom</h2>
+        <h2 className="card-title text-xl">{t("classes.join.title")}</h2>
 
         <p className="max-w-md text-base-content/70">
-          You have a pending invitation to join{" "}
-          <span className="font-medium text-base-content">{org}</span>. Accept
-          the invitation to access your classroom assignments.
+          {t("classes.join.body_prefix")}{" "}
+          <span className="font-medium text-base-content">{org}</span>
+          {t("classes.join.body_suffix")}
         </p>
 
         {mutation.isError ? (
           <div className="alert alert-error mt-4 max-w-md text-left">
-            Unable to join the organization. Please try again.
+            {t("classes.join.error")}
           </div>
         ) : null}
 
@@ -191,7 +200,9 @@ const JoinOrgCard = ({ org }: { org: string }) => {
             ) : (
               <Plus aria-hidden="true" className="size-4" />
             )}
-            {mutation.isPending ? "Joining..." : "Join organization"}
+            {mutation.isPending
+              ? t("classes.join.joining")
+              : t("classes.join.joinButton")}
           </button>
         </div>
       </div>
@@ -200,6 +211,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
 }
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
+  const { t } = useTranslation()
   const cl50Yaml = useDotClassroom50(org, repo.name)
   const { classroom, assignment, secret } = cl50Yaml
   const { assignment: assignmentData } = useGetPublicAssignment(
@@ -221,8 +233,8 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           to="/$org/$classroom/assignments/$assignment/edit"
           params={{ org, classroom, assignment }}
           className="btn btn-ghost btn-sm btn-circle absolute right-3 top-3 z-10 text-base-content/70 hover:text-primary"
-          aria-label={`Manage group for ${assignment}`}
-          title="Manage group"
+          aria-label={t("classes.repo.manageGroupAria", { assignment })}
+          title={t("classes.repo.manageGroupTitle")}
         >
           <Pencil aria-hidden="true" className="size-4" />
         </Link>
@@ -249,8 +261,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         </div>
 
         <p className="line-clamp-2 min-h-10 text-sm text-base-content/70">
-          {repo.description ||
-            "No description provided for this assignment repository."}
+          {repo.description || t("classes.repo.noDescription")}
         </p>
 
         {(classroom || assignment) && (
@@ -263,7 +274,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
               >
                 <GraduationCap aria-hidden="true" className="size-4" />
                 <span className="truncate">
-                  Classroom:{" "}
+                  {t("classes.repo.classroomLabel")}{" "}
                   <span className="font-medium text-base-content/80 group-hover:text-primary">
                     {classroom}
                   </span>
@@ -279,7 +290,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
               >
                 <BookOpen aria-hidden="true" className="size-4" />
                 <span className="truncate">
-                  Assignment:{" "}
+                  {t("classes.repo.assignmentLabel")}{" "}
                   <span className="font-medium text-base-content/80 group-hover:text-primary">
                     {assignment}
                   </span>
@@ -293,12 +304,14 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           <div className="flex flex-wrap items-end gap-2">
             {assignmentData?.mode === "individual" && (
               <div className="badge badge-ghost badge-sm py-3">
-                <UserRound aria-hidden="true" className="size-4" /> Individual
+                <UserRound aria-hidden="true" className="size-4" />{" "}
+                {t("classes.repo.individual")}
               </div>
             )}
             {assignmentData?.mode === "group" && (
               <div className="badge badge-ghost badge-sm">
-                <UsersRound aria-hidden="true" className="size-4" /> Group
+                <UsersRound aria-hidden="true" className="size-4" />{" "}
+                {t("classes.repo.group")}
               </div>
             )}
           </div>
@@ -309,7 +322,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             rel="noreferrer"
             className="btn btn-sm btn-primary"
           >
-            Open repo
+            {t("classes.repo.openRepo")}
             <ExternalLink aria-hidden="true" className="size-4" />
           </a>
         </div>
@@ -325,6 +338,7 @@ export const OrgRepos = ({
   org: string
   classroom?: string
 }) => {
+  const { t } = useTranslation()
   const { data: repos } = useGetOrgRepos(org)
 
   if (!repos) return <></>
@@ -346,11 +360,12 @@ export const OrgRepos = ({
           />
         </div>
 
-        <h2 className="text-lg font-semibold">No assignment repos yet</h2>
+        <h2 className="text-lg font-semibold">
+          {t("classes.repo.emptyTitle")}
+        </h2>
 
         <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-          Repositories you can maintain will appear here once assignments have
-          been created for this organization.
+          {t("classes.repo.emptyBody")}
         </p>
       </div>
     )
@@ -366,7 +381,8 @@ export const OrgRepos = ({
 }
 
 const ClassesPage = () => {
-  useDocumentTitle("Classes")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.classes"))
   const { org } = useParams({ strict: false })
   const { classes } = useGetClasses(org)
   const {
@@ -385,7 +401,7 @@ const ClassesPage = () => {
   const [filter, setFilter] = useState<ClassFilter>("active")
 
   if (!org) {
-    return <MissingParams message="Missing organization." />
+    return <MissingParams message={t("classes.missingOrg")} />
   }
 
   return (
@@ -401,7 +417,7 @@ const ClassesPage = () => {
 
                   <div>
                     <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
-                      GitHub Organization
+                      {t("classes.githubOrganization")}
                     </div>
                     <div className="font-mono text-sm font-semibold text-base-content">
                       {org}
@@ -414,11 +430,13 @@ const ClassesPage = () => {
                     <div className="skeleton skeleton-shimmer h-8 w-48" />
                   ) : (
                     <h1 className="text-2xl font-bold tracking-tight">
-                      My {isTeacher ? "Classes" : "Assignments"}
+                      {isTeacher
+                        ? t("classes.myClasses")
+                        : t("classes.myAssignments")}
                     </h1>
                   )}
                   <p className="mt-2 max-w-2xl text-sm text-base-content/70">
-                    Manage your courses and assignments.
+                    {t("classes.manageSubtitle")}
                   </p>
                 </div>
               </div>
@@ -431,7 +449,7 @@ const ClassesPage = () => {
                     params={{ org }}
                     className="btn btn-primary"
                   >
-                    + New Class
+                    {t("classes.newClass")}
                   </Link>
                 </div>
               )}
@@ -469,7 +487,7 @@ const ClassesPage = () => {
                             aria-selected={filter === f}
                             onClick={() => setFilter(f)}
                           >
-                            {f}
+                            {t(`classes.filter.${f}`)}
                           </button>
                         ))}
                       </div>

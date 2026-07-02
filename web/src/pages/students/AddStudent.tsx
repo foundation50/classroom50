@@ -3,6 +3,7 @@ import GitHub from "@/assets/github.svg?react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
@@ -33,6 +34,7 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
   const queryClient = useQueryClient()
   const githubClient = useGitHubClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
+  const { t } = useTranslation()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -81,7 +83,7 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
       setWarning(warningMessage)
       // Clear the form so the next student starts clean and a stray re-click
       // can't resubmit into a duplicate error. A warning still shows alongside.
-      setSuccess(`Added ${label}.`)
+      setSuccess(t("students.added", { label }))
       form.reset()
       // Show the new row immediately (see useUpdateRosterCache).
       updateRosterCache((current) => [...current, student])
@@ -107,10 +109,10 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
         const email = value.email.trim()
 
         if (!username && !email) {
-          errors.username = "Enter a GitHub username or an email."
+          errors.username = t("validation.githubOrEmailRequired")
         }
         if (email && !isValidEmail(email)) {
-          errors.email = "Enter a valid email address."
+          errors.email = t("validation.validEmail")
         }
 
         return Object.keys(errors).length > 0 ? { fields: errors } : undefined
@@ -133,10 +135,9 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
         }}
       >
         <div className="card-body">
-          <p className="font-bold mb-2">Add Student</p>
+          <p className="font-bold mb-2">{t("students.addTitle")}</p>
           <p className="text-xs text-base-content/70 mb-2">
-            Enter a GitHub username, an email, or both. Students complete their
-            details when they enroll.
+            {t("students.addHint")}
           </p>
 
           {warning && (
@@ -162,8 +163,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                   id={field.name}
                   name={field.name}
                   type="text"
-                  placeholder="Name (optional)"
-                  aria-label="Name (optional)"
+                  placeholder={t("students.namePlaceholder")}
+                  aria-label={t("students.namePlaceholder")}
                   className="input w-full"
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -184,8 +185,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                     id={field.name}
                     name={field.name}
                     type="text"
-                    placeholder="github-username"
-                    aria-label="GitHub username"
+                    placeholder={t("students.usernamePlaceholder")}
+                    aria-label={t("students.usernameAria")}
                     aria-invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
                       field.state.meta.errors.length > 0
@@ -222,8 +223,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                     id={field.name}
                     name={field.name}
                     type="email"
-                    placeholder="student@university.edu (optional)"
-                    aria-label="Email (optional)"
+                    placeholder={t("students.emailPlaceholder")}
+                    aria-label={t("students.emailAria")}
                     aria-invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
                       field.state.meta.errors.length > 0
@@ -259,8 +260,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                   id={field.name}
                   name={field.name}
                   type="text"
-                  placeholder="Section (optional, e.g. Period 3)"
-                  aria-label="Section (optional)"
+                  placeholder={t("students.sectionPlaceholder")}
+                  aria-label={t("students.sectionAria")}
                   className="input w-full"
                   value={field.state.value}
                   onBlur={field.handleBlur}
@@ -279,7 +280,9 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
                 disabled={!canSubmit || isSubmitting || !team}
                 className="btn btn-primary w-full"
               >
-                {!isSubmitting ? "+ Add Student" : "Submitting..."}
+                {!isSubmitting
+                  ? t("students.addButton")
+                  : t("students.submitting")}
               </button>
             )}
           </form.Subscribe>

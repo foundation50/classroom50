@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -62,31 +63,28 @@ export function SkeletonOverwriteModal({
   onConfirm: () => void
   onClose: () => void
 }) {
+  const { t } = useTranslation()
   const count = paths?.length ?? 0
   return (
     <ConfirmModal
       open={paths !== null}
       dangerous={false}
       needsConfirm={false}
-      title="Update workflow files to the latest version?"
-      confirmLabel="Overwrite"
-      cancelLabel="Keep mine"
+      title={t("orgSettings.overwrite.title")}
+      confirmLabel={t("orgSettings.overwrite.confirmLabel")}
+      cancelLabel={t("orgSettings.overwrite.cancelLabel")}
       description={
         <>
-          <p>
-            {count === 1
-              ? "1 Classroom 50 workflow/script file in your config repo differs from the latest bundled version and will be overwritten:"
-              : `${count} Classroom 50 workflow/script files in your config repo differ from the latest bundled version and will be overwritten:`}
-          </p>
+          <p>{t("orgSettings.overwrite.body", { count })}</p>
           <ul className="mt-2 list-disc space-y-0.5 pl-5 font-mono text-xs">
             {paths?.map((p) => (
               <li key={p}>{p}</li>
             ))}
           </ul>
           <p className="mt-3">
-            If you customized any of these files, overwriting resets your
-            changes to the bundled version — choose <strong>Keep mine</strong>{" "}
-            to leave them untouched and continue with everything else.
+            {t("orgSettings.overwrite.warning_prefix")}{" "}
+            <strong>{t("orgSettings.overwrite.keepMine")}</strong>{" "}
+            {t("orgSettings.overwrite.warning_suffix")}
           </p>
         </>
       }

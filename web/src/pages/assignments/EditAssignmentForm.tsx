@@ -1,4 +1,5 @@
 import { useMutation } from "@tanstack/react-query"
+import { useTranslation } from "react-i18next"
 import CreateAssignmentForm, {
   assignmentToFormValues,
 } from "./CreateAssignmentForm"
@@ -34,6 +35,7 @@ const EditAssignmentForm = ({
   // View the assignment config read-only (e.g. an archived classroom).
   readOnly?: boolean
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const editAssignmentMutation = useMutation<
     CreateAssignmentResult,
@@ -51,7 +53,7 @@ const EditAssignmentForm = ({
       loading={!defaultData}
       fallback={
         <div className="flex">
-          <Spinner className="m-auto" label="Loading assignment" />
+          <Spinner className="m-auto" label={t("assignmentSettings.loading")} />
         </div>
       }
     >

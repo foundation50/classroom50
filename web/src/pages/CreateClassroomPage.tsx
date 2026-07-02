@@ -1,5 +1,6 @@
 import { useParams, useNavigate } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useTranslation } from "react-i18next"
 
 import { createClassroomFilesWithConflictRetry } from "@/hooks/github/mutations"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -23,7 +24,8 @@ import type {
 } from "@/api/mutations/classrooms"
 
 const CreateClassroomPage = () => {
-  useDocumentTitle("New Classroom")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.newClassroom"))
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -58,7 +60,7 @@ const CreateClassroomPage = () => {
       }
       notify({
         tone: "error",
-        message: `Couldn't create classroom: ${err.message}`,
+        message: t("toasts.classroomCreateFailed", { message: err.message }),
       })
     },
     onSuccess: (_result, variables) => {
@@ -71,7 +73,7 @@ const CreateClassroomPage = () => {
       notify({
         tone: "success",
         durationMs: 6000,
-        message: "Classroom created. It may take a moment to appear.",
+        message: t("toasts.classroomCreated"),
       })
       navigate({
         to: "/$org/$classroom",
@@ -81,7 +83,7 @@ const CreateClassroomPage = () => {
   })
 
   if (!org) {
-    return <MissingParams message="Missing organization." />
+    return <MissingParams message={t("classes.missingOrg")} />
   }
 
   return (
@@ -89,12 +91,12 @@ const CreateClassroomPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="New Classroom" />
+          <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
           <RequireTeacher allow="owner">
             <div className="flex justify-between">
               <div>
                 <h1 className="text-xl pt-8 pb-10 font-bold">
-                  Create Classroom
+                  {t("classes.createTitle")}
                 </h1>
               </div>
             </div>

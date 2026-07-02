@@ -28,6 +28,13 @@ The token exchange goes through a Cloudflare Worker proxy (which holds the clien
 
 If no `VITE_GITHUB_CLIENT_ID` is set, the app falls back to a client ID previously saved in the browser's localStorage (from older builds that had a client ID input on the login screen).
 
+## Languages
+
+English is built in; other languages are user-installable at runtime as
+sideloadable JSON language packs (account menu → Language). See
+[src/locales/README.md](src/locales/README.md) for the pack format, validation
+rules, and the translate-`en.json`-with-an-LLM workflow.
+
 ## Deployment
 
 Pushes to `main` deploy to [classroom50.org](https://classroom50.org) via GitHub Pages (`.github/workflows/deploy.yml`). The production client ID comes from the `VITE_GITHUB_CLIENT_ID` repository variable (Settings → Secrets and variables → Actions → Variables) — it is a public identifier, not a secret.

@@ -1,4 +1,5 @@
 import { useEffect, useId, useRef } from "react"
+import { useTranslation } from "react-i18next"
 import { ExternalLink, X } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
@@ -25,6 +26,7 @@ export const StudentProfileModal = ({
 }) => {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
+  const { t } = useTranslation()
 
   // Mounted only while a profile is selected (caller gates on `profileStudent`
   // + remounts via `key`), so open once on mount; ESC/backdrop/X fire onClose,
@@ -42,14 +44,14 @@ export const StudentProfileModal = ({
 
   const statusLabel =
     student.enrollment_status === "enrolled"
-      ? "Enrolled"
+      ? t("components.modals.studentProfile.statusEnrolled")
       : student.enrollment_status === "invited"
-        ? "Invited"
+        ? t("components.modals.studentProfile.statusInvited")
         : "—"
 
   const rows: ProfileRow[] = [
     {
-      label: "GitHub",
+      label: t("components.modals.studentProfile.github"),
       value: student.username ? (
         <a
           className="link link-hover inline-flex items-center gap-1"
@@ -60,12 +62,23 @@ export const StudentProfileModal = ({
           <GitHub aria-hidden="true" className="size-4" />@{student.username}
         </a>
       ) : (
-        <span className="text-base-content/70">Not linked yet</span>
+        <span className="text-base-content/70">
+          {t("components.modals.studentProfile.notLinkedYet")}
+        </span>
       ),
     },
-    { label: "Email", value: student.email || "—" },
-    { label: "Section", value: student.section?.trim() || "—" },
-    { label: "Enrollment", value: statusLabel },
+    {
+      label: t("components.modals.studentProfile.email"),
+      value: student.email || "—",
+    },
+    {
+      label: t("components.modals.studentProfile.section"),
+      value: student.section?.trim() || "—",
+    },
+    {
+      label: t("components.modals.studentProfile.enrollment"),
+      value: statusLabel,
+    },
   ]
 
   return (
@@ -79,7 +92,7 @@ export const StudentProfileModal = ({
         <form method="dialog">
           <button
             className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-            aria-label="Close"
+            aria-label={t("common.close")}
           >
             <X className="size-4" aria-hidden="true" />
           </button>
@@ -125,15 +138,15 @@ export const StudentProfileModal = ({
             rel="noreferrer"
             title={repoName}
           >
-            <GitHub aria-hidden="true" className="size-4" /> Open assignment
-            repo
+            <GitHub aria-hidden="true" className="size-4" />{" "}
+            {t("components.modals.studentProfile.openRepo")}
             <ExternalLink aria-hidden="true" className="size-3.5" />
           </a>
         ) : null}
       </div>
 
       <form method="dialog" className="modal-backdrop">
-        <button>close</button>
+        <button>{t("common.close")}</button>
       </form>
     </dialog>
   )
