@@ -59,6 +59,7 @@ edits are safe: the next run reads the published pack back as its baseline and
 only re-touches strings whose English changed.
 
 ### Rules the installer enforces
+
 Packs are validated on install and re-validated every time they are loaded
 from storage. A pack is rejected when it breaks any of these:
 

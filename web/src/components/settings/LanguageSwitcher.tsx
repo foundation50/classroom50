@@ -1,5 +1,14 @@
 import { useState } from "react"
-import { Check, ChevronRight, Loader2, Trash2, Upload, X } from "lucide-react"
+import {
+  Check,
+  ChevronRight,
+  Copy,
+  Download,
+  Loader2,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
@@ -7,8 +16,10 @@ import {
   BASE_LANG,
   LanguagePackError,
   type PackPreview,
+  type RegistryLanguage,
   UndetectableCodeError,
   languageLabel,
+  shareUrlForLang,
 } from "@/i18n/customLocale"
 
 // Settings UI for language packs. Uploading/fetching only *prepares* a pack
@@ -28,6 +39,8 @@ export const LanguageSwitcher = ({
     setLang,
     prepareFromFile,
     prepareFromUrl,
+    prepareFromBuiltIn,
+    availableBuiltInLangs,
     commitPack,
     removePack,
     packCoverages,
@@ -41,6 +54,16 @@ export const LanguageSwitcher = ({
   const [preview, setPreview] = useState<PackPreview | null>(null)
   const [installOpen, setInstallOpen] = useState(false)
   const [installedOpen, setInstalledOpen] = useState(false)
+  const [browseOpen, setBrowseOpen] = useState(false)
+  const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
+  const [registryBusy, setRegistryBusy] = useState(false)
+  const [registryError, setRegistryError] = useState<string | null>(null)
+  const [preparingCode, setPreparingCode] = useState<string | null>(null)
+  const [shareOpen, setShareOpen] = useState(false)
+  const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
+    null,
+  )
+  const [shareCopied, setShareCopied] = useState(false)
 
   const showError = (err: unknown) => {
     if (err instanceof UndetectableCodeError) {
@@ -81,6 +104,37 @@ export const LanguageSwitcher = ({
     await runPrepare(() => prepareFromUrl(url.trim(), code.trim() || undefined))
   }
 
+  // Lazily load the registry the first time the Browse section opens. Only
+  // packs that are actually reachable (HEAD-probed) are offered, so a listed-
+  // but-undeployed language never appears as a dead entry.
+  const loadRegistry = async () => {
+    if (registry || registryBusy) return
+    setRegistryBusy(true)
+    setRegistryError(null)
+    try {
+      setRegistry(await availableBuiltInLangs())
+    } catch (err) {
+      setRegistryError(
+        err instanceof LanguagePackError
+          ? err.message
+          : t("language.errorRegistry"),
+      )
+    } finally {
+      setRegistryBusy(false)
+    }
+  }
+
+  const handleBrowseToggle = (open: boolean) => {
+    setBrowseOpen(open)
+    if (open) void loadRegistry()
+  }
+
+  const handleBuiltIn = async (builtInCode: string) => {
+    setPreparingCode(builtInCode)
+    await runPrepare(() => prepareFromBuiltIn(builtInCode))
+    setPreparingCode(null)
+  }
+
   const handleConfirm = async () => {
     if (!preview) return
     setBusy(true)
@@ -104,8 +158,30 @@ export const LanguageSwitcher = ({
     setError(null)
   }
 
+  // The language to share: an explicit pick, else the active language. Falls
+  // back to the base language so the control is always meaningful.
+  const shareCode = shareCodeOverride ?? lang ?? BASE_LANG
+  const shareUrl = shareUrlForLang(shareCode)
+
+  const handleCopyShare = async () => {
+    if (!shareUrl) return
+    try {
+      await navigator.clipboard.writeText(shareUrl)
+      setShareCopied(true)
+      window.setTimeout(() => setShareCopied(false), 2000)
+    } catch {
+      // Clipboard blocked (permissions/insecure context): leave the URL visible
+      // in the field so the user can copy it manually.
+      setShareCopied(false)
+    }
+  }
+
   // One storage read per render for all installed packs (vs. one per pack).
   const coverages = installedLangs.length > 0 ? packCoverages() : {}
+
+  // Registry languages not already installed — the ones worth offering.
+  const installedSet = new Set(installedLangs)
+  const offered = (registry ?? []).filter((l) => !installedSet.has(l.code))
 
   return (
     <div className="flex flex-col gap-5">
@@ -130,6 +206,80 @@ export const LanguageSwitcher = ({
           ))}
         </select>
       </div>
+
+      <details
+        className="collapse border border-base-300 rounded-box bg-base-100"
+        open={shareOpen}
+        onToggle={(e) => setShareOpen((e.target as HTMLDetailsElement).open)}
+      >
+        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            className={`size-4 transition-transform ${
+              shareOpen ? "rotate-90" : ""
+            }`}
+            aria-hidden="true"
+          />
+          {t("language.shareTitle")}
+        </summary>
+        <div className="collapse-content">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-base-content/70">
+              {t("language.shareHint")}
+            </p>
+
+            <div className="flex flex-col gap-1">
+              <label className="label py-0" htmlFor="lang-share-select">
+                <span className="label-text text-xs">
+                  {t("language.shareLanguageLabel")}
+                </span>
+              </label>
+              <select
+                id="lang-share-select"
+                className="select select-bordered select-sm w-full"
+                value={shareCode}
+                onChange={(e) => {
+                  setShareCodeOverride(e.target.value)
+                  setShareCopied(false)
+                }}
+              >
+                {availableLangs.map((c) => (
+                  <option key={c} value={c}>
+                    {c === BASE_LANG
+                      ? t("language.baseName")
+                      : languageLabel(c, lang)}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div className="flex flex-row gap-2">
+              <input
+                type="text"
+                readOnly
+                className="input input-bordered input-sm flex-1 min-w-0"
+                value={shareUrl ?? ""}
+                aria-label={t("language.shareUrlLabel")}
+                onFocus={(e) => e.currentTarget.select()}
+              />
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                onClick={() => void handleCopyShare()}
+                disabled={!shareUrl}
+              >
+                {shareCopied ? (
+                  <Check className="size-4" aria-hidden="true" />
+                ) : (
+                  <Copy className="size-4" aria-hidden="true" />
+                )}
+                {shareCopied
+                  ? t("language.shareCopied")
+                  : t("language.shareCopy")}
+              </button>
+            </div>
+          </div>
+        </div>
+      </details>
 
       {installedLangs.length > 0 && (
         <details
@@ -179,6 +329,78 @@ export const LanguageSwitcher = ({
           </div>
         </details>
       )}
+
+      <details
+        className="collapse border border-base-300 rounded-box bg-base-100"
+        open={browseOpen}
+        onToggle={(e) =>
+          handleBrowseToggle((e.target as HTMLDetailsElement).open)
+        }
+      >
+        <summary className="collapse-title flex items-center gap-2 text-sm font-bold [&::-webkit-details-marker]:hidden">
+          <ChevronRight
+            className={`size-4 transition-transform ${
+              browseOpen ? "rotate-90" : ""
+            }`}
+            aria-hidden="true"
+          />
+          {t("language.browseTitle")}
+        </summary>
+        <div className="collapse-content">
+          <div className="flex flex-col gap-3">
+            <p className="text-xs text-base-content/70">
+              {t("language.browseHint")}
+            </p>
+
+            {registryBusy && (
+              <div className="flex items-center gap-2 text-sm text-base-content/70">
+                <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                {t("language.browseLoading")}
+              </div>
+            )}
+
+            {registryError && (
+              <div className="alert alert-error" role="alert">
+                <span className="text-sm">{registryError}</span>
+              </div>
+            )}
+
+            {!registryBusy &&
+              !registryError &&
+              registry !== null &&
+              offered.length === 0 && (
+                <p className="text-sm text-base-content/70">
+                  {t("language.browseEmpty")}
+                </p>
+              )}
+
+            {offered.length > 0 && (
+              <ul className="menu bg-base-200 rounded-box w-full gap-1">
+                {offered.map((l) => (
+                  <li key={l.code}>
+                    <button
+                      type="button"
+                      className="flex flex-row items-center justify-between"
+                      onClick={() => void handleBuiltIn(l.code)}
+                      disabled={busy}
+                    >
+                      <span>{languageLabel(l.code, lang)}</span>
+                      {busy && preparingCode === l.code ? (
+                        <Loader2
+                          className="size-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : (
+                        <Download className="size-4" aria-hidden="true" />
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </details>
 
       <details
         className="collapse border border-base-300 rounded-box bg-base-100"

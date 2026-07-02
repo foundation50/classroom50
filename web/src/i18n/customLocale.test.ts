@@ -1,16 +1,22 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
+  LANG_QUERY_PARAM,
   LanguagePackError,
   MAX_PACK_BYTES,
   UndetectableCodeError,
+  applyLangFromQuery,
+  availableBuiltInLangs,
   coverage,
+  fetchRegistry,
   flattenBundle,
   inferLangCode,
   missingKeys,
   normalizeLangCode,
   parseBundle,
+  prepareFromBuiltIn,
   prepareFromUrl,
+  shareUrlForLang,
 } from "./customLocale"
 
 // The security-relevant guarantees of the sideload layer live in these pure
@@ -196,6 +202,298 @@ describe("loadFromUrl response handling", () => {
     expect(preview.coverage).toBeLessThan(1)
     // The sample surfaces real translated strings pulled from the bundle.
     expect(preview.sample).toContain("Studentin")
+  })
+})
+
+describe("fetchRegistry", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("returns valid codes, dropping base, dupes, and malformed entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              languages: [
+                { code: "ja" },
+                { code: "zh-CN" },
+                { code: "ja" }, // duplicate
+                { code: "en" }, // base language, excluded
+                { code: "!!" }, // invalid code
+                { notcode: "x" }, // malformed entry
+              ],
+            }),
+            { status: 200 },
+          ),
+      ),
+    )
+    const langs = await fetchRegistry()
+    expect(langs.map((l) => l.code)).toEqual(["ja", "zh-CN"])
+  })
+
+  it("returns an empty list when the manifest has no usable entries", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ languages: [] }), { status: 200 }),
+      ),
+    )
+    expect(await fetchRegistry()).toEqual([])
+  })
+
+  it("throws on a non-2xx response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("nope", { status: 500 })),
+    )
+    await expect(fetchRegistry()).rejects.toThrow(LanguagePackError)
+  })
+
+  it("throws on a malformed manifest shape", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ nope: true }), { status: 200 }),
+      ),
+    )
+    await expect(fetchRegistry()).rejects.toThrow(/malformed/)
+  })
+
+  it("throws a friendly error when the fetch itself fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("network down")
+      }),
+    )
+    await expect(fetchRegistry()).rejects.toThrow(LanguagePackError)
+  })
+})
+
+describe("availableBuiltInLangs", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("returns only packs whose HEAD probe succeeds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(input)
+        if (/index\.json$/.test(u)) {
+          return new Response(
+            JSON.stringify({
+              languages: [{ code: "ja" }, { code: "es" }, { code: "de" }],
+            }),
+            { status: 200 },
+          )
+        }
+        // HEAD probes: ja + es exist, de is missing (drift).
+        if (init?.method === "HEAD") {
+          const ok = /\/(ja|es)\.json$/.test(u)
+          return new Response(null, { status: ok ? 200 : 404 })
+        }
+        return new Response("{}", { status: 200 })
+      }),
+    )
+    const langs = await availableBuiltInLangs()
+    expect(langs.map((l) => l.code).sort()).toEqual(["es", "ja"])
+  })
+
+  it("drops a pack whose HEAD probe errors out", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+        const u = String(input)
+        if (/index\.json$/.test(u)) {
+          return new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+            status: 200,
+          })
+        }
+        if (init?.method === "HEAD") throw new TypeError("network")
+        return new Response("{}", { status: 200 })
+      }),
+    )
+    expect(await availableBuiltInLangs()).toEqual([])
+  })
+
+  it("propagates a manifest fetch failure", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("x", { status: 500 })),
+    )
+    await expect(availableBuiltInLangs()).rejects.toThrow(LanguagePackError)
+  })
+})
+
+describe("prepareFromBuiltIn", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("fetches <base>/<code>.json and previews it with the given code", async () => {
+    let requestedUrl = ""
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      requestedUrl = String(input)
+      return new Response(JSON.stringify({ nav: { roleStudent: "受講者" } }), {
+        status: 200,
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const preview = await prepareFromBuiltIn("ja")
+    expect(preview.code).toBe("ja")
+    expect(preview.sample).toContain("受講者")
+    // Resolves to the registry's <code>.json URL.
+    expect(requestedUrl).toMatch(/\/ja\.json$/)
+  })
+
+  it("rejects an invalid code before fetching", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(prepareFromBuiltIn("!!")).rejects.toThrow(LanguagePackError)
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe("shareUrlForLang", () => {
+  const realWindow = globalThis.window
+  afterEach(() => {
+    if (realWindow === undefined) {
+      // @ts-expect-error - restore the node env's missing window
+      delete globalThis.window
+    } else {
+      globalThis.window = realWindow
+    }
+  })
+
+  it("builds an origin+path URL with ?lang=<code>, dropping other params", () => {
+    vi.stubGlobal("window", {
+      location: { href: "https://app.example/class/42?foo=1#x" },
+    })
+    const url = shareUrlForLang("es")
+    expect(url).toBe("https://app.example/class/42?lang=es")
+  })
+
+  it("returns null when there's no window", () => {
+    vi.stubGlobal("window", {
+      location: { href: "https://app.example/" },
+    })
+    expect(shareUrlForLang("pt-BR")).toBe("https://app.example/?lang=pt-BR")
+    vi.unstubAllGlobals()
+    // @ts-expect-error - simulate SSR/no-window
+    delete globalThis.window
+    expect(shareUrlForLang("es")).toBeNull()
+  })
+
+  it("rejects an invalid code (returns null rather than a bad URL)", () => {
+    vi.stubGlobal("window", {
+      location: { href: "https://app.example/" },
+    })
+    expect(shareUrlForLang("not a code!!")).toBeNull()
+  })
+})
+
+describe("applyLangFromQuery", () => {
+  const realWindow = globalThis.window
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    if (realWindow === undefined) {
+      // @ts-expect-error - restore the node env's missing window
+      delete globalThis.window
+    } else {
+      globalThis.window = realWindow
+    }
+  })
+
+  // Minimal window stub: a mutable location URL + a history.replaceState that
+  // records the URL it was asked to set, so we can assert the param is stripped.
+  const stubWindow = (href: string) => {
+    let currentHref = href
+    const replaced: string[] = []
+    const win = {
+      get location() {
+        return { href: currentHref } as Location
+      },
+      history: {
+        state: null,
+        replaceState: (_state: unknown, _title: string, url: string) => {
+          replaced.push(url)
+          // Reflect the new URL so a subsequent read sees the stripped param.
+          currentHref = new URL(url, currentHref).href
+        },
+      },
+    }
+    vi.stubGlobal("window", win)
+    return { replaced }
+  }
+
+  it("does nothing (and doesn't fetch) when no ?lang= is present", async () => {
+    stubWindow("https://app.example/dashboard")
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await applyLangFromQuery()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("ignores an invalid ?lang= code without fetching, and strips the param", async () => {
+    const { replaced } = stubWindow(
+      `https://app.example/?${LANG_QUERY_PARAM}=not_a_code!!`,
+    )
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await applyLangFromQuery()
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(replaced.at(-1)).not.toContain(LANG_QUERY_PARAM)
+  })
+
+  it("ignores a valid code the registry does not offer (no pack fetch)", async () => {
+    stubWindow(`https://app.example/?${LANG_QUERY_PARAM}=zz`)
+    const fetchMock = vi.fn(
+      async (_input: RequestInfo | URL) =>
+        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    await applyLangFromQuery()
+    // Only the registry manifest is fetched; no <code>.json for an unoffered code.
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => /index\.json$/.test(u))).toBe(true)
+    expect(urls.some((u) => /\/zz\.json$/.test(u))).toBe(false)
+  })
+
+  it("fetches the pack for a registry-offered code and strips the param", async () => {
+    const { replaced } = stubWindow(
+      `https://app.example/?${LANG_QUERY_PARAM}=ja&keep=1`,
+    )
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        })
+      }
+      return new Response(JSON.stringify({ nav: { roleStudent: "受講者" } }), {
+        status: 200,
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await applyLangFromQuery()
+
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => /\/ja\.json$/.test(u))).toBe(true)
+    // Param stripped, but unrelated query params are preserved.
+    const finalUrl = replaced.at(-1) ?? ""
+    expect(finalUrl).not.toContain(`${LANG_QUERY_PARAM}=`)
+    expect(finalUrl).toContain("keep=1")
   })
 })
 
