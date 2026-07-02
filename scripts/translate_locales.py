@@ -246,21 +246,25 @@ def main() -> int:
         return 2
 
     prompt_path = args.prompt or (args.base.parent / "TRANSLATION_PROMPT.md")
-    if not args.base.exists():
+    try:
+        base_raw = args.base.read_text(encoding="utf-8")
+    except FileNotFoundError:
         eprint(f"error: base file not found: {args.base}")
         return 2
-    if not prompt_path.exists():
+    try:
+        system_prompt = prompt_path.read_text(encoding="utf-8")
+    except FileNotFoundError:
         eprint(f"error: prompt file not found: {prompt_path}")
         return 2
-
-    base_raw = args.base.read_text(encoding="utf-8")
     base = json.loads(base_raw)
-    system_prompt = prompt_path.read_text(encoding="utf-8")
 
     current_raw: str | None = None
-    if args.current and args.current.exists():
-        current_raw = args.current.read_text(encoding="utf-8")
-        eprint(f"[{args.code}] read-back baseline: {args.current}")
+    if args.current:
+        try:
+            current_raw = args.current.read_text(encoding="utf-8")
+            eprint(f"[{args.code}] read-back baseline: {args.current}")
+        except FileNotFoundError:
+            eprint(f"[{args.code}] no existing translation — first-time generation")
     else:
         eprint(f"[{args.code}] no existing translation — first-time generation")
 
