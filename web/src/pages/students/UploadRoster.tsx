@@ -1,5 +1,6 @@
 import { HardDriveUpload, X } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
@@ -109,6 +110,7 @@ const UploadRoster = ({
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
+  const { t } = useTranslation()
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
@@ -172,7 +174,7 @@ const UploadRoster = ({
       })
       setPhase("preview")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not read file")
+      setError(err instanceof Error ? err.message : t("students.couldNotReadFile"))
       setPhase("error")
     } finally {
       input.value = ""
@@ -186,7 +188,7 @@ const UploadRoster = ({
     setProgress({
       processed: 0,
       total: usernames.length,
-      message: "Starting import...",
+      message: t("students.startingImport"),
     })
 
     try {
@@ -202,7 +204,7 @@ const UploadRoster = ({
       onSuccess?.(importResult)
     } catch (err) {
       console.error(err)
-      setError(err instanceof Error ? err.message : "Import failed")
+      setError(err instanceof Error ? err.message : t("students.importFailed"))
       setPhase("error")
     }
   }
@@ -216,9 +218,9 @@ const UploadRoster = ({
     <>
       <div className="card card-border bg-base-100 shadow-sm">
         <div className="card-body">
-          <p className="font-bold">Upload Roster</p>
+          <p className="font-bold">{t("students.uploadRosterTitle")}</p>
           <span>
-            Upload a CSV or text file with one GitHub username per line.
+            {t("students.uploadRosterHint")}
           </span>
           <input
             ref={fileInputRef}
@@ -233,10 +235,10 @@ const UploadRoster = ({
             className="btn"
           >
             <HardDriveUpload aria-hidden="true" />
-            Choose File
+            {t("students.chooseFile")}
           </button>
           <p className="text-center text-base-content/70 text-sm">
-            Supported: .csv, .txt
+            {t("students.supportedFormats")}
           </p>
         </div>
       </div>
@@ -258,10 +260,10 @@ const UploadRoster = ({
           <div className="flex items-start justify-between gap-4">
             <div>
               <h3 id={titleId} className="text-lg font-bold">
-                Import Students
+                {t("students.importStudentsTitle")}
               </h3>
               {fileName && (
-                <p className="text-sm opacity-70 mt-1">File: {fileName}</p>
+                <p className="text-sm opacity-70 mt-1">{t("students.fileLabel", { fileName })}</p>
               )}
             </div>
 
@@ -269,7 +271,7 @@ const UploadRoster = ({
               <button
                 type="button"
                 className="btn btn-sm btn-circle btn-ghost"
-                aria-label="Close"
+                aria-label={t("common.close")}
                 onClick={reset}
               >
                 <X size={16} aria-hidden="true" />
@@ -281,8 +283,7 @@ const UploadRoster = ({
             <div className="mt-6">
               <div className="alert mb-4">
                 <span>
-                  Found <strong>{usernames.length}</strong> GitHub usernames
-                  {usernames.length === 1 ? "" : "s"} to import.
+                  {t("students.usernamesFound", { count: usernames.length })}
                 </span>
               </div>
 
@@ -292,7 +293,7 @@ const UploadRoster = ({
                     <thead>
                       <tr>
                         <th scope="col">#</th>
-                        <th scope="col">GitHub username</th>
+                        <th scope="col">{t("students.githubUsernameColumn")}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -309,13 +310,13 @@ const UploadRoster = ({
                 </div>
               ) : (
                 <div className="alert alert-warning">
-                  No valid GitHub usernames were found in this file.
+                  {t("students.noValidUsernames")}
                 </div>
               )}
 
               <div className="modal-action">
                 <button type="button" className="btn btn-ghost" onClick={reset}>
-                  Cancel
+                  {t("common.cancel")}
                 </button>
 
                 <button
@@ -324,8 +325,7 @@ const UploadRoster = ({
                   disabled={usernames.length === 0}
                   onClick={startImport}
                 >
-                  Import {usernames.length} student
-                  {usernames.length === 1 ? "" : "s"}
+                  {t("students.importCount", { count: usernames.length })}
                 </button>
               </div>
             </div>
@@ -343,15 +343,17 @@ const UploadRoster = ({
 
               <div className="mt-2 flex justify-between text-sm opacity-70">
                 <span>
-                  {progress.processed} / {progress.total} processed
+                  {t("students.progressProcessed", {
+                    processed: progress.processed,
+                    total: progress.total,
+                  })}
                 </span>
-                <span>{progressPercent}%</span>
+                <span>{t("students.progressPercent", { percent: progressPercent })}</span>
               </div>
 
               <div className="mt-6 alert">
                 <span>
-                  Keep this tab open while the import is running. Students are
-                  being validated and added to the classroom.
+                  {t("students.keepTabOpen")}
                 </span>
               </div>
             </div>
@@ -361,14 +363,13 @@ const UploadRoster = ({
             <div className="mt-6 space-y-4">
               <div className="alert alert-success">
                 <span>
-                  Added <strong>{result.addedStudents.length}</strong> student
-                  {result.addedStudents.length === 1 ? "" : "s"}
+                  {t("students.addedCount", { count: result.addedStudents.length })}
                 </span>
               </div>
 
               {result.addedStudents.length > 0 && (
                 <ImportResultSection
-                  title="Added"
+                  title={t("students.resultAdded")}
                   rows={result.addedStudents.map((student) => ({
                     key: student.username,
                     label: student.username,
@@ -381,7 +382,7 @@ const UploadRoster = ({
 
               {result.skippedStudents.length > 0 && (
                 <ImportResultSection
-                  title="Skipped"
+                  title={t("students.resultSkipped")}
                   rows={result.skippedStudents.map((student) => ({
                     key: student.username,
                     label: student.username,
@@ -394,7 +395,7 @@ const UploadRoster = ({
                 (teamResult) => teamResult.status === "failed",
               ) && (
                 <ImportResultSection
-                  title="Team add failures"
+                  title={t("students.resultTeamFailures")}
                   rows={result.teamResults
                     .filter((teamResult) => teamResult.status === "failed")
                     .map((teamResult) => ({
@@ -402,7 +403,7 @@ const UploadRoster = ({
                       label: teamResult.username,
                       detail:
                         teamResult.message ??
-                        "Could not add this user to the team",
+                        t("students.couldNotAddToTeam"),
                     }))}
                 />
               )}
@@ -413,7 +414,7 @@ const UploadRoster = ({
                   className="btn btn-primary"
                   onClick={reset}
                 >
-                  Done
+                  {t("students.done")}
                 </button>
               </div>
             </div>
@@ -422,12 +423,12 @@ const UploadRoster = ({
           {phase === "error" && (
             <div className="mt-6">
               <div className="alert alert-error" role="alert">
-                <span>{error ?? "Something went wrong."}</span>
+                <span>{error ?? t("students.somethingWentWrong")}</span>
               </div>
 
               <div className="modal-action">
                 <button type="button" className="btn btn-ghost" onClick={reset}>
-                  Close
+                  {t("common.close")}
                 </button>
 
                 <button
@@ -435,7 +436,7 @@ const UploadRoster = ({
                   className="btn btn-primary"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  Choose another file
+                  {t("students.chooseAnotherFile")}
                 </button>
               </div>
             </div>
@@ -445,7 +446,7 @@ const UploadRoster = ({
         {phase !== "importing" && (
           <form method="dialog" className="modal-backdrop">
             <button type="button" onClick={reset}>
-              close
+              {t("common.close")}
             </button>
           </form>
         )}
