@@ -6,7 +6,7 @@ import {
   availableLangs as readAvailableLangs,
   commitPack,
   installedCodes as readInstalledCodes,
-  packCoverage,
+  packCoverages,
   prepareFromFile,
   prepareFromUrl,
   removePack,
@@ -46,7 +46,7 @@ export function useLanguage() {
     prepareFromUrl,
     commitPack,
     removePack,
-    packCoverage,
+    packCoverages,
   }
 }
 

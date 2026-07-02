@@ -30,7 +30,7 @@ export const LanguageSwitcher = ({
     prepareFromUrl,
     commitPack,
     removePack,
-    packCoverage,
+    packCoverages,
   } = useLanguage()
 
   const [code, setCode] = useState("")
@@ -102,6 +102,9 @@ export const LanguageSwitcher = ({
     setError(null)
   }
 
+  // One storage read per render for all installed packs (vs. one per pack).
+  const coverages = installedLangs.length > 0 ? packCoverages() : {}
+
   return (
     <div className="flex flex-col gap-5">
       <div className="flex flex-col gap-1">
@@ -133,13 +136,13 @@ export const LanguageSwitcher = ({
           </span>
           <ul className="menu bg-base-200 rounded-box w-full gap-1">
             {installedLangs.map((c) => {
-              const cov = packCoverage(c)
+              const cov = coverages[c]
               return (
                 <li key={c}>
                   <div className="flex flex-row items-center justify-between">
                     <span className="flex items-center gap-2">
                       {languageLabel(c, lang)}
-                      {cov !== null && cov < 1 && (
+                      {cov !== undefined && cov < 1 && (
                         <span className="badge badge-ghost badge-sm">
                           {Math.round(cov * 100)}%
                         </span>

@@ -99,9 +99,7 @@ export function flattenBundle(input: unknown, prefix = ""): FlatBundle {
 // oversized string never reaches JSON.parse.
 export function parseBundle(text: string): FlatBundle {
   if (byteLength(text) > MAX_PACK_BYTES) {
-    throw new LanguagePackError(
-      `Language pack is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
-    )
+    throw tooLargeError()
   }
   let json: unknown
   try {
@@ -138,7 +136,7 @@ export function languageLabel(code: string, uiLocale?: string): string {
 
 // Common name for a language code (localized to uiLocale, defaulting to the
 // active language), or null when it can't be resolved.
-export function languageName(code: string, uiLocale?: string): string | null {
+function languageName(code: string, uiLocale?: string): string | null {
   if (typeof Intl === "undefined" || typeof Intl.DisplayNames !== "function") {
     return null
   }
@@ -172,6 +170,12 @@ function byteLength(text: string): number {
   }
   // Node fallback for the test environment.
   return Buffer.byteLength(text, "utf8")
+}
+
+function tooLargeError(subject = "Language pack"): LanguagePackError {
+  return new LanguagePackError(
+    `${subject} is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
+  )
 }
 
 // ---- Storage ----------------------------------------------------------------
@@ -257,8 +261,9 @@ let installedSnapshot: string[] = []
 let availableSnapshot: string[] = [BASE_LANG]
 const listeners = new Set<() => void>()
 
-function refreshSnapshot(): void {
-  const codes = Object.keys(readStoredPacks())
+// Callers that already read storage pass their codes to avoid a second
+// JSON.parse + re-validation pass.
+function refreshSnapshot(codes = Object.keys(readStoredPacks())): void {
   const sameInstalled =
     codes.length === installedSnapshot.length &&
     codes.every((c, i) => c === installedSnapshot[i])
@@ -286,7 +291,7 @@ export function hydratePacks(): string[] {
   for (const pack of Object.values(packs)) {
     registerPack(pack)
   }
-  refreshSnapshot()
+  refreshSnapshot(codes)
   return codes
 }
 
@@ -305,7 +310,7 @@ export function installPack(codeInput: string, bundle: FlatBundle): string {
   packs[code] = pack
   writeStoredPacks(packs)
   registerPack(pack)
-  refreshSnapshot()
+  refreshSnapshot(Object.keys(packs))
   return code
 }
 
@@ -315,7 +320,7 @@ export function removePack(code: string): void {
   delete packs[code]
   writeStoredPacks(packs)
   i18n.removeResourceBundle(code, NAMESPACE)
-  refreshSnapshot()
+  refreshSnapshot(Object.keys(packs))
   if (getStoredLang() === code) {
     void selectLang(BASE_LANG)
   }
@@ -345,10 +350,15 @@ export function coverage(bundle: FlatBundle): number {
   return translated / baseKeys.length
 }
 
-// Coverage for an installed pack by code (0..1), or null if not installed.
-export function packCoverage(code: string): number | null {
-  const pack = readStoredPacks()[code]
-  return pack ? coverage(pack.bundle) : null
+// Coverage for every installed pack, keyed by code. Reads storage once so a UI
+// listing N packs doesn't re-parse + re-validate the whole store N times.
+export function packCoverages(): Record<string, number> {
+  const packs = readStoredPacks()
+  const out: Record<string, number> = {}
+  for (const [code, pack] of Object.entries(packs)) {
+    out[code] = coverage(pack.bundle)
+  }
+  return out
 }
 
 // Switch the active language and persist the choice.
@@ -410,9 +420,7 @@ export async function prepareFromFile(
   code?: string,
 ): Promise<PackPreview> {
   if (file.size > MAX_PACK_BYTES) {
-    throw new LanguagePackError(
-      `File is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
-    )
+    throw tooLargeError("File")
   }
   const resolved = resolveCode(code, file.name)
   const text = await file.text()
@@ -465,9 +473,7 @@ export async function prepareFromUrl(
   const declared = Number(res.headers.get("content-length"))
   if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
     controller.abort()
-    throw new LanguagePackError(
-      `Language pack is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
-    )
+    throw tooLargeError()
   }
 
   const text = await readCappedText(res, controller)
@@ -507,9 +513,7 @@ async function readCappedText(
         total += value.byteLength
         if (total > MAX_PACK_BYTES) {
           controller.abort()
-          throw new LanguagePackError(
-            `Language pack is too large (max ${Math.round(MAX_PACK_BYTES / 1024)}KB)`,
-          )
+          throw tooLargeError()
         }
         chunks.push(value)
       }
@@ -555,5 +559,3 @@ export function subscribeToPackChanges(onChange: () => void): () => void {
     removeStorage()
   }
 }
-
-export { en as baseBundle }

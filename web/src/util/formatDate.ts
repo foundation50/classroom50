@@ -2,6 +2,7 @@ import type { DueMeta } from "@/types/classroom"
 import { formatDistanceToNow } from "date-fns"
 
 import i18n from "@/i18n"
+import { BASE_LANG } from "@/i18n/customLocale"
 
 // Drive Intl formatting off the active language. Bare "en" maps to "en-US" to
 // preserve the exact US-style output the app/tests expect. A sideloaded pack
@@ -9,7 +10,7 @@ import i18n from "@/i18n"
 // "en-US" rather than let every date render throw.
 const resolveLocale = (): string => {
   const lang = i18n.language || "en-US"
-  const candidate = lang === "en" ? "en-US" : lang
+  const candidate = lang === BASE_LANG ? "en-US" : lang
   try {
     Intl.getCanonicalLocales(candidate)
     return candidate
