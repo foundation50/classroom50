@@ -1,6 +1,12 @@
 {
   "common": {
-    "goToDashboard": "Go to dashboard"
+    "goToDashboard": "Go to dashboard",
+    "close": "Close",
+    "cancel": "Cancel",
+    "save": "Save",
+    "loading": "Loading...",
+    "working": "Working...",
+    "skipToMainContent": "Skip to main content"
   },
   "notFound": {
     "title": "Page not found",
@@ -8,5 +14,95 @@
   },
   "missingParams": {
     "message": "This page is missing a required parameter."
+  },
+  "nav": {
+    "appName": "Classroom 50",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu",
+    "primary": "Primary",
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "allClasses": "All Classes",
+    "allAssignments": "All Assignments",
+    "accountMenu": "Account menu",
+    "assignment": "Assignment",
+    "viewAs": "View as",
+    "rolePreviewTooltip": "You are previewing a role. Your real access is unchanged."
+  },
+  "auth": {
+    "signInTitle": "Sign in",
+    "signInSubtitle": "Sign in with your GitHub account to continue.",
+    "exchangingCode": "Exchanging code for access token...",
+    "successTitle": "Authentication successful",
+    "successRedirecting": "Redirecting you to the app...",
+    "signInWithGitHub": "Sign in with GitHub",
+    "useDeviceCode": "Use a device code instead",
+    "footerTagline": "Manage assignments and submissions via GitHub.",
+    "visitDocs": "Visit Classroom 50's docs"
+  },
+  "documentTitle": {
+    "assignments": "Assignments",
+    "assignmentSettings": "Assignment Settings",
+    "students": "Students",
+    "organizations": "Organizations",
+    "getStarted": "Get Started",
+    "publishedResources": "Published Resources",
+    "setup": "Setup",
+    "classroomSettings": "Classroom Settings",
+    "signIn": "Sign in",
+    "organizationSettings": "Organization Settings",
+    "newAssignment": "New Assignment",
+    "acceptAssignment": "Accept Assignment",
+    "members": "Members",
+    "newClassroom": "New Classroom",
+    "classes": "Classes",
+    "mySubmission": "My Submission",
+    "submissions": "Submissions"
+  },
+  "students": {
+    "addTitle": "Add Student",
+    "addHint": "Enter a GitHub username, an email, or both. Students complete their details when they enroll.",
+    "namePlaceholder": "Name (optional)",
+    "usernamePlaceholder": "github-username",
+    "emailPlaceholder": "student@university.edu (optional)",
+    "sectionPlaceholder": "Section (optional, e.g. Period 3)",
+    "keepStudent": "Keep student",
+    "unenrollStudent": "Unenroll student",
+    "added": "Added {{label}}.",
+    "count_one": "{{count}} Student",
+    "count_other": "{{count}} Students"
+  },
+  "language": {
+    "label": "Language",
+    "baseName": "English (base)",
+    "installHint": "Install a language pack: translate the base en.json and load it here.",
+    "codePlaceholder": "Language code (e.g. de)",
+    "uploadFile": "Upload JSON file",
+    "urlPlaceholder": "…or paste a URL",
+    "fetch": "Fetch",
+    "removePack": "Remove {{code}} language pack",
+    "errorCodeFirst": "Enter a language code (e.g. de, fr, ja) first.",
+    "errorUrlRequired": "Enter a URL to fetch the pack from.",
+    "errorGeneric": "Couldn't install the language pack."
+  },
+  "validation": {
+    "githubOrEmailRequired": "Enter a GitHub username or an email.",
+    "validEmail": "Enter a valid email address.",
+    "classroomNameRequired": "Classroom name is required.",
+    "classroomSlugRequired": "Classroom slug is required.",
+    "classroomSlugTaken": "Classroom slug is already taken.",
+    "assignmentSlugTaken": "An assignment \"{{slug}}\" already exists in this classroom.",
+    "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}."
+  },
+  "toasts": {
+    "classroomSettingsSaved": "Classroom settings saved.",
+    "classroomSaveConflict": "Couldn't save — another change landed first. Please try again.",
+    "assignmentCreated": "Assignment created. It may take a moment to appear.",
+    "classroomCreated": "Classroom created. It may take a moment to appear.",
+    "invited": "Invited {{who}} to the {{org}} organization.",
+    "staffAdded": "Added @{{username}} as {{role}}."
+  },
+  "formatDate": {
+    "invalidDate": "Invalid date"
   }
 }
