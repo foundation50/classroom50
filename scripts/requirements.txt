@@ -1,0 +1,2 @@
+# Dependencies for scripts/translate_locales.py (Bedrock translation CI).
+boto3>=1.43.39,<2

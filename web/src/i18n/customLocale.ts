@@ -20,6 +20,19 @@ export const NAMESPACE = "translation"
 export const MAX_PACK_BYTES = 512 * 1024
 export const MAX_PACK_KEYS = 5000
 
+// Registry of machine-generated + human-reviewed packs, served from the
+// classroom50-language-packs repo via GitHub Pages. Base URL is overridable for
+// forks; it hosts one `<code>.json` per language plus an `index.json` manifest.
+export const LANGUAGE_REGISTRY_BASE_URL = (
+  import.meta.env.VITE_LANGUAGE_REGISTRY_URL ||
+  "https://fifty.foundation/classroom50-language-packs"
+).replace(/\/+$/, "")
+
+const REGISTRY_INDEX_URL = `${LANGUAGE_REGISTRY_BASE_URL}/index.json`
+
+// The manifest is a small JSON list; anything larger is suspect.
+const MAX_REGISTRY_BYTES = 64 * 1024
+
 // Dotted keys to translated strings, e.g. { "notFound.title": "..." }. Nested
 // JSON is accepted on input and flattened before validation.
 export type FlatBundle = Record<string, string>
@@ -56,6 +69,18 @@ const packSchema = z.object({
 })
 
 const storedPacksSchema = z.record(z.string(), packSchema)
+
+// Shape of the registry's index.json: { "languages": [{ "code": "ja" }, ...] }.
+// Unknown/invalid entries are tolerated per-item so one bad row doesn't sink
+// the whole list.
+const registryEntrySchema = z.object({ code: langCodeSchema })
+const registrySchema = z.object({
+  languages: z.array(z.unknown()),
+})
+
+export type RegistryLanguage = {
+  code: string
+}
 
 export class LanguagePackError extends Error {
   constructor(message: string) {
@@ -481,6 +506,89 @@ export async function prepareFromUrl(
   return buildPreview(resolved, bundle)
 }
 
+// ---- Built-in registry ------------------------------------------------------
+
+// Fetch the manifest and return the offered language codes. Invalid entries are
+// skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
+export async function fetchRegistry(): Promise<RegistryLanguage[]> {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+  let res: Response
+  try {
+    res = await fetch(REGISTRY_INDEX_URL, { signal: controller.signal })
+  } catch {
+    throw new LanguagePackError(
+      "Couldn't reach the language registry — check your connection or try again.",
+    )
+  } finally {
+    clearTimeout(timeout)
+  }
+
+  if (!res.ok) {
+    throw new LanguagePackError(
+      `Couldn't load the language registry (HTTP ${res.status}).`,
+    )
+  }
+
+  const declared = Number(res.headers.get("content-length"))
+  if (Number.isFinite(declared) && declared > MAX_REGISTRY_BYTES) {
+    controller.abort()
+    throw new LanguagePackError("Language registry manifest is too large.")
+  }
+
+  let text: string
+  try {
+    text = await readCappedText(res, controller, MAX_REGISTRY_BYTES)
+  } catch {
+    throw new LanguagePackError("Language registry manifest is too large.")
+  }
+
+  let json: unknown
+  try {
+    json = JSON.parse(text)
+  } catch {
+    throw new LanguagePackError("Language registry manifest is not valid JSON.")
+  }
+
+  const parsed = registrySchema.safeParse(json)
+  if (!parsed.success) {
+    throw new LanguagePackError("Language registry manifest is malformed.")
+  }
+
+  // Keep well-formed entries, drop the base language, dedupe.
+  const seen = new Set<string>()
+  const langs: RegistryLanguage[] = []
+  for (const entry of parsed.data.languages) {
+    const one = registryEntrySchema.safeParse(entry)
+    if (!one.success) continue
+    const { code } = one.data
+    if (code === BASE_LANG || seen.has(code)) continue
+    seen.add(code)
+    langs.push({ code })
+  }
+  return langs
+}
+
+// Build the registry URL for a language pack.
+function packUrl(code: string): string {
+  return `${LANGUAGE_REGISTRY_BASE_URL}/${code}.json`
+}
+
+// Languages offered for install: exactly what the registry manifest lists. The
+// publish workflow builds index.json from the packs it actually deploys, so a
+// listed code always resolves — no per-pack probe needed (an earlier HEAD-probe
+// pass silently dropped languages when a cross-origin HEAD hiccuped).
+export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
+  return fetchRegistry()
+}
+
+// Preview a registry language by reusing the URL loader (same size/timeout/
+// validation guardrails). The code is explicit so it doesn't rely on inference.
+export async function prepareFromBuiltIn(code: string): Promise<PackPreview> {
+  const resolved = normalizeLangCode(code)
+  return prepareFromUrl(packUrl(resolved), resolved)
+}
+
 // Install and activate a previewed pack — the only step that mutates
 // localStorage and i18next.
 export async function commitPack(
@@ -492,11 +600,93 @@ export async function commitPack(
   return installed
 }
 
+// ---- Deep-link (?lang=) -----------------------------------------------------
+
+export const LANG_QUERY_PARAM = "lang"
+
+// Build a shareable URL that deep-links a language: current origin + path with
+// `?lang=<code>` set. Opening it applies that language (see applyLangFromQuery).
+export function shareUrlForLang(code: string): string | null {
+  if (typeof window === "undefined") return null
+  try {
+    const url = new URL(window.location.href)
+    // Clean landing URL: keep origin + path, set only the language.
+    url.search = ""
+    url.hash = ""
+    url.searchParams.set(LANG_QUERY_PARAM, normalizeLangCode(code))
+    return url.toString()
+  } catch {
+    return null
+  }
+}
+
+// Apply a `?lang=<code>` deep link so a shared URL lands the visitor in that
+// language and makes it their new active language: `en` and already-installed
+// codes just switch; otherwise the code must be offered by the registry, then
+// its pack is fetched, installed, and activated. The chosen language is
+// persisted (via selectLang -> setStoredLang), so it sticks across reloads —
+// this is a durable switch, not a one-visit override. The param is stripped
+// afterward (win or fail) so a reload doesn't re-fire it. Errors are swallowed
+// — a shared link must never break the app. No-op when the param is absent.
+export async function applyLangFromQuery(): Promise<void> {
+  if (typeof window === "undefined") return
+
+  let requested: string | null
+  try {
+    requested = new URL(window.location.href).searchParams.get(LANG_QUERY_PARAM)
+  } catch {
+    return
+  }
+  if (!requested) return
+
+  const stripParam = () => {
+    try {
+      const url = new URL(window.location.href)
+      url.searchParams.delete(LANG_QUERY_PARAM)
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.pathname + url.search + url.hash,
+      )
+    } catch {
+      // A stale param is harmless beyond re-running this once.
+    }
+  }
+
+  try {
+    const parsed = langCodeSchema.safeParse(requested.trim())
+    if (!parsed.success) return
+    const code = parsed.data
+
+    if (code === BASE_LANG) {
+      await selectLang(BASE_LANG)
+      return
+    }
+
+    // Already installed — switch without a network call.
+    if (installedSnapshot.includes(code) || code in readStoredPacks()) {
+      await selectLang(code)
+      return
+    }
+
+    // Only honor codes the registry offers, then fetch + install + activate.
+    const offered = await fetchRegistry()
+    if (!offered.some((l) => l.code === code)) return
+    const preview = await prepareFromBuiltIn(code)
+    await commitPack(preview.code, preview.bundle)
+  } catch {
+    // Invalid code, unavailable pack, or network failure — stay put.
+  } finally {
+    stripParam()
+  }
+}
+
 // Read a response body, aborting if the running byte total exceeds the cap.
 // Falls back to res.text() when the body isn't a readable stream (test mocks).
 async function readCappedText(
   res: Response,
   controller: AbortController,
+  cap: number = MAX_PACK_BYTES,
 ): Promise<string> {
   const body = res.body
   if (!body || typeof body.getReader !== "function") {
@@ -511,7 +701,7 @@ async function readCappedText(
       if (done) break
       if (value) {
         total += value.byteLength
-        if (total > MAX_PACK_BYTES) {
+        if (total > cap) {
           controller.abort()
           throw tooLargeError()
         }

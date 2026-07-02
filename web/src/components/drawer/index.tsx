@@ -922,7 +922,7 @@ export const SidebarFooter = () => {
           className="modal"
           aria-labelledby={langDialogTitleId}
         >
-          <div className="modal-box max-w-md text-base-content">
+          <div className="modal-box flex max-h-[85vh] max-w-lg flex-col overflow-y-auto text-base-content">
             <form method="dialog">
               <button
                 className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"

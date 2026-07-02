@@ -3,10 +3,12 @@ import { useTranslation } from "react-i18next"
 
 import {
   BASE_LANG,
+  availableBuiltInLangs,
   availableLangs as readAvailableLangs,
   commitPack,
   installedCodes as readInstalledCodes,
   packCoverages,
+  prepareFromBuiltIn,
   prepareFromFile,
   prepareFromUrl,
   removePack,
@@ -44,6 +46,8 @@ export function useLanguage() {
     setLang: selectLang,
     prepareFromFile,
     prepareFromUrl,
+    prepareFromBuiltIn,
+    availableBuiltInLangs,
     commitPack,
     removePack,
     packCoverages,
