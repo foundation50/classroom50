@@ -157,7 +157,7 @@ def plural_group_keys(removed_key: str, pack_keys: set[str]) -> list[str]:
         return [removed_key]
     stem = removed_key.rsplit("_", 1)[0]
     siblings = {f"{stem}{suffix}" for suffix in PLURAL_SUFFIXES}
-    return sorted(k for k in pack_keys if k in siblings)
+    return sorted(siblings & pack_keys)
 
 
 def compute_diff(previous: dict, current: dict) -> tuple[list[str], list[str]]:
@@ -361,9 +361,14 @@ def parse_model_json(text: str) -> dict:
     return json.loads(cleaned)
 
 
-def check_key_parity(base: dict, translated: dict) -> list[str]:
-    """Return base keys the translation dropped."""
-    base_keys = set(flatten(base))
+def check_key_parity(base: dict, translated: dict, base_keys: set[str] | None = None) -> list[str]:
+    """Return base keys the translation dropped.
+
+    Pass `base_keys` (a precomputed `set(flatten(base))`) to skip re-flattening a
+    large base that the caller already flattened.
+    """
+    if base_keys is None:
+        base_keys = set(flatten(base))
     trans_keys = set(flatten(translated))
     return sorted(base_keys - trans_keys)
 
@@ -533,7 +538,7 @@ def main() -> int:
         eprint(f"error: prompt file not found: {prompt_path}")
         return 2
     base = json.loads(base_raw)
-
+    base_keys = set(flatten(base))
     current_raw: str | None = None
     if args.current:
         try:
@@ -575,7 +580,6 @@ def main() -> int:
         # Start from the published pack; touch only diffed keys, so every other
         # key (hand edits, extra plural variants) carries through untouched.
         translated = current
-        base_keys = set(flatten(base))
 
         # Delete removed keys (skip any still present in en.json — stale list).
         # For a removed plural form, also sweep the pack's sibling variants
@@ -619,7 +623,7 @@ def main() -> int:
         if translated is None:
             return 1
 
-    missing = check_key_parity(base, translated)
+    missing = check_key_parity(base, translated, base_keys)
     if missing:
         eprint(
             f"[{args.code}] translation is missing {len(missing)} base key(s); "
