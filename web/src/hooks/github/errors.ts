@@ -12,6 +12,11 @@ export class GitHubAPIError extends Error {
   url: string
   body: unknown
   rateLimit: GitHubRateLimit
+  // Raw X-GitHub-SSO response header, when present. GitHub sets this on a
+  // 403 (and omits SSO-gated orgs from multi-org reads) when the token lacks a
+  // live SAML SSO session for the org/enterprise. `null` when the header was
+  // absent. See parseSsoAuthorizationUrl for extracting the authorization URL.
+  ssoHeader: string | null
 
   constructor(args: {
     status: number
@@ -19,6 +24,7 @@ export class GitHubAPIError extends Error {
     message: string
     body: unknown
     rateLimit: GitHubRateLimit
+    ssoHeader?: string | null
   }) {
     super(args.message)
     this.name = "GitHubAPIError"
@@ -26,6 +32,7 @@ export class GitHubAPIError extends Error {
     this.url = args.url
     this.body = args.body
     this.rateLimit = args.rateLimit
+    this.ssoHeader = args.ssoHeader ?? null
   }
 
   get isNotFound() {
@@ -46,6 +53,44 @@ export class GitHubAPIError extends Error {
       (this.status === 403 &&
         (this.rateLimit.remaining === 0 || this.rateLimit.retryAfter !== null))
     )
+  }
+
+  // The org/enterprise enforces SAML SSO and this token has no live SSO session
+  // for it. GitHub signals this with the X-GitHub-SSO header (a 403 carrying
+  // `required; url=…`, or `partial-results; organizations=…` on multi-org reads).
+  get isSsoRequired() {
+    return this.ssoHeader !== null
+  }
+
+  // The GitHub SSO authorization URL to send the user to, if the header carried
+  // one (`required; url=…`). Returns null for the `partial-results` shape or
+  // when no header is present.
+  get ssoAuthorizationUrl() {
+    return parseSsoAuthorizationUrl(this.ssoHeader)
+  }
+}
+
+// Extract the authorization URL from an X-GitHub-SSO header value. GitHub uses
+// two shapes:
+//   - `required; url=https://github.com/orgs/<org>/sso?authorization_request=…`
+//     (or `enterprises/<ent>/sso`) — a single-org read the token can't see.
+//   - `partial-results; organizations=21955855,20582480` — a multi-org read
+//     that silently omitted SSO-gated orgs; carries org IDs, not a URL.
+// Returns the URL for the first shape, or null otherwise.
+export function parseSsoAuthorizationUrl(
+  ssoHeader: string | null | undefined,
+): string | null {
+  if (!ssoHeader) return null
+  const match = ssoHeader.match(/url=(\S+)/)
+  if (!match) return null
+  try {
+    const url = new URL(match[1])
+    // Only ever hand back a github.com SSO URL, never an attacker-influenced
+    // origin (the header is from GitHub, but stay defensive since we redirect).
+    if (url.hostname !== "github.com") return null
+    return url.toString()
+  } catch {
+    return null
   }
 }
 

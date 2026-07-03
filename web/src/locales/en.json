@@ -1072,6 +1072,14 @@
       "inviteBody_suffix": "class roster before you can accept this assignment.",
       "afterAccepting": "After accepting the GitHub organization invite, return to this page and try again."
     },
+    "ssoRequired": {
+      "badge": "Single sign-on required",
+      "title": "Authorize single sign-on",
+      "body_prefix": "The",
+      "body_suffix": "organization requires SAML single sign-on (SSO), and your current session isn't authorized for it yet. You may already be a member — you just need to authorize SSO before continuing.",
+      "instructions": "Open this assignment link from within your school's learning management system (LMS) so you're signed in through single sign-on first, or use the button below to authorize single sign-on for this organization, then reload this page.",
+      "authorizeButton": "Authorize single sign-on"
+    },
     "steps": {
       "account": "Checking your GitHub account",
       "assignment": "Looking up the assignment",

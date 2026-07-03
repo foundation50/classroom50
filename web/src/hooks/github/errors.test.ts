@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest"
 import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,
+  parseSsoAuthorizationUrl,
   retryTransientNotFoundForbidden,
 } from "./errors"
 
-const apiError = (status: number) =>
+const apiError = (status: number, ssoHeader?: string | null) =>
   new GitHubAPIError({
     status,
     url: "https://api.github.com/x",
@@ -20,6 +21,7 @@ const apiError = (status: number) =>
       resource: null,
       retryAfter: null,
     },
+    ssoHeader,
   })
 
 describe("isDefinitiveGitHubStatus", () => {
@@ -52,5 +54,45 @@ describe("retryTransientNotFoundForbidden", () => {
   it("retries non-GitHubAPIError (network) failures within the bound", () => {
     expect(retryTransientNotFoundForbidden(0, new Error("network"))).toBe(true)
     expect(retryTransientNotFoundForbidden(2, new Error("network"))).toBe(false)
+  })
+})
+
+describe("SAML SSO detection", () => {
+  const orgSsoUrl =
+    "https://github.com/orgs/acme/sso?authorization_request=ABC123"
+  const entSsoUrl =
+    "https://github.com/enterprises/acme-inc/sso?authorization_request=ABC123"
+
+  it("isSsoRequired reflects presence of the X-GitHub-SSO header", () => {
+    expect(apiError(403, `required; url=${orgSsoUrl}`).isSsoRequired).toBe(true)
+    expect(apiError(403, null).isSsoRequired).toBe(false)
+    expect(apiError(403).isSsoRequired).toBe(false)
+  })
+
+  it("extracts the authorization URL from a `required; url=…` header", () => {
+    expect(parseSsoAuthorizationUrl(`required; url=${orgSsoUrl}`)).toBe(orgSsoUrl)
+    expect(parseSsoAuthorizationUrl(`required; url=${entSsoUrl}`)).toBe(entSsoUrl)
+    expect(apiError(403, `required; url=${entSsoUrl}`).ssoAuthorizationUrl).toBe(
+      entSsoUrl,
+    )
+  })
+
+  it("returns null for the multi-org `partial-results` shape (no URL)", () => {
+    const header = "partial-results; organizations=21955855,20582480"
+    expect(parseSsoAuthorizationUrl(header)).toBeNull()
+    expect(apiError(403, header).isSsoRequired).toBe(true)
+    expect(apiError(403, header).ssoAuthorizationUrl).toBeNull()
+  })
+
+  it("rejects a non-github.com URL (defensive against a spoofed redirect)", () => {
+    expect(
+      parseSsoAuthorizationUrl("required; url=https://evil.example.com/sso"),
+    ).toBeNull()
+  })
+
+  it("returns null for absent / malformed headers", () => {
+    expect(parseSsoAuthorizationUrl(null)).toBeNull()
+    expect(parseSsoAuthorizationUrl(undefined)).toBeNull()
+    expect(parseSsoAuthorizationUrl("required; url=not-a-url")).toBeNull()
   })
 })

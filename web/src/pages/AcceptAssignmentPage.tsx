@@ -16,6 +16,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/hooks/github/types"
 import { Link, Navigate, useParams, useSearch } from "@tanstack/react-router"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useMutation } from "@tanstack/react-query"
 import { useState } from "react"
@@ -258,6 +259,73 @@ const NotOrgMember = ({
   )
 }
 
+// Shown when GitHub reports the org/enterprise enforces SAML SSO and the
+// student's token has no live SSO session (403 + X-GitHub-SSO). Distinct from
+// NotOrgMember: the student may well BE a member — they just need to authorize
+// SSO for this org. When GitHub handed us an authorization URL, offer it as the
+// primary action; otherwise explain that opening the link from the SSO-gated
+// LMS (or re-authenticating) is required.
+const SsoRequired = ({
+  user,
+  org,
+  ssoUrl,
+}: {
+  user: GitHubUser | null
+  org?: string
+  ssoUrl: string | null
+}) => {
+  const { t } = useTranslation()
+  return (
+    <div className="min-h-screen bg-base-100">
+      <AcceptNavbar />
+      <AcceptCard>
+        <div className="card-body gap-8">
+          <div>
+            <span className="badge badge-warning badge-soft gap-2">
+              <AlertTriangle aria-hidden="true" className="size-4" />
+              {t("accept.ssoRequired.badge")}
+            </span>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("accept.ssoRequired.title")}
+            </h1>
+
+            <p className="mt-2 text-base text-base-content/70">
+              {t("accept.ssoRequired.body_prefix")}{" "}
+              <span className="font-bold">{org}</span>{" "}
+              {t("accept.ssoRequired.body_suffix")}
+            </p>
+          </div>
+
+          <div className="rounded-2xl border border-info/20 bg-info/5 p-5">
+            <p className="text-sm leading-5 text-base-content/70">
+              {t("accept.ssoRequired.instructions")}
+            </p>
+            {ssoUrl && (
+              <a
+                href={ssoUrl}
+                className="btn btn-primary btn-sm mt-4"
+                rel="noopener noreferrer"
+              >
+                {t("accept.ssoRequired.authorizeButton")}
+              </a>
+            )}
+          </div>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <label className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </label>
+            <UserInfo user={user} />
+          </div>
+        </div>
+      </AcceptCard>
+    </div>
+  )
+}
+
 const modeLabelKey: Record<string, string> = {
   individual: "accept.modeIndividual",
   group: "accept.modeGroup",
@@ -477,8 +545,11 @@ const AcceptAssignmentPage = () => {
 
   const { data: assignmentsData, isLoading: loadingAssignments } =
     usePagesAssignments(org, classroom, secret)
-  const { data: orgInvite, isLoading: loadingOrgMembership } =
-    useGetOwnOrgMembership(org)
+  const {
+    data: orgInvite,
+    isLoading: loadingOrgMembership,
+    error: orgMembershipError,
+  } = useGetOwnOrgMembership(org)
 
   const assignmentData = assignmentsData?.find((a) => a.slug === assignment)
 
@@ -542,6 +613,28 @@ const AcceptAssignmentPage = () => {
         </AcceptCard>
       </div>
     )
+  }
+
+  // Membership read failed. Distinguish causes rather than blanket "not a
+  // member": a 403 carrying X-GitHub-SSO means the org/enterprise enforces SAML
+  // SSO and this token has no live SSO session (the student may well be a
+  // member) — route them to authorize instead. Any other definitive failure
+  // (404 / non-SSO 403) falls through to the not-a-member screen. (Transient
+  // 5xx/429 are retried by the query, so they don't reach here as errors.)
+  if (orgMembershipError) {
+    if (
+      orgMembershipError instanceof GitHubAPIError &&
+      orgMembershipError.isSsoRequired
+    ) {
+      return (
+        <SsoRequired
+          user={user}
+          org={org}
+          ssoUrl={orgMembershipError.ssoAuthorizationUrl}
+        />
+      )
+    }
+    return <NotOrgMember classroom={classroom} user={user} org={org} />
   }
 
   if (!orgInvite) {
