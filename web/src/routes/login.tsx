@@ -3,21 +3,44 @@ import { GitHubAuthCard } from "@/auth/GitHubAuthCard"
 import { isSafeReturnTo } from "@/auth/returnTo"
 
 // `redirect`: same-origin path to return to after sign-in, set when the _authed
-// guard (or App's session-expiry redirect) bounces an unauthenticated user
-// here (#71). The sign-in round-trip is handled in useGithubAuth (stashed in
-// the OAuth session); this guard covers the already-authenticated case.
+// guard (or App's session-expiry redirect) bounces an unauthenticated user here
+// (#71). useGithubAuth handles the sign-in round-trip; this guard covers the
+// already-authenticated case.
+//
+// The value is built as pathname + search (see _authed.tsx / App.tsx), so it may
+// carry a query (e.g. the ?k= accept capability key). Passing it whole as
+// `redirect({ to })` folds the query into the pathname, so split it into
+// { to, search } first. /login itself is rejected to avoid a self-redirect hop.
+function toRedirectTarget(value: string): {
+  to: string
+  search: Record<string, string>
+} {
+  const queryIndex = value.indexOf("?")
+  const to = queryIndex === -1 ? value : value.slice(0, queryIndex)
+  const search =
+    queryIndex === -1
+      ? {}
+      : Object.fromEntries(new URLSearchParams(value.slice(queryIndex + 1)))
+  return { to, search }
+}
+
+function safeRedirect(value: unknown): string | undefined {
+  if (!isSafeReturnTo(value)) return undefined
+  const { to } = toRedirectTarget(value)
+  return to === "/login" ? undefined : value
+}
 
 export const Route = createFileRoute("/login")({
   component: GitHubAuthCard,
   validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
-    redirect: isSafeReturnTo(search.redirect) ? search.redirect : undefined,
+    redirect: safeRedirect(search.redirect),
   }),
   beforeLoad: ({ context, search }) => {
     const { auth } = context
     if (auth.status === "authenticated") {
-      throw redirect({
-        to: search.redirect ?? "/",
-      })
+      throw redirect(
+        search.redirect ? toRedirectTarget(search.redirect) : { to: "/" },
+      )
     }
   },
 })

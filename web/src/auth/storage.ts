@@ -42,8 +42,11 @@ export function saveOAuthSession(input: {
   state: string
   clientId: string
   scope: string
-  // Same-origin deep link to return to after sign-in (#71); only a value
-  // passing isSafeReturnTo is kept.
+  // Same-origin deep link to return to after sign-in (#71); kept only if it
+  // passes isSafeReturnTo. May carry the accept ?k= key (needed to land on the
+  // right link), so it is briefly persisted — acceptable since sessionStorage
+  // is same-origin and per-tab, cleared on consume, and the same secret is
+  // already in the URL the user arrived from.
   returnTo?: string | null
 }) {
   if (!canUseBrowserStorage()) return

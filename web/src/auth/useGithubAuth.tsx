@@ -67,6 +67,9 @@ function useGithubAuthState() {
   const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Deep link (#71) stashed at code-exchange, consumed by the status-driven
+  // effect below so navigation runs against an authenticated router context.
+  const pendingReturnToRef = useRef<string | null>(null)
 
   const [screen, setScreen] = useState<GithubAuthScreen>("config")
   const [clientId, setClientId] = useState(GITHUB_OAUTH_CLIENT_ID)
@@ -221,11 +224,10 @@ function useGithubAuthState() {
       {
         onSuccess: (data) => {
           completeSignIn(data)
-          // Return to the originally requested deep link instead of the
-          // homepage (#71); already re-validated by consumeOAuthSession.
-          if (returnTo) {
-            router.navigate({ to: returnTo })
-          }
+          // Defer the return until status is "authenticated" (effect below);
+          // navigating now would race the router context and bounce through
+          // the _authed guard (#71).
+          pendingReturnToRef.current = returnTo
         },
         onError: (err) => {
           setError(formatError(err))
@@ -553,6 +555,23 @@ function useGithubAuthState() {
     githubUserQuery.isError,
     githubUserQuery.data,
   ])
+
+  // Navigate to the stashed deep link once status is "authenticated", so the
+  // target _authed guard sees an authenticated context instead of bouncing
+  // through /login (#71). history.push (not navigate({ to })) preserves the
+  // query — e.g. the ?k= accept key — which navigate({ to }) would fold into
+  // the pathname. A bad path degrades to the homepage.
+  useEffect(() => {
+    if (status !== "authenticated") return
+    const returnTo = pendingReturnToRef.current
+    if (!returnTo) return
+    pendingReturnToRef.current = null
+    try {
+      router.history.push(returnTo)
+    } catch {
+      router.history.push("/")
+    }
+  }, [status])
 
   return {
     screen,
