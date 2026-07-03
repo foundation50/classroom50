@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router"
 import OnboardingPage from "@/pages/OnboardingPage"
 import { isValidInviteToken } from "@/util/onboarding"
+import { isSafeReturnTo } from "@/auth/returnTo"
 
 // `email`: untrusted prefill only; session authorizes.
 //
@@ -10,9 +11,7 @@ import { isValidInviteToken } from "@/util/onboarding"
 //
 // `returnTo`: where to send the student after they become an active member (the
 // accept page sets it). Only a same-origin relative path (leading "/", not "//")
-// is kept, so it can't become an open redirect.
-const isSafeReturnTo = (value: unknown): value is string =>
-  typeof value === "string" && value.startsWith("/") && !value.startsWith("//")
+// is kept, so it can't become an open redirect (see isSafeReturnTo).
 
 export const Route = createFileRoute("/_authed/$org/$classroom/onboard/")({
   validateSearch: (

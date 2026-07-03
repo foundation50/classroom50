@@ -1,4 +1,5 @@
 import { GITHUB_AUTH_SESSION, GITHUB_AUTH_STORAGE } from "./constants"
+import { isSafeReturnTo } from "./returnTo"
 
 function canUseBrowserStorage() {
   return typeof window !== "undefined"
@@ -41,6 +42,10 @@ export function saveOAuthSession(input: {
   state: string
   clientId: string
   scope: string
+  // Optional same-origin deep link to return to after sign-in (#71). Only a
+  // value passing isSafeReturnTo is stored; anything else is dropped so a bad
+  // value can't linger and misroute the next sign-in.
+  returnTo?: string | null
 }) {
   if (!canUseBrowserStorage()) return
 
@@ -48,6 +53,12 @@ export function saveOAuthSession(input: {
   sessionStorage.setItem(GITHUB_AUTH_SESSION.STATE, input.state)
   sessionStorage.setItem(GITHUB_AUTH_SESSION.CLIENT_ID, input.clientId)
   sessionStorage.setItem(GITHUB_AUTH_SESSION.SCOPE, input.scope)
+
+  if (isSafeReturnTo(input.returnTo)) {
+    sessionStorage.setItem(GITHUB_AUTH_SESSION.RETURN_TO, input.returnTo)
+  } else {
+    sessionStorage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
+  }
 }
 
 export function consumeOAuthSession() {
@@ -57,6 +68,7 @@ export function consumeOAuthSession() {
       expectedState: null,
       clientId: null,
       scope: null,
+      returnTo: null,
     }
   }
 
@@ -64,16 +76,23 @@ export function consumeOAuthSession() {
   const expectedState = sessionStorage.getItem(GITHUB_AUTH_SESSION.STATE)
   const clientId = sessionStorage.getItem(GITHUB_AUTH_SESSION.CLIENT_ID)
   const scope = sessionStorage.getItem(GITHUB_AUTH_SESSION.SCOPE)
+  const storedReturnTo = sessionStorage.getItem(GITHUB_AUTH_SESSION.RETURN_TO)
 
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.VERIFIER)
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.STATE)
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.CLIENT_ID)
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.SCOPE)
+  sessionStorage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
+
+  // Re-validate on read: sessionStorage is user-writable, so never trust a
+  // stored path without re-checking the open-redirect guard.
+  const returnTo = isSafeReturnTo(storedReturnTo) ? storedReturnTo : null
 
   return {
     verifier,
     expectedState,
     clientId,
     scope,
+    returnTo,
   }
 }
