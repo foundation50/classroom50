@@ -920,11 +920,7 @@ export type Classroom50OrgSummary = {
 }
 
 type Classroom50Status =
-  | "ready"
-  | "needs_setup"
-  | "no_access"
-  | "not_classroom50"
-  | "unknown"
+  "ready" | "needs_setup" | "no_access" | "not_classroom50" | "unknown"
 export async function getClassroom50OrgSummary(
   client: GitHubClient,
   membership: GitHubOrgMembership,

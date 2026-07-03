@@ -16,11 +16,7 @@ import type { StaffRole } from "@/types/classroom"
 // so callers treat it as "don't redirect; let the page load" rather than
 // demoting a real staff member on a blip.
 export type EffectiveRole =
-  | "owner"
-  | "instructor"
-  | "ta"
-  | "student"
-  | "unresolved"
+  "owner" | "instructor" | "ta" | "student" | "unresolved"
 
 // A tri-state membership signal: definitively in / definitively out / couldn't
 // tell (transient). Mirrors the fail-closed posture of resolveTeacherVerdict.

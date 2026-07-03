@@ -12,11 +12,7 @@
 //   4. allSet             — already on the classroom team.
 //   5. form               — fall-through.
 export type OnboardingState =
-  | "loading"
-  | "notInvited"
-  | "pendingConfirmation"
-  | "allSet"
-  | "form"
+  "loading" | "notInvited" | "pendingConfirmation" | "allSet" | "form"
 
 export type OnboardingStateInput = {
   loadingMembership: boolean

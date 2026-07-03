@@ -82,12 +82,7 @@ class AcceptStepError extends Error {
 // Ordered phases of the accept flow, surfaced as a progress checklist in the
 // GUI.
 export type AcceptStepId =
-  | "account"
-  | "assignment"
-  | "autograder"
-  | "repo"
-  | "access"
-  | "setup"
+  "account" | "assignment" | "autograder" | "repo" | "access" | "setup"
 
 export type AcceptStepStatus = "pending" | "running" | "complete" | "error"
 

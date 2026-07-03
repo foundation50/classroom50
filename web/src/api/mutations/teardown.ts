@@ -160,10 +160,7 @@ function countLabel(count: number, singular: string, plural: string): string {
 //  - "permanent-failed": an unretryable refusal a re-run will repeat forever
 //    (a reused-slug id mismatch, or a scope 403 a caller chose not to rethrow).
 type DeleteOutcome =
-  | "deleted"
-  | "rate-limited"
-  | "transient-failed"
-  | "permanent-failed"
+  "deleted" | "rate-limited" | "transient-failed" | "permanent-failed"
 
 // How withDeleteRetry should treat an error that is not a rate limit:
 //  - "rethrow": propagate it now (the caller surfaces a scope wall).

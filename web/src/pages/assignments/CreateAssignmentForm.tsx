@@ -1015,8 +1015,7 @@ const CreateAssignmentForm = ({
                       <form.Field name="pass_threshold">
                         {(field) => {
                           const error = field.state.meta.errors[0] as
-                            | string
-                            | undefined
+                            string | undefined
                           return (
                             <div className="mt-3">
                               <div className="flex items-center gap-2">

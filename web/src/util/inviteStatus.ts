@@ -5,13 +5,7 @@ import { bindReportsToRows } from "@/util/reconcileMatch"
 import { memberIdSet } from "@/util/identity"
 
 export type InviteStatus =
-  | "member"
-  | "pending"
-  | "expired"
-  | "onboarding"
-  | "ready"
-  | "removed"
-  | "none"
+  "member" | "pending" | "expired" | "onboarding" | "ready" | "removed" | "none"
 
 // A student's onboarding self-report, parsed from the onboarding repo's YAML.
 // github_id/github_username are GitHub-attested; email and the names are claimed

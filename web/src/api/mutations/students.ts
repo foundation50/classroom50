@@ -955,8 +955,7 @@ export async function reconcileOnboarding(
     )
 
     let matched:
-      | { row: StudentCsvRow; by: Resolved["matchBy"]; value: string }
-      | undefined
+      { row: StudentCsvRow; by: Resolved["matchBy"]; value: string } | undefined
 
     if (matchResult && "ambiguous" in matchResult) {
       result.unmatched.push({

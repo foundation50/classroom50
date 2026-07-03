@@ -144,12 +144,7 @@ export type GitHubOrgDetails = {
 export type GitHubWorkflowRun = {
   id: number
   status:
-    | "queued"
-    | "in_progress"
-    | "completed"
-    | "waiting"
-    | "requested"
-    | "pending"
+    "queued" | "in_progress" | "completed" | "waiting" | "requested" | "pending"
   conclusion:
     | "success"
     | "failure"

@@ -17,9 +17,7 @@ export type ClassroomAccess = {
 //  - member-no-roster: an org member on no classroom roster (e.g. a co-teacher,
 //    or a leftover after an unenroll).
 export type MemberClassification =
-  | "member-on-roster"
-  | "on-roster-not-member"
-  | "member-no-roster"
+  "member-on-roster" | "on-roster-not-member" | "member-no-roster"
 
 export type OrgMemberRow = {
   // Stable identity, mirroring studentKey (github_id || username || email).

@@ -8,12 +8,7 @@ import { getRegradeRunAfterId, githubKeys } from "./github/queries"
 import type { GitHubWorkflowRun } from "./github/types"
 
 export type RegradePhase =
-  | "idle"
-  | "dispatching"
-  | "running"
-  | "completed"
-  | "failed"
-  | "timeout"
+  "idle" | "dispatching" | "running" | "completed" | "failed" | "timeout"
 
 // Give up polling after this long so the UI doesn't spin forever on a run that
 // never registers or hangs. The dispatch itself is quick; this is generous.

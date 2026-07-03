@@ -949,8 +949,7 @@ export async function getPendingOrgInvite(client: GitHubClient, org: string) {
 // Sentinel returned by tryStep when fn throws: a warning (a tolerated status
 // code) or a hard error. Callers detect the hard case via stepFailed().
 type StepOutcome =
-  | { status: "warning"; message: string }
-  | { status: "error"; message: string }
+  { status: "warning"; message: string } | { status: "error"; message: string }
 
 async function tryStep<T>({
   id,
@@ -1025,12 +1024,7 @@ async function tryStep<T>({
 }
 
 export type InitStepStatus =
-  | "pending"
-  | "running"
-  | "complete"
-  | "warning"
-  | "error"
-  | "skipped"
+  "pending" | "running" | "complete" | "warning" | "error" | "skipped"
 
 export async function createOrgRepo(client: GitHubClient, org: string) {
   return client.request(`/orgs/${org}/repos`, {
@@ -1682,10 +1676,7 @@ export type EnsureBranchProtectionResult =
       repo: string
       branch: string | null
       reason:
-        | "permission_denied"
-        | "branch_not_found"
-        | "unsupported"
-        | "unexpected"
+        "permission_denied" | "branch_not_found" | "unsupported" | "unexpected"
       message: string
       settingsUrl: string
     }
