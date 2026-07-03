@@ -88,11 +88,29 @@ READMEs.
 
 ## Commits and pull requests
 
-- Use [Conventional Commits](https://www.conventionalcommits.org/) for commit
-  and PR titles, e.g. `feat(web): ...`, `fix(gh-teacher): ...`,
-  `docs: ...`.
-- Keep PRs focused; link the issue they address.
-- The pull request template includes a checklist — please fill it out.
+We squash-merge every PR, so the **PR title is the commit** that lands on
+`main` — and release-please reads it to compute the next web release. Getting
+the type right is functional, not cosmetic.
+
+**Format:** `type(scope): short summary` ([Conventional Commits](https://www.conventionalcommits.org/)).
+
+- **Type** (and its web release effect):
+  - `feat:` — new feature -> next release bumps the **minor**
+  - `fix:` — bug fix -> bumps the **patch**
+  - `feat!:` / `fix!:` (or a `BREAKING CHANGE:` footer) -> bumps the **major**
+  - `docs:` `chore:` `ci:` `test:` `refactor:` `perf:` `style:` -> no release on their own
+- **Scope** (optional): the affected area — `web`, `gh-teacher`, `gh-student`,
+  `cli`, `locales`. Omit for repo-wide changes.
+- **Summary:** imperative mood, lower-case, no trailing period, aim for <= 72
+  characters (e.g. `fix(web): stop double-firing the accept request`).
+- **Body:** optional and usually unnecessary. Add one only when the "why" isn't
+  obvious from the summary; keep it short and explain intent or trade-offs, not
+  what the diff already shows. Wrap at ~72 columns.
+- Keep PRs focused; link the issue they address. Fill out the PR template.
+
+Only the CLI is released by tag (`cli-v*`); the web app is released
+automatically by release-please from these commit types (see "Releasing the web
+app").
 
 ## Releasing the CLIs (maintainers)
 
