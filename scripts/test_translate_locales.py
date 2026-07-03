@@ -1,0 +1,286 @@
+"""Unit tests for the pure helpers in translate_locales.py.
+
+These cover the regression-prone parsing/validation logic without touching
+Bedrock: model-JSON fence stripping, response-text extraction, and key parity.
+
+Run from the repo root (needs scripts/requirements.txt installed for boto3,
+which translate_locales imports at module load):
+
+    python -m pytest scripts/test_translate_locales.py
+"""
+
+from __future__ import annotations
+
+import json
+
+import pytest
+
+import translate_locales
+from translate_locales import (
+    build_nested_from_keys,
+    check_key_parity,
+    compute_diff,
+    delete_nested,
+    extract_text,
+    flatten,
+    get_nested,
+    parse_model_json,
+    plural_group_keys,
+    set_nested,
+    translate_keys,
+)
+
+
+class TestParseModelJson:
+    def test_parses_bare_json(self):
+        assert parse_model_json('{"a": 1}') == {"a": 1}
+
+    def test_strips_json_fence(self):
+        text = '```json\n{"a": 1}\n```'
+        assert parse_model_json(text) == {"a": 1}
+
+    def test_strips_bare_fence(self):
+        text = '```\n{"a": 1}\n```'
+        assert parse_model_json(text) == {"a": 1}
+
+    def test_tolerates_leading_and_trailing_whitespace(self):
+        assert parse_model_json('  \n{"a": 1}\n  ') == {"a": 1}
+
+    def test_raises_on_invalid_json(self):
+        with pytest.raises(ValueError):
+            parse_model_json("not json at all")
+
+
+class TestExtractText:
+    def test_joins_text_chunks(self):
+        payload = {"content": [{"text": "he"}, {"text": "llo"}]}
+        assert extract_text(payload) == "hello"
+
+    def test_ignores_non_dict_chunks(self):
+        payload = {"content": [{"text": "ok"}, "stray", 3]}
+        assert extract_text(payload) == "ok"
+
+    def test_raises_when_no_text_content(self):
+        with pytest.raises(ValueError):
+            extract_text({"content": []})
+
+    def test_raises_when_content_missing(self):
+        with pytest.raises(ValueError):
+            extract_text({})
+
+
+class TestFlatten:
+    def test_flattens_nested_dicts_to_dotted_keys(self):
+        assert flatten({"nav": {"a": "x", "b": "y"}}) == {
+            "nav.a": "x",
+            "nav.b": "y",
+        }
+
+    def test_keeps_top_level_leaves(self):
+        assert flatten({"a": "x"}) == {"a": "x"}
+
+
+class TestCheckKeyParity:
+    def test_reports_dropped_keys(self):
+        base = {"nav": {"a": "x", "b": "y"}}
+        translated = {"nav": {"a": "x"}}
+        assert check_key_parity(base, translated) == ["nav.b"]
+
+    def test_no_missing_when_all_present(self):
+        base = {"nav": {"a": "x"}}
+        translated = {"nav": {"a": "翻訳"}}
+        assert check_key_parity(base, translated) == []
+
+    def test_extra_keys_do_not_count_as_missing(self):
+        base = {"nav": {"a": "x"}}
+        translated = {"nav": {"a": "x", "extra": "z"}}
+        assert check_key_parity(base, translated) == []
+
+    def test_precomputed_base_keys_matches_recompute(self):
+        base = {"nav": {"a": "x", "b": "y"}}
+        translated = {"nav": {"a": "x"}}
+        base_keys = set(flatten(base))
+        assert check_key_parity(base, translated, base_keys) == ["nav.b"]
+        assert check_key_parity(base, translated, base_keys) == check_key_parity(base, translated)
+
+
+class TestComputeDiff:
+    def test_added_and_nested_keys_are_changed(self):
+        previous = {"a": "x"}
+        current = {"a": "x", "b": "y", "nav": {"c": "z"}}
+        changed, removed = compute_diff(previous, current)
+        assert changed == ["b", "nav.c"]
+        assert removed == []
+
+    def test_modified_value_is_changed(self):
+        changed, removed = compute_diff({"a": "x"}, {"a": "different"})
+        assert changed == ["a"]
+        assert removed == []
+
+    def test_removed_key_is_reported(self):
+        changed, removed = compute_diff({"a": "x", "b": "y"}, {"a": "x"})
+        assert changed == []
+        assert removed == ["b"]
+
+    def test_unchanged_key_is_neither(self):
+        changed, removed = compute_diff({"a": "x"}, {"a": "x"})
+        assert changed == []
+        assert removed == []
+
+    def test_outputs_are_sorted(self):
+        previous = {"z": "1", "a": "1"}
+        current = {"z": "2", "a": "2", "m": "new"}
+        changed, _ = compute_diff(previous, current)
+        assert changed == sorted(changed)
+
+
+class TestNestedHelpers:
+    def test_get_nested_reads_value(self):
+        assert get_nested({"nav": {"a": "x"}}, "nav.a") == "x"
+
+    def test_get_nested_raises_keyerror_on_missing_segment(self):
+        with pytest.raises(KeyError):
+            get_nested({"nav": {"a": "x"}}, "nav.missing")
+
+    def test_set_nested_creates_intermediate_dicts(self):
+        obj: dict = {}
+        set_nested(obj, "nav.a", "x")
+        assert obj == {"nav": {"a": "x"}}
+
+    def test_set_nested_preserves_siblings(self):
+        obj = {"nav": {"a": "x"}}
+        set_nested(obj, "nav.b", "y")
+        assert obj == {"nav": {"a": "x", "b": "y"}}
+
+    def test_build_nested_from_keys_round_trip(self):
+        base = {"nav": {"a": "x", "b": "y"}, "c": "z"}
+        assert build_nested_from_keys(base, ["nav.b", "c"]) == {"nav": {"b": "y"}, "c": "z"}
+
+
+class TestDeleteNested:
+    def test_deletes_leaf(self):
+        obj = {"nav": {"a": "x", "b": "y"}}
+        delete_nested(obj, "nav.a")
+        assert obj == {"nav": {"b": "y"}}
+
+    def test_prunes_empty_ancestors(self):
+        obj = {"nav": {"a": "x"}}
+        delete_nested(obj, "nav.a")
+        assert obj == {}
+
+    def test_stops_pruning_at_non_empty_ancestor(self):
+        obj = {"nav": {"sub": {"a": "x"}, "keep": "y"}}
+        delete_nested(obj, "nav.sub.a")
+        assert obj == {"nav": {"keep": "y"}}
+
+    def test_no_op_when_key_absent(self):
+        obj = {"nav": {"a": "x"}}
+        delete_nested(obj, "nav.missing")
+        assert obj == {"nav": {"a": "x"}}
+
+
+class TestPluralGroupKeys:
+    def test_non_plural_key_returns_itself(self):
+        base_keys = {"foo.title"}
+        assert plural_group_keys("foo.title", {"foo.title"}, base_keys) == ["foo.title"]
+
+    def test_ordinary_key_with_plural_suffix_is_not_treated_as_plural(self):
+        # `step_two` looks like a plural form but has no base _one/_other, so it is
+        # an ordinary key: only itself is deleted, a stem-sharing key is untouched.
+        base_keys = {"onboarding.step_other"}  # unrelated key still in base
+        pack_keys = {"onboarding.step_two", "onboarding.step_other"}
+        assert plural_group_keys("onboarding.step_two", pack_keys, base_keys) == [
+            "onboarding.step_two"
+        ]
+
+    def test_partial_group_removal_keeps_gate_allowed_sibling(self):
+        # en.json removed foo.msg_one but kept foo.msg_other, so the group still
+        # exists; a community-added foo.msg_few is gate-allowed and must NOT be swept.
+        base_keys = {"foo.msg_other"}
+        pack_keys = {"foo.msg_one", "foo.msg_other", "foo.msg_few"}
+        assert plural_group_keys("foo.msg_one", pack_keys, base_keys) == ["foo.msg_one"]
+
+    def test_full_group_removal_sweeps_orphan_siblings(self):
+        # The whole base group is gone, so leftover pack siblings are true orphans
+        # that would trip verify_locale.py — sweep every one the pack has.
+        base_keys: set = set()
+        pack_keys = {"foo.msg_one", "foo.msg_other", "foo.msg_few"}
+        assert plural_group_keys("foo.msg_one", pack_keys, base_keys) == [
+            "foo.msg_few",
+            "foo.msg_one",
+            "foo.msg_other",
+        ]
+
+
+class TestTranslateKeys:
+    def test_returns_none_when_model_drops_a_requested_key(self, monkeypatch):
+        base = {"nav": {"a": "x", "b": "y"}}
+        base_raw = json.dumps(base)
+        # Model returns only nav.a, dropping the requested nav.b.
+        monkeypatch.setattr(
+            translate_locales, "invoke_model", lambda *a, **k: '{"nav": {"a": "translated"}}'
+        )
+        result = translate_keys(None, "model", "prompt", "ja", base, base_raw, ["nav.a", "nav.b"])
+        assert result is None
+
+    def test_returns_translation_when_all_keys_present(self, monkeypatch):
+        base = {"nav": {"a": "x", "b": "y"}}
+        base_raw = json.dumps(base)
+        monkeypatch.setattr(
+            translate_locales,
+            "invoke_model",
+            lambda *a, **k: '{"nav": {"a": "翻訳a", "b": "翻訳b"}}',
+        )
+        result = translate_keys(None, "model", "prompt", "ja", base, base_raw, ["nav.a", "nav.b"])
+        assert flatten(result) == {"nav.a": "翻訳a", "nav.b": "翻訳b"}
+
+
+class TestMainPatchMode:
+    """End-to-end patch-mode selection + removed-key application via main().
+
+    Uses only removed keys so no Bedrock call is needed (to_translate is empty),
+    exercising patch_mode selection, delete_nested, and the plural sweep together.
+    """
+
+    def _run(self, tmp_path, monkeypatch, base, current, removed_keys):
+        monkeypatch.setattr(translate_locales.boto3, "client", lambda *a, **k: None)
+        base_path = tmp_path / "en.json"
+        base_path.write_text(json.dumps(base), encoding="utf-8")
+        (tmp_path / "TRANSLATION_PROMPT.md").write_text("prompt", encoding="utf-8")
+        current_path = tmp_path / "ja.json"
+        current_path.write_text(json.dumps(current), encoding="utf-8")
+        changed_path = tmp_path / "changed.json"
+        changed_path.write_text("[]", encoding="utf-8")
+        removed_path = tmp_path / "removed.json"
+        removed_path.write_text(json.dumps(removed_keys), encoding="utf-8")
+        out_path = tmp_path / "out.json"
+        argv = [
+            "translate_locales.py", "--code", "ja",
+            "--base", str(base_path), "--prompt", str(tmp_path / "TRANSLATION_PROMPT.md"),
+            "--current", str(current_path),
+            "--changed-keys", str(changed_path), "--removed-keys", str(removed_path),
+            "--model-id", "test-model", "--out", str(out_path),
+        ]
+        monkeypatch.setattr(translate_locales.sys, "argv", argv)
+        rc = translate_locales.main()
+        result = json.loads(out_path.read_text(encoding="utf-8")) if out_path.exists() else None
+        return rc, result
+
+    def test_partial_plural_group_removal_keeps_community_sibling(self, tmp_path, monkeypatch):
+        base = {"foo": {"msg_other": "other"}}  # msg_one removed, msg_other kept
+        current = {"foo": {"msg_one": "1", "msg_other": "o", "msg_few": "community"}}
+        rc, result = self._run(tmp_path, monkeypatch, base, current, ["foo.msg_one"])
+        assert rc == 0
+        # msg_one deleted (removed); msg_few kept (gate still allows it); msg_other kept.
+        assert result == {"foo": {"msg_other": "o", "msg_few": "community"}}
+
+    def test_full_plural_group_removal_sweeps_orphans(self, tmp_path, monkeypatch):
+        base = {"other": {"key": "v"}}  # whole foo.msg group gone from en.json
+        current = {
+            "foo": {"msg_one": "1", "msg_other": "o", "msg_few": "orphan"},
+            "other": {"key": "v"},
+        }
+        rc, result = self._run(tmp_path, monkeypatch, base, current, ["foo.msg_one"])
+        assert rc == 0
+        # Entire orphan group swept; empty foo dict pruned.
+        assert result == {"other": {"key": "v"}}

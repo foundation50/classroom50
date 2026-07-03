@@ -14,25 +14,29 @@ import { useEffect, useRef, useState } from "react"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
+import { useTranslation } from "react-i18next"
 import { submitOnboarding } from "@/api/mutations/onboarding"
 import { useOnboardingState } from "@/hooks/onboarding/useOnboardingState"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { isValidEmail, isValidInviteToken } from "@/util/onboarding"
 import { EnterDiv } from "@/lib/motionComponents"
 
-const OnboardNavbar = () => (
-  <div className="navbar bg-base-100 shadow-sm">
-    <Link to="/">
-      <div className="flex p-6 text-lg font-bold">
-        <GraduationCap
-          aria-hidden="true"
-          className="size-8 text-primary mr-2"
-        />{" "}
-        Classroom 50
-      </div>
-    </Link>
-  </div>
-)
+const OnboardNavbar = () => {
+  const { t } = useTranslation()
+  return (
+    <div className="navbar bg-base-100 shadow-sm">
+      <Link to="/">
+        <div className="flex p-6 text-lg font-bold">
+          <GraduationCap
+            aria-hidden="true"
+            className="size-8 text-primary mr-2"
+          />{" "}
+          {t("nav.appName")}
+        </div>
+      </Link>
+    </div>
+  )
+}
 
 const OnboardCard = ({ children }: { children: React.ReactNode }) => (
   <div className="card w-200 max-w-[calc(100vw-2em)] p-8 m-auto rounded-xl mt-10 border border-base-300">
@@ -46,49 +50,52 @@ const NotOrgMember = ({
 }: {
   org?: string
   classroom?: string
-}) => (
-  <div className="min-h-screen bg-base-100">
-    <OnboardNavbar />
-    <OnboardCard>
-      <EnterDiv className="card-body gap-6">
-        <div>
-          <span className="badge badge-ghost badge-soft gap-2">
-            <Mail aria-hidden="true" className="size-4" />
-            Onboarding
-          </span>
-          <h1 className="mt-6 text-2xl font-bold">Nothing to do here yet</h1>
-          <p className="mt-2 text-base text-base-content/70">
-            We couldn&apos;t find an invitation for your account to the{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            organization.
-          </p>
-        </div>
+}) => {
+  const { t } = useTranslation()
+  return (
+    <div className="min-h-screen bg-base-100">
+      <OnboardNavbar />
+      <OnboardCard>
+        <EnterDiv className="card-body gap-6">
+          <div>
+            <span className="badge badge-ghost badge-soft gap-2">
+              <Mail aria-hidden="true" className="size-4" />
+              {t("getStarted.badge")}
+            </span>
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("getStarted.notInvited.title")}
+            </h1>
+            <p className="mt-2 text-base text-base-content/70">
+              {t("getStarted.notInvited.body_prefix")}{" "}
+              <span className="font-semibold text-base-content">{org}</span>{" "}
+              {t("getStarted.notInvited.body_suffix")}
+            </p>
+          </div>
 
-        <div className="rounded-2xl border border-base-300 bg-base-200/50 p-5">
-          <div className="flex gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-base-300/40 text-base-content/70">
-              <UserPlus aria-hidden="true" className="size-5" />
-            </div>
-            <div className="min-w-0">
-              <h2 className="font-semibold text-base-content">
-                Waiting on an invitation
-              </h2>
-              <p className="mt-2 leading-5 text-sm text-base-content/70">
-                If your instructor has invited you to{" "}
-                <span className="font-semibold text-base-content">
-                  {classroom}
-                </span>
-                , check your email for the GitHub invitation and accept it, then
-                return to this page and refresh. Otherwise, there&apos;s nothing
-                you need to do here right now.
-              </p>
+          <div className="rounded-2xl border border-base-300 bg-base-200/50 p-5">
+            <div className="flex gap-3">
+              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-base-300/40 text-base-content/70">
+                <UserPlus aria-hidden="true" className="size-5" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="font-semibold text-base-content">
+                  {t("getStarted.notInvited.waitingTitle")}
+                </h2>
+                <p className="mt-2 leading-5 text-sm text-base-content/70">
+                  {t("getStarted.notInvited.waitingBody_prefix")}{" "}
+                  <span className="font-semibold text-base-content">
+                    {classroom}
+                  </span>
+                  {t("getStarted.notInvited.waitingBody_suffix")}
+                </p>
+              </div>
             </div>
           </div>
-        </div>
-      </EnterDiv>
-    </OnboardCard>
-  </div>
-)
+        </EnterDiv>
+      </OnboardCard>
+    </div>
+  )
+}
 
 const OnboardingStatus = ({
   classroom,
@@ -103,6 +110,7 @@ const OnboardingStatus = ({
   tone?: "success" | "info"
   action?: React.ReactNode
 }) => {
+  const { t } = useTranslation()
   const toneClasses =
     tone === "success"
       ? { box: "border-success/20 bg-success/5", icon: "text-success" }
@@ -115,7 +123,7 @@ const OnboardingStatus = ({
           <div>
             <span className="badge badge-primary badge-soft gap-2">
               <Mail aria-hidden="true" className="size-4" />
-              Onboarding
+              {t("getStarted.badge")}
             </span>
             <h1 className="mt-6 text-2xl font-bold">{title}</h1>
             {classroom && (
@@ -139,7 +147,8 @@ const OnboardingStatus = ({
 }
 
 const OnboardingPage = () => {
-  useDocumentTitle("Get Started")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.getStarted"))
   const { org, classroom } = useParams({ strict: false })
   // Untrusted: only seeds the claimed-email field; the session authorizes.
   const search = useSearch({ strict: false }) as {
@@ -255,7 +264,7 @@ const OnboardingPage = () => {
       <div className="min-h-screen bg-base-100">
         <OnboardNavbar />
         <OnboardCard>
-          <Spinner size="xl" label="Loading" className="m-auto" />
+          <Spinner size="xl" label={t("common.loading")} className="m-auto" />
         </OnboardCard>
       </div>
     )
@@ -276,13 +285,17 @@ const OnboardingPage = () => {
       <OnboardingStatus
         classroom={classroom}
         tone="info"
-        title={returning ? "You're enrolled" : "Pending confirmation"}
+        title={
+          returning
+            ? t("getStarted.pending.enrolledTitle")
+            : t("getStarted.pending.title")
+        }
         message={
           returning
             ? pollExhausted
-              ? "You're enrolled. If you're not redirected automatically, continue to your assignment below."
-              : "Taking you back to your assignment…"
-            : "Your details are in — your instructor just needs to confirm your enrollment. There's nothing more for you to do here."
+              ? t("getStarted.pending.enrolledManual")
+              : t("getStarted.pending.takingBack")
+            : t("getStarted.pending.message")
         }
         action={
           returning && pollExhausted && returnTo ? (
@@ -291,7 +304,7 @@ const OnboardingPage = () => {
               className="btn btn-primary w-full"
               onClick={() => router.history.push(returnTo)}
             >
-              Continue to your assignment
+              {t("getStarted.continueToAssignment")}
             </button>
           ) : undefined
         }
@@ -305,8 +318,8 @@ const OnboardingPage = () => {
       <OnboardingStatus
         classroom={classroom}
         tone="success"
-        title="You're all set"
-        message="You already have access to this classroom — there's nothing more you need to do here. You can accept assignments your instructor shares with you."
+        title={t("getStarted.allSet.title")}
+        message={t("getStarted.allSet.message")}
       />
     )
   }
@@ -323,16 +336,15 @@ const OnboardingPage = () => {
             </span>
             <h1 className="mt-6 text-2xl font-bold">
               {returnTo
-                ? "Confirm your enrollment before accepting the assignment"
-                : "Confirm your enrollment"}
+                ? t("getStarted.form.titleWithReturn")
+                : t("getStarted.form.title")}
             </h1>
             <p className="mt-2 text-base text-base-content/70">
-              This links your GitHub account to your instructor&apos;s class
-              roster for{" "}
+              {t("getStarted.form.subtitle_prefix")}{" "}
               <span className="font-semibold text-base-content">
                 {classroom}
               </span>
-              .
+              {t("getStarted.form.subtitle_suffix")}
             </p>
           </div>
 
@@ -340,7 +352,7 @@ const OnboardingPage = () => {
             <div className="min-w-0 flex-1">
               <div className="flex items-center gap-1 text-sm text-base-content/70">
                 <GitHub aria-hidden="true" className="size-4" />
-                <span>{user?.login ?? "Checking GitHub user..."}</span>
+                <span>{user?.login ?? t("getStarted.form.checkingUser")}</span>
               </div>
             </div>
           </div>
@@ -351,13 +363,13 @@ const OnboardingPage = () => {
                 htmlFor="onboard-first-name"
                 className="text-sm font-medium text-base-content"
               >
-                First name
+                {t("getStarted.form.firstName")}
               </label>
               <input
                 id="onboard-first-name"
                 type="text"
                 value={firstName}
-                placeholder="Ada"
+                placeholder={t("getStarted.form.firstNamePlaceholder")}
                 className="input w-full mt-2"
                 disabled={onboardMutation.isPending}
                 onChange={(e) => setFirstName(e.target.value)}
@@ -368,13 +380,13 @@ const OnboardingPage = () => {
                 htmlFor="onboard-last-name"
                 className="text-sm font-medium text-base-content"
               >
-                Last name
+                {t("getStarted.form.lastName")}
               </label>
               <input
                 id="onboard-last-name"
                 type="text"
                 value={lastName}
-                placeholder="Lovelace"
+                placeholder={t("getStarted.form.lastNamePlaceholder")}
                 className="input w-full mt-2"
                 disabled={onboardMutation.isPending}
                 onChange={(e) => setLastName(e.target.value)}
@@ -387,11 +399,10 @@ const OnboardingPage = () => {
               htmlFor="onboard-email"
               className="text-sm font-medium text-base-content"
             >
-              Your university email
+              {t("getStarted.form.email")}
             </label>
             <p className="mt-1 text-xs text-base-content/70">
-              Enter the email your instructor used to invite you, so they can
-              match you to the class roster.
+              {t("getStarted.form.emailHint")}
             </p>
             <div className="mt-2 flex">
               <Mail
@@ -402,7 +413,7 @@ const OnboardingPage = () => {
                 id="onboard-email"
                 type="email"
                 value={email}
-                placeholder="student@university.edu"
+                placeholder={t("getStarted.form.emailPlaceholder")}
                 className="input w-full"
                 disabled={onboardMutation.isPending}
                 onChange={(e) => setEmail(e.target.value)}
@@ -410,7 +421,7 @@ const OnboardingPage = () => {
             </div>
             {email && !emailValid && (
               <p className="text-error text-sm mt-1">
-                Enter a valid email address.
+                {t("validation.validEmail")}
               </p>
             )}
           </div>
@@ -419,7 +430,7 @@ const OnboardingPage = () => {
             <div className="alert alert-error alert-soft text-sm">
               {onboardMutation.error instanceof Error
                 ? onboardMutation.error.message
-                : "Something went wrong. Please try again."}
+                : t("getStarted.form.genericError")}
             </div>
           )}
 
@@ -432,10 +443,10 @@ const OnboardingPage = () => {
             {onboardMutation.isPending ? (
               <>
                 <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                Confirming...
+                {t("getStarted.form.confirming")}
               </>
             ) : (
-              "Confirm enrollment"
+              t("getStarted.form.confirm")
             )}
           </button>
         </EnterDiv>

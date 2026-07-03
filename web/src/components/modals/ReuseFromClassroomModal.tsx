@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -24,6 +25,7 @@ export const ReuseFromClassroomModal = ({
 }) => {
   const { classes } = useGetClasses(org)
   const dialogRef = useRef<HTMLDialogElement | null>(null)
+  const { t } = useTranslation()
 
   // Sibling classrooms only — can't pull from the one you're already in.
   const sources = useMemo(
@@ -86,13 +88,14 @@ export const ReuseFromClassroomModal = ({
   return (
     <ReuseModalShell
       dialogRef={dialogRef}
-      title="Reuse an existing assignment"
+      title={t("components.modals.reuseFromClassroom.title")}
       description={
         <>
-          Copy an assignment from another classroom in {org} into{" "}
-          <span className="font-semibold text-base-content">{classroom}</span>.
-          Name, template, tests, runtime, due date, and other settings are
-          copied; student repositories and scores are not.
+          {t("components.modals.reuseFromClassroom.description_prefix", {
+            org,
+          })}{" "}
+          <span className="font-semibold text-base-content">{classroom}</span>
+          {t("components.modals.reuseFromClassroom.description_suffix")}
         </>
       }
       isPending={reuse.isPending}
@@ -105,13 +108,13 @@ export const ReuseFromClassroomModal = ({
     >
       {sources.length === 0 ? (
         <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-          There are no other classrooms in {org} to reuse an assignment from.
+          {t("components.modals.reuseFromClassroom.noSources", { org })}
         </div>
       ) : (
         <div className="mt-6 space-y-4">
           <label className="form-control w-full">
             <span className="label-text mb-1 font-medium">
-              Source classroom
+              {t("components.modals.reuseFromClassroom.sourceClassroom")}
             </span>
             <select
               className="select select-bordered w-full"
@@ -120,7 +123,7 @@ export const ReuseFromClassroomModal = ({
               onChange={(e) => handlePickClassroom(e.target.value)}
             >
               <option value="" disabled>
-                Choose a classroom…
+                {t("components.modals.reuseFromClassroom.chooseClassroom")}
               </option>
               {sources.map((c) => (
                 <option key={c.name} value={c.name}>
@@ -132,7 +135,9 @@ export const ReuseFromClassroomModal = ({
 
           {sourceClassroom ? (
             <label className="form-control w-full">
-              <span className="label-text mb-1 font-medium">Assignment</span>
+              <span className="label-text mb-1 font-medium">
+                {t("components.modals.reuseFromClassroom.assignment")}
+              </span>
               <select
                 className="select select-bordered w-full"
                 value={sourceSlug}
@@ -145,10 +150,14 @@ export const ReuseFromClassroomModal = ({
               >
                 <option value="" disabled>
                   {sourceLoading
-                    ? "Loading assignments…"
+                    ? t(
+                        "components.modals.reuseFromClassroom.loadingAssignments",
+                      )
                     : sourceAssignments.length === 0
-                      ? "No assignments in this classroom"
-                      : "Choose an assignment…"}
+                      ? t("components.modals.reuseFromClassroom.noAssignments")
+                      : t(
+                          "components.modals.reuseFromClassroom.chooseAssignment",
+                        )}
                 </option>
                 {sourceAssignments.map((a) => (
                   <option key={a.slug} value={a.slug}>
@@ -158,7 +167,9 @@ export const ReuseFromClassroomModal = ({
               </select>
               {sourceError ? (
                 <span className="label-text-alt mt-1 text-error">
-                  Couldn’t load assignments for {sourceClassroom}.
+                  {t("components.modals.reuseFromClassroom.loadError", {
+                    classroom: sourceClassroom,
+                  })}
                 </span>
               ) : null}
             </label>
@@ -167,7 +178,9 @@ export const ReuseFromClassroomModal = ({
           {selectedAssignment ? (
             <label className="form-control w-full">
               <span className="label-text mb-1 font-medium">
-                Slug in {classroom}
+                {t("components.modals.reuseFromClassroom.slugLabel", {
+                  classroom,
+                })}
               </span>
               <input
                 type="text"
@@ -185,6 +198,7 @@ export const ReuseFromClassroomModal = ({
                 }`}
               >
                 {reuseSlugStatus({
+                  t,
                   loading: destLoading,
                   error: destError,
                   slugTaken: reuse.slugTaken,
@@ -192,7 +206,9 @@ export const ReuseFromClassroomModal = ({
                   normalizedSlug: reuse.normalizedSlug,
                   displayedSlug: reuse.displayedSlug,
                   classroomLabel: classroom,
-                  uniqueHint: "Must be unique within this classroom.",
+                  uniqueHint: t(
+                    "components.modals.reuseFromClassroom.uniqueHint",
+                  ),
                 })}
               </span>
             </label>

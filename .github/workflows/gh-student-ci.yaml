@@ -2,7 +2,7 @@ name: gh-student CI
 
 on:
   push:
-    branches: [main, v1]
+    branches: [main, preview]
     paths:
       - 'cli/gh-student/**'
       - 'cli/shared/**'

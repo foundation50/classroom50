@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useTranslation } from "react-i18next"
 import { Loader2, ShieldCheck, UserPlus, X } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -22,9 +23,12 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
-const ROLE_LABEL: Record<StaffRole, string> = {
-  instructor: "Instructor",
-  ta: "TA",
+// i18n key for each role's singular display label. Kept as a map (not inline
+// t() calls) so it stays usable in module scope; components translate it via
+// t(ROLE_LABEL_KEY[role]).
+const ROLE_LABEL_KEY: Record<StaffRole, string> = {
+  instructor: "classes.staff.roleInstructor",
+  ta: "classes.staff.roleTa",
 }
 
 // Manage a classroom's staff (instructor / TA), backed by the per-classroom
@@ -40,6 +44,7 @@ const ClassroomStaffSection = ({
   // Archived classroom => read-only (mirrors the settings form's fieldset).
   disabled?: boolean
 }) => {
+  const { t } = useTranslation()
   return (
     <div className="card bg-base-100 w-full shadow-sm mt-8">
       <div className="card-body">
@@ -49,20 +54,17 @@ const ClassroomStaffSection = ({
               aria-hidden="true"
               className="size-5 text-base-content/70"
             />
-            <h3 className="text-lg font-bold">Staff &amp; roles</h3>
+            <h3 className="text-lg font-bold">{t("classes.staff.heading")}</h3>
           </div>
           <GitHubLink
             href={`https://github.com/orgs/${org}/teams`}
-            label="GitHub teams"
-            title="Open this organization's teams on GitHub"
+            label={t("classes.staff.githubTeams")}
+            title={t("classes.staff.githubTeamsTitle")}
             className="shrink-0"
           />
         </div>
         <p className="text-sm text-base-content/70 pb-4">
-          Instructors and TAs get write access to this organization&apos;s
-          Classroom 50 configuration. TAs see the same classroom content as
-          instructors, but organization and classroom settings stay
-          instructor-only.
+          {t("classes.staff.description")}
         </p>
 
         <AddStaff org={org} classroom={classroom} disabled={disabled} />
@@ -95,6 +97,7 @@ const AddStaff = ({
   classroom: string
   disabled: boolean
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
@@ -105,7 +108,7 @@ const AddStaff = ({
   const addMutation = useMutation({
     mutationFn: async (input: { username: string; role: StaffRole }) => {
       const trimmed = normalizeGithubUsername(input.username)
-      if (!trimmed) throw new Error("Enter a GitHub username.")
+      if (!trimmed) throw new Error(t("classes.staff.enterUsername"))
       // Verify the account exists for a clear error (vs. a confusing team 422).
       await queryClient.ensureQueryData(getUserQuery(client, trimmed))
       // Ensure-as-preflight: create the team if missing + (re)grant config write.
@@ -154,17 +157,23 @@ const AddStaff = ({
       notify({
         tone: "success",
         durationMs: 5000,
-        message: `Added @${trimmed} as ${ROLE_LABEL[addedRole]}.`,
+        message: t("toasts.staffAdded", {
+          username: trimmed,
+          role: t(ROLE_LABEL_KEY[addedRole]),
+        }),
       })
     },
     onError: (err) => {
       const message =
         err instanceof GitHubAPIError && err.status === 404
-          ? "No such GitHub user."
+          ? t("classes.staff.noSuchUser")
           : err instanceof Error
             ? err.message
-            : "Something went wrong."
-      notify({ tone: "error", message: `Couldn't add staff: ${message}` })
+            : t("classes.somethingWentWrong")
+      notify({
+        tone: "error",
+        message: t("classes.staff.addFailed", { message }),
+      })
     },
   })
 
@@ -179,7 +188,7 @@ const AddStaff = ({
     >
       <div className="grow min-w-[12rem]">
         <label htmlFor="staff-username" className="label font-bold text-sm">
-          GitHub username
+          {t("classes.staff.githubUsername")}
         </label>
         <input
           id="staff-username"
@@ -187,7 +196,7 @@ const AddStaff = ({
           autoComplete="off"
           spellCheck={false}
           className="input w-full"
-          placeholder="e.g. octocat"
+          placeholder={t("classes.staff.usernamePlaceholder")}
           value={username}
           disabled={disabled || addMutation.isPending}
           onChange={(e) => setUsername(e.target.value)}
@@ -195,7 +204,7 @@ const AddStaff = ({
       </div>
       <div>
         <label htmlFor="staff-role" className="label font-bold text-sm">
-          Role
+          {t("classes.staff.role")}
         </label>
         <select
           id="staff-role"
@@ -206,7 +215,7 @@ const AddStaff = ({
         >
           {STAFF_ROLES.map((r) => (
             <option key={r} value={r}>
-              {ROLE_LABEL[r]}
+              {t(ROLE_LABEL_KEY[r])}
             </option>
           ))}
         </select>
@@ -221,7 +230,7 @@ const AddStaff = ({
         ) : (
           <UserPlus aria-hidden="true" className="size-4" />
         )}
-        Add
+        {t("classes.staff.add")}
       </button>
     </form>
   )
@@ -238,6 +247,7 @@ const StaffRoleList = ({
   role: StaffRole
   disabled: boolean
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const teamSlug = useMemo(
     () => staffTeamName(classroom, role),
@@ -246,20 +256,25 @@ const StaffRoleList = ({
   const membersQuery = useQuery(teamMembersQuery(client, org, teamSlug))
   const members = membersQuery.data ?? []
 
+  const rolePlural =
+    role === "instructor"
+      ? t("classes.staff.roleInstructorPlural")
+      : t("classes.staff.roleTaPlural")
+
   return (
     <div>
       <div className="flex items-center gap-2 mb-2">
-        <h4 className="font-bold">{ROLE_LABEL[role]}s</h4>
+        <h4 className="font-bold">{rolePlural}</h4>
         <span className="badge badge-sm badge-ghost">{members.length}</span>
       </div>
       {membersQuery.isLoading ? (
         <div className="flex items-center gap-2 text-sm text-base-content/70">
           <Loader2 aria-hidden="true" className="size-4 animate-spin" />{" "}
-          Loading…
+          {t("common.loading")}
         </div>
       ) : members.length === 0 ? (
         <p className="text-sm text-base-content/70">
-          No {ROLE_LABEL[role].toLowerCase()}s yet.
+          {t("classes.staff.noneYet", { role: rolePlural.toLowerCase() })}
         </p>
       ) : (
         <ul className="flex flex-col gap-1.5">
@@ -292,10 +307,17 @@ const StaffMemberRow = ({
   member: GitHubUser
   disabled: boolean
 }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
   const teamSlug = staffTeamName(classroom, role)
+
+  const roleLabel = t(ROLE_LABEL_KEY[role])
+  const rolePlural =
+    role === "instructor"
+      ? t("classes.staff.roleInstructorPlural")
+      : t("classes.staff.roleTaPlural")
 
   const removeMutation = useMutation({
     mutationFn: () =>
@@ -307,15 +329,22 @@ const StaffMemberRow = ({
       notify({
         tone: "success",
         durationMs: 4000,
-        message: `Removed @${member.login} from ${ROLE_LABEL[role]}s.`,
+        message: t("classes.staff.removedToast", {
+          login: member.login,
+          role: rolePlural,
+        }),
       })
     },
     onError: (err) => {
       notify({
         tone: "error",
-        message: `Couldn't remove @${member.login}: ${
-          err instanceof Error ? err.message : "something went wrong"
-        }`,
+        message: t("classes.staff.removeFailed", {
+          login: member.login,
+          error:
+            err instanceof Error
+              ? err.message
+              : t("classes.somethingWentWrong"),
+        }),
       })
     },
   })
@@ -339,13 +368,13 @@ const StaffMemberRow = ({
             role === "instructor" ? "badge-primary" : "badge-secondary"
           } badge-soft`}
         >
-          {ROLE_LABEL[role]}
+          {roleLabel}
         </span>
       </a>
       <button
         type="button"
         className="btn btn-ghost btn-xs text-error"
-        title={`Remove ${ROLE_LABEL[role]}`}
+        title={t("classes.staff.removeRole", { role: roleLabel })}
         disabled={disabled || removeMutation.isPending}
         onClick={() => removeMutation.mutate()}
       >

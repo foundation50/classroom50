@@ -1,4 +1,5 @@
 import type { GitHubClient } from "@/hooks/github/client"
+import type { TFunction } from "i18next"
 import { unenrollStudent } from "@/api/mutations/students"
 import {
   removeOrgMembership,
@@ -41,6 +42,7 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 export async function removeMemberFromOrg(
   client: GitHubClient,
   input: { org: string; row: OrgMemberRow },
+  t?: TFunction,
 ): Promise<RemoveFromOrgResult> {
   const { org, row } = input
   const student = rowToStudent(row)
@@ -92,8 +94,13 @@ export async function removeMemberFromOrg(
     // inconsistency this flow exists to prevent. Skip them and report instead.
     if (access.archived) {
       warnings.push(
-        `${row.username || row.email} is still on the archived classroom "${access.classroom}"; ` +
-          `unarchive it to remove them from that roster.`,
+        t
+          ? t("orgMembers.warnArchived", {
+              who: row.username || row.email,
+              classroom: access.classroom,
+            })
+          : `${row.username || row.email} is still on the archived classroom "${access.classroom}"; ` +
+              `unarchive it to remove them from that roster.`,
       )
       continue
     }
@@ -106,9 +113,15 @@ export async function removeMemberFromOrg(
       unenrolledClassrooms.push(access.classroom)
     } catch (err) {
       warnings.push(
-        `Couldn't unenroll ${row.username || row.email} from "${access.classroom}" (${getErrorMessage(
-          err,
-        )}); removed the others.`,
+        t
+          ? t("orgMembers.warnUnenrollFailed", {
+              who: row.username || row.email,
+              classroom: access.classroom,
+              reason: getErrorMessage(err),
+            })
+          : `Couldn't unenroll ${row.username || row.email} from "${access.classroom}" (${getErrorMessage(
+              err,
+            )}); removed the others.`,
       )
     }
   }
@@ -144,9 +157,14 @@ export async function removeMemberFromOrg(
         }
       } else {
         warnings.push(
-          `Couldn't delete the leftover onboarding repository "${onboardingRepo}" (${getErrorMessage(
-            err,
-          )}); you can remove it manually.`,
+          t
+            ? t("orgMembers.warnOnboardingRepo", {
+                repo: onboardingRepo,
+                reason: getErrorMessage(err),
+              })
+            : `Couldn't delete the leftover onboarding repository "${onboardingRepo}" (${getErrorMessage(
+                err,
+              )}); you can remove it manually.`,
         )
       }
     }

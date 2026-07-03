@@ -1,4 +1,5 @@
 import { useParams } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -7,6 +8,7 @@ const OrgPage = () => {
   const { org } = useParams({ strict: false })
   const { isTeacher, isStudent, isBlocked } = useCourseTeacherAccess(org)
   const { classes } = useGetClasses(org)
+  const { t } = useTranslation()
 
   return (
     <div>
@@ -16,7 +18,7 @@ const OrgPage = () => {
       <hr />
 
       <div>
-        <h3>Classes</h3>
+        <h3>{t("documentTitle.classes")}</h3>
         <ul>
           {classes.map((cl) => (
             <li key={cl.name}>{cl.name}</li>

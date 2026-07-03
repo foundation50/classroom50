@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 import Drawer, {
   DrawerContent,
   DrawerSidebar,
@@ -57,29 +58,30 @@ function maxExpiryDays(from: Date): number {
 }
 
 // One descriptor per service-token status, keeping the banner's style, icon, and
-// title in sync from a single source.
+// titleKey in sync from a single source.
 const TOKEN_STATUS_BANNER = {
   present: {
     className: "border-success/30 bg-success/10",
     Icon: CheckCircle2,
     iconClassName: "text-success",
-    title: "A service token is already set",
+    titleKey: "orgSettings.serviceToken.statusPresent",
   },
   missing: {
     className: "border-error/30 bg-error/10",
     Icon: TriangleAlert,
     iconClassName: "text-error",
-    title: "No service token set yet",
+    titleKey: "orgSettings.serviceToken.statusMissing",
   },
   unknown: {
     className: "border-warning/30 bg-warning/10",
     Icon: TriangleAlert,
     iconClassName: "text-warning",
-    title: "Couldn’t check the service token",
+    titleKey: "orgSettings.serviceToken.statusUnknown",
   },
 } as const
 
 export function ServiceTokenInfo() {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const popupRef = useRef<HTMLDivElement>(null)
 
@@ -115,7 +117,7 @@ export function ServiceTokenInfo() {
       <button
         type="button"
         className="btn btn-circle btn-ghost btn-xs text-base-content/70 hover:text-base-content"
-        aria-label="What is the service token?"
+        aria-label={t("orgSettings.serviceToken.infoAria")}
         aria-expanded={open}
         onClick={() => setOpen((open) => !open)}
       >
@@ -127,14 +129,11 @@ export function ServiceTokenInfo() {
       {open && (
         <div className="dropdown-content z-50 mt-2 w-80 rounded-box border border-base-300 bg-base-100 p-4 text-sm shadow-xl">
           <p className="text-base-content/70">
-            Classroom 50 needs a service token, a fine-grained Personal Access
-            Token (PAT) with read and write access to the repositories in your
-            classroom’s GitHub organization. It is stored as the{" "}
-            <code className="text-xs">CLASSROOM50_SERVICE_TOKEN</code> secret on
-            your <span className="font-semibold">classroom50</span> config repo,
-            where the score-collection workflow uses it to read student
-            submissions and the regrade workflow uses it to re-run student
-            autograde workflows.
+            {t("orgSettings.serviceToken.info_1")}{" "}
+            <code className="text-xs">CLASSROOM50_SERVICE_TOKEN</code>{" "}
+            {t("orgSettings.serviceToken.info_2")}{" "}
+            <span className="font-semibold">classroom50</span>{" "}
+            {t("orgSettings.serviceToken.info_3")}
           </p>
         </div>
       )}
@@ -143,6 +142,7 @@ export function ServiceTokenInfo() {
 }
 
 export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const runPat = useSafeSubmit()
@@ -182,7 +182,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
     "https://github.com/settings/personal-access-tokens/new?" +
     new URLSearchParams({
       name: SERVICE_TOKEN_NAME,
-      description: `Service token for Classroom 50 score collection and regrading. Contents: Read and write + Actions: Read and write on all repositories in the ${org} organization`,
+      description: t("orgSettings.serviceToken.patDescription", { org }),
       target_name: org ?? "",
       expires_in: String(expiryValid ? parsedExpiry : DEFAULT_EXPIRY_DAYS),
       contents: "write",
@@ -213,7 +213,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
 
   return (
     <SettingsSection
-      title="Service Token"
+      title={t("orgSettings.serviceToken.title")}
       titleAdornment={<ServiceTokenInfo />}
     >
       {!tokenStatusLoading &&
@@ -233,15 +233,14 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
               />
               <div className="min-w-0">
                 <p className="font-semibold text-base-content">
-                  {banner.title}
+                  {t(banner.titleKey)}
                 </p>
                 <p className="mt-1 text-base-content/70">
                   {tokenStatus.message}
                 </p>
                 {tokenStatus.status === "present" && (
                   <p className="mt-1 text-base-content/70">
-                    Saving below will replace the existing token (an update).
-                    The old token is overwritten in place.
+                    {t("orgSettings.serviceToken.replaceNote")}
                   </p>
                 )}
               </div>
@@ -261,7 +260,9 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
           ) : (
             <ChevronRight aria-hidden="true" className="size-4" />
           )}
-          {configOpen ? "Hide token configuration" : "Update or replace token"}
+          {configOpen
+            ? t("orgSettings.serviceToken.hideConfig")
+            : t("orgSettings.serviceToken.updateOrReplace")}
         </button>
       )}
 
@@ -272,7 +273,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
               htmlFor="token-expiry"
               className="block text-sm font-semibold"
             >
-              Token expiry
+              {t("orgSettings.serviceToken.expiryLabel")}
             </label>
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <label
@@ -291,23 +292,32 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                   onChange={(e) => setExpiryDays(e.target.value)}
                   className="w-full [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none"
                 />
-                <span className="text-sm text-base-content/70">days</span>
+                <span className="text-sm text-base-content/70">
+                  {t("orgSettings.serviceToken.days")}
+                </span>
               </label>
 
               {expiresDate ? (
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-base-200 px-3 py-1 text-xs text-base-content/70">
                   <CalendarClock aria-hidden="true" className="size-3.5" />
-                  Expires {expiresDate.toLocaleDateString()}
+                  {t("orgSettings.serviceToken.expiresOn", {
+                    date: expiresDate.toLocaleDateString(),
+                  })}
                 </span>
               ) : (
                 <span className="text-xs text-error">
-                  Enter {MIN_EXPIRY_DAYS}–{maxExpiry} days
+                  {t("orgSettings.serviceToken.enterRange", {
+                    min: MIN_EXPIRY_DAYS,
+                    max: maxExpiry,
+                  })}
                 </span>
               )}
             </div>
             <p className="mt-2 text-xs text-base-content/70">
-              Valid range is {MIN_EXPIRY_DAYS}–{maxExpiry} days (GitHub’s
-              maximum).
+              {t("orgSettings.serviceToken.validRange", {
+                min: MIN_EXPIRY_DAYS,
+                max: maxExpiry,
+              })}
             </p>
           </div>
 
@@ -333,52 +343,61 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
             }}
           >
             <ExternalLink aria-hidden="true" className="size-4" />
-            Generate token on GitHub
+            {t("orgSettings.serviceToken.generateOnGitHub")}
           </a>
           <p className="mt-2 text-xs text-base-content/70">
-            Opens GitHub’s token form with the name, resource owner, expiry, and{" "}
+            {t("orgSettings.serviceToken.generateHint_prefix")}{" "}
             <span className="font-semibold">
-              Contents: Read and write + Actions: Read and write
+              {t("orgSettings.serviceToken.generateHint_permissions")}
             </span>{" "}
-            permissions pre-filled.
+            {t("orgSettings.serviceToken.generateHint_suffix")}
           </p>
 
           <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
             <p className="font-semibold text-base-content">
-              On the GitHub page, before generating the token:
+              {t("orgSettings.serviceToken.beforeGenerating")}
             </p>
             <ul className="mt-2 list-disc space-y-1 pl-5 text-base-content/80">
               <li>
-                Set <span className="font-semibold">Repository access</span> to{" "}
-                <span className="font-semibold">All repositories</span>.{" "}
+                {t("orgSettings.serviceToken.repoAccess_prefix")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.repoAccess_field")}
+                </span>{" "}
+                {t("orgSettings.serviceToken.repoAccess_mid")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.repoAccess_value")}
+                </span>
+                {t("orgSettings.serviceToken.repoAccess_period")}{" "}
                 <span className="text-base-content/70">
-                  “Only select repositories” will miss student repos created
-                  later and break score collection.
+                  {t("orgSettings.serviceToken.repoAccess_warning")}
                 </span>
               </li>
               <li>
-                Under <span className="font-semibold">Permissions</span>,
-                confirm{" "}
-                <span className="font-semibold">Contents: Read and write</span>{" "}
-                and{" "}
-                <span className="font-semibold">Actions: Read and write</span>{" "}
-                (Metadata: Read is included automatically).{" "}
+                {t("orgSettings.serviceToken.permissions_prefix")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.permissions_field")}
+                </span>
+                {t("orgSettings.serviceToken.permissions_confirm")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.permissions_contents")}
+                </span>{" "}
+                {t("orgSettings.serviceToken.permissions_and")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.permissions_actions")}
+                </span>{" "}
+                {t("orgSettings.serviceToken.permissions_metadata")}{" "}
                 <span className="text-base-content/70">
-                  Read collects scores; write lets the regrade workflow re-run
-                  student autograde workflows.
+                  {t("orgSettings.serviceToken.permissions_warning")}
                 </span>
               </li>
             </ul>
             <p className="mt-3 text-base-content/80">
-              The token expires after the period you set above. When it expires,
-              the score-collection and regrade workflows will fail until you
-              generate a new token and save it here again, so set a reminder to
-              rotate it before then.
+              {t("orgSettings.serviceToken.rotateNote")}
             </p>
           </div>
 
           <p className="mt-3 text-sm text-base-content/70">
-            After generating the token on GitHub, copy it and paste it below.
+            {t("orgSettings.serviceToken.pasteBelow")}
           </p>
           <form
             onSubmit={(e) => {
@@ -394,14 +413,14 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                 className="label font-bold mt-4 text-sm"
               >
                 {tokenAlreadySet
-                  ? "Enter new service token"
-                  : "Enter service token"}
+                  ? t("orgSettings.serviceToken.enterNewLabel")
+                  : t("orgSettings.serviceToken.enterLabel")}
               </label>
               <input
                 id="service-token"
                 ref={tokenInputRef}
                 type="password"
-                placeholder="Enter token (e.g., github_pat_123...)"
+                placeholder={t("orgSettings.serviceToken.placeholder")}
                 className="input input-bordered w-full"
                 autoComplete="off"
                 value={serviceToken}
@@ -412,9 +431,11 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                 }}
               />
               <p className="text-xs text-base-content/70">
-                We’ll check the token is valid before saving. Double-check you
-                chose <span className="font-semibold">All repositories</span>{" "}
-                when creating it.
+                {t("orgSettings.serviceToken.validateHint_prefix")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.validateHint_allRepos")}
+                </span>{" "}
+                {t("orgSettings.serviceToken.validateHint_suffix")}
               </p>
               {patMutation.isError && (
                 <div className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
@@ -425,7 +446,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                   <span>
                     {patMutation.error instanceof Error
                       ? patMutation.error.message
-                      : "Could not validate or save the token."}
+                      : t("orgSettings.serviceToken.saveError")}
                   </span>
                 </div>
               )}
@@ -433,8 +454,8 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                 <p className="flex items-center gap-1 text-sm text-success">
                   <CheckCircle2 aria-hidden="true" className="size-4" />
                   {savedKind === "updated"
-                    ? "Service token checked and updated."
-                    : "Service token checked and saved."}
+                    ? t("orgSettings.serviceToken.savedUpdated")
+                    : t("orgSettings.serviceToken.savedNew")}
                 </p>
               )}
               <button
@@ -448,12 +469,12 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                       className="loading loading-spinner loading-sm"
                       aria-hidden="true"
                     />
-                    Validating…
+                    {t("orgSettings.serviceToken.validating")}
                   </>
                 ) : tokenAlreadySet ? (
-                  "Update service token"
+                  t("orgSettings.serviceToken.updateButton")
                 ) : (
-                  "Save service token"
+                  t("orgSettings.serviceToken.saveButton")
                 )}
               </button>
             </div>
@@ -465,7 +486,8 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
 }
 
 const OrgSettingsPage = () => {
-  useDocumentTitle("Organization Settings")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.organizationSettings"))
   const { org } = useParams({ strict: false })
 
   return (
@@ -475,10 +497,13 @@ const OrgSettingsPage = () => {
         <DrawerContent className="p-10 bg-base-200 xl:px-50">
           <RequireTeacher allow="owner">
             <div>
-              <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
+              <h1 className="text-2xl font-bold tracking-tight">
+                {t("orgSettings.page.heading")}
+              </h1>
               <p className="mt-1 text-sm text-base-content/70">
-                Organization-level configuration for{" "}
-                <span className="font-mono font-semibold">{org}</span>.
+                {t("orgSettings.page.subheading_prefix")}{" "}
+                <span className="font-mono font-semibold">{org}</span>
+                {t("orgSettings.page.subheading_suffix")}
               </p>
             </div>
             <div className="mt-8 space-y-8">

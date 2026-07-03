@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { ShieldAlert } from "lucide-react"
 import { AnimatePresence } from "motion/react"
+import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { AppBanner } from "@/components/AppBanner"
@@ -14,8 +15,10 @@ export function ScopeWarningBanner() {
   const missing = useMissingScopes()
   const { startWebFlow } = useGithubAuth()
   const [dismissed, setDismissed] = useState(false)
+  const { t } = useTranslation()
 
   const show = missing.length > 0 && !dismissed
+  const scopeCount = missing.length
 
   return (
     <AnimatePresence initial={false}>
@@ -24,25 +27,23 @@ export function ScopeWarningBanner() {
           key="missing-scopes"
           tone="warning"
           icon={<ShieldAlert className="size-5" aria-hidden="true" />}
-          title="Some GitHub permissions are missing"
+          title={t("auth.missingScopesTitle")}
           onDismiss={() => setDismissed(true)}
         >
           <p className="text-base-content/70">
-            This app needs the {missing.length === 1 ? "scope" : "scopes"}{" "}
-            <code className="font-mono text-xs">{missing.join(", ")}</code>.
-            Some actions may fail until{" "}
-            {missing.length === 1 ? "it is" : "they are"} granted.
+            {t("auth.missingScopesBody", { count: scopeCount })}{" "}
+            <code className="font-mono text-xs">{missing.join(", ")}</code>
+            {t("auth.missingScopesBody_suffix", { count: scopeCount })}
           </p>
           <button
             type="button"
             className="btn btn-sm btn-warning self-start"
             onClick={() => void startWebFlow()}
           >
-            Re-authorize
+            {t("auth.reauthorize")}
           </button>
           <p className="text-xs text-base-content/70">
-            If re-authorizing doesn&apos;t clear this, an organization owner may
-            need to approve the app in the org&apos;s OAuth policy settings.
+            {t("auth.reauthorizeHint")}
           </p>
         </AppBanner>
       ) : null}

@@ -20,13 +20,15 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import type {
   CreateAssignmentInput,
   CreateAssignmentResult,
 } from "@/api/mutations/assignments"
 
 const CreateAssignmentPage = () => {
-  useDocumentTitle("New Assignment")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.newAssignment"))
   const client = useGitHubClient()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
@@ -89,7 +91,7 @@ const CreateAssignmentPage = () => {
       notify({
         tone: "success",
         durationMs: 6000,
-        message: "Assignment created. It may take a moment to appear.",
+        message: t("toasts.assignmentCreated"),
       })
       navigate({
         to: "/$org/$classroom/assignments/$assignment",
@@ -103,19 +105,19 @@ const CreateAssignmentPage = () => {
   })
 
   if (!org || !classroom) {
-    return <MissingParams message="Missing organization or classroom." />
+    return <MissingParams message={t("assignments.missingOrgOrClassroom")} />
   }
   return (
     <div className="min-h-screen">
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="New Assignment" />
+          <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
           <RequireTeacher>
             <div className="flex justify-between">
               <div>
                 <h1 className="text-xl pt-8 pb-10 font-bold">
-                  Create Assignment
+                  {t("assignments.createHeading")}
                 </h1>
               </div>
             </div>
@@ -144,7 +146,7 @@ const CreateAssignmentPage = () => {
                     })
                   }
                 >
-                  Go to assignments
+                  {t("assignments.goToAssignments")}
                 </button>
               </div>
             ) : (

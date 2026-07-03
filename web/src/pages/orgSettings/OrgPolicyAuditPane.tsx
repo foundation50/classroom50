@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   CheckCircle2,
   ChevronRight,
@@ -40,27 +41,27 @@ const VERDICT_BANNER: Record<
     className: string
     Icon: typeof CheckCircle2
     iconClassName: string
-    title: string
+    titleKey: string
   }
 > = {
   ok: {
     className: "border-success/30 bg-success/10",
     Icon: CheckCircle2,
     iconClassName: "text-success",
-    title: "Org policy verified",
+    titleKey: "orgSettings.audit.verdictOk",
   },
   fail: {
     className: "border-error/30 bg-error/10",
     Icon: XCircle,
     iconClassName: "text-error",
-    title: "Org policy incomplete",
+    titleKey: "orgSettings.audit.verdictFail",
   },
 }
 
 const CONCERN_STATE_LABEL: Record<CheckState, string> = {
-  enforced: "OK",
-  unenforced: "Needs attention",
-  unreadable: "Unreadable",
+  enforced: "orgSettings.audit.stateEnforced",
+  unenforced: "orgSettings.audit.stateUnenforced",
+  unreadable: "orgSettings.audit.stateUnreadable",
 }
 
 const CONCERN_STATE_BADGE: Record<CheckState, string> = {
@@ -87,6 +88,7 @@ function ConcernRow({
     pinned: boolean
   }[]
 }) {
+  const { t } = useTranslation()
   const isDrifted = concern.verdict.state === "unenforced"
   // Hide "Fix it" when every drifted member-default is enterprise-pinned — the
   // API write can't change them, so the button would silently do nothing.
@@ -113,7 +115,7 @@ function ConcernRow({
             rel="noreferrer"
             className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
           >
-            View on GitHub
+            {t("orgSettings.audit.viewOnGitHub")}
             <ExternalLink aria-hidden="true" className="size-3" />
           </a>
         </div>
@@ -131,14 +133,14 @@ function ConcernRow({
                   aria-hidden="true"
                 />
               ) : (
-                "Fix it"
+                t("orgSettings.audit.fixIt")
               )}
             </button>
           )}
           <span
             className={`badge ${CONCERN_STATE_BADGE[concern.verdict.state]}`}
           >
-            {CONCERN_STATE_LABEL[concern.verdict.state]}
+            {t(CONCERN_STATE_LABEL[concern.verdict.state])}
           </span>
         </div>
       </div>
@@ -146,20 +148,22 @@ function ConcernRow({
       {isDrifted && driftedDetails && driftedDetails.length > 0 && (
         <div className="mt-3 border-t border-base-200 pt-3">
           <p className="text-xs font-medium text-base-content/70">
-            {driftedDetails.length === 1
-              ? "1 setting needs fixing"
-              : `${driftedDetails.length} settings need fixing`}{" "}
-            — change {driftedDetails.length === 1 ? "it" : "them"} on{" "}
+            {t("orgSettings.audit.settingsNeedFixing", {
+              count: driftedDetails.length,
+            })}{" "}
+            {t("orgSettings.audit.changeThemOn", {
+              count: driftedDetails.length,
+            })}{" "}
             <a
               href={concern.settingsUrl}
               target="_blank"
               rel="noreferrer"
               className="link inline-flex items-center gap-0.5"
             >
-              GitHub
+              {t("orgSettings.audit.gitHub")}
               <ExternalLink aria-hidden="true" className="size-3" />
             </a>
-            {showFix ? ' (or use "Fix it")' : ""}:
+            {showFix ? t("orgSettings.audit.orUseFixIt") : ""}:
           </p>
           <ul className="mt-1 space-y-1">
             {driftedDetails.map((d) => (
@@ -178,7 +182,7 @@ function ConcernRow({
                   )}
                   {d.pinned && (
                     <span className="ml-1 badge badge-ghost badge-xs align-middle">
-                      Managed by enterprise — set manually
+                      {t("orgSettings.audit.managedByEnterprise")}
                     </span>
                   )}
                 </span>
@@ -204,6 +208,7 @@ function AuditBody({
   enterprisePinned: Set<string>
   onFix: (id: ConcernId) => void
 }) {
+  const { t } = useTranslation()
   const banner = VERDICT_BANNER[report.verdict]
   const { Icon } = banner
   const [showPermissions, setShowPermissions] = useState(false)
@@ -218,18 +223,19 @@ function AuditBody({
       >
         <Icon className={`mt-0.5 size-5 shrink-0 ${banner.iconClassName}`} />
         <div className="min-w-0">
-          <p className="font-semibold text-base-content">{banner.title}</p>
+          <p className="font-semibold text-base-content">
+            {t(banner.titleKey)}
+          </p>
           {!report.readOk && (
             <p className="mt-1 text-base-content/70">
-              Couldn&apos;t read the organization to audit the lockdown. Check
-              your access and retry.
+              {t("orgSettings.audit.readError")}
             </p>
           )}
           {report.readOk && report.verdict !== "ok" && (
             <p className="mt-1 text-base-content/70">
               {canFix
-                ? "Use “Fix it” on a drifted setting, or re-run setup below to re-apply everything at once."
-                : "Ask an organization owner to repair the drift — these changes require owner permissions."}
+                ? t("orgSettings.audit.driftCanFix")
+                : t("orgSettings.audit.driftCannotFix")}
             </p>
           )}
         </div>
@@ -259,11 +265,11 @@ function AuditBody({
 
       {report.manualUnreadable.length > 0 && (
         <div className="mt-6">
-          <h3 className="text-sm font-semibold">Confirm by hand</h3>
+          <h3 className="text-sm font-semibold">
+            {t("orgSettings.audit.confirmByHand")}
+          </h3>
           <p className="mt-1 text-xs text-base-content/70">
-            GitHub exposes no API to read these settings, so we can&apos;t
-            verify them automatically — confirm each one on the member
-            privileges page.
+            {t("orgSettings.audit.confirmByHandBody")}
           </p>
           <div className="mt-2 grid gap-2">
             {report.manualUnreadable.map((step) => (
@@ -281,12 +287,12 @@ function AuditBody({
                     rel="noreferrer"
                     className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
                   >
-                    View on GitHub
+                    {t("orgSettings.audit.viewOnGitHub")}
                     <ExternalLink aria-hidden="true" className="size-3" />
                   </a>
                 </div>
                 <span className="badge badge-warning badge-soft shrink-0">
-                  Confirm manually
+                  {t("orgSettings.audit.confirmManually")}
                 </span>
               </div>
             ))}
@@ -307,14 +313,12 @@ function AuditBody({
             ) : (
               <ChevronRight aria-hidden="true" className="size-4" />
             )}
-            Member permissions we configure
+            {t("orgSettings.audit.memberPermsToggle")}
           </button>
           {showPermissions && (
             <>
               <p className="mt-1 text-xs text-base-content/70">
-                The full list of organization member privileges Classroom 50
-                sets, including the ones already in place. Drifted ones are
-                called out above.
+                {t("orgSettings.audit.memberPermsHint")}
               </p>
               <ul className="mt-2 space-y-1 text-sm">
                 {report.defaultVerdicts.map((v) => (
@@ -354,6 +358,7 @@ function AuditBody({
 }
 
 const OrgPolicyAuditPane = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const runFix = useSafeSubmit()
@@ -398,14 +403,14 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
 
   return (
     <SettingsSection
-      title="Organization policy"
+      title={t("orgSettings.audit.title")}
       titleAdornment={
         <PlanBadge
           name={planDetails?.plan?.name}
-          title="GitHub plan — determines which policies are in scope (Enterprise unlocks additional member-privilege fields)"
+          title={t("orgSettings.audit.planBadgeTitle")}
         />
       }
-      description="What Classroom 50 configures on your behalf, and whether anything has drifted from the expected lockdown."
+      description={t("orgSettings.audit.description")}
       action={
         <button
           type="button"
@@ -416,7 +421,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
             })
           }}
         >
-          Re-check
+          {t("orgSettings.audit.recheck")}
         </button>
       }
     >
@@ -426,7 +431,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
             className="loading loading-spinner loading-sm"
             aria-hidden="true"
           />
-          Auditing organization policy…
+          {t("orgSettings.audit.auditing")}
         </div>
       )}
 
@@ -436,7 +441,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
           />
-          <span>Couldn&apos;t run the policy audit. Try re-checking.</span>
+          <span>{t("orgSettings.audit.auditError")}</span>
         </div>
       )}
 
@@ -446,10 +451,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
             aria-hidden="true"
             className="mt-0.5 size-4 shrink-0"
           />
-          <span>
-            Couldn&apos;t apply the fix. You may lack owner permissions, or an
-            enterprise policy blocks this change.
-          </span>
+          <span>{t("orgSettings.audit.fixError")}</span>
         </div>
       )}
 

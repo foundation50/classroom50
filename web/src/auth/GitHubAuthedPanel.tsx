@@ -1,4 +1,5 @@
 import { CheckCircle } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import type { GitHubUser } from "@/hooks/github/types"
 
@@ -20,12 +21,13 @@ export function GitHubAuthedPanel({
   tokenScope: string
   onSignOut: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="space-y-5">
       <div className="alert alert-success items-start text-sm">
         <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
         <span>
-          Signed in - token stored in{" "}
+          {t("auth.signedInTokenStored")}{" "}
           <code className="font-mono">localStorage</code>
         </span>
       </div>
@@ -45,7 +47,7 @@ export function GitHubAuthedPanel({
 
         {isLoadingUser && !user ? (
           <div className="text-sm text-base-content/70">
-            Fetching profile...
+            {t("auth.fetchingProfile")}
           </div>
         ) : user ? (
           <div>
@@ -59,7 +61,7 @@ export function GitHubAuthedPanel({
           </div>
         ) : (
           <div className="text-sm text-base-content/70">
-            Profile unavailable
+            {t("auth.profileUnavailable")}
           </div>
         )}
 
@@ -69,15 +71,17 @@ export function GitHubAuthedPanel({
         </div>
 
         <div className="w-full rounded-xl border border-base-300 bg-base-200 p-3 text-left font-mono text-xs text-base-content/70">
-          <strong className="text-base-content">granted scopes</strong> →{" "}
-          {tokenScope || "(none reported)"}
+          <strong className="text-base-content">
+            {t("auth.grantedScopesLabel")}
+          </strong>{" "}
+          → {tokenScope || t("auth.noScopesReported")}
         </div>
       </div>
 
       <div className="divider" />
 
       <button className="btn btn-outline w-full" onClick={onSignOut}>
-        Sign out & clear token
+        {t("auth.signOutClearToken")}
       </button>
     </div>
   )

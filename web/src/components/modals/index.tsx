@@ -1,5 +1,6 @@
 import { AlertTriangle } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 type ConfirmModalProps = {
   open: boolean
@@ -20,8 +21,8 @@ export function ConfirmModal({
   title,
   description,
   confirmText = "",
-  confirmLabel = "Confirm",
-  cancelLabel = "Cancel",
+  confirmLabel,
+  cancelLabel,
   dangerous = true,
   needsConfirm = true,
   onConfirm,
@@ -29,6 +30,10 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const confirmInputRef = useRef<HTMLInputElement | null>(null)
+  const { t } = useTranslation()
+  const resolvedConfirmLabel =
+    confirmLabel ?? t("components.confirmModal.confirm")
+  const resolvedCancelLabel = cancelLabel ?? t("common.cancel")
   const [hasAcknowledged, setHasAcknowledged] = useState(false)
   const [typedText, setTypedText] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
@@ -94,7 +99,11 @@ export function ConfirmModal({
       await onConfirm()
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.")
+      setError(
+        err instanceof Error
+          ? err.message
+          : t("components.confirmModal.genericError"),
+      )
     } finally {
       submittingRef.current = false
       setIsSubmitting(false)
@@ -150,8 +159,7 @@ export function ConfirmModal({
           <>
             {dangerous ? (
               <div className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-                Are you sure you want to continue? This action may be difficult
-                or impossible to undo.
+                {t("components.confirmModal.dangerousPrompt")}
               </div>
             ) : null}
 
@@ -171,7 +179,7 @@ export function ConfirmModal({
                 disabled={isSubmitting}
                 onClick={handleClose}
               >
-                No
+                {t("components.confirmModal.no")}
               </button>
 
               <button
@@ -195,12 +203,12 @@ export function ConfirmModal({
                       className="loading loading-spinner loading-sm"
                       aria-hidden="true"
                     />
-                    Working...
+                    {t("common.working")}
                   </>
                 ) : needsConfirm ? (
-                  "Yes, continue"
+                  t("components.confirmModal.yesContinue")
                 ) : (
-                  confirmLabel
+                  resolvedConfirmLabel
                 )}
               </button>
             </div>
@@ -209,11 +217,11 @@ export function ConfirmModal({
           <>
             <div className="mt-6 space-y-3">
               <p id={confirmHintId} className="text-sm text-base-content/70">
-                To confirm, type{" "}
+                {t("components.confirmModal.typeToConfirm_prefix")}{" "}
                 <span className="font-mono font-semibold text-base-content">
                   {confirmText}
                 </span>{" "}
-                below.
+                {t("components.confirmModal.typeToConfirm_suffix")}
               </p>
 
               <input
@@ -223,7 +231,9 @@ export function ConfirmModal({
                 value={typedText}
                 disabled={isSubmitting}
                 autoFocus
-                aria-label={`Type ${confirmText} to confirm`}
+                aria-label={t("components.confirmModal.typeAriaLabel", {
+                  text: confirmText,
+                })}
                 aria-describedby={confirmHintId}
                 onChange={(event) => setTypedText(event.target.value)}
                 onKeyDown={(event) => {
@@ -250,7 +260,7 @@ export function ConfirmModal({
                 disabled={isSubmitting}
                 onClick={handleClose}
               >
-                {cancelLabel}
+                {resolvedCancelLabel}
               </button>
 
               <button
@@ -265,10 +275,10 @@ export function ConfirmModal({
                       className="loading loading-spinner loading-sm"
                       aria-hidden="true"
                     />
-                    Working...
+                    {t("common.working")}
                   </>
                 ) : (
-                  confirmLabel
+                  resolvedConfirmLabel
                 )}
               </button>
             </div>
@@ -277,7 +287,7 @@ export function ConfirmModal({
       </div>
 
       <form method="dialog" className="modal-backdrop">
-        <button disabled={isSubmitting}>close</button>
+        <button disabled={isSubmitting}>{t("common.close")}</button>
       </form>
     </dialog>
   )

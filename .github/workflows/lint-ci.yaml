@@ -19,7 +19,7 @@ name: lint CI
 
 on:
   push:
-    branches: [main, v1]
+    branches: [main, preview]
     paths:
       - '.github/workflows/**'
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/**'

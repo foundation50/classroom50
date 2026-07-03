@@ -2,6 +2,7 @@ import useGetClasses from "@/hooks/useGetClasses"
 import { useForm } from "@tanstack/react-form"
 import { useParams } from "@tanstack/react-router"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 import {
   DEFAULT_SECRET_LENGTH,
   SECRET_PATTERN_DESCRIPTION,
@@ -33,6 +34,7 @@ const CreateClassroomForm = ({
   defaultValues,
   onSubmit,
 }: CreateClassroomFormProps) => {
+  const { t } = useTranslation()
   const { org = "" } = useParams({ strict: false })
   const { classes } = useGetClasses(org)
   const [submitted, setSubmitted] = useState(false)
@@ -50,21 +52,23 @@ const CreateClassroomForm = ({
         const errors: Partial<Record<keyof CreateClassroomFormValues, string>> =
           {}
         if (!value.name.trim()) {
-          errors.name = "Classroom name is required."
+          errors.name = t("validation.classroomNameRequired")
         }
 
         if (!value.slug.trim()) {
-          errors.slug = "Classroom slug is required."
+          errors.slug = t("validation.classroomSlugRequired")
         }
 
         if (classes.find((cl) => cl.path === value.slug.trim())) {
-          errors.slug = "Classroom slug is already taken."
+          errors.slug = t("validation.classroomSlugTaken")
         }
 
         // Only validate the secret when protection is enabled; a disabled
         // toggle leaves it empty (unprotected, the default).
         if (value.protectPages && !isValidSecret(value.secret.trim())) {
-          errors.secret = `Secret must be ${SECRET_PATTERN_DESCRIPTION}.`
+          errors.secret = t("classes.form.secretInvalid", {
+            description: SECRET_PATTERN_DESCRIPTION,
+          })
         }
 
         return Object.keys(errors).length > 0
@@ -100,13 +104,16 @@ const CreateClassroomForm = ({
       }}
     >
       <div className="card-body">
-        <h3 className="text-lg font-bold pb-4">Basic Information</h3>
+        <h3 className="text-lg font-bold pb-4">
+          {t("classes.form.basicInfo")}
+        </h3>
 
         <form.Field name="name">
           {(field) => (
             <>
               <label htmlFor={field.name} className="label font-bold">
-                Classroom Name<span className="text-error">*</span>
+                {t("classes.form.name")}
+                <span className="text-error">*</span>
               </label>
 
               <input
@@ -122,7 +129,7 @@ const CreateClassroomForm = ({
                     : undefined
                 }
                 className="input w-full mb-4"
-                placeholder="e.g., AP CS Principles"
+                placeholder={t("classes.form.namePlaceholder")}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => {
@@ -148,7 +155,8 @@ const CreateClassroomForm = ({
           {(field) => (
             <>
               <label htmlFor={field.name} className="label font-bold">
-                Classroom Slug<span className="text-error">*</span>
+                {t("classes.form.slug")}
+                <span className="text-error">*</span>
               </label>
 
               <input
@@ -164,7 +172,7 @@ const CreateClassroomForm = ({
                     : undefined
                 }
                 className="input w-full mb-4"
-                placeholder="e.g., ap-cs-principles"
+                placeholder={t("classes.form.slugPlaceholder")}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -187,7 +195,7 @@ const CreateClassroomForm = ({
           {(field) => (
             <>
               <label htmlFor={field.name} className="label font-bold">
-                Classroom Term
+                {t("classes.form.term")}
               </label>
 
               <input
@@ -195,7 +203,7 @@ const CreateClassroomForm = ({
                 name={field.name}
                 type="text"
                 className="input w-full mb-4"
-                placeholder="e.g., Fall 2026"
+                placeholder={t("classes.form.termPlaceholder")}
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -240,15 +248,10 @@ const CreateClassroomForm = ({
                 />
                 <span>
                   <span className="font-bold">
-                    Use an unlisted link for this classroom
+                    {t("classes.form.protectPagesLabel")}
                   </span>
                   <span className="block text-sm text-base-content/70">
-                    Publishes this classroom&apos;s assignment data at an
-                    unguessable URL instead of one anyone can reach by guessing
-                    the org name. This is obscurity, not real access control:
-                    anyone who gets the link can read it, and links can leak
-                    (browser history, referrers, search crawlers). Off by
-                    default.
+                    {t("classes.form.protectPagesHint")}
                   </span>
                 </span>
               </label>
@@ -263,7 +266,7 @@ const CreateClassroomForm = ({
                             htmlFor={secretField.name}
                             className="label font-bold"
                           >
-                            Access key
+                            {t("classes.form.accessKey")}
                           </label>
                           <div className="flex gap-2">
                             <input
@@ -271,7 +274,9 @@ const CreateClassroomForm = ({
                               name={secretField.name}
                               type="text"
                               className="input w-full font-mono"
-                              placeholder="e.g., a1b2c3d4"
+                              placeholder={t(
+                                "classes.form.accessKeyPlaceholder",
+                              )}
                               value={secretField.state.value}
                               onBlur={secretField.handleBlur}
                               onChange={(e) =>
@@ -287,16 +292,13 @@ const CreateClassroomForm = ({
                                 )
                               }
                             >
-                              Regenerate
+                              {t("classes.form.regenerate")}
                             </button>
                           </div>
                           <p className="mt-1 text-xs text-base-content/70">
-                            {SECRET_PATTERN_DESCRIPTION}. Accept the generated
-                            key or type your own. It becomes part of every
-                            published URL for this classroom, so treat it like a
-                            shared password — anyone who has the link can read
-                            the data. It can&apos;t be changed later without
-                            re-accepting assignments.
+                            {t("classes.form.accessKeyHelp", {
+                              description: SECRET_PATTERN_DESCRIPTION,
+                            })}
                           </p>
                           {secretField.state.meta.errors.length > 0 && (
                             <p className="text-error text-sm mt-1" role="alert">
@@ -333,10 +335,10 @@ const CreateClassroomForm = ({
                         className="loading loading-spinner loading-sm"
                         aria-hidden="true"
                       />
-                      Creating...
+                      {t("classes.form.creating")}
                     </>
                   ) : (
-                    "Create Classroom"
+                    t("classes.form.createButton")
                   )}
                 </button>
               )

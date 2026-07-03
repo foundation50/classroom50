@@ -55,6 +55,7 @@ import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants, enterExit } from "@/lib/motion"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 // Group students by roster `section`, sorted by name with the unlabeled
 // ("No section") bucket last. Section labels are trimmed; blank/absent folds
@@ -94,6 +95,7 @@ const EditStudentButton = ({
   onSaved: (updated: StudentCsvRow) => void
 }) => {
   const [open, setOpen] = useState(false)
+  const { t } = useTranslation()
   const label = student.username || student.email
 
   return (
@@ -102,8 +104,8 @@ const EditStudentButton = ({
         type="button"
         onClick={() => setOpen(true)}
         className="btn btn-ghost btn-square"
-        aria-label={`Edit ${label}`}
-        title="Edit student"
+        aria-label={t("students.editStudentAria", { label })}
+        title={t("students.editStudentTitle")}
       >
         <Pencil aria-hidden="true" className="size-4" />
       </button>
@@ -140,6 +142,7 @@ const UnenrollStudentButton = ({
   onRemoveStudent: (username: string, teamWarning?: string) => void
 }) => {
   const client = useGitHubClient()
+  const { t } = useTranslation()
   const unenrollStudentMutation = useMutation({
     mutationFn: (input: UnenrollStudentInput) => unenrollStudent(client, input),
   })
@@ -185,7 +188,9 @@ const UnenrollStudentButton = ({
       onRemoveStudent(student.username || student.email, result.teamWarning)
       setOpen(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.")
+      setError(
+        err instanceof Error ? err.message : t("students.somethingWentWrong"),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -197,7 +202,7 @@ const UnenrollStudentButton = ({
         onClick={() => setOpen(true)}
         disabled={unenrollStudentMutation.isPending}
         className="btn btn-ghost btn-square text-error"
-        aria-label={`Unenroll ${label}`}
+        aria-label={t("students.unenrollStudentAria", { label })}
       >
         <Trash aria-hidden="true" />
       </button>
@@ -217,45 +222,40 @@ const UnenrollStudentButton = ({
       >
         <div className="modal-box max-w-lg">
           <h3 id={titleId} className="text-lg font-bold">
-            Unenroll student from roster?
+            {t("students.unenrollTitle")}
           </h3>
 
           <div className="mt-2 text-sm leading-6 text-base-content/70">
-            This will remove student{" "}
+            {t("students.unenrollBodyPrefix")}{" "}
             <span className="font-semibold text-base-content">{label}</span>{" "}
-            from the{" "}
+            {t("students.unenrollBodyFrom")}{" "}
             <span className="font-semibold text-base-content">{org}</span>{" "}
-            {classroom} classroom. Student assignment repositories will not be
-            deleted.
+            {t("students.unenrollBodySuffix", { classroom })}
             {status === "pending" ? (
               <span className="mt-2 block">
-                Their pending organization invite will be cancelled.
+                {t("students.unenrollPendingNote")}
               </span>
             ) : null}
             {status === "onboarding" ? (
               <span className="mt-2 block">
-                Their enrollment will be reset (their onboarding repository is
-                removed), so a fresh invite starts over.
+                {t("students.unenrollOnboardingNote")}
               </span>
             ) : null}
           </div>
 
           {isMember && isSelf ? (
             <div className="mt-4 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              This is your signed-in account, so it will stay in the{" "}
-              <span className="font-semibold">{org}</span> organization. Remove
-              yourself from the organization's people page if you really intend
-              to.
+              {t("students.unenrollSelfPrefix")}{" "}
+              <span className="font-semibold">{org}</span>{" "}
+              {t("students.unenrollSelfSuffix")}
             </div>
           ) : null}
 
           {isMember && !isSelf ? (
             <p className="mt-3 text-sm text-base-content/70">
-              This only unenrolls them from this classroom — their{" "}
-              <span className="font-semibold">{org}</span> organization
-              membership is kept (they may be in your other classes). To remove
-              someone from the organization, use the Members page in
-              organization settings.
+              {t("students.unenrollMemberPrefix")}{" "}
+              <span className="font-semibold">{org}</span>{" "}
+              {t("students.unenrollMemberSuffix")}
             </p>
           ) : null}
 
@@ -272,7 +272,7 @@ const UnenrollStudentButton = ({
               disabled={submitting}
               onClick={closeDialog}
             >
-              Keep student
+              {t("students.keepStudent")}
             </button>
             <button
               type="button"
@@ -286,10 +286,10 @@ const UnenrollStudentButton = ({
                     className="loading loading-spinner loading-sm"
                     aria-hidden="true"
                   />
-                  Working...
+                  {t("common.working")}
                 </>
               ) : (
-                "Unenroll student"
+                t("students.unenrollStudent")
               )}
             </button>
           </div>
@@ -297,7 +297,7 @@ const UnenrollStudentButton = ({
 
         <form method="dialog" className="modal-backdrop">
           <button type="button" disabled={submitting} onClick={closeDialog}>
-            close
+            {t("common.close")}
           </button>
         </form>
       </dialog>
@@ -318,6 +318,7 @@ const InviteLink = ({
 }) => {
   const inviteUrl = `https://github.com/orgs/${org}/invitation`
   const { copied, copy } = useCopyToClipboard(inviteUrl)
+  const { t } = useTranslation()
 
   return (
     <div className="border-b border-base-300 bg-base-200/40 px-6 py-2">
@@ -332,20 +333,19 @@ const InviteLink = ({
         ) : (
           <ChevronRight aria-hidden="true" className="size-3.5" />
         )}
-        Native GitHub organization invite link
+        {t("students.nativeInviteToggle")}
       </button>
       {expanded ? (
         <div className="mt-2 flex flex-col gap-1">
           <span className="text-xs text-base-content/70">
-            Advanced: share this so students can accept the org invite directly
-            on GitHub. Most students use the onboarding link above instead.
+            {t("students.nativeInviteHint")}
           </span>
           <div className="join w-full">
             <input
               type="text"
               readOnly
               value={inviteUrl}
-              aria-label="Student invite link"
+              aria-label={t("students.studentInviteLinkAria")}
               onFocus={(event) => event.currentTarget.select()}
               className="input input-sm input-bordered join-item w-full font-mono text-xs"
             />
@@ -353,17 +353,17 @@ const InviteLink = ({
               type="button"
               className="btn btn-sm join-item"
               onClick={() => void copy()}
-              aria-label="Copy invite link"
+              aria-label={t("students.copyInviteLinkAria")}
             >
               {copied ? (
                 <>
                   <Check aria-hidden="true" className="size-4 text-success" />
-                  Copied
+                  {t("students.copied")}
                 </>
               ) : (
                 <>
                   <Copy aria-hidden="true" className="size-4" />
-                  Copy
+                  {t("students.copy")}
                 </>
               )}
             </button>
@@ -392,14 +392,15 @@ const SecureLinkButton = ({
     email,
   )}&t=${token}`
   const { copied, copy } = useCopyToClipboard(secureUrl)
+  const { t } = useTranslation()
 
   return (
     <button
       type="button"
       className="btn btn-xs btn-square btn-ghost"
       onClick={() => void copy()}
-      aria-label={`Copy secure onboarding link for ${email}`}
-      title="Copy secure onboarding link"
+      aria-label={t("students.copySecureLinkAria", { email })}
+      title={t("students.copySecureLinkTitle")}
     >
       {copied ? (
         <Check aria-hidden="true" className="size-4 text-success" />
@@ -422,18 +423,19 @@ const OnboardingLink = ({
 }) => {
   const onboardUrl = `${window.location.origin}/${org}/${classroom}/onboard`
   const { copied, copy } = useCopyToClipboard(onboardUrl)
+  const { t } = useTranslation()
 
   return (
     <div className="flex flex-col gap-1 px-6 py-3 border-b border-base-300 bg-base-200/40">
       <span className="text-xs font-medium text-base-content/70">
-        Email this onboarding link to students you invited by email:
+        {t("students.onboardingLinkHint")}
       </span>
       <div className="join w-full">
         <input
           type="text"
           readOnly
           value={onboardUrl}
-          aria-label="Student onboarding link"
+          aria-label={t("students.onboardingLinkAria")}
           onFocus={(event) => event.currentTarget.select()}
           className="input input-sm input-bordered join-item w-full font-mono text-xs"
         />
@@ -441,17 +443,17 @@ const OnboardingLink = ({
           type="button"
           className="btn btn-sm join-item"
           onClick={() => void copy()}
-          aria-label="Copy onboarding link"
+          aria-label={t("students.copyOnboardingLinkAria")}
         >
           {copied ? (
             <>
               <Check aria-hidden="true" className="size-4 text-success" />
-              Copied
+              {t("students.copied")}
             </>
           ) : (
             <>
               <Copy aria-hidden="true" className="size-4" />
-              Copy
+              {t("students.copy")}
             </>
           )}
         </button>
@@ -480,6 +482,7 @@ const MatchAccountButton = ({
   onMatched: (student: Student, teamWarning?: string) => void
 }) => {
   const client = useGitHubClient()
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [selected, setSelected] = useState<string | null>(null)
   const [filter, setFilter] = useState("")
@@ -536,7 +539,9 @@ const MatchAccountButton = ({
       setSelected(null)
       setFilter("")
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.")
+      setError(
+        err instanceof Error ? err.message : t("students.somethingWentWrong"),
+      )
     } finally {
       setSubmitting(false)
     }
@@ -547,12 +552,12 @@ const MatchAccountButton = ({
       <button
         type="button"
         className="btn btn-xs btn-primary"
-        aria-label={`Match a GitHub account to ${student.email}`}
-        title="Joined the org without onboarding — match their GitHub account"
+        aria-label={t("students.matchAccountAria", { email: student.email })}
+        title={t("students.matchAccountTitle")}
         onClick={() => setOpen(true)}
       >
         <Link2 aria-hidden="true" className="size-3.5" />
-        Match account
+        {t("students.matchAccount")}
       </button>
 
       <dialog
@@ -570,33 +575,28 @@ const MatchAccountButton = ({
       >
         <div className="modal-box max-w-lg">
           <h3 id={titleId} className="text-lg font-bold">
-            Match a GitHub account
+            {t("students.matchTitle")}
           </h3>
           <p className="mt-2 text-sm leading-6 text-base-content/70">
             <span className="font-semibold text-base-content">
               {student.email}
             </span>{" "}
-            was invited by email and appears to have joined the{" "}
+            {t("students.matchBodyPrefix")}{" "}
             <span className="font-semibold text-base-content">{org}</span>{" "}
-            organization without onboarding, so we can&apos;t tell which GitHub
-            account is theirs. Pick the account that belongs to this student to
-            complete their enrollment.
+            {t("students.matchBodySuffix")}
           </p>
 
           {candidates.length === 0 ? (
             <div className="mt-4 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              No unmatched organization members to choose from. If this student
-              hasn&apos;t accepted their invite yet, wait for them to join. To
-              remove an unidentifiable member, use the Members page in
-              organization settings.
+              {t("students.matchNoCandidates")}
             </div>
           ) : (
             <>
               <input
                 type="text"
                 value={filter}
-                placeholder="Filter by username or name..."
-                aria-label="Filter accounts"
+                placeholder={t("students.matchFilterPlaceholder")}
+                aria-label={t("students.matchFilterAria")}
                 className="input input-sm input-bordered mt-4 w-full"
                 onChange={(e) => setFilter(e.target.value)}
                 disabled={submitting}
@@ -604,7 +604,7 @@ const MatchAccountButton = ({
               <ul className="menu mt-2 max-h-64 w-full flex-nowrap overflow-y-auto rounded-box border border-base-300 p-1">
                 {filtered.length === 0 ? (
                   <li className="px-3 py-2 text-sm text-base-content/70">
-                    No accounts match &quot;{filter}&quot;.
+                    {t("students.matchNoResults", { filter })}
                   </li>
                 ) : (
                   filtered.map((c) => {
@@ -650,7 +650,7 @@ const MatchAccountButton = ({
                     className="size-4 shrink-0 text-primary"
                   />
                   <span className="text-base-content/80">
-                    Selected{" "}
+                    {t("students.matchSelectedPrefix")}{" "}
                     <span className="font-semibold text-base-content">
                       {selectedCandidate.name || selectedCandidate.login}
                     </span>{" "}
@@ -661,7 +661,7 @@ const MatchAccountButton = ({
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-base-content/70">
-                  Select an account above to enable matching.
+                  {t("students.matchSelectHint")}
                 </p>
               )}
             </>
@@ -680,7 +680,7 @@ const MatchAccountButton = ({
               onClick={close}
               disabled={submitting}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               type="button"
@@ -694,16 +694,18 @@ const MatchAccountButton = ({
                   aria-hidden="true"
                 />
               ) : selectedCandidate ? (
-                `Confirm match: @${selectedCandidate.login}`
+                t("students.confirmMatchWith", {
+                  login: selectedCandidate.login,
+                })
               ) : (
-                "Confirm match"
+                t("students.confirmMatch")
               )}
             </button>
           </div>
         </div>
         <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={close} aria-label="Close">
-            close
+          <button type="button" onClick={close} aria-label={t("common.close")}>
+            {t("common.close")}
           </button>
         </form>
       </dialog>
@@ -722,6 +724,7 @@ const EnrolledStudents = ({
 }) => {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
+  const { t } = useTranslation()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
   // Keyed by username so a clean unenroll can't clobber another student's warning.
   const [teamWarnings, setTeamWarnings] = useState<Record<string, string>>({})
@@ -809,7 +812,7 @@ const EnrolledStudents = ({
     if (!Number.isFinite(inviteeId) || inviteeId <= 0) {
       setWarning(
         student.username,
-        `Can't re-send the invite for ${student.username}: missing GitHub id. Re-add them to the roster.`,
+        t("students.resendMissingId", { username: student.username }),
       )
       return "skipped"
     }
@@ -834,24 +837,42 @@ const EnrolledStudents = ({
   const reconcileMutation = useMutation({
     mutationFn: () => reconcileOnboarding(client, { org, classroom }),
     onSuccess: (result) => {
-      const parts = [`${result.reconciled.length} enrolled`]
+      const parts = [
+        t("students.reconcileEnrolled", { count: result.reconciled.length }),
+      ]
       if (result.deleted.length > 0) {
-        parts.push(`${result.deleted.length} deleted`)
+        parts.push(
+          t("students.reconcileDeleted", { count: result.deleted.length }),
+        )
       }
       if (result.archived.length > 0) {
-        parts.push(`${result.archived.length} archived`)
+        parts.push(
+          t("students.reconcileArchived", { count: result.archived.length }),
+        )
       }
       if (result.pending.length > 0) {
-        parts.push(`${result.pending.length} still pending`)
+        parts.push(
+          t("students.reconcilePending", { count: result.pending.length }),
+        )
       }
       if (result.needsAttention.length > 0) {
-        parts.push(`${result.needsAttention.length} need attention`)
+        parts.push(
+          t("students.reconcileNeedsAttention", {
+            count: result.needsAttention.length,
+          }),
+        )
       }
       if (result.needsMatch.length > 0) {
-        parts.push(`${result.needsMatch.length} need matching`)
+        parts.push(
+          t("students.reconcileNeedsMatch", {
+            count: result.needsMatch.length,
+          }),
+        )
       }
       if (result.unmatched.length > 0) {
-        parts.push(`${result.unmatched.length} unmatched`)
+        parts.push(
+          t("students.reconcileUnmatched", { count: result.unmatched.length }),
+        )
       }
       const summary = parts.join(", ")
       setReconcileSummary(
@@ -873,7 +894,9 @@ const EnrolledStudents = ({
       invalidateInviteQueries()
     },
     onError: (err) => {
-      setReconcileSummary(`Reconcile failed (${getErrorMessage(err)}).`)
+      setReconcileSummary(
+        t("students.reconcileFailed", { error: getErrorMessage(err) }),
+      )
     },
   })
 
@@ -913,12 +936,15 @@ const EnrolledStudents = ({
         durationMs: 6000,
         message: result.teamWarning
           ? result.teamWarning
-          : `${student.username} marked enrolled.`,
+          : t("students.markedEnrolled", { username: student.username }),
       })
     } catch (err) {
       notify({
         tone: "error",
-        message: `Couldn't mark ${student.username} enrolled: ${getErrorMessage(err)}`,
+        message: t("students.markEnrolledFailed", {
+          username: student.username,
+          error: getErrorMessage(err),
+        }),
       })
     } finally {
       setMarkingUsernames((prev) => {
@@ -938,7 +964,10 @@ const EnrolledStudents = ({
     } catch (err) {
       setWarning(
         student.username,
-        `Re-sending the invite for ${student.username} failed (${getErrorMessage(err)}).`,
+        t("students.resendFailed", {
+          username: student.username,
+          error: getErrorMessage(err),
+        }),
       )
     } finally {
       setResendingUsernames((prev) => {
@@ -980,26 +1009,38 @@ const EnrolledStudents = ({
 
     const remaining = nonMemberStudents.length - stoppedAt
     const alreadyNote =
-      alreadyValid > 0 ? ` ${alreadyValid} already had a pending invite.` : ""
+      alreadyValid > 0
+        ? " " + t("students.resendAllAlreadyNote", { count: alreadyValid })
+        : ""
     const summaryKey = "__resend_all__"
     if (rateLimited) {
       const failedList = failures.length ? ` (${failures.join(", ")})` : ""
       setWarning(
         summaryKey,
-        `Re-sent ${resent} before GitHub rate-limited the request; ` +
-          `${failures.length} failed${failedList}` +
-          (remaining > 0 ? `, ${remaining} not attempted` : "") +
-          `. Wait a bit and try again.`,
+        t("students.resendAllRateLimited", {
+          resent,
+          failed: failures.length,
+          failedList,
+          remaining:
+            remaining > 0
+              ? t("students.resendAllNotAttempted", { count: remaining })
+              : "",
+        }),
       )
     } else if (failures.length === 0) {
       setWarning(
         summaryKey,
-        `Re-sent ${resent} invite${resent === 1 ? "" : "s"}.${alreadyNote}`,
+        t("students.resendAllSuccess", { count: resent }) + alreadyNote,
       )
     } else {
       setWarning(
         summaryKey,
-        `Re-sent ${resent} of ${nonMemberStudents.length}; ${failures.length} failed (${failures.join(", ")}).${alreadyNote}`,
+        t("students.resendAllPartial", {
+          resent,
+          total: nonMemberStudents.length,
+          failed: failures.length,
+          failedList: failures.join(", "),
+        }) + alreadyNote,
       )
     }
   }
@@ -1086,7 +1127,7 @@ const EnrolledStudents = ({
 
           {statusAvailable && invitedAtLabel ? (
             <span className="whitespace-nowrap text-xs text-base-content/70">
-              Invited {invitedAtLabel}
+              {t("students.invitedAt", { date: invitedAtLabel })}
             </span>
           ) : null}
 
@@ -1097,8 +1138,10 @@ const EnrolledStudents = ({
               disabled={isResending}
               aria-label={
                 status === "none"
-                  ? `Send invite to ${student.username}`
-                  : `Re-send invite to ${student.username}`
+                  ? t("students.sendInviteAria", { username: student.username })
+                  : t("students.resendInviteAria", {
+                      username: student.username,
+                    })
               }
               onClick={() => void handleResend(student)}
             >
@@ -1108,9 +1151,9 @@ const EnrolledStudents = ({
                   aria-hidden="true"
                 />
               ) : status === "none" ? (
-                "Send invite"
+                t("students.sendInvite")
               ) : (
-                "Re-send"
+                t("students.resend")
               )}
             </button>
           ) : null}
@@ -1129,8 +1172,10 @@ const EnrolledStudents = ({
               type="button"
               className="btn btn-xs btn-primary"
               disabled={isMarking}
-              aria-label={`Mark ${student.username} enrolled (already an organization member)`}
-              title="Already an organization member — mark enrolled"
+              aria-label={t("students.markEnrolledAria", {
+                username: student.username,
+              })}
+              title={t("students.markEnrolledTitle")}
               onClick={() =>
                 void runMarkEnrolled(() => handleMarkEnrolled(student))
               }
@@ -1143,7 +1188,7 @@ const EnrolledStudents = ({
               ) : (
                 <>
                   <UserCheck aria-hidden="true" className="size-3.5" />
-                  Mark enrolled
+                  {t("students.markEnrolled")}
                 </>
               )}
             </button>
@@ -1180,7 +1225,10 @@ const EnrolledStudents = ({
                   durationMs: 6000,
                   message: warning
                     ? warning
-                    : `Matched ${student.email} to @${matched.username}.`,
+                    : t("students.matchedToast", {
+                        email: student.email,
+                        username: matched.username,
+                      }),
                 })
               }}
             />
@@ -1248,13 +1296,15 @@ const EnrolledStudents = ({
               role="alert"
               className="alert alert-info alert-soft overflow-hidden"
             >
-              <span className="text-sm">Enrollment: {reconcileSummary}</span>
+              <span className="text-sm">
+                {t("students.enrollmentSummary", { summary: reconcileSummary })}
+              </span>
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
                 onClick={() => setReconcileSummary("")}
               >
-                Dismiss
+                {t("students.dismiss")}
               </button>
             </motion.div>
           ) : null}
@@ -1276,7 +1326,7 @@ const EnrolledStudents = ({
                 className="btn btn-ghost btn-xs"
                 onClick={() => dismissWarning(username)}
               >
-                Dismiss
+                {t("students.dismiss")}
               </button>
             </motion.div>
           ))}
@@ -1293,7 +1343,7 @@ const EnrolledStudents = ({
               className="loading loading-spinner loading-md"
               aria-hidden="true"
             />
-            <span className="text-sm">Loading roster...</span>
+            <span className="text-sm">{t("students.loadingRoster")}</span>
           </div>
         </div>
       ) : null}
@@ -1313,12 +1363,12 @@ const EnrolledStudents = ({
             <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-info/20">
               <div className="flex flex-col">
                 <h2 className="text-lg font-semibold text-info">
-                  Ready for enrollment confirmation
+                  {t("students.readyHeading")}
                 </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
-                  {readyToConfirm.length} student
-                  {readyToConfirm.length === 1 ? " has" : "s have"} onboarded.
-                  Confirm to add them to your roster.
+                  {t("students.readySubtitle", {
+                    count: readyToConfirm.length,
+                  })}
                 </span>
               </div>
               <button
@@ -1333,7 +1383,9 @@ const EnrolledStudents = ({
                   aria-hidden="true"
                   className={`size-4 ${reconcileMutation.isPending ? "animate-spin" : ""}`}
                 />
-                Confirm enrollment ({readyToConfirm.length})
+                {t("students.confirmEnrollment", {
+                  count: readyToConfirm.length,
+                })}
               </button>
             </div>
             <ul className="divide-y divide-base-300 bg-base-100">
@@ -1348,7 +1400,9 @@ const EnrolledStudents = ({
       {/* Invite students: share links. */}
       <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
         <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-          <h2 className="text-lg font-semibold">Invite students</h2>
+          <h2 className="text-lg font-semibold">
+            {t("students.inviteStudents")}
+          </h2>
         </div>
         <OnboardingLink org={org} classroom={classroom} />
         <InviteLink
@@ -1360,8 +1414,7 @@ const EnrolledStudents = ({
         {!statusAvailable ? (
           <div role="alert" className="alert alert-info alert-soft mx-6 my-4">
             <span className="text-sm">
-              Invite status requires organization owner access, so it isn't
-              shown here.
+              {t("students.inviteStatusOwnerOnly")}
             </span>
           </div>
         ) : null}
@@ -1371,12 +1424,7 @@ const EnrolledStudents = ({
             role="alert"
             className="alert alert-warning alert-soft mx-6 my-4"
           >
-            <span className="text-sm">
-              Couldn&apos;t check who has onboarded (the organization
-              repositories couldn&apos;t be read). The &quot;Ready for
-              enrollment confirmation&quot; list may be incomplete — refresh to
-              retry.
-            </span>
+            <span className="text-sm">{t("students.reportsErrored")}</span>
           </div>
         ) : null}
       </div>
@@ -1395,9 +1443,11 @@ const EnrolledStudents = ({
           >
             <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-base-300">
               <div className="flex flex-col">
-                <h2 className="text-lg font-semibold">Awaiting enrollment</h2>
+                <h2 className="text-lg font-semibold">
+                  {t("students.awaitingHeading")}
+                </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
-                  Invited, but haven&apos;t completed onboarding yet.
+                  {t("students.awaitingSubtitle")}
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
@@ -1408,7 +1458,7 @@ const EnrolledStudents = ({
                     onClick={() => setConfirmResendAllOpen(true)}
                   >
                     <Send aria-hidden="true" className="size-4" />
-                    Resend invites
+                    {t("students.resendInvites")}
                   </button>
                 ) : null}
                 <div className="badge badge-ghost badge-soft text-base">
@@ -1429,7 +1479,9 @@ const EnrolledStudents = ({
       {rosterReady ? (
         <EnterDiv className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-            <h2 className="text-lg font-semibold">Enrolled students</h2>
+            <h2 className="text-lg font-semibold">
+              {t("students.enrolledHeading")}
+            </h2>
             <div className="flex items-center gap-3">
               {hasSections && enrolled.length > 0 && (
                 <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/70">
@@ -1439,7 +1491,7 @@ const EnrolledStudents = ({
                     checked={groupBySection}
                     onChange={(e) => setGroupBySection(e.target.checked)}
                   />
-                  Group by section
+                  {t("students.groupBySection")}
                 </label>
               )}
               <div className="badge badge-primary badge-soft text-base">
@@ -1454,7 +1506,9 @@ const EnrolledStudents = ({
                   <div key={section}>
                     <div className="flex items-center justify-between bg-base-200/60 px-6 py-2">
                       <h3 className="text-sm font-semibold text-base-content/70">
-                        {section}
+                        {section === NO_SECTION
+                          ? t("students.noSection")
+                          : section}
                       </h3>
                       <span className="badge badge-ghost badge-sm">
                         {group.length}
@@ -1477,7 +1531,7 @@ const EnrolledStudents = ({
             )
           ) : (
             <div className="px-6 py-10 text-center text-sm text-base-content/70">
-              No students enrolled yet.
+              {t("students.noneEnrolled")}
             </div>
           )}
         </EnterDiv>
@@ -1485,25 +1539,27 @@ const EnrolledStudents = ({
 
       <ConfirmModal
         open={confirmResendAllOpen}
-        title="Resend invites to all students?"
+        title={t("students.resendAllTitle")}
         description={
           <>
-            All pending organization invitations will be{" "}
+            {t("students.resendAllBodyPrefix")}{" "}
             <span className="font-semibold text-base-content">
-              deleted and then resent
+              {t("students.resendAllBodyEmphasis")}
             </span>
-            . After this, every student who is not already a member of{" "}
+            {t("students.resendAllBodyMiddle")}{" "}
             <span className="font-semibold text-base-content">{org}</span> (
             <span className="font-semibold text-base-content">
               {nonMemberStudents.length}
             </span>{" "}
-            student{nonMemberStudents.length === 1 ? "" : "s"}) will receive a
-            new invitation email.
+            {t("students.resendAllBodyStudents", {
+              count: nonMemberStudents.length,
+            })}
+            ){t("students.resendAllBodySuffix")}
           </>
         }
         confirmText="resend"
-        confirmLabel="Resend invites"
-        cancelLabel="Cancel"
+        confirmLabel={t("students.resendInvites")}
+        cancelLabel={t("common.cancel")}
         dangerous={false}
         needsConfirm={false}
         onConfirm={async () => {

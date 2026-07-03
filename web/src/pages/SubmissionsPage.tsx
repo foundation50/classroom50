@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
 import {
@@ -121,6 +122,7 @@ const StatCard = ({
 )
 
 const SubmissionsPageContent = () => {
+  const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
   const {
     data: scoresData,
@@ -145,7 +147,7 @@ const SubmissionsPageContent = () => {
   const scoresLastUpdated =
     scoresUpdatedAt > 0
       ? formatDistanceToNow(scoresUpdatedAt, { addSuffix: true })
-      : "never"
+      : t("submissions.dashboard.never")
 
   const assignmentSubmitUrl =
     `${window.location.origin}/${org}/${classroom}/assignments/${assignment}/accept` +
@@ -366,11 +368,11 @@ const SubmissionsPageContent = () => {
     : collectWorkflowUrl
   const viewLabel = isRegradeView
     ? viewRun
-      ? "View regrade run"
-      : "View regrade workflow"
+      ? t("submissions.actions.viewRegradeRun")
+      : t("submissions.actions.viewRegradeWorkflow")
     : viewRun
-      ? "View run"
-      : "View workflow"
+      ? t("submissions.actions.viewRun")
+      : t("submissions.actions.viewWorkflow")
 
   const lastCollectedLabel =
     lastRun?.status === "completed" && lastRun.created_at
@@ -440,9 +442,7 @@ const SubmissionsPageContent = () => {
   }
 
   if (!org || !classroom || !assignment) {
-    return (
-      <MissingParams message="Missing organization, classroom, or assignment in the URL." />
-    )
+    return <MissingParams message={t("submissions.missingParams")} />
   }
 
   return (
@@ -450,7 +450,7 @@ const SubmissionsPageContent = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="Submissions" />
+          <Breadcrumb endpoint={t("nav.submissions")} />
           {emptyRoster.show && (
             <EmptyRosterNotice
               org={org}
@@ -462,18 +462,18 @@ const SubmissionsPageContent = () => {
           {scoresError && (
             <div className="alert alert-error mt-4">
               <div>
-                Couldn't load the gradebook
                 {scoresErrorObj instanceof Error
-                  ? `: ${scoresErrorObj.message}`
-                  : "."}{" "}
-                The counts below may be incomplete — retry before acting on
-                them.
+                  ? t("submissions.errors.gradebookLoadWithReason", {
+                      reason: scoresErrorObj.message,
+                    })
+                  : t("submissions.errors.gradebookLoad")}{" "}
+                {t("submissions.errors.gradebookLoadHint")}
                 <button
                   type="button"
                   className="btn btn-sm btn-ghost ml-2"
                   onClick={() => refetchScores()}
                 >
-                  Retry
+                  {t("submissions.errors.retry")}
                 </button>
               </div>
             </div>
@@ -486,12 +486,14 @@ const SubmissionsPageContent = () => {
               <div className="flex flex-wrap items-center gap-2 pb-10 text-sm text-base-content/70">
                 <span>
                   {assignmentInfo?.due
-                    ? `Due ${formatDueDateTime(assignmentInfo.due)}`
-                    : "No due date"}
+                    ? t("submissions.dueDate", {
+                        date: formatDueDateTime(assignmentInfo.due),
+                      })
+                    : t("submissions.noDueDate")}
                 </span>
                 {lateCount > 0 && (
                   <span className="badge badge-sm badge-error badge-soft">
-                    {lateCount} late
+                    {t("submissions.lateBadge", { count: lateCount })}
                   </span>
                 )}
               </div>
@@ -503,7 +505,8 @@ const SubmissionsPageContent = () => {
                 onClick={downloadScoresCsv}
                 disabled={!scoresInfo.length && !nonSubmitters.length}
               >
-                <HardDriveDownload aria-hidden="true" /> Download Scores (CSV)
+                <HardDriveDownload aria-hidden="true" />{" "}
+                {t("submissions.downloadCsv")}
               </button>
             </div>
           </div>
@@ -517,14 +520,15 @@ const SubmissionsPageContent = () => {
                   className="mt-0.5 size-5 shrink-0 text-info"
                 />
                 <p className="text-sm text-base-content/70">
-                  Submissions are collected automatically, but new ones can take
-                  up to 24 hours to appear.{" "}
+                  {t("submissions.collectionNote")}{" "}
                   {!collecting &&
                     !regrading &&
                     activeAction === null &&
                     lastCollectedLabel && (
                       <span className="text-base-content/70">
-                        Last collected (org-wide) {lastCollectedLabel}.
+                        {t("submissions.lastCollected", {
+                          when: lastCollectedLabel,
+                        })}
                       </span>
                     )}
                 </p>
@@ -536,12 +540,12 @@ const SubmissionsPageContent = () => {
                   disabled={regrading || collecting || emptyRoster.show}
                   title={
                     emptyRoster.show
-                      ? "Add students to the roster before regrading"
+                      ? t("submissions.regradeAll.titleEmptyRoster")
                       : collecting
-                        ? "Wait for collection to finish before regrading"
+                        ? t("submissions.regradeAll.titleCollecting")
                         : regrading
-                          ? "A regrade is already in progress"
-                          : "Re-run the autograder on every submitted repo (submission times don’t change)"
+                          ? t("submissions.regradeAll.titleRegrading")
+                          : t("submissions.regradeAll.title")
                   }
                   onClick={() => {
                     if (regrading || collecting || emptyRoster.show) return
@@ -554,7 +558,9 @@ const SubmissionsPageContent = () => {
                       aria-hidden="true"
                     />
                   )}
-                  {regradeAllActive ? "Regrading…" : "Regrade all"}
+                  {regradeAllActive
+                    ? t("submissions.regradeAll.active")
+                    : t("submissions.regradeAll.label")}
                 </button>
                 <button
                   type="button"
@@ -562,10 +568,10 @@ const SubmissionsPageContent = () => {
                   disabled={collecting || regrading || emptyRoster.show}
                   title={
                     emptyRoster.show
-                      ? "Add students to the roster before collecting"
+                      ? t("submissions.collect.titleEmptyRoster")
                       : regrading
-                        ? "Wait for the regrade to finish before collecting"
-                        : "Collect submissions now"
+                        ? t("submissions.collect.titleRegrading")
+                        : t("submissions.collect.title")
                   }
                   onClick={() => {
                     if (collecting || regrading || emptyRoster.show) return
@@ -578,7 +584,9 @@ const SubmissionsPageContent = () => {
                       aria-hidden="true"
                     />
                   )}
-                  {collecting ? "Collecting…" : "Collect now"}
+                  {collecting
+                    ? t("submissions.collect.active")
+                    : t("submissions.collect.label")}
                 </button>
                 <a
                   className="btn btn-sm btn-ghost"
@@ -602,7 +610,7 @@ const SubmissionsPageContent = () => {
               >
                 {collectScores.phase === "dispatching" && (
                   <span className="text-base-content/70">
-                    Starting collection…
+                    {t("submissions.collect.statusDispatching")}
                   </span>
                 )}
                 {collectScores.phase === "running" && (
@@ -611,27 +619,27 @@ const SubmissionsPageContent = () => {
                       className="loading loading-spinner loading-xs"
                       aria-hidden="true"
                     />
-                    Collection in progress. This page refreshes automatically
-                    when it finishes.
+                    {t("submissions.collect.statusRunning")}
                   </span>
                 )}
                 {collectScores.phase === "completed" && (
                   <span className="text-success">
-                    Collection finished. Submissions below are up to date.
+                    {t("submissions.collect.statusCompleted")}
                   </span>
                 )}
                 {collectScores.phase === "failed" && (
                   <span className="text-error">
                     {collectScores.error instanceof Error
-                      ? `Could not start collection: ${collectScores.error.message}`
-                      : "The collection run did not complete successfully."}{" "}
-                    You can check or trigger it manually on GitHub.
+                      ? t("submissions.collect.statusFailedWithReason", {
+                          reason: collectScores.error.message,
+                        })
+                      : t("submissions.collect.statusFailed")}{" "}
+                    {t("submissions.collect.statusFailedHint")}
                   </span>
                 )}
                 {collectScores.phase === "timeout" && (
                   <span className="text-base-content/70">
-                    Still running after a while. Check its progress on GitHub,
-                    or refresh this page once it finishes.
+                    {t("submissions.collect.statusTimeout")}
                   </span>
                 )}
               </div>
@@ -649,7 +657,7 @@ const SubmissionsPageContent = () => {
                 aria-live="polite"
               >
                 {regradeAll.phase === "dispatching" && (
-                  <span>Starting regrade…</span>
+                  <span>{t("submissions.regradeAll.statusDispatching")}</span>
                 )}
                 {regradeAll.phase === "running" && (
                   <span className="flex items-center gap-1.5">
@@ -657,30 +665,30 @@ const SubmissionsPageContent = () => {
                       className="loading loading-spinner loading-xs"
                       aria-hidden="true"
                     />
-                    Regrade in progress. Re-running the autograder for each
-                    submitted repo; collection is paused until it finishes.
+                    {t("submissions.regradeAll.statusRunning")}
                   </span>
                 )}
                 {regradeAll.phase === "completed" && (
                   <span>
-                    Regrade started — each repo is re-grading in the background.
-                    Click <span className="font-semibold">Collect now</span> in
-                    a few minutes to pull the new scores.
+                    {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
+                    <span className="font-semibold">
+                      {t("submissions.collect.label")}
+                    </span>{" "}
+                    {t("submissions.regradeAll.statusCompleted_suffix")}
                   </span>
                 )}
                 {regradeAll.phase === "failed" && (
                   <span>
                     {regradeAll.error instanceof Error
-                      ? `Could not start the regrade: ${regradeAll.error.message}`
-                      : "The regrade run did not start successfully."}{" "}
-                    Check the workflow on GitHub, then try again.
+                      ? t("submissions.regradeAll.statusFailedWithReason", {
+                          reason: regradeAll.error.message,
+                        })
+                      : t("submissions.regradeAll.statusFailed")}{" "}
+                    {t("submissions.regradeAll.statusFailedHint")}
                   </span>
                 )}
                 {regradeAll.phase === "timeout" && (
-                  <span>
-                    The regrade is taking a while to register. Check its
-                    progress on GitHub.
-                  </span>
+                  <span>{t("submissions.regradeAll.statusTimeout")}</span>
                 )}
               </div>
             )}
@@ -694,10 +702,9 @@ const SubmissionsPageContent = () => {
                 <LinkIcon aria-hidden="true" className="size-5" />
               </div>
               <div className="min-w-0 flex-1">
-                <h2 className="font-bold">How students accept</h2>
+                <h2 className="font-bold">{t("submissions.accept.heading")}</h2>
                 <p className="text-sm text-base-content/70">
-                  Share an invite link or CLI command so students can accept
-                  this assignment.
+                  {t("submissions.accept.subheading")}
                 </p>
               </div>
               <ChevronRight
@@ -708,9 +715,7 @@ const SubmissionsPageContent = () => {
             <div className="card-body gap-4 pt-0">
               {secret ? (
                 <p className="text-sm text-base-content/70">
-                  This classroom uses an unlisted URL, so the link includes the
-                  access key — treat it like a shared password and send the full
-                  link as-is.
+                  {t("submissions.accept.unlistedNote")}
                 </p>
               ) : null}
 
@@ -721,7 +726,7 @@ const SubmissionsPageContent = () => {
                 <CopyIconButton
                   copied={copiedSubmitLink}
                   onCopy={copySubmitLink}
-                  label="Copy accept link"
+                  label={t("submissions.accept.copyLink")}
                 />
               </div>
 
@@ -731,7 +736,7 @@ const SubmissionsPageContent = () => {
                     aria-hidden="true"
                     className="size-4 transition-transform group-open/cli:rotate-90"
                   />
-                  Prefer the command line?
+                  {t("submissions.accept.preferCli")}
                 </summary>
                 <div className="mt-2 flex justify-between bg-base-200 text-base-content border border-base-300 items-center">
                   <pre className="overflow-x-auto px-4 py-3 text-sm">
@@ -740,7 +745,7 @@ const SubmissionsPageContent = () => {
                   <CopyIconButton
                     copied={copiedSubmitCli}
                     onCopy={copySubmitCli}
-                    label="Copy CLI command"
+                    label={t("submissions.accept.copyCli")}
                   />
                 </div>
               </details>
@@ -748,7 +753,11 @@ const SubmissionsPageContent = () => {
           </details>{" "}
           <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
             <StatCard
-              label={isGroupAssignment ? "Groups Submitted" : "Submitted"}
+              label={
+                isGroupAssignment
+                  ? t("submissions.stats.groupsSubmitted")
+                  : t("submissions.stats.submitted")
+              }
             >
               <div className="flex items-baseline gap-1">
                 <span className="text-2xl font-bold">{stats.submitted}</span>
@@ -759,13 +768,15 @@ const SubmissionsPageContent = () => {
                 )}
               </div>
             </StatCard>
-            <StatCard label="Class Average">
+            <StatCard label={t("submissions.stats.classAverage")}>
               {!scopedScores?.[0]?.["max-score"] ? (
-                <span className="text-2xl font-bold">N/A</span>
+                <span className="text-2xl font-bold">
+                  {t("submissions.stats.notAvailable")}
+                </span>
               ) : (
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-bold">
-                    {avgScore ?? "N/A"}
+                    {avgScore ?? t("submissions.stats.notAvailable")}
                   </span>
                   <span className="text-base-content/70">
                     / {scopedScores?.[0]?.["max-score"]}
@@ -774,9 +785,11 @@ const SubmissionsPageContent = () => {
               )}
             </StatCard>
             {passingEnabled && (
-              <StatCard label="Passing">
+              <StatCard label={t("submissions.stats.passing")}>
                 {stats.passing + stats.failing === 0 ? (
-                  <span className="text-2xl font-bold">N/A</span>
+                  <span className="text-2xl font-bold">
+                    {t("submissions.stats.notAvailable")}
+                  </span>
                 ) : (
                   <>
                     <div className="flex items-baseline gap-1">
@@ -793,21 +806,31 @@ const SubmissionsPageContent = () => {
                           type="button"
                           className="link link-hover decoration-dotted underline-offset-2 hover:text-error"
                           onClick={showFailing}
-                          title="Show failing students"
+                          title={t("submissions.stats.showFailing")}
                         >
-                          {stats.failing} failing
+                          {t("submissions.stats.failingCount", {
+                            count: stats.failing,
+                          })}
                         </button>
                       ) : (
-                        <>{stats.failing} failing</>
+                        <>
+                          {t("submissions.stats.failingCount", {
+                            count: stats.failing,
+                          })}
+                        </>
                       )}
-                      {stats.ungraded > 0 ? `, ${stats.ungraded} ungraded` : ""}
+                      {stats.ungraded > 0
+                        ? t("submissions.stats.ungradedSuffix", {
+                            count: stats.ungraded,
+                          })
+                        : ""}
                     </span>
                   </>
                 )}
               </StatCard>
             )}
             {acceptedAvailable ? (
-              <StatCard label="Accepted">
+              <StatCard label={t("submissions.stats.accepted")}>
                 <div className="flex items-baseline gap-1">
                   <span className="text-2xl font-bold">{acceptedCount}</span>
                   <span className="text-base-content/70">
@@ -819,24 +842,26 @@ const SubmissionsPageContent = () => {
                     type="button"
                     className="link link-hover w-fit text-xs text-base-content/70 decoration-dotted underline-offset-2 hover:text-warning"
                     onClick={showAcceptedNotSubmitted}
-                    title="Show students who accepted but haven't submitted"
+                    title={t("submissions.stats.showAcceptedNotSubmitted")}
                   >
-                    {acceptedNotSubmittedCount} not yet submitted
+                    {t("submissions.stats.notYetSubmitted", {
+                      count: acceptedNotSubmittedCount,
+                    })}
                   </button>
                 )}
               </StatCard>
             ) : null}
           </div>
           <div className="mb-2 flex items-center justify-end gap-1 text-sm text-base-content/70">
-            <span>Updated {scoresLastUpdated}</span>
+            <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
 
             <button
               type="button"
               className="btn btn-ghost btn-xs btn-circle"
               disabled={scoresFetching}
               onClick={() => refetchScores()}
-              aria-label="Refresh submissions"
-              title="Refresh submissions"
+              aria-label={t("submissions.refresh")}
+              title={t("submissions.refresh")}
             >
               <RefreshCw
                 aria-hidden="true"
@@ -872,22 +897,24 @@ const SubmissionsPageContent = () => {
           />
           <ConfirmModal
             open={regradeConfirmOpen}
-            title={`Regrade all submissions for “${assignmentInfo?.name ?? assignment}”?`}
+            title={t("submissions.regradeAll.confirmTitle", {
+              name: assignmentInfo?.name ?? assignment,
+            })}
             description={
               <>
-                This re-runs the autograder on every submitted repo&apos;s
-                latest commit — useful after fixing a test or updating the
-                autograder. Submission times don&apos;t change.
+                {t("submissions.regradeAll.confirmBody1")}
                 <br />
                 <br />
-                Grading runs in the background and can take several minutes; use{" "}
-                <span className="font-semibold">Collect now</span> afterward to
-                pull the new scores.
+                {t("submissions.regradeAll.confirmBody2_prefix")}{" "}
+                <span className="font-semibold">
+                  {t("submissions.collect.label")}
+                </span>{" "}
+                {t("submissions.regradeAll.confirmBody2_suffix")}
               </>
             }
             confirmText="regrade"
-            confirmLabel="Regrade all"
-            cancelLabel="Cancel"
+            confirmLabel={t("submissions.regradeAll.label")}
+            cancelLabel={t("common.cancel")}
             dangerous={false}
             needsConfirm={false}
             onConfirm={async () => {
@@ -907,7 +934,8 @@ const SubmissionsPageContent = () => {
 // so a real teacher never bounces. Gating here (before mounting the content)
 // also avoids firing the teacher-only score/roster reads for a student.
 const SubmissionsPage = () => {
-  useDocumentTitle("Submissions")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.submissions"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
 

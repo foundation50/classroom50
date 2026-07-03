@@ -1,4 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./CreateAssignmentForm"
 
@@ -9,18 +11,18 @@ import type { AssignmentTestComparison } from "@/types/classroom"
 const TYPE_OPTIONS = [
   {
     value: "io",
-    label: "Input/Output",
-    hint: "Run a command, feed it stdin, and compare its stdout against an expected value.",
+    labelKey: "assignments.autograder.type.io.label",
+    hintKey: "assignments.autograder.type.io.hint",
   },
   {
     value: "run",
-    label: "Run command",
-    hint: "Run a command and pass when its exit code matches (0 by default).",
+    labelKey: "assignments.autograder.type.run.label",
+    hintKey: "assignments.autograder.type.run.hint",
   },
   {
     value: "python",
-    label: "Python (pytest)",
-    hint: "Run a pytest command; points are split across discovered test cases at grade time.",
+    labelKey: "assignments.autograder.type.python.label",
+    hintKey: "assignments.autograder.type.python.hint",
   },
 ] as const
 
@@ -57,6 +59,7 @@ const AutogradingTestModal = ({
   index,
   onClose,
 }: AutogradingTestModalProps) => {
+  const { t } = useTranslation()
   const titleId = useId()
   if (index === null) return null
 
@@ -117,11 +120,10 @@ const AutogradingTestModal = ({
       <div className="modal-box max-w-3xl max-h-[90vh]">
         <div className="mb-6">
           <h3 id={titleId} className="text-lg font-bold">
-            Edit Test {index + 1}
+            {t("assignments.autograder.editTest", { number: index + 1 })}
           </h3>
           <p className="text-sm opacity-70">
-            Pick a test type, then fill in the command and pass criteria.
-            Commands run in the student&apos;s repository checkout.
+            {t("assignments.autograder.editTestHint")}
           </p>
         </div>
 
@@ -130,7 +132,7 @@ const AutogradingTestModal = ({
             {(field) => (
               <div>
                 <label htmlFor={field.name} className="label font-bold">
-                  Test Name
+                  {t("assignments.autograder.testName")}
                 </label>
                 <input
                   id={field.name}
@@ -138,7 +140,7 @@ const AutogradingTestModal = ({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., Prints hello"
+                  placeholder={t("assignments.autograder.testNamePlaceholder")}
                   aria-invalid={field.state.meta.errors.length > 0}
                   aria-describedby={
                     field.state.meta.errors.length > 0
@@ -157,7 +159,9 @@ const AutogradingTestModal = ({
           <form.Field name={`tests[${index}].type`}>
             {(field) => (
               <fieldset>
-                <legend className="label font-bold">Test Type</legend>
+                <legend className="label font-bold">
+                  {t("assignments.autograder.testType")}
+                </legend>
                 <div className="join w-full">
                   {TYPE_OPTIONS.map((option) => (
                     <input
@@ -165,17 +169,19 @@ const AutogradingTestModal = ({
                       type="radio"
                       className="join-item btn btn-sm"
                       name={`tests-${index}-type`}
-                      aria-label={option.label}
+                      aria-label={t(option.labelKey)}
                       checked={field.state.value === option.value}
                       onChange={() => field.handleChange(option.value)}
                     />
                   ))}
                 </div>
                 <p className="label text-sm pt-1">
-                  {
-                    TYPE_OPTIONS.find((o) => o.value === field.state.value)
-                      ?.hint
-                  }
+                  {(() => {
+                    const hintKey = TYPE_OPTIONS.find(
+                      (o) => o.value === field.state.value,
+                    )?.hintKey
+                    return hintKey ? t(hintKey) : null
+                  })()}
                 </p>
               </fieldset>
             )}
@@ -185,7 +191,7 @@ const AutogradingTestModal = ({
             {(field) => (
               <div>
                 <label htmlFor={field.name} className="label font-bold">
-                  Setup Command
+                  {t("assignments.autograder.setupCommand")}
                 </label>
                 <input
                   id={field.name}
@@ -193,7 +199,9 @@ const AutogradingTestModal = ({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="optional — e.g., gcc -o hello hello.c"
+                  placeholder={t(
+                    "assignments.autograder.setupCommandPlaceholder",
+                  )}
                 />
               </div>
             )}
@@ -203,7 +211,7 @@ const AutogradingTestModal = ({
             {(field) => (
               <div>
                 <label htmlFor={field.name} className="label font-bold">
-                  Run Command
+                  {t("assignments.autograder.runCommand")}
                 </label>
                 <input
                   id={field.name}
@@ -211,7 +219,9 @@ const AutogradingTestModal = ({
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder="e.g., ./hello or python3 main.py"
+                  placeholder={t(
+                    "assignments.autograder.runCommandPlaceholder",
+                  )}
                   aria-invalid={field.state.meta.errors.length > 0}
                   aria-describedby={
                     field.state.meta.errors.length > 0
@@ -239,7 +249,7 @@ const AutogradingTestModal = ({
                             htmlFor={field.name}
                             className="label font-bold"
                           >
-                            Input (stdin)
+                            {t("assignments.autograder.input")}
                           </label>
                           <textarea
                             id={field.name}
@@ -247,7 +257,9 @@ const AutogradingTestModal = ({
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder="optional — text fed to the command on stdin"
+                            placeholder={t(
+                              "assignments.autograder.inputPlaceholder",
+                            )}
                             rows={3}
                           />
                         </div>
@@ -261,7 +273,7 @@ const AutogradingTestModal = ({
                             htmlFor={field.name}
                             className="label font-bold"
                           >
-                            Expected Output
+                            {t("assignments.autograder.expectedOutput")}
                           </label>
                           <textarea
                             id={field.name}
@@ -269,7 +281,9 @@ const AutogradingTestModal = ({
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder="Expected stdout"
+                            placeholder={t(
+                              "assignments.autograder.expectedOutputPlaceholder",
+                            )}
                             rows={5}
                             aria-invalid={field.state.meta.errors.length > 0}
                             aria-describedby={
@@ -293,7 +307,7 @@ const AutogradingTestModal = ({
                             htmlFor={field.name}
                             className="label font-bold"
                           >
-                            Comparison
+                            {t("assignments.autograder.comparison")}
                           </label>
                           <select
                             id={field.name}
@@ -307,14 +321,13 @@ const AutogradingTestModal = ({
                             }
                           >
                             <option value="included">
-                              Included — expected appears anywhere in the output
+                              {t("assignments.autograder.comparisonIncluded")}
                             </option>
                             <option value="exact">
-                              Exact — output equals expected (surrounding
-                              whitespace ignored)
+                              {t("assignments.autograder.comparisonExact")}
                             </option>
                             <option value="regex">
-                              Regex — Python re.search, multiline
+                              {t("assignments.autograder.comparisonRegex")}
                             </option>
                           </select>
                         </div>
@@ -328,7 +341,7 @@ const AutogradingTestModal = ({
                     {(field) => (
                       <div className="flex flex-col">
                         <label htmlFor={field.name} className="label font-bold">
-                          Required Exit Code
+                          {t("assignments.autograder.exitCode")}
                         </label>
                         <input
                           id={field.name}
@@ -355,7 +368,7 @@ const AutogradingTestModal = ({
                           }
                         />
                         <p className="label text-sm pt-1">
-                          Leave empty to require a successful exit (0).
+                          {t("assignments.autograder.exitCodeHint")}
                         </p>
                         <FieldError
                           error={field.state.meta.errors[0]}
@@ -368,10 +381,9 @@ const AutogradingTestModal = ({
 
                 {typeValue === "python" && (
                   <p className="rounded-box border border-dashed p-3 text-sm opacity-70">
-                    The run command should invoke pytest (e.g.{" "}
-                    <code>python3 -m pytest -q</code>) against test files in the
-                    assignment template. Points are split across the cases
-                    pytest discovers.
+                    {t("assignments.autograder.pythonNote_prefix")}{" "}
+                    <code>python3 -m pytest -q</code>
+                    {t("assignments.autograder.pythonNote_suffix")}
                   </p>
                 )}
               </>
@@ -383,7 +395,7 @@ const AutogradingTestModal = ({
               {(field) => (
                 <div className="flex flex-col">
                   <label htmlFor={field.name} className="label font-bold">
-                    Timeout (seconds)
+                    {t("assignments.autograder.timeout")}
                   </label>
                   <input
                     id={field.name}
@@ -406,7 +418,9 @@ const AutogradingTestModal = ({
                         : undefined
                     }
                   />
-                  <p className="label text-sm pt-1">0 = default (10s)</p>
+                  <p className="label text-sm pt-1">
+                    {t("assignments.autograder.timeoutHint")}
+                  </p>
                   <FieldError
                     error={field.state.meta.errors[0]}
                     id={`${field.name}-error`}
@@ -419,7 +433,7 @@ const AutogradingTestModal = ({
               {(field) => (
                 <div className="flex flex-col">
                   <label htmlFor={field.name} className="label font-bold">
-                    Points
+                    {t("assignments.autograder.points")}
                   </label>
                   <input
                     id={field.name}
@@ -458,23 +472,26 @@ const AutogradingTestModal = ({
             className="btn btn-primary"
             onClick={handleDone}
           >
-            Done
+            {t("assignments.autograder.done")}
           </button>
         </div>
       </div>
       <div className="modal-backdrop">
         <button type="button" onClick={onClose}>
-          close
+          {t("common.close")}
         </button>
       </div>
     </dialog>
   )
 }
 
-const typeBadge = (type: AssignmentTestDraft["type"]) =>
-  TYPE_OPTIONS.find((o) => o.value === type)?.label ?? type
+const typeBadge = (type: AssignmentTestDraft["type"], t: TFunction) => {
+  const labelKey = TYPE_OPTIONS.find((o) => o.value === type)?.labelKey
+  return labelKey ? t(labelKey) : type
+}
 
 const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
+  const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
 
@@ -504,18 +521,21 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
           <div className="card-body">
             <div className="flex justify-between mb-6">
               <div>
-                <h3 className="text-lg font-bold">Autograding Tests</h3>
+                <h3 className="text-lg font-bold">
+                  {t("assignments.autograder.heading")}
+                </h3>
                 <h3 className="text-md opacity-70">
                   <form.Subscribe selector={(state) => state.values.tests}>
                     {(tests) => (
                       <>
-                        {tests.length} tests •{" "}
-                        {tests.reduce(
-                          (sum: number, test: AssignmentTestDraft) =>
-                            sum + test.points,
-                          0,
-                        )}{" "}
-                        total points
+                        {t("assignments.autograder.summary", {
+                          count: tests.length,
+                          points: tests.reduce(
+                            (sum: number, test: AssignmentTestDraft) =>
+                              sum + test.points,
+                            0,
+                          ),
+                        })}
                       </>
                     )}
                   </form.Subscribe>
@@ -531,20 +551,24 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                     openEditor(newIndex)
                   }}
                 >
-                  + Add Test
+                  {t("assignments.autograder.addTest")}
                 </button>
               </div>
             </div>
             <table className="table">
-              <caption className="sr-only">Autograding tests</caption>
+              <caption className="sr-only">
+                {t("assignments.autograder.heading")}
+              </caption>
               <thead>
                 <tr>
-                  <th scope="col">Test Name</th>
-                  <th scope="col">Type</th>
-                  <th scope="col">Run Command</th>
-                  <th scope="col">Points</th>
+                  <th scope="col">{t("assignments.autograder.testName")}</th>
+                  <th scope="col">{t("assignments.autograder.colType")}</th>
+                  <th scope="col">{t("assignments.autograder.runCommand")}</th>
+                  <th scope="col">{t("assignments.autograder.points")}</th>
                   <th scope="col" className="w-28">
-                    <span className="sr-only">Actions</span>
+                    <span className="sr-only">
+                      {t("assignments.autograder.colActions")}
+                    </span>
                   </th>
                 </tr>
               </thead>
@@ -553,7 +577,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   <tr>
                     <td colSpan={5}>
                       <div className="rounded-box border border-dashed p-4 text-sm opacity-70">
-                        No autograding tests have been defined yet.
+                        {t("assignments.autograder.empty")}
                       </div>
                     </td>
                   </tr>
@@ -563,13 +587,16 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                       <tr key={index}>
                         <td>
                           <div className="font-bold max-w-[12rem] truncate">
-                            {test.name || `Test ${index + 1}`}
+                            {test.name ||
+                              t("assignments.autograder.testFallback", {
+                                number: index + 1,
+                              })}
                           </div>
                         </td>
 
                         <td>
                           <span className="badge badge-ghost badge-soft">
-                            {typeBadge(test.type)}
+                            {typeBadge(test.type, t)}
                           </span>
                         </td>
 
@@ -593,7 +620,9 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                               type="button"
                               className="btn btn-sm btn-ghost"
                               onClick={() => openEditor(index)}
-                              aria-label={`Edit test ${index + 1}`}
+                              aria-label={t("assignments.autograder.editTest", {
+                                number: index + 1,
+                              })}
                             >
                               <Pencil aria-hidden="true" size={16} />
                             </button>
@@ -602,7 +631,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                               type="button"
                               className="btn btn-sm btn-ghost text-error"
                               onClick={() => field.removeValue(index)}
-                              aria-label={`Remove test ${index + 1}`}
+                              aria-label={t(
+                                "assignments.autograder.removeTest",
+                                { number: index + 1 },
+                              )}
                             >
                               <Trash aria-hidden="true" size={16} />
                             </button>

@@ -16,6 +16,8 @@ import {
   Check,
   Sun,
   Moon,
+  Languages,
+  X,
 } from "lucide-react"
 import {
   Link,
@@ -24,12 +26,13 @@ import {
   useMatch,
   useNavigate,
 } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "../../auth/useGithubAuth"
 import duck from "@/assets/duck.png"
 import { useCourseTeacherAccess } from "../../hooks/useCourseTeacherAccess"
 import {
   useClassroomRole,
-  roleLabel,
+  roleLabelKey,
   isStaffRole,
   type ViewAsRole,
 } from "@/hooks/useClassroomRole"
@@ -42,15 +45,18 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
+import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 import type { Classroom } from "@/types/classroom"
 import {
   createContext,
   useContext,
   useEffect,
+  useId,
   useRef,
   useState,
   type ReactNode,
 } from "react"
+import { createPortal } from "react-dom"
 
 const SIDEBAR_COLLAPSED_KEY = "classroom50:sidebar-collapsed"
 const MOBILE_DRAWER_ID = "app-drawer"
@@ -93,24 +99,27 @@ export const DrawerContent = ({
 }: {
   children: ReactNode
   className?: string
-}) => (
-  <div className={`${className} drawer-content`}>
-    <a
-      href="#main-content"
-      className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
-    >
-      Skip to main content
-    </a>
-    <label
-      htmlFor={MOBILE_DRAWER_ID}
-      aria-label="Open menu"
-      className="btn btn-ghost btn-square fixed top-3 left-3 z-30 lg:hidden"
-    >
-      <Menu className="size-6" aria-hidden="true" />
-    </label>
-    <main id="main-content">{children}</main>
-  </div>
-)
+}) => {
+  const { t } = useTranslation()
+  return (
+    <div className={`${className} drawer-content`}>
+      <a
+        href="#main-content"
+        className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
+      >
+        {t("common.skipToMainContent")}
+      </a>
+      <label
+        htmlFor={MOBILE_DRAWER_ID}
+        aria-label={t("nav.openMenu")}
+        className="btn btn-ghost btn-square fixed top-3 left-3 z-30 lg:hidden"
+      >
+        <Menu className="size-6" aria-hidden="true" />
+      </label>
+      <main id="main-content">{children}</main>
+    </div>
+  )
+}
 
 export const DrawerToggle = () => (
   <input id={MOBILE_DRAWER_ID} type="checkbox" className="drawer-toggle" />
@@ -122,15 +131,16 @@ export const DrawerSidebar = ({
   settings = false,
 }) => {
   const { collapsed } = useSidebarCollapse()
+  const { t } = useTranslation()
   return (
     <div className="drawer-side z-40">
       <label
         htmlFor={MOBILE_DRAWER_ID}
-        aria-label="Close menu"
+        aria-label={t("nav.closeMenu")}
         className="drawer-overlay"
       />
       <nav
-        aria-label="Primary"
+        aria-label={t("nav.primary")}
         className={`flex flex-col min-h-full bg-neutral text-neutral-content transition-[width] duration-200 ease-out ${
           collapsed
             ? "w-16 min-w-16 [&>div]:px-2"
@@ -204,6 +214,7 @@ const SidebarItemBody = ({
 
 export const ClassroomLogo = () => {
   const { collapsed, toggle } = useSidebarCollapse()
+  const { t } = useTranslation()
 
   if (collapsed) {
     return (
@@ -212,8 +223,8 @@ export const ClassroomLogo = () => {
           type="button"
           onClick={toggle}
           className={`${sidebarTooltip} cursor-pointer rounded-md p-1 transition-colors hover:bg-[var(--sidebar-surface)]`}
-          data-tip="Expand sidebar"
-          aria-label="Expand sidebar"
+          data-tip={t("nav.expandSidebar")}
+          aria-label={t("nav.expandSidebar")}
         >
           <GraduationCap
             aria-hidden="true"
@@ -229,20 +240,20 @@ export const ClassroomLogo = () => {
       <Link
         to="/"
         className="flex flex-1 min-w-0 items-center text-lg text-neutral-content font-bold"
-        title="Classroom 50"
+        title={t("nav.appName")}
       >
         <GraduationCap
           aria-hidden="true"
           className="size-8 text-[var(--sidebar-accent)] shrink-0 mr-2"
         />
-        <span className="whitespace-nowrap">Classroom 50</span>
+        <span className="whitespace-nowrap">{t("nav.appName")}</span>
       </Link>
       <button
         type="button"
         onClick={toggle}
         className="shrink-0 rounded-md p-1 text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content cursor-pointer"
-        aria-label="Collapse sidebar"
-        title="Collapse sidebar"
+        aria-label={t("nav.collapseSidebar")}
+        title={t("nav.collapseSidebar")}
       >
         <ChevronLeft aria-hidden="true" className="size-5" />
       </button>
@@ -252,6 +263,7 @@ export const ClassroomLogo = () => {
 
 const ExpandSidebarButton = () => {
   const { collapsed, toggle } = useSidebarCollapse()
+  const { t } = useTranslation()
   if (!collapsed) return null
 
   return (
@@ -260,8 +272,8 @@ const ExpandSidebarButton = () => {
         type="button"
         onClick={toggle}
         className={sidebarIconButton("p-2")}
-        data-tip="Expand sidebar"
-        aria-label="Expand sidebar"
+        data-tip={t("nav.expandSidebar")}
+        aria-label={t("nav.expandSidebar")}
       >
         <ChevronRight aria-hidden="true" className="size-5" />
       </button>
@@ -271,6 +283,7 @@ const ExpandSidebarButton = () => {
 
 export const AllClasses = ({ org }: { org: string }) => {
   const { collapsed } = useSidebarCollapse()
+  const { t } = useTranslation()
 
   if (collapsed) {
     return (
@@ -279,8 +292,8 @@ export const AllClasses = ({ org }: { org: string }) => {
           to="/$org/classes"
           params={{ org }}
           className={sidebarIconButton("p-1")}
-          data-tip="All Classes"
-          aria-label="All Classes"
+          data-tip={t("nav.allClasses")}
+          aria-label={t("nav.allClasses")}
         >
           <ArrowLeft aria-hidden="true" className="size-5" />
         </Link>
@@ -291,7 +304,7 @@ export const AllClasses = ({ org }: { org: string }) => {
   return (
     <div className="py-4 text-sm">
       <Link to="/$org/classes" params={{ org }} className="text-center">
-        ‹ All Classes
+        {t("nav.allClassesArrow")}
       </Link>
     </div>
   )
@@ -300,6 +313,7 @@ export const AllClasses = ({ org }: { org: string }) => {
 export const SidebarClassInfo = ({ classInfo }: { classInfo?: Classroom }) => {
   const { classroom } = useParams({ strict: false })
   const { collapsed } = useSidebarCollapse()
+  const { t } = useTranslation()
 
   if (collapsed) return null
 
@@ -309,7 +323,7 @@ export const SidebarClassInfo = ({ classInfo }: { classInfo?: Classroom }) => {
         {classInfo?.name ||
           classInfo?.short_name ||
           classroom ||
-          "Untitled Course"}
+          t("nav.untitledCourse")}
       </h3>
       <p className="text-gray-400 text-sm">{classInfo?.term ?? ""}</p>
     </div>
@@ -326,6 +340,7 @@ const AssignmentSidebarMenu = ({
   assignment: string
 }) => {
   const { collapsed } = useSidebarCollapse()
+  const { t } = useTranslation()
   const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
@@ -407,8 +422,8 @@ const AssignmentSidebarMenu = ({
             to="/$org/$classroom/assignments"
             params={{ org, classroom }}
             className={sidebarIconButton("p-1")}
-            data-tip="All Assignments"
-            aria-label="All Assignments"
+            data-tip={t("nav.allAssignments")}
+            aria-label={t("nav.allAssignments")}
           >
             <ArrowLeft aria-hidden="true" className="size-5" />
           </Link>
@@ -416,7 +431,7 @@ const AssignmentSidebarMenu = ({
       ) : (
         <div className="py-4 text-sm">
           <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
-            ‹ All Assignments
+            {t("nav.allAssignmentsArrow")}
           </Link>
         </div>
       )}
@@ -424,7 +439,7 @@ const AssignmentSidebarMenu = ({
       {!collapsed && (
         <div className="py-2">
           <h3 className="font-bold leading-tight">{assignmentName}</h3>
-          <p className="text-gray-400 text-sm">Assignment</p>
+          <p className="text-gray-400 text-sm">{t("nav.assignment")}</p>
         </div>
       )}
 
@@ -440,25 +455,25 @@ const AssignmentSidebarMenu = ({
             </>
           ) : showTeacherUi ? (
             <>
-              <Tip label="Submissions">
+              <Tip label={t("nav.submissions")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submissions"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
-                    label="Submissions"
+                    label={t("nav.submissions")}
                     icon={<UsersRound aria-hidden="true" />}
                     active={onSubmissions}
                   />
                 </Link>
               </Tip>
-              <Tip label="Settings">
+              <Tip label={t("nav.settings")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/edit"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
-                    label="Settings"
+                    label={t("nav.settings")}
                     icon={<Settings aria-hidden="true" />}
                     active={onSettings}
                   />
@@ -468,40 +483,40 @@ const AssignmentSidebarMenu = ({
           ) : (
             <>
               {showAccept && (
-                <Tip label="Accept Assignment">
+                <Tip label={t("nav.acceptAssignment")}>
                   <Link
                     to="/$org/$classroom/assignments/$assignment/accept"
                     params={{ org, classroom, assignment }}
                     search={secret ? { k: secret } : undefined}
                   >
                     <SidebarItemBody
-                      label="Accept Assignment"
+                      label={t("nav.acceptAssignment")}
                       icon={<FilePlus2 aria-hidden="true" />}
                       active={onAccept}
                     />
                   </Link>
                 </Tip>
               )}
-              <Tip label="My Submission">
+              <Tip label={t("nav.mySubmission")}>
                 <Link
                   to="/$org/$classroom/assignments/$assignment/submission"
                   params={{ org, classroom, assignment }}
                 >
                   <SidebarItemBody
-                    label="My Submission"
+                    label={t("nav.mySubmission")}
                     icon={<FileCheck2 aria-hidden="true" />}
                     active={onSubmission}
                   />
                 </Link>
               </Tip>
               {isGroupAssignment && (
-                <Tip label="Manage Group">
+                <Tip label={t("nav.manageGroup")}>
                   <Link
                     to="/$org/$classroom/assignments/$assignment/edit"
                     params={{ org, classroom, assignment }}
                   >
                     <SidebarItemBody
-                      label="Manage Group"
+                      label={t("nav.manageGroup")}
                       icon={<UsersRound aria-hidden="true" />}
                       active={onSettings}
                     />
@@ -536,14 +551,15 @@ export const TeacherSidebarMenu = ({
   const showStaffItems = showTeacherUi && isStaffRole(classroomRole)
   const canEditSettings =
     classroomRole === "owner" || classroomRole === "instructor"
+  const { t } = useTranslation()
 
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
-        <Tip label="Assignments">
+        <Tip label={t("nav.assignments")}>
           <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
             <SidebarItemBody
-              label="Assignments"
+              label={t("nav.assignments")}
               icon={<BookText aria-hidden="true" />}
               active={selected === "assignments"}
             />
@@ -560,23 +576,23 @@ export const TeacherSidebarMenu = ({
         ) : (
           showStaffItems && (
             <>
-              <Tip label="Students">
+              <Tip label={t("nav.students")}>
                 <Link
                   to="/$org/$classroom/students"
                   params={{ org, classroom }}
                 >
                   <SidebarItemBody
-                    label="Students"
+                    label={t("nav.students")}
                     icon={<UsersRound aria-hidden="true" />}
                     active={selected === "students"}
                   />
                 </Link>
               </Tip>
               {canEditSettings && (
-                <Tip label="Settings">
+                <Tip label={t("nav.settings")}>
                   <Link to="/$org/$classroom/edit" params={{ org, classroom }}>
                     <SidebarItemBody
-                      label="Settings"
+                      label={t("nav.settings")}
                       icon={<Settings aria-hidden="true" />}
                       active={selected === "settings"}
                     />
@@ -593,8 +609,9 @@ export const TeacherSidebarMenu = ({
 
 export const SidebarFooter = () => {
   const { signOut, user } = useGithubAuth()
+  const { t } = useTranslation()
   const avatar_img = user?.avatar_url || duck
-  const name = user?.name || user?.login || "User"
+  const name = user?.name || user?.login || t("nav.userFallback")
   const { org, classroom, assignment } = useParams({ strict: false })
   const navigate = useNavigate()
   const matchRoute = useMatchRoute()
@@ -663,11 +680,12 @@ export const SidebarFooter = () => {
   // owner or a definite student, else blank.
   let roleLabelText: string | null
   if (classroom) {
-    roleLabelText = classroomRoleLoading ? null : roleLabel(classroomRole)
+    const key = classroomRoleLoading ? null : roleLabelKey(classroomRole)
+    roleLabelText = key ? t(key) : null
   } else if (isOrgSetup || isOwner) {
-    roleLabelText = "Instructor"
+    roleLabelText = t("nav.roleInstructor")
   } else if (!orgMembershipLoading && !roleLoading && isStudent) {
-    roleLabelText = "Student"
+    roleLabelText = t("nav.roleStudent")
   } else {
     roleLabelText = null
   }
@@ -677,6 +695,8 @@ export const SidebarFooter = () => {
 
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
+  const langDialogRef = useRef<HTMLDialogElement | null>(null)
+  const langDialogTitleId = useId()
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
@@ -699,28 +719,29 @@ export const SidebarFooter = () => {
   }, [menuOpen])
 
   return (
-    <div
-      ref={footerRef}
-      className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
-      onClick={() => setMenuOpen((open) => !open)}
-      role="button"
-      tabIndex={0}
-      aria-haspopup="menu"
-      aria-expanded={menuOpen}
-      aria-label="Account menu"
-      onKeyDown={(event) => {
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault()
-          setMenuOpen((open) => !open)
-        }
-
-        if (event.key === "Escape") {
-          setMenuOpen(false)
-        }
-      }}
-    >
+    <>
       <div
-        className={`
+        ref={footerRef}
+        className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
+        onClick={() => setMenuOpen((open) => !open)}
+        role="button"
+        tabIndex={0}
+        aria-haspopup="menu"
+        aria-expanded={menuOpen}
+        aria-label={t("nav.accountMenu")}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault()
+            setMenuOpen((open) => !open)
+          }
+
+          if (event.key === "Escape") {
+            setMenuOpen(false)
+          }
+        }}
+      >
+        <div
+          className={`
         absolute bottom-full z-50 mb-3
         ${collapsed ? "left-2 w-48" : "left-6 right-6"}
         origin-bottom rounded-box
@@ -732,146 +753,201 @@ export const SidebarFooter = () => {
             : "pointer-events-none translate-y-2 scale-95 opacity-0"
         }
       `}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
-          {canPreviewRoles && (
-            <>
-              <li>
-                <details key={menuOpen ? "open" : "closed"}>
-                  <summary>
-                    <Eye aria-hidden="true" className="size-4" />
-                    <span className="flex-1">View as</span>
-                  </summary>
-                  <ul>
-                    {(["self", "ta", "student"] as const).map((option) => {
-                      const active =
-                        option === "self" ? viewAs === null : viewAs === option
-                      const label =
-                        option === "self"
-                          ? `Myself (${roleLabel(actualClassroomRole) ?? "staff"})`
-                          : option === "ta"
-                            ? "TA"
-                            : "Student"
-                      return (
-                        <li key={option}>
-                          <button
-                            type="button"
-                            className={active ? "active font-semibold" : ""}
-                            onClick={() => {
-                              selectViewAs(option === "self" ? null : option)
-                              setMenuOpen(false)
-                            }}
-                          >
-                            {active ? (
-                              <Check aria-hidden="true" className="size-4" />
-                            ) : (
-                              <span className="size-4" />
-                            )}
-                            {label}
-                          </button>
-                        </li>
-                      )
-                    })}
-                  </ul>
-                </details>
-              </li>
-              <div className="divider my-1" />
-            </>
-          )}
-          <li>
-            <button
-              type="button"
-              onClick={(event) => {
-                event.stopPropagation()
-                toggleTheme()
-              }}
-              aria-pressed={isDark}
-            >
-              {isDark ? (
-                <Moon aria-hidden="true" className="size-4" />
-              ) : (
-                <Sun aria-hidden="true" className="size-4" />
-              )}
-              <span className="flex-1 text-left">
-                {isDark ? "Dark mode" : "Light mode"}
-              </span>
-              <input
-                type="checkbox"
-                className="toggle toggle-sm toggle-primary pointer-events-none"
-                checked={isDark}
-                readOnly
-                tabIndex={-1}
-                aria-hidden="true"
-              />
-            </button>
-          </li>
-          <div className="divider my-1" />
-          <li>
-            <a
-              href="https://github.com/foundation50/classroom50/discussions"
-              target="_blank"
-              rel="noreferrer"
-            >
-              <MessageCircleQuestionMark
-                aria-hidden="true"
-                className="size-4"
-              />
-              Classroom 50 Help
-            </a>
-          </li>
+          onClick={(event) => event.stopPropagation()}
+        >
+          <ul className="menu w-full rounded-box border border-base-300 bg-base-100 p-2 text-base-content shadow-xl">
+            {canPreviewRoles && (
+              <>
+                <li>
+                  <details key={menuOpen ? "open" : "closed"}>
+                    <summary>
+                      <Eye aria-hidden="true" className="size-4" />
+                      <span className="flex-1">{t("nav.viewAs")}</span>
+                    </summary>
+                    <ul>
+                      {(["self", "ta", "student"] as const).map((option) => {
+                        const active =
+                          option === "self"
+                            ? viewAs === null
+                            : viewAs === option
+                        const label =
+                          option === "self"
+                            ? t("nav.viewAsMyself", {
+                                role: (() => {
+                                  const key = roleLabelKey(actualClassroomRole)
+                                  return key
+                                    ? t(key)
+                                    : t("nav.viewAsMyselfFallback")
+                                })(),
+                              })
+                            : option === "ta"
+                              ? t("nav.viewAsTA")
+                              : t("nav.viewAsStudent")
+                        return (
+                          <li key={option}>
+                            <button
+                              type="button"
+                              className={active ? "active font-semibold" : ""}
+                              onClick={() => {
+                                selectViewAs(option === "self" ? null : option)
+                                setMenuOpen(false)
+                              }}
+                            >
+                              {active ? (
+                                <Check aria-hidden="true" className="size-4" />
+                              ) : (
+                                <span className="size-4" />
+                              )}
+                              {label}
+                            </button>
+                          </li>
+                        )
+                      })}
+                    </ul>
+                  </details>
+                </li>
+                <div className="divider my-1" />
+              </>
+            )}
+            <li>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  toggleTheme()
+                }}
+                aria-pressed={isDark}
+              >
+                {isDark ? (
+                  <Moon aria-hidden="true" className="size-4" />
+                ) : (
+                  <Sun aria-hidden="true" className="size-4" />
+                )}
+                <span className="flex-1 text-left">
+                  {isDark ? t("nav.darkMode") : t("nav.lightMode")}
+                </span>
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm toggle-primary pointer-events-none"
+                  checked={isDark}
+                  readOnly
+                  tabIndex={-1}
+                  aria-hidden="true"
+                />
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                  langDialogRef.current?.showModal()
+                }}
+              >
+                <Languages aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-left">{t("nav.language")}</span>
+              </button>
+            </li>
+            <div className="divider my-1" />
+            <li>
+              <a
+                href="https://github.com/foundation50/classroom50/discussions"
+                target="_blank"
+                rel="noreferrer"
+              >
+                <MessageCircleQuestionMark
+                  aria-hidden="true"
+                  className="size-4"
+                />
+                {t("nav.help")}
+              </a>
+            </li>
 
-          <li>
-            <button type="button" className="text-error" onClick={signOut}>
-              <LogOut aria-hidden="true" className="size-4" />
-              Sign Out
-            </button>
-          </li>
-        </ul>
-      </div>
-
-      <div
-        className={`flex w-full items-center gap-4 text-left ${collapsed ? "justify-center" : "justify-start"}`}
-        title={collapsed ? name : undefined}
-      >
-        <div className="avatar avatar-placeholder">
-          <img
-            src={avatar_img}
-            alt={`${name}'s avatar`}
-            className={`rounded-full ${collapsed ? "w-10" : "w-12"}`}
-          />
+            <li>
+              <button type="button" className="text-error" onClick={signOut}>
+                <LogOut aria-hidden="true" className="size-4" />
+                {t("nav.signOut")}
+              </button>
+            </li>
+          </ul>
         </div>
 
-        {!collapsed && (
-          <div className="min-w-0 flex-1">
-            <div className="truncate font-medium text-neutral-content">
-              {name}
-            </div>
-
-            {org ? (
-              <div className="flex items-center gap-1.5">
-                <span className="text-neutral-content/60">
-                  {labelPending ? (
-                    <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
-                  ) : (
-                    roleLabelText
-                  )}
-                </span>
-                {viewAs && canPreviewRoles ? (
-                  <span
-                    className="badge badge-warning badge-xs gap-1"
-                    title="You are previewing a role. Your real access is unchanged."
-                  >
-                    <Eye aria-hidden="true" className="size-3" />
-                    preview
-                  </span>
-                ) : null}
-              </div>
-            ) : null}
+        <div
+          className={`flex w-full items-center gap-4 text-left ${collapsed ? "justify-center" : "justify-start"}`}
+          title={collapsed ? name : undefined}
+        >
+          <div className="avatar avatar-placeholder">
+            <img
+              src={avatar_img}
+              alt={t("nav.avatarAlt", { name })}
+              className={`rounded-full ${collapsed ? "w-10" : "w-12"}`}
+            />
           </div>
-        )}
+
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <div className="truncate font-medium text-neutral-content">
+                {name}
+              </div>
+
+              {org ? (
+                <div className="flex items-center gap-1.5">
+                  <span className="text-neutral-content/60">
+                    {labelPending ? (
+                      <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
+                    ) : (
+                      roleLabelText
+                    )}
+                  </span>
+                  {viewAs && canPreviewRoles ? (
+                    <span
+                      className="badge badge-warning badge-xs gap-1"
+                      title={t("nav.rolePreviewTooltip")}
+                    >
+                      <Eye aria-hidden="true" className="size-3" />
+                      {t("nav.preview")}
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          )}
+        </div>
       </div>
-    </div>
+
+      {createPortal(
+        <dialog
+          ref={langDialogRef}
+          className="modal"
+          aria-labelledby={langDialogTitleId}
+        >
+          <div className="modal-box flex max-h-[85vh] max-w-lg flex-col overflow-y-auto text-base-content">
+            <form method="dialog">
+              <button
+                className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
+                aria-label={t("common.close")}
+              >
+                <X className="size-4" aria-hidden="true" />
+              </button>
+            </form>
+            <h3 id={langDialogTitleId} className="text-lg font-bold">
+              {t("nav.languageDialogTitle")}
+            </h3>
+            <p className="mt-1 mb-4 text-sm text-base-content/70">
+              {t("nav.languageDialogDescription")}
+            </p>
+            <LanguageSwitcher
+              onApplied={() => langDialogRef.current?.close()}
+            />
+          </div>
+          <form method="dialog" className="modal-backdrop">
+            <button>{t("common.close")}</button>
+          </form>
+        </dialog>,
+        document.body,
+      )}
+    </>
   )
 }
 
@@ -916,6 +992,7 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
 
 export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
+  const { t } = useTranslation()
   const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
   // Org-level Members/Settings are owner-only surfaces, so gate those two links
   // on org ownership rather than the broad staff signal.
@@ -926,7 +1003,9 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const onMembers = selected === "members"
   if (!org) return null
 
-  const classesLabel = showTeacherUi ? "My Classes" : "My Assignments"
+  const classesLabel = showTeacherUi
+    ? t("nav.myClasses")
+    : t("nav.myAssignments")
 
   return (
     <div className="py-4">
@@ -947,10 +1026,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
           </Tip>
         )}
         {showTeacherUi && (
-          <Tip label="Published">
+          <Tip label={t("nav.published")}>
             <Link to="/$org/published" params={{ org }}>
               <SidebarItemBody
-                label="Published"
+                label={t("nav.published")}
                 icon={<Globe aria-hidden="true" />}
                 active={onPublished}
               />
@@ -958,10 +1037,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
           </Tip>
         )}
         {showTeacherUi && isOwner && (
-          <Tip label="Members">
+          <Tip label={t("nav.members")}>
             <Link to="/$org/members" params={{ org }}>
               <SidebarItemBody
-                label="Members"
+                label={t("nav.members")}
                 icon={<UsersRound aria-hidden="true" />}
                 active={onMembers}
               />
@@ -969,10 +1048,10 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
           </Tip>
         )}
         {showTeacherUi && isOwner && (
-          <Tip label="Settings">
+          <Tip label={t("nav.settings")}>
             <Link to="/$org/settings" params={{ org }}>
               <SidebarItemBody
-                label="Settings"
+                label={t("nav.settings")}
                 icon={<Settings aria-hidden="true" />}
                 active={onSettings}
               />
@@ -985,13 +1064,14 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
 }
 
 export const MyOrgs = ({ settings = false }) => {
+  const { t } = useTranslation()
   return (
     <div className="py-4">
       <ul className="flex flex-col gap-1">
-        <Tip label="Organizations">
+        <Tip label={t("nav.organizations")}>
           <Link to="/">
             <SidebarItemBody
-              label="Organizations"
+              label={t("nav.organizations")}
               icon={<BookText aria-hidden="true" />}
               active={!settings}
             />

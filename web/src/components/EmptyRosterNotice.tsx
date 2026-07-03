@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Info, UserPlus } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 // Empty/unenrolled-roster warning. Owns the daisyUI alert shell + ARIA so the
 // assignments list and create pages can't drift in markup; copy adapts to
@@ -15,41 +16,43 @@ export const EmptyRosterNotice = ({
   classroom: string
   hasRosterRows: boolean
   className?: string
-}) => (
-  <div
-    role="alert"
-    className={`alert alert-info alert-soft flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
-  >
-    <div className="flex items-start gap-2">
-      <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <span className="text-sm">
-        {hasRosterRows ? (
-          <>
-            No students have joined the{" "}
-            <span className="font-semibold">{org}</span> organization yet. An
-            assignment's accept link only works for students who are
-            organization members, so invited students must accept their invite
-            first.
-          </>
-        ) : (
-          <>
-            This classroom has no students yet. An assignment's accept link only
-            works for students who are members of the{" "}
-            <span className="font-semibold">{org}</span> organization, so add
-            and enroll students before sharing it.
-          </>
-        )}
-      </span>
-    </div>
-    <Link
-      to="/$org/$classroom/students"
-      params={{ org, classroom }}
-      className="btn btn-sm btn-info whitespace-nowrap sm:shrink-0"
+}) => {
+  const { t } = useTranslation()
+  return (
+    <div
+      role="alert"
+      className={`alert alert-info alert-soft flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between ${className}`}
     >
-      <UserPlus className="size-4" aria-hidden="true" />
-      {hasRosterRows ? "Manage roster" : "Add students"}
-    </Link>
-  </div>
-)
+      <div className="flex items-start gap-2">
+        <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+        <span className="text-sm">
+          {hasRosterRows ? (
+            <>
+              {t("components.notices.emptyRoster.hasRows_prefix")}{" "}
+              <span className="font-semibold">{org}</span>{" "}
+              {t("components.notices.emptyRoster.hasRows_suffix")}
+            </>
+          ) : (
+            <>
+              {t("components.notices.emptyRoster.empty_prefix")}{" "}
+              <span className="font-semibold">{org}</span>{" "}
+              {t("components.notices.emptyRoster.empty_suffix")}
+            </>
+          )}
+        </span>
+      </div>
+      <Link
+        to="/$org/$classroom/students"
+        params={{ org, classroom }}
+        className="btn btn-sm btn-info whitespace-nowrap sm:shrink-0"
+      >
+        <UserPlus className="size-4" aria-hidden="true" />
+        {hasRosterRows
+          ? t("components.notices.emptyRoster.manageRoster")
+          : t("components.notices.emptyRoster.addStudents")}
+      </Link>
+    </div>
+  )
+}
 
 export default EmptyRosterNotice

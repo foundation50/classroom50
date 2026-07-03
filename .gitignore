@@ -23,3 +23,6 @@ __pycache__/
 # end up in the public mirror or shared review surface.
 plans/
 .tooling/
+
+# Git worktrees created for isolated task work.
+.worktrees/

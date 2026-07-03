@@ -1,6 +1,8 @@
 import { useForm } from "@tanstack/react-form"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import {
   AlertTriangle,
@@ -79,6 +81,7 @@ export type AssignmentForm = ReturnType<typeof useAssignmentForm>
 const useAssignmentForm = (
   defaultValues: Partial<CreateAssignmentFormValues> | undefined,
   onSubmit: (values: CreateAssignmentFormValues) => void | Promise<void>,
+  t: TFunction,
   // Create-only: slug uniqueness is not validated in edit mode (no rename).
   slugContext?: { takenSlugs?: string[]; edit?: boolean },
 ) =>
@@ -107,13 +110,13 @@ const useAssignmentForm = (
       onSubmit: ({ value }) => {
         const errors: Record<string, string> = {}
         if (!value.name.trim()) {
-          errors.name = "Assignment name is required."
+          errors.name = t("assignments.form.validation.nameRequired")
         }
         // edit mode does not rename, so the slug is only validated on create.
         if (!slugContext?.edit) {
           const slug = slugify(value.slug)
           if (!slug) {
-            errors.slug = "Assignment slug is required."
+            errors.slug = t("assignments.form.validation.slugRequired")
           } else if (
             (slugContext?.takenSlugs ?? []).some(
               (s) => s.trim().toLowerCase() === slug.toLowerCase(),
@@ -121,11 +124,13 @@ const useAssignmentForm = (
           ) {
             // Case-insensitive collision (slugs become repo path segments);
             // the write path re-checks authoritatively (nextAvailableSlug).
-            errors.slug = `An assignment "${slug}" already exists in this classroom.`
+            errors.slug = t("validation.assignmentSlugTaken", { slug })
           }
         }
         if (!Number(value.max_group_size)) {
-          errors.max_group_size = "Max group size must be a valid number."
+          errors.max_group_size = t(
+            "assignments.form.validation.maxGroupSizeInvalid",
+          )
         } else if (
           value.mode === "group" &&
           (!Number.isInteger(Number(value.max_group_size)) ||
@@ -134,7 +139,10 @@ const useAssignmentForm = (
         ) {
           // Mirror the buildAssignmentEntry guard: the CLI schema needs a whole
           // number in [MIN, MAX] or assignments.json becomes unparseable.
-          errors.max_group_size = `Group size must be a whole number between ${GROUP_SIZE_MIN} and ${GROUP_SIZE_MAX}.`
+          errors.max_group_size = t("validation.groupSizeRange", {
+            min: GROUP_SIZE_MIN,
+            max: GROUP_SIZE_MAX,
+          })
         }
 
         // Mirrors gh-teacher's write-time validation so a bad test is
@@ -159,7 +167,10 @@ const useAssignmentForm = (
             threshold < PASS_THRESHOLD_MIN ||
             threshold > PASS_THRESHOLD_MAX
           ) {
-            errors.pass_threshold = `Pass threshold must be a whole number between ${PASS_THRESHOLD_MIN} and ${PASS_THRESHOLD_MAX}.`
+            errors.pass_threshold = t(
+              "assignments.form.validation.passThresholdRange",
+              { min: PASS_THRESHOLD_MIN, max: PASS_THRESHOLD_MAX },
+            )
           }
         }
 
@@ -224,6 +235,7 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
 // Free-form runner input with advisory, non-blocking verification: it
 // annotates the value but never rewrites or clears what the teacher typed.
 const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
+  const { t } = useTranslation()
   const client = useOptionalGitHubClient()
   const rawValue = field.state.value
   const debouncedValue = useDebouncedValue(rawValue.trim(), 400)
@@ -259,7 +271,7 @@ const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
   return (
     <div>
       <label htmlFor={field.name} className="label block font-bold mb-1.5">
-        GitHub Runner
+        {t("assignments.form.runner.label")}
       </label>
       <input
         id={field.name}
@@ -284,8 +296,9 @@ const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
 
       {verification.kind === "self-hosted" && (
         <p className="mt-1.5 text-xs text-base-content/70">
-          Combine comma-separated labels for a self-hosted runner (e.g.{" "}
-          <code>self-hosted, linux, x64</code>).
+          {t("assignments.form.runner.selfHostedHint_prefix")}{" "}
+          <code>self-hosted, linux, x64</code>
+          {t("assignments.form.runner.selfHostedHint_suffix")}
         </p>
       )}
     </div>
@@ -301,11 +314,12 @@ const RunnerVerificationNote = ({
   pending: boolean
   hasValue: boolean
 }) => {
+  const { t } = useTranslation()
   if (pending && hasValue) {
     return (
       <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
         <Loader2 aria-hidden="true" className="size-4 shrink-0 animate-spin" />
-        Checking…
+        {t("assignments.form.runner.checking")}
       </p>
     )
   }
@@ -314,7 +328,9 @@ const RunnerVerificationNote = ({
     case "empty":
       return (
         <p className="mt-1.5 text-sm text-base-content/70">
-          Leave blank for <code>ubuntu-latest</code>.
+          {t("assignments.form.runner.emptyHint_prefix")}{" "}
+          <code>ubuntu-latest</code>
+          {t("assignments.form.runner.emptyHint_suffix")}
         </p>
       )
 
@@ -322,7 +338,7 @@ const RunnerVerificationNote = ({
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-success">
           <CheckCircle2 aria-hidden="true" className="size-4 shrink-0" />
-          GitHub-hosted runner
+          {t("assignments.form.runner.hosted")}
         </p>
       )
 
@@ -338,12 +354,13 @@ const RunnerVerificationNote = ({
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-success">
           <ServerCog aria-hidden="true" className="size-4 shrink-0" />
           {verification.confirmed && uniqueNames.length > 0
-            ? `Self-hosted runner${
-                uniqueNames.length === 1 ? "" : "s"
-              } match (${uniqueNames.slice(0, 3).join(", ")}${
-                uniqueNames.length > 3 ? "…" : ""
-              })`
-            : "Self-hosted runner labels"}
+            ? t("assignments.form.runner.selfHostedMatch", {
+                count: uniqueNames.length,
+                names: `${uniqueNames.slice(0, 3).join(", ")}${
+                  uniqueNames.length > 3 ? "…" : ""
+                }`,
+              })
+            : t("assignments.form.runner.selfHostedLabels")}
         </p>
       )
     }
@@ -358,16 +375,16 @@ const RunnerVerificationNote = ({
       const parts: string[] = []
       if (badShape.length > 0) {
         parts.push(
-          `Invalid label ${badShape
-            .map((l) => `"${l}"`)
-            .join(", ")} — letters, numbers, . - _ only.`,
+          t("assignments.form.runner.invalidLabel", {
+            labels: badShape.map((l) => `"${l}"`).join(", "),
+          }),
         )
       }
       if (unverified.length > 0) {
         parts.push(
-          `No runner matches ${unverified
-            .map((l) => `"${l}"`)
-            .join(", ")} — check the spelling.`,
+          t("assignments.form.runner.noRunnerMatch", {
+            labels: unverified.map((l) => `"${l}"`).join(", "),
+          }),
         )
       }
       return (
@@ -382,7 +399,9 @@ const RunnerVerificationNote = ({
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-error">
           <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
-          Too many labels ({verification.count}) — 10 max.
+          {t("assignments.form.runner.tooMany", {
+            count: verification.count,
+          })}
         </p>
       )
 
@@ -390,7 +409,7 @@ const RunnerVerificationNote = ({
       return (
         <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
           <HelpCircle aria-hidden="true" className="size-4 shrink-0" />
-          Can't verify — used as entered.
+          {t("assignments.form.runner.cannotVerify")}
         </p>
       )
 
@@ -473,7 +492,11 @@ const CreateAssignmentForm = ({
   classroom,
   takenSlugs,
 }: CreateAssignmentFormProps) => {
-  const form = useAssignmentForm(defaultValues, onSubmit, { takenSlugs, edit })
+  const { t } = useTranslation()
+  const form = useAssignmentForm(defaultValues, onSubmit, t, {
+    takenSlugs,
+    edit,
+  })
   // Auto-prefill the slug from the name until the teacher edits the slug
   // directly, so a deliberate slug isn't clobbered by later name edits.
   const [slugTouched, setSlugTouched] = useState(false)
@@ -495,13 +518,16 @@ const CreateAssignmentForm = ({
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
         <div className="card bg-base-100 w-full shadow-sm mb-6">
           <div className="card-body">
-            <h3 className="text-lg font-bold pb-4">Basic Information</h3>
+            <h3 className="text-lg font-bold pb-4">
+              {t("assignments.form.basicInfo")}
+            </h3>
 
             <form.Field name="name">
               {(field) => (
                 <>
                   <label htmlFor={field.name} className="label font-bold">
-                    Assignment Name<span className="text-error">*</span>
+                    {t("assignments.form.name")}
+                    <span className="text-error">*</span>
                   </label>
                   <input
                     id={field.name}
@@ -510,7 +536,7 @@ const CreateAssignmentForm = ({
                     required
                     aria-required="true"
                     className="input w-full mb-4"
-                    placeholder="e.g., Loops Assignment"
+                    placeholder={t("assignments.form.namePlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => {
@@ -529,7 +555,8 @@ const CreateAssignmentForm = ({
                 {(field) => (
                   <>
                     <label htmlFor={field.name} className="label font-bold">
-                      Assignment Slug<span className="text-error">*</span>
+                      {t("assignments.form.slug")}
+                      <span className="text-error">*</span>
                     </label>
                     <input
                       id={field.name}
@@ -544,7 +571,7 @@ const CreateAssignmentForm = ({
                           : undefined
                       }
                       className="input w-full"
-                      placeholder="e.g., loops-assignment"
+                      placeholder={t("assignments.form.slugPlaceholder")}
                       value={field.state.value}
                       onBlur={(e) => {
                         // Normalize on blur so what the teacher sees is what's
@@ -558,9 +585,7 @@ const CreateAssignmentForm = ({
                       }}
                     />
                     <p className="mt-1.5 mb-4 text-sm text-base-content/70">
-                      Used in the assignment&apos;s repository names.
-                      Auto-filled from the name; edit it if you like. Must be
-                      unique in this classroom.
+                      {t("assignments.form.slugHelp")}
                     </p>
                     {field.state.meta.errors.length > 0 && (
                       <p
@@ -580,13 +605,13 @@ const CreateAssignmentForm = ({
               {(field) => (
                 <>
                   <label htmlFor={field.name} className="label font-bold">
-                    Description
+                    {t("assignments.form.description")}
                   </label>
                   <textarea
                     id={field.name}
                     name={field.name}
                     className="textarea w-full mb-4"
-                    placeholder="Describe the assignment objectives..."
+                    placeholder={t("assignments.form.descriptionPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -615,7 +640,7 @@ const CreateAssignmentForm = ({
                         htmlFor={field.name}
                         className="label font-bold mb-2"
                       >
-                        Due Date ({tzShort})
+                        {t("assignments.form.dueDate", { tz: tzShort })}
                       </label>
                       <input
                         id={field.name}
@@ -637,7 +662,7 @@ const CreateAssignmentForm = ({
                 {(field) => (
                   <fieldset>
                     <legend className="label font-bold mb-2">
-                      Assignment Type
+                      {t("assignments.form.type")}
                     </legend>
                     <input
                       id={`${field.name}-individual`}
@@ -653,7 +678,7 @@ const CreateAssignmentForm = ({
                       htmlFor={`${field.name}-individual`}
                       className="label pl-2"
                     >
-                      Individual
+                      {t("assignments.form.typeIndividual")}
                     </label>
                     <input
                       id={`${field.name}-group`}
@@ -669,7 +694,7 @@ const CreateAssignmentForm = ({
                       htmlFor={`${field.name}-group`}
                       className="label pl-2"
                     >
-                      Group Project
+                      {t("assignments.form.typeGroup")}
                     </label>
                   </fieldset>
                 )}
@@ -688,7 +713,7 @@ const CreateAssignmentForm = ({
                               htmlFor={field.name}
                               className="label font-bold mb-2"
                             >
-                              Max Group Size
+                              {t("assignments.form.maxGroupSize")}
                             </label>
                           </div>
                           <input
@@ -700,7 +725,10 @@ const CreateAssignmentForm = ({
                             min={GROUP_SIZE_MIN}
                             max={GROUP_SIZE_MAX}
                             step="1"
-                            title={`Must be a whole number between ${GROUP_SIZE_MIN} and ${GROUP_SIZE_MAX}`}
+                            title={t("assignments.form.maxGroupSizeTitle", {
+                              min: GROUP_SIZE_MIN,
+                              max: GROUP_SIZE_MAX,
+                            })}
                             value={
                               Number.isFinite(field.state.value)
                                 ? field.state.value
@@ -746,7 +774,7 @@ const CreateAssignmentForm = ({
                   <div>
                     <div className="flex items-center gap-2">
                       <label htmlFor={field.name} className="label font-bold">
-                        Feedback pull request
+                        {t("assignments.form.feedbackPr")}
                       </label>
                       <span
                         className={`badge badge-sm ${
@@ -755,12 +783,13 @@ const CreateAssignmentForm = ({
                             : "badge-ghost"
                         }`}
                       >
-                        {field.state.value ? "Enabled" : "Disabled"}
+                        {field.state.value
+                          ? t("assignments.form.enabled")
+                          : t("assignments.form.disabled")}
                       </span>
                     </div>
                     <p className="text-sm text-base-content/70">
-                      Open a pull request per repo for inline review of each
-                      submission.
+                      {t("assignments.form.feedbackPrHelp")}
                     </p>
                   </div>
                 </div>
@@ -777,12 +806,11 @@ const CreateAssignmentForm = ({
                 <span className="transition-transform group-open:rotate-90">
                   ▶
                 </span>
-                Advanced Settings
+                {t("assignments.form.advanced")}
               </summary>
 
               <p className="label pt-2 pb-4">
-                Optional runtime overrides. Leave blank for the defaults
-                (ubuntu-latest + Python 3.12).
+                {t("assignments.form.advancedHelp")}
               </p>
 
               <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
@@ -797,20 +825,22 @@ const CreateAssignmentForm = ({
                         htmlFor={field.name}
                         className="label block font-bold mb-1.5"
                       >
-                        Docker Image
+                        {t("assignments.form.dockerImage")}
                       </label>
                       <input
                         id={field.name}
                         name={field.name}
                         type="text"
                         className="input w-full max-w-xs"
-                        placeholder="e.g. gcc:13"
+                        placeholder={t(
+                          "assignments.form.dockerImagePlaceholder",
+                        )}
                         value={field.state.value}
                         onBlur={normalizeOnBlur(field)}
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
                       <p className="mt-1.5 text-sm text-base-content/70">
-                        Run the autograder inside this public image.
+                        {t("assignments.form.dockerImageHelp")}
                       </p>
                     </div>
                   )}
@@ -828,14 +858,16 @@ const CreateAssignmentForm = ({
                               htmlFor={field.name}
                               className="block font-bold mb-1.5"
                             >
-                              Container User
+                              {t("assignments.form.containerUser")}
                             </label>
                             <input
                               id={field.name}
                               name={field.name}
                               type="text"
                               className="input w-full max-w-xs"
-                              placeholder="e.g. root"
+                              placeholder={t(
+                                "assignments.form.containerUserPlaceholder",
+                              )}
                               value={field.state.value}
                               onBlur={normalizeOnBlur(field)}
                               onChange={(e) =>
@@ -843,8 +875,9 @@ const CreateAssignmentForm = ({
                               }
                             />
                             <p className="mt-1.5 text-sm text-base-content/70">
-                              Use <code>root</code> if checkout fails with a
-                              permission error.
+                              {t("assignments.form.containerUserHelp_prefix")}{" "}
+                              <code>root</code>
+                              {t("assignments.form.containerUserHelp_suffix")}
                             </p>
                           </div>
                         )}
@@ -884,21 +917,22 @@ const CreateAssignmentForm = ({
                       htmlFor={field.name}
                       className="label block font-bold mb-1.5"
                     >
-                      Setup Command
+                      {t("assignments.form.setupCommand")}
                     </label>
                     <input
                       id={field.name}
                       name={field.name}
                       type="text"
                       className="input w-full"
-                      placeholder="e.g., gcc -o hello hello.c"
+                      placeholder={t(
+                        "assignments.form.setupCommandPlaceholder",
+                      )}
                       value={field.state.value}
                       onBlur={normalizeOnBlur(field)}
                       onChange={(e) => field.handleChange(e.target.value)}
                     />
                     <p className="mt-1.5 text-sm text-base-content/70">
-                      Runs once before grading (e.g. to compile). Added as a
-                      leading 0-point autograding step named “setup”.
+                      {t("assignments.form.setupCommandHelp")}
                     </p>
                   </div>
                 )}
@@ -914,7 +948,7 @@ const CreateAssignmentForm = ({
                         htmlFor={field.name}
                         className="label block font-bold mb-1.5"
                       >
-                        Allowed files
+                        {t("assignments.form.allowedFiles")}
                       </label>
                       <textarea
                         id={field.name}
@@ -928,11 +962,13 @@ const CreateAssignmentForm = ({
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
                       <p className="mt-1.5 text-sm text-base-content/70">
-                        Ordered <code>.gitignore</code>-style patterns, one per
-                        line, defining which files belong to a submission (last
-                        match wins, <code>!</code> re-includes). E.g.{" "}
-                        <code>*</code> then <code>!hello.py</code> allows only{" "}
-                        <code>hello.py</code>. Leave blank to allow every file.
+                        {t("assignments.form.allowedFilesHelp", {
+                          gitignore: ".gitignore",
+                          bang: "!",
+                          star: "*",
+                          example: "!hello.py",
+                          result: "hello.py",
+                        })}
                       </p>
                       {error ? (
                         <p
@@ -948,8 +984,9 @@ const CreateAssignmentForm = ({
                       ) : (
                         patterns.length > 0 && (
                           <p className="mt-1.5 text-xs text-base-content/70">
-                            {patterns.length} pattern
-                            {patterns.length === 1 ? "" : "s"}
+                            {t("assignments.form.patternCount", {
+                              count: patterns.length,
+                            })}
                           </p>
                         )
                       )}
@@ -968,13 +1005,10 @@ const CreateAssignmentForm = ({
                         checked={toggle.state.value}
                         onChange={(e) => toggle.handleChange(e.target.checked)}
                       />
-                      Set a passing threshold
+                      {t("assignments.form.passThresholdToggle")}
                     </label>
                     <p className="mt-1.5 text-sm text-base-content/70">
-                      Off by default. When on, the gradebook marks submissions
-                      passing/failing against the bar below (Passing rollup,
-                      score badges, passing/failing filter). A display threshold
-                      only — it does not change a student&apos;s actual score.
+                      {t("assignments.form.passThresholdHelp")}
                     </p>
 
                     {toggle.state.value && (
@@ -1002,7 +1036,7 @@ const CreateAssignmentForm = ({
                                   }
                                 />
                                 <span className="text-sm text-base-content/70">
-                                  % of max score to pass
+                                  {t("assignments.form.passThresholdSuffix")}
                                 </span>
                               </div>
                               {error ? (
@@ -1040,7 +1074,7 @@ const CreateAssignmentForm = ({
             onClick={onCancel}
             disabled={loading}
           >
-            {readOnly ? "Back" : "Cancel"}
+            {readOnly ? t("assignments.form.back") : t("common.cancel")}
           </button>
         )}
         {!readOnly && (
@@ -1068,9 +1102,9 @@ const CreateAssignmentForm = ({
                     aria-hidden="true"
                   />
                 ) : edit ? (
-                  "Save Changes"
+                  t("assignments.form.saveChanges")
                 ) : (
-                  "Create Assignment"
+                  t("assignments.form.createButton")
                 )}
               </button>
             )}

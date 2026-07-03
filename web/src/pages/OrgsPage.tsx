@@ -12,6 +12,7 @@ import { Link } from "@tanstack/react-router"
 import { ExternalLink, Info, Lock, RefreshCw } from "lucide-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
+import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
 import PlanBadge from "@/components/PlanBadge"
 import { enterExit, staggerTransition } from "@/lib/motion"
@@ -24,6 +25,7 @@ function MissingOrgNotice({
   refreshing: boolean
   onRefresh: () => void
 }) {
+  const { t } = useTranslation()
   return (
     <div className="rounded-2xl border border-info/20 bg-info/5 p-5 shadow-sm">
       <div className="flex gap-4">
@@ -35,13 +37,11 @@ function MissingOrgNotice({
           <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
             <div>
               <h2 className="text-base font-semibold text-base-content">
-                Not seeing your organization?
+                {t("orgs.missingNotice.title")}
               </h2>
 
               <p className="mt-1 text-sm leading-6 text-base-content/70">
-                Classroom 50 can only show GitHub organizations that you have
-                explicitly granted access to during sign-in. If an organization
-                is missing, you may need to update your OAuth permissions.
+                {t("orgs.missingNotice.body")}
               </p>
             </div>
           </div>
@@ -53,7 +53,7 @@ function MissingOrgNotice({
               rel="noreferrer"
               className="btn btn-info btn-sm"
             >
-              Manage GitHub OAuth access
+              {t("orgs.missingNotice.manageOauth")}
               <ExternalLink aria-hidden="true" className="size-4" />
             </a>
 
@@ -69,7 +69,9 @@ function MissingOrgNotice({
                   " ",
                 )}
               />
-              {refreshing ? "Refreshing…" : "Refresh list"}
+              {refreshing
+                ? t("orgs.missingNotice.refreshing")
+                : t("orgs.missingNotice.refresh")}
             </button>
           </div>
         </div>
@@ -87,6 +89,7 @@ function OrgCard({
   index?: number
   planName?: string
 }) {
+  const { t } = useTranslation()
   const { org, membership, classroom50 } = summary
 
   const isReady = classroom50.status === "ready"
@@ -142,7 +145,8 @@ function OrgCard({
               <div className="mt-3 flex flex-wrap gap-2">
                 <span className="badge badge-neutral gap-1">
                   <Lock aria-hidden="true" className="size-3" />
-                  No <code>classroom50</code> access
+                  {t("orgs.card.noAccessBadge_prefix")} <code>classroom50</code>{" "}
+                  {t("orgs.card.noAccessBadge_suffix")}
                 </span>
               </div>
             )}
@@ -156,16 +160,16 @@ function OrgCard({
                 name={planName}
                 title={
                   classifyPlan(planName) === "free"
-                    ? "Free plan — Classroom 50 needs a Team or Enterprise organization"
-                    : "GitHub plan — Classroom 50 can be set up on Team and Enterprise plans"
+                    ? t("orgs.card.planTitleFree")
+                    : t("orgs.card.planTitlePaid")
                 }
               />
             )}
 
             <GitHubLink
               href={`https://github.com/${org.login}`}
-              label="View on GitHub"
-              title={`Open ${org.login} on GitHub`}
+              label={t("orgs.card.viewOnGitHub")}
+              title={t("orgs.card.openOnGitHub", { org: org.login })}
               className="shrink-0"
               showLogo={false}
             />
@@ -178,7 +182,7 @@ function OrgCard({
                 params={{ org: org.login }}
                 className="btn btn-primary btn-sm"
               >
-                Open
+                {t("orgs.card.open")}
               </Link>
             )}
 
@@ -188,13 +192,13 @@ function OrgCard({
                 params={{ org: org.login }}
                 className="btn btn-warning btn-sm"
               >
-                Set Up
+                {t("orgs.card.setUp")}
               </Link>
             )}
 
             {noAccess && !isActiveMember && (
               <button className="btn btn-disabled btn-sm">
-                Ask a teacher for access
+                {t("orgs.card.askTeacher")}
               </button>
             )}
           </div>
@@ -205,7 +209,8 @@ function OrgCard({
 }
 
 const OrgsPage = () => {
-  useDocumentTitle("Organizations")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.organizations"))
   const queryClient = useQueryClient()
   const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
   const [showUnsupported, setShowUnsupported] = useState(false)
@@ -272,10 +277,10 @@ const OrgsPage = () => {
               />
               <div>
                 <p className="text-base font-semibold">
-                  Loading your organizations…
+                  {t("orgs.loadingTitle")}
                 </p>
                 <p className="mt-1 text-sm text-base-content/70">
-                  This may take a moment.
+                  {t("orgs.loadingSubtitle")}
                 </p>
               </div>
             </div>
@@ -284,7 +289,7 @@ const OrgsPage = () => {
               <div className="flex flex-col gap-6 p-6">
                 <div className="w-full space-y-4">
                   <h1 className="text-2xl font-bold tracking-tight">
-                    Classroom 50 Organizations
+                    {t("orgs.headingCl50")}
                   </h1>
                   <MissingOrgNotice
                     refreshing={isFetching}
@@ -302,12 +307,10 @@ const OrgsPage = () => {
                   {cl50Orgs?.length === 0 && (
                     <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
                       <h2 className="text-lg font-semibold">
-                        No Classroom 50 organizations yet
+                        {t("orgs.emptyTitle")}
                       </h2>
                       <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                        Organizations you belong to that use Classroom 50 will
-                        appear here. If you expect one, ask your instructor to
-                        confirm you've been added, then refresh.
+                        {t("orgs.emptyBody")}
                       </p>
                     </div>
                   )}
@@ -317,7 +320,7 @@ const OrgsPage = () => {
                   <div className="w-full space-y-4">
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                       <h1 className="text-2xl font-bold tracking-tight">
-                        Set Up New Classroom 50 Organization
+                        {t("orgs.headingSetUp")}
                       </h1>
                       {(hiddenFreeCount > 0 || showUnsupported) && (
                         <label className="label cursor-pointer gap-2 text-sm">
@@ -328,10 +331,10 @@ const OrgsPage = () => {
                             onChange={(e) =>
                               setShowUnsupported(e.target.checked)
                             }
-                            aria-label="Show unsupported organizations"
+                            aria-label={t("orgs.showUnsupported")}
                           />
                           <span className="label-text">
-                            Show unsupported organizations
+                            {t("orgs.showUnsupported")}
                             {hiddenFreeCount > 0 && !showUnsupported && (
                               <span aria-hidden="true">
                                 {" "}

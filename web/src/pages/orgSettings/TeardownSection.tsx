@@ -1,6 +1,7 @@
 import { useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
@@ -22,6 +23,7 @@ import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 // `gh teacher teardown`), marker-gated and behind a typed-org-name
 // confirmation. Owner-gated; destructive and irreversible.
 const TeardownSection = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -45,7 +47,7 @@ const TeardownSection = ({ org }: { org: string }) => {
       setError(
         err instanceof TeardownMarkerError
           ? err.message
-          : "Couldn't prepare the teardown plan.",
+          : t("orgSettings.teardown.prepareError"),
       )
     },
   })
@@ -91,15 +93,16 @@ const TeardownSection = ({ org }: { org: string }) => {
   return (
     <SettingsSection
       tone="danger"
-      title="Danger zone"
+      title={t("orgSettings.teardown.title")}
       titleAdornment={
         <TriangleAlert aria-hidden="true" className="size-5 text-error" />
       }
       description={
         <>
-          Tear down this organization by deleting <strong>every</strong>{" "}
-          repository in it, including the <code>classroom50</code> config repo,
-          and removing the GitHub team of every classroom. This is irreversible.
+          {t("orgSettings.teardown.description_prefix")}{" "}
+          <strong>{t("orgSettings.teardown.description_every")}</strong>{" "}
+          {t("orgSettings.teardown.description_mid")} <code>classroom50</code>{" "}
+          {t("orgSettings.teardown.description_suffix")}
         </>
       }
     >
@@ -116,17 +119,21 @@ const TeardownSection = ({ org }: { org: string }) => {
         type="button"
         className={`btn btn-error btn-sm ${error || done ? "mt-4" : ""}`}
         disabled={!isOwner || openMutation.isPending}
-        title={isOwner ? undefined : "Requires organization owner permissions"}
+        title={
+          isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")
+        }
         onClick={() => {
           if (!openMutation.isPending) openMutation.mutate()
         }}
       >
-        {openMutation.isPending ? "Preparing…" : "Tear down organization"}
+        {openMutation.isPending
+          ? t("orgSettings.teardown.preparing")
+          : t("orgSettings.teardown.button")}
       </button>
 
       {!isOwner && (
         <p className="mt-2 text-xs text-base-content/70">
-          Teardown requires organization owner permissions.
+          {t("orgSettings.teardown.requiresOwnerNote")}
         </p>
       )}
 
@@ -134,29 +141,34 @@ const TeardownSection = ({ org }: { org: string }) => {
         open={open}
         dangerous
         needsConfirm
-        confirmText={`delete ${org}`}
-        confirmLabel="Delete all resources"
-        title="Delete every repository in this org?"
+        confirmText={t("orgSettings.teardown.confirmText", { org })}
+        confirmLabel={t("orgSettings.teardown.confirmLabel")}
+        title={t("orgSettings.teardown.confirmTitle")}
         description={
           <div className="space-y-2 text-sm">
             <p>
-              This will permanently delete{" "}
-              <strong>{plan?.repoNames.length ?? 0}</strong> repositories in{" "}
-              <span className="font-mono">{org}</span>, including the{" "}
-              <code>classroom50</code> config repo (deleted last)
+              {t("orgSettings.teardown.confirmBody_prefix")}{" "}
+              <strong>{plan?.repoNames.length ?? 0}</strong>{" "}
+              {t("orgSettings.teardown.confirmBody_reposIn")}{" "}
+              <span className="font-mono">{org}</span>
+              {t("orgSettings.teardown.confirmBody_including")}{" "}
+              <code>classroom50</code>{" "}
+              {t("orgSettings.teardown.confirmBody_deletedLast")}
               {plan && plan.teams.length > 0 ? (
                 <>
-                  , and remove <strong>{plan.teams.length}</strong> classroom
-                  team
-                  {plan.teams.length === 1 ? "" : "s"}
+                  {t("orgSettings.teardown.confirmBody_andRemove")}{" "}
+                  <strong>{plan.teams.length}</strong>{" "}
+                  {t("orgSettings.teardown.confirmBody_teams", {
+                    count: plan.teams.length,
+                  })}
                 </>
               ) : null}
-              . This cannot be undone.
+              {t("orgSettings.teardown.confirmBody_cannotUndo")}
             </p>
             {plan && plan.repoNames.length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-base-content/70">
-                  Repositories
+                  {t("orgSettings.teardown.repositoriesHeading")}
                 </p>
                 <ul className="max-h-40 overflow-auto rounded border border-base-300 bg-base-100 p-2 font-mono text-xs">
                   {plan.repoNames.map((name) => (
@@ -168,7 +180,7 @@ const TeardownSection = ({ org }: { org: string }) => {
             {plan && plan.teams.length > 0 && (
               <div className="space-y-1">
                 <p className="text-xs font-semibold text-base-content/70">
-                  Classroom teams
+                  {t("orgSettings.teardown.classroomTeamsHeading")}
                 </p>
                 <ul className="max-h-40 overflow-auto rounded border border-base-300 bg-base-100 p-2 font-mono text-xs">
                   {plan.teams.map((team) => (
@@ -193,10 +205,9 @@ const TeardownSection = ({ org }: { org: string }) => {
             ) {
               throw err
             }
-            throw new Error(
-              "Teardown failed. Some repositories may not have been deleted.",
-              { cause: err },
-            )
+            throw new Error(t("orgSettings.teardown.executeError"), {
+              cause: err,
+            })
           }
         }}
         onClose={() => setOpen(false)}

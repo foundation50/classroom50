@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
 import { Check, Copy, ExternalLink } from "lucide-react"
+import { useTranslation } from "react-i18next"
 
 import type { DeviceAuthState } from "./types"
 
@@ -35,6 +36,7 @@ export function GitHubDevicePrompt({
 }) {
   const [copied, setCopied] = useState(false)
   const [copyTick, setCopyTick] = useState(0)
+  const { t } = useTranslation()
 
   // Reset stale "Copied!" when the code rotates.
   const [copiedCode, setCopiedCode] = useState(device.userCode)
@@ -67,7 +69,9 @@ export function GitHubDevicePrompt({
         <StepNumber value={1} done={device.progress >= 1} />
 
         <div className="min-w-0 flex-1">
-          <h2 className="text-sm font-semibold">Copy the one-time code</h2>
+          <h2 className="text-sm font-semibold">
+            {t("auth.deviceStep1Title")}
+          </h2>
 
           <div className="my-3 select-all rounded-xl border border-base-300 bg-base-200 px-4 py-3 text-center font-mono text-3xl font-bold tracking-[0.2em]">
             {device.userCode}
@@ -83,12 +87,12 @@ export function GitHubDevicePrompt({
             {copied ? (
               <>
                 <Check aria-hidden="true" className="size-4" />
-                Copied!
+                {t("auth.deviceCopied")}
               </>
             ) : (
               <>
                 <Copy aria-hidden="true" className="size-4" />
-                Copy code
+                {t("auth.deviceCopyCode")}
               </>
             )}
           </button>
@@ -100,7 +104,7 @@ export function GitHubDevicePrompt({
 
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">
-            Open the GitHub verification page
+            {t("auth.deviceStep2Title")}
           </h2>
 
           <a
@@ -113,11 +117,11 @@ export function GitHubDevicePrompt({
             }}
           >
             <ExternalLink aria-hidden="true" className="size-4" />
-            Open {device.verificationUri}
+            {t("auth.deviceOpenUri", { uri: device.verificationUri })}
           </a>
 
           <p className="mt-2 text-xs leading-relaxed text-base-content/70">
-            Paste the code there, authorize the app, then come back here.
+            {t("auth.deviceStep2Hint")}
           </p>
         </div>
       </div>
@@ -127,18 +131,19 @@ export function GitHubDevicePrompt({
 
         <div className="min-w-0 flex-1">
           <h2 className="text-sm font-semibold">
-            Wait; we&apos;re checking automatically
+            {t("auth.deviceStep3Title")}
           </h2>
 
           <p className="mt-2 text-xs leading-relaxed text-base-content/70">
-            Once you authorize on github.com, this page should detect it within
-            a few seconds.
+            {t("auth.deviceStep3Hint")}
           </p>
 
           <p className="mt-3 font-mono text-xs text-base-content/70">
-            attempt {status?.attempts ?? device.attempts} · next in{" "}
-            {status?.nextPollSeconds ?? device.intervalSeconds}s · expires in{" "}
-            {status?.expiresDisplay ?? "-"}
+            {t("auth.deviceStatus", {
+              attempts: status?.attempts ?? device.attempts,
+              seconds: status?.nextPollSeconds ?? device.intervalSeconds,
+              expires: status?.expiresDisplay ?? "-",
+            })}
           </p>
         </div>
       </div>
@@ -146,7 +151,7 @@ export function GitHubDevicePrompt({
       <div className="divider" />
 
       <button className="btn btn-outline w-full" onClick={onCancel}>
-        Cancel
+        {t("common.cancel")}
       </button>
     </div>
   )

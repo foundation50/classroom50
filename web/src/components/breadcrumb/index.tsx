@@ -1,6 +1,7 @@
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { useParams } from "@tanstack/react-router"
 import { Link } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 
 const Breadcrumb = ({
   className,
@@ -11,19 +12,20 @@ const Breadcrumb = ({
 }) => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const { data: classData } = useGetClassroom(org, classroom)
+  const { t } = useTranslation()
 
   if (!org && !classroom) return <div></div>
 
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={t("components.breadcrumb.label")}
       className={`breadcrumbs text-sm [&_a]:text-primary ${className ?? ""}`}
     >
       <ol>
         {org && (
           <li>
             <Link to="/$org" params={{ org }}>
-              Classes
+              {t("components.breadcrumb.classes")}
             </Link>
           </li>
         )}
@@ -41,7 +43,7 @@ const Breadcrumb = ({
                 to="/$org/$classroom/assignments"
                 params={{ org, classroom }}
               >
-                Assignments
+                {t("components.breadcrumb.assignments")}
               </Link>
             </li>
             <li>

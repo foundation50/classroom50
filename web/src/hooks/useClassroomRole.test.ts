@@ -4,7 +4,7 @@ import {
   isStaffRole,
   isInstructorRole,
   applyViewAs,
-  roleLabel,
+  roleLabelKey,
   type ClassroomRoleInput,
 } from "./useClassroomRole"
 
@@ -177,12 +177,12 @@ describe("role predicates", () => {
     expect(isInstructorRole("student")).toBe(false)
   })
 
-  it("roleLabel: owner+instructor => Instructor, ta => TA, student => Student, unresolved => null", () => {
-    expect(roleLabel("owner")).toBe("Instructor")
-    expect(roleLabel("instructor")).toBe("Instructor")
-    expect(roleLabel("ta")).toBe("TA")
-    expect(roleLabel("student")).toBe("Student")
-    expect(roleLabel("unresolved")).toBeNull()
+  it("roleLabelKey: owner+instructor => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
+    expect(roleLabelKey("owner")).toBe("nav.roleInstructor")
+    expect(roleLabelKey("instructor")).toBe("nav.roleInstructor")
+    expect(roleLabelKey("ta")).toBe("nav.roleTa")
+    expect(roleLabelKey("student")).toBe("nav.roleStudent")
+    expect(roleLabelKey("unresolved")).toBeNull()
   })
 })
 

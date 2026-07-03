@@ -1,6 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { ChevronDown, Copy, Plus } from "lucide-react"
 import { useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import Breadcrumb from "@/components/breadcrumb"
@@ -18,7 +19,7 @@ import useGetStudents from "@/hooks/useGetStudents"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
-import { useClassroomRole, roleLabel } from "@/hooks/useClassroomRole"
+import { useClassroomRole, roleLabelKey } from "@/hooks/useClassroomRole"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { isClassroomArchived } from "@/types/classroom"
 import { OrgRepos } from "./ClassesPage"
@@ -32,6 +33,7 @@ const NewAssignmentButton = ({
   org: string
   classroom: string
 }) => {
+  const { t } = useTranslation()
   const [reuseOpen, setReuseOpen] = useState(false)
 
   return (
@@ -42,13 +44,14 @@ const NewAssignmentButton = ({
           params={{ org, classroom }}
           className="btn btn-primary join-item"
         >
-          <Plus aria-hidden="true" className="size-4" /> Assignment
+          <Plus aria-hidden="true" className="size-4" />{" "}
+          {t("assignments.newButton.assignment")}
         </Link>
         <div className="dropdown dropdown-end join-item">
           <button
             tabIndex={0}
             className="btn btn-primary join-item border-l border-primary-content/20 px-2"
-            aria-label="More assignment options"
+            aria-label={t("assignments.newButton.moreOptions")}
           >
             <ChevronDown aria-hidden="true" className="size-4" />
           </button>
@@ -66,7 +69,8 @@ const NewAssignmentButton = ({
                   setReuseOpen(true)
                 }}
               >
-                <Copy aria-hidden="true" className="size-4" /> Reuse assignment
+                <Copy aria-hidden="true" className="size-4" />{" "}
+                {t("assignments.newButton.reuse")}
               </button>
             </li>
           </ul>
@@ -91,6 +95,7 @@ const TeacherAssignmentsView = ({
   org: string
   classroom: string
 }) => {
+  const { t } = useTranslation()
   const { data: classData, isLoading: assignmentsLoading } =
     useGetClassroomAssignments(org, classroom)
   const { students, isLoading: studentsLoading } = useGetStudents(
@@ -103,7 +108,8 @@ const TeacherAssignmentsView = ({
   )
   const { user } = useGithubAuth()
   const { role: myRole } = useClassroomRole(org, classroom, user?.login)
-  const myRoleLabel = roleLabel(myRole)
+  const myRoleLabelKey = roleLabelKey(myRole)
+  const myRoleLabel = myRoleLabelKey ? t(myRoleLabelKey) : null
   const archived = isClassroomArchived(classroomData ?? {})
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
@@ -125,12 +131,16 @@ const TeacherAssignmentsView = ({
           )}
           <h3 className="pb-10">
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading ? "…" : students.length} Students
+            {studentsLoading
+              ? "…"
+              : t("assignments.studentCount", { count: students.length })}
           </h3>
         </div>
         <div className="pt-10">
           {archived ? (
-            <span className="badge badge-soft badge-neutral">Archived</span>
+            <span className="badge badge-soft badge-neutral">
+              {t("assignments.archived")}
+            </span>
           ) : (
             <NewAssignmentButton org={org} classroom={classroom} />
           )}
@@ -138,16 +148,15 @@ const TeacherAssignmentsView = ({
       </div>
       {archived ? (
         <ArchivedClassroomNotice>
-          This classroom is archived — new assignments and student accepts are
-          disabled. Unarchive it from{" "}
+          {t("assignments.archivedNotice_prefix")}{" "}
           <Link
             className="link"
             to="/$org/$classroom/edit"
             params={{ org, classroom }}
           >
-            Classroom Settings
+            {t("assignments.archivedNotice_link")}
           </Link>{" "}
-          to make changes.
+          {t("assignments.archivedNotice_suffix")}
         </ArchivedClassroomNotice>
       ) : emptyRoster.show ? (
         <EmptyRosterNotice
@@ -176,12 +185,16 @@ const StudentAssignmentsView = ({
   org: string
   classroom: string
 }) => {
+  const { t } = useTranslation()
   return (
     <div>
-      <h1 className="text-2xl font-bold mt-6">Classroom Assignments</h1>
+      <h1 className="text-2xl font-bold mt-6">
+        {t("assignments.studentHeading")}
+      </h1>
       <label className="text-sm label mb-6">
-        View all assignments for the{" "}
-        <span className="font-bold">{classroom}</span> classroom.
+        {t("assignments.studentViewAll_prefix")}{" "}
+        <span className="font-bold">{classroom}</span>{" "}
+        {t("assignments.studentViewAll_suffix")}
       </label>
       <OrgRepos org={org} classroom={classroom} />
     </div>
@@ -189,7 +202,8 @@ const StudentAssignmentsView = ({
 }
 
 const AssignmentsPage = () => {
-  useDocumentTitle("Assignments")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.assignments"))
   const { org, classroom } = useParams({ strict: false })
   const {
     isTeacher,
@@ -202,7 +216,7 @@ const AssignmentsPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="Assignments" />
+          <Breadcrumb endpoint={t("nav.assignments")} />
           {roleLoading && (
             <div className="mt-8 space-y-4">
               <div className="skeleton skeleton-shimmer h-6 w-48" />

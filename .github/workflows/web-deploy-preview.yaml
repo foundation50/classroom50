@@ -1,0 +1,89 @@
+name: web Deploy to Preview (preview.classroom50.org)
+
+# Builds the web app (web/) and publishes the built dist/ to the preview repo
+# (foundation50/classroom50-web-preview), whose GitHub Pages serves
+# preview.classroom50.org. Runs on every push to `preview` (scoped to web/**),
+# so day-to-day work merged into the preview branch is continuously deployed.
+# Manual runs available via the Actions tab.
+#
+# Branch model: `preview` is the rapid-dev integration branch; a release PR
+# merges preview -> main, and main deploys production (classroom50.org) via
+# web-deploy.yaml.
+#
+# Why a separate repo: GitHub Pages allows only one custom domain per repo, so
+# production (classroom50.org) and preview must live in different repos. Source
+# stays here; the preview repo holds only the built artifact + its own CNAME.
+
+on:
+  push:
+    branches: [preview]
+    paths:
+      - 'web/**'
+      - '.github/workflows/web-deploy-preview.yaml'
+  workflow_dispatch:
+
+# Only the cross-repo push needs auth (provided via PREVIEW_DEPLOY_KEY); this
+# workflow does not use the local repo's GITHUB_TOKEN to write anything.
+permissions:
+  contents: read
+
+concurrency:
+  group: web-deploy-preview
+  cancel-in-progress: true
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Gate the deploy on the test suite (incl. skeleton parity), same as the
+      # production deploy — a broken skeleton bundle must not reach preview.
+      - run: npm test
+
+      # `npm run build` runs `tsc -b && vite build`; the type-check is
+      # blocking. Served from the root of preview.classroom50.org, so the
+      # default base of "/" is correct.
+      - run: npm run build
+        env:
+          # OAuth client IDs are public identifiers; a repo variable suffices.
+          # Reuses the production client id — ensure preview.classroom50.org is
+          # an allowed callback on that OAuth app.
+          VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+
+      # GitHub Pages has no SPA rewrites; serve the app for unknown deep links.
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      # Custom domain for the preview Pages site. Written into the published
+      # artifact so the preview repo's Pages keeps serving the subdomain.
+      - name: Write CNAME for preview domain
+        run: echo "preview.classroom50.org" > dist/CNAME
+
+      # Publish the built site to the preview repo's `main` branch (its Pages
+      # source). Uses an SSH deploy key (least privilege, no expiry) that has
+      # write access to ONLY the preview repo.
+      - name: Publish to preview repo
+        uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
+        with:
+          deploy_key: ${{ secrets.PREVIEW_DEPLOY_KEY }}
+          external_repository: foundation50/classroom50-web-preview
+          publish_branch: main
+          # Repo-root-relative; the build wrote to web/dist.
+          publish_dir: ./web/dist
+          # Replace the branch contents wholesale each deploy (the preview repo
+          # holds only the built artifact, no source history worth keeping).
+          force_orphan: true
+          full_commit_message: "deploy: preview.classroom50.org from ${{ github.sha }}"

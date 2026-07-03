@@ -2,6 +2,7 @@ import { Mail, UserRound, Users } from "lucide-react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useMutation } from "@tanstack/react-query"
 import { useCallback, useEffect, useId, useRef, useState } from "react"
+import { useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
 import { updateStudentWithConflictRetry } from "@/api/mutations/students"
@@ -62,6 +63,7 @@ const EditStudent = ({
   const runSave = useSafeSubmit()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
+  const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
 
   const displayHandle = student.username || student.email
@@ -116,7 +118,7 @@ const EditStudent = ({
       onDynamic: ({ value }) => {
         const email = value.email.trim()
         if (email && !isValidEmail(email)) {
-          return { fields: { email: "Enter a valid email address." } }
+          return { fields: { email: t("validation.validEmail") } }
         }
         return undefined
       },
@@ -178,14 +180,14 @@ const EditStudent = ({
     >
       <div className="modal-box max-w-lg">
         <h3 id={titleId} className="text-lg font-bold">
-          Edit student
+          {t("students.editTitle")}
         </h3>
         <p className="mt-1 text-sm text-base-content/70">
-          Editing{" "}
+          {t("students.editingPrefix")}{" "}
           <span className="font-semibold text-base-content">
-            {displayHandle ? `@${displayHandle}` : "this student"}
+            {displayHandle ? `@${displayHandle}` : t("students.thisStudent")}
           </span>
-          . Their GitHub identity can&apos;t be changed here.
+          {t("students.editingSuffix")}
         </p>
 
         <form
@@ -207,8 +209,8 @@ const EditStudent = ({
                     id={field.name}
                     name={field.name}
                     type="text"
-                    placeholder="First name"
-                    aria-label="First name"
+                    placeholder={t("students.firstNamePlaceholder")}
+                    aria-label={t("students.firstNamePlaceholder")}
                     className="input w-full"
                     value={field.state.value}
                     onBlur={field.handleBlur}
@@ -229,8 +231,8 @@ const EditStudent = ({
                     id={field.name}
                     name={field.name}
                     type="text"
-                    placeholder="Last name"
-                    aria-label="Last name"
+                    placeholder={t("students.lastNamePlaceholder")}
+                    aria-label={t("students.lastNamePlaceholder")}
                     className="input w-full"
                     value={field.state.value}
                     onBlur={field.handleBlur}
@@ -249,12 +251,12 @@ const EditStudent = ({
                 const emailHelp =
                   emailLocked && !isEnrolled
                     ? emailFromSelfReport
-                      ? "This is the email the student reported when onboarding. It's part of the identity that enrollment confirms, so it can't be changed until you confirm enrollment."
-                      : "This student isn't enrolled yet. Their email is part of the identity that onboarding confirms, so it can't be changed until enrollment is confirmed."
+                      ? t("students.emailHelpReportedLocked")
+                      : t("students.emailHelpNotEnrolled")
                     : emailLocked
-                      ? "This student has no GitHub identity yet, so their email is their only identifier and can't be changed here. Unenroll and re-add them to change it."
+                      ? t("students.emailHelpNoIdentity")
                       : emailChangedWhileEnrolled
-                        ? "This student is already enrolled. Changing their email won't re-bind their confirmed GitHub identity; it only affects future email-based matching."
+                        ? t("students.emailHelpEnrolledChange")
                         : null
                 return (
                   <div>
@@ -267,8 +269,8 @@ const EditStudent = ({
                         id={field.name}
                         name={field.name}
                         type="email"
-                        placeholder="student@university.edu"
-                        aria-label="Email"
+                        placeholder={t("students.editEmailPlaceholder")}
+                        aria-label={t("students.emailLabel")}
                         aria-invalid={field.state.meta.errors.length > 0}
                         aria-describedby={
                           field.state.meta.errors.length > 0
@@ -318,8 +320,8 @@ const EditStudent = ({
                     id={field.name}
                     name={field.name}
                     type="text"
-                    placeholder="Section (e.g. Period 3)"
-                    aria-label="Section"
+                    placeholder={t("students.editSectionPlaceholder")}
+                    aria-label={t("students.sectionLabel")}
                     className="input w-full"
                     value={field.state.value}
                     onBlur={field.handleBlur}
@@ -333,8 +335,11 @@ const EditStudent = ({
               <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/70">
                 <GitHub aria-hidden="true" className="size-5 opacity-40" />
                 <span>
-                  GitHub: <span className="font-mono">@{student.username}</span>
-                  {student.github_id ? ` (id ${student.github_id})` : ""}
+                  {t("students.githubLabel")}{" "}
+                  <span className="font-mono">@{student.username}</span>
+                  {student.github_id
+                    ? t("students.githubIdSuffix", { id: student.github_id })
+                    : ""}
                 </span>
               </div>
             ) : null}
@@ -353,7 +358,7 @@ const EditStudent = ({
               disabled={submitting}
               onClick={closeDialog}
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <form.Subscribe
               selector={(state) => [state.canSubmit, state.isSubmitting]}
@@ -370,10 +375,10 @@ const EditStudent = ({
                         className="loading loading-spinner loading-sm"
                         aria-hidden="true"
                       />
-                      Saving...
+                      {t("students.saving")}
                     </>
                   ) : (
-                    "Save changes"
+                    t("students.saveChanges")
                   )}
                 </button>
               )}
@@ -384,7 +389,7 @@ const EditStudent = ({
 
       <form method="dialog" className="modal-backdrop">
         <button type="button" disabled={submitting} onClick={closeDialog}>
-          close
+          {t("common.close")}
         </button>
       </form>
     </dialog>

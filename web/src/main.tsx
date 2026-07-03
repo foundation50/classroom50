@@ -5,6 +5,7 @@ import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { MotionConfig } from "motion/react"
 
 import "./index.css"
+import "./i18n"
 import { GitHubAuthProvider } from "./auth/useGithubAuth"
 import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProviderFromAuth"
 import { NotificationProvider } from "./context/notifications/NotificationProvider"

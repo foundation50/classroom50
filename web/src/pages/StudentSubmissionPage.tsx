@@ -1,4 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 import {
   ExternalLink,
   FileText,
@@ -34,6 +35,7 @@ const releaseLabel = (release: GitHubRelease): string =>
   release.name?.trim() || release.tag_name.replace(/^submit\//, "")
 
 const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
+  const { t } = useTranslation()
   // html_url comes from the GitHub API (always http(s)); guard anyway to keep
   // the no-unsafe-href rule uniform across views.
   const href = safeHttpUrl(release.html_url)
@@ -44,7 +46,9 @@ const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
       <div className="min-w-0">
         <p className="truncate font-medium">{releaseLabel(release)}</p>
         <p className="text-sm text-base-content/70">
-          Submitted {formatDueDateTime(when)}
+          {t("submissions.student.submittedAt", {
+            date: formatDueDateTime(when),
+          })}
         </p>
       </div>
       {href ? (
@@ -55,16 +59,19 @@ const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
           className="btn btn-sm btn-outline shrink-0"
         >
           <FileText aria-hidden="true" className="size-4" />
-          View grade
+          {t("submissions.student.viewGrade")}
         </a>
       ) : (
-        <span className="text-sm text-base-content/70">Unavailable</span>
+        <span className="text-sm text-base-content/70">
+          {t("submissions.student.unavailable")}
+        </span>
       )}
     </li>
   )
 }
 
 const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
+  const { t } = useTranslation()
   if (!assignment) return null
   const due = assignment.due
   const overdue = due ? isPastDue(due) : false
@@ -73,18 +80,22 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {assignment.mode === "group" ? (
         <span className="badge badge-ghost badge-sm gap-1">
-          <UsersRound aria-hidden="true" className="size-3.5" /> Group
+          <UsersRound aria-hidden="true" className="size-3.5" />{" "}
+          {t("submissions.student.modeGroup")}
         </span>
       ) : assignment.mode === "individual" ? (
         <span className="badge badge-ghost badge-sm gap-1">
-          <UserRound aria-hidden="true" className="size-3.5" /> Individual
+          <UserRound aria-hidden="true" className="size-3.5" />{" "}
+          {t("submissions.student.modeIndividual")}
         </span>
       ) : null}
       <span
         className={`badge badge-sm gap-1 ${overdue ? "badge-error badge-soft" : "badge-ghost"}`}
       >
         <CalendarClock aria-hidden="true" className="size-3.5" />
-        {due ? `Due ${formatDueDateTime(due)}` : "No due date"}
+        {due
+          ? t("submissions.dueDate", { date: formatDueDateTime(due) })
+          : t("submissions.noDueDate")}
       </span>
     </div>
   )
@@ -103,6 +114,7 @@ const SubmissionBody = ({
   // link. Undefined for unprotected.
   secret?: string
 }) => {
+  const { t } = useTranslation()
   const { user } = useGithubAuth()
   const {
     data: releases,
@@ -139,7 +151,7 @@ const SubmissionBody = ({
           : ""
     return (
       <div className="alert alert-error mt-6">
-        Could not load your submissions.
+        {t("submissions.student.loadError")}
         {message ? ` ${message}` : ""}
       </div>
     )
@@ -150,16 +162,16 @@ const SubmissionBody = ({
     return (
       <EnterDiv className="alert alert-warning mt-6">
         <div>
-          You haven't accepted this assignment yet.{" "}
+          {t("submissions.student.notAccepted_prefix")}{" "}
           <Link
             className="underline"
             to="/$org/$classroom/assignments/$assignment/accept"
             params={{ org, classroom, assignment }}
             search={secret ? { k: secret } : undefined}
           >
-            Accept it
+            {t("submissions.student.notAccepted_link")}
           </Link>{" "}
-          to get your repository, then push your work to be graded.
+          {t("submissions.student.notAccepted_suffix")}
         </div>
       </EnterDiv>
     )
@@ -169,10 +181,7 @@ const SubmissionBody = ({
     return (
       <EnterDiv className="mt-6 space-y-4">
         <div className="alert alert-info">
-          <div>
-            No graded submission yet. Push a commit to your assignment
-            repository and the autograder will publish your result here.
-          </div>
+          <div>{t("submissions.student.noGradedYet")}</div>
         </div>
         <a
           href={studentRepo.html_url}
@@ -181,7 +190,7 @@ const SubmissionBody = ({
           className="btn btn-sm btn-outline"
         >
           <ExternalLink aria-hidden="true" className="size-4" />
-          Open my repository
+          {t("submissions.student.openMyRepo")}
         </a>
       </EnterDiv>
     )
@@ -191,8 +200,7 @@ const SubmissionBody = ({
     <div className="mt-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className="text-sm text-base-content/70">
-          Each submission opens its graded release on GitHub, with your score
-          and per-test results.
+          {t("submissions.student.releasesIntro")}
         </p>
         <a
           href={studentRepo.html_url}
@@ -201,7 +209,7 @@ const SubmissionBody = ({
           className="btn btn-sm btn-outline"
         >
           <ExternalLink aria-hidden="true" className="size-4" />
-          Open my repository
+          {t("submissions.student.openMyRepo")}
         </a>
       </div>
 
@@ -217,7 +225,8 @@ const SubmissionBody = ({
 }
 
 const StudentSubmissionPage = () => {
-  useDocumentTitle("My Submission")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.mySubmission"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const { user } = useGithubAuth()
   // Resolve the capability-URL secret (if the classroom is protected) from two
@@ -247,9 +256,11 @@ const StudentSubmissionPage = () => {
       <Drawer>
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint="My Submission" />
+          <Breadcrumb endpoint={t("nav.mySubmission")} />
           <h1 className="text-2xl font-bold mt-4">
-            {assignmentData?.name || assignment || "Submission"}
+            {assignmentData?.name ||
+              assignment ||
+              t("submissions.student.fallbackTitle")}
           </h1>
           <AssignmentMeta assignment={assignmentData} />
           {org && classroom && assignment ? (
@@ -260,7 +271,7 @@ const StudentSubmissionPage = () => {
               secret={secret}
             />
           ) : (
-            <MissingParams message="Missing course or assignment information." />
+            <MissingParams message={t("submissions.student.missingParams")} />
           )}
         </DrawerContent>
         <DrawerSidebar selected="assignments" />

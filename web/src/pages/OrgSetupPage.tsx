@@ -1,6 +1,7 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
+import { useTranslation } from "react-i18next"
 
 import Drawer, {
   DrawerContent,
@@ -46,6 +47,7 @@ const OrgSteps = ({
   stage?: number
   setStage?: (num: number) => void
 }) => {
+  const { t } = useTranslation()
   const runSetup = useSafeSubmit()
   return (
     <div className="card border border-base-300 bg-base-100 shadow-sm">
@@ -76,7 +78,7 @@ const OrgSteps = ({
                       aria-hidden="true"
                     />
                   ) : (
-                    "Run setup"
+                    t("setup.runSetup")
                   )}
                 </button>
               ) : (
@@ -84,14 +86,14 @@ const OrgSteps = ({
                   className="btn btn-primary ml-auto"
                   onClick={() => setStage(2)}
                 >
-                  Next: service token
+                  {t("setup.nextServiceToken")}
                   <ArrowRight aria-hidden="true" className="size-4" />
                 </button>
               ))}
             {stage === 2 && (
               <button className="btn btn-ghost" onClick={() => setStage(1)}>
                 <ArrowLeft aria-hidden="true" className="size-4" />
-                Back
+                {t("setup.back")}
               </button>
             )}
           </div>
@@ -102,10 +104,7 @@ const OrgSteps = ({
             {nextStep && (
               <EnterDiv className="alert alert-success">
                 <CheckCircle2 aria-hidden="true" className="size-5 shrink-0" />
-                <div>
-                  Organization setup is complete. Review the steps below, then
-                  continue to set the service token.
-                </div>
+                <div>{t("setup.setupComplete")}</div>
               </EnterDiv>
             )}
             <InitStepBoard steps={steps} org={org} />
@@ -120,15 +119,16 @@ const OrgSteps = ({
               <CheckCircle2 aria-hidden="true" className="size-9" />
             </div>
             <div>
-              <h2 className="text-xl font-bold">You're all set!</h2>
+              <h2 className="text-xl font-bold">{t("setup.allSetTitle")}</h2>
               <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                Your organization is ready to use Classroom 50. Head to your
-                organization to create your first classroom and assignments.
+                {t("setup.allSetBody")}
               </p>
             </div>
             <Link className="btn btn-primary" to="/$org" params={{ org }}>
               <span className="truncate">
-                Go to {org || "your organization"}
+                {t("setup.goToOrg", {
+                  org: org || t("setup.yourOrganization"),
+                })}
               </span>
               <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
             </Link>
@@ -140,26 +140,22 @@ const OrgSteps = ({
 }
 
 const NotAdminAlert = () => {
-  return (
-    <div className="alert alert-error">
-      Classroom 50 setup requires org owner permissions. Ask an org owner to run
-      setup.
-    </div>
-  )
+  const { t } = useTranslation()
+  return <div className="alert alert-error">{t("setup.notAdmin")}</div>
 }
 
 const NotTeamOrEnterpriseWarning = () => {
+  const { t } = useTranslation()
   return (
     <div className="alert alert-warning mb-4">
-      GitHub Pages from a private repository may require GitHub Team or
-      Enterprise Cloud. You can continue setup, but published assignments may
-      not be accessible until Pages is available for this org.
+      {t("setup.notTeamOrEnterprise")}
     </div>
   )
 }
 
 const OrgSetupPage = () => {
-  useDocumentTitle("Setup")
+  const { t } = useTranslation()
+  useDocumentTitle(t("documentTitle.setup"))
   const queryClient = useQueryClient()
   const githubClient = useGitHubClient()
 
@@ -225,15 +221,15 @@ const OrgSetupPage = () => {
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
           <div className="mb-8">
-            <h1 className="font-bold text-2xl">Setup Classroom 50</h1>
+            <h1 className="font-bold text-2xl">{t("setup.pageHeading")}</h1>
             <p className="text-sm text-base-content/70">
-              This will set up your GitHub organization to use Classroom 50.
+              {t("setup.pageSubheading")}
             </p>
           </div>
           {!isLoadingPlanDetails && !isTeamOrEnterprise && (
             <NotTeamOrEnterpriseWarning />
           )}
-          {isLoading && <Spinner label="Loading organization setup" />}
+          {isLoading && <Spinner label={t("setup.loadingSetup")} />}
           {!isLoading && !isOwner && <NotAdminAlert />}
           {!isLoading && isOwner && (
             <OrgSteps

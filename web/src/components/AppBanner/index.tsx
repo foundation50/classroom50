@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { X } from "lucide-react"
 import { motion } from "motion/react"
+import { useTranslation } from "react-i18next"
 
 import { collapseVariants } from "@/lib/motion"
 
@@ -38,6 +39,7 @@ export const AppBanner = ({
   onDismiss?: () => void
 }) => {
   const tokens = TONE_CLASS[tone]
+  const { t } = useTranslation()
   return (
     <motion.div
       role="alert"
@@ -56,7 +58,7 @@ export const AppBanner = ({
         {onDismiss ? (
           <button
             type="button"
-            aria-label="Dismiss"
+            aria-label={t("components.banner.dismiss")}
             className="btn btn-ghost btn-xs btn-square -mr-1 shrink-0"
             onClick={onDismiss}
           >
