@@ -914,9 +914,9 @@
   },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",
-    "body": "The GitHub Actions workflows scaffolded into this organization's classroom50 configuration repository have drifted from the current version. Re-run onboarding to update them so grading, score collection, and Pages publishing keep working.",
+    "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Re-run onboarding to update them and keep grading, score collection, and Pages publishing working.",
     "overwriteWarning_label": "Heads up:",
-    "overwriteWarning": "Updating replaces the scaffolded workflow files (collect-scores, regrade, publish-pages, autograde-runner) with the defaults. Any manual edits you made to those files will be overwritten — you'll confirm each replacement first.",
+    "overwriteWarning": "Updating overwrites the scaffolded workflow files (collect-scores, regrade, publish-pages, autograde-runner) with the defaults, replacing any manual edits — you'll confirm each one first.",
     "action": "Update workflows"
   },
   "classes": {

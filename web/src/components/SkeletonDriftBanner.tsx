@@ -8,29 +8,27 @@ import { AppBanner } from "@/components/AppBanner"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { RERUN_ONBOARDING_ANCHOR } from "@/pages/orgSettings/RerunOnboarding"
 
-// Global warning banner shown to a teacher when the org's `classroom50` config
-// repo has scaffolded workflow files that drifted from the current bundled
-// skeleton (e.g. after an action-pin bump). Routes to the existing "Re-run
-// onboarding" Org Settings section, which performs the overwrite.
+// Global warning banner shown to an org owner when the `classroom50` config
+// repo's scaffolded workflows have drifted from the current bundled skeleton
+// (e.g. after an action-pin bump). Routes to the owner-only "Re-run onboarding"
+// Org Settings section, which performs the overwrite.
 //
-// The copy states plainly that updating REPLACES any customized workflow files
-// with the defaults — the overwrite is byte-for-byte from the skeleton, so a
-// teacher who hand-edited collect-scores/regrade/publish-pages/autograde-runner
-// loses those edits. The re-run flow's overwrite-confirmation modal gates it
-// per file, but the banner warns up front so nobody is surprised.
+// The copy warns that re-running overwrites customized workflow files with the
+// skeleton defaults (the re-run flow's modal still confirms per file).
 //
-// Dismiss is per-session (component-local state, like ScopeWarningBanner): it
-// reappears on reload until the drift is actually resolved.
+// Dismiss is per-session and per-org: the banner is mounted once in the stable
+// _authed layout and never remounts on org navigation, so dismissal is tracked
+// by org — dismissing org A must not suppress org B's drift. Reappears on
+// reload until resolved.
 export function SkeletonDriftBanner() {
-  // Org-level and classroom routes both live under /_authed/$org, so read the
-  // param loosely; org-less routes (the org picker) yield undefined and the
-  // teacher-gated hook stays disabled.
+  // Loose param read: org-less routes (the org picker) yield undefined and the
+  // owner-gated hook stays disabled.
   const { org } = useParams({ strict: false })
   const { hasDrift } = useSkeletonDrift(org)
-  const [dismissed, setDismissed] = useState(false)
+  const [dismissedOrg, setDismissedOrg] = useState<string>()
   const { t } = useTranslation()
 
-  const show = Boolean(org) && hasDrift && !dismissed
+  const show = Boolean(org) && hasDrift && dismissedOrg !== org
 
   return (
     <AnimatePresence initial={false}>
@@ -40,7 +38,7 @@ export function SkeletonDriftBanner() {
           tone="warning"
           icon={<FileWarning className="size-5" aria-hidden="true" />}
           title={t("skeletonDrift.title")}
-          onDismiss={() => setDismissed(true)}
+          onDismiss={() => setDismissedOrg(org)}
         >
           <p className="text-base-content/70">{t("skeletonDrift.body")}</p>
           <p className="text-base-content/70">

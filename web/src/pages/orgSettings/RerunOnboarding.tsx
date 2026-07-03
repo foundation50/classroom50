@@ -49,9 +49,8 @@ const SummaryBanner = ({
   </CalloutDiv>
 )
 
-// DOM anchor for the Re-run onboarding section, shared with the global
-// skeleton-drift banner (SkeletonDriftBanner) so its "Update workflows" action
-// can scroll the teacher straight to this section.
+// DOM anchor shared with SkeletonDriftBanner so its "Update workflows" action
+// scrolls straight to this section.
 export const RERUN_ONBOARDING_ANCHOR = "rerun-onboarding"
 
 // Re-run onboarding from Org Settings: re-invokes the idempotent
