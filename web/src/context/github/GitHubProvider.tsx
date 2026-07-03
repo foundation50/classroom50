@@ -90,15 +90,6 @@ export function useOptionalGitHubClient() {
   return useContext(GitHubClientContext)
 }
 
-// True when the current token has been seen to fail authentication (401) on a
-// real API call — i.e. it is expired or the app's access was revoked. Drives
-// the session-expired banner. A 401 carries no usable scope/identity, so this
-// takes precedence over the scope check below.
-export function useTokenRevoked(): boolean {
-  const observed = useContext(ObservedContext)
-  return observed?.signal.status === 401
-}
-
 // Required scopes the current token is missing, for the scope-warning banner.
 // Prefers the live X-OAuth-Scopes observation; falls back to the scope string
 // captured at login. Fails open: when neither source has a value (no client, or

@@ -17,6 +17,7 @@ import {
   requestDeviceCode,
 } from "./github-oauth-api"
 import { fetchGithubUser, GithubUserFetchError } from "./github-user-api"
+import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import {
   clearGithubToken,
@@ -84,9 +85,21 @@ function useGithubAuthState() {
     queryFn: () => fetchGithubUser(token!),
     enabled: Boolean(token),
     staleTime: 60 * 60 * 1000,
-    // A 401 is deterministic for a revoked token; retrying only widens the
-    // window before the session resolves to unauthenticated.
-    retry: 0,
+    // A definitive status (401 revoked, 403 SSO/blocked, 404) resolves
+    // immediately — retrying can't change it and only widens the window before
+    // the session settles. Transient failures (5xx / network) still self-heal
+    // with a bounded retry so a momentary GitHub blip doesn't eject a signed-in
+    // user. Shares the definitive-status policy with the GitHub-client reads
+    // (see retryTransientNotFoundForbidden / isDefinitiveGitHubStatus).
+    retry: (failureCount, error) => {
+      if (
+        error instanceof GithubUserFetchError &&
+        isDefinitiveGitHubStatus(error.status)
+      ) {
+        return false
+      }
+      return failureCount < 2
+    },
   })
 
   const exchangeCodeMutation = useMutation({
@@ -448,6 +461,9 @@ function useGithubAuthState() {
       setError(null)
       setScreen("config")
       setSessionExpired(expired)
+      // Cancel in-flight ["github"] requests before evicting them so they
+      // don't resolve/reject into removed cache state after teardown.
+      void queryClient.cancelQueries({ queryKey: ["github"] })
       queryClient.removeQueries({ queryKey: ["github"] })
     },
     [queryClient],
@@ -457,12 +473,14 @@ function useGithubAuthState() {
 
   // Called when a revoked/expired token is detected on a live API 401. Clears
   // the token so `status` flips to unauthenticated and the _authed guard
-  // redirects to /login. Safe to call repeatedly — no-ops once the token is
-  // already gone.
+  // redirects to /login. Guards on the in-memory token (the authoritative
+  // source) rather than localStorage, so a live 401 still tears the session
+  // down even if storage was cleared out-of-band. No-ops once the token is
+  // already gone, keeping it safe to call repeatedly.
   const expireSession = useCallback(() => {
-    if (!getStoredGithubToken()) return
+    if (!token) return
     clearSession(true)
-  }, [clearSession])
+  }, [clearSession, token])
 
   // Cold-reload path: a stored-but-revoked token fails /user validation with a
   // 401. Tear the session down so the token doesn't linger across reloads and

@@ -65,6 +65,16 @@ export function retryTransientNotFoundForbidden(
   return failureCount < 2
 }
 
+// Statuses that are DEFINITIVE for a GitHub read — retrying cannot change the
+// outcome, so the query should resolve immediately: 401 (revoked/expired
+// credentials), 403 (blocked, incl. SAML-SSO-gated — see #66), 404 (absent).
+// Any other failure (5xx / 429 / network) is treated as transient by the retry
+// predicates above/below. Works off a bare status so it is shared across the
+// bespoke GithubUserFetchError and the canonical GitHubAPIError.
+export function isDefinitiveGitHubStatus(status: number): boolean {
+  return status === 401 || status === 403 || status === 404
+}
+
 export function readGitHubRateLimitHeaders(res: Response): GitHubRateLimit {
   const numberHeader = (name: string) => {
     const value = res.headers.get(name)
