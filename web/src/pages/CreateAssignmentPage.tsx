@@ -16,6 +16,7 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import { createAssignment } from "@/hooks/github/mutations"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
@@ -34,6 +35,7 @@ const CreateAssignmentPage = () => {
   const { org, classroom } = useParams({ strict: false })
   const queryClient = useQueryClient()
   const { notify } = useToast()
+  const { register } = useActionActivityRegistry()
   const [errorMessage, setErrorMessage] = useState("")
   const [warningMessage, setWarningMessage] = useState("")
 
@@ -78,6 +80,16 @@ const CreateAssignmentPage = () => {
           `${classroom ?? ""}/assignments.json`,
         ),
       })
+      // Track the publish-pages deploy this commit triggers so the global
+      // activity banner can label the run ("Publishing '<name>' to student
+      // site"). Anchored on the commit SHA the runs API exposes as head_sha.
+      if (org && result.newCommitSha) {
+        register({
+          org,
+          label: t("toasts.publishingAssignment", { name: variables.name }),
+          anchor: { kind: "sha", sha: result.newCommitSha },
+        })
+      }
       // Assignment created. If the template team grant failed, stay on the
       // page to show the warning instead of navigating away.
       if (result.templateGrantWarning) {

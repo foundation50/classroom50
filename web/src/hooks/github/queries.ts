@@ -141,6 +141,12 @@ export const githubKeys = {
 
   releases: (owner: string, repo: string) =>
     [...githubKeys.all, "releases", owner, repo] as const,
+
+  // Repo-wide Actions runs for the org's classroom50 config repo, filtered by
+  // status. Keys the activity-banner poll of in-progress (and recently
+  // finished) runs across every workflow.
+  repoActionsRuns: (owner: string, status: string) =>
+    [...githubKeys.all, "repo-actions-runs", owner, status] as const,
 }
 
 // Refresh roster invite-status lists after enroll/resend/unenroll: invites
@@ -1462,4 +1468,83 @@ export async function getLastCollectScoresRun(
     signal,
   )
   return runs[0] ?? null
+}
+
+// Repo-wide Actions runs across ALL workflows in <org>/classroom50, filtered by
+// a runs-API `status` value. Unlike listLatestWorkflowRun (scoped to one
+// workflow file), this hits the repo-level runs endpoint so the activity banner
+// can see every in-flight workflow (publish-pages, collect-scores, regrade, …)
+// at once. Returns [] on any error (a missing repo, a token without Actions
+// read) so the banner degrades to "nothing running" rather than surfacing an
+// error over the whole app.
+async function listRepoActionsRuns(
+  client: GitHubClient,
+  org: string,
+  status: string,
+  perPage: number,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun[]> {
+  try {
+    const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
+      `/repos/${encodeURIComponent(
+        org,
+      )}/classroom50/actions/runs?status=${encodeURIComponent(
+        status,
+      )}&per_page=${perPage}`,
+      { method: "GET", signal },
+    )
+    return res.workflow_runs ?? []
+  } catch (error) {
+    if (signal?.aborted) throw error
+    return []
+  }
+}
+
+// Runs currently executing (queued or in progress) in <org>/classroom50, newest
+// first. GitHub's `in_progress` status filter excludes queued runs, so we union
+// the two so a run that's still queued after a dispatch/push also shows.
+export async function listActiveRuns(
+  client: GitHubClient,
+  org: string,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun[]> {
+  const [inProgress, queued] = await Promise.all([
+    listRepoActionsRuns(client, org, "in_progress", 30, signal),
+    listRepoActionsRuns(client, org, "queued", 30, signal),
+  ])
+  const byId = new Map<number, GitHubWorkflowRun>()
+  for (const run of [...inProgress, ...queued]) byId.set(run.id, run)
+  return [...byId.values()].sort((a, b) => b.id - a.id)
+}
+
+// The most recently completed runs in <org>/classroom50 (newest first). The
+// activity banner reads these when its active count drops to zero, to learn how
+// the just-finished runs concluded (success vs. failure) and flash accordingly.
+export async function listRecentCompletedRuns(
+  client: GitHubClient,
+  org: string,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun[]> {
+  return listRepoActionsRuns(client, org, "completed", 20, signal)
+}
+
+// Active (queued/in-progress) AND recently-completed runs together, so the
+// activity banner can evaluate each run status-first (running vs finished) and,
+// for finished runs, its conclusion — without relying on catching a run in the
+// active list at exactly the right poll. Newest first, de-duplicated by id
+// (a run can briefly appear in both lists as it transitions).
+export async function listActiveAndRecentRuns(
+  client: GitHubClient,
+  org: string,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun[]> {
+  const [active, completed] = await Promise.all([
+    listActiveRuns(client, org, signal),
+    listRecentCompletedRuns(client, org, signal),
+  ])
+  const byId = new Map<number, GitHubWorkflowRun>()
+  // Completed first, then active overwrites — the active copy is the fresher
+  // snapshot for a run mid-transition.
+  for (const run of [...completed, ...active]) byId.set(run.id, run)
+  return [...byId.values()].sort((a, b) => b.id - a.id)
 }

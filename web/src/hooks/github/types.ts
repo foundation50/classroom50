@@ -143,6 +143,13 @@ export type GitHubOrgDetails = {
 
 export type GitHubWorkflowRun = {
   id: number
+  // Human name of the workflow that produced this run (e.g. "Publish Pages").
+  // Used to label an unattributed run in the activity banner.
+  name?: string
+  // The workflow definition file path (e.g.
+  // ".github/workflows/publish-pages.yaml"), present on the runs API. Lets the
+  // banner map a run to a workflow without relying on the display name.
+  path?: string
   status:
     "queued" | "in_progress" | "completed" | "waiting" | "requested" | "pending"
   conclusion:
@@ -156,6 +163,11 @@ export type GitHubWorkflowRun = {
     | "stale"
     | null
   created_at: string
+  // When the run actually started (may lag created_at while queued).
+  run_started_at?: string
+  // Head commit SHA the run is building. The activity banner matches a
+  // push-triggered publish-pages run to a teacher's commit by this.
+  head_sha?: string
   html_url: string
   event: string
 }

@@ -23,6 +23,7 @@ import { editClassroomWithConflictRetry } from "@/api/mutations/classrooms"
 import { isClassroomArchived } from "@/types/classroom"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireTeacher from "@/components/RequireTeacher"
 import { LoadingSwap } from "@/lib/LoadingSwap"
@@ -38,6 +39,7 @@ const EditClassroomContent = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
+  const { register } = useActionActivityRegistry()
   const runSave = useSafeSubmit()
   const { data: cl, isLoading: loadingClassroom } = useGetClassroom(
     org,
@@ -59,7 +61,7 @@ const EditClassroomContent = ({
             : t("toasts.classroomSaveFailed", { message: err.message }),
       })
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
       // Refresh the exact classroom.json query useGetClassroom reads (so a
       // renamed name/term updates in place), plus the classes-list listing.
       // A bare rawFile("/") key matched no live query — useGetClassroom keys on
@@ -74,6 +76,15 @@ const EditClassroomContent = ({
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
       })
+      // A classroom.json write triggers a publish-pages deploy — surface it in
+      // the global activity banner, anchored on the commit SHA (head_sha).
+      if (org && result?.newCommitSha) {
+        register({
+          org,
+          label: t("actionsBanner.workflow.publishPages"),
+          anchor: { kind: "sha", sha: result.newCommitSha },
+        })
+      }
       // Plain-text message only: the toast surface (NotificationProvider) is
       // mounted ABOVE the RouterProvider, so a TanStack <Link> here has no
       // router context and throws on render, blanking the whole app (the throw

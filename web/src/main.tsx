@@ -9,6 +9,8 @@ import "./i18n"
 import { GitHubAuthProvider } from "./auth/useGithubAuth"
 import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProviderFromAuth"
 import { NotificationProvider } from "./context/notifications/NotificationProvider"
+import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
+import { ActionsBanner } from "./components/status/ActionsBanner"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 
@@ -28,9 +30,12 @@ createRoot(document.getElementById("root")!).render(
       <QueryClientProvider client={client}>
         <GitHubAuthProvider>
           <GitHubClientProviderFromAuth>
-            <NotificationProvider>
-              <App />
-            </NotificationProvider>
+            <ActionActivityProvider>
+              <NotificationProvider>
+                <App />
+              </NotificationProvider>
+              <ActionsBanner />
+            </ActionActivityProvider>
             {import.meta.env.DEV && (
               <ReactQueryDevtools initialIsOpen={false} />
             )}

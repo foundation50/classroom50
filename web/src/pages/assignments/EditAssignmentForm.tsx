@@ -10,6 +10,7 @@ import {
 } from "@/api/mutations/assignments"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Spinner } from "@/components/Spinner"
 
@@ -37,6 +38,7 @@ const EditAssignmentForm = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
+  const { register } = useActionActivityRegistry()
   const editAssignmentMutation = useMutation<
     CreateAssignmentResult,
     GitHubAPIError,
@@ -44,7 +46,19 @@ const EditAssignmentForm = ({
   >({
     mutationFn: (input) => editAssignmentWithConflictRetry(client, input),
     onMutate,
-    onSuccess,
+    onSuccess: (result, variables) => {
+      // Track the publish-pages deploy this edit's commit triggers so the
+      // global activity banner labels the run. Anchored on the commit SHA
+      // (head_sha on the runs API).
+      if (result.newCommitSha) {
+        register({
+          org,
+          label: t("toasts.publishingAssignment", { name: variables.name }),
+          anchor: { kind: "sha", sha: result.newCommitSha },
+        })
+      }
+      onSuccess(result)
+    },
     onError,
   })
 

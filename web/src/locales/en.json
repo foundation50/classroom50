@@ -1,4 +1,17 @@
 {
+  "actionsBanner": {
+    "totalActions_one": "{{count}} action",
+    "totalActions_other": "{{count}} actions",
+    "viewRun": "View run",
+    "retry": "Retry",
+    "dismiss": "Dismiss",
+    "workflow": {
+      "publishPages": "Publishing to student site",
+      "collectScores": "Collecting scores",
+      "regrade": "Regrading",
+      "generic": "GitHub Actions workflow"
+    }
+  },
   "common": {
     "goToDashboard": "Go to dashboard",
     "close": "Close",
@@ -341,6 +354,7 @@
     "classroomSettingsSaved": "Classroom settings saved.",
     "classroomSaveConflict": "Couldn't save — another change landed first. Please try again.",
     "assignmentCreated": "Assignment created. It may take a moment to appear.",
+    "publishingAssignment": "Publishing \"{{name}}\" to student site",
     "classroomCreated": "Classroom created. It may take a moment to appear.",
     "invited": "Invited {{who}} to the {{org}} organization.",
     "staffAdded": "Added @{{username}} as {{role}}.",

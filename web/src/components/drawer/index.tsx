@@ -60,8 +60,17 @@ import {
 } from "react"
 import { createPortal } from "react-dom"
 
-const SIDEBAR_COLLAPSED_KEY = "classroom50:sidebar-collapsed"
+// Persisted sidebar collapse flag. Exported so consumers outside the drawer's
+// React context (the top activity banner, via useSidebarCollapsed) read the
+// same localStorage key rather than a hand-copied literal that could drift.
+export const SIDEBAR_COLLAPSED_KEY = "classroom50:sidebar-collapsed"
 const MOBILE_DRAWER_ID = "app-drawer"
+
+// Broadcast sidebar collapse changes within the same tab. `storage` events only
+// fire in OTHER tabs, so the top activity banner (mounted above the router,
+// outside this context) listens for this to keep its left offset in sync when
+// the sidebar is toggled here.
+export const SIDEBAR_COLLAPSE_EVENT = "cl50:sidebar-collapse"
 
 type SidebarCollapseContextValue = {
   collapsed: boolean
@@ -84,6 +93,9 @@ const Drawer = ({ children }: { children: ReactNode }) => {
   useEffect(() => {
     if (typeof window === "undefined") return
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, String(collapsed))
+    window.dispatchEvent(
+      new CustomEvent(SIDEBAR_COLLAPSE_EVENT, { detail: collapsed }),
+    )
   }, [collapsed])
 
   return (
