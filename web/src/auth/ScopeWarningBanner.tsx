@@ -1,53 +1,21 @@
 import { useState } from "react"
-import { ShieldAlert, TriangleAlert } from "lucide-react"
+import { ShieldAlert } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { AppBanner } from "@/components/AppBanner"
-import {
-  useMissingScopes,
-  useTokenRevoked,
-} from "@/context/github/GitHubProvider"
+import { useMissingScopes } from "@/context/github/GitHubProvider"
 
-// Surfaces two distinct token problems detected from live API responses:
-//   1. Revoked / expired token (401 Bad credentials) — the app can't make any
-//      authenticated call; show an error and route to a fresh sign-in.
-//   2. Missing required scopes — best-effort; offer re-authorize.
-// Both are non-blocking. The revoked case takes precedence because a dead token
-// makes the scope question moot.
+// Surfaces missing required scopes detected from live API responses:
+// best-effort, non-blocking; offers a re-authorize action. A revoked/expired
+// token is handled separately — a live 401 tears the session down and redirects
+// to /login (see GitHubProvider.onResponse and useGithubAuth.expireSession).
 export function ScopeWarningBanner() {
-  const revoked = useTokenRevoked()
   const missing = useMissingScopes()
-  const { startWebFlow, signOut } = useGithubAuth()
+  const { startWebFlow } = useGithubAuth()
   const [dismissed, setDismissed] = useState(false)
   const { t } = useTranslation()
-
-  if (revoked) {
-    return (
-      <AnimatePresence initial={false}>
-        <AppBanner
-          key="revoked"
-          tone="error"
-          icon={<TriangleAlert className="size-5" aria-hidden="true" />}
-          title={t("auth.revokedTitle")}
-        >
-          <p className="text-base-content/70">
-            {t("auth.revokedBody_prefix")}{" "}
-            <code className="font-mono text-xs">401 Bad credentials</code>
-            {t("auth.revokedBody_suffix")}
-          </p>
-          <button
-            type="button"
-            className="btn btn-sm btn-error self-start"
-            onClick={() => signOut()}
-          >
-            {t("auth.signInAgain")}
-          </button>
-        </AppBanner>
-      </AnimatePresence>
-    )
-  }
 
   const show = missing.length > 0 && !dismissed
   const scopeCount = missing.length

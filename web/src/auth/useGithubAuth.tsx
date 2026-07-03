@@ -16,7 +16,8 @@ import {
   pollDeviceToken,
   requestDeviceCode,
 } from "./github-oauth-api"
-import { fetchGithubUser } from "./github-user-api"
+import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
+import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import {
   clearGithubToken,
@@ -74,13 +75,31 @@ function useGithubAuthState() {
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
+  // Set when a live API 401 (revoked/expired token) tears the session down,
+  // so /login can explain why the user was signed out. A deliberate signOut()
+  // clears it.
+  const [sessionExpired, setSessionExpired] = useState(false)
 
   const githubUserQuery = useQuery({
     queryKey: ["github", "user", token],
     queryFn: () => fetchGithubUser(token!),
     enabled: Boolean(token),
     staleTime: 60 * 60 * 1000,
-    retry: 1,
+    // A definitive status (401 revoked, 403 SSO/blocked, 404) resolves
+    // immediately — retrying can't change it and only widens the window before
+    // the session settles. Transient failures (5xx / network) still self-heal
+    // with a bounded retry so a momentary GitHub blip doesn't eject a signed-in
+    // user. Shares the definitive-status policy with the GitHub-client reads
+    // (see retryTransientNotFoundForbidden / isDefinitiveGitHubStatus).
+    retry: (failureCount, error) => {
+      if (
+        error instanceof GitHubUserFetchError &&
+        isDefinitiveGitHubStatus(error.status)
+      ) {
+        return false
+      }
+      return failureCount < 2
+    },
   })
 
   const exchangeCodeMutation = useMutation({
@@ -100,6 +119,7 @@ function useGithubAuthState() {
       persistGithubToken(data.access_token, data.scope || "")
       setToken(data.access_token)
       setTokenScope(data.scope || "")
+      setSessionExpired(false)
       setDevice(null)
       setScreen("success")
 
@@ -429,16 +449,48 @@ function useGithubAuthState() {
     )
   }, [])
 
-  const signOut = useCallback(() => {
-    abortRef.current?.abort()
-    clearGithubToken()
-    setToken(null)
-    setTokenScope("")
-    setDevice(null)
-    setError(null)
-    setScreen("config")
-    queryClient.removeQueries({ queryKey: ["github"] })
-  }, [queryClient])
+  // Shared teardown for both a deliberate sign-out and an involuntary expiry.
+  // `expired` flags the involuntary case so /login can explain the redirect.
+  const clearSession = useCallback(
+    (expired: boolean) => {
+      abortRef.current?.abort()
+      clearGithubToken()
+      setToken(null)
+      setTokenScope("")
+      setDevice(null)
+      setError(null)
+      setScreen("config")
+      setSessionExpired(expired)
+      // Cancel in-flight ["github"] requests before evicting them so they
+      // don't resolve/reject into removed cache state after teardown.
+      void queryClient.cancelQueries({ queryKey: ["github"] })
+      queryClient.removeQueries({ queryKey: ["github"] })
+    },
+    [queryClient],
+  )
+
+  const signOut = useCallback(() => clearSession(false), [clearSession])
+
+  // Called when a revoked/expired token is detected on a live API 401. Clears
+  // the token so `status` flips to unauthenticated and the _authed guard
+  // redirects to /login. Guards on the in-memory token (the authoritative
+  // source) rather than localStorage, so a live 401 still tears the session
+  // down even if storage was cleared out-of-band. No-ops once the token is
+  // already gone, keeping it safe to call repeatedly.
+  const expireSession = useCallback(() => {
+    if (!token) return
+    clearSession(true)
+  }, [clearSession, token])
+
+  // Cold-reload path: a stored-but-revoked token fails /user validation with a
+  // 401. Tear the session down so the token doesn't linger across reloads and
+  // the guard redirects to /login.
+  useEffect(() => {
+    const error = githubUserQuery.error
+    if (error instanceof GitHubUserFetchError && error.status === 401) {
+      expireSession()
+    }
+  }, [githubUserQuery.error, expireSession])
 
   const deviceStatus = useMemo(() => {
     if (!device) return null
@@ -507,6 +559,8 @@ function useGithubAuthState() {
     markDeviceCodeCopied,
     markVerificationOpened,
     signOut,
+    expireSession,
+    sessionExpired,
     status,
   }
 }
