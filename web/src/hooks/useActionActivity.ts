@@ -246,7 +246,7 @@ export function useActionActivity(): ActionActivity {
     ) {
       phase = latched
     }
-    return { op, run, phase }
+    return { op, run, phase, realPhase }
   })
 
   // Persist newly-formed bindings and drop those for ops that left the store.
@@ -402,7 +402,7 @@ export function useActionActivity(): ActionActivity {
   // clears it after the optimistic window so a stuck retry can't pin "running".
   const optimisticSignature = [...optimisticRunning].sort().join(",")
   const realPhaseById = new Map(
-    resolved.map(({ op, run }) => [op.id, trackerPhase(run)]),
+    resolved.map(({ op, realPhase }) => [op.id, realPhase]),
   )
   useEffect(() => {
     if (optimisticRunning.size === 0) return

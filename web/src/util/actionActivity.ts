@@ -127,19 +127,6 @@ export function resolveOpRun(
   return candidates[0] ?? null
 }
 
-// Attribute a run to a session operation so it gets a specific label. Returns
-// the generic label when no session op matches (cron run, another teacher's
-// dispatch, or a run from before this session).
-export function labelForRun(
-  run: GitHubWorkflowRun,
-  ops: ActionOperation[],
-  _file: string | undefined,
-  genericLabel: string,
-): string {
-  const match = ops.find((op) => runMatchesOp(run, op))
-  return match?.label ?? genericLabel
-}
-
 // Whether a run is still in flight (not yet completed). Checks `status` first —
 // a run is only terminal once GitHub reports status "completed"; queued /
 // in_progress / waiting / requested / pending are all "still running".

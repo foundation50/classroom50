@@ -1500,6 +1500,20 @@ async function listRepoActionsRuns(
   }
 }
 
+// Union several run lists into one, de-duplicated by id and sorted newest-first
+// (descending id). Later lists win on a collision, so callers can pass the
+// fresher snapshot last (e.g. active runs after completed ones for a run
+// mid-transition).
+function mergeRunsByIdNewestFirst(
+  ...lists: GitHubWorkflowRun[][]
+): GitHubWorkflowRun[] {
+  const byId = new Map<number, GitHubWorkflowRun>()
+  for (const list of lists) {
+    for (const run of list) byId.set(run.id, run)
+  }
+  return [...byId.values()].sort((a, b) => b.id - a.id)
+}
+
 // Runs currently executing (queued or in progress) in <org>/classroom50, newest
 // first. GitHub's `in_progress` status filter excludes queued runs, so we union
 // the two so a run that's still queued after a dispatch/push also shows.
@@ -1512,9 +1526,7 @@ export async function listActiveRuns(
     listRepoActionsRuns(client, org, "in_progress", 30, signal),
     listRepoActionsRuns(client, org, "queued", 30, signal),
   ])
-  const byId = new Map<number, GitHubWorkflowRun>()
-  for (const run of [...inProgress, ...queued]) byId.set(run.id, run)
-  return [...byId.values()].sort((a, b) => b.id - a.id)
+  return mergeRunsByIdNewestFirst(inProgress, queued)
 }
 
 // The most recently completed runs in <org>/classroom50 (newest first). The
@@ -1542,9 +1554,7 @@ export async function listActiveAndRecentRuns(
     listActiveRuns(client, org, signal),
     listRecentCompletedRuns(client, org, signal),
   ])
-  const byId = new Map<number, GitHubWorkflowRun>()
   // Completed first, then active overwrites — the active copy is the fresher
   // snapshot for a run mid-transition.
-  for (const run of [...completed, ...active]) byId.set(run.id, run)
-  return [...byId.values()].sort((a, b) => b.id - a.id)
+  return mergeRunsByIdNewestFirst(completed, active)
 }

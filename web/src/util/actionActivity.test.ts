@@ -3,7 +3,6 @@ import { describe, expect, it } from "vitest"
 import {
   isFailureConclusion,
   isRunning,
-  labelForRun,
   orgFromPathname,
   resolveOpRun,
   runMatchesOp,
@@ -123,106 +122,6 @@ describe("workflowFile", () => {
   })
 })
 
-describe("labelForRun", () => {
-  const generic = "GitHub Actions workflow"
-
-  it("matches a push run to a sha-anchored op by head_sha", () => {
-    const r = run({ head_sha: "abc123" })
-    expect(labelForRun(r, [op({})], "publish-pages.yaml", generic)).toBe(
-      "Publishing \"hw1\" to student site",
-    )
-  })
-
-  it("does not match when the head_sha differs", () => {
-    const r = run({ head_sha: "different" })
-    expect(labelForRun(r, [op({})], "publish-pages.yaml", generic)).toBe(
-      generic,
-    )
-  })
-
-  it("matches a dispatch run by workflow + id newer than the baseline", () => {
-    const r = dispatchRun(200, "collect-scores.yaml")
-    const dispatchOp = op({
-      label: "Collecting scores",
-      anchor: {
-        kind: "sinceRunId",
-        workflow: "collect-scores.yaml",
-        sinceRunId: 100,
-      },
-    })
-    expect(
-      labelForRun(r, [dispatchOp], "collect-scores.yaml", generic),
-    ).toBe("Collecting scores")
-  })
-
-  it("does not match a dispatch run at/below the baseline id", () => {
-    const r = dispatchRun(100, "collect-scores.yaml")
-    const dispatchOp = op({
-      label: "Collecting scores",
-      anchor: {
-        kind: "sinceRunId",
-        workflow: "collect-scores.yaml",
-        sinceRunId: 100,
-      },
-    })
-    expect(labelForRun(r, [dispatchOp], "collect-scores.yaml", generic)).toBe(
-      generic,
-    )
-  })
-
-  it("does not cross workflows when matching a dispatch op", () => {
-    const r = dispatchRun(200, "collect-scores.yaml")
-    const dispatchOp = op({
-      label: "Regrading",
-      anchor: {
-        kind: "sinceRunId",
-        workflow: "regrade.yaml",
-        sinceRunId: null,
-      },
-    })
-    // Same run, but the op is for a different workflow file.
-    expect(labelForRun(r, [dispatchOp], "collect-scores.yaml", generic)).toBe(
-      generic,
-    )
-  })
-
-  it("null baseline matches a run started at/after the dispatch time", () => {
-    const started = Date.now()
-    const r = dispatchRun(5, "regrade.yaml", {
-      run_started_at: new Date(started + 1000).toISOString(),
-    })
-    const dispatchOp = op({
-      label: "Regrading",
-      startedAt: started,
-      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
-    })
-    expect(labelForRun(r, [dispatchOp], "regrade.yaml", generic)).toBe(
-      "Regrading",
-    )
-  })
-
-  it("null baseline does NOT match a run that started well before the dispatch (later cron/other run)", () => {
-    const started = Date.now()
-    // A run that started 10 minutes before this op was dispatched — e.g. an
-    // earlier cron run that only now shows in the poll window.
-    const r = dispatchRun(5, "regrade.yaml", {
-      run_started_at: new Date(started - 10 * 60_000).toISOString(),
-    })
-    const dispatchOp = op({
-      label: "Regrading",
-      startedAt: started,
-      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
-    })
-    expect(labelForRun(r, [dispatchOp], "regrade.yaml", generic)).toBe(generic)
-  })
-
-  it("falls back to the generic label when no op matches", () => {
-    expect(labelForRun(run({ head_sha: "zzz" }), [], "publish-pages.yaml", generic)).toBe(
-      generic,
-    )
-  })
-})
-
 describe("runMatchesOp", () => {
   it("matches a sha op by head_sha", () => {
     expect(runMatchesOp(run({ head_sha: "abc123" }), op({}))).toBe(true)
@@ -244,6 +143,32 @@ describe("runMatchesOp", () => {
     expect(runMatchesOp(dispatchRun(200, "collect-scores.yaml"), dispatchOp)).toBe(
       false,
     )
+  })
+
+  it("null baseline matches a run started at/after the dispatch time", () => {
+    const started = Date.now()
+    const r = dispatchRun(5, "regrade.yaml", {
+      run_started_at: new Date(started + 1000).toISOString(),
+    })
+    const dispatchOp = op({
+      startedAt: started,
+      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
+    })
+    expect(runMatchesOp(r, dispatchOp)).toBe(true)
+  })
+
+  it("null baseline does NOT match a run that started well before the dispatch (later cron/other run)", () => {
+    const started = Date.now()
+    // A run that started 10 minutes before this op was dispatched — e.g. an
+    // earlier cron run that only now shows in the poll window.
+    const r = dispatchRun(5, "regrade.yaml", {
+      run_started_at: new Date(started - 10 * 60_000).toISOString(),
+    })
+    const dispatchOp = op({
+      startedAt: started,
+      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
+    })
+    expect(runMatchesOp(r, dispatchOp)).toBe(false)
   })
 })
 
