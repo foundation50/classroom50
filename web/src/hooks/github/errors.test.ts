@@ -81,11 +81,15 @@ describe("SAML SSO detection", () => {
   })
 
   it("extracts the authorization URL from a `required; url=…` header", () => {
-    expect(parseSsoAuthorizationUrl(`required; url=${orgSsoUrl}`)).toBe(orgSsoUrl)
-    expect(parseSsoAuthorizationUrl(`required; url=${entSsoUrl}`)).toBe(entSsoUrl)
-    expect(apiError(403, `required; url=${entSsoUrl}`).ssoAuthorizationUrl).toBe(
+    expect(parseSsoAuthorizationUrl(`required; url=${orgSsoUrl}`)).toBe(
+      orgSsoUrl,
+    )
+    expect(parseSsoAuthorizationUrl(`required; url=${entSsoUrl}`)).toBe(
       entSsoUrl,
     )
+    expect(
+      apiError(403, `required; url=${entSsoUrl}`).ssoAuthorizationUrl,
+    ).toBe(entSsoUrl)
   })
 
   it("returns null for the multi-org `partial-results` shape (no URL)", () => {
@@ -122,7 +126,9 @@ describe("SAML SSO detection", () => {
       parseSsoAuthorizationUrl("required; url=javascript:alert(1)"),
     ).toBeNull()
     expect(
-      parseSsoAuthorizationUrl("required; url=data:text/html,<script>x</script>"),
+      parseSsoAuthorizationUrl(
+        "required; url=data:text/html,<script>x</script>",
+      ),
     ).toBeNull()
     expect(
       parseSsoAuthorizationUrl("required; url=http://github.com/orgs/acme/sso"),

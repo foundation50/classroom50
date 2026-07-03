@@ -109,7 +109,10 @@ export function retryTransientNotFoundForbidden(
   failureCount: number,
   error: unknown,
 ): boolean {
-  if (error instanceof GitHubAPIError && isDefinitiveGitHubStatus(error.status)) {
+  if (
+    error instanceof GitHubAPIError &&
+    isDefinitiveGitHubStatus(error.status)
+  ) {
     return false
   }
   return failureCount < 2
