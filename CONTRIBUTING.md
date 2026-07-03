@@ -131,6 +131,36 @@ You can also trigger a run manually from the Actions tab
 (`workflow_dispatch`) — useful for re-running a failed publish or forcing
 provenance attestation on a private repo.
 
+## Releasing the web app (maintainers)
+
+The web app (classroom50.org) uses a two-branch promotion model. Day-to-day
+work lands on `preview`, which continuously deploys to
+[preview.classroom50.org](https://preview.classroom50.org) via
+[`web-deploy-preview`](.github/workflows/web-deploy-preview.yaml). A release is
+a PR merging `preview` -> `main`; `main` deploys production
+(classroom50.org) via [`web-deploy`](.github/workflows/web-deploy.yaml).
+
+Web releases are versioned with `web-v*` tags (namespaced apart from the CLI's
+`cli-v*` tags). `web/package.json` is the version source of truth, and
+[`web/CHANGELOG.md`](web/CHANGELOG.md) records the history. To cut a release:
+
+1. In the release PR, bump `web/package.json` and move the `web/CHANGELOG.md`
+   **[Unreleased]** entries under a new `## [X.Y.Z]` heading with the date.
+2. Merge `preview` -> `main`.
+3. Tag the merged commit and push:
+
+```sh
+git tag web-v1.2.0        # a `-` suffix (web-v1.2.0-rc.1) publishes as a pre-release
+git push origin web-v1.2.0
+```
+
+The tag triggers a versioned production deploy (the version is stamped into the
+build via `VITE_APP_VERSION`; the running app reports it in the browser console)
+and the [`web-release`](.github/workflows/web-release.yaml) workflow, which
+creates a GitHub Release using the matching `web/CHANGELOG.md` section (falling
+back to auto-generated notes). The workflow asserts the tag version matches
+`web/package.json` to prevent drift.
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the

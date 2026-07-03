@@ -87,25 +87,62 @@ jobs:
             exit 1
           fi
 
+      # Extract this version's section from web/CHANGELOG.md (Keep a Changelog
+      # format) to use as the release body. Falls back to gh's auto-generated
+      # notes when the section is absent (e.g. a prerelease not yet written up).
+      - name: Extract changelog section
+        id: notes
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          changelog="web/CHANGELOG.md"
+          body_file="$RUNNER_TEMP/release-notes.md"
+          # Print lines from the matching `## [VERSION]` heading up to (but not
+          # including) the next `## ` heading. Match the version bracket exactly
+          # so 1.0.0 doesn't also grab 1.0.0-rc.1.
+          awk -v ver="$VERSION" '
+            $0 ~ "^## \\[" ver "\\]" { grab=1; next }
+            grab && /^## / { grab=0 }
+            grab { print }
+          ' "$changelog" | sed '/./,$!d' >"$body_file" || true
+
+          if [ -s "$body_file" ]; then
+            echo "Using web/CHANGELOG.md section for $VERSION."
+            echo "has_notes=true" >>"$GITHUB_OUTPUT"
+            echo "body_file=$body_file" >>"$GITHUB_OUTPUT"
+          else
+            echo "::warning::No web/CHANGELOG.md section for $VERSION; falling back to auto-generated notes."
+            echo "has_notes=false" >>"$GITHUB_OUTPUT"
+          fi
+
       - name: Publish GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ steps.tag.outputs.tag }}
           VERSION: ${{ steps.tag.outputs.version }}
           REPO: ${{ github.repository }}
+          HAS_NOTES: ${{ steps.notes.outputs.has_notes }}
+          BODY_FILE: ${{ steps.notes.outputs.body_file }}
         run: |
           set -euo pipefail
           prerelease="false"
           case "$VERSION" in
             *-*) prerelease="true" ;;
           esac
-          # Idempotent: create the Release once (notes generated once), then
-          # reconcile prerelease state on re-run — a retried run won't dup notes.
+          # Prefer the curated changelog section; else let gh generate notes.
+          if [ "$HAS_NOTES" = "true" ]; then
+            notes_args=(--notes-file "$BODY_FILE")
+          else
+            notes_args=(--generate-notes)
+          fi
+          # Idempotent: create the Release once (notes set once), then reconcile
+          # prerelease state on re-run — a retried run won't duplicate notes.
           if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "$REPO" \
               --title "web $VERSION" \
-              --generate-notes \
+              "${notes_args[@]}" \
               --prerelease="$prerelease"
           else
             echo "Release $TAG already exists on $REPO; reconciling prerelease state."
