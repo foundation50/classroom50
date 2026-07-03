@@ -2,10 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { orgMembershipQuery } from "./github/queries"
 import { useGitHubRepo } from "./github/hooks"
-import {
-  GitHubAPIError,
-  retryTransientGitHubError,
-} from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { resolveTeacherVerdict } from "./useCourseTeacherAccess"
 import { staffTeamName } from "./github/mutations"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"

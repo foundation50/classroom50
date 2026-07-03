@@ -1,9 +1,6 @@
 import { useGitHubRepo } from "./github/hooks"
 import { useParams } from "@tanstack/react-router"
-import {
-  GitHubAPIError,
-  retryTransientGitHubError,
-} from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import type { ViewAsRole } from "./useClassroomRole"
 
