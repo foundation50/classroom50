@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { fetchGithubUser, GithubUserFetchError } from "./github-user-api"
+import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -36,7 +36,7 @@ describe("fetchGithubUser", () => {
     )
   })
 
-  it("throws GithubUserFetchError carrying status 401 on a revoked token", async () => {
+  it("throws GitHubUserFetchError carrying status 401 on a revoked token", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response("Bad credentials", { status: 401 })),
@@ -46,10 +46,10 @@ describe("fetchGithubUser", () => {
     // so the carried status is the contract this test locks in.
     const error = await fetchGithubUser("tok").catch((e) => e)
 
-    expect(error).toBeInstanceOf(GithubUserFetchError)
+    expect(error).toBeInstanceOf(GitHubUserFetchError)
     expect(error).toBeInstanceOf(Error)
     expect(error.status).toBe(401)
-    expect(error.name).toBe("GithubUserFetchError")
+    expect(error.name).toBe("GitHubUserFetchError")
   })
 
   it("carries a non-401 status distinctly so callers can treat 5xx as transient", async () => {
@@ -60,11 +60,11 @@ describe("fetchGithubUser", () => {
 
     const error = await fetchGithubUser("tok").catch((e) => e)
 
-    expect(error).toBeInstanceOf(GithubUserFetchError)
+    expect(error).toBeInstanceOf(GitHubUserFetchError)
     expect(error.status).toBe(500)
   })
 
   it("preserves the HTTP status in the error message", () => {
-    expect(new GithubUserFetchError(403).message).toBe("GitHub API: HTTP 403")
+    expect(new GitHubUserFetchError(403).message).toBe("GitHub API: HTTP 403")
   })
 })

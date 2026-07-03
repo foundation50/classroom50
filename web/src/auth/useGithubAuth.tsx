@@ -16,7 +16,7 @@ import {
   pollDeviceToken,
   requestDeviceCode,
 } from "./github-oauth-api"
-import { fetchGithubUser, GithubUserFetchError } from "./github-user-api"
+import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
 import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import {
@@ -93,7 +93,7 @@ function useGithubAuthState() {
     // (see retryTransientNotFoundForbidden / isDefinitiveGitHubStatus).
     retry: (failureCount, error) => {
       if (
-        error instanceof GithubUserFetchError &&
+        error instanceof GitHubUserFetchError &&
         isDefinitiveGitHubStatus(error.status)
       ) {
         return false
@@ -487,7 +487,7 @@ function useGithubAuthState() {
   // the guard redirects to /login.
   useEffect(() => {
     const error = githubUserQuery.error
-    if (error instanceof GithubUserFetchError && error.status === 401) {
+    if (error instanceof GitHubUserFetchError && error.status === 401) {
       expireSession()
     }
   }, [githubUserQuery.error, expireSession])

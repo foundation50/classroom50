@@ -2,12 +2,12 @@ import type { GitHubUser } from "@/hooks/github/types"
 
 // Carries the HTTP status so callers can branch on auth failures (401) without
 // string-matching the message — e.g. the session-expiry effect in useGithubAuth.
-export class GithubUserFetchError extends Error {
+export class GitHubUserFetchError extends Error {
   status: number
 
   constructor(status: number) {
     super(`GitHub API: HTTP ${status}`)
-    this.name = "GithubUserFetchError"
+    this.name = "GitHubUserFetchError"
     this.status = status
   }
 }
@@ -21,7 +21,7 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
   })
 
   if (!res.ok) {
-    throw new GithubUserFetchError(res.status)
+    throw new GitHubUserFetchError(res.status)
   }
 
   return res.json()

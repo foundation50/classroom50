@@ -70,7 +70,7 @@ export function retryTransientNotFoundForbidden(
 // credentials), 403 (blocked, incl. SAML-SSO-gated — see #66), 404 (absent).
 // Any other failure (5xx / 429 / network) is treated as transient by the retry
 // predicates above/below. Works off a bare status so it is shared across the
-// bespoke GithubUserFetchError and the canonical GitHubAPIError.
+// bespoke GitHubUserFetchError and the canonical GitHubAPIError.
 export function isDefinitiveGitHubStatus(status: number): boolean {
   return status === 401 || status === 403 || status === 404
 }
