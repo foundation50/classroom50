@@ -9,6 +9,9 @@ export const GITHUB_AUTH_SESSION = {
   STATE: "gh_oauth_state",
   CLIENT_ID: "gh_oauth_client_id",
   SCOPE: "gh_oauth_scope",
+  // Deep link to return to after sign-in; the /login redirect_uri can't carry
+  // it across the GitHub round-trip, so it rides the session instead (#71).
+  RETURN_TO: "gh_oauth_return_to",
 } as const
 
 // Scopes: admin:org enables org-invite management + team writes; repo covers

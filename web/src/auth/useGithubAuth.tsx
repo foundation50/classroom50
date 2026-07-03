@@ -18,6 +18,7 @@ import {
 } from "./github-oauth-api"
 import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
 import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
+import router from "@/router"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import {
   clearGithubToken,
@@ -66,6 +67,9 @@ function useGithubAuthState() {
   const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Deep link (#71) stashed at code-exchange, consumed by the status-driven
+  // effect below so navigation runs against an authenticated router context.
+  const pendingReturnToRef = useRef<string | null>(null)
 
   const [screen, setScreen] = useState<GithubAuthScreen>("config")
   const [clientId, setClientId] = useState(GITHUB_OAUTH_CLIENT_ID)
@@ -188,6 +192,7 @@ function useGithubAuthState() {
       verifier,
       expectedState,
       clientId: callbackClientId,
+      returnTo,
     } = consumeOAuthSession()
 
     if (!returnedState || returnedState !== expectedState) {
@@ -219,6 +224,10 @@ function useGithubAuthState() {
       {
         onSuccess: (data) => {
           completeSignIn(data)
+          // Defer the return until status is "authenticated" (effect below);
+          // navigating now would race the router context and bounce through
+          // the _authed guard (#71).
+          pendingReturnToRef.current = returnTo
         },
         onError: (err) => {
           setError(formatError(err))
@@ -257,11 +266,16 @@ function useGithubAuthState() {
     const challenge = await deriveChallenge(verifier)
     const oauthState = randomBase64Url(16)
 
+    // Stash the deep link (from /login?redirect=) in the OAuth session so it
+    // survives the GitHub round-trip; restored after the code exchange (#71).
+    const returnTo = new URLSearchParams(window.location.search).get("redirect")
+
     saveOAuthSession({
       verifier,
       state: oauthState,
       clientId: config.clientId,
       scope: config.scope,
+      returnTo,
     })
 
     window.location.href = buildGithubAuthorizeUrl({
@@ -541,6 +555,23 @@ function useGithubAuthState() {
     githubUserQuery.isError,
     githubUserQuery.data,
   ])
+
+  // Navigate to the stashed deep link once status is "authenticated", so the
+  // target _authed guard sees an authenticated context instead of bouncing
+  // through /login (#71). history.push (not navigate({ to })) preserves the
+  // query — e.g. the ?k= accept key — which navigate({ to }) would fold into
+  // the pathname. A bad path degrades to the homepage.
+  useEffect(() => {
+    if (status !== "authenticated") return
+    const returnTo = pendingReturnToRef.current
+    if (!returnTo) return
+    pendingReturnToRef.current = null
+    try {
+      router.history.push(returnTo)
+    } catch {
+      router.history.push("/")
+    }
+  }, [status])
 
   return {
     screen,
