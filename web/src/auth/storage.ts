@@ -42,9 +42,8 @@ export function saveOAuthSession(input: {
   state: string
   clientId: string
   scope: string
-  // Optional same-origin deep link to return to after sign-in (#71). Only a
-  // value passing isSafeReturnTo is stored; anything else is dropped so a bad
-  // value can't linger and misroute the next sign-in.
+  // Same-origin deep link to return to after sign-in (#71); only a value
+  // passing isSafeReturnTo is kept.
   returnTo?: string | null
 }) {
   if (!canUseBrowserStorage()) return
@@ -84,8 +83,7 @@ export function consumeOAuthSession() {
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.SCOPE)
   sessionStorage.removeItem(GITHUB_AUTH_SESSION.RETURN_TO)
 
-  // Re-validate on read: sessionStorage is user-writable, so never trust a
-  // stored path without re-checking the open-redirect guard.
+  // Re-validate on read: sessionStorage is user-writable.
   const returnTo = isSafeReturnTo(storedReturnTo) ? storedReturnTo : null
 
   return {

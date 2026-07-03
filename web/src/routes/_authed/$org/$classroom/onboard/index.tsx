@@ -10,8 +10,8 @@ import { isSafeReturnTo } from "@/auth/returnTo"
 // flow (github_id, else email).
 //
 // `returnTo`: where to send the student after they become an active member (the
-// accept page sets it). Only a same-origin relative path (leading "/", not "//")
-// is kept, so it can't become an open redirect (see isSafeReturnTo).
+// accept page sets it). Kept only when it passes isSafeReturnTo (open-redirect
+// guard).
 
 export const Route = createFileRoute("/_authed/$org/$classroom/onboard/")({
   validateSearch: (

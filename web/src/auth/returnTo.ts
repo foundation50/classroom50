@@ -1,10 +1,6 @@
-// A post-auth / post-onboarding return target is only ever a SAME-ORIGIN
-// relative path: it must start with a single "/" and not "//" (which the
-// browser treats as a protocol-relative absolute URL to another host). This is
-// the open-redirect guard shared by the login redirect (#71) and the onboarding
-// returnTo. Anything else — an absolute URL, a "//evil.com" path, a non-string
-// — is rejected so a crafted link can't bounce a freshly authenticated user to
-// an attacker origin.
+// Open-redirect guard for post-auth / post-onboarding return targets: only a
+// same-origin relative path ("/" but not "//", which is a protocol-relative
+// absolute URL). Shared by the login redirect and the onboarding returnTo.
 export function isSafeReturnTo(value: unknown): value is string {
   return (
     typeof value === "string" &&

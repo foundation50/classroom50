@@ -221,10 +221,8 @@ function useGithubAuthState() {
       {
         onSuccess: (data) => {
           completeSignIn(data)
-          // Return the user to the deep link they originally requested (e.g. an
-          // assignment accept link) instead of the homepage (#71). The value was
-          // re-validated as a safe relative path by consumeOAuthSession; absent
-          // it, the /login guard falls back to "/" as before.
+          // Return to the originally requested deep link instead of the
+          // homepage (#71); already re-validated by consumeOAuthSession.
           if (returnTo) {
             router.navigate({ to: returnTo })
           }
@@ -266,12 +264,8 @@ function useGithubAuthState() {
     const challenge = await deriveChallenge(verifier)
     const oauthState = randomBase64Url(16)
 
-    // Capture where to return after sign-in. The _authed guard (and App's
-    // session-expiry redirect) bounce here as /login?redirect=<deep-link>; that
-    // param can't survive the GitHub round-trip (redirect_uri is pinned to
-    // /login), so stash it in the OAuth session now and restore it after the
-    // code exchange (#71). saveOAuthSession re-validates it as a safe relative
-    // path.
+    // Stash the deep link (from /login?redirect=) in the OAuth session so it
+    // survives the GitHub round-trip; restored after the code exchange (#71).
     const returnTo = new URLSearchParams(window.location.search).get("redirect")
 
     saveOAuthSession({

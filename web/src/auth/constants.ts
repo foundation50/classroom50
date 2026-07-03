@@ -9,9 +9,8 @@ export const GITHUB_AUTH_SESSION = {
   STATE: "gh_oauth_state",
   CLIENT_ID: "gh_oauth_client_id",
   SCOPE: "gh_oauth_scope",
-  // Same-origin relative path to return to after a successful sign-in, captured
-  // before leaving for GitHub (the OAuth redirect_uri is pinned to /login, so
-  // the original deep link can't ride the URL round-trip — see issue #71).
+  // Deep link to return to after sign-in; the /login redirect_uri can't carry
+  // it across the GitHub round-trip, so it rides the session instead (#71).
   RETURN_TO: "gh_oauth_return_to",
 } as const
 
