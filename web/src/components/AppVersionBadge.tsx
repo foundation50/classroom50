@@ -1,4 +1,4 @@
-import { appVersion } from "@/version"
+import { appVersion, shortCommit } from "@/version"
 
 // Small, unobtrusive build identifier. The version is a build-time constant
 // (see version.ts), not user-facing prose, so it is not translated; the commit
@@ -11,7 +11,7 @@ export function AppVersionBadge({ className }: { className?: string }) {
       title={`Built ${appVersion.buildDate}`}
       data-testid="app-version"
     >
-      v{appVersion.version} · {appVersion.commit.slice(0, 7)}
+      v{appVersion.version} · {shortCommit()}
     </span>
   )
 }

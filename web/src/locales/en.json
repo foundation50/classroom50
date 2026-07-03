@@ -65,8 +65,18 @@
     "language": "Language",
     "languageDialogTitle": "Language",
     "languageDialogDescription": "Switch languages or install a translated language pack.",
-    "help": "Classroom 50 Help",
-    "signOut": "Sign Out"
+    "signOut": "Sign Out",
+    "about": "About",
+    "aboutDialogTitle": "Classroom 50",
+    "aboutDialogDescription": "Build and version information for this app.",
+    "aboutVersion": "Version",
+    "aboutCommit": "Commit",
+    "aboutBuilt": "Built",
+    "aboutSupportTitle": "Feedback & support",
+    "aboutReportIssue": "Report an issue",
+    "aboutReportIssueHint": "Found a bug or have a feature request?",
+    "aboutAskQuestion": "Ask a question",
+    "aboutAskQuestionHint": "Get help from the community."
   },
   "auth": {
     "signInTitle": "Sign in",

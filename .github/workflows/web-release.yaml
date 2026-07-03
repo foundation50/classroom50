@@ -98,14 +98,24 @@ jobs:
           set -euo pipefail
           changelog="web/CHANGELOG.md"
           body_file="$RUNNER_TEMP/release-notes.md"
+          # A missing changelog is a legitimate no-notes case (fall back to
+          # auto-generated notes); anything else — an awk/sed crash — must NOT be
+          # masked, so no blanket `|| true` swallowing real failures below.
+          if [ ! -f "$changelog" ]; then
+            echo "::warning::web/CHANGELOG.md not found; falling back to auto-generated notes."
+            echo "has_notes=false" >>"$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Print lines from the matching `## [VERSION]` heading up to (but not
           # including) the next `## ` heading. Match the version bracket exactly
-          # so 1.0.0 doesn't also grab 1.0.0-rc.1.
+          # so 1.0.0 doesn't also grab 1.0.0-rc.1. A real awk/sed error fails the
+          # step (pipefail); an empty match just yields an empty file (handled
+          # as the no-section fallback below).
           awk -v ver="$VERSION" '
             $0 ~ "^## \\[" ver "\\]" { grab=1; next }
             grab && /^## / { grab=0 }
             grab { print }
-          ' "$changelog" | sed '/./,$!d' >"$body_file" || true
+          ' "$changelog" | sed '/./,$!d' >"$body_file"
 
           if [ -s "$body_file" ]; then
             echo "Using web/CHANGELOG.md section for $VERSION."
@@ -136,15 +146,24 @@ jobs:
           else
             notes_args=(--generate-notes)
           fi
-          # Idempotent: create the Release once (notes set once), then reconcile
-          # prerelease state on re-run — a retried run won't duplicate notes.
+          # Idempotent: create the Release once, then on re-run reconcile the
+          # prerelease flag and — when curated changelog notes now exist —
+          # re-apply them, so a release first published with auto-generated
+          # notes (changelog absent at first tag) self-heals on a deliberate
+          # re-run. Without curated notes we leave the existing body untouched
+          # rather than clobbering it with a fresh --generate-notes each run.
           if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
             gh release create "$TAG" \
               --repo "$REPO" \
               --title "web $VERSION" \
               "${notes_args[@]}" \
               --prerelease="$prerelease"
+          elif [ "$HAS_NOTES" = "true" ]; then
+            echo "Release $TAG already exists on $REPO; reconciling prerelease state and changelog notes."
+            gh release edit "$TAG" --repo "$REPO" \
+              --notes-file "$BODY_FILE" \
+              --prerelease="$prerelease"
           else
-            echo "Release $TAG already exists on $REPO; reconciling prerelease state."
+            echo "Release $TAG already exists on $REPO; reconciling prerelease state (no curated notes to re-apply)."
             gh release edit "$TAG" --repo "$REPO" --prerelease="$prerelease"
           fi
