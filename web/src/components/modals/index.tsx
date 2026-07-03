@@ -36,8 +36,7 @@ export function ConfirmModal({
   const resolvedCancelLabel = cancelLabel ?? t("common.cancel")
   // Honor a caller's cancelLabel here too (not just the type-to-confirm step),
   // since the description copy may refer to it; default to "No".
-  const acknowledgeCancelLabel =
-    cancelLabel ?? t("components.confirmModal.no")
+  const acknowledgeCancelLabel = cancelLabel ?? t("components.confirmModal.no")
   const [hasAcknowledged, setHasAcknowledged] = useState(false)
   const [typedText, setTypedText] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
