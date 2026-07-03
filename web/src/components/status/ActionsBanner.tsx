@@ -123,7 +123,7 @@ const TrackerRow = ({
           href={tracker.htmlUrl}
           target="_blank"
           rel="noreferrer"
-          className="flex shrink-0 items-center gap-1 text-xs font-medium opacity-80 hover:opacity-100"
+          className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-medium opacity-80 hover:opacity-100"
         >
           {t("actionsBanner.viewRun")}
           <ExternalLink aria-hidden="true" className="size-3.5" />
@@ -135,7 +135,7 @@ const TrackerRow = ({
           onClick={() => onRetry(tracker.id)}
           disabled={retrying}
           aria-label={t("actionsBanner.retry")}
-          className="flex shrink-0 items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline disabled:opacity-50"
+          className="flex shrink-0 cursor-pointer items-center gap-1 text-xs font-semibold underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-50"
         >
           {retrying ? (
             <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
@@ -150,7 +150,7 @@ const TrackerRow = ({
           type="button"
           onClick={() => onDismiss(tracker.id)}
           aria-label={t("actionsBanner.dismiss")}
-          className="flex shrink-0 items-center opacity-70 hover:opacity-100"
+          className="flex shrink-0 cursor-pointer items-center opacity-70 hover:opacity-100"
         >
           <X aria-hidden="true" className="size-4" />
         </button>
@@ -210,7 +210,7 @@ const BannerBody = ({
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={showList}
-        className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
+        className="flex w-full cursor-pointer items-center gap-3 px-4 py-2.5 text-left"
       >
         <StatusIcon phase={primaryPhase} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
