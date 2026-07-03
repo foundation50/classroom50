@@ -128,6 +128,9 @@ export const githubKeys = {
   serviceToken: (owner: string) =>
     [...githubKeys.all, "serviceToken", owner] as const,
 
+  skeletonDrift: (owner: string) =>
+    [...githubKeys.all, "skeletonDrift", owner] as const,
+
   orgAudit: (owner: string, plan?: string) =>
     [...githubKeys.all, "orgAudit", owner, plan ?? null] as const,
 

@@ -12,6 +12,7 @@ const SettingsSection = ({
   action,
   titleAdornment,
   tone = "default",
+  id,
   children,
 }: PropsWithChildren<{
   title: string
@@ -19,13 +20,15 @@ const SettingsSection = ({
   action?: ReactNode
   titleAdornment?: ReactNode
   tone?: "default" | "danger"
+  id?: string
 }>) => {
   const isDanger = tone === "danger"
 
   return (
     <section
+      id={id}
       className={[
-        "rounded-2xl border p-6",
+        "scroll-mt-24 rounded-2xl border p-6",
         isDanger ? "border-error/30 bg-error/5" : "border-base-300 bg-base-100",
       ].join(" ")}
     >

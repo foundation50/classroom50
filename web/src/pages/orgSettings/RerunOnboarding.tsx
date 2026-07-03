@@ -49,6 +49,11 @@ const SummaryBanner = ({
   </CalloutDiv>
 )
 
+// DOM anchor for the Re-run onboarding section, shared with the global
+// skeleton-drift banner (SkeletonDriftBanner) so its "Update workflows" action
+// can scroll the teacher straight to this section.
+export const RERUN_ONBOARDING_ANCHOR = "rerun-onboarding"
+
 // Re-run onboarding from Org Settings: re-invokes the idempotent
 // initClassroom50 to re-apply the full lockdown, rulesets, and repo settings.
 // Owner-gated; shows the same badge board the wizard uses. This is the
@@ -123,6 +128,7 @@ const RerunOnboarding = ({ org }: { org: string }) => {
 
   return (
     <SettingsSection
+      id={RERUN_ONBOARDING_ANCHOR}
       title={t("orgSettings.rerun.title")}
       description={t("orgSettings.rerun.description")}
       action={
