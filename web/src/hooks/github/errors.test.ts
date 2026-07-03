@@ -3,10 +3,11 @@ import { describe, expect, it } from "vitest"
 import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,
+  parseSsoAuthorizationUrl,
   retryTransientNotFoundForbidden,
 } from "./errors"
 
-const apiError = (status: number) =>
+const apiError = (status: number, ssoHeader?: string | null) =>
   new GitHubAPIError({
     status,
     url: "https://api.github.com/x",
@@ -20,6 +21,7 @@ const apiError = (status: number) =>
       resource: null,
       retryAfter: null,
     },
+    ssoHeader,
   })
 
 describe("isDefinitiveGitHubStatus", () => {
@@ -38,7 +40,8 @@ describe("isDefinitiveGitHubStatus", () => {
 })
 
 describe("retryTransientNotFoundForbidden", () => {
-  it("does not retry a definitive 404 / 403", () => {
+  it("does not retry a definitive 401 / 403 / 404", () => {
+    expect(retryTransientNotFoundForbidden(0, apiError(401))).toBe(false)
     expect(retryTransientNotFoundForbidden(0, apiError(404))).toBe(false)
     expect(retryTransientNotFoundForbidden(0, apiError(403))).toBe(false)
   })
@@ -52,5 +55,92 @@ describe("retryTransientNotFoundForbidden", () => {
   it("retries non-GitHubAPIError (network) failures within the bound", () => {
     expect(retryTransientNotFoundForbidden(0, new Error("network"))).toBe(true)
     expect(retryTransientNotFoundForbidden(2, new Error("network"))).toBe(false)
+  })
+})
+
+describe("SAML SSO detection", () => {
+  const orgSsoUrl =
+    "https://github.com/orgs/acme/sso?authorization_request=ABC123"
+  const entSsoUrl =
+    "https://github.com/enterprises/acme-inc/sso?authorization_request=ABC123"
+
+  it("isSsoRequired requires a 403 carrying the X-GitHub-SSO header", () => {
+    expect(apiError(403, `required; url=${orgSsoUrl}`).isSsoRequired).toBe(true)
+    expect(apiError(403, null).isSsoRequired).toBe(false)
+    expect(apiError(403).isSsoRequired).toBe(false)
+  })
+
+  it("isSsoRequired is false when the header rides a non-403 status", () => {
+    // GitHub only emits X-GitHub-SSO on a 403; a header echoed onto a dead-token
+    // 401 or a transient 5xx/429 (e.g. copied by a proxy) must NOT be read as an
+    // SSO gate, or it would mask a re-auth / outage as "authorize SSO".
+    const header = `required; url=${orgSsoUrl}`
+    expect(apiError(401, header).isSsoRequired).toBe(false)
+    expect(apiError(500, header).isSsoRequired).toBe(false)
+    expect(apiError(429, header).isSsoRequired).toBe(false)
+  })
+
+  it("extracts the authorization URL from a `required; url=…` header", () => {
+    expect(parseSsoAuthorizationUrl(`required; url=${orgSsoUrl}`)).toBe(
+      orgSsoUrl,
+    )
+    expect(parseSsoAuthorizationUrl(`required; url=${entSsoUrl}`)).toBe(
+      entSsoUrl,
+    )
+    expect(
+      apiError(403, `required; url=${entSsoUrl}`).ssoAuthorizationUrl,
+    ).toBe(entSsoUrl)
+  })
+
+  it("returns null for the multi-org `partial-results` shape (no URL)", () => {
+    const header = "partial-results; organizations=21955855,20582480"
+    expect(parseSsoAuthorizationUrl(header)).toBeNull()
+    expect(apiError(403, header).isSsoRequired).toBe(true)
+    expect(apiError(403, header).ssoAuthorizationUrl).toBeNull()
+  })
+
+  it("rejects a non-github.com URL (defensive against a spoofed redirect)", () => {
+    expect(
+      parseSsoAuthorizationUrl("required; url=https://evil.example.com/sso"),
+    ).toBeNull()
+  })
+
+  it("rejects github.com spoofs that shift the real host (userinfo / subdomain)", () => {
+    // The `hostname === "github.com"` guard is the security-relevant sentinel;
+    // these are the classic ways a naive substring/`includes` check would be
+    // fooled. `new URL()` puts `github.com` in the userinfo (host = evil.com)
+    // for the `@` form, and the trailing-domain form has host github.com.evil.com.
+    expect(
+      parseSsoAuthorizationUrl("required; url=https://github.com@evil.com/sso"),
+    ).toBeNull()
+    expect(
+      parseSsoAuthorizationUrl("required; url=https://github.com.evil.com/sso"),
+    ).toBeNull()
+  })
+
+  it("rejects non-https schemes even when the host is github.com", () => {
+    // Script schemes parse to an empty host (already rejected), but the explicit
+    // https: allowlist also blocks any benign non-http scheme and makes the
+    // intent durable against a future refactor of the host check.
+    expect(
+      parseSsoAuthorizationUrl("required; url=javascript:alert(1)"),
+    ).toBeNull()
+    expect(
+      parseSsoAuthorizationUrl(
+        "required; url=data:text/html,<script>x</script>",
+      ),
+    ).toBeNull()
+    expect(
+      parseSsoAuthorizationUrl("required; url=http://github.com/orgs/acme/sso"),
+    ).toBeNull()
+    expect(
+      parseSsoAuthorizationUrl("required; url=ftp://github.com/x"),
+    ).toBeNull()
+  })
+
+  it("returns null for absent / malformed headers", () => {
+    expect(parseSsoAuthorizationUrl(null)).toBeNull()
+    expect(parseSsoAuthorizationUrl(undefined)).toBeNull()
+    expect(parseSsoAuthorizationUrl("required; url=not-a-url")).toBeNull()
   })
 })

@@ -103,6 +103,7 @@ export function createGitHubClient(args: {
         message,
         body,
         rateLimit,
+        ssoHeader: res.headers.get("x-github-sso"),
       })
     }
 
