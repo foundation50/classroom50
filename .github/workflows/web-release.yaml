@@ -1,0 +1,113 @@
+name: web Release
+
+# Creates a GitHub Release for the web app when a `web-v*` tag is pushed. The
+# actual production deploy of that tag is handled by web-deploy.yaml (which also
+# triggers on `web-v*` and stamps the version into the build); this workflow
+# only publishes the human-facing Release + auto-generated notes, so "what is
+# live on classroom50.org" has a versioned, changelog-backed answer.
+#
+# Release model: day-to-day work lands on `preview`; a release PR merges
+# preview -> main; then a `web-v*` tag is cut from the resulting main commit.
+# The tag scheme (`web-v*`) is namespaced apart from the CLI's `cli-v*` tags so
+# both can live in this monorepo without collision. web/package.json is the
+# version source of truth — bump it in the release PR, then tag to match.
+#
+# Versioning: vMAJOR.MINOR.PATCH[-prerelease]. A tag containing `-`
+# (web-v1.1.0-rc.1) publishes as a prerelease.
+
+on:
+  push:
+    tags: ['web-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag (e.g. web-v1.0.0).'
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: web-release-${{ github.event.inputs.tag || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Full history so --generate-notes can diff against the previous tag.
+          fetch-depth: 0
+
+      - name: Resolve and validate tag
+        id: tag
+        # Bind the untrusted input to env and use the shell var — never
+        # interpolate ${{ }} into run: (script injection; the dispatch input
+        # bypasses the web-v* push filter).
+        env:
+          TAG: ${{ github.event.inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${TAG#web-v}"
+          if [ "$version" = "$TAG" ]; then
+            echo "::error::Tag '$TAG' does not start with the 'web-v' prefix; expected e.g. web-v1.0.0."
+            exit 1
+          fi
+          # Restrict to a semver shape and charset before it reaches the CLI.
+          case "$version" in
+            [0-9]*.[0-9]*.[0-9]*) ;;
+            *)
+              echo "::error::Version '$version' is not MAJOR.MINOR.PATCH[-prerelease] (from tag '$TAG')."
+              exit 1
+              ;;
+          esac
+          case "$version" in
+            *[!0-9A-Za-z.+_-]*)
+              echo "::error::Version '$version' contains characters outside [0-9A-Za-z.+_-] (from tag '$TAG')."
+              exit 1
+              ;;
+          esac
+          echo "tag=$TAG" >>"$GITHUB_OUTPUT"
+          echo "version=$version" >>"$GITHUB_OUTPUT"
+
+      # Guard against tag/source drift: the tag version must match the version
+      # in web/package.json (the source of truth), so a release can't ship
+      # claiming a version the build wasn't stamped with.
+      - name: Assert package.json version matches tag
+        env:
+          VERSION: ${{ steps.tag.outputs.version }}
+        run: |
+          set -euo pipefail
+          pkg_version="$(node -p "require('./web/package.json').version")"
+          if [ "$pkg_version" != "$VERSION" ]; then
+            echo "::error::web/package.json version ($pkg_version) does not match tag version ($VERSION). Bump package.json in the release PR before tagging."
+            exit 1
+          fi
+
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.tag.outputs.tag }}
+          VERSION: ${{ steps.tag.outputs.version }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          prerelease="false"
+          case "$VERSION" in
+            *-*) prerelease="true" ;;
+          esac
+          # Idempotent: create the Release once (notes generated once), then
+          # reconcile prerelease state on re-run — a retried run won't dup notes.
+          if ! gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "$REPO" \
+              --title "web $VERSION" \
+              --generate-notes \
+              --prerelease="$prerelease"
+          else
+            echo "Release $TAG already exists on $REPO; reconciling prerelease state."
+            gh release edit "$TAG" --repo "$REPO" --prerelease="$prerelease"
+          fi

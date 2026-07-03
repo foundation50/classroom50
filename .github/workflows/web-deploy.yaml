@@ -11,10 +11,18 @@ name: web Deploy to GitHub Pages
 # custom domain (Settings -> Pages, source: GitHub Actions). The web/CNAME file
 # carries the domain into the published artifact. The Vite build serves from
 # root "/" (default base), which is correct for classroom50.org.
+#
+# Two triggers, one production site:
+#   - push to main (web/** scoped): continuous production deploy.
+#   - `web-v*` tag: a versioned release. The tag is stamped into the build
+#     (VITE_APP_VERSION) so classroom50.org reports its exact release, and
+#     web-release.yaml creates the matching GitHub Release. Cut a tag from a
+#     main commit after the preview -> main release PR merges.
 
 on:
   push:
     branches: [main]
+    tags: ['web-v*']
     paths:
       - 'web/**'
       - '.github/workflows/web-deploy.yaml'
@@ -64,6 +72,12 @@ jobs:
           # (Settings -> Secrets and variables -> Actions -> Variables)
           # is sufficient; no secret needed.
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # Release identity stamped into the build (see web/vite.config.ts).
+          # On a `web-v*` tag the tag name (minus prefix) is the version; on a
+          # push to main / manual run it falls back to web/package.json. Commit
+          # + date give a precise build fingerprint for bug reports.
+          VITE_APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/web-v') && github.ref_name || '' }}
+          VITE_APP_COMMIT: ${{ github.sha }}
 
       # GitHub Pages has no SPA rewrites; serve the app for unknown deep links.
       - name: Add SPA fallback
