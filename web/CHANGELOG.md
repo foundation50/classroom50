@@ -30,7 +30,8 @@ First versioned release of the web app.
 - Language-pack patching from the `en.json` diff instead of full regeneration,
   so updates only touch changed strings (#69).
 - Build version stamp: the running app reports its version, commit, and build
-  date (surfaced in the browser console; see `web/src/version.ts`).
+  date (surfaced in the browser console; see `web/src/version.ts`) and shows a
+  version badge in the sign-in card footer (`v<version> · <commit>`).
 
 ### Fixed
 
