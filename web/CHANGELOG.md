@@ -7,11 +7,15 @@ release track and are not covered by this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-Releases are cut by tagging a `main` commit `web-vX.Y.Z` (see
-`web/package.json` for the current version and `.github/workflows/web-release.yaml`
-for the release automation). Add new entries under **[Unreleased]** as work
-lands on `preview`, then rename that section to the version and date when a
-release is tagged.
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please): merges to `main`
+(via the `preview -> main` release PR) maintain a release PR that bumps
+`web/package.json` and this file from [Conventional Commits](https://www.conventionalcommits.org/)
+(`feat:` -> minor, `fix:` -> patch, `feat!:`/`fix!:` -> major). Merging that
+release PR tags `web-vX.Y.Z`, publishes the GitHub Release, and deploys to
+classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
+edit this file or tag by hand; write Conventional Commit messages and
+release-please compiles the notes.
 
 ## [Unreleased]
 

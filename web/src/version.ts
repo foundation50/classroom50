@@ -22,13 +22,10 @@ export const appVersion: AppVersion = {
   buildDate: __APP_BUILD_DATE__,
 }
 
-/** Source repository the app is built from. */
 export const REPO_URL = "https://github.com/foundation50/classroom50"
 
-/** Where users report bugs / request features. */
 export const ISSUES_URL = `${REPO_URL}/issues`
 
-/** Where users ask questions / discuss with the community. */
 export const DISCUSSIONS_URL = `${REPO_URL}/discussions`
 
 /** e.g. "1.0.0 (a1b2c3d4e5f6)" — for footers, logs, and bug reports. */

@@ -1,32 +1,24 @@
 name: web Deploy to GitHub Pages
 
-# Builds the web app (web/) and publishes it to classroom50.org via this
-# repo's GitHub Pages on every merge to main (scoped to web/** so unrelated
-# CLI changes don't redeploy the site). Manual runs available via the Actions
-# tab.
+# Manual redeploy of the web app (web/) to classroom50.org via GitHub Pages.
 #
-# Production deploy: main is the release branch (day-to-day work lands on
-# `preview`, which deploys to preview.classroom50.org via web-deploy-preview.yaml;
-# a release PR merges preview -> main). classroom50.org is this repo's Pages
-# custom domain (Settings -> Pages, source: GitHub Actions). The web/CNAME file
-# carries the domain into the published artifact. The Vite build serves from
-# root "/" (default base), which is correct for classroom50.org.
+# Production RELEASES are handled by web-release-please.yaml: merging the
+# release-please Release PR tags `web-vX.Y.Z` and that workflow builds + deploys
+# the tagged commit. This workflow is kept as a manual escape hatch only
+# (workflow_dispatch) to re-publish a chosen ref without cutting a release —
+# e.g. to recover a broken Pages deploy or redeploy an existing tag.
 #
-# Two triggers, one production site:
-#   - push to main (web/** scoped): continuous production deploy.
-#   - `web-v*` tag: a versioned release. The tag is stamped into the build
-#     (VITE_APP_VERSION) so classroom50.org reports its exact release, and
-#     web-release.yaml creates the matching GitHub Release. Cut a tag from a
-#     main commit after the preview -> main release PR merges.
+# classroom50.org is this repo's Pages custom domain (Settings -> Pages, source:
+# GitHub Actions). web/CNAME carries the domain into the published artifact; the
+# Vite build serves from root "/" (default base), correct for classroom50.org.
 
 on:
-  push:
-    branches: [main]
-    tags: ['web-v*']
-    paths:
-      - 'web/**'
-      - '.github/workflows/web-deploy.yaml'
   workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref (tag/branch/SHA) to build and deploy. Defaults to the run ref.'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -46,6 +38,10 @@ jobs:
         working-directory: web
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Build the ref the operator chose (a tag to redeploy a release, or a
+          # branch/SHA); empty falls back to the ref the run was dispatched on.
+          ref: ${{ inputs.ref }}
 
       - uses: actions/setup-node@v6
         with:
@@ -73,10 +69,10 @@ jobs:
           # is sufficient; no secret needed.
           VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
           # Release identity stamped into the build (see web/vite.config.ts).
-          # On a `web-v*` tag the tag name (minus prefix) is the version; on a
-          # push to main / manual run it falls back to web/package.json. Commit
-          # + date give a precise build fingerprint for bug reports.
-          VITE_APP_VERSION: ${{ startsWith(github.ref, 'refs/tags/web-v') && github.ref_name || '' }}
+          # A `web-v*` ref names the version; anything else (branch/SHA redeploy)
+          # falls back to web/package.json. Commit + date give a precise build
+          # fingerprint for bug reports.
+          VITE_APP_VERSION: ${{ startsWith(inputs.ref, 'web-v') && inputs.ref || '' }}
           VITE_APP_COMMIT: ${{ github.sha }}
 
       # GitHub Pages has no SPA rewrites; serve the app for unknown deep links.

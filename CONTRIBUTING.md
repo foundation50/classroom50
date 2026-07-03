@@ -137,29 +137,37 @@ The web app (classroom50.org) uses a two-branch promotion model. Day-to-day
 work lands on `preview`, which continuously deploys to
 [preview.classroom50.org](https://preview.classroom50.org) via
 [`web-deploy-preview`](.github/workflows/web-deploy-preview.yaml). A release is
-a PR merging `preview` -> `main`; `main` deploys production
-(classroom50.org) via [`web-deploy`](.github/workflows/web-deploy.yaml).
+a PR merging `preview` -> `main`.
 
-Web releases are versioned with `web-v*` tags (namespaced apart from the CLI's
-`cli-v*` tags). `web/package.json` is the version source of truth, and
-[`web/CHANGELOG.md`](web/CHANGELOG.md) records the history. To cut a release:
+Releases are automated with
+[release-please](https://github.com/googleapis/release-please)
+([`web-release-please`](.github/workflows/web-release-please.yaml),
+[`release-please-config.json`](release-please-config.json)). You do not tag or
+edit the changelog by hand:
 
-1. In the release PR, bump `web/package.json` and move the `web/CHANGELOG.md`
-   **[Unreleased]** entries under a new `## [X.Y.Z]` heading with the date.
-2. Merge `preview` -> `main`.
-3. Tag the merged commit and push:
+1. Merge `preview` -> `main` as usual. release-please reads the
+   [Conventional Commits](https://www.conventionalcommits.org/) since the last
+   release and maintains a **release PR** on `main` that bumps
+   `web/package.json` and [`web/CHANGELOG.md`](web/CHANGELOG.md) (`feat:` ->
+   minor, `fix:` -> patch, `feat!:`/`fix!:` -> major).
+2. When ready to release, merge that release PR. release-please then tags the
+   commit `web-vX.Y.Z` (namespaced apart from the CLI's `cli-v*` tags) and
+   publishes the GitHub Release from the changelog.
+3. The same workflow builds the tagged commit and deploys it to
+   classroom50.org — gated on the release actually being created, so a plain
+   merge to `main` never deploys. The version is stamped into the build via
+   `VITE_APP_VERSION` and the running app reports it in the browser console.
 
-```sh
-git tag web-v1.2.0        # a `-` suffix (web-v1.2.0-rc.1) publishes as a pre-release
-git push origin web-v1.2.0
-```
+To force a specific version (e.g. a first `1.0.0` or a jump), land a commit on
+`main` whose body contains `Release-As: X.Y.Z`.
 
-The tag triggers a versioned production deploy (the version is stamped into the
-build via `VITE_APP_VERSION`; the running app reports it in the browser console)
-and the [`web-release`](.github/workflows/web-release.yaml) workflow, which
-creates a GitHub Release using the matching `web/CHANGELOG.md` section (falling
-back to auto-generated notes). The workflow asserts the tag version matches
-`web/package.json` to prevent drift.
+[`web-deploy`](.github/workflows/web-deploy.yaml) is retained only as a manual
+escape hatch (`workflow_dispatch` with an optional `ref`) to re-publish a chosen
+tag/branch/SHA without cutting a release.
+
+Requirement (repo/org Settings, one-time): enable "Allow GitHub Actions to
+create and approve pull requests" so release-please can open its release PR with
+the default `GITHUB_TOKEN`.
 
 ## License
 
