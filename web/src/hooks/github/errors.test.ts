@@ -4,7 +4,7 @@ import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,
   parseSsoAuthorizationUrl,
-  retryTransientNotFoundForbidden,
+  retryTransientGitHubError,
 } from "./errors"
 
 const apiError = (status: number, ssoHeader?: string | null) =>
@@ -39,22 +39,22 @@ describe("isDefinitiveGitHubStatus", () => {
   })
 })
 
-describe("retryTransientNotFoundForbidden", () => {
+describe("retryTransientGitHubError", () => {
   it("does not retry a definitive 401 / 403 / 404", () => {
-    expect(retryTransientNotFoundForbidden(0, apiError(401))).toBe(false)
-    expect(retryTransientNotFoundForbidden(0, apiError(404))).toBe(false)
-    expect(retryTransientNotFoundForbidden(0, apiError(403))).toBe(false)
+    expect(retryTransientGitHubError(0, apiError(401))).toBe(false)
+    expect(retryTransientGitHubError(0, apiError(404))).toBe(false)
+    expect(retryTransientGitHubError(0, apiError(403))).toBe(false)
   })
 
   it("retries transient failures up to a bounded count", () => {
-    expect(retryTransientNotFoundForbidden(0, apiError(500))).toBe(true)
-    expect(retryTransientNotFoundForbidden(1, apiError(500))).toBe(true)
-    expect(retryTransientNotFoundForbidden(2, apiError(500))).toBe(false)
+    expect(retryTransientGitHubError(0, apiError(500))).toBe(true)
+    expect(retryTransientGitHubError(1, apiError(500))).toBe(true)
+    expect(retryTransientGitHubError(2, apiError(500))).toBe(false)
   })
 
   it("retries non-GitHubAPIError (network) failures within the bound", () => {
-    expect(retryTransientNotFoundForbidden(0, new Error("network"))).toBe(true)
-    expect(retryTransientNotFoundForbidden(2, new Error("network"))).toBe(false)
+    expect(retryTransientGitHubError(0, new Error("network"))).toBe(true)
+    expect(retryTransientGitHubError(2, new Error("network"))).toBe(false)
   })
 })
 

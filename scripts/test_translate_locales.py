@@ -284,3 +284,58 @@ class TestMainPatchMode:
         assert rc == 0
         # Entire orphan group swept; empty foo dict pruned.
         assert result == {"other": {"key": "v"}}
+
+
+class TestFlattenParityWithVerifyLocale:
+    """`flatten()` is duplicated in verify_locale.py (which ships standalone next
+    to en.json) and here. The duplication is intentional for portability, so
+    guard the two copies against silent drift with a behavioral parity test
+    rather than merging them. If either implementation changes shape, this fails.
+    """
+
+    @staticmethod
+    def _load_verify_locale():
+        import importlib.util
+        from pathlib import Path
+
+        verify_path = (
+            Path(__file__).resolve().parent.parent
+            / "web"
+            / "src"
+            / "locales"
+            / "verify_locale.py"
+        )
+        spec = importlib.util.spec_from_file_location("verify_locale", verify_path)
+        assert spec and spec.loader
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    @pytest.mark.parametrize(
+        "obj",
+        [
+            {},
+            {"a": "1"},
+            {"a": {"b": "2", "c": {"d": "3"}}},
+            {"nav": {"appName": "x"}, "accept": {"title": "t", "body": "b"}},
+            {"a": {"b": {"c": {"deep": "leaf"}}}, "top": "value"},
+            {"count_one": "one", "count_other": "many"},
+        ],
+    )
+    def test_flatten_matches_verify_locale(self, obj):
+        verify_locale = self._load_verify_locale()
+        assert flatten(obj) == verify_locale.flatten(obj)
+
+    def test_flatten_matches_on_real_base_locale(self):
+        from pathlib import Path
+
+        verify_locale = self._load_verify_locale()
+        base_path = (
+            Path(__file__).resolve().parent.parent
+            / "web"
+            / "src"
+            / "locales"
+            / "en.json"
+        )
+        base = json.loads(base_path.read_text(encoding="utf-8"))
+        assert flatten(base) == verify_locale.flatten(base)

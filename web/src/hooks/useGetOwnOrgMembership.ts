@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { getPendingOrgInvite } from "./github/mutations"
-import { retryTransientNotFoundForbidden } from "./github/errors"
+import { retryTransientGitHubError } from "./github/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Reads the authenticated user's OWN membership in `org` (GET
@@ -18,7 +18,7 @@ const useGetOwnOrgMembership = (org: string | undefined) => {
     queryKey: ["github", "memberships", "orgs", org],
     queryFn: () => getPendingOrgInvite(client, org ?? ""),
     staleTime: 10 * 60 * 1000,
-    retry: retryTransientNotFoundForbidden,
+    retry: retryTransientGitHubError,
     enabled: Boolean(org),
   })
 }

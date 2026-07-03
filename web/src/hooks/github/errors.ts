@@ -104,8 +104,9 @@ export function parseSsoAuthorizationUrl(
 // Shared React Query `retry` predicate for fail-closed role/permission reads: a
 // definitive status (401 revoked/expired, 403 blocked, 404 not found / not a
 // member — see isDefinitiveGitHubStatus) must NOT retry, while a transient
-// 5xx/429/network blip self-heals (bounded to 2).
-export function retryTransientNotFoundForbidden(
+// 5xx/429/network blip self-heals (bounded to 2). Named for its behavior (retry
+// only transient errors); the definitive set includes 401 as well as 403/404.
+export function retryTransientGitHubError(
   failureCount: number,
   error: unknown,
 ): boolean {
