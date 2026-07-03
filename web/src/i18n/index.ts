@@ -31,14 +31,20 @@ void i18n.use(initReactI18next).init({
 // Runs after init so addResourceBundle has an instance to attach to.
 const installed = hydratePacks()
 const stored = getStoredLang()
-if (stored !== BASE_LANG && installed.includes(stored)) {
-  void i18n.changeLanguage(stored)
-}
 
-// A `?lang=<code>` deep link sets the active language and persists it (it
-// overrides the stored choice going forward, not just for this visit).
-// Fire-and-forget so startup isn't blocked; it activates when it resolves and
-// swallows errors, so a shared link is always safe.
-void applyLangFromQuery()
+// Activate the stored language, THEN apply any `?lang=<code>` deep link, in that
+// order. A `?lang=` deep link sets the active language and persists it (it
+// overrides the stored choice going forward, not just for this visit), so it
+// must be the last write to both i18n.language and the persisted lang. Chaining
+// (rather than firing both unawaited) prevents a startup race where the stored
+// activation resolves after applyLangFromQuery and clobbers the deep link,
+// leaving the screen and localStorage disagreeing. Fire-and-forget the chain so
+// startup isn't blocked; both steps swallow errors, so a shared link is safe.
+void (async () => {
+  if (stored !== BASE_LANG && installed.includes(stored)) {
+    await i18n.changeLanguage(stored)
+  }
+  await applyLangFromQuery()
+})()
 
 export default i18n
