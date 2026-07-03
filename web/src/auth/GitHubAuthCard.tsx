@@ -7,6 +7,7 @@ import { useGithubAuth } from "./useGithubAuth"
 import { GitHubAuthedPanel } from "./GitHubAuthedPanel"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
+import { AppVersionBadge } from "@/components/AppVersionBadge"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -140,16 +141,19 @@ export function GitHubAuthCard() {
           )}
         </div>
 
-        <footer className="flex items-center justify-between border-t border-base-200 px-7 py-4 text-xs text-base-content/70">
+        <footer className="flex items-center justify-between gap-3 border-t border-base-200 px-7 py-4 text-xs text-base-content/70">
           <span>{t("auth.footerTagline")}</span>
-          <a
-            className="link link-info link-hover shrink-0"
-            href="https://github.com/foundation50/classroom50/wiki"
-            target="_blank"
-            rel="noreferrer"
-          >
-            {t("auth.visitDocs")}
-          </a>
+          <div className="flex shrink-0 items-center gap-3">
+            <AppVersionBadge className="tabular-nums text-base-content/50" />
+            <a
+              className="link link-info link-hover"
+              href="https://github.com/foundation50/classroom50/wiki"
+              target="_blank"
+              rel="noreferrer"
+            >
+              {t("auth.visitDocs")}
+            </a>
+          </div>
         </footer>
       </section>
     </main>

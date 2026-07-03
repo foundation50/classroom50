@@ -3,7 +3,6 @@ import {
   BookText,
   UsersRound,
   LogOut,
-  MessageCircleQuestionMark,
   Settings,
   ChevronLeft,
   ChevronRight,
@@ -18,6 +17,7 @@ import {
   Moon,
   Languages,
   X,
+  Info,
 } from "lucide-react"
 import {
   Link,
@@ -46,6 +46,7 @@ import { studentRepoName } from "@/util/studentRepo"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
+import { AboutDialog } from "@/components/AboutDialog"
 import type { Classroom } from "@/types/classroom"
 import {
   createContext,
@@ -697,6 +698,8 @@ export const SidebarFooter = () => {
   const footerRef = useRef<HTMLDivElement | null>(null)
   const langDialogRef = useRef<HTMLDialogElement | null>(null)
   const langDialogTitleId = useId()
+  const aboutDialogRef = useRef<HTMLDialogElement | null>(null)
+  const aboutDialogTitleId = useId()
   const { collapsed } = useSidebarCollapse()
   const { isDark, toggleTheme } = useTheme()
 
@@ -851,17 +854,17 @@ export const SidebarFooter = () => {
             </li>
             <div className="divider my-1" />
             <li>
-              <a
-                href="https://github.com/foundation50/classroom50/discussions"
-                target="_blank"
-                rel="noreferrer"
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                  aboutDialogRef.current?.showModal()
+                }}
               >
-                <MessageCircleQuestionMark
-                  aria-hidden="true"
-                  className="size-4"
-                />
-                {t("nav.help")}
-              </a>
+                <Info aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-left">{t("nav.about")}</span>
+              </button>
             </li>
 
             <li>
@@ -945,6 +948,11 @@ export const SidebarFooter = () => {
             <button>{t("common.close")}</button>
           </form>
         </dialog>,
+        document.body,
+      )}
+
+      {createPortal(
+        <AboutDialog ref={aboutDialogRef} titleId={aboutDialogTitleId} />,
         document.body,
       )}
     </>

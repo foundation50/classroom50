@@ -1,0 +1,117 @@
+name: web Release Please
+
+# Automates web-app releases with googleapis/release-please. Day-to-day work
+# lands on `preview`; a release PR merges `preview` -> `main`. This workflow
+# watches `main` and maintains a *Release PR* that bumps web/package.json +
+# web/CHANGELOG.md from Conventional Commits. Merging that Release PR creates
+# the `web-vX.Y.Z` tag + GitHub Release, which is the single production-release
+# signal (see web-deploy.yaml, now tag-only).
+#
+# Monorepo-scoped to web/ via release-please-config.json +
+# .release-please-manifest.json. The `web-v*` tag scheme is namespaced apart
+# from the CLI's `cli-v*` tags.
+#
+# Token model: release-please runs with GITHUB_TOKEN. A tag pushed by
+# GITHUB_TOKEN does NOT retrigger other workflows (Actions' recursion guard),
+# so instead of relying on web-deploy.yaml's tag trigger, the deploy job below
+# is gated on release-please's `release_created` output and runs in the same
+# run. (Requires "Allow GitHub Actions to create and approve pull requests" in
+# repo/org settings so the Release PR can be opened.)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: web-release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # `web--*` keys because component is "web" (see release-please-config).
+      release_created: ${{ steps.release.outputs['web--release_created'] }}
+      tag_name: ${{ steps.release.outputs['web--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v4
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+  # Build + deploy the freshly tagged release to production. Gated on a real
+  # release (Release PR merged) so a plain push to main never deploys. Mirrors
+  # web-deploy.yaml's build so the tagged commit ships stamped with its version.
+  deploy:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # Check out the tag release-please just created so the build stamps
+          # the released commit + version, not a later main tip.
+          ref: ${{ needs.release-please.outputs.tag_name }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Gate the deploy on the same suite as web-deploy.yaml (incl. the skeleton
+      # parity test that vite build can't catch).
+      - run: npm test
+
+      # Resolve the SHA of the checked-out tag so the build stamps the commit
+      # that was actually released, not github.sha (the main tip that triggered
+      # the run, which can differ from the release commit).
+      - id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - run: npm run build
+        env:
+          VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # Tag name (web-vX.Y.Z); vite.config.ts strips the web-v prefix.
+          VITE_APP_VERSION: ${{ needs.release-please.outputs.tag_name }}
+          VITE_APP_COMMIT: ${{ steps.sha.outputs.value }}
+
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      - name: Write CNAME into dist
+        run: cp CNAME dist/CNAME
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v5
