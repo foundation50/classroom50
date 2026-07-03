@@ -17,6 +17,7 @@ import {
   Moon,
   Languages,
   Info,
+  BookOpen,
 } from "lucide-react"
 import {
   Link,
@@ -46,6 +47,7 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
 import { LanguageDialog } from "@/components/LanguageDialog"
 import { AboutDialog } from "@/components/AboutDialog"
+import { WIKI_URL } from "@/version"
 import type { Classroom } from "@/types/classroom"
 import {
   createContext,
@@ -852,6 +854,20 @@ export const SidebarFooter = () => {
               </button>
             </li>
             <div className="divider my-1" />
+            <li>
+              <a
+                href={WIKI_URL}
+                target="_blank"
+                rel="noreferrer"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  setMenuOpen(false)
+                }}
+              >
+                <BookOpen aria-hidden="true" className="size-4" />
+                <span className="flex-1 text-left">{t("nav.docs")}</span>
+              </a>
+            </li>
             <li>
               <button
                 type="button"

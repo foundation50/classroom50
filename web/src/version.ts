@@ -28,6 +28,8 @@ export const ISSUES_URL = `${REPO_URL}/issues`
 
 export const DISCUSSIONS_URL = `${REPO_URL}/discussions`
 
+export const WIKI_URL = `${REPO_URL}/wiki`
+
 /** e.g. "1.0.0 (a1b2c3d4e5f6)" — for footers, logs, and bug reports. */
 export function formatAppVersion(v: AppVersion = appVersion): string {
   return `${v.version} (${v.commit})`

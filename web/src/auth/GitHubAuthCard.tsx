@@ -8,6 +8,7 @@ import { GitHubAuthedPanel } from "./GitHubAuthedPanel"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 import { AppVersionBadge } from "@/components/AppVersionBadge"
+import { WIKI_URL } from "@/version"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -147,7 +148,7 @@ export function GitHubAuthCard() {
             <AppVersionBadge className="tabular-nums text-base-content/50" />
             <a
               className="link link-info link-hover"
-              href="https://github.com/foundation50/classroom50/wiki"
+              href={WIKI_URL}
               target="_blank"
               rel="noreferrer"
             >
