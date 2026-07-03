@@ -80,9 +80,8 @@ const CreateAssignmentPage = () => {
           `${classroom ?? ""}/assignments.json`,
         ),
       })
-      // Track the publish-pages deploy this commit triggers so the global
-      // activity banner can label the run ("Publishing '<name>' to student
-      // site"). Anchored on the commit SHA the runs API exposes as head_sha.
+      // Track the publish-pages deploy this commit triggers, anchored on the
+      // commit SHA (head_sha on the runs API).
       if (org && result.newCommitSha) {
         register({
           org,

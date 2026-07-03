@@ -47,9 +47,8 @@ const EditAssignmentForm = ({
     mutationFn: (input) => editAssignmentWithConflictRetry(client, input),
     onMutate,
     onSuccess: (result, variables) => {
-      // Track the publish-pages deploy this edit's commit triggers so the
-      // global activity banner labels the run. Anchored on the commit SHA
-      // (head_sha on the runs API).
+      // Track the publish-pages deploy this edit's commit triggers, anchored on
+      // the commit SHA (head_sha on the runs API).
       if (result.newCommitSha) {
         register({
           org,

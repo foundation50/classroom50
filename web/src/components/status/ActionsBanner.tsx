@@ -19,9 +19,8 @@ import { useTranslation } from "react-i18next"
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
 import { DURATION, EASE_OUT } from "@/lib/motion"
 
-// Compact elapsed duration (e.g. "8s", "1m 12s", "3m"). Under a minute shows
-// seconds; from a minute up shows m + s (s omitted once past ~an hour to stay
-// short). Returns "" for a non-positive span.
+// Compact elapsed duration ("8s", "1m 12s", "3m", "1h 5m"). "" for a
+// non-positive span.
 function formatElapsed(ms: number): string {
   const total = Math.max(0, Math.round(ms / 1000))
   if (total < 60) return `${total}s`
@@ -32,9 +31,8 @@ function formatElapsed(ms: number): string {
   return `${h}h ${m % 60}m`
 }
 
-// Elapsed time for a tracker: live-ticking since start while running, or the
-// frozen total once finished. `now` is the shared 1s tick from the banner so
-// running rows advance in step without each row owning a timer.
+// Elapsed time: live-ticking while running (via the banner's shared 1s `now`),
+// frozen once finished.
 const ElapsedLabel = ({ tracker, now }: { tracker: Tracker; now: number }) => {
   if (tracker.startedAtMs === undefined) return null
   const end = tracker.endedAtMs ?? now
@@ -47,25 +45,14 @@ const ElapsedLabel = ({ tracker, now }: { tracker: Tracker; now: number }) => {
   )
 }
 
-// App-wide banner pinned to the top of the content area (right of the sidebar
-// at lg+) showing GitHub Actions activity for the current org as a collection of
-// per-operation trackers. Mounts above the router (alongside the toast viewport)
-// so it survives route changes.
-//
-//  - One tracker: shown inline in the bar.
-//  - Several: the most recent action leads the collapsed bar (aggregate tone —
-//    red if anything failed) with a total-count badge; expanding reveals a
-//    neutral list where each row carries its OWN phase color (green succeeded /
-//    red failed / orange running) so it's clear what passed and what didn't.
-//  - Each tracker reflects its run's real state; terminal rows (success and
-//    failed) persist as run history until the teacher dismisses them.
-//
-// Router constraint: this renders ABOVE the RouterProvider, so it must NOT use a
-// TanStack <Link>. Run links are plain <a href> to github.com.
+// App-wide banner fixed to the top, showing GitHub Actions activity for the
+// current org as per-operation trackers. One tracker shows inline; several
+// collapse to a header (latest action + count) that expands to a per-row list.
+// Mounts above the router (so it survives route changes) — hence NO TanStack
+// <Link>; run links are plain <a href> to github.com.
 
-// Icon for a tracker phase. `tinted` applies the phase's semantic color (used in
-// the per-row list, which sits on a neutral surface); without it the icon
-// inherits the current color (used in the solid-tone header).
+// Phase icon. `tinted` applies the phase's semantic color (per-row list on a
+// neutral surface); without it the icon inherits the solid-tone header color.
 const StatusIcon = ({
   phase,
   tinted,
@@ -95,9 +82,8 @@ const StatusIcon = ({
   )
 }
 
-// Per-phase background/border/text for an expanded row, so a green (success),
-// red (failed), or orange (running) row is clearly distinguishable inside the
-// neutral list — even when the aggregate header is red.
+// Per-phase tone for an expanded row, so each row is distinguishable inside the
+// neutral list even when the header is red.
 const ROW_TONE: Record<Tracker["phase"], string> = {
   failed: "bg-error/10 text-error",
   success: "bg-success/10 text-success",
@@ -118,8 +104,8 @@ const TrackerRow = ({
   onRetry: (id: string) => void
   retrying: boolean
   now: number
-  // compact = rendered inline in the collapsed single-tracker bar (inherits the
-  // header's solid tone). Otherwise the row carries its own per-phase tone.
+  // compact = inline in the collapsed single-tracker bar (inherits header tone);
+  // otherwise the row carries its own per-phase tone.
   compact?: boolean
 }) => {
   const { t } = useTranslation()
@@ -173,10 +159,8 @@ const TrackerRow = ({
   )
 }
 
-// The banner's inner content (one row, or the expandable multi-row header +
-// list). Extracted so it can render both in a hidden measuring probe — to learn
-// the height before the animated bar mounts, so the slide-in starts from the
-// real offset — and in the visible animated bar itself.
+// The banner's inner content (one row, or the expandable header + list).
+// Extracted so it renders both in the hidden measuring probe and the visible bar.
 const BannerBody = ({
   trackers,
   primary,
@@ -193,8 +177,8 @@ const BannerBody = ({
   trackers: Tracker[]
   primary: Tracker | undefined
   primaryPhase: Tracker["phase"]
-  // Failed actions the header isn't itself leading with — surfaced as a
-  // "needs attention" error badge, independent of the bar's own tone.
+  // Failed actions the header isn't leading with — shown as a "needs attention"
+  // badge, independent of the bar's tone.
   attentionCount: number
   single: boolean
   showList: boolean
@@ -206,7 +190,6 @@ const BannerBody = ({
 }) => {
   const { t } = useTranslation()
   if (single) {
-    // One action: show it directly in the bar.
     return (
       <div className="px-4 py-2.5">
         <TrackerRow
@@ -220,8 +203,7 @@ const BannerBody = ({
       </div>
     )
   }
-  // Several actions: the most recent leads, with a total-count badge; expand to
-  // see them all.
+  // Several actions: latest leads with a count badge; expand for the full list.
   return (
     <>
       <button
@@ -285,9 +267,8 @@ export function ActionsBanner() {
     useActionActivity()
   const [expanded, setExpanded] = useState(false)
 
-  // A shared 1s clock so running rows advance their elapsed time in step. Only
-  // ticks while something is still running (a finished row's elapsed is frozen),
-  // so an idle banner does no per-second work.
+  // Shared 1s clock so running rows tick in step. Runs only while something is
+  // running, so an idle banner does no per-second work.
   const anyRunning = trackers.some(
     (tr) => tr.phase === "running" || tr.phase === "pending",
   )
@@ -299,16 +280,13 @@ export function ActionsBanner() {
     return () => window.clearInterval(id)
   }, [anyRunning])
 
-  // Hold the banner back until the page has painted, so on a browser refresh it
-  // slides in AFTER the app content rather than flashing in with (or before) the
-  // page. A short post-mount delay lets the initial render settle; the
-  // AnimatePresence slide-in below then plays. Gate on document.readyState so a
-  // slow initial load waits for it too.
+  // Hold the banner until after the page paints so it slides in after the app
+  // content on a refresh, not with/before it. Gate on document.readyState so a
+  // slow load waits too.
   const [ready, setReady] = useState(false)
   useEffect(() => {
     let timer: number | undefined
     const reveal = () => {
-      // One extra tick after load so the reveal lands after the first paint.
       timer = window.setTimeout(() => setReady(true), 150)
     }
     if (document.readyState === "complete") {
@@ -326,22 +304,15 @@ export function ActionsBanner() {
   const single = trackers.length === 1
   const canExpand = trackers.length > 1
 
-  // The collapsed header always leads with the LATEST action (trackers are
-  // newest first), so a new action taken after a failure takes over the title —
-  // the teacher sees what they just did, not the stale failure. The header icon
-  // reflects the latest action's own phase so icon and label stay coherent.
+  // Header leads with the LATEST action (trackers are newest-first), so a new
+  // action after a failure takes over the title; its own phase drives the icon.
   const primary = trackers[0]
   const primaryPhase = primary?.phase ?? "running"
   const failedCount = trackers.filter((tr) => tr.phase === "failed").length
 
-  // Tone follows the LATEST action's own phase, so the bar honestly reflects
-  // what just happened — green when it succeeded, orange while it's working,
-  // red only when the latest action itself failed. A failure in an OLDER action
-  // is NOT allowed to repaint the whole bar red (that would mislabel a
-  // succeeding action); it surfaces instead as the "needs attention" error
-  // badge below, which is the single cross-state failure signal. Solid fill
-  // with the matching -content text/icon color so it reads as a clear status
-  // bar, not a wash.
+  // Tone follows the LATEST action's phase (green/orange/red) — an older
+  // failure does NOT repaint the whole bar; it surfaces as the attention badge
+  // below instead. Solid fill with the matching -content color.
   const tone =
     primaryPhase === "failed"
       ? "border-error bg-error text-error-content"
@@ -349,28 +320,22 @@ export function ActionsBanner() {
         ? "border-success bg-success text-success-content"
         : "border-warning bg-warning text-warning-content"
 
-  // Other actions that failed but aren't the one leading the header — the count
-  // the "needs attention" badge shows. When the latest action IS the failure,
-  // the bar is already red and the badge would be redundant, so exclude it.
+  // Failed actions NOT leading the header (the badge count). When the latest
+  // action is itself the failure, the bar is already red, so exclude it.
   const attentionCount =
     primaryPhase === "failed" ? failedCount - 1 : failedCount
 
   const showList = canExpand && expanded
 
-  // Reserve vertical space equal to the banner's height so it PUSHES the app
-  // down instead of overlaying the content beneath it (a fixed bar would sit on
-  // top of a page heading). The banner is a full-width bar fixed at the top,
-  // mounted above the router so it survives route changes; that takes it out of
-  // normal flow, so we mirror its position onto document.body's padding-top,
-  // which shifts the whole app (sidebar and content) down as one.
+  // Reserve body padding equal to the banner height so it PUSHES the app down
+  // instead of overlaying page content. The banner is a full-width fixed bar
+  // above the router (out of normal flow), so we mirror its position onto
+  // document.body's padding-top, shifting the whole app down as one.
   //
-  // Enter/exit slide vertically: `y` runs from -height (fully above the
-  // viewport) to 0 on enter, and back on exit. The reserved padding is derived
-  // as height + y, so the app top tracks the banner's bottom edge frame-for-
-  // frame — the banner slides up and the app slides up to fill the gap together,
-  // with no snap when it finally unmounts. Height is measured from the inner
-  // content (unaffected by the slide) via a ResizeObserver so expanding the
-  // list keeps the reserved space in sync.
+  // Enter/exit slide `y` from -height to 0 and back; padding = height + y tracks
+  // the banner's bottom edge frame-for-frame, so the app slides with it. Height
+  // is measured from the inner content (unaffected by the slide) via a
+  // ResizeObserver so expanding the list keeps the reservation in sync.
   const contentRef = useRef<HTMLDivElement | null>(null)
   const [bannerHeight, setBannerHeight] = useState(0)
   useLayoutEffect(() => {
@@ -383,13 +348,9 @@ export function ActionsBanner() {
     return () => observer.disconnect()
   }, [visible])
 
-  // `y` is the banner's vertical offset, animated by Framer on enter/exit.
-  // Reserved body padding = height + y, so it tracks the slide (y changes every
-  // frame) and a height change (measure / list expand). The exit animation
-  // drives y to -height, sliding the app up in lockstep; AnimatePresence's
-  // onExitComplete below then hard-clears the gap so a reduced-motion or
-  // interrupted exit (where y may never reach exactly -height) can't strand a
-  // permanent top gap across the whole app.
+  // `y` (Framer-animated on enter/exit) drives body padding = height + y, so the
+  // app slides with the banner. onExitComplete below hard-clears the gap so a
+  // reduced-motion or interrupted exit can't strand a permanent top gap.
   const y = useMotionValue(-bannerHeight)
   useMotionValueEvent(y, "change", (value) => {
     const px = Math.max(0, bannerHeight + value)
@@ -425,11 +386,9 @@ export function ActionsBanner() {
 
   return (
     <div className="pointer-events-none fixed inset-x-0 top-0 z-50">
-      {/* Hidden probe: mounted whenever the banner is visible so its height is
-          known BEFORE the animated bar mounts, letting the slide-in start from
-          the true offset (a slide can't animate from an as-yet-unmeasured
-          height). Laid out (not display:none) so it has a real height, but
-          invisible and inert. */}
+      {/* Hidden probe: measures the banner height before the animated bar
+          mounts so the slide-in can start from the true offset. Laid out (not
+          display:none) but invisible and inert. */}
       {visible && (
         <div
           ref={contentRef}

@@ -42,16 +42,12 @@ const isComplete = (
 } => Boolean(t.org && t.classroom && t.assignment)
 
 /**
- * Triggers the regrade.yaml workflow for an assignment (or a single student
- * when `owner` is set) and tracks the resulting dispatch run via the shared
- * useGitHubOperation machine. Adds regrade-specific concerns on top: the page
- * RegradeCoordinator (mutual exclusion across the page's trackers) and the
- * activity-banner registration.
+ * Triggers regrade.yaml for an assignment (or one student when `owner` is set)
+ * and tracks the run via useGitHubOperation, adding regrade-specific concerns:
+ * the page RegradeCoordinator (mutual exclusion) and banner registration.
  *
- * The tracked run only kicks off grading (re-running each repo's autograde
- * workflow) — grading itself runs asynchronously after — so a "completed" phase
- * means grading was started, not that scores are ready. Callers surface that and
- * refresh via the existing collect-scores path.
+ * The tracked run only kicks off grading (grading runs async after), so
+ * "completed" means grading started, not that scores are ready.
  */
 const useTriggerRegrade = (target: RegradeTarget) => {
   const client = useGitHubClient()
@@ -99,10 +95,8 @@ const useTriggerRegrade = (target: RegradeTarget) => {
     },
   })
 
-  // Publish this tracker's in-flight state to the page coordinator so the
-  // page-level "Regrade all" hook, every per-row tracker, and "Collect now"
-  // share one mutual-exclusion signal (and so a new dispatch can be blocked
-  // while any regrade is already running). Unregister on unmount/target change.
+  // Publish in-flight state to the page coordinator so "Regrade all", every
+  // per-row tracker, and "Collect now" share one mutual-exclusion signal.
   const inFlight = phase === "dispatching" || phase === "running"
   const { setInFlight } = coordinator
   useEffect(() => {
@@ -111,9 +105,8 @@ const useTriggerRegrade = (target: RegradeTarget) => {
   }, [setInFlight, key, inFlight])
 
   return {
-    // Refuse to start a second regrade while any regrade for this assignment
-    // is in flight: trackers poll the same regrade.yaml run list and bind by
-    // monotonic id, which assumes one outstanding dispatch at a time.
+    // Refuse a second regrade while any is in flight: trackers bind by monotonic
+    // id, which assumes one outstanding dispatch at a time.
     regrade: () => {
       if (inFlight || !coordinator.canDispatch()) return
       trigger()

@@ -1978,11 +1978,9 @@ export async function triggerRegrade(
   return { sinceRunId }
 }
 
-// Re-run the failed jobs of a workflow run in <org>/classroom50. Used by the
-// activity banner's per-tracker retry on a failed run — re-running only the
-// failed jobs (vs. the whole run) is the cheapest way to recover a transient
-// failure while preserving the run's identity, so the tracker re-binds to the
-// same run as it goes back in progress.
+// Re-run the failed jobs of a run in <org>/classroom50 (the banner's retry).
+// Re-running only failed jobs preserves the run id, so the tracker re-binds to
+// the same run as it goes back in progress.
 export async function rerunFailedRun(
   client: GitHubClient,
   org: string,

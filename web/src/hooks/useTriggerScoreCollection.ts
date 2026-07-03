@@ -14,10 +14,8 @@ import {
 export type CollectScoresPhase = OperationPhase
 
 /**
- * Triggers the collect-scores workflow and tracks the resulting run via the
- * shared useGitHubOperation machine (dispatch -> snapshot baseline -> poll for
- * the oldest newer run -> persist -> bounded timeout). Also registers the
- * dispatch with the global activity banner.
+ * Triggers collect-scores and tracks the run via useGitHubOperation; also
+ * registers the dispatch with the activity banner.
  */
 const useTriggerScoreCollection = (org: string | undefined) => {
   const client = useGitHubClient()
