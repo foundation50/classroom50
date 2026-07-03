@@ -54,7 +54,7 @@ jobs:
       E2E_COLLECT_TOKEN: ${{ secrets.E2E_COLLECT_TOKEN }}
       GOWORK: "off" # the e2e module is standalone; the CLIs build via their replace directives
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:

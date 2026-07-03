@@ -37,7 +37,7 @@ jobs:
       run:
         working-directory: web
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Build the ref the operator chose (a tag to redeploy a release, or a
           # branch/SHA); empty falls back to the ref the run was dispatched on.

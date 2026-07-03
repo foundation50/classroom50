@@ -101,7 +101,7 @@ jobs:
           - { os: linux, arch: arm64 }
           - { os: windows, arch: amd64 }
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-go@v6
         with:
@@ -136,7 +136,7 @@ jobs:
           ls -l "$out"
 
       - name: Upload binary artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: dist-${{ matrix.extension }}-${{ matrix.target.os }}-${{ matrix.target.arch }}
           path: dist/*
@@ -158,7 +158,7 @@ jobs:
         extension: [gh-teacher, gh-student]
     steps:
       - name: Download this extension's binaries
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: dist-${{ matrix.extension }}-*
           merge-multiple: true
@@ -176,7 +176,7 @@ jobs:
       # dispatch run forces it; otherwise skip so testing still publishes.
       - name: Attest build provenance
         if: ${{ !github.event.repository.private || github.event.inputs.attest == 'true' }}
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-path: 'dist/gh-*'
 

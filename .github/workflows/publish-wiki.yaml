@@ -48,7 +48,7 @@ jobs:
       # authored by this identity is treated as an unreconciled upstream edit.
       SYNC_BOT_EMAIL: classroom50-sync@users.noreply.github.com
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Configure git identity
         run: |
