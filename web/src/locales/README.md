@@ -49,16 +49,60 @@ The agent should then:
 The target languages in [`targets.json`](./targets.json) are also produced
 automatically: a GitHub Actions workflow
 ([`.github/workflows/translate-locales.yaml`](../../../.github/workflows/translate-locales.yaml))
-regenerates each target from `en.json` with AWS Bedrock whenever `en.json`
-changes, then opens a single pull request on a separate public translations
-repo carrying every language that regenerated cleanly, for a human to review
-and merge. Batching into one PR means one merge and one GitHub Pages deploy
-rather than one per language. The generator
+patches each target from `en.json` with AWS Bedrock whenever `en.json` changes,
+then opens a single pull request on a separate public translations repo carrying
+every language that patched cleanly, for a human to review and merge. Batching
+into one PR means one merge and one GitHub Pages deploy rather than one per
+language.
+
+It is a **patch**, not a regenerate. Because every pack shares `en.json`'s exact
+key structure, a structural diff of `en.json` maps 1:1 onto every language — the
+same dotted keys are added/modified/removed in each. So per language the CI:
+
+- diffs **our `en.json`** against that language's published **baseline marker**
+  (`markers/<code>.json` in the translations repo — a verbatim copy of the
+  `en.json` the pack was last built against) into `{changed keys, removed keys}`
+  ([`scripts/locale_diff.py`](../../../scripts/locale_diff.py)),
+- downloads the published `<code>.json`,
+- **translates only the changed/added keys** and writes them in, deletes removed
+  keys, and **leaves every other key exactly as published.**
+
+The marker lives in the translations repo and _holds the state we diff against_,
+so the effective diff is always "everything unpublished since this language last
+published" — independent of run cadence, re-runs, or how many `en.json` commits
+happened in between. The publish PR bumps each produced language's
+`markers/<code>.json` to the current `en.json` in the same commit as its pack,
+so the marker advances only when the pack does. A language that fails a run
+keeps its old marker and is caught up on the next run — no gap. (A nice
+byproduct: the PR shows the English diff in `markers/<code>.json` right next to
+the pack diff.)
+
+The generator
 ([`scripts/translate_locales.py`](../../../scripts/translate_locales.py)) uses
 this same `TRANSLATION_PROMPT.md` as its system prompt and gates output with
-`verify_locale.py`, so machine and hand-made packs follow one contract. Hand
-edits are safe: the next run reads the published pack back as its baseline and
-only re-touches strings whose English changed.
+`verify_locale.py`, so machine and hand-made packs follow one contract. A
+language with no marker yet, or a manual `workflow_dispatch`, falls back to a
+full first-time translation. If a patched pack ever fails the structural gate
+(e.g. a pre-existing defect on a key this run didn't touch), CI automatically
+retries that language with a full retranslation — which re-emits every key — and
+only fails the language if it still doesn't pass.
+
+**Retiring a language.** Removing a code from [`targets.json`](./targets.json)
+only stops CI from _updating_ it — the workflow never deletes files from the
+translations repo, so the language's `<code>.json` and `markers/<code>.json`
+stay published (and still offered to users via the registry's `index.json`)
+until you delete them there by hand. To fully retire a language, remove it from
+`targets.json` here **and** delete both files from the translations repo.
+
+### Community contributions are durable
+
+Because CI only ever touches the keys whose English changed, **hand edits to a
+published pack survive verbatim.** Anyone can open a PR against the translations
+repo to fix a wording, adjust a fragment, or add a plural variant; once merged,
+CI will never overwrite that key on later runs — it only re-touches a key if its
+**English source** later changes (a reworded `en.json` value), and only adds
+keys that are genuinely new. This makes the translations repo the place to
+contribute improvements, not a throwaway machine output.
 
 ### Rules the installer enforces
 
