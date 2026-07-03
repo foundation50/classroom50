@@ -133,37 +133,38 @@ provenance attestation on a private repo.
 
 ## Releasing the web app (maintainers)
 
-The web app (classroom50.org) uses a two-branch promotion model. Day-to-day
-work lands on `preview`, which continuously deploys to
+The web app uses a **single-trunk** model. `main` is the default and
+integration branch: feature PRs merge into `main` (squash), and every merge
+continuously deploys to
 [preview.classroom50.org](https://preview.classroom50.org) via
-[`web-deploy-preview`](.github/workflows/web-deploy-preview.yaml). A release is
-a PR merging `preview` -> `main`.
+[`web-deploy-preview`](.github/workflows/web-deploy-preview.yaml). There is no
+separate long-lived `preview` branch to promote from.
 
-Releases are automated with
+Releases to production (classroom50.org) are automated with
 [release-please](https://github.com/googleapis/release-please)
 ([`web-release-please`](.github/workflows/web-release-please.yaml),
 [`release-please-config.json`](release-please-config.json)). You do not tag or
 edit the changelog by hand:
 
-1. Merge `preview` -> `main` as usual. release-please reads the
-   [Conventional Commits](https://www.conventionalcommits.org/) since the last
-   release and maintains a **release PR** on `main` that bumps
+1. Merge feature PRs into `main` as usual (each deploys to preview).
+   release-please reads the [Conventional Commits](https://www.conventionalcommits.org/)
+   since the last release and maintains a **release PR** on `main` that bumps
    `web/package.json` and [`web/CHANGELOG.md`](web/CHANGELOG.md) (`feat:` ->
    minor, `fix:` -> patch, `feat!:`/`fix!:` -> major).
 2. When ready to release, merge that release PR. release-please then tags the
    commit `web-vX.Y.Z` (namespaced apart from the CLI's `cli-v*` tags) and
    publishes the GitHub Release from the changelog.
 3. The same workflow builds the tagged commit and deploys it to
-   classroom50.org — gated on the release actually being created, so a plain
-   merge to `main` never deploys. The version is stamped into the build via
-   `VITE_APP_VERSION` and the running app reports it in the browser console.
+   **classroom50.org** — gated on the release actually being created, so a plain
+   merge to `main` only touches preview, never production. The version is
+   stamped into the build via `VITE_APP_VERSION` and the running app reports it.
 
 To force a specific version (e.g. a first `1.0.0` or a jump), land a commit on
 `main` whose body contains `Release-As: X.Y.Z`.
 
 [`web-deploy`](.github/workflows/web-deploy.yaml) is retained only as a manual
 escape hatch (`workflow_dispatch` with an optional `ref`) to re-publish a chosen
-tag/branch/SHA without cutting a release.
+tag/branch/SHA to production without cutting a release.
 
 Requirement (repo/org Settings, one-time): enable "Allow GitHub Actions to
 create and approve pull requests" so release-please can open its release PR with

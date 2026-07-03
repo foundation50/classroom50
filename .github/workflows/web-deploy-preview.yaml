@@ -2,13 +2,15 @@ name: web Deploy to Preview (preview.classroom50.org)
 
 # Builds the web app (web/) and publishes the built dist/ to the preview repo
 # (foundation50/classroom50-web-preview), whose GitHub Pages serves
-# preview.classroom50.org. Runs on every push to `preview` (scoped to web/**),
-# so day-to-day work merged into the preview branch is continuously deployed.
+# preview.classroom50.org. Runs on every push to `main` (scoped to web/**), so
+# day-to-day work merged into main is continuously deployed to the preview site.
 # Manual runs available via the Actions tab.
 #
-# Branch model: `preview` is the rapid-dev integration branch; a release PR
-# merges preview -> main, and main deploys production (classroom50.org) via
-# web-deploy.yaml.
+# Branch model: single trunk. `main` is the default/integration branch — feature
+# PRs merge into it (squash) and each merge deploys here to preview. Production
+# (classroom50.org) is cut only by merging the release-please Release PR, which
+# tags `web-v*` and deploys via web-release-please.yaml. A release-PR merge is
+# also a push to main, so it redeploys preview too (harmless, same content).
 #
 # Why a separate repo: GitHub Pages allows only one custom domain per repo, so
 # production (classroom50.org) and preview must live in different repos. Source
@@ -16,7 +18,7 @@ name: web Deploy to Preview (preview.classroom50.org)
 
 on:
   push:
-    branches: [preview]
+    branches: [main]
     paths:
       - 'web/**'
       - '.github/workflows/web-deploy-preview.yaml'

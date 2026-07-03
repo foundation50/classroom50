@@ -8,8 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 Releases are automated with
-[release-please](https://github.com/googleapis/release-please): merges to `main`
-(via the `preview -> main` release PR) maintain a release PR that bumps
+[release-please](https://github.com/googleapis/release-please): feature PRs
+merge into `main` and release-please maintains a release PR that bumps
 `web/package.json` and this file from [Conventional Commits](https://www.conventionalcommits.org/)
 (`feat:` -> minor, `fix:` -> patch, `feat!:`/`fix!:` -> major). Merging that
 release PR tags `web-vX.Y.Z`, publishes the GitHub Release, and deploys to
