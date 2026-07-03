@@ -1,5 +1,4 @@
 import type { DueMeta } from "@/types/classroom"
-import { formatDistanceToNow } from "date-fns"
 
 import i18n from "@/i18n"
 import { BASE_LANG } from "@/i18n/customLocale"
@@ -76,14 +75,46 @@ export const formatDueDateTime = (dateString: string): string => {
   return dueDateTimeFormatter().format(date)
 }
 
+// Unlike DateTimeFormat above, an unsupported-but-well-formed tag must fall
+// back to English, not to the browser's default locale — hence the extra
+// supportedLocalesOf check.
+const relativeTimeFormatter = () => {
+  const supported = Intl.RelativeTimeFormat.supportedLocalesOf([
+    resolveLocale(),
+  ])
+  return new Intl.RelativeTimeFormat(supported[0] ?? "en-US", {
+    numeric: "always",
+  })
+}
+
+// Largest whole unit wins. No weeks — day counts up to a month read more
+// naturally on a dashboard; month/year lengths are approximations.
+const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
+  ["year", 365 * 24 * 3600],
+  ["month", 30 * 24 * 3600],
+  ["day", 24 * 3600],
+  ["hour", 3600],
+  ["minute", 60],
+]
+
+// Relative "x ago" / "in x" in the active UI language, via the platform's
+// Intl locale data — sideloaded languages need no per-language bundles.
+export const formatRelativeToNow = (date: Date | number): string => {
+  const diffSeconds = Math.round((new Date(date).getTime() - Date.now()) / 1000)
+  const abs = Math.abs(diffSeconds)
+  const found = RELATIVE_UNITS.find(([, size]) => abs >= size)
+  const [unit, size] = found ?? ["second", 1]
+  const value = Math.trunc(diffSeconds / size)
+  // -0 keeps a zero diff on the past side ("0 seconds ago", not "in 0 seconds").
+  return relativeTimeFormatter().format(value === 0 ? -0 : value, unit)
+}
+
 // Relative "x ago" for an invitation timestamp. Returns null on missing/invalid.
 export const formatInvitedAt = (dateString?: string | null): string | null => {
   if (!dateString) return null
   const date = new Date(dateString)
   if (Number.isNaN(date.getTime())) return null
-  // TODO(i18n): relative-time output is English-only. Localizing needs per-
-  // language date-fns locales (deferred — bundles are heavy).
-  return formatDistanceToNow(date, { addSuffix: true })
+  return formatRelativeToNow(date)
 }
 
 export const isPastDue = (dateString: string): boolean => {

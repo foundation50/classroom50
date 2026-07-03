@@ -1,8 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import i18n from "@/i18n"
+
 import {
   buildDueFields,
   formatDueDate,
   formatDueDateTime,
+  formatInvitedAt,
+  formatRelativeToNow,
   isPastDue,
 } from "./formatDate"
 
@@ -75,6 +80,98 @@ describe("isPastDue", () => {
     vi.setSystemTime(new Date("2026-06-23T12:00:00Z"))
     expect(isPastDue("not-a-date")).toBe(false)
     expect(isPastDue("2026-13-45")).toBe(false)
+  })
+})
+
+describe("formatRelativeToNow", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00Z"))
+  })
+  afterEach(async () => {
+    vi.useRealTimers()
+    await i18n.changeLanguage("en")
+  })
+
+  it("renders the largest whole unit that fits", () => {
+    expect(formatRelativeToNow(new Date("2026-06-23T11:59:30Z"))).toBe(
+      "30 seconds ago",
+    )
+    expect(formatRelativeToNow(new Date("2026-06-23T11:55:00Z"))).toBe(
+      "5 minutes ago",
+    )
+    expect(formatRelativeToNow(new Date("2026-06-23T09:00:00Z"))).toBe(
+      "3 hours ago",
+    )
+    expect(formatRelativeToNow(new Date("2026-06-20T12:00:00Z"))).toBe(
+      "3 days ago",
+    )
+    expect(formatRelativeToNow(new Date("2026-04-24T12:00:00Z"))).toBe(
+      "2 months ago",
+    )
+    expect(formatRelativeToNow(new Date("2024-06-23T12:00:00Z"))).toBe(
+      "2 years ago",
+    )
+  })
+
+  it("renders a zero/sub-second difference as past, not future", () => {
+    expect(formatRelativeToNow(new Date("2026-06-23T12:00:00Z"))).toBe(
+      "0 seconds ago",
+    )
+  })
+
+  it("renders a future instant with an 'in' prefix", () => {
+    expect(formatRelativeToNow(new Date("2026-06-23T12:05:00Z"))).toBe(
+      "in 5 minutes",
+    )
+  })
+
+  it("accepts an epoch-milliseconds timestamp", () => {
+    expect(formatRelativeToNow(Date.now() - 5 * 60_000)).toBe("5 minutes ago")
+  })
+
+  it("renders in the active UI language", async () => {
+    await i18n.changeLanguage("de")
+    expect(formatRelativeToNow(new Date("2026-06-20T12:00:00Z"))).toBe(
+      "vor 3 Tagen",
+    )
+  })
+
+  it("falls back to English when the language has no locale data", async () => {
+    // Well-formed BCP-47 tag with no CLDR data behind it.
+    await i18n.changeLanguage("xq")
+    expect(formatRelativeToNow(new Date("2026-06-20T12:00:00Z"))).toBe(
+      "3 days ago",
+    )
+  })
+
+  it("falls back to English for a malformed language code", async () => {
+    // A sideloaded pack code that Intl rejects must not make rendering throw.
+    await i18n.changeLanguage("123")
+    expect(formatRelativeToNow(new Date("2026-06-20T12:00:00Z"))).toBe(
+      "3 days ago",
+    )
+  })
+})
+
+describe("formatInvitedAt", () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-06-23T12:00:00Z"))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it("renders a relative timestamp", () => {
+    expect(formatInvitedAt("2026-06-20T12:00:00Z")).toBe("3 days ago")
+  })
+
+  it("returns null for missing or unparseable input", () => {
+    expect(formatInvitedAt(undefined)).toBeNull()
+    expect(formatInvitedAt(null)).toBeNull()
+    expect(formatInvitedAt("")).toBeNull()
+    expect(formatInvitedAt("not-a-date")).toBeNull()
   })
 })
 

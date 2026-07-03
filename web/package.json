@@ -22,7 +22,6 @@
     "@tanstack/react-query": "^5.100.10",
     "@tanstack/react-router": "^1.168.25",
     "canvas-confetti": "^1.9.4",
-    "date-fns": "^4.4.0",
     "i18next": "^26.3.4",
     "libsodium-wrappers": "^0.8.4",
     "lucide-react": "^1.12.0",

@@ -61,8 +61,7 @@ import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
 } from "@/hooks/github/mutations"
-import { formatDueDateTime } from "@/util/formatDate"
-import { formatDistanceToNow } from "date-fns"
+import { formatDueDateTime, formatRelativeToNow } from "@/util/formatDate"
 
 // Re-renders on an interval to keep relative timestamps fresh; returns nothing.
 const usePeriodicRerender = (intervalMs = 30_000) => {
@@ -146,7 +145,7 @@ const SubmissionsPageContent = () => {
   const secret = classroomMeta?.secret
   const scoresLastUpdated =
     scoresUpdatedAt > 0
-      ? formatDistanceToNow(scoresUpdatedAt, { addSuffix: true })
+      ? formatRelativeToNow(scoresUpdatedAt)
       : t("submissions.dashboard.never")
 
   const assignmentSubmitUrl =
@@ -376,7 +375,7 @@ const SubmissionsPageContent = () => {
 
   const lastCollectedLabel =
     lastRun?.status === "completed" && lastRun.created_at
-      ? formatDistanceToNow(new Date(lastRun.created_at), { addSuffix: true })
+      ? formatRelativeToNow(new Date(lastRun.created_at))
       : null
 
   // Refresh scores and the last-run timestamp once a manual collection finishes.

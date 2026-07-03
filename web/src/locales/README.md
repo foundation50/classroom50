@@ -179,8 +179,5 @@ validation/installation API lives in
 
 ## Known limitations
 
-- Relative timestamps ("3 days ago") are English-only for now (date-fns
-  locales are not sideloaded). Absolute dates follow the active language via
-  `Intl`.
 - A handful of strings asserted by unit tests in the `orgMembers` logic files
   remain English.
