@@ -11,6 +11,9 @@ on:
       - 'cli/shared/**'
       - '.github/workflows/cli-shared-ci.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
