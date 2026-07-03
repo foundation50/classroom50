@@ -1721,6 +1721,13 @@ export async function acceptAssignment(params: {
 
   // Best-effort: auto-accept a pending org invite. Failures are ignored (the
   // student may already be a member), so this isn't a tracked step.
+  //
+  // TODO(#66 follow-up): a SAML-SSO-gated 403 here (org enforces SSO and this
+  // token has no live SSO session) surfaces later as a generic step failure
+  // (repo/access), not the SSO-aware screen the accept gate now renders. The
+  // gate covers the common case (initial membership read); routing this
+  // mutation-side SSO 403 to the same "Authorize single sign-on" affordance is
+  // still open.
   await acceptPendingOrgInvite(client, org)
 
   const assignment = await withAcceptStep(
