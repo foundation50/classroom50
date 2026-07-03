@@ -56,7 +56,7 @@ jobs:
       mode:           ${{ steps.read.outputs.mode }}
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           # Full history -- the acceptance check walks back to the commit
           # that added .classroom50.yaml; a shallow clone hides it.
@@ -540,7 +540,7 @@ jobs:
       # runner.py removes disallowed files before grading. "[]" = allow all.
       ALLOWED_FILES:  ${{ needs.setup.outputs.allowed-files }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           ref: ${{ needs.setup.outputs.submission-tag }}
           # Full history -- runner.py needs the student's baseline
@@ -554,18 +554,18 @@ jobs:
           python-version: ${{ needs.setup.outputs.python }}
 
       - if: needs.setup.outputs.node != ''
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.setup.outputs.node }}
 
       - if: needs.setup.outputs.java != ''
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ needs.setup.outputs.java }}
 
       - if: needs.setup.outputs.go != ''
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@v6
         with:
           go-version: ${{ needs.setup.outputs.go }}
 

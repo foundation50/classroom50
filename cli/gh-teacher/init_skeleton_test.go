@@ -294,11 +294,11 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		"if: needs.setup.outputs.python != ''",
 		"actions/setup-python@v6",
 		"if: needs.setup.outputs.node != ''",
-		"actions/setup-node@v4",
+		"actions/setup-node@v6",
 		"if: needs.setup.outputs.java != ''",
-		"actions/setup-java@v4",
+		"actions/setup-java@v5",
 		"if: needs.setup.outputs.go != ''",
-		"actions/setup-go@v5",
+		"actions/setup-go@v6",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)
