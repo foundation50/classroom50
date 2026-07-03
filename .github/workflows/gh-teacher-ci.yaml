@@ -13,6 +13,9 @@ on:
       - 'cli/shared/**'
       - '.github/workflows/gh-teacher-ci.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest

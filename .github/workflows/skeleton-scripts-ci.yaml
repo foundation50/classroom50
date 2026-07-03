@@ -47,6 +47,9 @@ on:
       - 'examples/declarative-tests/tests.json'
       - '.github/workflows/skeleton-scripts-ci.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   pytest:
     runs-on: ubuntu-latest

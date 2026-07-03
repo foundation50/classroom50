@@ -13,6 +13,9 @@ on:
       - 'cli/shared/**'
       - '.github/workflows/gh-student-ci.yaml'
 
+permissions:
+  contents: read
+
 jobs:
   build:
     runs-on: ubuntu-latest
