@@ -16,7 +16,6 @@ import {
   Sun,
   Moon,
   Languages,
-  X,
   Info,
 } from "lucide-react"
 import {
@@ -45,7 +44,7 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
-import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
+import { LanguageDialog } from "@/components/LanguageDialog"
 import { AboutDialog } from "@/components/AboutDialog"
 import type { Classroom } from "@/types/classroom"
 import {
@@ -920,34 +919,7 @@ export const SidebarFooter = () => {
       </div>
 
       {createPortal(
-        <dialog
-          ref={langDialogRef}
-          className="modal"
-          aria-labelledby={langDialogTitleId}
-        >
-          <div className="modal-box flex max-h-[85vh] max-w-lg flex-col overflow-y-auto text-base-content">
-            <form method="dialog">
-              <button
-                className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-                aria-label={t("common.close")}
-              >
-                <X className="size-4" aria-hidden="true" />
-              </button>
-            </form>
-            <h3 id={langDialogTitleId} className="text-lg font-bold">
-              {t("nav.languageDialogTitle")}
-            </h3>
-            <p className="mt-1 mb-4 text-sm text-base-content/70">
-              {t("nav.languageDialogDescription")}
-            </p>
-            <LanguageSwitcher
-              onApplied={() => langDialogRef.current?.close()}
-            />
-          </div>
-          <form method="dialog" className="modal-backdrop">
-            <button>{t("common.close")}</button>
-          </form>
-        </dialog>,
+        <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />,
         document.body,
       )}
 

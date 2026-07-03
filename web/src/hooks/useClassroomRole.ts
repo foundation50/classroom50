@@ -2,10 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { orgMembershipQuery } from "./github/queries"
 import { useGitHubRepo } from "./github/hooks"
-import {
-  GitHubAPIError,
-  retryTransientNotFoundForbidden,
-} from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { resolveTeacherVerdict } from "./useCourseTeacherAccess"
 import { staffTeamName } from "./github/mutations"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
@@ -225,11 +222,11 @@ export function useClassroomRole(
     // orgMembershipQuery defaults to retry:false, but a transient blip on the
     // membership read must self-heal rather than pin isOwner at `undefined`
     // (which would silently demote a real owner). A 404/403 is definitive.
-    retry: retryTransientNotFoundForbidden,
+    retry: retryTransientGitHubError,
   })
 
   const staffRepoQuery = useGitHubRepo(org, "classroom50", {
-    retry: retryTransientNotFoundForbidden,
+    retry: retryTransientGitHubError,
   })
   const staff = resolveTeacherVerdict({
     org,

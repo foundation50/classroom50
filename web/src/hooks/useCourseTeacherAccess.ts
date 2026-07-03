@@ -1,9 +1,6 @@
 import { useGitHubRepo } from "./github/hooks"
 import { useParams } from "@tanstack/react-router"
-import {
-  GitHubAPIError,
-  retryTransientNotFoundForbidden,
-} from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import type { ViewAsRole } from "./useClassroomRole"
 
@@ -98,7 +95,7 @@ export function useCourseTeacherAccess(org: string | undefined) {
   // a definitive verdict and must not be retried, but a 5xx/429/network blip
   // should self-heal instead of stranding the role unresolved.
   const repoQuery = useGitHubRepo(org, teacherRepo, {
-    retry: retryTransientNotFoundForbidden,
+    retry: retryTransientGitHubError,
   })
 
   const verdict = resolveTeacherVerdict({

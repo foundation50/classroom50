@@ -64,8 +64,9 @@ export const LanguageSwitcher = ({
   const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
     null,
   )
-  // Synchronous re-entry lock for prepares: `busy` is async React state, so a
-  // fast second click can fire before it re-renders. A ref flips immediately.
+  // Synchronous re-entry lock shared by all prepare entry points (file, URL,
+  // built-in): `busy` is async React state, so a fast second click can fire
+  // before it re-renders. A ref flips immediately. Owned by runPrepare.
   const preparingRef = useRef(false)
 
   const showError = (err: unknown) => {
@@ -86,6 +87,13 @@ export const LanguageSwitcher = ({
     // (the cards render below all sections; a detached preview is confusing).
     section: "add" | "install",
   ) => {
+    // Synchronous re-entry lock shared by all prepare entry points (file, URL,
+    // built-in). `busy` is async React state, so a fast second click or an
+    // overlapping URL/file prepare would otherwise race two fetches over the
+    // shared preview and let the last fetch to resolve win — installing a pack
+    // that isn't the one the user last chose. The ref flips immediately.
+    if (preparingRef.current) return
+    preparingRef.current = true
     setError(null)
     setPreview(null)
     setBusy(true)
@@ -97,6 +105,7 @@ export const LanguageSwitcher = ({
       setOpenSection(section)
     } finally {
       setBusy(false)
+      preparingRef.current = false
     }
   }
 
@@ -154,17 +163,15 @@ export const LanguageSwitcher = ({
   }
 
   const handleBuiltIn = async (builtInCode: string) => {
-    // Guard synchronously: two fast clicks would otherwise race two prepares
-    // over the shared preview/preparingCode, letting the last fetch to resolve
-    // win and install a pack that isn't the one last clicked.
+    // The re-entry lock now lives in runPrepare (shared across all entry
+    // points), so a second concurrent click is a no-op there. Set preparingCode
+    // for the per-row spinner; runPrepare's guard prevents the racing install.
     if (preparingRef.current) return
-    preparingRef.current = true
     setPreparingCode(builtInCode)
     try {
       await runPrepare(() => prepareFromBuiltIn(builtInCode), "add")
     } finally {
       setPreparingCode(null)
-      preparingRef.current = false
     }
   }
 

@@ -94,7 +94,7 @@ function useGithubAuthState() {
     // the session settles. Transient failures (5xx / network) still self-heal
     // with a bounded retry so a momentary GitHub blip doesn't eject a signed-in
     // user. Shares the definitive-status policy with the GitHub-client reads
-    // (see retryTransientNotFoundForbidden / isDefinitiveGitHubStatus).
+    // (see retryTransientGitHubError / isDefinitiveGitHubStatus).
     retry: (failureCount, error) => {
       if (
         error instanceof GitHubUserFetchError &&
