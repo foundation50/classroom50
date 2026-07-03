@@ -2,8 +2,11 @@
   "actionsBanner": {
     "totalActions_one": "{{count}} action",
     "totalActions_other": "{{count}} actions",
+    "failedActions_one": "{{count}} action failed",
+    "failedActions_other": "{{count}} actions failed",
     "viewRun": "View run",
     "retry": "Retry",
+    "retryFailed": "Couldn't re-run the action: {{detail}}",
     "dismiss": "Dismiss",
     "workflow": {
       "publishPages": "Publishing to student site",

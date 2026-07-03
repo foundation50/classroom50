@@ -33,8 +33,8 @@ createRoot(document.getElementById("root")!).render(
             <ActionActivityProvider>
               <NotificationProvider>
                 <App />
+                <ActionsBanner />
               </NotificationProvider>
-              <ActionsBanner />
             </ActionActivityProvider>
             {import.meta.env.DEV && (
               <ReactQueryDevtools initialIsOpen={false} />

@@ -1,5 +1,10 @@
-import { useEffect, useState } from "react"
-import { AnimatePresence, motion } from "motion/react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import {
+  AnimatePresence,
+  motion,
+  useMotionValue,
+  useMotionValueEvent,
+} from "motion/react"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -12,8 +17,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
-import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed"
-import { calloutVariants } from "@/lib/motion"
+import { DURATION, EASE_OUT } from "@/lib/motion"
 
 // Compact elapsed duration (e.g. "8s", "1m 12s", "3m"). Under a minute shows
 // seconds; from a minute up shows m + s (s omitted once past ~an hour to stay
@@ -169,11 +173,116 @@ const TrackerRow = ({
   )
 }
 
-export function ActionsBanner() {
+// The banner's inner content (one row, or the expandable multi-row header +
+// list). Extracted so it can render both in a hidden measuring probe — to learn
+// the height before the animated bar mounts, so the slide-in starts from the
+// real offset — and in the visible animated bar itself.
+const BannerBody = ({
+  trackers,
+  primary,
+  primaryPhase,
+  attentionCount,
+  single,
+  showList,
+  setExpanded,
+  dismiss,
+  retry,
+  retrying,
+  now,
+}: {
+  trackers: Tracker[]
+  primary: Tracker | undefined
+  primaryPhase: Tracker["phase"]
+  // Failed actions the header isn't itself leading with — surfaced as a
+  // "needs attention" error badge, independent of the bar's own tone.
+  attentionCount: number
+  single: boolean
+  showList: boolean
+  setExpanded: (fn: (v: boolean) => boolean) => void
+  dismiss: (id: string) => void
+  retry: (id: string) => void
+  retrying: ReadonlySet<string>
+  now: number
+}) => {
   const { t } = useTranslation()
-  const { trackers, runningCount, anyFailed, dismiss, retry, retrying } =
+  if (single) {
+    // One action: show it directly in the bar.
+    return (
+      <div className="px-4 py-2.5">
+        <TrackerRow
+          tracker={trackers[0]}
+          onDismiss={dismiss}
+          onRetry={retry}
+          retrying={retrying.has(trackers[0].id)}
+          now={now}
+          compact
+        />
+      </div>
+    )
+  }
+  // Several actions: the most recent leads, with a total-count badge; expand to
+  // see them all.
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        aria-expanded={showList}
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
+      >
+        <StatusIcon phase={primaryPhase} />
+        <span className="min-w-0 flex-1 truncate text-sm font-medium">
+          {primary?.label}
+        </span>
+        {attentionCount > 0 && (
+          <span
+            className="flex shrink-0 items-center gap-1 rounded-full bg-error px-2 py-0.5 text-xs font-semibold text-error-content"
+            aria-label={t("actionsBanner.failedActions", {
+              count: attentionCount,
+            })}
+          >
+            <AlertTriangle aria-hidden="true" className="size-3.5" />
+            {attentionCount}
+          </span>
+        )}
+        <span
+          className="shrink-0 rounded-full bg-black/15 px-2 py-0.5 text-xs font-semibold"
+          aria-label={t("actionsBanner.totalActions", {
+            count: trackers.length,
+          })}
+        >
+          {trackers.length}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className={`size-4 shrink-0 opacity-70 transition-transform ${
+            showList ? "rotate-180" : ""
+          }`}
+        />
+      </button>
+
+      {showList && (
+        <ul className="flex w-full flex-col gap-1 bg-base-100 p-2 text-base-content">
+          {trackers.map((tracker) => (
+            <li key={tracker.id}>
+              <TrackerRow
+                tracker={tracker}
+                onDismiss={dismiss}
+                onRetry={retry}
+                retrying={retrying.has(tracker.id)}
+                now={now}
+              />
+            </li>
+          ))}
+        </ul>
+      )}
+    </>
+  )
+}
+
+export function ActionsBanner() {
+  const { trackers, anyFailed, dismiss, retry, retrying } =
     useActionActivity()
-  const collapsed = useSidebarCollapsed()
   const [expanded, setExpanded] = useState(false)
 
   // A shared 1s clock so running rows advance their elapsed time in step. Only
@@ -191,10 +300,10 @@ export function ActionsBanner() {
   }, [anyRunning])
 
   // Hold the banner back until the page has painted, so on a browser refresh it
-  // fades in AFTER the app content rather than flashing in with (or before) the
-  // page. A short post-mount delay lets the initial render settle; the existing
-  // AnimatePresence + calloutVariants then plays the fade-in. Gate on
-  // document.readyState so a slow initial load waits for it too.
+  // slides in AFTER the app content rather than flashing in with (or before) the
+  // page. A short post-mount delay lets the initial render settle; the
+  // AnimatePresence slide-in below then plays. Gate on document.readyState so a
+  // slow initial load waits for it too.
   const [ready, setReady] = useState(false)
   useEffect(() => {
     let timer: number | undefined
@@ -217,101 +326,137 @@ export function ActionsBanner() {
   const single = trackers.length === 1
   const canExpand = trackers.length > 1
 
-  // Tone: any failure -> error (red); else all done (no running) -> success
-  // (green); else working -> warning (orange). Solid fill with the matching
-  // -content text/icon color so it reads as a clear status bar, not a wash.
-  const tone = anyFailed
-    ? "border-error bg-error text-error-content"
-    : runningCount === 0
-      ? "border-success bg-success text-success-content"
-      : "border-warning bg-warning text-warning-content"
+  // The collapsed header always leads with the LATEST action (trackers are
+  // newest first), so a new action taken after a failure takes over the title —
+  // the teacher sees what they just did, not the stale failure. The header icon
+  // reflects the latest action's own phase so icon and label stay coherent.
+  const primary = trackers[0]
+  const primaryPhase = primary?.phase ?? "running"
+  const failedCount = trackers.filter((tr) => tr.phase === "failed").length
 
-  const offsetClass = collapsed ? "left-0 lg:left-16" : "left-0 lg:left-60"
+  // Tone follows the LATEST action's own phase, so the bar honestly reflects
+  // what just happened — green when it succeeded, orange while it's working,
+  // red only when the latest action itself failed. A failure in an OLDER action
+  // is NOT allowed to repaint the whole bar red (that would mislabel a
+  // succeeding action); it surfaces instead as the "needs attention" error
+  // badge below, which is the single cross-state failure signal. Solid fill
+  // with the matching -content text/icon color so it reads as a clear status
+  // bar, not a wash.
+  const tone =
+    primaryPhase === "failed"
+      ? "border-error bg-error text-error-content"
+      : primaryPhase === "success"
+        ? "border-success bg-success text-success-content"
+        : "border-warning bg-warning text-warning-content"
 
-  // The collapsed header leads with the most relevant action (trackers are
-  // newest first): when anything failed, the most recent FAILED action leads so
-  // the red banner names a real problem; otherwise the most recent action. Its
-  // own phase drives the header icon so icon, label, and tone stay coherent.
-  const primary =
-    (anyFailed && trackers.find((tr) => tr.phase === "failed")) || trackers[0]
-  const primaryIconPhase = primary?.phase ?? "running"
+  // Other actions that failed but aren't the one leading the header — the count
+  // the "needs attention" badge shows. When the latest action IS the failure,
+  // the bar is already red and the badge would be redundant, so exclude it.
+  const attentionCount =
+    primaryPhase === "failed" ? failedCount - 1 : failedCount
 
   const showList = canExpand && expanded
 
+  // Reserve vertical space equal to the banner's height so it PUSHES the app
+  // down instead of overlaying the content beneath it (a fixed bar would sit on
+  // top of a page heading). The banner is a full-width bar fixed at the top,
+  // mounted above the router so it survives route changes; that takes it out of
+  // normal flow, so we mirror its position onto document.body's padding-top,
+  // which shifts the whole app (sidebar and content) down as one.
+  //
+  // Enter/exit slide vertically: `y` runs from -height (fully above the
+  // viewport) to 0 on enter, and back on exit. The reserved padding is derived
+  // as height + y, so the app top tracks the banner's bottom edge frame-for-
+  // frame — the banner slides up and the app slides up to fill the gap together,
+  // with no snap when it finally unmounts. Height is measured from the inner
+  // content (unaffected by the slide) via a ResizeObserver so expanding the
+  // list keeps the reserved space in sync.
+  const contentRef = useRef<HTMLDivElement | null>(null)
+  const [bannerHeight, setBannerHeight] = useState(0)
+  useLayoutEffect(() => {
+    const el = contentRef.current
+    if (!el) return
+    const measure = () => setBannerHeight(el.getBoundingClientRect().height)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [visible])
+
+  // `y` is the banner's vertical offset, animated by Framer on enter/exit.
+  // Reserved body padding = height + y, so it tracks the slide (y changes every
+  // frame) and a height change (measure / list expand). The exit animation
+  // drives y to -height, sliding the app up in lockstep; AnimatePresence's
+  // onExitComplete below then hard-clears the gap so a reduced-motion or
+  // interrupted exit (where y may never reach exactly -height) can't strand a
+  // permanent top gap across the whole app.
+  const y = useMotionValue(-bannerHeight)
+  useMotionValueEvent(y, "change", (value) => {
+    const px = Math.max(0, bannerHeight + value)
+    document.body.style.paddingTop = px > 0 ? `${px}px` : ""
+  })
+  useEffect(() => {
+    if (!visible) return
+    const px = Math.max(0, bannerHeight + y.get())
+    document.body.style.paddingTop = px > 0 ? `${px}px` : ""
+    return () => {
+      document.body.style.paddingTop = ""
+    }
+  }, [visible, bannerHeight, y])
+  const clearReservedGap = () => {
+    document.body.style.paddingTop = ""
+  }
+
+  const body = (
+    <BannerBody
+      trackers={trackers}
+      primary={primary}
+      primaryPhase={primaryPhase}
+      attentionCount={attentionCount}
+      single={single}
+      showList={showList}
+      setExpanded={setExpanded}
+      dismiss={dismiss}
+      retry={retry}
+      retrying={retrying}
+      now={now}
+    />
+  )
+
   return (
-    <div
-      className={`pointer-events-none fixed right-0 top-0 z-50 ${offsetClass}`}
-    >
-      <AnimatePresence>
-        {visible && (
+    <div className="pointer-events-none fixed inset-x-0 top-0 z-50">
+      {/* Hidden probe: mounted whenever the banner is visible so its height is
+          known BEFORE the animated bar mounts, letting the slide-in start from
+          the true offset (a slide can't animate from an as-yet-unmeasured
+          height). Laid out (not display:none) so it has a real height, but
+          invisible and inert. */}
+      {visible && (
+        <div
+          ref={contentRef}
+          aria-hidden="true"
+          className="pointer-events-none invisible absolute inset-x-0 top-0 w-full border-b"
+        >
+          {body}
+        </div>
+      )}
+      <AnimatePresence onExitComplete={clearReservedGap}>
+        {visible && bannerHeight > 0 && (
           <motion.div
-            variants={calloutVariants}
-            initial="initial"
-            animate="animate"
-            exit="exit"
+            style={{ y }}
+            initial={{ y: -bannerHeight }}
+            animate={{
+              y: 0,
+              transition: { duration: DURATION.slow, ease: EASE_OUT },
+            }}
+            exit={{
+              y: -bannerHeight,
+              transition: { duration: DURATION.base, ease: EASE_OUT },
+            }}
             role="status"
             aria-live={anyFailed ? "assertive" : "polite"}
             className={`pointer-events-auto w-full border-b shadow-sm ${tone}`}
           >
-            {single ? (
-              // One action: show it directly in the bar.
-              <div className="px-4 py-2.5">
-                <TrackerRow
-                  tracker={trackers[0]}
-                  onDismiss={dismiss}
-                  onRetry={retry}
-                  retrying={retrying.has(trackers[0].id)}
-                  now={now}
-                  compact
-                />
-              </div>
-            ) : (
-              // Several actions: the most recent leads, with a total-count
-              // badge; expand to see them all.
-              <>
-                <button
-                  type="button"
-                  onClick={() => setExpanded((v) => !v)}
-                  aria-expanded={showList}
-                  className="flex w-full items-center gap-3 px-4 py-2.5 text-left"
-                >
-                  <StatusIcon phase={primaryIconPhase} />
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {primary?.label}
-                  </span>
-                  <span
-                    className="shrink-0 rounded-full bg-black/15 px-2 py-0.5 text-xs font-semibold"
-                    aria-label={t("actionsBanner.totalActions", {
-                      count: trackers.length,
-                    })}
-                  >
-                    {trackers.length}
-                  </span>
-                  <ChevronDown
-                    aria-hidden="true"
-                    className={`size-4 shrink-0 opacity-70 transition-transform ${
-                      showList ? "rotate-180" : ""
-                    }`}
-                  />
-                </button>
-
-                {showList && (
-                  <ul className="flex w-full flex-col gap-1 bg-base-100 p-2 text-base-content">
-                    {trackers.map((tracker) => (
-                      <li key={tracker.id}>
-                        <TrackerRow
-                          tracker={tracker}
-                          onDismiss={dismiss}
-                          onRetry={retry}
-                          retrying={retrying.has(tracker.id)}
-                          now={now}
-                        />
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </>
-            )}
+            {body}
           </motion.div>
         )}
       </AnimatePresence>

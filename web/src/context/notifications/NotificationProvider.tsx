@@ -173,3 +173,10 @@ export function useToast() {
   }
   return ctx
 }
+
+// Like useToast() but returns null instead of throwing when no provider is
+// mounted, for consumers that render both inside and outside the provider
+// (e.g. the activity banner in isolation/tests) and want a best-effort notify.
+export function useOptionalToast() {
+  return useContext(NotificationContext)
+}

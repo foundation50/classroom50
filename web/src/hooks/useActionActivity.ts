@@ -3,11 +3,17 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, listActiveAndRecentRuns } from "@/hooks/github/queries"
+import {
+  activityRunsKey,
+  listActiveAndRecentRuns,
+} from "@/hooks/github/activityRuns"
 import { rerunFailedRun } from "@/hooks/github/mutations"
+import type { GitHubWorkflowRun } from "@/hooks/github/types"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
+import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { useActiveOrg } from "@/hooks/useActiveOrg"
 import {
+  isRunning,
   nowMs,
   resolveOpRun,
   runTimes,
@@ -77,8 +83,6 @@ export type Tracker = {
 export type ActionActivity = {
   org: string | undefined
   trackers: Tracker[]
-  // Trackers that are still working (pending or running).
-  runningCount: number
   anyFailed: boolean
   // Dismiss a failed tracker (by its id).
   dismiss: (id: string) => void
@@ -100,6 +104,7 @@ export function useActionActivity(): ActionActivity {
   const client = useOptionalGitHubClient()
   const { operationsForOrg, lastRegisteredAt, isDismissed, dismiss, clearOp } =
     useActionActivityRegistry()
+  const toast = useOptionalToast()
   const queryClient = useQueryClient()
 
   const registeredAt = lastRegisteredAt(org)
@@ -130,24 +135,48 @@ export function useActionActivity(): ActionActivity {
   const [optimisticRunning, setOptimisticRunning] = useState<Set<string>>(
     new Set(),
   )
+  // Wall-clock time of the last retry per op. A retry is a fresh action from the
+  // teacher's point of view, so the retried tracker jumps to the front of the
+  // banner (leads the collapsed header) — ordering below sorts a retried op by
+  // this timestamp ahead of its original registration order.
+  const [retriedAt, setRetriedAt] = useState<Record<string, number>>({})
+
+  // Registered session ops for this org (oldest first). Read before the query
+  // so the poll cadence can keep a slow poll alive while any op is still
+  // outstanding (e.g. a publish-pages deploy whose run takes longer than the
+  // expecting window to appear), rather than stopping the moment the runs list
+  // is momentarily empty.
+  const ops = operationsForOrg(org)
 
   const runsQuery = useQuery({
-    queryKey: githubKeys.repoActionsRuns(org ?? "", "active-and-recent"),
+    queryKey: activityRunsKey(org ?? ""),
     queryFn: ({ signal }) => listActiveAndRecentRuns(client!, org ?? "", signal),
     enabled: Boolean(org && client),
     // Poll fast while anything is running OR a dispatch/retry is still expected
     // to surface, so the banner reacts about as quickly as the per-op trackers;
-    // back off to the idle cadence once the expecting window passes.
+    // slow to the idle cadence once nothing is in flight but a recently-finished
+    // run is still shown; and STOP entirely (return false) once there is truly
+    // nothing active and nothing expected. A new dispatch/retry re-arms the poll
+    // via the register()-driven invalidate + bumpExpecting, so a fully idle tab
+    // doesn't burn GitHub REST budget forever (esp. combined with background
+    // polling below).
     refetchInterval: (query) => {
       const runs = query.state.data ?? []
-      const anyRunning = runs.some((r) => r.status !== "completed")
+      const anyRunning = runs.some(isRunning)
       const expecting = nowMs() < expectingUntil
-      return anyRunning || expecting || optimisticRunning.size > 0
-        ? POLL_ACTIVE_MS
-        : POLL_IDLE_MS
+      if (anyRunning || expecting || optimisticRunning.size > 0) {
+        return POLL_ACTIVE_MS
+      }
+      // Nothing in flight. Keep a slow poll only while recently-finished runs
+      // are still on screen OR a registered op is still outstanding (so a run
+      // that completes elsewhere, or a not-yet-surfaced deploy, still updates);
+      // once there's genuinely nothing to track, stop.
+      return runs.length > 0 || ops.length > 0 ? POLL_IDLE_MS : false
     },
-    // Keep polling while the tab is backgrounded — a teacher often watches the
-    // run on github.com in another tab, and the banner must still update here.
+    // Keep polling while the tab is backgrounded so a teacher watching the run
+    // on github.com in another tab still sees the banner update. Combined with
+    // the refetchInterval above, a truly idle tab stops (returns false), so this
+    // doesn't become an unbounded background drain.
     refetchIntervalInBackground: true,
     retry: false,
     staleTime: 0,
@@ -155,7 +184,6 @@ export function useActionActivity(): ActionActivity {
   })
 
   const allRuns = runsQuery.data ?? []
-  const ops = operationsForOrg(org)
 
   // On settle of a retry, drop its in-flight flag and refetch so the banner
   // picks up the real in-flight run. On ERROR (e.g. GitHub rejects the re-run —
@@ -166,12 +194,24 @@ export function useActionActivity(): ActionActivity {
   const retryMutation = useMutation({
     mutationFn: ({ runId }: { trackerId: string; runId: number }) =>
       rerunFailedRun(client!, org ?? "", runId),
-    onError: (_err, { trackerId }) => {
+    onError: (err, { trackerId }) => {
       setOptimisticRunning((prev) => {
         if (!prev.has(trackerId)) return prev
         const next = new Set(prev)
         next.delete(trackerId)
         return next
+      })
+      // Surface the rejection so the teacher learns the RETRY itself failed
+      // (e.g. 403 not-rerunnable, token lacks Actions:write, run too old) rather
+      // than silently snapping back to "failed" and re-clicking into the same
+      // rejection. Keyed so repeated retries replace the toast instead of
+      // stacking. Best-effort: no-op if rendered outside a NotificationProvider.
+      const detail = err instanceof Error ? err.message : String(err)
+      toast?.notify({
+        tone: "error",
+        message: t("actionsBanner.retryFailed", { detail }),
+        key: `actionsBanner.retryFailed.${trackerId}`,
+        durationMs: 8000,
       })
     },
     onSettled: (_data, _err, { trackerId }) => {
@@ -182,7 +222,7 @@ export function useActionActivity(): ActionActivity {
       })
       if (org) {
         void queryClient.invalidateQueries({
-          queryKey: githubKeys.repoActionsRuns(org, "active-and-recent"),
+          queryKey: activityRunsKey(org),
         })
       }
     },
@@ -196,7 +236,7 @@ export function useActionActivity(): ActionActivity {
     lastSeenRegisteredAt.current = registeredAt
     bumpExpecting()
     void queryClient.invalidateQueries({
-      queryKey: githubKeys.repoActionsRuns(org, "active-and-recent"),
+      queryKey: activityRunsKey(org),
     })
   }, [registeredAt, org, queryClient, bumpExpecting])
 
@@ -219,14 +259,22 @@ export function useActionActivity(): ActionActivity {
   const runsById = new Map(allRuns.map((r) => [r.id, r]))
   const resolved = ops.map((op) => {
     const remembered = boundRunId[op.id]
-    // Prefer the remembered run if it's still in the polled window and not
-    // already claimed by an earlier op this pass.
-    let run =
-      remembered !== undefined && !claimed.has(remembered)
-        ? (runsById.get(remembered) ?? null)
-        : null
-    if (!run) run = resolveOpRun(op, allRuns, claimed)
-    if (run) claimed.add(run.id)
+    // Once an op has bound to a run, it stays pinned to THAT run — it never
+    // re-resolves. A poll that transiently omits the bound run (it scrolled out
+    // of the window, or one of the 3 status pages briefly missed it) yields
+    // `null` here, which reads as pending/latched — NOT a fall-through to
+    // resolveOpRun, which would re-bind this op onto a sibling's still-present
+    // run (wrong URL/phase/elapsed, and a wrong terminal phase could latch).
+    // Claim the remembered id even when absent so a concurrent same-workflow
+    // sibling can't grab it either.
+    let run: GitHubWorkflowRun | null
+    if (remembered !== undefined) {
+      run = claimed.has(remembered) ? null : (runsById.get(remembered) ?? null)
+      claimed.add(remembered)
+    } else {
+      run = resolveOpRun(op, allRuns, claimed)
+      if (run) claimed.add(run.id)
+    }
     const realPhase = trackerPhase(run)
     // A just-retried op shows "running" optimistically until the poll observes
     // the re-run genuinely in flight (or it settles again).
@@ -366,7 +414,7 @@ export function useActionActivity(): ActionActivity {
   // (cron, another teacher). Shown while running; they simply drop when they
   // finish (we don't own their success/failure lifecycle).
   const discoveredTrackers: Tracker[] = allRuns
-    .filter((r) => r.status !== "completed")
+    .filter(isRunning)
     .filter((r) => !claimed.has(r.id))
     .map((r) => {
       const file = workflowFile(r)
@@ -388,31 +436,60 @@ export function useActionActivity(): ActionActivity {
       }
     })
 
-  // Newest-first: session ops in reverse registration order (most recent
-  // action leads the banner), then discovered runs by descending id. So
-  // trackers[0] is the most recent action — shown in the collapsed header.
+  // Newest-first: session ops lead the banner, then discovered runs by
+  // descending id. So trackers[0] is the leading action shown in the collapsed
+  // header. Session order is normally reverse registration (most recent
+  // action first), but a RETRIED op is treated as a fresh action and jumps
+  // ahead of un-retried ones (most-recently-retried first) — so retrying a
+  // failed action makes it the highlighted/leading tracker.
   const discoveredNewestFirst = [...discoveredTrackers].sort((a, b) =>
     (b.runId ?? 0) - (a.runId ?? 0),
   )
-  const trackers = [...sessionTrackers.reverse(), ...discoveredNewestFirst]
+  // sessionTrackers is oldest-registration-first; index is the registration
+  // rank (higher = more recent). Rank an op by its retry time when it has one,
+  // else by registration recency; retried ops (positive retry time) always sort
+  // ahead of un-retried ones.
+  const sessionRank = new Map(
+    sessionTrackers.map((tr, index) => [
+      tr.id,
+      { retriedAt: retriedAt[tr.id] ?? 0, index },
+    ]),
+  )
+  const sessionNewestFirst = [...sessionTrackers].sort((a, b) => {
+    const ra = sessionRank.get(a.id)!
+    const rb = sessionRank.get(b.id)!
+    if (ra.retriedAt !== rb.retriedAt) return rb.retriedAt - ra.retriedAt
+    return rb.index - ra.index
+  })
+  const trackers = [...sessionNewestFirst, ...discoveredNewestFirst]
 
   // Reconcile the optimistic-running set. An id clears once the poll observes
-  // its run genuinely running (real phase running) or leaving the failed state
-  // (a re-settle), so the real phase drives the UI again. A safety timer also
-  // clears it after the optimistic window so a stuck retry can't pin "running".
+  // its re-run genuinely running or succeeded, so the real phase drives the UI
+  // again. It ALSO clears on a fresh terminal FAILURE — a re-run that fails
+  // again — but only once GitHub has actually re-touched the run since the
+  // retry (run.updated_at >= retriedAt), so we don't clear on the stale
+  // pre-retry "failed" the poll may still be reporting in the first cycle.
+  // Without this, a retry-that-re-fails would spin as "running" (hiding
+  // Retry/Dismiss) until the RETRY_OPTIMISTIC_MS safety timer. A safety timer
+  // still backstops any id the poll never resolves.
   const optimisticSignature = [...optimisticRunning].sort().join(",")
-  const realPhaseById = new Map(
-    resolved.map(({ op, realPhase }) => [op.id, realPhase]),
+  const realStateById = new Map(
+    resolved.map(({ op, run, realPhase }) => [op.id, { realPhase, run }]),
   )
   useEffect(() => {
     if (optimisticRunning.size === 0) return
-    // Clear ids whose real run is now running (or no longer failed).
     setOptimisticRunning((prev) => {
       let changed = false
       const next = new Set(prev)
       for (const id of prev) {
-        const real = realPhaseById.get(id)
-        if (real === "running" || real === "success") {
+        const state = realStateById.get(id)
+        if (!state) continue
+        const { realPhase, run } = state
+        const reFailed =
+          realPhase === "failed" &&
+          run !== null &&
+          (runTimes(run).endedAtMs ?? 0) >= (retriedAt[id] ?? 0)
+        if (realPhase === "running" || realPhase === "success" || reFailed) {
           next.delete(id)
           changed = true
         }
@@ -438,19 +515,29 @@ export function useActionActivity(): ActionActivity {
     // Flip to "running" immediately so the banner reacts without waiting for the
     // poll, and keep the fast cadence so the real transition is picked up soon.
     setOptimisticRunning((prev) => new Set(prev).add(id))
+    // rerun-failed-jobs reuses the SAME run id, so the terminal latch (which is
+    // monotonic per binding) would otherwise pin the pre-retry "failed" forever
+    // — resurrecting a stale red row (with a live Retry button) once the re-run
+    // scrolls out of the poll window. Clear the latch so the re-run re-latches
+    // its NEW outcome (success or failure) from scratch. optimisticRunning +
+    // the persisted boundRunId keep the row from being GC'd during the gap.
+    setLatchedPhase((prev) => {
+      if (prev[id] === undefined) return prev
+      const next = { ...prev }
+      delete next[id]
+      return next
+    })
+    // Treat the retry as a fresh action so the tracker leads the banner.
+    setRetriedAt((prev) => ({ ...prev, [id]: nowMs() }))
     bumpExpecting()
     retryMutation.mutate({ trackerId: id, runId: tracker.runId })
   }
 
-  const runningCount = trackers.filter(
-    (tr) => tr.phase === "running" || tr.phase === "pending",
-  ).length
   const anyFailed = trackers.some((tr) => tr.phase === "failed")
 
   return {
     org,
     trackers,
-    runningCount,
     anyFailed,
     dismiss,
     retry,
