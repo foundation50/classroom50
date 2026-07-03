@@ -117,20 +117,17 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
     [],
   )
 
-  const dismiss = useCallback(
-    (opId: string) => {
-      setState((prev) => {
-        if (prev.dismissed.includes(opId)) return prev
-        const next: PersistedState = {
-          ops: prev.ops,
-          dismissed: [...prev.dismissed, opId],
-        }
-        saveState(next)
-        return next
-      })
-    },
-    [],
-  )
+  const dismiss = useCallback((opId: string) => {
+    setState((prev) => {
+      if (prev.dismissed.includes(opId)) return prev
+      const next: PersistedState = {
+        ops: prev.ops,
+        dismissed: [...prev.dismissed, opId],
+      }
+      saveState(next)
+      return next
+    })
+  }, [])
 
   const clearOp = useCallback((opId: string) => {
     setState((prev) => {

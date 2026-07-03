@@ -123,7 +123,8 @@ export function useActionActivity(): ActionActivity {
 
   const runsQuery = useQuery({
     queryKey: activityRunsKey(org ?? ""),
-    queryFn: ({ signal }) => listActiveAndRecentRuns(client!, org ?? "", signal),
+    queryFn: ({ signal }) =>
+      listActiveAndRecentRuns(client!, org ?? "", signal),
     enabled: Boolean(org && client),
     // Fast while anything runs or a dispatch/retry is expected; slow while a
     // finished run or outstanding op is still shown; stop (false) once there's
@@ -300,7 +301,10 @@ export function useActionActivity(): ActionActivity {
     const deadlines: number[] = []
     for (const { op, phase } of resolved) {
       if (phase !== "pending") continue
-      if (boundRunId[op.id] !== undefined || latchedPhase[op.id] !== undefined) {
+      if (
+        boundRunId[op.id] !== undefined ||
+        latchedPhase[op.id] !== undefined
+      ) {
         continue
       }
       const due = op.startedAt + PENDING_TTL_MS
@@ -373,8 +377,8 @@ export function useActionActivity(): ActionActivity {
   // Newest-first so trackers[0] leads the collapsed header: session ops (a
   // retried op jumps ahead as a fresh action, else reverse registration order),
   // then discovered runs by descending id.
-  const discoveredNewestFirst = [...discoveredTrackers].sort((a, b) =>
-    (b.runId ?? 0) - (a.runId ?? 0),
+  const discoveredNewestFirst = [...discoveredTrackers].sort(
+    (a, b) => (b.runId ?? 0) - (a.runId ?? 0),
   )
   // sessionTrackers is oldest-first; rank by retry time (retried ops lead), else
   // by registration recency (higher index = more recent).

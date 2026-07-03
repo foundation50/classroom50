@@ -42,7 +42,7 @@ const dispatchRun = (
 const op = (over: Partial<ActionOperation>): ActionOperation => ({
   id: "op-1",
   org: "acme",
-  label: "Publishing \"hw1\" to student site",
+  label: 'Publishing "hw1" to student site',
   anchor: { kind: "sha", sha: "abc123" },
   startedAt: Date.now(),
   ...over,
@@ -136,13 +136,15 @@ describe("runMatchesOp", () => {
         sinceRunId: 100,
       },
     })
-    expect(runMatchesOp(dispatchRun(101, "regrade.yaml"), dispatchOp)).toBe(true)
+    expect(runMatchesOp(dispatchRun(101, "regrade.yaml"), dispatchOp)).toBe(
+      true,
+    )
     expect(runMatchesOp(dispatchRun(100, "regrade.yaml"), dispatchOp)).toBe(
       false,
     )
-    expect(runMatchesOp(dispatchRun(200, "collect-scores.yaml"), dispatchOp)).toBe(
-      false,
-    )
+    expect(
+      runMatchesOp(dispatchRun(200, "collect-scores.yaml"), dispatchOp),
+    ).toBe(false)
   })
 
   it("null baseline matches a run started at/after the dispatch time", () => {
@@ -152,7 +154,11 @@ describe("runMatchesOp", () => {
     })
     const dispatchOp = op({
       startedAt: started,
-      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
+      anchor: {
+        kind: "sinceRunId",
+        workflow: "regrade.yaml",
+        sinceRunId: null,
+      },
     })
     expect(runMatchesOp(r, dispatchOp)).toBe(true)
   })
@@ -166,7 +172,11 @@ describe("runMatchesOp", () => {
     })
     const dispatchOp = op({
       startedAt: started,
-      anchor: { kind: "sinceRunId", workflow: "regrade.yaml", sinceRunId: null },
+      anchor: {
+        kind: "sinceRunId",
+        workflow: "regrade.yaml",
+        sinceRunId: null,
+      },
     })
     expect(runMatchesOp(r, dispatchOp)).toBe(false)
   })
@@ -207,7 +217,10 @@ describe("resolveOpRun", () => {
         sinceRunId: 100,
       },
     })
-    const runs = [dispatchRun(101, "regrade.yaml"), dispatchRun(102, "regrade.yaml")]
+    const runs = [
+      dispatchRun(101, "regrade.yaml"),
+      dispatchRun(102, "regrade.yaml"),
+    ]
     const claimed = new Set<number>([101])
     // 101 is taken by an earlier op, so this op binds to 102.
     expect(resolveOpRun(dispatchOp, runs, claimed)?.id).toBe(102)

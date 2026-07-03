@@ -6,10 +6,7 @@ import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvi
 import { useRegradeCoordinator } from "@/context/regrade/RegradeCoordinator"
 import { REGRADE_WORKFLOW, triggerRegrade } from "./github/mutations"
 import { getRegradeRunAfterId, githubKeys } from "./github/queries"
-import {
-  useGitHubOperation,
-  type OperationPhase,
-} from "./useGitHubOperation"
+import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 
 export type RegradePhase = OperationPhase
 

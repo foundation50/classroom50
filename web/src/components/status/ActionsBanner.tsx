@@ -263,8 +263,7 @@ const BannerBody = ({
 }
 
 export function ActionsBanner() {
-  const { trackers, anyFailed, dismiss, retry, retrying } =
-    useActionActivity()
+  const { trackers, anyFailed, dismiss, retry, retrying } = useActionActivity()
   const [expanded, setExpanded] = useState(false)
 
   // Shared 1s clock so running rows tick in step. Runs only while something is

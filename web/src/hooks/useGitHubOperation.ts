@@ -69,7 +69,10 @@ const loadDispatch = (
   }
 }
 
-const saveDispatch = (storageKey: string | null, state: DispatchState | null) => {
+const saveDispatch = (
+  storageKey: string | null,
+  state: DispatchState | null,
+) => {
   if (!storageKey) return
   try {
     if (state) sessionStorage.setItem(storageKey, JSON.stringify(state))
@@ -92,7 +95,8 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
   const timeoutMs = config.timeoutMs ?? DEFAULTS.timeoutMs
   const intervalMs = config.intervalMs ?? DEFAULTS.intervalMs
   const backoffAfterMs = config.backoffAfterMs ?? DEFAULTS.backoffAfterMs
-  const backoffIntervalMs = config.backoffIntervalMs ?? DEFAULTS.backoffIntervalMs
+  const backoffIntervalMs =
+    config.backoffIntervalMs ?? DEFAULTS.backoffIntervalMs
 
   const [dispatch, setDispatch] = useState<DispatchState | null>(() =>
     loadDispatch(config.storageKey, timeoutMs),

@@ -6,10 +6,7 @@ import {
   triggerScoreCollection,
 } from "./github/mutations"
 import { getCollectScoresRunAfterId, githubKeys } from "./github/queries"
-import {
-  useGitHubOperation,
-  type OperationPhase,
-} from "./useGitHubOperation"
+import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 
 export type CollectScoresPhase = OperationPhase
 
@@ -24,7 +21,8 @@ const useTriggerScoreCollection = (org: string | undefined) => {
 
   const { trigger, phase, run, error } = useGitHubOperation({
     storageKey: org ? `cl50:collect-scores:${org}` : null,
-    queryKey: (sinceRunId) => githubKeys.collectScoresRun(org ?? "", sinceRunId),
+    queryKey: (sinceRunId) =>
+      githubKeys.collectScoresRun(org ?? "", sinceRunId),
     resetKey: org ?? "",
     // Org-wide collection, matching the "Last collected" timestamp. Pass a
     // classroom slug to triggerScoreCollection to scope it.
