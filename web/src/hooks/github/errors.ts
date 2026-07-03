@@ -58,8 +58,11 @@ export class GitHubAPIError extends Error {
   // The org/enterprise enforces SAML SSO and this token has no live SSO session
   // for it. GitHub signals this with the X-GitHub-SSO header (a 403 carrying
   // `required; url=…`, or `partial-results; organizations=…` on multi-org reads).
+  // Scoped to 403: GitHub only emits X-GitHub-SSO on a forbidden response, so a
+  // header echoed on any other status (a 401 dead token, a 5xx/429 that a proxy
+  // copied the header onto) is NOT an SSO gate and must not misroute the user.
   get isSsoRequired() {
-    return this.ssoHeader !== null
+    return this.status === 403 && this.ssoHeader !== null
   }
 
   // The GitHub SSO authorization URL to send the user to, if the header carried
@@ -85,8 +88,12 @@ export function parseSsoAuthorizationUrl(
   if (!match) return null
   try {
     const url = new URL(match[1])
-    // Only ever hand back a github.com SSO URL, never an attacker-influenced
-    // origin (the header is from GitHub, but stay defensive since we redirect).
+    // Only ever hand back an https://github.com SSO URL, never an
+    // attacker-influenced origin or scheme (the header is from GitHub, but stay
+    // defensive since we render this as a clickable redirect). The explicit
+    // https: check makes the intent durable rather than relying on the
+    // incidental fact that javascript:/data: URLs parse to an empty hostname.
+    if (url.protocol !== "https:") return null
     if (url.hostname !== "github.com") return null
     return url.toString()
   } catch {
@@ -95,16 +102,14 @@ export function parseSsoAuthorizationUrl(
 }
 
 // Shared React Query `retry` predicate for fail-closed role/permission reads: a
-// 404 (not found / not a member) or 403 (blocked) is DEFINITIVE and must NOT
-// retry, while a transient 5xx/429/network blip self-heals (bounded to 2).
+// definitive status (401 revoked/expired, 403 blocked, 404 not found / not a
+// member — see isDefinitiveGitHubStatus) must NOT retry, while a transient
+// 5xx/429/network blip self-heals (bounded to 2).
 export function retryTransientNotFoundForbidden(
   failureCount: number,
   error: unknown,
 ): boolean {
-  if (
-    error instanceof GitHubAPIError &&
-    (error.status === 404 || error.status === 403)
-  ) {
+  if (error instanceof GitHubAPIError && isDefinitiveGitHubStatus(error.status)) {
     return false
   }
   return failureCount < 2

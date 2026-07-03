@@ -618,13 +618,21 @@ const AcceptAssignmentPage = () => {
   // Membership read failed. Distinguish causes rather than blanket "not a
   // member": a 403 carrying X-GitHub-SSO means the org/enterprise enforces SAML
   // SSO and this token has no live SSO session (the student may well be a
-  // member) — route them to authorize instead. Any other definitive failure
-  // (404 / non-SSO 403) falls through to the not-a-member screen. (Transient
-  // 5xx/429 are retried by the query, so they don't reach here as errors.)
+  // member) — route them to authorize instead. We only take the SSO detour when
+  // GitHub gave us an actionable authorization URL; the header-only
+  // `partial-results` shape (ssoAuthorizationUrl === null) has no button to
+  // offer, so it falls through to the not-a-member screen (which at least points
+  // the student at their instructor / re-opening from the LMS) rather than
+  // dead-ending them on a button-less SSO screen. Any other definitive failure
+  // (404 / non-SSO 403) also renders not-a-member. (Transient 5xx/429 are
+  // retried by the query, so they don't reach here as errors — and on any error
+  // the query's `data` is undefined, so the pending-invite onboarding redirect
+  // below is only reachable from a successful read.)
   if (orgMembershipError) {
     if (
       orgMembershipError instanceof GitHubAPIError &&
-      orgMembershipError.isSsoRequired
+      orgMembershipError.isSsoRequired &&
+      orgMembershipError.ssoAuthorizationUrl
     ) {
       return (
         <SsoRequired
