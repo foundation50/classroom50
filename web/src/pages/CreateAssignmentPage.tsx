@@ -97,8 +97,7 @@ const CreateAssignmentPage = () => {
         return
       }
       // Toast before navigating: the provider is mounted above the router, so
-      // the confirmation survives the redirect. GitHub's contents API is
-      // read-after-write eventual, hence "may take a moment to appear".
+      // the confirmation survives the redirect.
       notify({
         tone: "success",
         durationMs: 6000,

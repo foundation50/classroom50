@@ -354,11 +354,11 @@
     "groupSizeRange": "Group size must be a whole number between {{min}} and {{max}}."
   },
   "toasts": {
-    "classroomSettingsSaved": "Classroom settings saved.",
+    "classroomSettingsSaved": "Classroom settings saved. Publishing to the student site now — the banner above tracks progress.",
     "classroomSaveConflict": "Couldn't save — another change landed first. Please try again.",
-    "assignmentCreated": "Assignment created. It may take a moment to appear.",
+    "assignmentCreated": "Assignment created. It's publishing to the student site and will appear shortly — the banner above tracks progress.",
     "publishingAssignment": "Publishing \"{{name}}\" to student site",
-    "classroomCreated": "Classroom created. It may take a moment to appear.",
+    "classroomCreated": "Classroom created. It's publishing to the student site and will appear shortly — the banner above tracks progress.",
     "invited": "Invited {{who}} to the {{org}} organization.",
     "staffAdded": "Added @{{username}} as {{role}}.",
     "classroomCreateFailed": "Couldn't create classroom: {{message}}",
@@ -698,7 +698,7 @@
   },
   "assignmentSettings": {
     "heading": "Assignment Settings",
-    "editSuccess": "Your assignment has been edited successfully!",
+    "editSuccess": "Your changes were saved and are publishing to the student site — the banner above tracks progress.",
     "loading": "Loading assignment",
     "archivedNotice_prefix": "This classroom is archived — its assignments are read-only. Unarchive it in",
     "archivedNotice_link": "Classroom Settings",

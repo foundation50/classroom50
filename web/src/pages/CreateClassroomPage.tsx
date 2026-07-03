@@ -6,6 +6,7 @@ import { createClassroomFilesWithConflictRetry } from "@/hooks/github/mutations"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import Drawer, {
   DrawerContent,
@@ -30,6 +31,7 @@ const CreateClassroomPage = () => {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { notify } = useToast()
+  const { register } = useActionActivityRegistry()
   const { user } = useGithubAuth()
   const { org } = useParams({ strict: false })
 
@@ -63,13 +65,21 @@ const CreateClassroomPage = () => {
         message: t("toasts.classroomCreateFailed", { message: err.message }),
       })
     },
-    onSuccess: (_result, variables) => {
+    onSuccess: (result, variables) => {
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
       })
+      // Track the publish-pages deploy this commit triggers, anchored on the
+      // commit SHA (head_sha on the runs API).
+      if (org && result.newCommitSha) {
+        register({
+          org,
+          label: t("actionsBanner.workflow.publishPages"),
+          anchor: { kind: "sha", sha: result.newCommitSha },
+        })
+      }
       // Toast before navigating: the provider is mounted above the router, so
-      // the confirmation survives the redirect. GitHub's contents API is
-      // read-after-write eventual, hence "may take a moment to appear".
+      // the confirmation survives the redirect.
       notify({
         tone: "success",
         durationMs: 6000,
