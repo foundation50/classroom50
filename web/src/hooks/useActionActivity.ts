@@ -10,6 +10,7 @@ import { useActiveOrg } from "@/hooks/useActiveOrg"
 import {
   nowMs,
   resolveOpRun,
+  runTimes,
   runUrl,
   trackerPhase,
   workflowFile,
@@ -65,6 +66,12 @@ export type Tracker = {
   dismissible: boolean
   // A failed run with a known runId can be retried (re-run its failed jobs).
   retriable: boolean
+  // Run start time (ms epoch), for showing elapsed time. Undefined while the
+  // run hasn't surfaced (pending).
+  startedAtMs?: number
+  // Run finish time (ms epoch) once terminal; undefined while running, which
+  // the UI reads as "still ticking".
+  endedAtMs?: number
 }
 
 export type ActionActivity = {
@@ -335,6 +342,7 @@ export function useActionActivity(): ActionActivity {
     .filter(({ op }) => !isDismissed(op.id))
     .map(({ op, run, phase }) => {
       const stableRunId = run?.id ?? boundRunId[op.id]
+      const times = run ? runTimes(run) : {}
       return {
         id: op.id,
         label: op.label,
@@ -349,6 +357,8 @@ export function useActionActivity(): ActionActivity {
         // dismissed; a running/pending op can't.
         dismissible: phase === "success" || phase === "failed",
         retriable: phase === "failed" && stableRunId !== undefined,
+        startedAtMs: times.startedAtMs,
+        endedAtMs: times.endedAtMs,
       }
     })
 
@@ -364,6 +374,7 @@ export function useActionActivity(): ActionActivity {
         (file && WORKFLOW_LABEL_KEY[file] && t(WORKFLOW_LABEL_KEY[file])) ||
         r.name ||
         t("actionsBanner.workflow.generic")
+      const times = runTimes(r)
       return {
         id: `run-${r.id}`,
         label,
@@ -372,6 +383,8 @@ export function useActionActivity(): ActionActivity {
         runId: r.id,
         dismissible: false,
         retriable: false,
+        startedAtMs: times.startedAtMs,
+        endedAtMs: times.endedAtMs,
       }
     })
 

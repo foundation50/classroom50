@@ -7,6 +7,7 @@ import {
   orgFromPathname,
   resolveOpRun,
   runMatchesOp,
+  runTimes,
   runUrl,
   trackerPhase,
   workflowFile,
@@ -77,6 +78,36 @@ describe("runUrl", () => {
     expect(runUrl("acme", 42)).toBe(
       "https://github.com/acme/classroom50/actions/runs/42",
     )
+  })
+})
+
+describe("runTimes", () => {
+  it("uses run_started_at for start and leaves end open while running", () => {
+    const r = run({
+      status: "in_progress",
+      run_started_at: "2026-07-03T00:00:10Z",
+      updated_at: "2026-07-03T00:00:30Z",
+    })
+    const { startedAtMs, endedAtMs } = runTimes(r)
+    expect(startedAtMs).toBe(Date.parse("2026-07-03T00:00:10Z"))
+    expect(endedAtMs).toBeUndefined()
+  })
+
+  it("sets end from updated_at once completed", () => {
+    const r = run({
+      status: "completed",
+      conclusion: "success",
+      run_started_at: "2026-07-03T00:00:10Z",
+      updated_at: "2026-07-03T00:02:40Z",
+    })
+    const { startedAtMs, endedAtMs } = runTimes(r)
+    expect(startedAtMs).toBe(Date.parse("2026-07-03T00:00:10Z"))
+    expect(endedAtMs).toBe(Date.parse("2026-07-03T00:02:40Z"))
+  })
+
+  it("falls back to created_at when run_started_at is absent", () => {
+    const r = run({ status: "queued", run_started_at: undefined })
+    expect(runTimes(r).startedAtMs).toBe(Date.parse(r.created_at))
   })
 })
 

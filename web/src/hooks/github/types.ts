@@ -165,6 +165,9 @@ export type GitHubWorkflowRun = {
   created_at: string
   // When the run actually started (may lag created_at while queued).
   run_started_at?: string
+  // Last-updated time; for a completed run this is effectively the finish time,
+  // used to show the run's total elapsed duration in the activity banner.
+  updated_at?: string
   // Head commit SHA the run is building. The activity banner matches a
   // push-triggered publish-pages run to a teacher's commit by this.
   head_sha?: string

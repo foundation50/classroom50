@@ -15,6 +15,34 @@ import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
 import { useSidebarCollapsed } from "@/hooks/useSidebarCollapsed"
 import { calloutVariants } from "@/lib/motion"
 
+// Compact elapsed duration (e.g. "8s", "1m 12s", "3m"). Under a minute shows
+// seconds; from a minute up shows m + s (s omitted once past ~an hour to stay
+// short). Returns "" for a non-positive span.
+function formatElapsed(ms: number): string {
+  const total = Math.max(0, Math.round(ms / 1000))
+  if (total < 60) return `${total}s`
+  const m = Math.floor(total / 60)
+  const s = total % 60
+  if (m < 60) return s === 0 ? `${m}m` : `${m}m ${s}s`
+  const h = Math.floor(m / 60)
+  return `${h}h ${m % 60}m`
+}
+
+// Elapsed time for a tracker: live-ticking since start while running, or the
+// frozen total once finished. `now` is the shared 1s tick from the banner so
+// running rows advance in step without each row owning a timer.
+const ElapsedLabel = ({ tracker, now }: { tracker: Tracker; now: number }) => {
+  if (tracker.startedAtMs === undefined) return null
+  const end = tracker.endedAtMs ?? now
+  const elapsed = formatElapsed(end - tracker.startedAtMs)
+  if (!elapsed) return null
+  return (
+    <span className="shrink-0 font-mono text-xs tabular-nums opacity-70">
+      {elapsed}
+    </span>
+  )
+}
+
 // App-wide banner pinned to the top of the content area (right of the sidebar
 // at lg+) showing GitHub Actions activity for the current org as a collection of
 // per-operation trackers. Mounts above the router (alongside the toast viewport)
@@ -78,12 +106,14 @@ const TrackerRow = ({
   onDismiss,
   onRetry,
   retrying,
+  now,
   compact,
 }: {
   tracker: Tracker
   onDismiss: (id: string) => void
   onRetry: (id: string) => void
   retrying: boolean
+  now: number
   // compact = rendered inline in the collapsed single-tracker bar (inherits the
   // header's solid tone). Otherwise the row carries its own per-phase tone.
   compact?: boolean
@@ -97,6 +127,7 @@ const TrackerRow = ({
     >
       <StatusIcon phase={tracker.phase} tinted={!compact} />
       <span className="min-w-0 flex-1 truncate text-sm">{tracker.label}</span>
+      <ElapsedLabel tracker={tracker} now={now} />
       {tracker.htmlUrl && (
         <a
           href={tracker.htmlUrl}
@@ -144,6 +175,20 @@ export function ActionsBanner() {
     useActionActivity()
   const collapsed = useSidebarCollapsed()
   const [expanded, setExpanded] = useState(false)
+
+  // A shared 1s clock so running rows advance their elapsed time in step. Only
+  // ticks while something is still running (a finished row's elapsed is frozen),
+  // so an idle banner does no per-second work.
+  const anyRunning = trackers.some(
+    (tr) => tr.phase === "running" || tr.phase === "pending",
+  )
+  const [now, setNow] = useState(() => Date.now())
+  useEffect(() => {
+    if (!anyRunning) return
+    setNow(Date.now())
+    const id = window.setInterval(() => setNow(Date.now()), 1000)
+    return () => window.clearInterval(id)
+  }, [anyRunning])
 
   // Hold the banner back until the page has painted, so on a browser refresh it
   // fades in AFTER the app content rather than flashing in with (or before) the
@@ -216,6 +261,7 @@ export function ActionsBanner() {
                   onDismiss={dismiss}
                   onRetry={retry}
                   retrying={retrying.has(trackers[0].id)}
+                  now={now}
                   compact
                 />
               </div>
@@ -258,6 +304,7 @@ export function ActionsBanner() {
                           onDismiss={dismiss}
                           onRetry={retry}
                           retrying={retrying.has(tracker.id)}
+                          now={now}
                         />
                       </li>
                     ))}

@@ -40,6 +40,26 @@ export function runUrl(org: string, runId: number): string {
   return `https://github.com/${org}/classroom50/actions/runs/${runId}`
 }
 
+// Parse an ISO timestamp to epoch ms, or undefined when absent/unparseable.
+function parseMs(iso: string | undefined): number | undefined {
+  if (!iso) return undefined
+  const ms = Date.parse(iso)
+  return Number.isNaN(ms) ? undefined : ms
+}
+
+// Start/end epoch-ms for a run, for elapsed-time display. Start = run_started_at
+// (falling back to created_at). End = updated_at ONLY once the run is completed
+// (a running run has no end, so elapsed keeps ticking).
+export function runTimes(run: GitHubWorkflowRun): {
+  startedAtMs?: number
+  endedAtMs?: number
+} {
+  const startedAtMs = parseMs(run.run_started_at) ?? parseMs(run.created_at)
+  const endedAtMs =
+    run.status === "completed" ? parseMs(run.updated_at) : undefined
+  return { startedAtMs, endedAtMs }
+}
+
 // The workflow definition file name (e.g. "publish-pages.yaml") from a run's
 // `path` (".github/workflows/publish-pages.yaml").
 export function workflowFile(run: GitHubWorkflowRun): string | undefined {
