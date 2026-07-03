@@ -176,16 +176,15 @@ jobs:
             translate --full
             gate
           else
-            # Patch mode: translate only the diff onto the published pack. The gate
-            # validates the WHOLE pack, so a pre-existing defect on an untouched
-            # key (stale placeholder, orphan variant a hand-edit left) would fail
-            # a language forever — patching never re-emits those keys. On gate
-            # FAIL, self-heal by falling back to a full retranslation, which
-            # re-emits every key, then re-gate. If that still fails, the language
-            # legitimately fails this run (and is retried next run).
-            translate
-            if ! gate; then
-              echo "::warning::${CODE}: patched pack failed the structural gate; retrying with a full retranslation."
+            # Patch mode: apply only the diff onto the published pack. A patch
+            # can fail the parity check or whole-pack gate on a key it never
+            # re-emits (a base key missing from the pack, or a pre-existing
+            # defect on an untouched one), which would fail the language every
+            # run. On either failure, self-heal with a full retranslation (which
+            # re-emits every key) and re-gate; a still-failing language is
+            # excluded this run and retried next.
+            if ! translate || ! gate; then
+              echo "::warning::${CODE}: patch run failed the parity check or structural gate; retrying with a full retranslation."
               translate --full
               gate
             fi

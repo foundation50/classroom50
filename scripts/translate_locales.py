@@ -144,18 +144,23 @@ def delete_nested(obj: dict, dotted: str) -> None:
             break
 
 
-def plural_group_keys(removed_key: str, pack_keys: set[str]) -> list[str]:
-    """Pack keys in `removed_key`'s plural group (including itself).
+def plural_group_keys(removed_key: str, pack_keys: set[str], base_keys: set[str]) -> list[str]:
+    """Pack keys to delete when `removed_key` is dropped from en.json.
 
-    When `removed_key` is an i18next plural form, a pack may carry extra sibling
-    variants (e.g. `_few`) that verify_locale.py only tolerates while a base
-    `_one`/`_other` exists. Once the base group is gone those orphans fail the
-    gate, so a removal of any group member must sweep every sibling the pack has.
-    Returns just the key itself when it isn't a plural form.
+    Mirrors verify_locale.py's `is_allowed_plural_variant`: the gate tolerates a
+    pack's extra plural sibling (e.g. an added `_few`) only while a base
+    `_one`/`_other` for the stem exists. So we sweep the whole plural group only
+    once that base group is entirely gone — otherwise those siblings are still
+    gate-allowed and deleting them would drop community edits. A key with no base
+    `_one`/`_other` isn't a plural form (it just looks like one, e.g. `step_two`),
+    so only itself is removed.
     """
     if not any(removed_key.endswith(suffix) for suffix in PLURAL_SUFFIXES):
         return [removed_key]
     stem = removed_key.rsplit("_", 1)[0]
+    base_group_survives = any(f"{stem}_{p}" in base_keys for p in ("one", "other"))
+    if base_group_survives:
+        return [removed_key]
     siblings = {f"{stem}{suffix}" for suffix in PLURAL_SUFFIXES}
     return sorted(siblings & pack_keys)
 
@@ -581,17 +586,14 @@ def main() -> int:
         # key (hand edits, extra plural variants) carries through untouched.
         translated = current
 
-        # Delete removed keys (skip any still present in en.json — stale list).
-        # For a removed plural form, also sweep the pack's sibling variants
-        # (e.g. an extra `_few`) so no orphan trips verify_locale.py once the
-        # base `_one`/`_other` are gone.
+        # Delete removed keys; skip any still in en.json (stale list). For a
+        # retired plural group, plural_group_keys also returns its orphan siblings.
         pack_keys = set(flatten(translated))
         for key in removed_keys:
             if key in base_keys:
                 continue
-            for member in plural_group_keys(key, pack_keys):
-                # Never delete a sibling that en.json still defines (only part of
-                # the group was removed) — that would drop a required translation.
+            for member in plural_group_keys(key, pack_keys, base_keys):
+                # Guard against dropping a swept member en.json still defines.
                 if member not in base_keys:
                     delete_nested(translated, member)
 
