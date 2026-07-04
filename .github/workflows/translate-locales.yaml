@@ -23,7 +23,7 @@ name: Translate locales
 
 on:
   push:
-    branches: [main, preview, feat/locale-marker-patch]
+    branches: [main, feat/locale-marker-patch]
     paths:
       - 'web/src/locales/en.json'
       - 'web/src/locales/targets.json'

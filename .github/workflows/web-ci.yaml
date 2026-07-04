@@ -15,7 +15,7 @@ name: web CI
 
 on:
   push:
-    branches: [main, preview]
+    branches: [main]
     paths:
       - 'web/**'
       - 'cli/gh-teacher/skeleton/dotgithub/**'

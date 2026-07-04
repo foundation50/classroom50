@@ -1,7 +1,7 @@
 name: web Release Please
 
 # Automates web-app releases with googleapis/release-please. Day-to-day work
-# lands on `preview`; a release PR merges `preview` -> `main`. This workflow
+# lands on `main` (all PRs merge straight into main). This workflow
 # watches `main` and maintains a *Release PR* that bumps web/package.json +
 # web/CHANGELOG.md from Conventional Commits. Merging that Release PR creates
 # the `web-vX.Y.Z` tag + GitHub Release, which is the single production-release

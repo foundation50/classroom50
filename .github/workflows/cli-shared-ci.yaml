@@ -2,7 +2,7 @@ name: cli-shared CI
 
 on:
   push:
-    branches: [main, preview]
+    branches: [main]
     paths:
       - 'cli/shared/**'
       - '.github/workflows/cli-shared-ci.yaml'

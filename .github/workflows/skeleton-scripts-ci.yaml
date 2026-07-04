@@ -20,7 +20,7 @@ name: embedded-python CI
 
 on:
   push:
-    branches: [main, preview]
+    branches: [main]
     paths:
       - 'cli/gh-teacher/skeleton/dotgithub/scripts/**'
       - 'cli/gh-teacher/skeleton/dotgithub/workflows/collect-scores.yaml'
