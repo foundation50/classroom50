@@ -63,19 +63,23 @@ func TestValidateServiceToken(t *testing.T) {
 		membersStatus int
 		wantErr       bool
 		errSubstr     string
+		// wantWarn is true when validation should pass but emit the
+		// inconclusive-Members-scope advisory to its writer (fail-open branch).
+		wantWarn bool
 	}{
-		{"valid read+write+members", http.StatusOK, true, http.StatusOK, false, ""},
-		{"read-only rejected", http.StatusOK, false, http.StatusOK, true, "lacks write access"},
-		{"revoked", http.StatusUnauthorized, false, 0, true, "invalid, expired, or revoked"},
-		{"no repo access", http.StatusNotFound, false, 0, true, "can't read"},
-		{"repo forbidden", http.StatusForbidden, false, 0, true, "can't read"},
-		{"members forbidden", http.StatusOK, true, http.StatusForbidden, true, "can't read the org's members"},
-		{"members not found", http.StatusOK, true, http.StatusNotFound, true, "can't read the org's members"},
+		{"valid read+write+members", http.StatusOK, true, http.StatusOK, false, "", false},
+		{"read-only rejected", http.StatusOK, false, http.StatusOK, true, "lacks write access", false},
+		{"revoked", http.StatusUnauthorized, false, 0, true, "invalid, expired, or revoked", false},
+		{"no repo access", http.StatusNotFound, false, 0, true, "can't read", false},
+		{"repo forbidden", http.StatusForbidden, false, 0, true, "can't read", false},
+		{"members forbidden", http.StatusOK, true, http.StatusForbidden, true, "can't read the org's members", false},
+		{"members not found", http.StatusOK, true, http.StatusNotFound, true, "can't read the org's members", false},
 		// FAIL-OPEN: a 401 or 5xx on the members probe (after a 200 repo read
 		// that already proved the token live) is inconclusive, not fatal — the
-		// probe must not reject a valid token on GitHub-side flakiness.
-		{"members unauthorized proceeds", http.StatusOK, true, http.StatusUnauthorized, false, ""},
-		{"members server error proceeds", http.StatusOK, true, http.StatusInternalServerError, false, ""},
+		// probe must not reject a valid token on GitHub-side flakiness, but it
+		// MUST warn so the teacher knows to run probe-token before relying on it.
+		{"members unauthorized proceeds", http.StatusOK, true, http.StatusUnauthorized, false, "", true},
+		{"members server error proceeds", http.StatusOK, true, http.StatusInternalServerError, false, "", true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -107,7 +111,8 @@ func TestValidateServiceToken(t *testing.T) {
 			t.Cleanup(server.Close)
 			client := githubtest.NewTestClient(t, server)
 
-			err := validateTokenWithClient(client, "cs50")
+			var warnOut strings.Builder
+			err := validateTokenWithClient(client, "cs50", &warnOut)
 			if tc.wantErr && err == nil {
 				t.Fatalf("expected an error (repo=%d canPush=%v members=%d)", tc.repoStatus, tc.canPush, tc.membersStatus)
 			}
@@ -116,6 +121,10 @@ func TestValidateServiceToken(t *testing.T) {
 			}
 			if tc.errSubstr != "" && !strings.Contains(err.Error(), tc.errSubstr) {
 				t.Errorf("error %q should contain %q", err.Error(), tc.errSubstr)
+			}
+			gotWarn := strings.Contains(warnOut.String(), "probe-token")
+			if gotWarn != tc.wantWarn {
+				t.Errorf("inconclusive-scope warning = %v, want %v (out=%q)", gotWarn, tc.wantWarn, warnOut.String())
 			}
 			if !sawRepo {
 				t.Error("validation should always GET the config repo")

@@ -129,6 +129,17 @@ func SecretExists(client githubapi.Client, owner, repo string) (bool, error) {
 // rather than surfacing months later as an opaque collect-scores 403.
 // Returns a descriptive, actionable error on failure.
 func ValidateToken(token []byte, org string) error {
+	return ValidateTokenVerbose(token, org, io.Discard)
+}
+
+// ValidateTokenVerbose is ValidateToken with a writer for advisory notes. When
+// the org-members probe is INCONCLUSIVE (401/5xx/timeout after a proven-live
+// repo read), validation still passes (fail-open), but a warning is written to
+// `out` so the teacher knows the Members: Read scope wasn't positively
+// confirmed and should run the `probe-token` workflow before relying on the
+// nightly collect — otherwise a Members-less token sits latent until the cron
+// 403s and aborts the whole run.
+func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
 	tokenClient, err := githubapi.NewClient(githubapi.ClientOptions{
 		AuthToken: string(token),
 	})
@@ -136,7 +147,7 @@ func ValidateToken(token []byte, org string) error {
 	if err != nil {
 		return fmt.Errorf("build token client: %w", err)
 	}
-	return validateTokenWithClient(tokenClient, org)
+	return validateTokenWithClient(tokenClient, org, out)
 }
 
 // validateTokenWithClient is ValidateToken's testable core: it reads the
@@ -160,7 +171,7 @@ func ValidateToken(token []byte, org string) error {
 // valid token on this second round-trip's flakiness would be worse than the
 // cron-time 403 the runtime already handles. The probe-token.yaml workflow
 // is the exhaustive post-provision signal.
-func validateTokenWithClient(tokenClient githubapi.Client, org string) error {
+func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Writer) error {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(configrepo.ConfigRepoName))
 	var repo struct {
 		Permissions struct {
@@ -210,7 +221,12 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string) error {
 			return fmt.Errorf("the supplied token can read %s/%s but can't read the org's members — collecting scores is team-driven and lists the classroom team's members, which needs the org-level Members permission. Re-create the fine-grained PAT with Resource owner = %q and add Organization permissions -> Members: Read (this is a separate section from Repository permissions; it appears only once the org is selected as Resource owner). Underlying error: %v", org, configrepo.ConfigRepoName, org, err)
 		}
 		// Inconclusive (401 after a 200 repo read, 5xx, rate-limit, timeout):
-		// proceed rather than reject a token the repo read just proved valid.
+		// proceed rather than reject a token the repo read just proved valid,
+		// but WARN — the Members: Read scope the nightly collect needs was not
+		// positively confirmed, and an unconfirmed Members-less token 403s at
+		// collect time and aborts the whole run. Point the teacher at the
+		// exhaustive probe-token workflow.
+		_, _ = fmt.Fprintf(out, "Warning: couldn't confirm the token's Organization -> Members: Read scope (%v). Proceeding, since the repo read proved the token live, but if it in fact lacks Members: Read, the nightly collect will 403 and skip. Run the `probe-token` workflow to verify all scopes before the first collect.\n", err)
 	}
 	return nil
 }
@@ -332,8 +348,9 @@ func NewRotateCmd() *cobra.Command {
 				return err
 			}
 			// Validate before storing: catch a bad PAT now, not via a
-			// failed collect-scores workflow weeks later.
-			if err := ValidateToken(token, org); err != nil {
+			// failed collect-scores workflow weeks later. Verbose so an
+			// inconclusive Members-scope probe warns the teacher.
+			if err := ValidateTokenVerbose(token, org, out); err != nil {
 				return fmt.Errorf("service token validation failed: %w", err)
 			}
 			return ProvisionSecret(client, out, org, configrepo.ConfigRepoName, token, "rotated")

@@ -8,6 +8,7 @@ import {
   unenrollStudent,
   updateStudent,
   updateStudentWithConflictRetry,
+  STUDENT_CSV_FIELDS,
 } from "./students"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubClient } from "@/hooks/github/client"
@@ -100,6 +101,25 @@ const makeClient = (opts: {
 
 const HEADER = "username,first_name,last_name,email,section,github_id\n"
 
+// The web leg of the three-way students.csv header lockstep. The Go
+// (TestFullRosterHeader) and Python (test_full_roster_header_matches_go_constant)
+// suites each pin their own header constant to this exact string; the web app is
+// what WRITES the file's column order (via STUDENT_CSV_FIELDS), so without this
+// assertion a web-only reorder/rename would keep every web test green while the
+// CLI's ParseRoster and the collector's read_students_csv reject every roster
+// the web subsequently writes. Pin the source-of-truth constant, not a fixture.
+describe("students.csv header lockstep (web leg)", () => {
+  it("STUDENT_CSV_FIELDS matches the Go/Python header verbatim", () => {
+    expect(STUDENT_CSV_FIELDS.join(",")).toBe(
+      "username,first_name,last_name,email,section,github_id",
+    )
+  })
+
+  it("the fixture HEADER used by these tests is derived from the real constant", () => {
+    expect(HEADER).toBe(STUDENT_CSV_FIELDS.join(",") + "\n")
+  })
+})
+
 const rowsFromCsv = (csv: string) =>
   Papa.parse(csv, { header: true, skipEmptyLines: true }).data as Record<
     string,
@@ -170,6 +190,9 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
     // github_id -> current login (GET /user/{id}); the 422 already-member path
     // derives the fresh login from the resolved id before binding.
     usersById?: Record<string, string>
+    // Omit the persisted classroom-team block so the invite can't attach a team,
+    // exercising the team-less-invite warning path.
+    noTeamBlock?: boolean
   }) => {
     const rosters = { ...opts.rosters }
     const membershipState = opts.membershipState ?? "active"
@@ -200,7 +223,13 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
         return Promise.resolve(JSON.stringify(dirs))
       }
       if (path.includes("classroom.json")) {
-        return Promise.resolve(JSON.stringify({ short_name: "x" }))
+        // Include a persisted team block by default so the happy path attaches
+        // it; opts.noTeamBlock omits it to exercise the team-less-invite warning.
+        const meta: Record<string, unknown> = { short_name: "x" }
+        if (!opts.noTeamBlock) {
+          meta.team = { slug: "classroom50-x", id: 4242 }
+        }
+        return Promise.resolve(JSON.stringify(meta))
       }
       return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
     })
@@ -294,6 +323,44 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
     expect(result.inviteWarning).toBeUndefined()
     const rows = rowsFromCsv(rosters.cs101)
     expect(rows.find((r) => r.email === "new@x.edu")).toBeTruthy()
+  })
+
+  it("warns when the classroom team can't be attached (team-less invite risk)", async () => {
+    // With no persisted team block, the invite goes out team-less. That must
+    // warn: with the onboarding reconcile path removed and collection now
+    // team-driven, a student who accepts a team-less invite is uncollected
+    // until the teacher runs Sync roster. The invite MUST still be sent.
+    const { client, rosters } = makeEmailClient({
+      rosters: { cs101: HEADER },
+      inviteSucceeds: true,
+      noTeamBlock: true,
+    })
+
+    const result = await inviteStudentByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      email: "noteam@x.edu",
+    })
+
+    expect(result.inviteWarning).toMatch(/team couldn't be attached/i)
+    expect(result.inviteWarning).toMatch(/sync roster/i)
+    // The row still committed and the student was still invited.
+    expect(
+      rowsFromCsv(rosters.cs101).find((r) => r.email === "noteam@x.edu"),
+    ).toBeTruthy()
+  })
+
+  it("does not warn when the team attaches cleanly", async () => {
+    const { client } = makeEmailClient({
+      rosters: { cs101: HEADER },
+      inviteSucceeds: true,
+    })
+    const result = await inviteStudentByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      email: "hasteam@x.edu",
+    })
+    expect(result.inviteWarning).toBeUndefined()
   })
 
   it("422 + email enrolled in another classroom -> enrolled here, name backfilled, section not copied", async () => {

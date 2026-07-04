@@ -205,6 +205,22 @@ function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
   })
 }
 
+// Project a roster row back to the display-metadata Student shape the grade
+// dashboard consumes. Single-sourced here (the row already carries every
+// Student field) so callers can't drift on the field list — a new Student
+// field surfaces as a type error here rather than a silently dropped column at
+// each inline call site.
+export function rowToStudent(row: TeamRosterRow): Student {
+  return {
+    username: row.username,
+    first_name: row.first_name,
+    last_name: row.last_name,
+    email: row.email,
+    section: row.section,
+    github_id: row.github_id,
+  }
+}
+
 // Convenience accessors the view uses for section counts / banners.
 export function countByState(
   rows: TeamRosterRow[],

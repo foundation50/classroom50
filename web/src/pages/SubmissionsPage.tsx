@@ -48,9 +48,11 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { rowToStudent } from "@/util/teamRoster"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
@@ -150,17 +152,7 @@ const SubmissionsPageContent = () => {
     refetch: refetchRoster,
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
   const students: Student[] = useMemo(
-    () =>
-      teamRows
-        .filter((r) => r.state === "enrolled")
-        .map((r) => ({
-          username: r.username,
-          first_name: r.first_name,
-          last_name: r.last_name,
-          email: r.email,
-          section: r.section,
-          github_id: r.github_id,
-        })),
+    () => teamRows.filter((r) => r.state === "enrolled").map(rowToStudent),
     [teamRows],
   )
   // Gate Regrade all / Collect now on an empty roster: dispatching a workflow
@@ -489,38 +481,30 @@ const SubmissionsPageContent = () => {
             />
           )}
           {rosterError && (
-            <div className="alert alert-error mt-4">
-              <div>
-                {t("submissions.errors.rosterLoad")}{" "}
-                {t("submissions.errors.rosterLoadHint")}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost ml-2"
-                  onClick={() => refetchRoster()}
-                >
-                  {t("submissions.errors.retry")}
-                </button>
-              </div>
-            </div>
+            <QueryErrorAlert
+              message={
+                <>
+                  {t("submissions.errors.rosterLoad")}{" "}
+                  {t("submissions.errors.rosterLoadHint")}
+                </>
+              }
+              onRetry={() => refetchRoster()}
+            />
           )}
           {scoresError && (
-            <div className="alert alert-error mt-4">
-              <div>
-                {scoresErrorObj instanceof Error
-                  ? t("submissions.errors.gradebookLoadWithReason", {
-                      reason: scoresErrorObj.message,
-                    })
-                  : t("submissions.errors.gradebookLoad")}{" "}
-                {t("submissions.errors.gradebookLoadHint")}
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost ml-2"
-                  onClick={() => refetchScores()}
-                >
-                  {t("submissions.errors.retry")}
-                </button>
-              </div>
-            </div>
+            <QueryErrorAlert
+              message={
+                <>
+                  {scoresErrorObj instanceof Error
+                    ? t("submissions.errors.gradebookLoadWithReason", {
+                        reason: scoresErrorObj.message,
+                      })
+                    : t("submissions.errors.gradebookLoad")}{" "}
+                  {t("submissions.errors.gradebookLoadHint")}
+                </>
+              }
+              onRetry={() => refetchScores()}
+            />
           )}
           <div className="flex justify-between">
             <div>

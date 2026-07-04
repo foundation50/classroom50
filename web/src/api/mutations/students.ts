@@ -171,8 +171,9 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
 // students.csv (this app's parse layer and the gh-teacher CLI) sees and must
 // tolerate it on these fields. The gh-teacher Go writer defangs the same set;
-// keep them in lockstep. email_hash is computed from the normalized, pre-guard
-// email, so guarding the stored cell does not affect reconcile matching.
+// keep them in lockstep. The guard runs on the stored cell only; email matching
+// keys on the normalized (trim+lowercase) email, so guarding the cell does not
+// affect match-by-email.
 const FORMULA_LEAD = /^[=+\-@\t\r]/
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
@@ -579,10 +580,21 @@ export async function inviteStudentByEmail(
   const result = await addEmailInviteToClassroomWithConflictRetry(client, input)
 
   // Attach the classroom team to the invite so the student lands in it on
-  // acceptance. Best-effort: if the id can't resolve, reconcile adds them later.
-  const teamId = await resolveClassroomTeam(client, input.org, input.classroom)
-    .then((team) => team.id)
-    .catch(() => undefined)
+  // acceptance. If the team id can't be attached — the resolve threw, or the
+  // classroom has no persisted team block — we still send the invite (the row
+  // already landed and a team-less org member is recoverable), but we MUST warn:
+  // the reconcile path that used to re-add such a student was removed with the
+  // self-report subsystem, and grade collection is now team-driven — a student
+  // who accepts a team-less invite becomes an org member absent from the team,
+  // so they render as an `unprovisioned` drift row and are silently uncollected
+  // until the teacher runs "Sync roster" or "Match account".
+  let teamId: number | undefined
+  try {
+    teamId = (await resolveClassroomTeam(client, input.org, input.classroom)).id
+  } catch {
+    teamId = undefined
+  }
+  const teamAttached = Boolean(teamId)
 
   try {
     await createOrgInvitation(client, {
@@ -590,6 +602,16 @@ export async function inviteStudentByEmail(
       email: result.student.email,
       team_ids: teamId ? [teamId] : undefined,
     })
+    if (!teamAttached) {
+      return {
+        ...result,
+        inviteWarning:
+          `${result.student.email} was invited to ${input.org}, but the classroom ` +
+          `team couldn't be attached, so the invite was sent without it. Once they ` +
+          `accept, run "Sync roster" to add them to the team — otherwise they ` +
+          `won't be included in grade collection.`,
+      }
+    }
   } catch (err) {
     // A 422 means the email already belongs to a member (or is already invited).
     // GitHub gives no identity for the email, so resolve it from the teacher's
@@ -1192,7 +1214,7 @@ export async function syncRosterFromTeam(
     // GitHub profile email matches an existing (e.g. pre-resolution, id/login-
     // less) CSV row is the SAME person the view already folds by email, so
     // appending would create a duplicate email-colliding row the view masks but
-    // that breaks email-keyed logic (match-by-email, emailHash invite dedupe).
+    // that breaks email-keyed logic (match-by-email, invite dedupe).
     const emails = new Set(
       currentStudents
         .map((s) => s.email?.trim().toLowerCase())
@@ -1548,10 +1570,9 @@ export async function unenrollStudent(
   }
 }
 
-// The teacher-editable subset of a roster row. Identity (username, github_id)
-// and lifecycle columns (enrollment_status/method, invite_token, timestamps)
-// are deliberately excluded — they're bound by onboarding/reconcile, not the
-// teacher.
+// The teacher-editable subset of a roster row. Identity columns (username,
+// github_id) are deliberately excluded — they are bound at enrollment and by
+// the team-driven roster, not hand-edited here.
 export type StudentEditableFields = {
   first_name: string
   last_name: string
@@ -1574,9 +1595,7 @@ export type UpdateStudentResult = CreateClassroomResult & {
 }
 
 // Edit one roster row's teacher-facing fields in place and commit the rewritten
-// students.csv. Identity + lifecycle columns are preserved verbatim from the
-// matched row. Recomputes email_hash when the email changes so email-based
-// reconcile matching stays correct.
+// students.csv. Identity columns are preserved verbatim from the matched row.
 export async function updateStudent(
   client: GitHubClient,
   input: UpdateStudentInput,

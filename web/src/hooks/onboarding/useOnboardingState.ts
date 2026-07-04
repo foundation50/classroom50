@@ -1,6 +1,7 @@
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useAcceptAndVerifyMembership } from "@/hooks/onboarding/useAcceptAndVerifyMembership"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import {
   classifyMembershipError,
   type MembershipErrorInfo,
@@ -9,6 +10,19 @@ import {
   deriveOnboardingState,
   type OnboardingState,
 } from "@/hooks/onboarding/onboardingState"
+
+// Whether a membership-read error should surface the error screen. A definitive
+// 404 is NOT a read failure — it is GitHub's authoritative "no membership
+// record" (the student was never invited), which must fall through to the calm
+// notInvited screen. Every other error (403 / SSO-gated / transient 5xx) is a
+// genuine read failure. Exported for unit testing the 404 boundary the live
+// hook depends on (the pure deriveOnboardingState alone can't cover it).
+export function isMembershipReadError(error: unknown): boolean {
+  if (error instanceof GitHubAPIError && error.isNotFound) {
+    return false
+  }
+  return Boolean(error)
+}
 
 export type UseOnboardingStateResult = {
   state: OnboardingState
@@ -32,9 +46,17 @@ export function useOnboardingState(input: {
   const {
     data: orgMembership,
     isLoading: loadingMembership,
-    error: membershipReadError,
+    error: rawMembershipError,
     refetch: refetchMembership,
   } = useGetOwnOrgMembership(org)
+
+  // A 404 from GET /user/memberships/orgs/{org} is not a read *failure* — it is
+  // GitHub's authoritative "no membership record", i.e. the student was never
+  // invited. Treat it as "no membership" so the state machine falls through to
+  // the calm notInvited screen, and reserve the error screen for genuine read
+  // failures (403 / SSO-gated / transient). The accept page keeps its own
+  // 404 -> notAMember handling; this remapping is scoped to onboarding.
+  const membershipReadError = isMembershipReadError(rawMembershipError)
 
   const hasMembership = Boolean(orgMembership)
   const alreadyActive = orgMembership?.state === "active"
@@ -59,8 +81,9 @@ export function useOnboardingState(input: {
   if (state === "error") {
     // Mirror deriveOnboardingState's precedence: a read error takes priority,
     // so classify it over any accept error to keep the cause aligned with the
-    // flag that produced the error state.
-    const err = membershipReadError ? membershipReadError : accept.error
+    // flag that produced the error state. (A 404 never reaches here — it maps
+    // to notInvited, not error.)
+    const err = membershipReadError ? rawMembershipError : accept.error
     errorInfo = classifyMembershipError(err, {
       org,
       username: user?.login,

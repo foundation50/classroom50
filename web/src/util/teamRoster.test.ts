@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildTeamRoster, countByState } from "./teamRoster"
+import { buildTeamRoster, countByState, rowToStudent } from "./teamRoster"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
@@ -99,6 +99,20 @@ describe("buildTeamRoster", () => {
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ state: "pending", username: "pendinguser" })
+    // The pending row MUST carry the org-invitation id: resendOrgInvitation
+    // short-circuits (re-sends nothing) without it, so dropping it is a silent
+    // no-op, not a crash. Pin it here so a regression fails loudly.
+    expect(rows[0].invitation_id).toBe(2)
+  })
+
+  it("leaves invitation_id undefined for enrolled (non-pending) rows", () => {
+    const rows = buildTeamRoster({
+      members: [member(55, "linus")],
+      invitations: [],
+      students: [],
+    })
+    expect(rows[0].state).toBe("enrolled")
+    expect(rows[0].invitation_id).toBeUndefined()
   })
 
   it("skips a pending invite for someone already an active member", () => {
@@ -125,6 +139,7 @@ describe("buildTeamRoster", () => {
       first_name: "Bob",
       section: "B",
     })
+    expect(rows[0].invitation_id).toBe(3)
   })
 
   it("marks CSV-only rows with no member/invite as unprovisioned", () => {
@@ -184,6 +199,30 @@ describe("buildTeamRoster", () => {
       enrolled: 2,
       pending: 1,
       unprovisioned: 2,
+    })
+  })
+
+  it("rowToStudent projects all six Student fields from a roster row", () => {
+    const rows = buildTeamRoster({
+      members: [member(101, "ada")],
+      students: [
+        csvRow({
+          github_id: "101",
+          username: "ada",
+          first_name: "Ada",
+          last_name: "Lovelace",
+          email: "ada@uni.edu",
+          section: "A",
+        }),
+      ],
+    })
+    expect(rowToStudent(rows[0])).toEqual({
+      username: "ada",
+      first_name: "Ada",
+      last_name: "Lovelace",
+      email: "ada@uni.edu",
+      section: "A",
+      github_id: "101",
     })
   })
 })
