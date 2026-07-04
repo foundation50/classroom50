@@ -37,20 +37,18 @@ const MAX_REGISTRY_BYTES = 64 * 1024
 // JSON is accepted on input and flattened before validation.
 export type FlatBundle = Record<string, string>
 
-// Where an installed pack came from. Only "registry" packs are eligible for the
-// silent auto-refresh; a user's hand-loaded pack (file/URL) is never touched,
-// even when its code also exists in the registry. Legacy packs stored before
-// this field existed are read as "user" so they're never auto-overwritten.
+// Where an installed pack came from. Only "registry" packs auto-refresh; a
+// user's hand-loaded pack is never touched, even if its code is in the
+// registry. Legacy packs (no source field) read as "user", so never clobbered.
 export type PackSource = "registry" | "user"
 
 export type LanguagePack = {
   code: string
   bundle: FlatBundle
-  // Origin of the pack; defaults to "user" on read for legacy stored packs.
+  // Origin; defaults to "user" on read for legacy stored packs.
   source: PackSource
-  // Update markers for registry packs: the manifest version and/or the pack's
-  // content hash at install time. Used to decide whether a refresh is warranted
-  // (version/hash changed) without re-downloading, and absent for user packs.
+  // Registry-pack update markers captured at install: skip a re-download when
+  // unchanged. Absent for user packs.
   version?: string
   hash?: string
 }
@@ -90,8 +88,7 @@ const storedPacksSchema = z.record(z.string(), packSchema)
 
 // Shape of the registry's index.json: { "languages": [{ "code": "ja" }, ...] }.
 // Unknown/invalid entries are tolerated per-item so one bad row doesn't sink
-// the whole list. `version`/`hash` are optional update markers the publish
-// workflow may add; the app degrades gracefully when they're absent.
+// the whole list. `version`/`hash` are optional update markers.
 const registryEntrySchema = z.object({
   code: langCodeSchema,
   version: z.string().max(200).optional(),
@@ -346,9 +343,7 @@ export function hydratePacks(): string[] {
 }
 
 // Install (or replace) a pack: register it and persist. Returns the code.
-// `meta` records provenance (source) and, for registry packs, the update
-// markers (version/hash) so a later startup can decide whether to refresh
-// without re-downloading. Defaults to a user-sourced pack.
+// `meta` records provenance + registry update markers; defaults to user-sourced.
 export function installPack(
   codeInput: string,
   bundle: FlatBundle,
@@ -441,13 +436,10 @@ export type PackPreview = {
   coverage: number
   keyCount: number
   sample: string[]
-  // Provenance + update markers carried from the loader to commit time, so an
-  // installed registry pack records how to detect a future update.
+  // Provenance + update markers carried from loader to commit time.
   source: PackSource
-  // Manifest-provided version, when the loader had one (registry only).
   version?: string
-  // Content hash of the bundle (always computed), plus/or a manifest-provided
-  // hash. Used as the update signal when the manifest carries no version.
+  // Manifest hash when available, else a computed content hash — always set.
   hash: string
 }
 
@@ -462,9 +454,7 @@ const SAMPLE_KEYS = [
 ] as const
 
 // Order-independent content hash of a flat bundle (FNV-1a over sorted
-// key=value pairs). Cheap and synchronous — used to detect whether a refetched
-// registry pack actually differs from the installed one when no manifest
-// version/hash is available.
+// key=value pairs). The fallback update signal when the manifest has no hash.
 export function hashBundle(bundle: FlatBundle): string {
   const serialized = Object.keys(bundle)
     .sort()
@@ -494,8 +484,7 @@ function buildPreview(
     sample,
     source: meta?.source ?? "user",
     ...(meta?.version ? { version: meta.version } : {}),
-    // Prefer a manifest hash when supplied; otherwise fall back to the computed
-    // content hash so we always have an update signal.
+    // Manifest hash if supplied, else the computed content hash.
     hash: meta?.hash ?? hashBundle(bundle),
   }
 }
@@ -529,9 +518,8 @@ const FETCH_TIMEOUT_MS = 10_000
 
 // Fetch a pack from a URL into a preview. Requires http/https, bounds the
 // response size, times out, and maps every failure to a LanguagePackError. Code
-// is inferred from the URL's last path segment when omitted. Pass
-// `requireHttps` for the unattended auto-refresh path, which (unlike the
-// user-confirmed manual install) must reject cleartext http.
+// is inferred from the URL's last path segment when omitted. `requireHttps`
+// rejects cleartext http (used by the unattended auto-refresh path).
 export async function prepareFromUrl(
   url: string,
   code?: string,
@@ -586,17 +574,15 @@ export async function prepareFromUrl(
 
 // ---- Built-in registry ------------------------------------------------------
 
-// Short-lived memoization of the manifest fetch. Startup auto-refresh and the
-// Browse dialog both hit index.json; without this they'd issue overlapping
-// requests. Only successful results are cached (a failure must not poison later
-// calls), and an in-flight promise is shared so concurrent callers dedupe.
+// Short-lived memoization of the manifest fetch: startup refresh and the Browse
+// dialog both hit index.json. Only successful results cache (a failure must not
+// poison later calls); an in-flight promise dedupes concurrent callers.
 const REGISTRY_CACHE_TTL_MS = 30_000
 let registryCache: { at: number; langs: RegistryLanguage[] } | null = null
 let registryInFlight: Promise<RegistryLanguage[]> | null = null
 
-// Test-only: clear the memoization so a per-test fetch mock isn't shadowed by a
-// cached result (vitest does not isolate tests within a file). Call in
-// beforeEach/afterEach of any suite that stubs fetch for the registry.
+// Test-only: clear the memo so a per-test fetch mock isn't shadowed by a cached
+// result (vitest doesn't isolate tests within a file). Call in beforeEach.
 export function resetRegistryCache(): void {
   registryCache = null
   registryInFlight = null
@@ -697,10 +683,8 @@ export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
 }
 
 // Preview a registry language by reusing the URL loader (same size/timeout/
-// validation guardrails). The code is explicit so it doesn't rely on inference.
-// Pass `requireHttps` for the silent auto-refresh path, and `entry` (the
-// manifest row) to stamp the registry source + version/hash markers onto the
-// preview so a committed pack knows how to detect future updates.
+// validation guardrails). Pass `requireHttps` for the silent auto-refresh path,
+// and `entry` (the manifest row) to stamp the registry source + version/hash.
 export async function prepareFromBuiltIn(
   code: string,
   options?: { requireHttps?: boolean; entry?: RegistryLanguage },
@@ -715,14 +699,13 @@ export async function prepareFromBuiltIn(
     ...preview,
     source: "registry",
     ...(version ? { version } : {}),
-    // Prefer the manifest hash when present; else keep the computed content hash.
+    // Manifest hash if present, else the computed content hash.
     hash: manifestHash ?? preview.hash,
   }
 }
 
 // Install and activate a previewed pack — the only step that mutates
-// localStorage and i18next. Pass the preview's provenance so a registry pack
-// records its source + update markers.
+// localStorage and i18next. Pass the preview's provenance/markers.
 export async function commitPack(
   code: string,
   bundle: FlatBundle,
@@ -735,10 +718,9 @@ export async function commitPack(
 
 // ---- Auto-refresh + update notifications ------------------------------------
 
-// Listeners notified with the codes of packs updated by refreshInstalledPacks.
-// Bridges the non-React startup refresh to a React toast: startup runs before
-// the app mounts, so any codes updated then are buffered and flushed to the
-// first subscriber (see onPacksUpdated / subscribeToPackUpdates).
+// Listeners for codes updated by refreshInstalledPacks. Bridges the non-React
+// startup refresh to a toast: startup runs before mount, so codes updated then
+// are buffered and flushed to the first subscriber.
 const updateListeners = new Set<(codes: string[]) => void>()
 let pendingUpdatedCodes: string[] = []
 
@@ -752,8 +734,8 @@ function emitPackUpdates(codes: string[]): void {
   for (const listener of updateListeners) listener(codes)
 }
 
-// Subscribe to "packs were auto-updated" events. Immediately flushes any codes
-// buffered before the first subscriber mounted. Returns an unsubscribe fn.
+// Subscribe to auto-update events, immediately flushing any buffered codes.
+// Returns an unsubscribe fn.
 export function subscribeToPackUpdates(
   onUpdate: (codes: string[]) => void,
 ): () => void {
@@ -768,11 +750,10 @@ export function subscribeToPackUpdates(
   }
 }
 
-// Whether the registry copy warrants refetching the pack. Prefer the cheap
-// marker comparison (version, else manifest/stored hash) so an unchanged pack
-// costs no download; fall back to always-fetch only when neither side has a
-// marker (older manifest + older stored pack), where the post-download
-// bundlesEqual check still prevents a needless overwrite.
+// Whether the registry copy warrants refetching the pack. Compare markers
+// (version, else hash) so an unchanged pack costs no download; with neither
+// marker, fall through to fetch (the post-download bundlesEqual check still
+// prevents a needless overwrite).
 function registryPackChanged(
   installed: LanguagePack,
   entry: RegistryLanguage,
@@ -786,15 +767,11 @@ function registryPackChanged(
   return true
 }
 
-// Silent background refresh: re-fetch each installed *registry* pack whose
-// registry marker changed and overwrite it in place. Only packs with
-// source==="registry" are eligible — a user's hand-loaded pack is never
-// touched, even when its code also exists in the registry. Every failure
-// (registry unreachable, a single pack fetch, https rejection, hash mismatch)
-// is swallowed so a flaky network never wipes a working pack. Returns the codes
-// actually updated (also emitted to subscribers for a toast). Never changes the
-// active language; installPack -> addResourceBundle live-updates the rendered
-// strings of the active pack.
+// Silent background refresh: re-fetch each installed registry pack whose marker
+// changed and overwrite in place. Only source==="registry" packs are eligible.
+// Every failure is swallowed so a flaky network never wipes a working pack.
+// Returns (and emits) the updated codes. Never changes the active language;
+// installPack -> addResourceBundle live-updates the active pack's strings.
 export async function refreshInstalledPacks(): Promise<string[]> {
   const packs = readStoredPacks()
   const registryPacks = Object.values(packs).filter(
@@ -821,11 +798,9 @@ export async function refreshInstalledPacks(): Promise<string[]> {
         requireHttps: true,
         entry,
       })
-      // If a manifest hash was provided, prepareFromBuiltIn already verified
-      // by adopting it; guard the no-marker path against a no-op overwrite.
+      // Content identical despite a changed marker: refresh the stored marker
+      // quietly (stop refetching) but don't toast.
       if (bundlesEqual(preview.bundle, pack.bundle)) {
-        // Content identical despite a changed/absent marker — refresh the
-        // stored marker quietly so we stop refetching, but don't toast.
         installPack(pack.code, pack.bundle, {
           source: "registry",
           version: preview.version,
@@ -840,8 +815,7 @@ export async function refreshInstalledPacks(): Promise<string[]> {
       })
       updated.push(pack.code)
     } catch {
-      // A single pack failing (fetch, https, validation) must not abort the
-      // rest or wipe the existing pack.
+      // One pack failing must not abort the rest or wipe the existing pack.
     }
   }
 

@@ -46,10 +46,9 @@ void (async () => {
     await i18n.changeLanguage(stored)
   }
   await applyLangFromQuery()
-  // Silently pull any newer registry packs. Runs last so a just-installed
-  // deep-link pack is considered and the active pack's strings live-update.
-  // Swallows its own failures; updated codes surface as a toast via a
-  // subscriber mounted under NotificationProvider (LanguagePackUpdateToaster).
+  // Silently pull any newer registry packs (runs last so a just-installed
+  // deep-link pack is considered and the active pack live-updates). Swallows
+  // its own failures; updated codes toast via LanguagePackUpdateToaster.
   await refreshInstalledPacks()
 })()
 

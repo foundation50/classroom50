@@ -644,8 +644,7 @@ describe("refreshInstalledPacks", () => {
   const realWindow = globalThis.window
 
   beforeEach(async () => {
-    // installPack registers bundles via i18next.addResourceBundle, which throws
-    // pre-init. Production initializes i18next via ./i18n; the unit tests here
+    // installPack -> i18next.addResourceBundle throws pre-init; these tests
     // import only ./customLocale, so init a minimal instance first.
     if (!i18n.isInitialized) {
       await i18n.use(initReactI18next).init({
@@ -655,8 +654,7 @@ describe("refreshInstalledPacks", () => {
         interpolation: { escapeValue: false },
       })
     }
-    // Drain any codes buffered by a prior test (the update buffer is module
-    // state that survives between tests).
+    // Drain codes buffered by a prior test (buffer is module state).
     subscribeToPackUpdates(() => {})()
   })
 
