@@ -320,6 +320,42 @@ class TestApplyUpdates:
         assert len(entries) == 1
         assert entries[0]["member_usernames"] == ["alice", "bob"]
 
+    def test_group_credited_set_shrink_warns_and_still_replaces(self, capsys):
+        # A previously-credited teammate (bob) is dropped on re-collect (e.g.
+        # he left the classroom team but is still a repo collaborator, so the
+        # team-driven crediting gate no longer includes him). The entry is
+        # still replaced in place, but the silent revocation must now surface
+        # a warning naming the dropped member so a team/CSV divergence isn't
+        # invisible. The owner-only warning in collect_classroom only covers
+        # the len==1 collapse, so a >=2 -> >=1 shrink needs this guard.
+        scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
+        first = make_update(username="alice", assignment_type="group", score=8)
+        first["member_usernames"] = ["alice", "bob", "carol"]
+        cs.apply_updates(scores, [first])
+
+        shrunk = make_update(username="alice", assignment_type="group", score=9)
+        shrunk["member_usernames"] = ["alice", "carol"]
+        changes = cs.apply_updates(scores, [shrunk])
+
+        assert changes == 1
+        entries = scores["assignments"]["hello"]["entries"]
+        assert len(entries) == 1
+        assert entries[0]["member_usernames"] == ["alice", "carol"]
+        err = capsys.readouterr().err
+        assert "lost previously-credited member(s) bob" in err
+
+    def test_group_credited_set_grow_does_not_warn(self, capsys):
+        # The complement of the shrink test: adding a member (no revocation)
+        # must NOT emit the credit-loss warning.
+        scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
+        first = make_update(username="alice", assignment_type="group", score=5)
+        first["member_usernames"] = ["alice"]
+        cs.apply_updates(scores, [first])
+        grown = make_update(username="alice", assignment_type="group", score=6)
+        grown["member_usernames"] = ["alice", "bob"]
+        cs.apply_updates(scores, [grown])
+        assert "previously-credited member" not in capsys.readouterr().err
+
     def test_owner_field_persisted_in_entry(self):
         # The owner is a first-class entry field and survives ingest.
         scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
@@ -1148,6 +1184,24 @@ class TestCollectClassroomTeamDriven:
         )
         # Alice/alice collapse to one repo probe; BOB to another.
         assert seen_repos == ["cs-principles-hello-alice", "cs-principles-hello-bob"]
+
+    def test_malformed_team_listing_warns_and_skips(self, monkeypatch, capsys):
+        # A malformed team-member listing (non-array body -> ValueError, or a
+        # JSONDecodeError) is a per-classroom data problem, not a run-killer:
+        # collect_classroom catches it, warns, and returns no pairs rather than
+        # propagating (mirrors the 404 soft-skip; contrasts with the 403 hard
+        # error that propagates).
+        def boom(*a, **k):
+            raise ValueError("expected JSON array, got dict")
+
+        monkeypatch.setattr(cs, "list_team_member_logins", boom)
+        results, mode_flip = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+        )
+        assert results == []
+        assert mode_flip == 0
+        assert "member listing malformed" in capsys.readouterr().err
 
 
 class TestLateness:

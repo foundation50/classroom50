@@ -1149,6 +1149,8 @@
       "gradebookLoad": "Couldn't load the gradebook.",
       "gradebookLoadWithReason": "Couldn't load the gradebook: {{reason}}",
       "gradebookLoadHint": "The counts below may be incomplete — retry before acting on them.",
+      "rosterLoad": "Couldn't load the roster from GitHub.",
+      "rosterLoadHint": "The enrolled list may be incomplete — this is a load error, not an empty classroom. Retry before acting on the counts.",
       "retry": "Retry"
     },
     "actions": {

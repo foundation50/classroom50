@@ -33,6 +33,9 @@ export type UseTeamRosterResult = {
   pendingHidden: boolean
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
+  // Re-run the team-member fetch (the enrolled source of truth) so an error
+  // surface can offer a retry without a full page reload.
+  refetch: () => void
 }
 
 // The teacher roster, driven by GitHub (team members + pending org invites),
@@ -54,6 +57,7 @@ export function useTeamRoster(
     data: members,
     isLoading: membersLoading,
     isError: membersError,
+    refetch: refetchMembers,
   } = useQuery({
     ...teamMembersQuery(client, org, teamSlug),
   })
@@ -90,5 +94,8 @@ export function useTeamRoster(
     isEmpty: !isLoading && !membersError && rows.length === 0,
     pendingHidden: invitesForbidden,
     teamSlug,
+    refetch: () => {
+      void refetchMembers()
+    },
   }
 }

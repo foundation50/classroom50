@@ -141,11 +141,14 @@ const SubmissionsPageContent = () => {
   // map the enrolled team rows into that shape. Non-submitters = team members
   // minus credited usernames (below).
   const { students: csvStudents } = useGetStudents(org, classroom)
-  const { rows: teamRows } = useTeamRoster(
-    org ?? "",
-    classroom ?? "",
-    csvStudents,
-  )
+  // Surface the team-member fetch's error/loading (useTeamRoster exposes them
+  // deliberately): a transient or permission failure of the enrolled source of
+  // truth must render as an error+retry, not as an authoritative empty roster.
+  const {
+    rows: teamRows,
+    isError: rosterError,
+    refetch: refetchRoster,
+  } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
   const students: Student[] = useMemo(
     () =>
       teamRows
@@ -484,6 +487,21 @@ const SubmissionsPageContent = () => {
               hasRosterRows={emptyRoster.hasRosterRows}
               className="mt-4"
             />
+          )}
+          {rosterError && (
+            <div className="alert alert-error mt-4">
+              <div>
+                {t("submissions.errors.rosterLoad")}{" "}
+                {t("submissions.errors.rosterLoadHint")}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost ml-2"
+                  onClick={() => refetchRoster()}
+                >
+                  {t("submissions.errors.retry")}
+                </button>
+              </div>
+            </div>
           )}
           {scoresError && (
             <div className="alert alert-error mt-4">

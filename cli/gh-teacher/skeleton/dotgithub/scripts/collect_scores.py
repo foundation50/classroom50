@@ -58,7 +58,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 # Schema sentinels — keep in lockstep with the Go-side constants in
 # `cli/gh-teacher/classroom.go` and `cli/gh-teacher/assignments_json.go`.
@@ -934,6 +934,23 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
             continue
         if same_submission(existing, entry):
             continue
+        # A group re-collect that drops a previously-credited member (e.g. a
+        # teammate who left the classroom team but is still a repo collaborator)
+        # replaces the entry in place, silently revoking that member's shared
+        # credit. The owner-only warning in collect_classroom only fires when
+        # the set collapses to just the owner; a shrink that still leaves >=2
+        # members would otherwise be invisible. Surface any dropped member so
+        # the teacher can confirm the revocation is intended, not a team/CSV
+        # divergence.
+        dropped = _dropped_group_members(existing, entry)
+        if dropped:
+            emit_warning(
+                f"{slug}: group entry owned by {row_key(entry)!r} lost previously-"
+                f"credited member(s) {', '.join(sorted(dropped))} on re-collect. A "
+                f"teammate is credited only while on the classroom team; verify the "
+                f"drop is intended (e.g. an unenrollment) and not a team-vs-students.csv "
+                f"divergence, since the shared score is now revoked for them."
+            )
         # Preserve an explicit "override": false on replacement —
         # the teacher's "I reviewed this, keep refreshing" signal.
         if "override" in existing and "override" not in entry:
@@ -942,6 +959,26 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
         entries[idx] = entry
         changes += 1
     return changes
+
+
+def _dropped_group_members(
+    existing: dict[str, Any], incoming: dict[str, Any]
+) -> set[str]:
+    """Members credited on the existing group entry but absent from the
+    incoming one (case-insensitive), i.e. teammates whose shared credit a
+    re-collect would silently revoke. Empty for individual entries or when
+    the credited set did not shrink."""
+    def credited(entry: dict[str, Any]) -> set[str]:
+        members = entry.get("member_usernames")
+        if not isinstance(members, list):
+            return set()
+        return {
+            m.strip().lower()
+            for m in members
+            if isinstance(m, str) and m.strip()
+        }
+
+    return credited(existing) - credited(incoming)
 
 
 def entry_from_result(payload: dict[str, Any]) -> dict[str, Any]:
@@ -1216,6 +1253,71 @@ def _assert_same_host(next_url: str, api_url: str) -> str:
     return next_url
 
 
+def _paginate_login_list(
+    page_url: Callable[[int], str],
+    api_url: str,
+    token: str,
+    resource_label: str,
+) -> list[str]:
+    """Walk a paginated GitHub list-of-accounts endpoint and return every
+    `login`. Shared core for list_repo_collaborator_logins and
+    list_team_member_logins — the only per-caller differences are the URL
+    builder and the cap-error label.
+
+    `page_url(page)` builds the request URL for a 1-based page number
+    (caller owns per_page/page formatting). Only the first page is built
+    from it; subsequent pages follow GitHub's authoritative `Link: rel="next"`
+    header, host-pinned to api_url via _assert_same_host so a crafted Link
+    can't pivot the service token to a foreign host. When no Link header is
+    present, the walk falls back to synthesizing page+1 and stops on a short
+    page (len < per_page). A self/looping rel="next" is bounded by seen_next.
+
+    Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
+    can decide between a soft fallback and a hard failure; raises ValueError on
+    a non-array body or on hitting the page cap.
+    """
+    per_page = 100
+    max_pages = 100
+    logins: list[str] = []
+    url = page_url(1)
+    seen_next: set[str] = set()
+    for page in range(1, max_pages + 1):
+        body, headers = _http_get_with_headers(
+            url, token, accept="application/vnd.github+json"
+        )
+        batch = json.loads(body.decode("utf-8"))
+        if not isinstance(batch, list):
+            raise ValueError(
+                f"GET {url}: expected JSON array, got {type(batch).__name__}"
+            )
+        for item in batch:
+            if not isinstance(item, dict):
+                continue
+            login = item.get("login")
+            if isinstance(login, str) and login:
+                logins.append(login)
+        link_header = headers.get("Link") if headers else None
+        next_url = _next_page_link(link_header)
+        if next_url:
+            next_url = _assert_same_host(next_url, api_url)
+            # Stop if the server points us back at a page we've already
+            # fetched (self/looping rel="next"): bounds a crafted or buggy
+            # Link chain to the pages actually seen instead of running out
+            # the max_pages cap.
+            if next_url in seen_next:
+                return logins
+            seen_next.add(next_url)
+            url = next_url
+            continue
+        if link_header or len(batch) < per_page:
+            return logins
+        url = page_url(page + 1)
+    raise ValueError(
+        f"{resource_label}: too many entries to enumerate "
+        f"(hit the {max_pages}-page cap)"
+    )
+
+
 def list_repo_collaborator_logins(
     api_url: str, owner: str, repo: str, token: str
 ) -> list[str]:
@@ -1243,48 +1345,12 @@ def list_repo_collaborator_logins(
     caller can decide between an owner-only fallback and a hard failure.
     """
     per_page = 100
-    max_pages = 100
-    logins: list[str] = []
-    url = (
-        f"{_repo_url(api_url, owner, repo)}/collaborators"
-        f"?per_page={per_page}&page=1"
-    )
-    seen_next: set[str] = set()
-    for page in range(1, max_pages + 1):
-        body, headers = _http_get_with_headers(
-            url, token, accept="application/vnd.github+json"
-        )
-        batch = json.loads(body.decode("utf-8"))
-        if not isinstance(batch, list):
-            raise ValueError(f"GET {url}: expected JSON array, got {type(batch).__name__}")
-        for c in batch:
-            if not isinstance(c, dict):
-                continue
-            login = c.get("login")
-            if isinstance(login, str) and login:
-                logins.append(login)
-        link_header = headers.get("Link") if headers else None
-        next_url = _next_page_link(link_header)
-        if next_url:
-            next_url = _assert_same_host(next_url, api_url)
-            # Stop if the server points us back at a page we've already
-            # fetched (self/looping rel="next"): bounds a crafted or buggy
-            # Link chain to the pages actually seen instead of running out
-            # the max_pages cap.
-            if next_url in seen_next:
-                return logins
-            seen_next.add(next_url)
-            url = next_url
-            continue
-        if link_header or len(batch) < per_page:
-            return logins
-        url = (
-            f"{_repo_url(api_url, owner, repo)}/collaborators"
-            f"?per_page={per_page}&page={page + 1}"
-        )
-    raise ValueError(
-        f"repos/{owner}/{repo}/collaborators: too many collaborators to "
-        f"enumerate (hit the {max_pages}-page cap)"
+    base = f"{_repo_url(api_url, owner, repo)}/collaborators"
+    return _paginate_login_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
+        api_url=api_url,
+        token=token,
+        resource_label=f"repos/{owner}/{repo}/collaborators",
     )
 
 
@@ -1301,44 +1367,15 @@ def list_team_member_logins(
     urllib.error.HTTPError on any non-2xx (including 404 when the team
     doesn't exist) so the caller can warn-and-skip vs. hard-fail."""
     per_page = 100
-    max_pages = 100
-    logins: list[str] = []
-    members_url = (
+    base = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/members"
     )
-    url = f"{members_url}?per_page={per_page}&page=1"
-    seen_next: set[str] = set()
-    for page in range(1, max_pages + 1):
-        body, headers = _http_get_with_headers(
-            url, token, accept="application/vnd.github+json"
-        )
-        batch = json.loads(body.decode("utf-8"))
-        if not isinstance(batch, list):
-            raise ValueError(
-                f"GET {url}: expected JSON array, got {type(batch).__name__}"
-            )
-        for m in batch:
-            if not isinstance(m, dict):
-                continue
-            login = m.get("login")
-            if isinstance(login, str) and login:
-                logins.append(login)
-        link_header = headers.get("Link") if headers else None
-        next_url = _next_page_link(link_header)
-        if next_url:
-            next_url = _assert_same_host(next_url, api_url)
-            if next_url in seen_next:
-                return logins
-            seen_next.add(next_url)
-            url = next_url
-            continue
-        if link_header or len(batch) < per_page:
-            return logins
-        url = f"{members_url}?per_page={per_page}&page={page + 1}"
-    raise ValueError(
-        f"orgs/{org}/teams/{team_slug}/members: too many members to "
-        f"enumerate (hit the {max_pages}-page cap)"
+    return _paginate_login_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
+        api_url=api_url,
+        token=token,
+        resource_label=f"orgs/{org}/teams/{team_slug}/members",
     )
 
 
