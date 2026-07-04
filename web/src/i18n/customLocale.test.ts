@@ -901,4 +901,48 @@ describe("refreshInstalledPacks", () => {
     unsubscribe()
     expect(seen).toEqual([["de"]])
   })
+
+  it("buffers updates emitted before any subscriber and flushes them on first subscribe", async () => {
+    stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "old" },
+        },
+      }),
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const u = String(input)
+        if (/index\.json$/.test(u)) {
+          return new Response(
+            JSON.stringify({ languages: [{ code: "de", version: "2" }] }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify({ nav: { roleStudent: "neu" } }), {
+          status: 200,
+        })
+      }),
+    )
+
+    // Startup path: the refresh runs before the toaster mounts, so the update
+    // is emitted with no listener and must be buffered.
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual(["de"])
+
+    // First subscriber (the mounting toaster) drains the buffer exactly once.
+    const seen: string[][] = []
+    const unsubscribe = subscribeToPackUpdates((codes) => seen.push(codes))
+    expect(seen).toEqual([["de"]])
+    unsubscribe()
+
+    // A later subscriber gets nothing — the buffer was already drained.
+    const seenLater: string[][] = []
+    subscribeToPackUpdates((codes) => seenLater.push(codes))()
+    expect(seenLater).toEqual([])
+  })
 })

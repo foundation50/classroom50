@@ -42,6 +42,10 @@ export type FlatBundle = Record<string, string>
 // registry. Legacy packs (no source field) read as "user", so never clobbered.
 export type PackSource = "registry" | "user"
 
+// Provenance + registry update markers carried alongside a pack: from loader to
+// preview to install. Defaults to user-sourced when the source is omitted.
+export type PackMeta = { source?: PackSource; version?: string; hash?: string }
+
 export type LanguagePack = {
   code: string
   bundle: FlatBundle
@@ -347,7 +351,7 @@ export function hydratePacks(): string[] {
 export function installPack(
   codeInput: string,
   bundle: FlatBundle,
-  meta?: { source?: PackSource; version?: string; hash?: string },
+  meta?: PackMeta,
 ): string {
   const code = normalizeLangCode(codeInput)
   if (code === BASE_LANG) {
@@ -471,7 +475,7 @@ export function hashBundle(bundle: FlatBundle): string {
 function buildPreview(
   code: string,
   bundle: FlatBundle,
-  meta?: { source?: PackSource; version?: string; hash?: string },
+  meta?: PackMeta,
 ): PackPreview {
   const sample = SAMPLE_KEYS.map((key) => bundle[key]).filter(
     (value): value is string => typeof value === "string",
@@ -709,7 +713,7 @@ export async function prepareFromBuiltIn(
 export async function commitPack(
   code: string,
   bundle: FlatBundle,
-  meta?: { source?: PackSource; version?: string; hash?: string },
+  meta?: PackMeta,
 ): Promise<string> {
   const installed = installPack(code, bundle, meta)
   await selectLang(installed)
