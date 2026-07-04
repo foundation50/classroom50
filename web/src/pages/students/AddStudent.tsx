@@ -28,7 +28,7 @@ type AddStudentFormValues = {
 
 // Single add/invite form. A username enrolls via GitHub (resolve, add to team,
 // send org invite) and still stores the email; email-only sends an email invite.
-// Either way the student completes their roster row through onboarding.
+// Either way the student joins the classroom team when they accept the invite.
 const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const queryClient = useQueryClient()
@@ -63,8 +63,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
         }
       }
 
-      // Email-only -> email invite. A per-student invite token is always minted,
-      // so the secure per-student onboarding link is available too.
+      // Email-only -> email invite carrying the classroom team, so the student
+      // lands in the team when they accept.
       const result = await inviteStudentByEmail(githubClient, {
         org,
         classroom,

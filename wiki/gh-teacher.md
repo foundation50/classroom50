@@ -148,7 +148,7 @@ The short-name flows into student repo names like `<short-name>-<assignment>-<us
 | --- | --- | --- |
 | `<short-name>/classroom.json` | `classroom50/classroom/v1` | `name`, `short_name`, `term`, `org`, and a `team` block (`{id, slug}`) recording the classroom's GitHub team |
 | `<short-name>/assignments.json` | `classroom50/assignments/v1` | Empty `assignments: []` array — populated by `gh teacher assignment add`. |
-| `<short-name>/students.csv` | n/a | Header row begins with `username,first_name,last_name,email,section,github_id`. The `email` column is optional per row (values may be empty). The trailing `github_id` is a hidden column populated by `gh teacher roster add/import` — do not hand-edit it. The Classroom50 web app may append optional onboarding columns after `github_id` (`enrollment_status`, `enrollment_method`, `email_hash`, `invite_token`, `invited_at`, `enrolled_at`); the CLI reads past them and preserves them on edit. |
+| `<short-name>/students.csv` | n/a | Header row begins with `username,first_name,last_name,email,section,github_id`. The `email` column is optional per row (values may be empty). The trailing `github_id` is a hidden column populated by `gh teacher roster add/import` — do not hand-edit it. Any extra trailing columns after `github_id` (e.g. left over from an older file) are read past and preserved on edit. |
 | `<short-name>/scores.json` | `classroom50/scores/v1` | Scaffolds with an empty `assignments: {}` object -- entries are written by the `collect-scores.yaml` workflow, keyed by assignment slug → `{type, entries[]}`. |
 
 Three things this scaffold does **not** include:
@@ -380,7 +380,7 @@ Bulk upsert from a local CSV. Accepts either header shape:
 
 The `email` column values may be empty per row.
 
-> **Import takes only the canonical shape.** If your `students.csv` carries the web app's onboarding columns (`enrollment_status`, `invite_token`, …) appended after `github_id`, trim everything after `github_id` before importing — `roster import` accepts only the 5- or 6-column canonical header and rejects a wider file with a message naming the cause. `roster add`/`roster update`/`roster remove` *do* preserve those onboarding columns; import re-resolves `github_id` and carries no onboarding state, so it stays canonical-only by design.
+> **Import takes only the canonical shape.** If your `students.csv` carries extra columns appended after `github_id` (e.g. left over from an older file), trim everything after `github_id` before importing — `roster import` accepts only the 5- or 6-column canonical header and rejects a wider file with a message naming the cause. `roster add`/`roster update`/`roster remove` *do* preserve those extra columns; import re-resolves `github_id` and carries no extra state, so it stays canonical-only by design.
 
 Resolves every username up-front (one `GET /users/{username}` per row); a non-existent username aborts the import with the row number, before any commit. Once all usernames resolve, the entire file is written in a single Tree commit — there's no partial-import state visible on the repo. After the commit, each non-member is invited; the command prints a summary `N invited, M already members, K already pending`.
 
@@ -390,7 +390,7 @@ Duplicate usernames within the input (case-insensitive) collapse with last-wins 
 
 - `<org>/classroom50` missing → `run gh teacher init <org> first`, non-zero exit.
 - `<classroom>/students.csv` missing → `run gh teacher classroom add <org> <classroom> first, or restore the file if it was deleted`.
-- `students.csv` header doesn't begin with `username,first_name,last_name,email,section,github_id` → exits non-zero with the offending header. (Optional onboarding columns appended after `github_id` by the web app are accepted and preserved.)
+- `students.csv` header doesn't begin with `username,first_name,last_name,email,section,github_id` → exits non-zero with the offending header. (Optional extra columns appended after `github_id` are accepted and preserved.)
 - GitHub user not found (404 from `GET /users/{username}`) → exits with the offending username.
 - Repeated rebase failures (the CLI retries a small fixed number of times with exponential backoff) → exits with a `lost the rebase race` message and a hint to retry or investigate concurrent writers.
 

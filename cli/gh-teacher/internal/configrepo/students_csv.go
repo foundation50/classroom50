@@ -16,21 +16,15 @@ import (
 // defends against mid-class username changes. Email may be empty.
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id"}
 
-// OnboardingColumns: the email-first onboarding tail the web app once appended
-// (enrollment_status/method, email_hash, invite_token, invited_at, enrolled_at)
-// was PRUNED — the classroom GitHub team is the source of truth for enrollment,
-// so students.csv is now just the identity/metadata columns. Kept as an empty
-// slice so FullRosterHeader stays "RosterColumns + OnboardingColumns" and any
-// legacy tail on an existing file still round-trips via RosterRow.Extra.
-var OnboardingColumns = []string{}
-
-// FullRosterHeader is the complete on-disk students.csv header the CLI writes
-// when all onboarding columns are present: the canonical RosterColumns followed
-// by OnboardingColumns, comma-joined. It is the single shared fixture that both
-// the Go and Python test suites assert against (and that classroom50-web's
-// STUDENT_CSV_FIELDS must match) so column-order drift between the three
-// codebases is caught by CI rather than surfacing as live file churn.
-var FullRosterHeader = strings.Join(append(append([]string{}, RosterColumns...), OnboardingColumns...), ",")
+// FullRosterHeader is the complete on-disk students.csv header the CLI writes:
+// the canonical RosterColumns, comma-joined. It is the single shared fixture
+// that both the Go and Python test suites assert against (and that
+// classroom50-web's STUDENT_CSV_FIELDS must match) so column-order drift between
+// the three codebases is caught by CI rather than surfacing as live file churn.
+// (An earlier email-first onboarding tail the web app appended was pruned — the
+// classroom GitHub team is now the source of truth for enrollment — but any such
+// legacy tail on an existing file still round-trips via RosterRow.Extra.)
+var FullRosterHeader = strings.Join(RosterColumns, ",")
 
 // isCanonicalColumn reports whether name is one of the CLI-managed RosterColumns
 // (the rest are carried through RosterRow.Extra).
@@ -63,8 +57,8 @@ type RosterRow struct {
 	Email     string
 	Section   string
 	GitHubID  int64
-	// Extra carries non-canonical columns (the web app's onboarding columns,
-	// and any other unknown columns) keyed by header name, so a CLI
+	// Extra carries non-canonical columns (any legacy columns a prior tool
+	// appended, and any other unknown columns) keyed by header name, so a CLI
 	// read/modify/write round-trips them instead of dropping them. nil for a
 	// plain 6-column file.
 	Extra map[string]string
@@ -78,9 +72,9 @@ type RosterRow struct {
 
 // ParseRoster decodes students.csv. The header MUST begin with the canonical
 // RosterColumns in order (so a hand-edit can't silently drop or shift the
-// CLI-managed data); additional trailing columns (the web app's onboarding
-// columns, or any other extras) are accepted and preserved verbatim in
-// RosterRow.Extra. Empty input is rejected.
+// CLI-managed data); additional trailing columns (any legacy tail, or any other
+// extras) are accepted and preserved verbatim in RosterRow.Extra. Empty input
+// is rejected.
 func ParseRoster(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
@@ -147,9 +141,9 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 // 6-column canonical shape (github_id ignored; the CLI re-resolves
 // it) or the 5-column hand-edit shape.
 //
-// Unlike ParseRoster, import deliberately rejects the web app's wider
-// onboarding-column shape: it re-resolves github_id and carries no onboarding
-// state, so accepting a wider file would silently drop the tail (breaking
+// Unlike ParseRoster, import deliberately rejects a wider file with extra
+// trailing columns: it re-resolves github_id and carries no extra column state,
+// so accepting a wider file would silently drop the tail (breaking
 // ParseRoster's preservation guarantee). The error points the teacher at the
 // canonical shape so they trim the tail first.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
@@ -166,11 +160,11 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	}
 
 	if !equalSlices(header, RosterColumns) && !equalSlices(header, RosterColumns[:5]) {
-		// Call out the common mistake of feeding a web-augmented students.csv
-		// (canonical six + onboarding tail) straight into import.
+		// Call out the common mistake of feeding a wider students.csv (canonical
+		// six + extra trailing columns) straight into import.
 		if len(header) > len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns) {
 			return nil, fmt.Errorf("unexpected header: got %v — import takes only the canonical %v (or its 5-column form without github_id). "+
-				"This looks like a roster with the web app's onboarding columns appended; drop the columns after github_id before importing "+
+				"This looks like a roster with extra columns appended; drop the columns after github_id before importing "+
 				"(roster add/update preserve those columns, import does not)", header, RosterColumns[:5])
 		}
 		return nil, fmt.Errorf("unexpected header: got %v, want %v (with optional trailing github_id; github_id ignored on input — the CLI re-resolves it)", header, RosterColumns[:5])
@@ -249,7 +243,7 @@ func recordToRow(record, extraColumns []string, line int) (RosterRow, error) {
 // EncodeRoster writes rows back as RFC 4180 students.csv (trailing
 // newline) to match the scaffold shape. The header is RosterColumns followed by
 // any extra columns present on the rows (ordered by collectExtraColumns), so the
-// CLI preserves web-written onboarding state instead of stripping it.
+// CLI preserves any web-written extra columns instead of stripping them.
 func EncodeRoster(rows []RosterRow) ([]byte, error) {
 	extraColumns := collectExtraColumns(rows)
 
@@ -290,30 +284,13 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 }
 
 // collectExtraColumns returns the union of non-canonical column names across
-// rows, ordered deterministically: the known OnboardingColumns first (in their
-// canonical order) when present on any row, then any other extra columns in
-// first-seen order. This keeps the written header stable across round-trips
-// regardless of Go map iteration order. Each row's ExtraOrder is the sole
-// enumeration of its extra columns (it lists exactly the keys of Extra).
+// rows, ordered deterministically in first-seen order (across rows, then within
+// each row's ExtraOrder). This keeps the written header stable across
+// round-trips regardless of Go map iteration order. Each row's ExtraOrder is the
+// sole enumeration of its extra columns (it lists exactly the keys of Extra).
 func collectExtraColumns(rows []RosterRow) []string {
-	present := make(map[string]bool)
-	for _, row := range rows {
-		for _, name := range row.ExtraOrder {
-			present[name] = true
-		}
-	}
-	if len(present) == 0 {
-		return nil
-	}
 	var ordered []string
-	seen := make(map[string]bool, len(present))
-	for _, name := range OnboardingColumns {
-		if present[name] && !seen[name] {
-			ordered = append(ordered, name)
-			seen[name] = true
-		}
-	}
-	// Any remaining extras (not in OnboardingColumns) follow in first-seen order.
+	seen := make(map[string]bool)
 	for _, row := range rows {
 		for _, name := range row.ExtraOrder {
 			if !seen[name] {
@@ -329,10 +306,10 @@ func collectExtraColumns(rows []RosterRow) []string {
 // GitHub's username rules) or appends. Position preserved on
 // replace. Returns the slice and whether a row was replaced.
 //
-// On replace, the existing row's Extra (the web app's onboarding columns) is
+// On replace, the existing row's Extra (any web-written extra columns) is
 // carried over to the incoming row UNLESS the incoming row supplies its own
 // Extra — so a CLI `roster add` (which only knows the canonical fields) never
-// silently wipes a student's onboarding state written by the web app.
+// silently wipes extra column state written by the web app.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	for i := range rows {
 		if strings.EqualFold(rows[i].Username, row.Username) {

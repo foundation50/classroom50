@@ -655,7 +655,8 @@
     "active": {
       "title": "You're all set",
       "message": "You now have access to this classroom — there's nothing more you need to do here. You can accept assignments your instructor shares with you.",
-      "takingBack": "Taking you back to your assignment…"
+      "takingBack": "Taking you back to your assignment…",
+      "goToClassroom": "Go to your classroom"
     }
   },
   "membership": {

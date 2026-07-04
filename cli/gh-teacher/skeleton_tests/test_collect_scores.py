@@ -1352,10 +1352,10 @@ class TestReadStudentsCSV:
         write_roster(path, [])
         assert cs.read_students_csv(path) == []
 
-    def test_onboarding_columns_are_accepted_and_ignored(self, tmp_path):
-        # The web app (classroom50-web) appends optional onboarding columns.
-        # The collector must accept the wider header (not skip the classroom)
-        # and still extract only username + github_id by name.
+    def test_legacy_extra_columns_are_accepted_and_ignored(self, tmp_path):
+        # An earlier web app appended optional extra columns. The collector must
+        # accept the wider header (not skip the classroom) and still extract only
+        # username + github_id by name.
         path = tmp_path / "students.csv"
         path.write_text(
             "username,first_name,last_name,email,section,github_id,"
@@ -1369,8 +1369,8 @@ class TestReadStudentsCSV:
             {"username": "bob", "github_id": "222"},
         ]
 
-    def test_onboarding_header_with_utf8_bom_is_accepted(self, tmp_path):
-        # The 12-column header must also survive Excel's BOM.
+    def test_legacy_extra_header_with_utf8_bom_is_accepted(self, tmp_path):
+        # The wider header must also survive Excel's BOM.
         path = tmp_path / "students.csv"
         path.write_text(
             "\ufeffusername,first_name,last_name,email,section,github_id,"
@@ -1395,8 +1395,8 @@ class TestReadStudentsCSV:
         # The exact 6-column header must stay in lockstep with FullRosterHeader
         # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
         # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If
-        # this fails, a column or its order drifted between the codebases. The
-        # onboarding tail was pruned across all three, so this is now the 6
+        # this fails, a column or its order drifted between the codebases. An
+        # earlier trailing tail was pruned across all three, so this is now the 6
         # identity/metadata columns only.
         assert cs.FULL_ROSTER_HEADER == (
             "username,first_name,last_name,email,section,github_id"

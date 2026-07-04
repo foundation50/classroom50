@@ -184,13 +184,12 @@ func TestRunRosterUpdate(t *testing.T) {
 		}
 	})
 
-	// The web app appends onboarding columns to students.csv; a `roster update`
+	// The web app may append extra columns to students.csv; a `roster update`
 	// (which patches only canonical fields) must round-trip them so it never
-	// silently wipes a student's onboarding state. This drives the actual
-	// command path (LoadRoster -> UpdateRosterRow -> EncodeRoster), not just the
-	// configrepo helpers.
-	t.Run("preserves web onboarding columns on both edited and unrelated rows", func(t *testing.T) {
-		onboardingRoster := rosterCSVContent(t,
+	// silently wipes them. This drives the actual command path (LoadRoster ->
+	// UpdateRosterRow -> EncodeRoster), not just the configrepo helpers.
+	t.Run("preserves web extra columns on both edited and unrelated rows", func(t *testing.T) {
+		extraRoster := rosterCSVContent(t,
 			configrepo.RosterRow{
 				Username: "alice", FirstName: "Alice", LastName: "A", Email: "a@x.edu", Section: "s1", GitHubID: 1,
 				Extra:      map[string]string{"enrollment_status": "enrolled", "email_hash": "abcd1234ef567890"},
@@ -202,7 +201,7 @@ func TestRunRosterUpdate(t *testing.T) {
 				ExtraOrder: []string{"enrollment_status", "invite_token"},
 			},
 		)
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": onboardingRoster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": extraRoster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -231,10 +230,10 @@ func TestRunRosterUpdate(t *testing.T) {
 			t.Errorf("alice email = %q, want alice@new.edu", alice.Email)
 		}
 		if alice.Extra["enrollment_status"] != "enrolled" || alice.Extra["email_hash"] != "abcd1234ef567890" {
-			t.Errorf("edited row lost onboarding columns: %#v", alice.Extra)
+			t.Errorf("edited row lost extra columns: %#v", alice.Extra)
 		}
 		if bob.Extra["enrollment_status"] != "invited" || bob.Extra["invite_token"] != "tok123" {
-			t.Errorf("unrelated row lost onboarding columns: %#v", bob.Extra)
+			t.Errorf("unrelated row lost extra columns: %#v", bob.Extra)
 		}
 	})
 }
@@ -273,9 +272,9 @@ func TestRunRosterRemove(t *testing.T) {
 		}
 	})
 
-	// Removing one student must not wipe the onboarding columns of the
+	// Removing one student must not wipe the extra columns of the
 	// surviving students.
-	t.Run("preserves web onboarding columns on surviving rows", func(t *testing.T) {
+	t.Run("preserves web extra columns on surviving rows", func(t *testing.T) {
 		roster := rosterCSVContent(t,
 			configrepo.RosterRow{
 				Username: "alice", FirstName: "Alice", LastName: "A", Email: "a@x.edu", Section: "s1", GitHubID: 1,
@@ -308,7 +307,7 @@ func TestRunRosterRemove(t *testing.T) {
 			t.Fatalf("after removing alice, want only bob, got %#v", rows)
 		}
 		if rows[0].Extra["enrollment_status"] != "invited" || rows[0].Extra["invite_token"] != "tok123" {
-			t.Errorf("surviving row lost onboarding columns: %#v", rows[0].Extra)
+			t.Errorf("surviving row lost extra columns: %#v", rows[0].Extra)
 		}
 	})
 }

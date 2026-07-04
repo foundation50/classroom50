@@ -8,7 +8,7 @@ import {
   initialInitSteps,
 } from "./initStepBoard"
 
-// The board is the single source of truth shared by the onboarding wizard and
+// The board is the single source of truth shared by the org setup wizard and
 // the re-run surface. These guard against the three ways the surfaces could
 // drift: a step missing from the order, a step missing its explanation, or a
 // settings link that no longer points at the org/repo it's supposed to.

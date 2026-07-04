@@ -92,20 +92,17 @@ MAX_RESULT_BYTES = 10 * 1024 * 1024
 
 # Required roster columns written by `gh teacher classroom add`. Mirrors
 # RosterColumns in cli/gh-teacher/internal/configrepo/students_csv.go and the web
-# app's STUDENT_CSV_FIELDS. students.csv is now just these six identity/metadata
-# columns — the email-first onboarding tail was pruned across all three codebases
+# app's STUDENT_CSV_FIELDS. students.csv is just these six identity/metadata
+# columns — an earlier email-first tail was pruned across all three codebases
 # (the classroom GitHub team is the source of truth for enrollment).
 ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id")
 
-# The onboarding tail was pruned to nothing. Kept as an empty tuple so
-# FULL_ROSTER_HEADER stays "required + onboarding" and read-tolerance for a
-# legacy tail (see read_students_csv) is unaffected.
-ROSTER_ONBOARDING_COLUMNS: tuple[str, ...] = ()
-
 # FULL_ROSTER_HEADER is the exact on-disk students.csv header. Must equal
 # FullRosterHeader in the Go students_csv.go (asserted by TestFullRosterHeader)
-# and the web app's STUDENT_CSV_FIELDS header — a three-way lockstep.
-FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS + ROSTER_ONBOARDING_COLUMNS)
+# and the web app's STUDENT_CSV_FIELDS header — a three-way lockstep. Any legacy
+# trailing columns on an existing file are tolerated on read (see
+# read_students_csv), not part of the written header.
+FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
 
 # Coarse filter for obviously-bogus usernames (empty, slashes, etc.)
 # so they don't get formatted into a URL. Not a strict GitHub
@@ -323,7 +320,7 @@ def read_students_csv(path: pathlib.Path) -> list[dict[str, str]]:
             if reader.fieldnames is None:
                 raise RosterFileError("students.csv is empty")
             header = tuple(reader.fieldnames)
-            # Tolerate trailing extras (e.g. a legacy onboarding tail on a
+            # Tolerate trailing extras (e.g. a legacy tail on a
             # between-deploys file): only username + github_id are read by
             # name. A renamed/short/shuffled required prefix is still rejected
             # so a hand-edit can't silently drop or shift roster data.

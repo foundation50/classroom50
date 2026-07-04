@@ -362,20 +362,20 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 	}
 }
 
-func TestParseImportCSV_RejectsWebWidenedExportWithGuidance(t *testing.T) {
-	// Feeding a web-augmented students.csv (canonical six + onboarding tail)
+func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
+	// Feeding a wider students.csv (canonical six + extra trailing columns)
 	// straight into import is rejected with a message that names the cause and
 	// the fix, rather than the generic header error — import is canonical-only
-	// by design (it re-resolves github_id and carries no onboarding state).
+	// by design (it re-resolves github_id and carries no extra column state).
 	in := []byte("username,first_name,last_name,email,section,github_id," +
 		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
 		"alice,Alice,A,a@x.edu,s1,123,enrolled,github,abcd,,2026-01-01T00:00:00Z,\n")
 	_, err := ParseImportCSV(in)
 	if err == nil {
-		t.Fatal("expected ParseImportCSV to reject a web-widened export")
+		t.Fatal("expected ParseImportCSV to reject a widened export")
 	}
-	if !strings.Contains(err.Error(), "onboarding columns") || !strings.Contains(err.Error(), "import does not") {
-		t.Fatalf("expected guidance about onboarding columns / import, got %v", err)
+	if !strings.Contains(err.Error(), "extra columns") || !strings.Contains(err.Error(), "import does not") {
+		t.Fatalf("expected guidance about extra columns / import, got %v", err)
 	}
 }
 
@@ -480,13 +480,13 @@ func TestDedupeByUsername_LastWins(t *testing.T) {
 	}
 }
 
-// --- email-first onboarding columns (classroom50-web schema) ---------------
+// --- legacy extra columns (e.g. a prior web schema) ------------------------
 
-// The web app appends optional onboarding columns to students.csv. The CLI
-// must parse the wider file (not reject it) and preserve those columns on a
-// read/modify/write cycle so a CLI roster edit never wipes onboarding state.
+// An earlier web app appended optional extra columns to students.csv. The CLI
+// must still parse such a wider file (not reject it) and preserve those columns
+// on a read/modify/write cycle so a CLI roster edit never wipes them.
 
-func TestParseRoster_AcceptsAndPreservesOnboardingColumns(t *testing.T) {
+func TestParseRoster_AcceptsAndPreservesLegacyColumns(t *testing.T) {
 	in := []byte(
 		"username,first_name,last_name,email,section,github_id," +
 			"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
@@ -517,7 +517,7 @@ func TestParseRoster_AcceptsAndPreservesOnboardingColumns(t *testing.T) {
 	}
 }
 
-func TestEncodeRoster_RoundTripsOnboardingColumns(t *testing.T) {
+func TestEncodeRoster_RoundTripsLegacyColumns(t *testing.T) {
 	in := []byte(
 		"username,first_name,last_name,email,section,github_id," +
 			"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n" +
@@ -541,16 +541,16 @@ func TestEncodeRoster_RoundTripsOnboardingColumns(t *testing.T) {
 		t.Fatalf("re-parse: %v", err)
 	}
 	if !reflect.DeepEqual(round, rows) {
-		t.Fatalf("onboarding-column round-trip mismatch:\norig:  %#v\nround: %#v", rows, round)
+		t.Fatalf("legacy-column round-trip mismatch:\norig:  %#v\nround: %#v", rows, round)
 	}
 }
 
 func TestEncodeRoster_UnknownColumnsPreserveSourceOrder(t *testing.T) {
-	// OnboardingColumns was pruned to empty, so the CLI no longer imposes a
-	// canonical order on a legacy tail — it preserves whatever unknown columns
-	// an existing file carries, in their on-disk (first-seen) order, via
-	// RosterRow.Extra/ExtraOrder. This keeps a between-deploys file readable and
-	// stable without the CLI reordering columns it doesn't manage.
+	// The CLI imposes no canonical order on a legacy tail — it preserves
+	// whatever unknown columns an existing file carries, in their on-disk
+	// (first-seen) order, via RosterRow.Extra/ExtraOrder. This keeps a
+	// between-deploys file readable and stable without the CLI reordering
+	// columns it doesn't manage.
 	in := []byte(
 		"username,first_name,last_name,email,section,github_id," +
 			"invite_token,enrollment_status\n" +
@@ -571,8 +571,8 @@ func TestEncodeRoster_UnknownColumnsPreserveSourceOrder(t *testing.T) {
 	}
 }
 
-func TestUpsertRosterRow_PreservesOnboardingColumns(t *testing.T) {
-	// A web-written row carries onboarding columns; a CLI `roster add` upsert
+func TestUpsertRosterRow_PreservesLegacyColumns(t *testing.T) {
+	// A web-written row carries extra columns; a CLI `roster add` upsert
 	// supplies only the canonical fields (Extra == nil) and must NOT wipe them.
 	rows := []RosterRow{
 		{
@@ -591,7 +591,7 @@ func TestUpsertRosterRow_PreservesOnboardingColumns(t *testing.T) {
 		t.Errorf("canonical fields not updated: %#v", updated[0])
 	}
 	if updated[0].Extra["enrollment_status"] != "enrolled" || updated[0].Extra["email_hash"] != "abcd1234ef567890" {
-		t.Errorf("onboarding columns wiped on upsert: %#v", updated[0].Extra)
+		t.Errorf("legacy columns wiped on upsert: %#v", updated[0].Extra)
 	}
 }
 
@@ -654,26 +654,21 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 	}
 }
 
-// TestFullRosterHeader pins the exact on-disk header the CLI writes when all
-// onboarding columns are present. The Python collector asserts the identical
-// string (test_collect_scores.py::test_full_roster_header_matches_go_constant)
-// and classroom50-web's STUDENT_CSV_FIELDS must match it, so a column-order
-// drift across the three codebases fails here loudly rather than churning the
-// shared file. If you change RosterColumns or OnboardingColumns, update the web
-// app and the Python fixture in lockstep.
+// TestFullRosterHeader pins the exact on-disk header the CLI writes. The Python
+// collector asserts the identical string
+// (test_collect_scores.py::test_full_roster_header_matches_go_constant) and
+// classroom50-web's STUDENT_CSV_FIELDS must match it, so a column-order drift
+// across the three codebases fails here loudly rather than churning the shared
+// file. If you change RosterColumns, update the web app and the Python fixture
+// in lockstep.
 func TestFullRosterHeader(t *testing.T) {
 	const want = "username,first_name,last_name,email,section,github_id"
 	if FullRosterHeader != want {
 		t.Fatalf("FullRosterHeader = %q, want %q", FullRosterHeader, want)
 	}
 	// EncodeRoster of a canonical row must emit exactly this header line,
-	// proving the constant matches real encoder output. OnboardingColumns is now
-	// empty, so there is no onboarding tail to append.
-	row := RosterRow{Username: "alice", GitHubID: 1, Extra: map[string]string{}, ExtraOrder: nil}
-	for _, c := range OnboardingColumns {
-		row.Extra[c] = ""
-		row.ExtraOrder = append(row.ExtraOrder, c)
-	}
+	// proving the constant matches real encoder output.
+	row := RosterRow{Username: "alice", GitHubID: 1}
 	encoded, err := EncodeRoster([]RosterRow{row})
 	if err != nil {
 		t.Fatalf("EncodeRoster: %v", err)

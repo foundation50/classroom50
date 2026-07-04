@@ -15,7 +15,7 @@ import type {
   InitStepUpdate,
 } from "@/hooks/github/mutations"
 
-// Shared init "badge board" used by both the onboarding wizard (OrgSetupPage)
+// Shared init "badge board" used by both the org setup wizard (OrgSetupPage)
 // and the re-run action on the Org Settings page. One source of truth for the
 // step order, titles, per-step explanations, and rendering so the two surfaces
 // can't drift.

@@ -27,7 +27,7 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 // bump). Reuses findStaleSkeletonFiles read-only — no version marker.
 //
 // Gated on org owner (admin), not any staff: the banner routes to the
-// owner-only Re-run onboarding section, so surfacing it to a TA/non-owner
+// owner-only Re-run org setup section, so surfacing it to a TA/non-owner
 // instructor would dead-end their CTA on a NotFound — and only an owner should
 // trigger the config-repo read.
 export function useSkeletonDrift(org: string | undefined) {

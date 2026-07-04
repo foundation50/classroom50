@@ -1,4 +1,5 @@
 import {
+  ArrowRight,
   CheckCircle2,
   GraduationCap,
   Loader2,
@@ -103,11 +104,13 @@ const NotInvited = ({
 }
 
 const AllSet = ({
+  org,
   classroom,
   returning,
   returnTo,
   onContinue,
 }: {
+  org?: string
   classroom?: string
   returning: boolean
   returnTo?: string
@@ -142,7 +145,7 @@ const AllSet = ({
             </p>
           </div>
         </div>
-        {returning && returnTo && (
+        {returning && returnTo ? (
           <button
             type="button"
             className="btn btn-primary w-full"
@@ -150,6 +153,18 @@ const AllSet = ({
           >
             {t("getStarted.continueToAssignment")}
           </button>
+        ) : (
+          org &&
+          classroom && (
+            <Link
+              to="/$org/$classroom"
+              params={{ org, classroom }}
+              className="btn btn-primary w-full"
+            >
+              {t("getStarted.active.goToClassroom")}
+              <ArrowRight aria-hidden="true" className="size-4" />
+            </Link>
+          )
         )}
       </EnterDiv>
     </OnboardShell>
@@ -300,6 +315,7 @@ const OnboardingPage = () => {
   // active
   return (
     <AllSet
+      org={org}
       classroom={classroom}
       returning={Boolean(returnTo)}
       returnTo={returnTo}
