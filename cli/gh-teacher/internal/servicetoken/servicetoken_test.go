@@ -54,40 +54,62 @@ func TestServiceSecretExists(t *testing.T) {
 
 func TestValidateServiceToken(t *testing.T) {
 	cases := []struct {
-		name      string
-		status    int
-		canPush   bool // permissions.push on the 200 repo body
-		wantErr   bool
-		errSubstr string
+		name string
+		// repoStatus/canPush describe the GET /repos/{org}/classroom50
+		// response; membersStatus describes the follow-on
+		// GET /orgs/{org}/members probe (only reached on a 200 push repo).
+		repoStatus    int
+		canPush       bool
+		membersStatus int
+		wantErr       bool
+		errSubstr     string
 	}{
-		{"valid read+write", http.StatusOK, true, false, ""},
-		{"read-only rejected", http.StatusOK, false, true, "lacks write access"},
-		{"revoked", http.StatusUnauthorized, false, true, "invalid, expired, or revoked"},
-		{"no access", http.StatusNotFound, false, true, "can't read"},
-		{"forbidden", http.StatusForbidden, false, true, "can't read"},
+		{"valid read+write+members", http.StatusOK, true, http.StatusOK, false, ""},
+		{"read-only rejected", http.StatusOK, false, http.StatusOK, true, "lacks write access"},
+		{"revoked", http.StatusUnauthorized, false, 0, true, "invalid, expired, or revoked"},
+		{"no repo access", http.StatusNotFound, false, 0, true, "can't read"},
+		{"repo forbidden", http.StatusForbidden, false, 0, true, "can't read"},
+		{"members forbidden", http.StatusOK, true, http.StatusForbidden, true, "can't read the org's members"},
+		{"members not found", http.StatusOK, true, http.StatusNotFound, true, "can't read the org's members"},
+		// FAIL-OPEN: a 401 or 5xx on the members probe (after a 200 repo read
+		// that already proved the token live) is inconclusive, not fatal — the
+		// probe must not reject a valid token on GitHub-side flakiness.
+		{"members unauthorized proceeds", http.StatusOK, true, http.StatusUnauthorized, false, ""},
+		{"members server error proceeds", http.StatusOK, true, http.StatusInternalServerError, false, ""},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
+			var sawRepo, sawMembers bool
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				// Validation reads the config repo itself (GET
-				// /repos/{org}/classroom50) so it can assert the
-				// token's effective permissions.push, not the
-				// contents listing.
-				if !strings.HasSuffix(r.URL.Path, "/repos/cs50/classroom50") {
-					t.Errorf("validate should GET the config repo, got path %s", r.URL.Path)
+				switch {
+				// Validation first reads the config repo (GET
+				// /repos/{org}/classroom50) to assert
+				// permissions.push, then probes org members (GET
+				// /orgs/{org}/members) for the Members: Read scope.
+				case strings.HasSuffix(r.URL.Path, "/repos/cs50/classroom50"):
+					sawRepo = true
+					if tc.repoStatus == http.StatusOK {
+						_, _ = w.Write([]byte(`{"permissions":{"push":` + boolJSON(tc.canPush) + `}}`))
+						return
+					}
+					w.WriteHeader(tc.repoStatus)
+				case strings.HasSuffix(r.URL.Path, "/orgs/cs50/members"):
+					sawMembers = true
+					if tc.membersStatus == http.StatusOK {
+						_, _ = w.Write([]byte(`[]`))
+						return
+					}
+					w.WriteHeader(tc.membersStatus)
+				default:
+					t.Errorf("unexpected request path %s", r.URL.Path)
 				}
-				if tc.status == http.StatusOK {
-					_, _ = w.Write([]byte(`{"permissions":{"push":` + boolJSON(tc.canPush) + `}}`))
-					return
-				}
-				w.WriteHeader(tc.status)
 			}))
 			t.Cleanup(server.Close)
 			client := githubtest.NewTestClient(t, server)
 
 			err := validateTokenWithClient(client, "cs50")
 			if tc.wantErr && err == nil {
-				t.Fatalf("expected an error for status %d (canPush=%v)", tc.status, tc.canPush)
+				t.Fatalf("expected an error (repo=%d canPush=%v members=%d)", tc.repoStatus, tc.canPush, tc.membersStatus)
 			}
 			if !tc.wantErr && err != nil {
 				t.Fatalf("unexpected error: %v", err)
@@ -95,18 +117,35 @@ func TestValidateServiceToken(t *testing.T) {
 			if tc.errSubstr != "" && !strings.Contains(err.Error(), tc.errSubstr) {
 				t.Errorf("error %q should contain %q", err.Error(), tc.errSubstr)
 			}
-			// The no-access message must carry the actionable fix,
+			if !sawRepo {
+				t.Error("validation should always GET the config repo")
+			}
+			// The members probe is only reachable once the config repo
+			// returns 200 with push access. On any earlier failure it
+			// must NOT be hit (fail fast on the Contents check).
+			wantMembersProbe := tc.repoStatus == http.StatusOK && tc.canPush
+			if sawMembers != wantMembersProbe {
+				t.Errorf("members probe reached = %v, want %v", sawMembers, wantMembersProbe)
+			}
+			// The no-access repo message must carry the actionable fix,
 			// including the now-required Read-and-write scope.
-			if tc.status == http.StatusNotFound {
+			if tc.repoStatus == http.StatusNotFound {
 				if !strings.Contains(err.Error(), "Resource owner") ||
 					!strings.Contains(err.Error(), "Contents: Read and write") {
 					t.Errorf("no-access error should explain the resource-owner + Contents: Read and write fix: %q", err.Error())
 				}
 			}
 			// A read-only token must be told it needs write.
-			if tc.status == http.StatusOK && !tc.canPush {
+			if tc.repoStatus == http.StatusOK && !tc.canPush {
 				if !strings.Contains(err.Error(), "Contents: Read and write") {
 					t.Errorf("read-only error should explain the Contents: Read and write fix: %q", err.Error())
+				}
+			}
+			// A Members-less token must be told to add Members: Read.
+			if tc.repoStatus == http.StatusOK && tc.canPush &&
+				(tc.membersStatus == http.StatusForbidden || tc.membersStatus == http.StatusNotFound) {
+				if !strings.Contains(err.Error(), "Members: Read") {
+					t.Errorf("members-denied error should explain the Members: Read fix: %q", err.Error())
 				}
 			}
 		})

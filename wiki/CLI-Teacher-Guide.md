@@ -55,12 +55,21 @@ Create a **fine-grained personal access token** at **Settings → Developer sett
 2. **Resource owner** — select **the organization** (`<org>`). This is the critical step: the token can only reach repos owned by the resource owner you pick here. If the org isn't listed, the org has blocked fine-grained PATs (an org owner must allow them).
 3. **Expiration** — your choice (fine-grained PATs allow up to 1 year). Set a calendar reminder to rotate before it expires.
 4. **Repository access** — **All repositories**. Student repos are created on demand by `gh student accept`, so they don't exist yet — a "Only select repositories" token silently misses them (see the note below).
-5. **Repository permissions** — set **Contents: Read-only**. (`Metadata: Read-only` is added automatically; that's all group-assignment collaborator reads need too.)
-6. **Generate** and copy the `github_pat_…` value.
+5. **Repository permissions** — set **Contents: Read and write** and **Actions: Read and write**. (`Metadata: Read-only` is added automatically; that's all group-assignment collaborator reads need too.) Contents read collects scores; Contents write lets regrade push `submit/*` tags; Actions write lets regrade re-run each student repo's autograde workflow.
+6. **Organization permissions** — set **Members: Read-only**. This is a **separate section** from Repository permissions and only appears once the org is the Resource owner; it lets `collect-scores` list the classroom team's members (collection is team-driven). It is **not** implied by any repository scope.
+7. **Generate** and copy the `github_pat_…` value.
 
 **Approval:** if your org requires approval for fine-grained PATs (the GitHub default), a token created by a regular member stays *pending* until an org owner approves it. Because `gh teacher init` requires you to be an **org owner**, a token you create is **auto-approved** — so it just works. (A classic PAT also works; it's broader than necessary, but init won't stop you.)
 
-**How init uses it:** supply the value via the `CLASSROOM50_SERVICE_TOKEN` environment variable, or let init prompt for it (hidden input) on first setup — there is no `--token` flag (command-line PATs leak via shell history and process listings). init **validates the token against your org before storing it** (it must be able to read repo contents), so a mis-scoped or unapproved token is caught immediately instead of surfacing weeks later as a failed `collect-scores` run. On a **re-run**, if the secret is already configured, init leaves it untouched and tells you so — to replace it, set `CLASSROOM50_SERVICE_TOKEN` and re-run, or use `gh teacher rotate-service-token <org>`.
+**How init uses it:** supply the value via the `CLASSROOM50_SERVICE_TOKEN` environment variable, or let init prompt for it (hidden input) on first setup — there is no `--token` flag (command-line PATs leak via shell history and process listings). init **validates the token against your org before storing it** (it must be able to read *and write* repo contents, and read the org's members), so a mis-scoped or unapproved token is caught immediately instead of surfacing weeks later as a failed `collect-scores` run. On a **re-run**, if the secret is already configured, init leaves it untouched and tells you so — to replace it, set `CLASSROOM50_SERVICE_TOKEN` and re-run, or use `gh teacher rotate-service-token <org>`.
+
+**Verify the full scope set after provisioning.** init's validation is a cheap pre-store check — it proves Contents:write and probes org-member access, but it can't verify the repo-level `Actions` permission (regrade needs it) or the exact per-classroom team read before the team exists. For an exhaustive, read-only signal, run the probe workflow once after `init`/`rotate` (or any time collect/regrade 401/403s):
+
+```sh
+gh workflow run probe-token.yaml --repo <org>/classroom50
+```
+
+A green run confirms Contents Read+Write, Actions Read+Write, org Members: Read (including each classroom's team read), and Metadata; a red run's log names the missing scope. It's side-effect free — no tags pushed, no runs re-run.
 
 > **Group assignments need no extra scope.** A group assignment grades once in
 > the first-accepter's repo; `collect-scores` then reads that repo's collaborators
@@ -310,7 +319,7 @@ What it does on each run:
 5. Logs a per-assignment `cs-principles/hello: 23/30 submitted` line so you see roster coverage at a glance.
 6. Commits the updated `*/scores.json` files back to `<org>/classroom50` on a single `[Classroom 50] collect: refresh scores.json` commit. A no-op run (no submissions changed) does not produce a commit.
 
-**Token requirements.** The workflow reads the `CLASSROOM50_SERVICE_TOKEN` secret provisioned by `gh teacher init` (a fine-grained PAT with `Contents: read` on all org repos; see the service-token note in the setup section above). If that token expires mid-semester, the workflow run fails loudly with a 401 — rotate with `gh teacher rotate-service-token <org>`.
+**Token requirements.** The workflow reads the `CLASSROOM50_SERVICE_TOKEN` secret provisioned by `gh teacher init` (a fine-grained PAT with `Contents: Read and write`, `Actions: Read and write`, and `Members: Read` on the org; see the service-token note in the setup section above). If that token expires mid-semester, the workflow run fails loudly with a 401/403 — rotate with `gh teacher rotate-service-token <org>`.
 
 **Override workflow.** To grant partial credit for a flaky test or correct a misgrade, hand-edit `<classroom>/scores.json` in the config repo, change the entry's submission `score`, and add `"override": true` to the entry. Commit and push. The next collect run will leave that entry alone. A `gh teacher score override` CLI helper is planned for a later release; until then, the JSON edit is the canonical path.
 

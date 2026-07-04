@@ -24,7 +24,7 @@ The suite is doubly gated and is a **clean no-op** when either gate is unmet:
 | `E2E_ORG` | ✅ | Throwaway org the **teacher PAT owns** (the suite asserts owner role and aborts otherwise). |
 | `E2E_TEACHER_PAT` | ✅ | Classic PAT: `admin:org`, `workflow`, `repo`, `delete_repo`. |
 | `E2E_STUDENT_PAT` | ✅ | Classic PAT for a **separate** bot: `read:org`, `repo`, `workflow`. |
-| `E2E_COLLECT_TOKEN` | ✅ | Fine-grained PAT: `Contents: read` on all org repos. The suite passes this to `init` / `rotate-service-token` as `CLASSROOM50_SERVICE_TOKEN` (it *is* the service token that powers collect-scores — not a separate credential). |
+| `E2E_COLLECT_TOKEN` | ✅ | Fine-grained PAT: `Contents: Read and write` on all org repos **and** Organization `Members: Read`. The suite passes this to `init` / `rotate-service-token` as `CLASSROOM50_SERVICE_TOKEN` (it *is* the service token that powers collect-scores — not a separate credential). Validation now probes org members, so a `Members`-less token fails `init`. |
 | `E2E_TEMPLATE` | optional | A **public** `is_template` repo `owner/name`. Unset → template-less assignments (empty repo + autograder shim; no external dependency). Set it to also exercise the template-generate path — it must be visible to the teacher account, so public (the CLI rejects out-of-org private templates). |
 | `E2E_STUDENT2_PAT` | optional | Classic PAT for a **third, distinct** bot (`read:org`, `repo`, `workflow`) — the group teammate; enables the §7 group flow (`TestGroupAssignment`). |
 | `E2E_CLASSROOM` / `E2E_ASSIGNMENT` | optional | Defaults `cs-principles` / `hello`. |
@@ -37,7 +37,7 @@ cd test/e2e
 export E2E_ORG=classroom50-e2e-test-org
 export E2E_TEACHER_PAT=...   # owner of E2E_ORG
 export E2E_STUDENT_PAT=...   # a separate bot (e.g. bot50)
-export E2E_COLLECT_TOKEN=... # fine-grained, Contents: read
+export E2E_COLLECT_TOKEN=... # fine-grained: Contents R/W + Members: Read
 export E2E_STUDENT2_PAT=...  # optional: a 3rd bot → enables the §7 group flow
 GOWORK=off go test -tags e2e -timeout 60m -v ./...
 ```

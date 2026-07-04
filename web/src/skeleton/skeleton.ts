@@ -39,6 +39,10 @@ export const SKELETON_PATHS = [
   "scripts/ensure_feedback_pr.py",
   // Regrade fan-out invoked by regrade.yaml.
   "scripts/regrade_repos.py",
+  // Teacher-triggered service-token scope probe (workflow_dispatch). Deployed
+  // so GUI org setup ships the same health check as `gh teacher init`.
+  "workflows/probe-token.yaml",
+  "scripts/probe_token.py",
 ] as const
 
 // Map a bundled module key to its org-relative skeleton path, e.g.

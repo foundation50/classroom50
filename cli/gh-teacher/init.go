@@ -51,11 +51,15 @@ func initCmd() *cobra.Command {
 			"is no --token flag (PATs on the command line leak via shell\n" +
 			"history, process listings, and CI logs). Create a fine-grained PAT\n" +
 			"with Resource owner = your org, Repository access = All\n" +
-			"repositories, and Contents: Read and write — student repos are\n" +
-			"created on demand, so an \"Only select repositories\" scope\n" +
-			"silently misses them. Read is needed to collect scores; write\n" +
-			"is needed to push submit/* tags when regrading. Since init\n" +
-			"requires you to be an org owner, your own PAT is auto-approved.\n" +
+			"repositories, Contents: Read and write, Actions: Read and\n" +
+			"write, and Organization permissions -> Members: Read — student\n" +
+			"repos are created on demand, so an \"Only select repositories\"\n" +
+			"scope silently misses them. Contents read is needed to collect\n" +
+			"scores; Contents write pushes submit/* tags and Actions write\n" +
+			"re-runs autograde workflows when regrading; Members: Read is\n" +
+			"needed to list the classroom team (collection is team-driven).\n" +
+			"Since init requires you to be an org owner, your own PAT is\n" +
+			"auto-approved.\n" +
 			"init validates the token before storing it (and a re-run leaves\n" +
 			"an already-configured token untouched; replace it with\n" +
 			"`gh teacher rotate-service-token <org>`).\n\n" +

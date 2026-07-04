@@ -9,6 +9,7 @@ because `gh teacher init` embeds them at `.github/scripts/` in each org's
                            autograder re-runs (regrade.yaml)
   - materialize_tests.py — translates assignments.json `tests` blocks into
                            per-assignment tests.json bundles (publish-pages.yaml)
+  - probe_token.py       — service-token scope probe (probe-token.yaml)
 
 Importing via `importlib` keeps the embedded path canonical — no second
 copy to keep in sync.
@@ -36,3 +37,4 @@ def _load_module(name: str, path: pathlib.Path):
 collect_scores = _load_module("collect_scores", _SCRIPTS_DIR / "collect_scores.py")
 materialize_tests = _load_module("materialize_tests", _SCRIPTS_DIR / "materialize_tests.py")
 regrade_repos = _load_module("regrade_repos", _SCRIPTS_DIR / "regrade_repos.py")
+probe_token = _load_module("probe_token", _SCRIPTS_DIR / "probe_token.py")

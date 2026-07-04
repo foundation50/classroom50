@@ -38,10 +38,12 @@ jobs:
 
       - name: Collect scores
         env:
-          # Fine-grained PAT scoped to `Contents: Read and write`
-          # on <classroom>-* student repos. Collection only READS
-          # (releases + result.json); the write scope is shared with
-          # regrade.yaml, which pushes submit/* tags.
+          # Fine-grained PAT. Needs Organization -> Members: Read
+          # (collection is team-driven and lists the classroom team's
+          # members) and Repository -> Contents: Read and write on
+          # <classroom>-* student repos. Collection only READS (team
+          # members, releases + result.json); the write scope is shared
+          # with regrade.yaml, which pushes submit/* tags.
           # Rotated via `gh teacher rotate-service-token <org>`.
           CLASSROOM50_SERVICE_TOKEN: ${{ secrets.CLASSROOM50_SERVICE_TOKEN }}
           # Optional restriction to a single classroom; empty

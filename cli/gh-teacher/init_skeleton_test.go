@@ -25,9 +25,11 @@ func TestSkeletonFiles_Manifest(t *testing.T) {
 		".github/workflows/publish-pages.yaml",
 		".github/workflows/collect-scores.yaml",
 		".github/workflows/regrade.yaml",
+		".github/workflows/probe-token.yaml",
 		".github/scripts/runner.py",
 		".github/scripts/collect_scores.py",
 		".github/scripts/regrade_repos.py",
+		".github/scripts/probe_token.py",
 		".github/scripts/ensure_feedback_pr.py",
 		"README.md",
 	}

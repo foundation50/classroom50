@@ -187,6 +187,11 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
       expires_in: String(expiryValid ? parsedExpiry : DEFAULT_EXPIRY_DAYS),
       contents: "write",
       actions: "write",
+      // Organization-level Members: Read. Collection is team-driven — it
+      // lists the classroom team's members — which needs this org permission,
+      // and it is NOT implied by any repository scope. GitHub only honors the
+      // `members` prefill param when target_name is an org (it is, above).
+      members: "read",
     }).toString()
 
   const patMutation = useMutation({
@@ -380,12 +385,19 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                 {t("orgSettings.serviceToken.permissions_confirm")}{" "}
                 <span className="font-semibold">
                   {t("orgSettings.serviceToken.permissions_contents")}
-                </span>{" "}
-                {t("orgSettings.serviceToken.permissions_and")}{" "}
+                </span>
+                {", "}
                 <span className="font-semibold">
                   {t("orgSettings.serviceToken.permissions_actions")}
                 </span>{" "}
+                {t("orgSettings.serviceToken.permissions_and")}{" "}
+                <span className="font-semibold">
+                  {t("orgSettings.serviceToken.permissions_members")}
+                </span>{" "}
                 {t("orgSettings.serviceToken.permissions_metadata")}{" "}
+                <span className="text-base-content/70">
+                  {t("orgSettings.serviceToken.permissions_members_note")}
+                </span>{" "}
                 <span className="text-base-content/70">
                   {t("orgSettings.serviceToken.permissions_warning")}
                 </span>

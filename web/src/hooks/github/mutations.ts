@@ -1810,9 +1810,12 @@ export async function validateServiceToken(
 
   const scopeHint =
     `Create a fine-grained PAT with Resource owner = ${org}, Repository access = ` +
-    "All repositories, and Repository permissions → Contents: Read and write " +
+    "All repositories, Repository permissions → Contents: Read and write " +
     "AND Actions: Read and write (collecting scores reads; regrading re-runs " +
-    "student autograde workflows and may push submit/* tags, which need write). " +
+    "student autograde workflows and may push submit/* tags, which need write), " +
+    "AND Organization permissions → Members: Read (collection is team-driven and " +
+    "lists the classroom team — a separate section shown once the org is the " +
+    "resource owner; not implied by any repository scope). " +
     "If your org requires PAT approval and you are not an org owner, an owner " +
     "must approve it first (owners' tokens are auto-approved)."
 
@@ -1868,6 +1871,37 @@ export async function validateServiceToken(
     throw new Error(
       `This token can read ${org}/classroom50 but lacks write access — collecting scores needs read, but regrading needs write. ${scopeHint}`,
     )
+  }
+
+  // Contents/Actions are proven, but collection is team-driven: it lists the
+  // classroom team's members, which needs the org-level Members: Read
+  // permission — NOT implied by any repository scope, so a Contents/Actions-only
+  // token passes every check above yet 403s on the first API call collect-scores
+  // makes. Probe GET /orgs/{org}/members (same Members: Read permission the
+  // team-members endpoint needs, but not dependent on a specific team existing).
+  //
+  // FAIL-OPEN on ambiguity: a 403/404 is a definitive scope gap and is
+  // rejected; any other failure (401 after a 200 repo read, 5xx, rate-limit,
+  // network/CORS) is inconclusive and allowed to proceed — the repo read above
+  // already proved the token live, so blocking on this second round-trip's
+  // flakiness would reject a valid token. The probe-token.yaml workflow is the
+  // exhaustive post-provision signal.
+  try {
+    await tokenClient.request(
+      `/orgs/${encodeURIComponent(org)}/members?per_page=1`,
+    )
+  } catch (err) {
+    if (
+      err instanceof GitHubAPIError &&
+      (err.status === 403 || err.status === 404)
+    ) {
+      throw new Error(
+        `This token can read ${org}/classroom50 but can't read the org's members — collecting scores is team-driven and lists the classroom team, which needs Organization permissions → Members: Read. ${scopeHint}`,
+        { cause: err },
+      )
+    }
+    // Inconclusive (401/5xx/network) — proceed; the repo read already
+    // proved the token valid.
   }
 }
 

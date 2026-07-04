@@ -19,7 +19,7 @@ type config struct {
 	StudentPAT   string // E2E_STUDENT_PAT  (read:org, repo)
 	Student2     string // resolved from E2E_STUDENT2_PAT (group flow only)
 	Student2PAT  string // E2E_STUDENT2_PAT (optional)
-	CollectToken string // E2E_COLLECT_TOKEN (fine-grained, Contents: read)
+	CollectToken string // E2E_COLLECT_TOKEN (fine-grained, Contents: R/W + Members: Read)
 	Template     string // E2E_TEMPLATE: a public is_template repo, owner/name
 	Classroom    string // E2E_CLASSROOM (default cs-principles)
 	Assignment   string // E2E_ASSIGNMENT (default hello)

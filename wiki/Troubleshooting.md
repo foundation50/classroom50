@@ -97,9 +97,9 @@ If the config repo isn't bootstrapped yet, or you want every matching repo regar
 
 The nightly `collect-scores` workflow logs a `::warning::` when a non-empty roster x assignment set yields zero readable submissions. Because a fine-grained PAT returns `404` for repos outside its scope -- indistinguishable from "no release yet" -- this almost always means the `CLASSROOM50_SERVICE_TOKEN` can't read the student repos, not that the whole class submitted nothing. (An early-term run before anyone has submitted will also trip it; the warning is hedged with "if you expected submissions.")
 
-- Confirm the service token has **`Contents: read` on all org repos** (not "Only select repositories" -- student repos are created on demand by `gh student accept`, so a pre-chosen list misses them). See the [service-token note](GitHub-Integration#4-fine-grained-pat-for-score-collection).
+- Confirm the service token has **`Contents: Read and write` on all org repos** (not "Only select repositories" -- student repos are created on demand by `gh student accept`, so a pre-chosen list misses them) **and Organization `Members: Read`** (collection lists the classroom team; a missing `Members` scope 403s the run — see below). See the [service-token note](GitHub-Integration#4-fine-grained-pat-for-score-collection).
 - Re-scope and rotate it with `gh teacher rotate-service-token <org>`.
-- A `401`/`403` instead fails the run loudly (bad or expired token); the `0 submissions` warning is specifically the silent-404 case.
+- A `401`/`403` instead fails the run loudly (bad/expired token, or a missing `Members: Read` scope); the `0 submissions` warning is specifically the silent-404 case.
 
 ## Build fails after a `git pull`
 

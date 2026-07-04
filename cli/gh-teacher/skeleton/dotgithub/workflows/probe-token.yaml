@@ -1,0 +1,44 @@
+name: Probe Service Token
+
+# Teacher-triggered service-token health check. Run this after
+# `gh teacher init` / `gh teacher rotate-service-token` (or any time a
+# collect-scores / regrade run fails with a 401/403) to confirm the
+# CLASSROOM50_SERVICE_TOKEN holds EVERY scope the pipeline needs — including
+# the org-team read and repo-level Actions permission that the CLI/web
+# provisioning validators can't cheaply check and that otherwise only surface
+# as an opaque failure in a nightly collect or a regrade.
+#
+# SIDE-EFFECT FREE: the probe only READS. It proves the write scopes with
+# read-only proxies GitHub gates behind the write permission (config-repo
+# permissions.push for Contents: write; actions/permissions reachability for
+# Actions: write) — it never pushes a tag, re-runs a workflow, or writes a
+# secret. Safe to run any time.
+
+on:
+  workflow_dispatch: {}
+
+permissions:
+  contents: read        # read the per-classroom config to resolve team slugs
+
+concurrency:
+  group: probe-token
+  cancel-in-progress: false
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+
+      - name: Probe the service token
+        env:
+          # The fine-grained PAT under test. The probe touches every scope the
+          # token requests (Contents R/W, Actions R/W, Organization Members: R,
+          # Metadata: R) with read-only calls. Rotated via
+          # `gh teacher rotate-service-token <org>`.
+          CLASSROOM50_SERVICE_TOKEN: ${{ secrets.CLASSROOM50_SERVICE_TOKEN }}
+        run: python3 .github/scripts/probe_token.py

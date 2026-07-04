@@ -444,10 +444,12 @@ describe("triggerRegrade", () => {
   })
 })
 
-// validateServiceToken now asserts the token can WRITE the classroom50 repo
-// (permissions.push) — regrade needs write, not just the read collect needs.
-// It reads GET /repos/{org}/classroom50 as the pasted token (via a mocked
-// createGitHubClient) and rejects a read-only token with an actionable hint.
+// validateServiceToken asserts the token can WRITE the classroom50 repo
+// (permissions.push — regrade needs write, not just the read collect needs)
+// AND can read the org's members (Members: Read — team-driven collection lists
+// the classroom team). It reads GET /repos/{org}/classroom50 then GET
+// /orgs/{org}/members as the pasted token (via a mocked createGitHubClient) and
+// rejects a read-only or Members-less token with an actionable hint.
 describe("validateServiceToken", () => {
   const mockTokenClient = (impl: (path: string) => Promise<unknown>) => {
     const request = vi.fn().mockImplementation(impl)
@@ -474,14 +476,22 @@ describe("validateServiceToken", () => {
       rateLimit,
     })
 
-  it("accepts a token with write access (permissions.push true)", async () => {
-    mockTokenClient((path) => {
-      expect(path).toBe("/repos/acme/classroom50")
-      return Promise.resolve({ permissions: { push: true } })
+  it("accepts a token with write access and org-members read", async () => {
+    const request = mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      if (path === "/orgs/acme/members?per_page=1") {
+        return Promise.resolve([])
+      }
+      throw new Error(`unexpected path ${path}`)
     })
     await expect(
       validateServiceToken("github_pat_x", "acme"),
     ).resolves.toBeUndefined()
+    // Both the Contents (repo) and Members (org) probes must run.
+    expect(request).toHaveBeenCalledWith("/repos/acme/classroom50")
+    expect(request).toHaveBeenCalledWith("/orgs/acme/members?per_page=1")
   })
 
   it("rejects a read-only token (permissions.push false) with a write hint", async () => {
@@ -489,6 +499,66 @@ describe("validateServiceToken", () => {
     await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
       /lacks write access|Read and write/,
     )
+  })
+
+  it("rejects a Members-less token (org members 403) with a Members: Read hint", async () => {
+    mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      return Promise.reject(apiError(403))
+    })
+    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
+      /Members: Read|can't read the org's members/,
+    )
+  })
+
+  it("rejects when the org members probe 404s (no Members scope)", async () => {
+    mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      return Promise.reject(apiError(404))
+    })
+    await expect(validateServiceToken("github_pat_x", "acme")).rejects.toThrow(
+      /Members: Read|can't read the org's members/,
+    )
+  })
+
+  // FAIL-OPEN: a 401 or 5xx on the members probe (after the repo read already
+  // proved the token valid) is inconclusive and must NOT reject the token.
+  it("proceeds when the org members probe 401s (inconclusive, not fatal)", async () => {
+    mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      return Promise.reject(apiError(401))
+    })
+    await expect(
+      validateServiceToken("github_pat_x", "acme"),
+    ).resolves.toBeUndefined()
+  })
+
+  it("proceeds when the org members probe 500s or hits a network error", async () => {
+    mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      return Promise.reject(apiError(500))
+    })
+    await expect(
+      validateServiceToken("github_pat_x", "acme"),
+    ).resolves.toBeUndefined()
+
+    mockTokenClient((path) => {
+      if (path === "/repos/acme/classroom50") {
+        return Promise.resolve({ permissions: { push: true } })
+      }
+      return Promise.reject(new TypeError("Failed to fetch"))
+    })
+    await expect(
+      validateServiceToken("github_pat_x", "acme"),
+    ).resolves.toBeUndefined()
   })
 
   it("maps a 403 to the actionable scope hint", async () => {

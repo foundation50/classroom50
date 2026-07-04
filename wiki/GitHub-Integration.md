@@ -66,9 +66,20 @@ Same device flow as above, and — as of the scope unification — the **same sc
 |---------|-------|
 | Resource owner | your teaching org |
 | Repository access | **All repositories** ("Only select repositories" misses student repos, which `gh student accept` creates on demand after the token is minted) |
-| Contents | **Read** |
-| Metadata | **Read** (mandatory — GitHub auto-includes it on every fine-grained PAT; this is what lets `collect-scores` read group-repo collaborators, so group assignments need no extra scope) |
+| Repository → Contents | **Read and write** (Read: collect student repo releases; Write: regrade pushes `submit/*` tags — one shared token) |
+| Repository → Actions | **Read and write** (regrade re-runs each student repo's autograde workflow run via the Actions rerun API) |
+| Repository → Metadata | **Read** (mandatory — GitHub auto-includes it on every fine-grained PAT; this is what lets `collect-scores` read group-repo collaborators, so group assignments need no extra scope) |
+| Organization → **Members** | **Read** (collection is team-driven: it lists the classroom GitHub team's members to derive who is enrolled. This is a **separate section** from Repository permissions and only appears once the org is selected as Resource owner — it is **not** implied by any repository scope) |
 | Expiry | 1–366 days (fine-grained PATs support up to 1 year); set a calendar reminder to rotate before it expires |
+
+> **Where is "Members"?** It lives under **Organization permissions**, a
+> collapsible section shown **only after you pick the org as Resource owner** —
+> distinct from the **Repository permissions** section where Contents/Metadata
+> live. It is not granted by, or implied by, any repository permission, so a
+> Contents-only token passes `gh teacher rotate-service-token`'s Contents check
+> yet fails the first API call `collect-scores` makes (listing the classroom
+> team). `rotate-service-token` now probes `GET /orgs/{org}/members` too, so a
+> Members-less token is rejected at rotation time rather than in a cron run.
 
 > **Group assignments need no extra scope.** For a group assignment the
 > autograder runs once in the first-accepter's repo and emits a single score;
@@ -125,6 +136,16 @@ gh workflow run collect-scores.yaml --repo <org>/classroom50 -f classroom=<short
 ```
 
 Or use the **Actions** tab on `<org>/classroom50` → `collect-scores.yaml` → **Run workflow**.
+
+### 7. Verify the service token (`probe-token.yaml`)
+
+After `gh teacher init` / `gh teacher rotate-service-token`, or whenever a collect/regrade run fails with a `401`/`403`, run the probe workflow to confirm the `CLASSROOM50_SERVICE_TOKEN` holds every scope the pipeline needs. It's read-only (no tags pushed, no runs re-run):
+
+```sh
+gh workflow run probe-token.yaml --repo <org>/classroom50
+```
+
+Or **Actions** tab → `probe-token.yaml` → **Run workflow**. A green run means the token has Contents Read+Write, Actions Read+Write, org Members: Read (including the per-classroom team read), and Metadata. A red run's log lists exactly which scope is missing and how to fix it — re-scope and `gh teacher rotate-service-token <org>`.
 
 ---
 
@@ -202,10 +223,24 @@ The CLIs call the GitHub REST API through [`go-gh`](https://github.com/cli/go-gh
 
 ### `collect_scores.py` (runs inside GitHub Actions, uses `CLASSROOM50_SERVICE_TOKEN`)
 
-| Method | URL | Purpose |
-|--------|-----|---------|
-| GET | [`https://api.github.com/repos/{owner}/{repo}/releases`](https://docs.github.com/en/rest/releases/releases#list-releases) | Page through a student's assignment-repo releases to collect every `submit/*` submission |
-| GET | [`https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}`](https://docs.github.com/en/rest/releases/assets#get-a-release-asset) | Download the `result.json` asset from a release |
+| Method | URL | Purpose | Required FG-PAT permission |
+|--------|-----|---------|----------------------------|
+| GET | [`https://api.github.com/orgs/{org}/teams/{team_slug}/members`](https://docs.github.com/en/rest/teams/members#list-team-members) | List the classroom team's members (team-driven enrollment; the source of the (student, assignment) pairs) | **Organization → Members: Read** |
+| GET | [`https://api.github.com/repos/{owner}/{repo}/releases`](https://docs.github.com/en/rest/releases/releases#list-releases) | Page through a student's assignment-repo releases to collect every `submit/*` submission | **Repository → Contents: Read** |
+| GET | [`https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}`](https://docs.github.com/en/rest/releases/assets#get-a-release-asset) | Download the `result.json` asset from a release | **Repository → Contents: Read** |
+| GET | [`https://api.github.com/repos/{owner}/{repo}/collaborators`](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators) | List a group repo's collaborators to fan the score out to rostered teammates | **Repository → Metadata: Read** (auto-included) |
+
+### `probe_token.py` (runs inside GitHub Actions, uses `CLASSROOM50_SERVICE_TOKEN`)
+
+Read-only. Exercises every scope the token needs so a teacher gets one green/red signal after provisioning or rotating. No writes — write scopes are proven with read-only proxies GitHub gates behind the write permission.
+
+| Method | URL | Purpose | Scope proven |
+|--------|-----|---------|--------------|
+| GET | [`https://api.github.com/orgs/{org}/members`](https://docs.github.com/en/rest/orgs/members#list-organization-members) | Org-members proxy for the team read | **Organization → Members: Read** |
+| GET | [`https://api.github.com/orgs/{org}/teams/{team_slug}/members`](https://docs.github.com/en/rest/teams/members#list-team-members) | The exact per-classroom team read collect makes (also tests team visibility) | **Organization → Members: Read** |
+| GET | [`https://api.github.com/repos/{org}/classroom50`](https://docs.github.com/en/rest/repos/repos#get-a-repository) | Config repo readable + `permissions.push` | **Contents: Read** and **Contents: Write** (via `permissions.push`) |
+| GET | [`https://api.github.com/repos/{org}/classroom50/actions/permissions`](https://docs.github.com/en/rest/actions/permissions#get-github-actions-permissions-for-a-repository) | Reachable only with the Actions permission | **Actions: Read and write** (regrade rerun) |
+| GET | [`https://api.github.com/repos/{org}/classroom50/collaborators`](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators) | Metadata endpoint (group attribution) | **Metadata: Read** (auto-included) |
 
 ### `autograde-runner.yaml` (reusable workflow, runs in student repos)
 
@@ -236,6 +271,7 @@ The runner setup also fetches from GitHub Pages without authentication (public b
 |------|----------|---------|
 | `publish-pages.yaml` | Push to default branch, `workflow_dispatch` | Deploy `assignments.json`, classroom-default `autograder.py` files, autograder workflow shims, the runner-side bootstrap, and per-assignment bundles to GitHub Pages |
 | `collect-scores.yaml` | `workflow_dispatch`, cron `17 4 * * *` UTC | Run `collect_scores.py`, aggregate `result.json` assets into `*/scores.json` |
+| `probe-token.yaml` | `workflow_dispatch` | Run `probe_token.py` — a read-only check that `CLASSROOM50_SERVICE_TOKEN` holds every scope collect and regrade need. Run it after provisioning/rotating, or when a collect/regrade run 401/403s. |
 | `autograde-runner.yaml` (reusable) | Called from each student's `autograde.yaml` | Set up runtime (toolchains, container) per `assignments.json`, fetch `runner.py` from Pages, run it, publish commit status and submit-tag release |
 
 ---

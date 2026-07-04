@@ -30,9 +30,12 @@ release is not an error (student hasn't accepted/submitted yet);
 the per-assignment "X of Y submitted" log shows roster coverage.
 
 Environment (set by `collect-scores.yaml`):
-  CLASSROOM50_SERVICE_TOKEN — fine-grained PAT, Contents: Read and write.
-                              Collection only reads; the write scope is
-                              shared with regrade.yaml (pushes submit/* tags).
+  CLASSROOM50_SERVICE_TOKEN — fine-grained PAT. Needs Organization ->
+                              Members: Read (collection is team-driven and
+                              lists the classroom team) and Repository ->
+                              Contents: Read and write. Collection only
+                              reads; the write scope is shared with
+                              regrade.yaml (pushes submit/* tags).
   CLASSROOM_FILTER          — optional single-classroom limit.
   GITHUB_REPOSITORY_OWNER   — org name (auto-set by Actions).
   GITHUB_API_URL            — API URL on GHES runners.
@@ -181,7 +184,9 @@ def main() -> int:
                 emit_error(
                     f"{classroom_short}: service token was rejected with HTTP {exc.code} "
                     f"({exc.reason or 'no reason'}) — run `gh teacher rotate-service-token {org}` "
-                    f"with a fine-grained PAT scoped to Contents: read on the student repos"
+                    f"with a fine-grained PAT scoped to Organization -> Members: Read (collection "
+                    f"lists the classroom team's members) AND Repository -> Contents: Read and write "
+                    f"(read the student repos' releases; the write scope is shared with regrade)"
                 )
             else:
                 emit_error(
@@ -437,8 +442,8 @@ def collect_classroom(
         emit_warning(
             f"{classroom_short}: could not read team {team_slug!r} members: "
             f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping collection for "
-            f"this classroom. Ensure CLASSROOM50_SERVICE_TOKEN can read org members "
-            f"(org-level read:org / members) — rotate it with "
+            f"this classroom. Ensure CLASSROOM50_SERVICE_TOKEN has Organization -> "
+            f"Members: Read (a fine-grained PAT permission) — rotate it with "
             f"`gh teacher rotate-service-token {org}`."
         )
         return results, mode_flip_assignments
