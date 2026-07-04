@@ -674,11 +674,8 @@ const EnrolledStudents = ({
   const [confirmResendAllOpen, setConfirmResendAllOpen] = useState(false)
   const [resendingKeys, setResendingKeys] = useState<Set<string>>(new Set())
 
-  const { rows, counts, isLoading, isEmpty, pendingHidden } = useTeamRoster(
-    org,
-    classroom,
-    students,
-  )
+  const { rows, counts, isLoading, isError, isEmpty, pendingHidden, teamSlug } =
+    useTeamRoster(org, classroom, students)
 
   const enrolled = useMemo(
     () => rows.filter((r) => r.state === "enrolled"),
@@ -709,11 +706,7 @@ const EnrolledStudents = ({
         id: Number(r.github_id),
         login: r.username,
         name: `${r.first_name} ${r.last_name}`.trim() || null,
-        email: r.email || null,
         avatar_url: r.avatar_url,
-        html_url: "",
-        bio: null,
-        permissions: { admin: false, pull: true, maintain: false, push: false },
       })),
     [enrolled],
   )
@@ -779,6 +772,7 @@ const EnrolledStudents = ({
       org,
       username: row.username,
       inviteeId,
+      invitationId: row.invitation_id,
     })
     return result.state
   }
@@ -808,12 +802,14 @@ const EnrolledStudents = ({
 
   const handleResendAll = async () => {
     let resent = 0
+    let skipped = 0
     const failures: string[] = []
     let rateLimited = false
     for (const row of pending) {
       try {
         const outcome = await resendForRow(row)
         if (outcome === "invited") resent++
+        else skipped++
       } catch (err) {
         failures.push(row.username || row.email)
         if (err instanceof GitHubAPIError && err.isRateLimited) {
@@ -826,9 +822,7 @@ const EnrolledStudents = ({
     const key = "__resend_all__"
     if (rateLimited) {
       setWarning(key, t("students.resendAllRateLimitedShort", { resent }))
-    } else if (failures.length === 0) {
-      setWarning(key, t("students.resendAllSuccess", { count: resent }))
-    } else {
+    } else if (failures.length > 0) {
       setWarning(
         key,
         t("students.resendAllPartialShort", {
@@ -837,6 +831,12 @@ const EnrolledStudents = ({
           failedList: failures.join(", "),
         }),
       )
+    } else if (resent === 0 && skipped > 0) {
+      // Nothing was actually re-sent (e.g. every row lacked a resolvable invite
+      // id). Don't report an unqualified success.
+      setWarning(key, t("students.resendAllNothing", { count: skipped }))
+    } else {
+      setWarning(key, t("students.resendAllSuccess", { count: resent }))
     }
   }
 
@@ -1018,7 +1018,7 @@ const EnrolledStudents = ({
       {/* Data-drift banner: CSV-only rows with no team member / pending invite.
           Kept VISIBLE below as a distinct "not yet provisioned" section, but the
           banner surfaces the count + a disclosure so the teacher sees which. */}
-      {!isLoading && unprovisioned.length > 0 ? (
+      {!isLoading && !isError && unprovisioned.length > 0 ? (
         <div
           role="alert"
           className="alert alert-warning alert-soft flex-col items-start"
@@ -1096,6 +1096,25 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
+      {isError ? (
+        <div role="alert" className="alert alert-error alert-soft">
+          <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+          <span className="text-sm">{t("students.rosterLoadError")}</span>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            onClick={() =>
+              void queryClient.invalidateQueries({
+                queryKey: githubKeys.teamMembers(org, teamSlug),
+              })
+            }
+          >
+            <RefreshCw aria-hidden="true" className="size-4" />
+            {t("students.rosterRetry")}
+          </button>
+        </div>
+      ) : null}
+
       {isEmpty ? (
         <div className="card card-border w-full bg-base-100 shadow-sm">
           <div className="px-6 py-12 text-center">
@@ -1111,7 +1130,7 @@ const EnrolledStudents = ({
 
       {/* Pending invites. */}
       <AnimatePresence initial={false}>
-        {!isLoading && pending.length > 0 ? (
+        {!isLoading && !isError && pending.length > 0 ? (
           <motion.div
             key="pending"
             layout
@@ -1154,7 +1173,7 @@ const EnrolledStudents = ({
       </AnimatePresence>
 
       {/* Non-owner: pending invites are owner-only. */}
-      {!isLoading && pendingHidden ? (
+      {!isLoading && !isError && pendingHidden ? (
         <div role="alert" className="alert alert-info alert-soft">
           <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
         </div>
@@ -1162,7 +1181,7 @@ const EnrolledStudents = ({
 
       {/* Not-yet-provisioned (visible, distinct state). */}
       <AnimatePresence initial={false}>
-        {!isLoading && unprovisioned.length > 0 ? (
+        {!isLoading && !isError && unprovisioned.length > 0 ? (
           <motion.div
             key="unprovisioned"
             layout
@@ -1196,7 +1215,7 @@ const EnrolledStudents = ({
       </AnimatePresence>
 
       {/* Enrolled (team members) — reviewed last. */}
-      {!isLoading ? (
+      {!isLoading && !isError ? (
         <EnterDiv className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
             <h2 className="text-lg font-semibold">

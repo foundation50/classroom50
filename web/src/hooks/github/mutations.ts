@@ -906,11 +906,13 @@ export async function ensureOrgMembership(
   }
 }
 
-// Resend an org invite without ever leaving the student invite-less: recreate
-// first, then cancel the stale invite only once a replacement exists (the old
-// cancel-then-recreate order stranded a student if the recreate failed). If a
-// still-pending invite blocks the recreate (422), that existing invite is the
-// live one, so leave it in place.
+// Resend an org invite without ever leaving the student invite-less. A fresh
+// `ensureOrgMembership` recreates when the invitee is neither active nor
+// pending. When they ARE still pending and we know the stale invitation id,
+// cancel it and recreate so the invite is genuinely re-sent (previously this
+// short-circuited on the pending precheck and re-sent nothing). If the recreate
+// then hits a 422 (a pending invite still blocks it), that existing invite is
+// the live one, so leave it in place.
 export async function resendOrgInvitation(
   client: GitHubClient,
   input: {
@@ -924,10 +926,24 @@ export async function resendOrgInvitation(
 
   const result = await ensureOrgMembership(client, { org, username, inviteeId })
 
-  // A fresh invite makes the prior one stale; an already active/pending student
-  // means we created nothing, so don't cancel their invite.
-  if (invitationId !== undefined && result.state === "invited") {
+  if (result.state === "invited") {
+    // A fresh invite was created; cancel the prior one if we know it.
+    if (invitationId !== undefined) {
+      await cancelOrgInvitation(client, { org, invitationId })
+    }
+    return result
+  }
+
+  // Still pending with a known stale invite: cancel it and recreate so the
+  // student actually receives a new invitation. Active members are left alone.
+  if (result.state === "pending" && invitationId !== undefined) {
     await cancelOrgInvitation(client, { org, invitationId })
+    const recreated = await ensureOrgMembership(client, {
+      org,
+      username,
+      inviteeId,
+    })
+    return recreated
   }
 
   return result

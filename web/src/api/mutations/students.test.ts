@@ -834,7 +834,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
       patch: {
         first_name: "=HYPERLINK(1)",
         last_name: "+CMD",
-        email: "alice@x.edu",
+        email: "=1+1@x.edu",
         section: "@SUM(A1)",
       },
     })
@@ -846,8 +846,10 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(alice?.first_name).toBe("'=HYPERLINK(1)")
     expect(alice?.last_name).toBe("'+CMD")
     expect(alice?.section).toBe("'@SUM(A1)")
-    // email is NOT formula-guarded (must round-trip byte-exact for reconcile/CLI).
-    expect(alice?.email).toBe("alice@x.edu")
+    // email is also formula-guarded (member-controlled via sync/bulk import);
+    // email_hash is derived from the normalized pre-guard email, so reconcile
+    // matching is unaffected.
+    expect(alice?.email).toBe("'=1+1@x.edu")
   })
 
   it("writes a descriptive commit message", async () => {

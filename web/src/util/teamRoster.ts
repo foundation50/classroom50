@@ -36,6 +36,10 @@ export type TeamRosterRow = {
   section: string
   email: string
   avatar_url: string
+  // The pending org-invitation id, set only for `pending` rows. Threaded to
+  // resendOrgInvitation so a still-pending invite is actually recreated (a
+  // resend without it short-circuits and re-sends nothing).
+  invitation_id?: number
 }
 
 // A CSV row keyed for the fallback join: github_id first, then lowercased
@@ -149,6 +153,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       username: login,
       github_id: student?.github_id?.trim() ?? "",
       avatar_url: "",
+      invitation_id: invite.id,
       ...metadataFrom(student),
     })
   }

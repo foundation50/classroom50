@@ -18,6 +18,12 @@ export type UseTeamRosterResult = {
   counts: Record<TeamRosterRowState, number>
   // The team-member fetch (the enrolled source of truth) is still resolving.
   isLoading: boolean
+  // The team-member fetch (enrolled source of truth) failed for a reason other
+  // than a missing team (listTeamMembers swallows 404 -> []). When true, the
+  // roster couldn't be read and the view must show an error+retry instead of
+  // the empty state, so a transient/permission failure isn't rendered as an
+  // authoritative "nobody enrolled".
+  isError: boolean
   // The classroom has zero team members AND zero pending invites — a brand-new
   // classroom nobody has joined yet.
   isEmpty: boolean
@@ -44,7 +50,11 @@ export function useTeamRoster(
   const teamSlug =
     classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
 
-  const { data: members, isLoading: membersLoading } = useQuery({
+  const {
+    data: members,
+    isLoading: membersLoading,
+    isError: membersError,
+  } = useQuery({
     ...teamMembersQuery(client, org, teamSlug),
   })
 
@@ -76,7 +86,8 @@ export function useTeamRoster(
     rows,
     counts,
     isLoading,
-    isEmpty: !isLoading && rows.length === 0,
+    isError: membersError,
+    isEmpty: !isLoading && !membersError && rows.length === 0,
     pendingHidden: invitesForbidden,
     teamSlug,
   }

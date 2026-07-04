@@ -184,8 +184,16 @@ export type MatchCandidate = {
 // "claimed" when their numeric id or login appears on a roster row (by github_id
 // or username), so a teacher only sees accounts that aren't yet bound to a
 // student here. Pure for unit-testing without react-query.
+//
+// Accepts the minimal member shape it reads (id/login/name/avatar_url) so
+// callers don't have to fabricate a full GitHubUser just to feed it.
+export type MatchMember = Pick<
+  GitHubUser,
+  "id" | "login" | "name" | "avatar_url"
+>
+
 export function unmatchedTeamMembers(
-  members: GitHubUser[],
+  members: MatchMember[],
   students: Student[],
 ): MatchCandidate[] {
   const { ids: claimedIds, logins: claimedLogins } = rosterClaimSet(students)

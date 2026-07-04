@@ -191,18 +191,28 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
 }
 
 // Neutralize spreadsheet formula injection (OWASP CSV injection) in the
-// free-text fields a teacher controls. A value starting with = + - @ (or a
-// leading tab/CR that a spreadsheet treats as a formula lead) is prefixed with
-// a single quote so Excel/Sheets render it as text. Idempotent: a value already
-// quote-guarded isn't double-prefixed. Applied ONLY to teacher-entered free
-// text — never to email/github_id/tokens/hashes/timestamps, which must
-// round-trip byte-exact for reconcile and the gh-teacher CLI.
+// free-text fields a teacher OR a GitHub member can influence. A value starting
+// with = + - @ (or a leading tab/CR that a spreadsheet treats as a formula
+// lead) is prefixed with a single quote so Excel/Sheets render it as text.
+// Idempotent: a value already quote-guarded isn't double-prefixed. Applied to
+// name/section free text AND to email — email is a member-controlled GitHub
+// profile field written verbatim by syncRosterFromTeam/bulk import, so a
+// formula-leading verified email (e.g. `=1+1@evil.com`) would otherwise reach
+// students.csv and execute on open. Deliberately NOT applied to
+// github_id/tokens/hashes/timestamps, which must round-trip byte-exact.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
 // students.csv (this app's parse layer and the gh-teacher CLI) sees and must
-// tolerate it on these three fields. Cross-binary contract — keep in lockstep.
+// tolerate it on these fields. The gh-teacher Go writer defangs the same set;
+// keep them in lockstep. email_hash is computed from the normalized, pre-guard
+// email, so guarding the stored cell does not affect reconcile matching.
 const FORMULA_LEAD = /^[=+\-@\t\r]/
-const FORMULA_GUARDED_FIELDS = ["first_name", "last_name", "section"] as const
+const FORMULA_GUARDED_FIELDS = [
+  "first_name",
+  "last_name",
+  "section",
+  "email",
+] as const
 
 function escapeFormulaInjection(value: string): string {
   if (!value) return value
@@ -1669,6 +1679,28 @@ async function matchStudentToAccount(
     )
   }
 
+  // Reject if the picked account is already bound to a DIFFERENT row (by
+  // immutable github_id or, for a pre-id row, by login). Without this, matching
+  // two email rows to the same account — or a stale candidate list re-picking an
+  // account another match just claimed — writes one github_id onto two rows,
+  // which the roster view masks (dedupe by studentKey) while the CSV stays
+  // permanently double-bound. Runs on the freshly-read roster so it composes
+  // with a concurrent match under withGitConflictRetry.
+  const pickedId = input.github_id.trim()
+  const pickedLogin = normalizedUsername.toLowerCase()
+  const alreadyClaimed = currentStudents.some(
+    (row) =>
+      !isTarget(row) &&
+      ((Boolean(pickedId) && row.github_id.trim() === pickedId) ||
+        (Boolean(pickedLogin) &&
+          row.username.trim().toLowerCase() === pickedLogin)),
+  )
+  if (alreadyClaimed) {
+    throw new Error(
+      `${normalizedUsername} is already matched to another student on this roster; refresh and pick a different account.`,
+    )
+  }
+
   if (target.enrollment_status === "enrolled") {
     return { alreadyEnrolled: true, student: target }
   }
@@ -2013,11 +2045,25 @@ export async function syncRosterFromTeam(
     const currentStudents = parseStudentsCsv(currentCsv)
 
     const { ids, logins } = rosterClaimSet(currentStudents)
+    // Email set mirrors buildTeamRoster's indexCsv.byEmail fold: a member whose
+    // GitHub profile email matches an existing (e.g. pre-resolution, id/login-
+    // less) CSV row is the SAME person the view already folds by email, so
+    // appending would create a duplicate email-colliding row the view masks but
+    // that breaks email-keyed logic (match-by-email, emailHash invite dedupe).
+    const emails = new Set(
+      currentStudents
+        .map((s) => s.email?.trim().toLowerCase())
+        .filter((e): e is string => Boolean(e)),
+    )
 
-    // A member is "missing" when neither their numeric id nor their login is
-    // already claimed by a CSV row (the roster-view fallback join).
+    // A member is "missing" when their numeric id, login, AND email are all
+    // unclaimed by any CSV row (the same id -> login -> email fallback join the
+    // roster view uses, so append and display can't diverge).
     const missing = members.filter(
-      (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
+      (m) =>
+        !ids.has(String(m.id)) &&
+        !logins.has(m.login.toLowerCase()) &&
+        !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
     )
 
     if (missing.length === 0) {
