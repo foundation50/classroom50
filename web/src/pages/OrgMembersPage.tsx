@@ -65,8 +65,15 @@ const OrgMembersPage = () => {
   const { notify } = useToast()
   const queryClient = useQueryClient()
   const { data: viewer } = useGitHubViewer()
-  const { rows, members, ownerIds, isLoading, isError, notes } =
-    useOrgMembersOverview(org)
+  const {
+    rows,
+    members,
+    ownerIds,
+    isLoading,
+    isError,
+    teamSlugByClassroom,
+    notes,
+  } = useOrgMembersOverview(org)
   const { classes } = useGetClasses(org)
   const [query, setQuery] = useState("")
   // Classroom filter: "" = all, NO_CLASSROOM_FILTER = members on no roster,
@@ -103,6 +110,15 @@ const OrgMembersPage = () => {
     invalidateInviteQueries(queryClient, org)
   }
 
+  // The resolved GitHub team slug for a classroom (classroom.json.team.slug,
+  // else the classroom50-<classroom> heuristic). Must match the key
+  // useOrgMembersOverview reads the team cache under, or optimistic team-cache
+  // writes below would target a cache nobody reads (a name-collision classroom's
+  // real slug differs from the heuristic) and reintroduce the false
+  // "unprovisioned" flash the optimistic machinery exists to prevent.
+  const teamSlugFor = (classroom: string) =>
+    teamSlugByClassroom.get(classroom) ?? `classroom50-${classroom}`
+
   // Invalidate the non-racy caches a roster write touches for one classroom:
   // classroom.json (rarely changes) and, unless suppressed, the CSV. The
   // team-members query is deliberately NOT invalidated here — it's handled by
@@ -138,8 +154,8 @@ const OrgMembersPage = () => {
   // Optimistically drop members (by resolved id/login) from BOTH the target
   // classroom's students.csv cache AND its team-members cache, in the same tick,
   // so the two never momentarily disagree (which would flash a false
-  // "unprovisioned" state). teamSlug uses the heuristic; a collided slug is
-  // corrected by the delayed reconcile.
+  // "unprovisioned" state). teamSlug is the resolved slug (matches the cache the
+  // Members overview reads), so a collided-name classroom is updated correctly.
   const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
     const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
@@ -156,7 +172,7 @@ const OrgMembersPage = () => {
         ) ?? current,
     )
     queryClient.setQueryData<GitHubUser[]>(
-      githubKeys.teamMembers(org, `classroom50-${classroom}`),
+      githubKeys.teamMembers(org, teamSlugFor(classroom)),
       (current) =>
         current?.filter(
           (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
@@ -179,7 +195,7 @@ const OrgMembersPage = () => {
         ),
       })
       queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(org, `classroom50-${classroom}`),
+        queryKey: githubKeys.teamMembers(org, teamSlugFor(classroom)),
       })
     }, CSV_RECONCILE_DELAY_MS)
   }
@@ -220,7 +236,7 @@ const OrgMembersPage = () => {
       // Seed the team cache too, so the member reads as "enrolled" (not
       // "unprovisioned") immediately. buildTeamRoster/aggregate read id+login.
       queryClient.setQueryData<GitHubUser[]>(
-        githubKeys.teamMembers(org, `classroom50-${classroom}`),
+        githubKeys.teamMembers(org, teamSlugFor(classroom)),
         (current) => {
           const list = current ?? []
           const have = new Set(list.map((m) => String(m.id)))

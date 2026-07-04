@@ -1407,6 +1407,38 @@ export async function bulkEnrollStudentsInClassroom(
   }
 }
 
+// Does a students.csv row identify the same person as `target`? The single
+// authority for matching a removal target to a roster row, shared by
+// unenrollStudent and bulkUnenrollStudents so the two can't drift.
+//
+// Precedence mirrors enrollment identity: when the target carries a username or
+// github_id, match on those only (never on email — a shared email must not
+// widen the match). Email is a fallback ONLY for an email-only target (no
+// username, no github_id), and then it matches ONLY an email-only row (a row
+// that is itself unclaimed: no username, no github_id). Without that guard a
+// batch remove of one email-only invite would drop every other roster row that
+// happens to share the email, silently unenrolling an unselected student.
+export function matchesRosterRow(row: StudentCsvRow, target: Student): boolean {
+  const username = target.username?.trim()
+  const githubId = target.github_id?.trim()
+  if (username || githubId) {
+    return (
+      (Boolean(username) &&
+        row.username.toLowerCase() === username!.toLowerCase()) ||
+      (Boolean(githubId) &&
+        Boolean(row.github_id) &&
+        row.github_id === githubId)
+    )
+  }
+  const email = target.email?.trim()
+  return (
+    Boolean(email) &&
+    !row.username.trim() &&
+    !row.github_id.trim() &&
+    row.email.toLowerCase() === email!.toLowerCase()
+  )
+}
+
 export type UnenrollStudentInput = {
   org: string
   classroom: string
@@ -1455,22 +1487,10 @@ export async function unenrollStudent(
 
   const currentStudents = parseStudentsCsv(currentCsv)
 
-  // Match the target row. Prefer username/github_id; fall back to email for a
-  // not-yet-reconciled email row.
-  const sameRow = (student: StudentCsvRow) => {
-    if (normalizedUsername || toRemoveStudent.github_id) {
-      return (
-        student.username.toLowerCase() ===
-          toRemoveStudent.username.toLowerCase() ||
-        (Boolean(student.github_id) &&
-          student.github_id === String(toRemoveStudent.github_id))
-      )
-    }
-    return (
-      Boolean(normalizedEmail) &&
-      student.email.toLowerCase() === normalizedEmail!.toLowerCase()
-    )
-  }
+  // Match the target row via the shared roster-row matcher (username/github_id,
+  // email only for a fully email-only target).
+  const sameRow = (student: StudentCsvRow) =>
+    matchesRosterRow(student, toRemoveStudent)
 
   const exists = currentStudents.some(sameRow)
 
@@ -1626,19 +1646,10 @@ export async function bulkUnenrollStudents(
     return { removed: [], notFound: [], warnings: [] }
   }
 
-  // Same per-row match predicate as unenrollStudent, applied to any target.
-  const matchesTarget = (row: StudentCsvRow, target: Student): boolean => {
-    const username = target.username?.trim()
-    if (username || target.github_id) {
-      return (
-        (Boolean(username) &&
-          row.username.toLowerCase() === username!.toLowerCase()) ||
-        (Boolean(row.github_id) && row.github_id === String(target.github_id))
-      )
-    }
-    const email = target.email?.trim()
-    return Boolean(email) && row.email.toLowerCase() === email!.toLowerCase()
-  }
+  // Same per-row match predicate as unenrollStudent (shared matchesRosterRow):
+  // username/github_id when present, email only for a fully email-only target.
+  const matchesTarget = (row: StudentCsvRow, target: Student): boolean =>
+    matchesRosterRow(row, target)
 
   // Resolve slug + viewer once, concurrently with the commit.
   const teamSlugPromise = resolveClassroomTeamSlug(client, org, classroom)

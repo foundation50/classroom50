@@ -3,6 +3,8 @@ import {
   pagesAssignmentUrl,
   classroomsIndexUrl,
   listAllOrgMembers,
+  listOrgAdmins,
+  listOrgTeams,
   releasesQuery,
 } from "./queries"
 import { GitHubAPIError } from "./errors"
@@ -89,6 +91,87 @@ describe("listAllOrgMembers (#76 — pages to completion)", () => {
     const all = await listAllOrgMembers(client, "acme")
     expect(request).toHaveBeenCalledTimes(100)
     expect(all).toHaveLength(100 * 100)
+  })
+})
+
+const apiError = (status: number) =>
+  new GitHubAPIError({
+    status,
+    url: "https://api.github.com/x",
+    message: `HTTP ${status}`,
+    body: null,
+    rateLimit: {
+      limit: null,
+      remaining: null,
+      used: null,
+      reset: null,
+      resource: null,
+      retryAfter: null,
+    },
+  })
+
+describe("listOrgAdmins (role=admin fallback)", () => {
+  const rejectingClient = (status: number) =>
+    ({
+      request: vi.fn().mockRejectedValue(apiError(status)),
+    }) as unknown as GitHubClient
+
+  it("returns [] on 403 (can't read the role-filtered member list)", async () => {
+    await expect(listOrgAdmins(rejectingClient(403), "acme")).resolves.toEqual(
+      [],
+    )
+  })
+
+  it("returns [] on 404", async () => {
+    await expect(listOrgAdmins(rejectingClient(404), "acme")).resolves.toEqual(
+      [],
+    )
+  })
+
+  it("rethrows a non-403/404 error (e.g. 500) rather than degrading silently", async () => {
+    await expect(listOrgAdmins(rejectingClient(500), "acme")).rejects.toThrow(
+      GitHubAPIError,
+    )
+  })
+
+  it("returns the admins on success", async () => {
+    const client = {
+      request: vi.fn().mockResolvedValue([{ id: 1, login: "owner" }]),
+    } as unknown as GitHubClient
+    const admins = await listOrgAdmins(client, "acme")
+    expect(admins.map((m) => m.login)).toEqual(["owner"])
+  })
+})
+
+describe("listOrgTeams (org teams fallback)", () => {
+  const rejectingClient = (status: number) =>
+    ({
+      request: vi.fn().mockRejectedValue(apiError(status)),
+    }) as unknown as GitHubClient
+
+  it("returns [] on 404 (no access — degrades to CSV-only display)", async () => {
+    await expect(listOrgTeams(rejectingClient(404), "acme")).resolves.toEqual(
+      [],
+    )
+  })
+
+  it("rethrows a non-404 error (e.g. 403/500) rather than degrading silently", async () => {
+    await expect(listOrgTeams(rejectingClient(403), "acme")).rejects.toThrow(
+      GitHubAPIError,
+    )
+    await expect(listOrgTeams(rejectingClient(500), "acme")).rejects.toThrow(
+      GitHubAPIError,
+    )
+  })
+
+  it("returns the teams on success", async () => {
+    const client = {
+      request: vi
+        .fn()
+        .mockResolvedValue([{ id: 7, slug: "classroom50-cs101" }]),
+    } as unknown as GitHubClient
+    const teams = await listOrgTeams(client, "acme")
+    expect(teams.map((tm) => tm.slug)).toEqual(["classroom50-cs101"])
   })
 })
 

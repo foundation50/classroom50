@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { bulkUnenrollStudents } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
+import { studentKey } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
@@ -26,23 +27,6 @@ export type BulkRemoveFromClassroomResult = {
 }
 
 const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
-
-// A row and a Student match the same person when their github_id, username, or
-// email coincide (case-insensitive) — the identity precedence the roster writer
-// itself keys on. Used to reconcile the writer's removed/notFound Students back
-// to the selected rows WITHOUT relying on object identity (the writer may
-// return normalized copies, not the same references).
-const sameIdentity = (row: OrgMemberRow, student: Student): boolean => {
-  const rid = row.github_id?.trim()
-  const sid = student.github_id?.trim()
-  if (rid && sid && rid === sid) return true
-  const rlogin = row.username?.trim().toLowerCase()
-  const slogin = student.username?.trim().toLowerCase()
-  if (rlogin && slogin && rlogin === slogin) return true
-  const remail = row.email?.trim().toLowerCase()
-  const semail = student.email?.trim().toLowerCase()
-  return Boolean(remail && semail && remail === semail)
-}
 
 // Reconstruct the minimal Student the roster matcher keys on (username /
 // github_id / email). Mirrors removeMemberFromOrg.rowToStudent.
@@ -124,12 +108,15 @@ export async function bulkRemoveFromClassroom(
       onProgress,
     })
 
-    // Reconcile the batch result back to per-row outcomes by IDENTITY (not
-    // object reference): a row whose person is in the writer's `removed` set was
+    // Reconcile the batch result back to per-row outcomes by studentKey (the
+    // shared identity precedence github_id || username || email) rather than
+    // object reference: a row whose person is in the writer's `removed` set was
     // dropped; one only in `notFound` was already gone at write time (a racing
     // edit / prior removal) — distinct from the pre-filter "not-on-classroom".
+    // rowToStudent copies the row's identity fields, so both sides key alike.
+    const removedKeys = new Set(result.removed.map((s) => studentKey(s)))
     for (const { row } of byStudent) {
-      const wasRemoved = result.removed.some((s) => sameIdentity(row, s))
+      const wasRemoved = removedKeys.has(studentKey(row))
       outcomes.push({
         key: row.key,
         label: labelFor(row),

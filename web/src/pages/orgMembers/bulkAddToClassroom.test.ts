@@ -113,6 +113,34 @@ describe("bulkAddToClassroom", () => {
     expect(res.preSkipped[0]).toMatchObject({ key: "99", reason: "not-member" })
   })
 
+  it("reports an isMember row that resolves to no member id as 'no-id'", async () => {
+    // isMember:true but neither the github_id nor the username matches any
+    // loaded org member, so matchedId stays null on the isMember branch of the
+    // reason ternary. The engine is never called for it.
+    getUserByIdMock.mockReset()
+    bulkEnrollMock.mockReset()
+
+    const res = await bulkAddToClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      rows: [
+        row({
+          key: "42",
+          github_id: "42",
+          username: "renamed-away",
+          isMember: true,
+        }),
+      ],
+      // The loaded member list contains a different account entirely.
+      members: [member(1, "alice")],
+    })
+
+    expect(bulkEnrollMock).not.toHaveBeenCalled()
+    expect(res.enroll).toBeNull()
+    expect(res.preSkipped).toHaveLength(1)
+    expect(res.preSkipped[0]).toMatchObject({ key: "42", reason: "no-id" })
+  })
+
   it("skips members already on the target classroom", async () => {
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice" })
     bulkEnrollMock.mockReset()

@@ -1303,4 +1303,40 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(result.removed).toHaveLength(0)
     expect(committed.content).toBeNull()
   })
+
+  it("email-only target drops ONLY an email-only row, never a same-email identified sibling", async () => {
+    // Regression: an email-only removal target (no username, no github_id) must
+    // match only an unclaimed email-only row. Two rows share sam@x.edu — one is
+    // a fully-identified enrolled student, the other an unclaimed email invite.
+    // Removing the email-only target must not silently unenroll the sibling.
+    const startingCsv =
+      HEADER +
+      // Identified sibling (must survive): username + github_id, same email.
+      "sam,,,sam@x.edu,,100\n" +
+      // Email-only invite (the actual target): no username, no github_id.
+      ",,,sam@x.edu,,\n"
+    const { client, committed } = makeClient({ startingCsv })
+
+    const result = await bulkUnenrollStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [
+        {
+          username: "",
+          first_name: "",
+          last_name: "",
+          email: "sam@x.edu",
+          section: "",
+          github_id: "",
+        },
+      ],
+    })
+
+    const survivors = rowsFromCsv(committed.content ?? HEADER)
+    // The identified sibling survives; only the email-only row was dropped.
+    expect(survivors).toHaveLength(1)
+    expect(survivors[0]).toMatchObject({ username: "sam", github_id: "100" })
+    expect(result.removed).toHaveLength(1)
+    expect(result.notFound).toHaveLength(0)
+  })
 })

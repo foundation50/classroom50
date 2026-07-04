@@ -31,6 +31,12 @@ export type OrgMembersOverview = {
   ownerIds: Set<string>
   isLoading: boolean
   isError: boolean
+  // classroom path -> resolved GitHub team slug (classroom.json.team.slug, else
+  // the classroom50-<classroom> heuristic). The SAME slug teamMembersByClassroom
+  // is keyed from, so optimistic team-cache writes on the Members page target the
+  // cache this hook actually reads (a name-collision classroom's real slug can
+  // differ from the heuristic).
+  teamSlugByClassroom: Map<string, string>
   // Per-classroom roster read failures (a 404 / parse error contributes no
   // students rather than failing the whole page).
   notes: string[]
@@ -174,13 +180,32 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     [adminsQuery.data],
   )
 
+  // classroom path -> resolved team slug, from the same teamSlugs array that
+  // keys the team-member queries above, so the Members page seeds/invalidates
+  // the exact team cache this hook reads.
+  const teamSlugByClassroom = useMemo(() => {
+    const map = new Map<string, string>()
+    classroomNames.forEach((name, i) => {
+      map.set(name, teamSlugs[i])
+    })
+    return map
+  }, [classroomNames, teamSlugs])
+
   const isLoading =
     membersQuery.isLoading ||
     metaQueries.some((q) => q.isLoading) ||
     rosterQueries.some((q) => q.isLoading)
   const isError = membersQuery.isError
 
-  return { rows, members, ownerIds, isLoading, isError, notes }
+  return {
+    rows,
+    members,
+    ownerIds,
+    isLoading,
+    isError,
+    teamSlugByClassroom,
+    notes,
+  }
 }
 
 export default useOrgMembersOverview
