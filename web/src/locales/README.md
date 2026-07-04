@@ -44,6 +44,22 @@ The agent should then:
    silently break a pack. It mirrors the installer's own validation, so a
    passing pack also installs cleanly.
 
+### Writing translatable strings
+
+Every user-facing string goes through `t()` so a language pack can translate
+it. The CI audit below is a gate, but it can only see a key when the reference
+is statically analyzable, so keep to these conventions:
+
+- **Reference keys with a literal**, not a fully dynamic variable. The audit
+  sees `t("a.b")`, `t('a.b')`, ``t(`a.b`)``, and literal-prefixed dynamic
+  keys (``t(`a.${x}`)`` or `t("a." + x)`). A fully dynamic `t(someVar)` is
+  **invisible** to the gate — a key referenced only that way can go missing and
+  ship silently. If you must build a key dynamically, keep a literal prefix.
+- **Key segments use `[A-Za-z0-9_.:-]`** (dotted paths, optionally an i18next
+  `ns:` namespace). A key with any other character in a segment won't be seen.
+- **Don't hardcode prose** in `aria-label`/`alt`/`title`/`placeholder` or in
+  `setError`/`toast` calls — those bypass i18n and no pack can translate them.
+
 ### Auditing coverage in our own code
 
 [`verify_locale.py`](./verify_locale.py) checks a _pack_ against `en.json`.

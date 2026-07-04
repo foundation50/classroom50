@@ -61,6 +61,11 @@ npm run check   # tsc -b + eslint + prettier + vitest
 npm run dev     # local dev server
 ```
 
+User-facing strings go through `t()` so language packs can translate them, and
+CI audits coverage against `en.json` — see
+[`web/src/locales/README.md`](web/src/locales/README.md) for the `t()`
+conventions the audit expects.
+
 Skeleton scripts (Python):
 
 ```
