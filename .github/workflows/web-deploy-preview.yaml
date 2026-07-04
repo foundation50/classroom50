@@ -15,6 +15,12 @@ name: web Deploy to Preview (preview.classroom50.org)
 # Why a separate repo: GitHub Pages allows only one custom domain per repo, so
 # production (classroom50.org) and preview must live in different repos. Source
 # stays here; the preview repo holds only the built artifact + its own CNAME.
+#
+# Deploy mechanism: the preview repo uses Actions-based Pages. This workflow
+# force-pushes the built dist/ to the preview repo's `build` branch; a workflow
+# on the preview repo's `main` (deploy-pages.yaml) then publishes it via
+# actions/deploy-pages. (Previously this pushed to the preview repo's `main`,
+# which used legacy branch-based Pages.)
 
 on:
   push:
@@ -74,15 +80,20 @@ jobs:
       - name: Write CNAME for preview domain
         run: echo "preview.classroom50.org" > dist/CNAME
 
-      # Publish the built site to the preview repo's `main` branch (its Pages
-      # source). Uses an SSH deploy key (least privilege, no expiry) that has
-      # write access to ONLY the preview repo.
+      # Publish the built site to the preview repo's `build` branch. The preview
+      # repo uses Actions-based GitHub Pages (build_type: workflow): its
+      # deploy-pages.yaml lives on `main` and triggers on pushes to `build`,
+      # then runs upload-pages-artifact + deploy-pages. Publishing to a separate
+      # branch (not `main`) is required because force_orphan recreates the
+      # branch with ONLY these files — pushing to `main` would delete the
+      # preview repo's deploy workflow. Uses an SSH deploy key (least privilege,
+      # no expiry) with write access to ONLY the preview repo.
       - name: Publish to preview repo
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           deploy_key: ${{ secrets.PREVIEW_DEPLOY_KEY }}
           external_repository: foundation50/classroom50-web-preview
-          publish_branch: main
+          publish_branch: build
           # Repo-root-relative; the build wrote to web/dist.
           publish_dir: ./web/dist
           # Replace the branch contents wholesale each deploy (the preview repo
