@@ -29,7 +29,7 @@ const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",
-  driftClassrooms: [],
+  unprovisionedClassrooms: [],
   ...over,
 })
 
@@ -37,7 +37,7 @@ const access = (classroom: string, archived = false) => ({
   classroom,
   archived,
   section: "",
-  onTeam: true,
+  state: "enrolled" as const,
 })
 
 describe("bulkRemoveFromClassroom", () => {

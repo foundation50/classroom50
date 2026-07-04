@@ -18,7 +18,7 @@ const row = (key: string, over: Partial<OrgMemberRow> = {}): OrgMemberRow => ({
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",
-  driftClassrooms: [],
+  unprovisionedClassrooms: [],
   ...over,
 })
 
@@ -28,10 +28,9 @@ const notSelf = (self: string) => (r: OrgMemberRow) => r.key !== self
 describe("selection helpers", () => {
   it("selectableRows excludes the non-selectable (self) row from the filtered set", () => {
     const filtered = [row("a"), row("self"), row("b")]
-    expect(selectableRows(filtered, notSelf("self")).map((r) => r.key)).toEqual([
-      "a",
-      "b",
-    ])
+    expect(selectableRows(filtered, notSelf("self")).map((r) => r.key)).toEqual(
+      ["a", "b"],
+    )
   })
 
   it("selectAllState reports all/some over the selectable-filtered set only", () => {

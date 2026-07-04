@@ -1,7 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { AlertTriangle, ChevronRight, ExternalLink, UserPlus, X } from "lucide-react"
+import {
+  AlertTriangle,
+  ChevronRight,
+  ExternalLink,
+  UserPlus,
+  X,
+} from "lucide-react"
 
 import Avatar from "@/components/avatar"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -29,6 +35,7 @@ const MemberDetailModal = ({
   isOwner,
   onClose,
   onRemoved,
+  onInvited,
 }: {
   open: boolean
   org: string
@@ -38,7 +45,11 @@ const MemberDetailModal = ({
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
+  // Called after the member is removed from the org (refresh + optimistic drop).
   onRemoved: () => void
+  // Called after an on-roster non-member is invited to the org (refresh only —
+  // no classroom membership changed).
+  onInvited: () => void
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
@@ -82,7 +93,7 @@ const MemberDetailModal = ({
     if (inviting) return
     setInviting(true)
     try {
-      await runInviteMember(client, org, row, notify, onRemoved, t)
+      await runInviteMember(client, org, row, notify, onInvited, t)
     } finally {
       setInviting(false)
     }
@@ -210,16 +221,16 @@ const MemberDetailModal = ({
                           {t("orgMembers.archived")}
                         </span>
                       ) : null}
-                      {!access.onTeam && !access.archived ? (
+                      {access.state === "unprovisioned" && !access.archived ? (
                         <span
                           className="badge badge-xs badge-warning badge-soft ml-2 gap-1"
-                          title={t("orgMembers.driftAccessTitle")}
+                          title={t("orgMembers.unprovisionedAccessTitle")}
                         >
                           <AlertTriangle
                             aria-hidden="true"
                             className="size-2.5"
                           />
-                          {t("orgMembers.driftAccessBadge")}
+                          {t("orgMembers.unprovisionedAccessBadge")}
                         </span>
                       ) : null}
                     </span>

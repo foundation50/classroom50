@@ -25,6 +25,7 @@ import { githubKeys, invalidateInviteQueries } from "@/hooks/github/queries"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { StudentCsvRow } from "@/api/mutations/students"
+import type { GitHubUser } from "@/hooks/github/types"
 import { isSameGitHubUser } from "@/util/students"
 import { motion } from "motion/react"
 import { enterExit } from "@/lib/motion"
@@ -78,25 +79,39 @@ const OrgMembersPage = () => {
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 
+  // Refresh after an org-level member removal (removeMemberFromOrg unenrolls the
+  // member from every classroom + removes org membership). Optimistically drop
+  // them from each affected classroom's CSV + team caches CONSISTENTLY (so no
+  // false "unprovisioned" flashes while the two reconcile), then reconcile with
+  // the server on a delay.
   const refresh = (affected?: OrgMemberRow) => {
     if (!org) return
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
     invalidateInviteQueries(queryClient, org)
-    // removeMemberFromOrg rewrites each affected classroom's students.csv, which
-    // the aggregation reads via csvFileQuery; invalidate those (and the
-    // classroom.json) so the page doesn't show a just-removed student as still
-    // enrolled until the 5-minute staleTime elapses.
     for (const access of affected?.classrooms ?? []) {
-      invalidateClassroom(access.classroom)
+      optimisticRemove(access.classroom, [affected!])
+      invalidateClassroom(access.classroom, { skipCsv: true })
+      scheduleClassroomReconcile(access.classroom)
     }
   }
 
-  // Invalidate the caches a roster write touches for one classroom. `skipCsv`
-  // omits the students.csv query — used right after we've OPTIMISTICALLY seeded
-  // that cache, because invalidating it forces an immediate refetch that reads
-  // the still-pre-commit CSV back from GitHub (its contents API lags a commit)
-  // and clobbers the seed, reverting the row status. Shared by the single-row
-  // and bulk paths.
+  // Refresh after an org invite (no classroom membership changed — only the
+  // org-invite state). Just re-read the members + invite lists.
+  const refreshInvite = () => {
+    if (!org) return
+    queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
+    invalidateInviteQueries(queryClient, org)
+  }
+
+  // Invalidate the non-racy caches a roster write touches for one classroom:
+  // classroom.json (rarely changes) and, unless suppressed, the CSV. The
+  // team-members query is deliberately NOT invalidated here — it's handled by
+  // the optimistic seed + delayed reconcile in the bulk/remove paths, because
+  // invalidating the CSV and the team at different beats lets aggregateOrgMembers
+  // momentarily compare a fresh team against a stale CSV (or vice-versa) and
+  // flash a false "unprovisioned" state. `skipCsv` is set right after we've
+  // optimistically seeded the CSV (invalidating it would refetch the pre-commit
+  // file and revert the seed).
   const invalidateClassroom = (
     classroom: string,
     opts?: { skipCsv?: boolean },
@@ -118,23 +133,60 @@ const OrgMembersPage = () => {
         `${classroom}/classroom.json`,
       ),
     })
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.teamMembers(org, `classroom50-${classroom}`),
-    })
   }
 
-  // After a bulk add/remove: optimistically reflect the change in the caches
-  // the row status derives from, then reconcile with the (eventually-consistent)
-  // server on a short delay.
-  //
-  // The row's classification + classroom list come from aggregateOrgMembers over
-  // the per-classroom students.csv reads (csvFileQuery). GitHub's contents API
-  // lags a commit, so invalidating that CSV now would refetch the PRE-commit
-  // file and revert the change. So we mutate the target classroom's csv cache in
-  // place (append on add, drop on remove), invalidate everything EXCEPT that CSV,
-  // and schedule a delayed CSV invalidation to let the authoritative read catch
-  // up. classroomOptions keys on `path` — the same key useOrgMembersOverview
-  // reads the CSV under — so the seed lands on the cache the page actually uses.
+  // Optimistically drop members (by resolved id/login) from BOTH the target
+  // classroom's students.csv cache AND its team-members cache, in the same tick,
+  // so the two never momentarily disagree (which would flash a false
+  // "unprovisioned" state). teamSlug uses the heuristic; a collided slug is
+  // corrected by the delayed reconcile.
+  const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
+    if (!org || removed.length === 0) return
+    const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
+    const logins = new Set(
+      removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
+    )
+    queryClient.setQueryData<StudentCsvRow[]>(
+      githubKeys.csvFile(org, "classroom50", `${classroom}/students.csv`),
+      (current) =>
+        current?.filter(
+          (s) =>
+            !(s.github_id && ids.has(s.github_id.trim())) &&
+            !(s.username && logins.has(s.username.trim().toLowerCase())),
+        ) ?? current,
+    )
+    queryClient.setQueryData<GitHubUser[]>(
+      githubKeys.teamMembers(org, `classroom50-${classroom}`),
+      (current) =>
+        current?.filter(
+          (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
+        ) ?? current,
+    )
+  }
+
+  // Reconcile a classroom's CSV + team caches with the authoritative server
+  // once GitHub's APIs have caught up with the commit (both lag a beat). Done on
+  // one delayed tick so they refetch together and can't flash an inconsistent
+  // intermediate state.
+  const scheduleClassroomReconcile = (classroom: string) => {
+    if (!org) return
+    window.setTimeout(() => {
+      queryClient.invalidateQueries({
+        queryKey: githubKeys.csvFile(
+          org,
+          "classroom50",
+          `${classroom}/students.csv`,
+        ),
+      })
+      queryClient.invalidateQueries({
+        queryKey: githubKeys.teamMembers(org, `classroom50-${classroom}`),
+      })
+    }, CSV_RECONCILE_DELAY_MS)
+  }
+
+  // After a bulk add/remove: optimistically reflect the change in the CSV +
+  // team caches the row status derives from (keeping them consistent so no false
+  // "unprovisioned" flashes), then reconcile both with the server on a delay.
   const handleBulkDone = (input: {
     classroom: string
     action: "add" | "remove"
@@ -143,13 +195,13 @@ const OrgMembersPage = () => {
   }) => {
     if (!org) return
     const { classroom, action, addedStudents, affectedKeys } = input
-    const csvKey = githubKeys.csvFile(
-      org,
-      "classroom50",
-      `${classroom}/students.csv`,
-    )
 
     if (action === "add" && addedStudents.length > 0) {
+      const csvKey = githubKeys.csvFile(
+        org,
+        "classroom50",
+        `${classroom}/students.csv`,
+      )
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []
         const seen = new Set(
@@ -165,41 +217,50 @@ const OrgMembersPage = () => {
         )
         return toAppend.length > 0 ? [...list, ...toAppend] : list
       })
+      // Seed the team cache too, so the member reads as "enrolled" (not
+      // "unprovisioned") immediately. buildTeamRoster/aggregate read id+login.
+      queryClient.setQueryData<GitHubUser[]>(
+        githubKeys.teamMembers(org, `classroom50-${classroom}`),
+        (current) => {
+          const list = current ?? []
+          const have = new Set(list.map((m) => String(m.id)))
+          const stubs = addedStudents
+            .filter((s) => s.github_id && !have.has(s.github_id.trim()))
+            .map(
+              (s) =>
+                ({
+                  id: Number(s.github_id),
+                  login: s.username,
+                  avatar_url: "",
+                  html_url: "",
+                  name: null,
+                  email: null,
+                  bio: null,
+                  permissions: {
+                    admin: false,
+                    pull: true,
+                    maintain: false,
+                    push: false,
+                  },
+                }) satisfies GitHubUser,
+            )
+          return stubs.length > 0 ? [...list, ...stubs] : list
+        },
+      )
     }
 
     if (action === "remove" && affectedKeys.length > 0) {
-      // Drop the removed members from the target classroom's csv cache. Match on
-      // the same github_id/username identity the removed rows carry.
       const removedRows = rows.filter((r) => affectedKeys.includes(r.key))
-      const removedIds = new Set(
-        removedRows.map((r) => r.github_id?.trim()).filter(Boolean),
-      )
-      const removedLogins = new Set(
-        removedRows.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
-      )
-      queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
-        if (!current) return current
-        return current.filter(
-          (s) =>
-            !(s.github_id && removedIds.has(s.github_id.trim())) &&
-            !(s.username && removedLogins.has(s.username.trim().toLowerCase())),
-        )
-      })
+      optimisticRemove(classroom, removedRows)
     }
 
-    // Recompute the members list against the (now-seeded) roster caches, but
-    // leave the seeded CSV alone — invalidating it would refetch the pre-commit
-    // file and revert the optimistic change.
+    // Recompute the members list against the (now-consistently-seeded) caches,
+    // leaving the seeded CSV/team alone; reconcile both on a delay.
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
     invalidateInviteQueries(queryClient, org)
     invalidateClassroom(classroom, { skipCsv: true })
     setSelectedKeys(new Set())
-
-    // Reconcile the CSV with the authoritative server state once GitHub's
-    // contents API has caught up with the commit.
-    window.setTimeout(() => {
-      queryClient.invalidateQueries({ queryKey: csvKey })
-    }, CSV_RECONCILE_DELAY_MS)
+    scheduleClassroomReconcile(classroom)
   }
 
   // Inline row invite for an on-roster non-member (mirrors the detail-drawer
@@ -208,7 +269,7 @@ const OrgMembersPage = () => {
     if (!org || invitingKey) return
     setInvitingKey(row.key)
     try {
-      await runInviteMember(client, org, row, notify, () => refresh(row), t)
+      await runInviteMember(client, org, row, notify, () => refreshInvite(), t)
     } finally {
       setInvitingKey(null)
     }
@@ -284,8 +345,10 @@ const OrgMembersPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filtered, viewer],
   )
-  const { allSelected: allFilteredSelected, someSelected: someFilteredSelected } =
-    selectAllState(selectableFiltered, selectedKeys)
+  const {
+    allSelected: allFilteredSelected,
+    someSelected: someFilteredSelected,
+  } = selectAllState(selectableFiltered, selectedKeys)
   const handleToggleSelectAll = () =>
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
 
@@ -495,21 +558,25 @@ const OrgMembersPage = () => {
                               count: row.classrooms.length,
                             })}
                           </span>
-                          {row.driftClassrooms.length > 0 ? (
+                          {row.unprovisionedClassrooms.length > 0 ? (
                             <span
                               className="badge badge-sm badge-warning badge-soft gap-1"
-                              title={t("orgMembers.driftTitle", {
-                                classrooms: row.driftClassrooms.join(", "),
+                              title={t("orgMembers.unprovisionedTitle", {
+                                classrooms:
+                                  row.unprovisionedClassrooms.join(", "),
                               })}
                             >
                               <AlertTriangle
                                 aria-hidden="true"
                                 className="size-3"
                               />
-                              {t("orgMembers.driftBadge")}
+                              {t("orgMembers.unprovisionedBadge")}
                             </span>
                           ) : null}
-                          <ClassificationBadge row={row} isOwner={isOwner(row)} />
+                          <ClassificationBadge
+                            row={row}
+                            isOwner={isOwner(row)}
+                          />
                           <ChevronRight
                             aria-hidden="true"
                             className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
@@ -538,6 +605,10 @@ const OrgMembersPage = () => {
             const affected = selected
             setSelectedKey(null)
             if (affected) refresh(affected)
+          }}
+          onInvited={() => {
+            setSelectedKey(null)
+            refreshInvite()
           }}
         />
       ) : null}

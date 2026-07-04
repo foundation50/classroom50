@@ -35,7 +35,7 @@ const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   isMember: true,
   classrooms: [],
   classification: "member-on-roster",
-  driftClassrooms: [],
+  unprovisionedClassrooms: [],
   ...over,
 })
 
@@ -46,7 +46,7 @@ const access = (classroom: string) => ({
   classroom,
   archived: false,
   section: "",
-  onTeam: true,
+  state: "enrolled" as const,
 })
 
 describe("bulkAddToClassroom", () => {
@@ -57,17 +57,26 @@ describe("bulkAddToClassroom", () => {
   })
 
   it("resolves live members to current logins and feeds the engine", async () => {
-    getUserByIdMock.mockReset().mockImplementation((_c, id: number) =>
-      Promise.resolve({ login: `user${id}` }),
-    )
+    getUserByIdMock
+      .mockReset()
+      .mockImplementation((_c, id: number) =>
+        Promise.resolve({ login: `user${id}` }),
+      )
     bulkEnrollMock
       .mockReset()
-      .mockResolvedValue({ addedStudents: [], skippedStudents: [], teamResults: [] })
+      .mockResolvedValue({
+        addedStudents: [],
+        skippedStudents: [],
+        teamResults: [],
+      })
 
     await bulkAddToClassroom(client, {
       org: "acme",
       classroom: "cs101",
-      rows: [row({ key: "1", github_id: "1" }), row({ key: "2", github_id: "2" })],
+      rows: [
+        row({ key: "1", github_id: "1" }),
+        row({ key: "2", github_id: "2" }),
+      ],
       members: [member(1, "alice"), member(2, "bob")],
     })
 
@@ -81,7 +90,11 @@ describe("bulkAddToClassroom", () => {
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice" })
     bulkEnrollMock
       .mockReset()
-      .mockResolvedValue({ addedStudents: [], skippedStudents: [], teamResults: [] })
+      .mockResolvedValue({
+        addedStudents: [],
+        skippedStudents: [],
+        teamResults: [],
+      })
 
     const res = await bulkAddToClassroom(client, {
       org: "acme",
@@ -111,9 +124,7 @@ describe("bulkAddToClassroom", () => {
     const res = await bulkAddToClassroom(client, {
       org: "acme",
       classroom: "cs101",
-      rows: [
-        row({ key: "1", github_id: "1", classrooms: [access("cs101")] }),
-      ],
+      rows: [row({ key: "1", github_id: "1", classrooms: [access("cs101")] })],
       members: [member(1, "alice")],
     })
 
@@ -129,7 +140,11 @@ describe("bulkAddToClassroom", () => {
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice-new" })
     bulkEnrollMock
       .mockReset()
-      .mockResolvedValue({ addedStudents: [], skippedStudents: [], teamResults: [] })
+      .mockResolvedValue({
+        addedStudents: [],
+        skippedStudents: [],
+        teamResults: [],
+      })
 
     await bulkAddToClassroom(client, {
       org: "acme",

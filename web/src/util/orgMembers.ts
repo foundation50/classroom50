@@ -2,17 +2,23 @@ import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 import { memberIdSet, rosterClaimSet, studentKey } from "@/util/identity"
 
+// Per-classroom enrollment state for an aggregated member, mirroring the
+// per-classroom roster's model (buildTeamRoster) so the two views agree:
+//  - enrolled:      on the classroom's `classroom50-<classroom>` GitHub team
+//                   (the enrollment source of truth), OR team data wasn't
+//                   available for this classroom (unknown is treated as enrolled,
+//                   never surfaced as a problem).
+//  - unprovisioned: on the CSV roster but NOT on the team — a rostered student
+//                   who hasn't formed team membership yet (or a failed team-add).
+//                   Grade collection is team-driven, so these are uncollected.
+export type ClassroomAccessState = "enrolled" | "unprovisioned"
+
 // One classroom a student appears on.
 export type ClassroomAccess = {
   classroom: string
   archived: boolean
   section: string
-  // Whether the member is confirmed on the actual `classroom50-<classroom>`
-  // GitHub team (the enrollment source of truth). True when team membership is
-  // verified OR when team data wasn't available for this classroom (unknown is
-  // treated as fine, not as drift). False = on the CSV roster but NOT on the
-  // team — a drift row grade collection would miss.
-  onTeam: boolean
+  state: ClassroomAccessState
 }
 
 // How an aggregated row relates org membership to roster presence:
@@ -35,10 +41,11 @@ export type OrgMemberRow = {
   classrooms: ClassroomAccess[]
   classification: MemberClassification
   // Classrooms where the member is on the CSV roster but NOT on the live
-  // `classroom50-<classroom>` team (CSV/team drift). Empty when team data was
+  // `classroom50-<classroom>` team (state: "unprovisioned") — grade collection
+  // is team-driven, so these are uncollected. Empty when team data was
   // unavailable or everything is consistent. Only meaningful for members
   // (a non-member is already flagged on-roster-not-member).
-  driftClassrooms: string[]
+  unprovisionedClassrooms: string[]
 }
 
 export type ClassroomRoster = {
@@ -140,21 +147,24 @@ export function aggregateOrgMembers(
     const isMember = Boolean(matchedId)
     if (isMember) matchedMemberIds.add(matchedId)
 
-    // Finalize each access with team-verified membership. A classroom with no
-    // team data (absent from the map) is "unknown" -> onTeam true (never
-    // flagged as drift). Drift = a member on the CSV roster but not the team.
-    const driftClassrooms: string[] = []
+    // Finalize each access with its team-authoritative state. A classroom with
+    // no team data (absent from the map) is "unknown" -> enrolled (never
+    // surfaced as a problem). unprovisioned = a member on the CSV roster but not
+    // the team. Only real members can be unprovisioned — a non-member is already
+    // flagged on-roster-not-member. Archived classrooms are excluded (their team
+    // may be intentionally gone).
+    const unprovisionedClassrooms: string[] = []
     const classrooms: ClassroomAccess[] = acc.classrooms.map((raw) => {
       const teamSet = teamMembersByClassroom?.get(raw.classroom)
-      const onTeam =
-        !teamSet || (Boolean(matchedId) && teamSet.has(matchedId))
-      // Only real members can meaningfully "drift" — a non-member is already
-      // flagged on-roster-not-member. Archived classrooms are excluded (their
-      // team may be intentionally gone).
-      if (isMember && teamSet && !onTeam && !raw.archived) {
-        driftClassrooms.push(raw.classroom)
+      const onTeam = !teamSet || (Boolean(matchedId) && teamSet.has(matchedId))
+      const unprovisioned = isMember && Boolean(teamSet) && !onTeam
+      if (unprovisioned && !raw.archived) {
+        unprovisionedClassrooms.push(raw.classroom)
       }
-      return { ...raw, onTeam }
+      return {
+        ...raw,
+        state: unprovisioned ? "unprovisioned" : "enrolled",
+      }
     })
 
     rows.push({
@@ -168,7 +178,7 @@ export function aggregateOrgMembers(
       isMember,
       classrooms,
       classification: isMember ? "member-on-roster" : "on-roster-not-member",
-      driftClassrooms,
+      unprovisionedClassrooms,
     })
   }
 
@@ -185,7 +195,7 @@ export function aggregateOrgMembers(
       isMember: true,
       classrooms: [],
       classification: "member-no-roster",
-      driftClassrooms: [],
+      unprovisionedClassrooms: [],
     })
   }
 

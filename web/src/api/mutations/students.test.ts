@@ -1228,9 +1228,7 @@ describe("matchStudentToAccountWithConflictRetry — teacher manual match (email
 describe("bulkUnenrollStudents — single-commit batch removal", () => {
   const rosterWith = (usernames: string[]) =>
     HEADER +
-    usernames
-      .map((u, i) => `${u},,,${u}@x.edu,,${100 + i}`)
-      .join("\n") +
+    usernames.map((u, i) => `${u},,,${u}@x.edu,,${100 + i}`).join("\n") +
     "\n"
 
   const student = (username: string, github_id: string) => ({

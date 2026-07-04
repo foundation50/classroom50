@@ -26,7 +26,7 @@ const row = (over: Partial<OrgMemberRow>): OrgMemberRow => ({
   isMember: false,
   classrooms: [],
   classification: "on-roster-not-member",
-  driftClassrooms: [],
+  unprovisionedClassrooms: [],
   ...over,
 })
 

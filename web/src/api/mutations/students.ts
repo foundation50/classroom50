@@ -1633,8 +1633,7 @@ export async function bulkUnenrollStudents(
       return (
         (Boolean(username) &&
           row.username.toLowerCase() === username!.toLowerCase()) ||
-        (Boolean(row.github_id) &&
-          row.github_id === String(target.github_id))
+        (Boolean(row.github_id) && row.github_id === String(target.github_id))
       )
     }
     const email = target.email?.trim()
@@ -1691,7 +1690,12 @@ export async function bulkUnenrollStudents(
       org,
       base_tree: commit.tree.sha,
       tree: [
-        { path: studentsFilePath, mode: "100644", type: "blob", content: nextCsv },
+        {
+          path: studentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: nextCsv,
+        },
       ],
     })
     const newCommit = await createGitCommit(client, {

@@ -46,14 +46,16 @@ export type TeamRosterRow = {
 // username, then lowercased email. Section 4/5 require the SAME fallback chain
 // (github_id -> username) so an imported/hand-edited/pre-resolution row with an
 // empty github_id isn't misclassified as drift AND doesn't cause the backfill
-// to append a duplicate.
-type CsvIndex = {
+// to append a duplicate. Exported so the org-wide members aggregation
+// (aggregateOrgMembers) reconciles team-vs-CSV with the SAME join this
+// per-classroom roster uses, so the two views can't disagree.
+export type CsvIndex = {
   byGithubId: Map<string, Student>
   byLogin: Map<string, Student>
   byEmail: Map<string, Student>
 }
 
-function indexCsv(students: Student[]): CsvIndex {
+export function indexCsv(students: Student[]): CsvIndex {
   const byGithubId = new Map<string, Student>()
   const byLogin = new Map<string, Student>()
   const byEmail = new Map<string, Student>()
@@ -69,7 +71,7 @@ function indexCsv(students: Student[]): CsvIndex {
 }
 
 // Find the CSV row for a GitHub account, github_id first then login.
-function csvForMember(
+export function csvForMember(
   index: CsvIndex,
   member: { id: number; login: string },
 ): Student | undefined {

@@ -27,7 +27,10 @@ type Progress = { processed: number; total: number; message: string }
 // failed etc.).
 type ResultView = {
   headline: string
-  sections: { title: string; rows: { key: string; label: string; detail?: string }[] }[]
+  sections: {
+    title: string
+    rows: { key: string; label: string; detail?: string }[]
+  }[]
 }
 
 const buildAddResult = (
@@ -101,7 +104,9 @@ const buildRemoveResult = (
         key: o.key,
         label: o.label,
         detail: o.detail
-          ? t(`orgMembers.bulk.skipReason.${o.detail}`, { defaultValue: o.detail })
+          ? t(`orgMembers.bulk.skipReason.${o.detail}`, {
+              defaultValue: o.detail,
+            })
           : undefined,
       })),
     })
@@ -109,7 +114,11 @@ const buildRemoveResult = (
   if (failed.length > 0) {
     sections.push({
       title: t("orgMembers.bulk.resultFailed"),
-      rows: failed.map((o) => ({ key: o.key, label: o.label, detail: o.detail })),
+      rows: failed.map((o) => ({
+        key: o.key,
+        label: o.label,
+        detail: o.detail,
+      })),
     })
   }
   // Non-fatal side-effect warnings (team drop / invite cancel) — the roster
