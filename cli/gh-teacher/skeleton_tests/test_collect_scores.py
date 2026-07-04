@@ -851,11 +851,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[
-                {"username": "alice", "github_id": "1"},
-                {"username": "bob", "github_id": "2"},
-                {"username": "carol", "github_id": "3"},
-            ],
             service_token="token",
         )
         assert len(results) == 1
@@ -884,10 +879,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[
-                {"username": "alice", "github_id": "1"},
-                {"username": "bob", "github_id": "2"},
-            ],
             service_token="token",
         )
         assert results[0]["member_usernames"] == ["alice", "bob"]
@@ -918,7 +909,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         # Only the owner is credited on the entry.
@@ -950,7 +940,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         assert results[0]["member_usernames"] == ["alice"]
@@ -977,10 +966,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[
-                {"username": "alice", "github_id": "1"},
-                {"username": "bob", "github_id": "2"},
-            ],
             service_token="token",
         )
         # One submission (alice's repo), crediting both.
@@ -1017,7 +1002,6 @@ class TestGroupCollectClassroom:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._group_assignments(),
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         assert results[0]["member_usernames"] == ["alice"]
@@ -1127,7 +1111,7 @@ class TestCollectClassroomTeamDriven:
         )
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
         assert len(results) == 1
         assert results[0]["owner"] == "alice"
@@ -1136,7 +1120,7 @@ class TestCollectClassroomTeamDriven:
         stub_team_members(monkeypatch, [])
         results, mode_flip = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
         assert results == []
         assert mode_flip == 0
@@ -1151,7 +1135,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(cs, "list_team_member_logins", boom)
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
         assert results == []
         assert "could not read team" in capsys.readouterr().err
@@ -1166,7 +1150,7 @@ class TestCollectClassroomTeamDriven:
         with pytest.raises(urllib.error.HTTPError):
             cs.collect_classroom(
                 api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-                classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+                classroom_meta={}, assignments=self._assignments(), service_token="token",
             )
 
     def test_dedupes_team_members_case_insensitively(self, monkeypatch):
@@ -1180,7 +1164,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(cs, "all_submit_releases", fake_all)
         cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
         # Alice/alice collapse to one repo probe; BOB to another.
         assert seen_repos == ["cs-principles-hello-alice", "cs-principles-hello-bob"]
@@ -1197,7 +1181,7 @@ class TestCollectClassroomTeamDriven:
         monkeypatch.setattr(cs, "list_team_member_logins", boom)
         results, mode_flip = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
-            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
         )
         assert results == []
         assert mode_flip == 0
@@ -1267,7 +1251,6 @@ class TestLateness:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello", "due": "2026-09-15T23:59:00-04:00"}]},
-            roster=[{"username": "alice", "github_id": "111"}],
             service_token="token",
         )
 
@@ -1721,7 +1704,6 @@ class TestReleaseLookup:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "111"}],
             service_token="token",
         )
         assert results == []
@@ -1807,7 +1789,6 @@ class TestCollectAllSubmissions:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         assert len(results) == 1
@@ -1846,7 +1827,6 @@ class TestCollectAllSubmissions:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         assert len(results) == 1
@@ -1866,7 +1846,6 @@ class TestCollectAllSubmissions:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         assert results == []
@@ -1887,7 +1866,6 @@ class TestCollectAllSubmissions:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         row = results[0]
@@ -1910,7 +1888,6 @@ class TestCollectAllSubmissions:
             classroom_short="cs-principles",
             classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
-            roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
         )
         scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
@@ -2196,7 +2173,7 @@ class TestCollectClassroomModeFlip:
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._assignments("group"),
-            roster=[{"username": "alice", "github_id": "1"}], service_token="token",
+            service_token="token",
         )
         assert results == []
         assert mode_flip == 1
@@ -2225,7 +2202,7 @@ class TestCollectClassroomModeFlip:
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
             classroom_meta={},
             assignments=self._assignments("individual"),
-            roster=[{"username": "alice", "github_id": "1"}], service_token="token",
+            service_token="token",
         )
         assert results == []
         assert mode_flip == 0

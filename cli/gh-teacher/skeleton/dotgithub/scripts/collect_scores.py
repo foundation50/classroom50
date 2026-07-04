@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 """Teacher-triggered scores collector.
 
-Walks roster × assignment manifest: for each (student, assignment)
-pair, pages through the canonical `<classroom>-<assignment>-<username>`
-repo's `submit/*` releases, validates each `result.json` asset, and
-upserts into `<classroom>/scores.json`.
+Walks the classroom team × assignment manifest: for each (team member,
+assignment) pair, pages through the canonical
+`<classroom>-<assignment>-<username>` repo's `submit/*` releases, validates
+each `result.json` asset, and upserts into `<classroom>/scores.json`. The
+classroom GitHub team is the source of truth for who is enrolled;
+students.csv is not read during collection.
 
 `scores.json` is keyed by assignment slug under the root `assignments`
 object: each value is `{ "type": "individual"|"group", "entries": [...] }`.
 An `entry` is one student repo's gradebook record (one per repo owner):
 identity/keying at the top level (`owner`; plus `member_usernames` for a
-group entry — the credited roster collaborators) and the full
+group entry — the credited team collaborators) and the full
 per-submission history inside a `submissions` list (newest first). Each
 `submissions` item is a validated `result.json` payload (minus the
 redundant `assignment` bucket key; it carries `owner` + `assignment_type`
@@ -27,7 +29,7 @@ preserved verbatim so teacher corrections never get overwritten.
 
 Per-classroom writes are atomic via tmp + os.replace. A missing
 release is not an error (student hasn't accepted/submitted yet);
-the per-assignment "X of Y submitted" log shows roster coverage.
+the per-assignment "X of Y submitted" log shows team coverage.
 
 Environment (set by `collect-scores.yaml`):
   CLASSROOM50_SERVICE_TOKEN — fine-grained PAT. Needs Organization ->
@@ -150,16 +152,16 @@ def main() -> int:
 
     total_changes = 0
     failed_classrooms: list[str] = []
-    for classroom_short, classroom_meta, assignments, roster in classroom_dirs:
+    for classroom_short, classroom_meta, assignments in classroom_dirs:
         scores_path = base_dir / classroom_short / "scores.json"
         try:
             scores = load_scores(scores_path)
         except ScoresFileError as exc:
             # A malformed/hand-edited scores.json is a per-CLASSROOM data
             # problem — isolate it (like iter_classrooms does for a bad
-            # classroom.json/students.csv) so one broken file can't deny
-            # collection to every other classroom in the run. The run still
-            # exits non-zero at the end so CI surfaces the failure.
+            # classroom.json) so one broken file can't deny collection to
+            # every other classroom in the run. The run still exits non-zero
+            # at the end so CI surfaces the failure.
             emit_error(f"{classroom_short}: {exc}")
             failed_classrooms.append(classroom_short)
             continue
@@ -171,7 +173,6 @@ def main() -> int:
                 classroom_short=classroom_short,
                 classroom_meta=classroom_meta,
                 assignments=assignments,
-                roster=roster,
                 service_token=service_token,
             )
         except urllib.error.HTTPError as exc:
@@ -253,17 +254,17 @@ def main() -> int:
 
 def iter_classrooms(
     base_dir: pathlib.Path, classroom_filter: str
-) -> Iterable[tuple[str, dict[str, Any], dict[str, Any], list[dict[str, str]]]]:
-    """Yield (short_name, classroom_meta, assignments, roster) per
-    classroom. Non-v1 schemas skip with a workflow warning (preserves
-    forward-compat without crashing the run).
+) -> Iterable[tuple[str, dict[str, Any], dict[str, Any]]]:
+    """Yield (short_name, classroom_meta, assignments) per classroom. Non-v1
+    schemas skip with a workflow warning (preserves forward-compat without
+    crashing the run).
 
     Collection is TEAM-driven: the classroom GitHub team is the source of
-    truth for who is enrolled. students.csv is optional display metadata —
-    a missing/partial CSV no longer skips the classroom (the team member
-    list drives the (student, assignment) pairs). The parsed `roster` here
-    is CSV metadata only (possibly empty); the team enumeration happens in
-    collect_classroom (which has the API url/org/token).
+    truth for who is enrolled, so this no longer reads students.csv at all
+    (the team enumeration in collect_classroom drives the (student,
+    assignment) pairs). students.csv is optional display metadata consumed
+    elsewhere (the Go `download` scores.csv join and the web roster view),
+    not by the scorer.
     """
     if not base_dir.is_dir():
         return
@@ -272,7 +273,6 @@ def iter_classrooms(
             continue
         classroom_path = entry / "classroom.json"
         assignments_path = entry / "assignments.json"
-        roster_path = entry / "students.csv"
         if not classroom_path.is_file() or not assignments_path.is_file():
             continue
         try:
@@ -293,19 +293,7 @@ def iter_classrooms(
                 f"{assignments.get('schema')!r}, want {ASSIGNMENTS_SCHEMA_V1!r}; skipping"
             )
             continue
-        # students.csv is optional display metadata now. Read it when present
-        # (a malformed file warns but doesn't skip — the team still drives
-        # collection); absent -> empty metadata.
-        roster: list[dict[str, str]] = []
-        if roster_path.is_file():
-            try:
-                roster = read_students_csv(roster_path)
-            except RosterFileError as exc:
-                emit_warning(
-                    f"{entry.name}: students.csv unreadable ({exc}); "
-                    f"continuing with team-driven collection and no CSV metadata"
-                )
-        yield entry.name, classroom_meta, assignments, roster
+        yield entry.name, classroom_meta, assignments
 
 
 # Roster CSV parsing ----------------------------------------------------------
@@ -319,6 +307,13 @@ def read_students_csv(path: pathlib.Path) -> list[dict[str, str]]:
     """Parse students.csv into row dicts. Rejects a renamed/short
     header so a hand-edit can't silently drop data. Empty-username
     rows are skipped.
+
+    NOTE: score collection is TEAM-driven and no longer reads students.csv
+    (the classroom team drives the (student, assignment) pairs). This reader
+    is retained as the Python-side validator of the shared CSV contract —
+    exercised by the test suite and available to any future consumer — and
+    its header must stay in lockstep with the Go/web header (see
+    FULL_ROSTER_HEADER).
     """
     try:
         # utf-8-sig strips Excel's BOM, matching the Go-side
@@ -328,10 +323,10 @@ def read_students_csv(path: pathlib.Path) -> list[dict[str, str]]:
             if reader.fieldnames is None:
                 raise RosterFileError("students.csv is empty")
             header = tuple(reader.fieldnames)
-            # Tolerate trailing extras (the web app's onboarding columns): the
-            # collector reads username + github_id by name. A renamed/short/
-            # shuffled required prefix is still rejected so a hand-edit can't
-            # silently drop or shift roster data.
+            # Tolerate trailing extras (e.g. a legacy onboarding tail on a
+            # between-deploys file): only username + github_id are read by
+            # name. A renamed/short/shuffled required prefix is still rejected
+            # so a hand-edit can't silently drop or shift roster data.
             if header[: len(ROSTER_REQUIRED_COLUMNS)] != ROSTER_REQUIRED_COLUMNS:
                 raise RosterFileError(
                     f"students.csv header = {header}, want it to start with "
@@ -408,7 +403,6 @@ def collect_classroom(
     classroom_short: str,
     classroom_meta: dict[str, Any],
     assignments: dict[str, Any],
-    roster: list[dict[str, str]],
     service_token: str,
 ) -> tuple[list[dict[str, Any]], int]:
     """Return (validated result payloads for every (student,
