@@ -1,9 +1,9 @@
-import { useMemo } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useCallback, useMemo } from "react"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
-import { teamMembersQuery } from "@/hooks/github/queries"
+import { githubKeys, teamMembersQuery } from "@/hooks/github/queries"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
@@ -12,6 +12,7 @@ import {
   type TeamRosterRowState,
 } from "@/util/teamRoster"
 import type { Student } from "@/types/classroom"
+import type { GitHubUser } from "@/hooks/github/types"
 
 export type UseTeamRosterResult = {
   rows: TeamRosterRow[]
@@ -98,4 +99,79 @@ export function useTeamRoster(
       void refetchMembers()
     },
   }
+}
+
+// Invalidate the team-members query that drives the enrolled roster (slug
+// resolved as in useTeamRoster). Any mutation that changes classroom-team
+// membership (enroll/unenroll/match) must call this, or the change only shows
+// after the members query's 60s staleTime lapses. Stable callback.
+export function useInvalidateTeamRoster(
+  org: string,
+  classroom: string,
+): () => void {
+  const queryClient = useQueryClient()
+  const { data: classroomJson } = useGetClassroom(org, classroom)
+  const teamSlug =
+    classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
+
+  return useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: githubKeys.teamMembers(org, teamSlug),
+    })
+  }, [queryClient, org, teamSlug])
+}
+
+// Minimal identity to seed a member into the team-members cache; buildTeamRoster
+// reads only id/login/avatar, and the refetch fills the rest of GitHubUser.
+export type OptimisticMember = {
+  id: number
+  login: string
+  avatar_url?: string
+}
+
+// Optimistically add a just-enrolled member to the team-members cache, then
+// invalidate to reconcile. Enrolling an already-active org member team-adds them
+// with no pending invite, so without the seed buildTeamRoster flashes the row as
+// "unprovisioned" until the refetch lands. Dedup is by id; the refetch replaces
+// the stub (or drops it if the add didn't land). No-ops a blank/invalid id.
+export function useSeedTeamMember(
+  org: string,
+  classroom: string,
+): (member: OptimisticMember) => void {
+  const queryClient = useQueryClient()
+  const { data: classroomJson } = useGetClassroom(org, classroom)
+  const teamSlug =
+    classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
+
+  return useCallback(
+    (member: OptimisticMember) => {
+      const key = githubKeys.teamMembers(org, teamSlug)
+      if (!Number.isFinite(member.id) || member.id <= 0 || !member.login) {
+        void queryClient.invalidateQueries({ queryKey: key })
+        return
+      }
+      queryClient.setQueryData<GitHubUser[]>(key, (current) => {
+        const list = current ?? []
+        if (list.some((m) => m.id === member.id)) return list
+        const stub = {
+          login: member.login,
+          id: member.id,
+          avatar_url: member.avatar_url ?? "",
+          html_url: "",
+          name: null,
+          email: null,
+          bio: null,
+          permissions: {
+            admin: false,
+            pull: true,
+            maintain: false,
+            push: false,
+          },
+        } satisfies GitHubUser
+        return [...list, stub]
+      })
+      void queryClient.invalidateQueries({ queryKey: key })
+    },
+    [queryClient, org, teamSlug],
+  )
 }

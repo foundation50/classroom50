@@ -32,7 +32,7 @@ import {
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
 } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
-import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
 import { unmatchedTeamMembers, type MatchCandidate } from "@/util/orgMembers"
 import { studentKey, toStudent } from "@/util/roster"
@@ -656,6 +656,7 @@ const EnrolledStudents = ({
   const { t } = useTranslation()
   const { notify } = useToast()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
+  const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
 
   // Keyed by username/email so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
@@ -937,6 +938,8 @@ const EnrolledStudents = ({
                   ),
                 )
                 invalidateInviteQueries()
+                // Match binds an active member; refresh the enrolled list.
+                invalidateTeamRoster()
                 notify({
                   tone: warning ? "warning" : "success",
                   durationMs: 6000,
@@ -965,7 +968,14 @@ const EnrolledStudents = ({
             isMember={row.state === "enrolled"}
             onRemoveStudent={(_username, warning) => {
               if (warning) setWarning(row.key, warning)
+              // Drop the CSV metadata row so nothing lingers as
+              // unprovisioned/pending, then refresh the team-driven enrolled
+              // list (unenroll removed them from the classroom team).
+              updateRosterCache((current) =>
+                current.filter((s) => studentKey(s) !== row.key),
+              )
               invalidateInviteQueries()
+              invalidateTeamRoster()
             }}
           />
         </div>

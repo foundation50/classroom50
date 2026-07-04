@@ -790,6 +790,10 @@ export async function enrollStudentInClassroom(
 
   return {
     ...result,
+    // Whether the student is now an active org member (team-added directly, no
+    // invite). The roster view seeds the team-members cache when true to avoid
+    // an "unprovisioned" flash; false = the normal invited path.
+    enrolled: alreadyMember,
     teamWarning: warnings.length > 0 ? warnings.join(" ") : undefined,
   }
 }
