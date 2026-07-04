@@ -29,13 +29,14 @@ import {
   getUserById,
   listClassroomDirs,
   listOnboardingRepos,
+  listTeamMembers,
   ONBOARDING_READ_CONCURRENCY,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { isEnrolledRow, isSameGitHubUser } from "@/util/students"
-import { studentKey } from "@/util/identity"
+import { studentKey, rosterClaimSet } from "@/util/identity"
 import { prefixCommit } from "@/util/commit"
 import {
   emailHash,
@@ -1966,6 +1967,108 @@ export async function addStudentsToClassroomWithConflictRetry(
   input: AddStudentsToClassroomInput,
 ) {
   return withGitConflictRetry(() => addStudentsToClassroom(client, input))
+}
+
+export type SyncRosterFromTeamResult = {
+  // Team members newly appended to students.csv as metadata rows.
+  addedUsernames: string[]
+  // No missing members — nothing was committed.
+  noop: boolean
+}
+
+// Backfill students.csv from the classroom team: ensure every active team
+// member has a metadata row (keyed by github_id), appended in ONE commit. The
+// team is the source of truth for enrollment; this only persists optional
+// display metadata. Never removes rows (CSV-only rows are drift, not deletions).
+//
+// The diff is recomputed INSIDE the retried closure (re-reading both the team
+// and the CSV each attempt) so a 409 retry or a concurrent teacher edit can't
+// reintroduce or duplicate rows. Uses the same github_id -> username fallback
+// join as the roster view when deciding "missing", so a pre-resolution row with
+// an empty github_id isn't treated as missing (which would append a duplicate).
+export async function syncRosterFromTeam(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+): Promise<SyncRosterFromTeamResult> {
+  const { org, classroom } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const teamSlug = await resolveClassroomTeamSlug(client, org, classroom)
+
+  return withGitConflictRetry(async () => {
+    // Re-read team + CSV on every attempt so the diff is always against the
+    // latest state (a concurrent add/edit can't be clobbered or duplicated).
+    const [members, ref] = await Promise.all([
+      listTeamMembers(client, org, teamSlug),
+      getBranchRef(client, org),
+    ])
+    const commit = await getCommit(client, org, ref.object.sha)
+
+    const studentsFilePath = `${classroom}/students.csv`
+    const currentCsv = await getRawFile(client, {
+      org,
+      path: studentsFilePath,
+      ref: ref.object.sha,
+    })
+    const currentStudents = parseStudentsCsv(currentCsv)
+
+    const { ids, logins } = rosterClaimSet(currentStudents)
+
+    // A member is "missing" when neither their numeric id nor their login is
+    // already claimed by a CSV row (the roster-view fallback join).
+    const missing = members.filter(
+      (m) => !ids.has(String(m.id)) && !logins.has(m.login.toLowerCase()),
+    )
+
+    if (missing.length === 0) {
+      return { addedUsernames: [], noop: true }
+    }
+
+    const addedRows = missing.map((m) => {
+      const nameParts = splitName(m.name)
+      return normalizeStudentRow({
+        username: m.login,
+        first_name: nameParts.first_name,
+        last_name: nameParts.last_name,
+        email: m.email ?? "",
+        section: "",
+        github_id: String(m.id),
+      })
+    })
+
+    const nextCsv = stringifyStudentsCsv([...currentStudents, ...addedRows])
+
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: studentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: nextCsv,
+        },
+      ],
+    })
+
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `Sync ${addedRows.length} team member${
+          addedRows.length === 1 ? "" : "s"
+        } into roster: ${classroom}`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+
+    await updateRef(client, org, newCommit.sha)
+
+    return {
+      addedUsernames: addedRows.map((r) => r.username),
+      noop: false,
+    }
+  })
 }
 
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {

@@ -1,53 +1,41 @@
 import {
+  AlertTriangle,
   Check,
   ChevronDown,
   ChevronRight,
   Copy,
-  Link as LinkIcon,
   Pencil,
   RefreshCw,
   Send,
   Trash,
-  UserCheck,
+  UserRoundX,
 } from "lucide-react"
 
-import {
-  isSameGitHubUser,
-  nameFromParts,
-  initialsFromParts,
-} from "@/util/students"
-import { formatInvitedAt } from "@/util/formatDate"
+import { nameFromParts, initialsFromParts } from "@/util/students"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { ConfirmModal } from "@/components/modals"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
-  reconcileOnboarding,
+  syncRosterFromTeam,
   unenrollStudent,
-  markStudentEnrolledWithConflictRetry,
   matchStudentToAccountWithConflictRetry,
 } from "@/api/mutations/students"
 import type { UnenrollStudentInput } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
-import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import useGetOrgMembers from "@/hooks/useGetOrgMembers"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/hooks/github/queries"
-import { useUpdateRosterCache } from "@/hooks/useGetStudents"
-import useRosterStatus from "@/hooks/useRosterStatus"
-import { useGitHubViewer } from "@/hooks/github/hooks"
-import { type InviteStatus, memberIdSet } from "@/util/inviteStatus"
-import type { OnboardingSelfReport } from "@/util/inviteStatus"
 import {
-  applyReconciledToRoster,
-  removeFromRoster,
-  studentKey,
-  toStudent,
-} from "@/util/roster"
+  githubKeys,
+  invalidateInviteQueries as invalidateInviteQueriesForOrg,
+} from "@/hooks/github/queries"
+import { useUpdateRosterCache } from "@/hooks/useGetStudents"
+import { useTeamRoster } from "@/hooks/useTeamRoster"
+import type { TeamRosterRow } from "@/util/teamRoster"
 import { unmatchedTeamMembers, type MatchCandidate } from "@/util/orgMembers"
+import { toStudent } from "@/util/roster"
 import EditStudent from "@/pages/students/EditStudent"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { Link2 } from "lucide-react"
@@ -57,14 +45,25 @@ import { EnterDiv } from "@/lib/motionComponents"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-// Group students by roster `section`, sorted by name with the unlabeled
-// ("No section") bucket last. Section labels are trimmed; blank/absent folds
-// into the unlabeled bucket.
+// A team-driven roster row rendered as a Student for the metadata-editing and
+// unenroll/match affordances (which key on username/github_id/email).
+const rowToStudent = (row: TeamRosterRow): Student => ({
+  username: row.username,
+  first_name: row.first_name,
+  last_name: row.last_name,
+  email: row.email,
+  section: row.section,
+  github_id: row.github_id,
+})
+
+// Group rows by `section`, sorted by name with the unlabeled ("No section")
+// bucket last. Generic over any row carrying a `section` field, so it serves
+// both the CSV Student shape and the team-driven TeamRosterRow.
 const NO_SECTION = "No section"
-export function groupStudentsBySection(
-  students: Student[],
-): Array<{ section: string; students: Student[] }> {
-  const bySection = new Map<string, Student[]>()
+export function groupStudentsBySection<T extends { section?: string }>(
+  students: T[],
+): Array<{ section: string; students: T[] }> {
+  const bySection = new Map<string, T[]>()
   for (const student of students) {
     const label = student.section?.trim() || NO_SECTION
     const bucket = bySection.get(label)
@@ -73,7 +72,6 @@ export function groupStudentsBySection(
   }
   return Array.from(bySection.entries())
     .sort(([a], [b]) => {
-      // Unlabeled bucket always last; otherwise locale-compare section names.
       if (a === NO_SECTION) return 1
       if (b === NO_SECTION) return -1
       return a.localeCompare(b, undefined, { numeric: true })
@@ -85,13 +83,11 @@ const EditStudentButton = ({
   org,
   classroom,
   student,
-  selfReport,
   onSaved,
 }: {
   org: string
   classroom: string
   student: Student
-  selfReport?: OnboardingSelfReport
   onSaved: (updated: StudentCsvRow) => void
 }) => {
   const [open, setOpen] = useState(false)
@@ -114,7 +110,6 @@ const EditStudentButton = ({
         org={org}
         classroom={classroom}
         student={student}
-        selfReport={selfReport}
         open={open}
         onClose={() => setOpen(false)}
         onSaved={(updated) => {
@@ -130,14 +125,14 @@ const UnenrollStudentButton = ({
   org,
   classroom,
   student,
-  status,
+  isMember,
   isSelf = false,
   onRemoveStudent,
 }: {
   org: string
   classroom: string
   student: Student
-  status?: InviteStatus
+  isMember: boolean
   isSelf?: boolean
   onRemoveStudent: (username: string, teamWarning?: string) => void
 }) => {
@@ -147,12 +142,6 @@ const UnenrollStudentButton = ({
     mutationFn: (input: UnenrollStudentInput) => unenrollStudent(client, input),
   })
   const [open, setOpen] = useState(false)
-
-  // Org removal now lives on the org Members page, where the student's full
-  // cross-classroom footprint is visible.
-  const isMember = status === "member"
-  // Email-invited rows have no username yet; show the email so the row is
-  // identifiable before reconciliation.
   const label = student.username || student.email
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
@@ -182,9 +171,6 @@ const UnenrollStudentButton = ({
         classroom,
         student,
       })
-      // Key the warning by a stable identity (username, else email): this button
-      // unmounts on refetch, and keying stops a concurrent clean unenroll from
-      // clobbering it.
       onRemoveStudent(student.username || student.email, result.teamWarning)
       setOpen(false)
     } catch (err) {
@@ -231,16 +217,6 @@ const UnenrollStudentButton = ({
             {t("students.unenrollBodyFrom")}{" "}
             <span className="font-semibold text-base-content">{org}</span>{" "}
             {t("students.unenrollBodySuffix", { classroom })}
-            {status === "pending" ? (
-              <span className="mt-2 block">
-                {t("students.unenrollPendingNote")}
-              </span>
-            ) : null}
-            {status === "onboarding" ? (
-              <span className="mt-2 block">
-                {t("students.unenrollOnboardingNote")}
-              </span>
-            ) : null}
           </div>
 
           {isMember && isSelf ? (
@@ -374,46 +350,9 @@ const InviteLink = ({
   )
 }
 
-// Per-student secure onboarding link (icon-only): carries the email prefill and
-// unguessable invite token so reconcile binds the self-report to this row. Shown
-// only for a pending-invite student.
-const SecureLinkButton = ({
-  org,
-  classroom,
-  email,
-  token,
-}: {
-  org: string
-  classroom: string
-  email: string
-  token: string
-}) => {
-  const secureUrl = `${window.location.origin}/${org}/${classroom}/onboard?email=${encodeURIComponent(
-    email,
-  )}&t=${token}`
-  const { copied, copy } = useCopyToClipboard(secureUrl)
-  const { t } = useTranslation()
-
-  return (
-    <button
-      type="button"
-      className="btn btn-xs btn-square btn-ghost"
-      onClick={() => void copy()}
-      aria-label={t("students.copySecureLinkAria", { email })}
-      title={t("students.copySecureLinkTitle")}
-    >
-      {copied ? (
-        <Check aria-hidden="true" className="size-4 text-success" />
-      ) : (
-        <LinkIcon aria-hidden="true" className="size-4" />
-      )}
-    </button>
-  )
-}
-
 // Classroom-wide onboarding link. Students open it after accepting the org
-// invite and self-report their GitHub identity. Same URL for everyone; the
-// student supplies the email, so no per-student token is needed.
+// invite; it auto-accepts + verifies membership (no self-report form). Same URL
+// for everyone, so no per-student token.
 const OnboardingLink = ({
   org,
   classroom,
@@ -463,11 +402,10 @@ const OnboardingLink = ({
 }
 
 // Manual-match affordance for an email-invited row whose student joined the org
-// directly (accepted the GitHub invite, so no onboarding repo) and whose GitHub
-// identity GitHub no longer exposes (the email->login link is dropped once an
-// invite is accepted). The teacher picks which unmatched team member owns the
-// email; matchStudentToAccount re-verifies the pick is an active member before
-// binding. Candidates are org members not already on this roster.
+// directly and whose GitHub identity GitHub no longer exposes (the email->login
+// link is dropped once an invite is accepted). The teacher picks which unmatched
+// team member owns the email; matchStudentToAccount re-verifies the pick is an
+// active member before binding. Kept because email invites remain supported.
 const MatchAccountButton = ({
   org,
   classroom,
@@ -725,383 +663,217 @@ const EnrolledStudents = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { t } = useTranslation()
-  const updateRosterCache = useUpdateRosterCache(org, classroom)
-  // Keyed by username so a clean unenroll can't clobber another student's warning.
-  const [teamWarnings, setTeamWarnings] = useState<Record<string, string>>({})
-  const [confirmResendAllOpen, setConfirmResendAllOpen] = useState(false)
-  // Native GitHub org-invite link is secondary; keep it behind a toggle.
-  const [showGithubInvite, setShowGithubInvite] = useState(false)
-  const [resendingUsernames, setResendingUsernames] = useState<Set<string>>(
-    new Set(),
-  )
-  // Optional "group by section" view. Off by default; only meaningful when
-  // the roster carries sections.
-  const [groupBySection, setGroupBySection] = useState(false)
-
-  const { data: viewer } = useGitHubViewer()
   const { notify } = useToast()
-  const { members } = useGetOrgMembers(org)
-  // Live member github_ids (cache hit — useRosterStatus already fetched them),
-  // for gating the "Mark enrolled" affordance.
-  const memberIds = useMemo(() => memberIdSet(members ?? []), [members])
-  // Org members not already bound to any roster row in this classroom — the
-  // candidate set for manually matching an email-invited student who joined the
-  // org directly (no onboarding repo).
-  const matchCandidates = useMemo(
-    () => unmatchedTeamMembers(members ?? [], students),
-    [members, students],
-  )
-  const {
-    statusByKey,
-    getStatus,
-    statusAvailable,
-    reportsErrored,
-    rosterReady,
-    partition: { readyToConfirm, awaitingEnrollment, enrolled },
-  } = useRosterStatus(org, classroom, students)
+  const updateRosterCache = useUpdateRosterCache(org, classroom)
 
-  // Does the roster carry any section labels? (gates the toggle)
+  // Keyed by username/email so a clean action can't clobber another's warning.
+  const [warnings, setWarnings] = useState<Record<string, string>>({})
+  const [showGithubInvite, setShowGithubInvite] = useState(false)
+  const [groupBySection, setGroupBySection] = useState(false)
+  const [driftExpanded, setDriftExpanded] = useState(false)
+  const [confirmResendAllOpen, setConfirmResendAllOpen] = useState(false)
+  const [resendingKeys, setResendingKeys] = useState<Set<string>>(new Set())
+
+  const { rows, counts, isLoading, isEmpty, pendingHidden } = useTeamRoster(
+    org,
+    classroom,
+    students,
+  )
+
+  const enrolled = useMemo(
+    () => rows.filter((r) => r.state === "enrolled"),
+    [rows],
+  )
+  const pending = useMemo(
+    () => rows.filter((r) => r.state === "pending"),
+    [rows],
+  )
+  const unprovisioned = useMemo(
+    () => rows.filter((r) => r.state === "unprovisioned"),
+    [rows],
+  )
+
   const hasSections = useMemo(
-    () => students.some((s) => s.section?.trim()),
-    [students],
+    () => enrolled.some((r) => r.section.trim()),
+    [enrolled],
   )
-
-  // Enrolled students grouped by section. Computed regardless of the toggle so
-  // the data is ready when grouping is turned on.
   const enrolledBySection = useMemo(
     () => groupStudentsBySection(enrolled),
     [enrolled],
   )
 
-  // Non-members still needing an invite re-sent: pending, expired, or never
-  // invited. Excludes onboarded/awaiting rows — they've accepted.
-  const nonMemberStudents = useMemo(
+  // Match-account candidates: org members not already bound to any roster row.
+  const memberUsers = useMemo(
     () =>
-      students.filter((student) => {
-        const status = statusByKey.get(studentKey(student))?.status
-        return (
-          status != null &&
-          status !== "member" &&
-          status !== "onboarding" &&
-          status !== "ready"
-        )
-      }),
-    [students, statusByKey],
+      enrolled.map((r) => ({
+        id: Number(r.github_id),
+        login: r.username,
+        name: `${r.first_name} ${r.last_name}`.trim() || null,
+        email: r.email || null,
+        avatar_url: r.avatar_url,
+        html_url: "",
+        bio: null,
+        permissions: { admin: false, pull: true, maintain: false, push: false },
+      })),
+    [enrolled],
+  )
+  const matchCandidates = useMemo(
+    () => unmatchedTeamMembers(memberUsers, students),
+    [memberUsers, students],
   )
 
-  const setWarning = (username: string, message: string) =>
-    setTeamWarnings((prev) => ({ ...prev, [username]: message }))
-
-  const dismissWarning = (username: string) =>
-    setTeamWarnings((prev) => {
+  const setWarning = (key: string, message: string) =>
+    setWarnings((prev) => ({ ...prev, [key]: message }))
+  const dismissWarning = (key: string) =>
+    setWarnings((prev) => {
       const next = { ...prev }
-      delete next[username]
+      delete next[key]
       return next
     })
 
   const invalidateInviteQueries = () =>
     invalidateInviteQueriesForOrg(queryClient, org)
 
-  // Resend (or first-time invite for "none"). "expired" carries an invitation id
-  // we cancel first; "none" is a plain create. Outcome distinguishes what
-  // happened: "invited" = sent; "pending"/"active" = no-op; "skipped" = missing id.
-  type ResendOutcome = "invited" | "pending" | "active" | "skipped"
+  // Explicit teacher-triggered backfill: append missing team members into
+  // students.csv as metadata (Section 5). Not automatic — the team-driven view
+  // renders correctly without it; this only persists optional metadata.
+  const syncMutation = useMutation({
+    mutationFn: () => syncRosterFromTeam(client, { org, classroom }),
+    onSuccess: (result) => {
+      notify({
+        tone: "success",
+        durationMs: 5000,
+        message: result.noop
+          ? t("students.syncUpToDate")
+          : t("students.syncAdded", { count: result.addedUsernames.length }),
+      })
+      // The CSV changed; invalidate the roster (csv-file) query so a refetch
+      // picks up the newly-appended metadata rows. Uses the same key
+      // useGetStudents reads (a bare prefix wouldn't match).
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.csvFile(
+          org,
+          "classroom50",
+          `${classroom}/students.csv`,
+        ),
+      })
+    },
+    onError: (err) => {
+      notify({
+        tone: "error",
+        message: t("students.syncFailed", { error: getErrorMessage(err) }),
+      })
+    },
+  })
 
-  const resendForStudent = async (student: Student): Promise<ResendOutcome> => {
-    const inviteeId = Number(student.github_id)
-    if (!Number.isFinite(inviteeId) || inviteeId <= 0) {
+  const resendForRow = async (row: TeamRosterRow) => {
+    const inviteeId = Number(row.github_id)
+    if (!Number.isFinite(inviteeId) || inviteeId <= 0 || !row.username) {
       setWarning(
-        student.username,
-        t("students.resendMissingId", { username: student.username }),
+        row.key,
+        t("students.resendMissingId", { username: row.username || row.email }),
       )
-      return "skipped"
+      return "skipped" as const
     }
-
-    const status = getStatus(student)
     const result = await resendOrgInvitation(client, {
       org,
-      username: student.username,
+      username: row.username,
       inviteeId,
-      invitationId: status?.invitationId,
     })
     return result.state
   }
 
-  const resendMutation = useMutation({
-    mutationFn: (student: Student) => resendForStudent(student),
-  })
-
-  const [reconcileSummary, setReconcileSummary] = useState("")
-  const runReconcile = useSafeSubmit()
-
-  const reconcileMutation = useMutation({
-    mutationFn: () => reconcileOnboarding(client, { org, classroom }),
-    onSuccess: (result) => {
-      const parts = [
-        t("students.reconcileEnrolled", { count: result.reconciled.length }),
-      ]
-      if (result.deleted.length > 0) {
-        parts.push(
-          t("students.reconcileDeleted", { count: result.deleted.length }),
-        )
-      }
-      if (result.archived.length > 0) {
-        parts.push(
-          t("students.reconcileArchived", { count: result.archived.length }),
-        )
-      }
-      if (result.pending.length > 0) {
-        parts.push(
-          t("students.reconcilePending", { count: result.pending.length }),
-        )
-      }
-      if (result.needsAttention.length > 0) {
-        parts.push(
-          t("students.reconcileNeedsAttention", {
-            count: result.needsAttention.length,
-          }),
-        )
-      }
-      if (result.needsMatch.length > 0) {
-        parts.push(
-          t("students.reconcileNeedsMatch", {
-            count: result.needsMatch.length,
-          }),
-        )
-      }
-      if (result.unmatched.length > 0) {
-        parts.push(
-          t("students.reconcileUnmatched", { count: result.unmatched.length }),
-        )
-      }
-      const summary = parts.join(", ")
-      setReconcileSummary(
-        result.cleanupWarning
-          ? `${summary}. ${result.cleanupWarning}`
-          : summary,
-      )
-      // Optimistically flip just-confirmed rows to "enrolled" so they move to
-      // Enrolled immediately. Don't invalidate the roster CSV query (see
-      // useUpdateRosterCache); a natural refetch reconciles later.
-      updateRosterCache((current) =>
-        applyReconciledToRoster(current, result.reconciled),
-      )
-      // Reconcile deletes/archives onboarding repos, so the ready-to-confirm
-      // self-report set is now stale.
-      queryClient.invalidateQueries({
-        queryKey: ["github", "onboarding-reports", org, classroom],
-      })
-      invalidateInviteQueries()
-    },
-    onError: (err) => {
-      setReconcileSummary(
-        t("students.reconcileFailed", { error: getErrorMessage(err) }),
-      )
-    },
-  })
-
-  // Per-row confirm for an already-member with no onboarding repo (reconcile
-  // can't confirm those); the mutation re-verifies membership server-side.
-  const runMarkEnrolled = useSafeSubmit()
-  const [markingUsernames, setMarkingUsernames] = useState<Set<string>>(
-    new Set(),
-  )
-
-  const markEnrolledMutation = useMutation({
-    mutationFn: (student: Student) =>
-      markStudentEnrolledWithConflictRetry(client, {
-        org,
-        classroom,
-        username: student.username,
-        github_id: student.github_id || undefined,
-      }),
-  })
-
-  const handleMarkEnrolled = async (student: Student) => {
-    setMarkingUsernames((prev) => new Set(prev).add(student.username))
-    dismissWarning(student.username)
+  const handleResend = async (row: TeamRosterRow) => {
+    setResendingKeys((prev) => new Set(prev).add(row.key))
+    dismissWarning(row.key)
     try {
-      const result = await markEnrolledMutation.mutateAsync(student)
-      // Optimistic flip to enrolled; a refetch reconciles the remaining fields.
-      updateRosterCache((current) =>
-        current.map((s) =>
-          studentKey(s) === studentKey(student)
-            ? { ...s, enrollment_status: "enrolled" as const }
-            : s,
-        ),
-      )
-      invalidateInviteQueries()
-      notify({
-        tone: result.teamWarning ? "warning" : "success",
-        durationMs: 6000,
-        message: result.teamWarning
-          ? result.teamWarning
-          : t("students.markedEnrolled", { username: student.username }),
-      })
-    } catch (err) {
-      notify({
-        tone: "error",
-        message: t("students.markEnrolledFailed", {
-          username: student.username,
-          error: getErrorMessage(err),
-        }),
-      })
-    } finally {
-      setMarkingUsernames((prev) => {
-        const next = new Set(prev)
-        next.delete(student.username)
-        return next
-      })
-    }
-  }
-
-  const handleResend = async (student: Student) => {
-    setResendingUsernames((prev) => new Set(prev).add(student.username))
-    dismissWarning(student.username)
-    try {
-      await resendMutation.mutateAsync(student)
+      await resendForRow(row)
       invalidateInviteQueries()
     } catch (err) {
       setWarning(
-        student.username,
+        row.key,
         t("students.resendFailed", {
-          username: student.username,
+          username: row.username || row.email,
           error: getErrorMessage(err),
         }),
       )
     } finally {
-      setResendingUsernames((prev) => {
+      setResendingKeys((prev) => {
         const next = new Set(prev)
-        next.delete(student.username)
+        next.delete(row.key)
         return next
       })
     }
   }
 
-  // Sequential to respect GitHub's 50/24h invite cap and secondary rate limits.
-  // Stops early on a rate-limit error.
   const handleResendAll = async () => {
     let resent = 0
-    let alreadyValid = 0
     const failures: string[] = []
     let rateLimited = false
-    let stoppedAt = 0
-
-    for (const student of nonMemberStudents) {
-      stoppedAt++
+    for (const row of pending) {
       try {
-        const outcome = await resendForStudent(student)
+        const outcome = await resendForRow(row)
         if (outcome === "invited") resent++
-        // "pending"/"active" = already valid / a member; not a failure.
-        else if (outcome === "pending" || outcome === "active") alreadyValid++
-        else failures.push(student.username)
       } catch (err) {
-        failures.push(student.username)
-        console.error(`resend failed for ${student.username}:`, err)
+        failures.push(row.username || row.email)
         if (err instanceof GitHubAPIError && err.isRateLimited) {
           rateLimited = true
           break
         }
       }
     }
-
     invalidateInviteQueries()
-
-    const remaining = nonMemberStudents.length - stoppedAt
-    const alreadyNote =
-      alreadyValid > 0
-        ? " " + t("students.resendAllAlreadyNote", { count: alreadyValid })
-        : ""
-    const summaryKey = "__resend_all__"
+    const key = "__resend_all__"
     if (rateLimited) {
-      const failedList = failures.length ? ` (${failures.join(", ")})` : ""
-      setWarning(
-        summaryKey,
-        t("students.resendAllRateLimited", {
-          resent,
-          failed: failures.length,
-          failedList,
-          remaining:
-            remaining > 0
-              ? t("students.resendAllNotAttempted", { count: remaining })
-              : "",
-        }),
-      )
+      setWarning(key, t("students.resendAllRateLimitedShort", { resent }))
     } else if (failures.length === 0) {
-      setWarning(
-        summaryKey,
-        t("students.resendAllSuccess", { count: resent }) + alreadyNote,
-      )
+      setWarning(key, t("students.resendAllSuccess", { count: resent }))
     } else {
       setWarning(
-        summaryKey,
-        t("students.resendAllPartial", {
+        key,
+        t("students.resendAllPartialShort", {
           resent,
-          total: nonMemberStudents.length,
           failed: failures.length,
           failedList: failures.join(", "),
-        }) + alreadyNote,
+        }),
       )
     }
   }
 
-  const renderStudentRow = (student: Student) => {
-    const rowKey = studentKey(student)
-    const statusEntry = statusByKey.get(rowKey)
-    const status = statusEntry?.status
-    // Per-row invite (re)send: offered for an outstanding invite (pending/expired)
-    // or a never-invited row (none). An email-only row (no github_id) can't be
-    // org-resent — skip it (also avoids an empty-username key collision below).
-    const showResend =
-      (status === "pending" || status === "expired" || status === "none") &&
-      Boolean(student.github_id)
-    const isResending = resendingUsernames.has(student.username)
-    // Show "Mark enrolled" only for a verified live member stuck awaiting (not
-    // already enrolled, not onboarding-confirmable); needs a github_id to verify.
-    const isVerifiedMember =
-      Boolean(student.github_id) && memberIds.has(student.github_id)
-    const showMarkEnrolled =
-      statusAvailable &&
-      isVerifiedMember &&
-      status !== "member" &&
-      status !== "removed" &&
-      status !== "ready"
-    const isMarking = markingUsernames.has(student.username)
-    // Show "Match account" for an email-invited row with no GitHub identity yet
-    // that isn't showing a self-report or outstanding invite — the student
-    // likely joined the org directly (no onboarding repo). The teacher binds it
-    // to an org member by hand (email->login isn't recoverable post-accept).
-    const isEmailOnly = !student.github_id.trim() && !student.username.trim()
-    const showMatchAccount =
-      statusAvailable &&
-      isEmailOnly &&
-      Boolean(student.email.trim()) &&
-      status === "onboarding"
-    const invitedAtLabel =
-      status === "pending" || status === "expired"
-        ? formatInvitedAt(statusEntry?.invitedAt)
-        : null
-    const isSelf = isSameGitHubUser(viewer, student)
-    // CSV is authoritative for the displayed name; when a row has no name on the
-    // CSV (common for an onboarded-but-unenrolled, email-invited student), fall
-    // back to the student's onboarding self-report so the row reads as a person
-    // rather than a bare email.
-    const selfReport = statusEntry?.selfReport
+  const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
+    updateRosterCache((current) => {
+      const next = current.map((s) =>
+        (s.github_id || s.username || s.email) === rowKey
+          ? toStudent(updated)
+          : s,
+      )
+      // A member with no prior CSV row (blank metadata) has no row to replace;
+      // append the newly-written one so the edit sticks optimistically.
+      const exists = current.some(
+        (s) => (s.github_id || s.username || s.email) === rowKey,
+      )
+      return exists ? next : [...next, toStudent(updated)]
+    })
+    invalidateInviteQueries()
+  }
+
+  const renderRow = (row: TeamRosterRow) => {
+    const student = rowToStudent(row)
     const displayName =
-      nameFromParts(student.first_name, student.last_name) ||
-      nameFromParts(selfReport?.first_name, selfReport?.last_name) ||
-      student.email
-    const displayHandle =
-      student.username || selfReport?.github_username || student.email
+      nameFromParts(row.first_name, row.last_name) || row.username || row.email
+    const displayHandle = row.username || row.email
     const displayInitials =
-      initialsFromParts(student.first_name, student.last_name) ||
-      initialsFromParts(selfReport?.first_name, selfReport?.last_name) ||
-      student.email[0]?.toUpperCase() ||
+      initialsFromParts(row.first_name, row.last_name) ||
+      (row.username || row.email)[0]?.toUpperCase() ||
       "?"
+    const isResending = resendingKeys.has(row.key)
+    const canResend = row.state === "pending" && Boolean(row.github_id)
+    const isEmailOnlyPending =
+      row.state === "pending" && !row.github_id && Boolean(row.email)
 
     return (
       <motion.li
-        key={rowKey}
+        key={row.key}
         layout
         variants={enterExit}
         initial="initial"
@@ -1119,102 +891,60 @@ const EnrolledStudents = ({
         </div>
 
         <div className="flex shrink-0 items-center gap-2">
-          {student.section?.trim() ? (
+          {row.section.trim() ? (
             <span className="badge badge-sm badge-ghost shrink-0">
-              {student.section.trim()}
+              {row.section.trim()}
             </span>
           ) : null}
 
-          {statusAvailable && invitedAtLabel ? (
-            <span className="whitespace-nowrap text-xs text-base-content/70">
-              {t("students.invitedAt", { date: invitedAtLabel })}
+          {row.state === "pending" ? (
+            <span className="badge badge-sm badge-warning badge-soft shrink-0">
+              {t("students.statusPending")}
             </span>
           ) : null}
 
-          {statusAvailable && showResend ? (
+          {row.state === "unprovisioned" ? (
+            <span className="badge badge-sm badge-ghost badge-soft shrink-0">
+              {t("students.statusUnprovisioned")}
+            </span>
+          ) : null}
+
+          {canResend ? (
             <button
               type="button"
               className="btn btn-xs"
               disabled={isResending}
-              aria-label={
-                status === "none"
-                  ? t("students.sendInviteAria", { username: student.username })
-                  : t("students.resendInviteAria", {
-                      username: student.username,
-                    })
-              }
-              onClick={() => void handleResend(student)}
+              aria-label={t("students.resendInviteAria", {
+                username: row.username,
+              })}
+              onClick={() => void handleResend(row)}
             >
               {isResending ? (
                 <span
                   className="loading loading-spinner loading-xs"
                   aria-hidden="true"
                 />
-              ) : status === "none" ? (
-                t("students.sendInvite")
               ) : (
                 t("students.resend")
               )}
             </button>
           ) : null}
 
-          {statusAvailable && status === "pending" && student.invite_token ? (
-            <SecureLinkButton
-              org={org}
-              classroom={classroom}
-              email={student.email}
-              token={student.invite_token}
-            />
-          ) : null}
-
-          {showMarkEnrolled ? (
-            <button
-              type="button"
-              className="btn btn-xs btn-primary"
-              disabled={isMarking}
-              aria-label={t("students.markEnrolledAria", {
-                username: student.username,
-              })}
-              title={t("students.markEnrolledTitle")}
-              onClick={() =>
-                void runMarkEnrolled(() => handleMarkEnrolled(student))
-              }
-            >
-              {isMarking ? (
-                <span
-                  className="loading loading-spinner loading-xs"
-                  aria-hidden="true"
-                />
-              ) : (
-                <>
-                  <UserCheck aria-hidden="true" className="size-3.5" />
-                  {t("students.markEnrolled")}
-                </>
-              )}
-            </button>
-          ) : null}
-
-          {showMatchAccount ? (
+          {isEmailOnlyPending ? (
             <MatchAccountButton
               org={org}
               classroom={classroom}
               student={student}
               candidates={matchCandidates}
               onMatched={(matched, warning) => {
-                if (warning) {
-                  setWarning(matched.username || student.email, warning)
-                }
-                // Optimistically reflect the bound identity + enrolled status so
-                // the row moves out of "awaiting" immediately; a refetch
-                // reconciles the rest.
+                if (warning) setWarning(row.key, warning)
                 updateRosterCache((current) =>
                   current.map((s) =>
-                    studentKey(s) === rowKey
+                    (s.github_id || s.username || s.email) === row.key
                       ? {
                           ...s,
                           username: matched.username,
                           github_id: matched.github_id,
-                          enrollment_status: "enrolled" as const,
                         }
                       : s,
                   ),
@@ -1226,7 +956,7 @@ const EnrolledStudents = ({
                   message: warning
                     ? warning
                     : t("students.matchedToast", {
-                        email: student.email,
+                        email: row.email,
                         username: matched.username,
                       }),
                 })
@@ -1238,39 +968,16 @@ const EnrolledStudents = ({
             org={org}
             classroom={classroom}
             student={student}
-            selfReport={selfReport}
-            onSaved={(updated) => {
-              // Replace the edited row in the cached roster (see
-              // useUpdateRosterCache). studentKey is stable across any permitted
-              // edit — identity columns aren't editable, and an email-only row's
-              // email (its only key) can't be changed — so the captured rowKey
-              // still matches.
-              updateRosterCache((current) =>
-                current.map((s) =>
-                  studentKey(s) === rowKey ? toStudent(updated) : s,
-                ),
-              )
-              // A name/email change can affect invite display; keep parity with
-              // the other row actions.
-              invalidateInviteQueries()
-            }}
+            onSaved={(updated) => onRowMetadataSaved(row.key, updated)}
           />
 
           <UnenrollStudentButton
             org={org}
             classroom={classroom}
             student={student}
-            status={statusAvailable ? status : undefined}
-            isSelf={isSelf}
-            onRemoveStudent={(username: string, warning?: string) => {
-              // Record only a real warning; a clean unenroll must not wipe one.
-              if (warning) {
-                setWarning(username, warning)
-              }
-              // Drop the row from the cached roster immediately (see
-              // useUpdateRosterCache). Keyed by the same stable studentKey.
-              updateRosterCache((current) => removeFromRoster(current, rowKey))
-              // Unenroll may cancel a pending invite or remove a member.
+            isMember={row.state === "enrolled"}
+            onRemoveStudent={(_username, warning) => {
+              if (warning) setWarning(row.key, warning)
               invalidateInviteQueries()
             }}
           />
@@ -1281,37 +988,12 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Action results surface here at the top: the triggering section often
-          unmounts afterward (e.g. confirming empties the Ready section). */}
+      {/* Warnings / action results surface at the top. */}
       <div className="flex w-full flex-col gap-2">
         <AnimatePresence initial={false}>
-          {reconcileSummary ? (
+          {Object.entries(warnings).map(([key, warning]) => (
             <motion.div
-              key="reconcile-summary"
-              layout
-              variants={collapseVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              role="alert"
-              className="alert alert-info alert-soft overflow-hidden"
-            >
-              <span className="text-sm">
-                {t("students.enrollmentSummary", { summary: reconcileSummary })}
-              </span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs"
-                onClick={() => setReconcileSummary("")}
-              >
-                {t("students.dismiss")}
-              </button>
-            </motion.div>
-          ) : null}
-
-          {Object.entries(teamWarnings).map(([username, warning]) => (
-            <motion.div
-              key={username}
+              key={key}
               layout
               variants={collapseVariants}
               initial="initial"
@@ -1324,7 +1006,7 @@ const EnrolledStudents = ({
               <button
                 type="button"
                 className="btn btn-ghost btn-xs"
-                onClick={() => dismissWarning(username)}
+                onClick={() => dismissWarning(key)}
               >
                 {t("students.dismiss")}
               </button>
@@ -1333,10 +1015,76 @@ const EnrolledStudents = ({
         </AnimatePresence>
       </div>
 
-      {/* Wait on all partition queries to avoid an onboarded student flashing in
-          "Awaiting enrollment" before jumping to "Ready". The Invite card still
-          renders below so links are available while status loads. */}
-      {!rosterReady ? (
+      {/* Data-drift banner: CSV-only rows with no team member / pending invite.
+          Kept VISIBLE below as a distinct "not yet provisioned" section, but the
+          banner surfaces the count + a disclosure so the teacher sees which. */}
+      {!isLoading && unprovisioned.length > 0 ? (
+        <div
+          role="alert"
+          className="alert alert-warning alert-soft flex-col items-start"
+        >
+          <div className="flex w-full items-center justify-between gap-3">
+            <span className="flex items-center gap-2 text-sm">
+              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              {t("students.driftBanner", { count: unprovisioned.length })}
+            </span>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              aria-expanded={driftExpanded}
+              onClick={() => setDriftExpanded((v) => !v)}
+            >
+              {driftExpanded
+                ? t("students.driftHide")
+                : t("students.driftShow")}
+            </button>
+          </div>
+          {driftExpanded ? (
+            <ul className="mt-2 w-full list-disc pl-6 text-sm">
+              {unprovisioned.map((row) => (
+                <li key={row.key}>
+                  {nameFromParts(row.first_name, row.last_name) ||
+                    row.username ||
+                    row.email}
+                  {row.username ? ` (@${row.username})` : ""}
+                </li>
+              ))}
+            </ul>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Invite students card. */}
+      <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
+          <h2 className="text-lg font-semibold">
+            {t("students.inviteStudents")}
+          </h2>
+          <button
+            type="button"
+            className="btn btn-sm btn-ghost"
+            disabled={syncMutation.isPending}
+            onClick={() => syncMutation.mutate()}
+            title={t("students.syncRosterTitle")}
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+            />
+            {syncMutation.isPending
+              ? t("students.syncing")
+              : t("students.syncRoster")}
+          </button>
+        </div>
+        <OnboardingLink org={org} classroom={classroom} />
+        <InviteLink
+          org={org}
+          expanded={showGithubInvite}
+          onToggle={() => setShowGithubInvite((prev) => !prev)}
+        />
+      </div>
+
+      {isLoading ? (
         <div className="card card-border w-full bg-base-100 shadow-sm">
           <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
             <span
@@ -1348,92 +1096,24 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Ready for enrollment confirmation (state 2). */}
-      <AnimatePresence initial={false}>
-        {rosterReady && readyToConfirm.length > 0 ? (
-          <motion.div
-            key="ready-to-confirm"
-            layout
-            variants={enterExit}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="card card-border w-full overflow-hidden border-info/30 bg-info/5 shadow-sm"
-          >
-            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-info/20">
-              <div className="flex flex-col">
-                <h2 className="text-lg font-semibold text-info">
-                  {t("students.readyHeading")}
-                </h2>
-                <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.readySubtitle", {
-                    count: readyToConfirm.length,
-                  })}
-                </span>
-              </div>
-              <button
-                type="button"
-                className="btn btn-sm btn-primary shrink-0"
-                onClick={() =>
-                  void runReconcile(() => reconcileMutation.mutateAsync())
-                }
-                disabled={reconcileMutation.isPending}
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={`size-4 ${reconcileMutation.isPending ? "animate-spin" : ""}`}
-                />
-                {t("students.confirmEnrollment", {
-                  count: readyToConfirm.length,
-                })}
-              </button>
-            </div>
-            <ul className="divide-y divide-base-300 bg-base-100">
-              <AnimatePresence initial={false}>
-                {readyToConfirm.map((student) => renderStudentRow(student))}
-              </AnimatePresence>
-            </ul>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      {/* Invite students: share links. */}
-      <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-          <h2 className="text-lg font-semibold">
-            {t("students.inviteStudents")}
-          </h2>
+      {isEmpty ? (
+        <div className="card card-border w-full bg-base-100 shadow-sm">
+          <div className="px-6 py-12 text-center">
+            <h3 className="text-base font-semibold">
+              {t("students.emptyTitle")}
+            </h3>
+            <p className="mt-2 text-sm text-base-content/70">
+              {t("students.emptyBody")}
+            </p>
+          </div>
         </div>
-        <OnboardingLink org={org} classroom={classroom} />
-        <InviteLink
-          org={org}
-          expanded={showGithubInvite}
-          onToggle={() => setShowGithubInvite((prev) => !prev)}
-        />
+      ) : null}
 
-        {!statusAvailable ? (
-          <div role="alert" className="alert alert-info alert-soft mx-6 my-4">
-            <span className="text-sm">
-              {t("students.inviteStatusOwnerOnly")}
-            </span>
-          </div>
-        ) : null}
-
-        {statusAvailable && reportsErrored ? (
-          <div
-            role="alert"
-            className="alert alert-warning alert-soft mx-6 my-4"
-          >
-            <span className="text-sm">{t("students.reportsErrored")}</span>
-          </div>
-        ) : null}
-      </div>
-
-      {/* Awaiting enrollment (state 1): invited, not yet onboarded. */}
+      {/* Pending invites. */}
       <AnimatePresence initial={false}>
-        {rosterReady && awaitingEnrollment.length > 0 ? (
+        {!isLoading && pending.length > 0 ? (
           <motion.div
-            key="awaiting-enrollment"
+            key="pending"
             layout
             variants={enterExit}
             initial="initial"
@@ -1444,39 +1124,79 @@ const EnrolledStudents = ({
             <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-base-300">
               <div className="flex flex-col">
                 <h2 className="text-lg font-semibold">
-                  {t("students.awaitingHeading")}
+                  {t("students.pendingHeading")}
                 </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.awaitingSubtitle")}
+                  {t("students.pendingSubtitle")}
                 </span>
               </div>
               <div className="flex shrink-0 items-center gap-2">
-                {statusAvailable ? (
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-ghost"
-                    onClick={() => setConfirmResendAllOpen(true)}
-                  >
-                    <Send aria-hidden="true" className="size-4" />
-                    {t("students.resendInvites")}
-                  </button>
-                ) : null}
-                <div className="badge badge-ghost badge-soft text-base">
-                  {awaitingEnrollment.length}
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => setConfirmResendAllOpen(true)}
+                >
+                  <Send aria-hidden="true" className="size-4" />
+                  {t("students.resendInvites")}
+                </button>
+                <div className="badge badge-warning badge-soft text-base">
+                  {counts.pending}
                 </div>
               </div>
             </div>
             <ul className="divide-y divide-base-300">
               <AnimatePresence initial={false}>
-                {awaitingEnrollment.map((student) => renderStudentRow(student))}
+                {pending.map((row) => renderRow(row))}
               </AnimatePresence>
             </ul>
           </motion.div>
         ) : null}
       </AnimatePresence>
 
-      {/* Enrolled students (state 3) — reviewed last. */}
-      {rosterReady ? (
+      {/* Non-owner: pending invites are owner-only. */}
+      {!isLoading && pendingHidden ? (
+        <div role="alert" className="alert alert-info alert-soft">
+          <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
+        </div>
+      ) : null}
+
+      {/* Not-yet-provisioned (visible, distinct state). */}
+      <AnimatePresence initial={false}>
+        {!isLoading && unprovisioned.length > 0 ? (
+          <motion.div
+            key="unprovisioned"
+            layout
+            variants={enterExit}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            className="card card-border w-full overflow-hidden border-warning/30 bg-warning/5 shadow-sm"
+          >
+            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-warning/20">
+              <div className="flex flex-col">
+                <h2 className="flex items-center gap-2 text-lg font-semibold">
+                  <UserRoundX aria-hidden="true" className="size-5" />
+                  {t("students.unprovisionedHeading")}
+                </h2>
+                <span className="mt-0.5 text-sm text-base-content/70">
+                  {t("students.unprovisionedSubtitle")}
+                </span>
+              </div>
+              <div className="badge badge-ghost badge-soft text-base">
+                {counts.unprovisioned}
+              </div>
+            </div>
+            <ul className="divide-y divide-base-300 bg-base-100">
+              <AnimatePresence initial={false}>
+                {unprovisioned.map((row) => renderRow(row))}
+              </AnimatePresence>
+            </ul>
+          </motion.div>
+        ) : null}
+      </AnimatePresence>
+
+      {/* Enrolled (team members) — reviewed last. */}
+      {!isLoading ? (
         <EnterDiv className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
           <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
             <h2 className="text-lg font-semibold">
@@ -1495,7 +1215,7 @@ const EnrolledStudents = ({
                 </label>
               )}
               <div className="badge badge-primary badge-soft text-base">
-                {enrolled.length}
+                {counts.enrolled}
               </div>
             </div>
           </div>
@@ -1516,7 +1236,7 @@ const EnrolledStudents = ({
                     </div>
                     <ul className="divide-y divide-base-300">
                       <AnimatePresence initial={false}>
-                        {group.map((student) => renderStudentRow(student))}
+                        {group.map((row) => renderRow(row))}
                       </AnimatePresence>
                     </ul>
                   </div>
@@ -1525,7 +1245,7 @@ const EnrolledStudents = ({
             ) : (
               <ul className="divide-y divide-base-300">
                 <AnimatePresence initial={false}>
-                  {enrolled.map((student) => renderStudentRow(student))}
+                  {enrolled.map((row) => renderRow(row))}
                 </AnimatePresence>
               </ul>
             )
@@ -1549,12 +1269,10 @@ const EnrolledStudents = ({
             {t("students.resendAllBodyMiddle")}{" "}
             <span className="font-semibold text-base-content">{org}</span> (
             <span className="font-semibold text-base-content">
-              {nonMemberStudents.length}
+              {pending.length}
             </span>{" "}
-            {t("students.resendAllBodyStudents", {
-              count: nonMemberStudents.length,
-            })}
-            ){t("students.resendAllBodySuffix")}
+            {t("students.resendAllBodyStudents", { count: pending.length })})
+            {t("students.resendAllBodySuffix")}
           </>
         }
         confirmText="resend"

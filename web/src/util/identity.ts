@@ -1,4 +1,3 @@
-import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
 // Canonical identity helpers for relating GitHub accounts, org members, and
@@ -46,7 +45,9 @@ export function memberIdSet(members: GitHubUser[]): Set<string> {
 // The set of GitHub ids and lowercased logins already claimed by a roster. A
 // member is "claimed" when their numeric id or login appears on any row. Shared
 // so the org-members aggregation and the manual-match picker apply one predicate.
-export function rosterClaimSet(students: Student[]): {
+export function rosterClaimSet(
+  students: { github_id?: string; username?: string }[],
+): {
   ids: Set<string>
   logins: Set<string>
 } {
