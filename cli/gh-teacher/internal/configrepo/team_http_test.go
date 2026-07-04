@@ -1,7 +1,9 @@
 package configrepo
 
 import (
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -230,5 +232,85 @@ func TestEnsureClassroomStaffTeam_AdoptsExisting422(t *testing.T) {
 	}
 	if !patched {
 		t.Errorf("expected a PATCH reconciling privacy to secret on the closed team")
+	}
+}
+
+// TestListTeamMembers walks pagination (via the short-page fallback) and
+// returns every member login.
+func TestListTeamMembers(t *testing.T) {
+	page1 := make([]map[string]any, 100)
+	for i := range page1 {
+		page1[i] = map[string]any{"login": fmt.Sprintf("u%d", i), "id": i + 1}
+	}
+	page2 := []map[string]any{
+		{"login": "alice", "id": 500},
+		{"login": "bob", "id": 501},
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/orgs/o/teams/classroom50-cs/members" {
+			t.Errorf("unexpected path %q", r.URL.Path)
+			http.NotFound(w, r)
+			return
+		}
+		// No Link header: a full page (==per_page) continues to a synthesized
+		// page 2; the short page 2 (<per_page) ends the walk.
+		if r.URL.Query().Get("page") == "2" {
+			_ = json.NewEncoder(w).Encode(page2)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(page1)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	logins, err := ListTeamMembers(client, "o", "classroom50-cs")
+	if err != nil {
+		t.Fatalf("ListTeamMembers: %v", err)
+	}
+	if len(logins) != 102 {
+		t.Fatalf("got %d logins, want 102", len(logins))
+	}
+	if logins[100] != "alice" || logins[101] != "bob" {
+		t.Errorf("second page not appended: got tail %v", logins[100:])
+	}
+}
+
+// TestListTeamMembers_404IsEmpty: a classroom whose team doesn't exist yet
+// reads as "no members", not an error.
+func TestListTeamMembers_404IsEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	logins, err := ListTeamMembers(client, "o", "classroom50-missing")
+	if err != nil {
+		t.Fatalf("ListTeamMembers 404: unexpected err %v", err)
+	}
+	if len(logins) != 0 {
+		t.Errorf("got %v, want empty", logins)
+	}
+}
+
+// TestResolveClassroomTeamSlug_FallbackWhenNoTeamBlock: a classroom.json with
+// no team block falls back to the derived classroom50-<short> slug.
+func TestResolveClassroomTeamSlug_FallbackWhenNoTeamBlock(t *testing.T) {
+	doc, _ := json.Marshal(map[string]any{"schema": "classroom50/v1", "short_name": "cs"})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"content":  base64.StdEncoding.EncodeToString(doc),
+			"encoding": "base64",
+		})
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	slug, err := ResolveClassroomTeamSlug(client, "o", "cs", "main")
+	if err != nil {
+		t.Fatalf("ResolveClassroomTeamSlug: %v", err)
+	}
+	if slug != "classroom50-cs" {
+		t.Errorf("slug = %q, want classroom50-cs", slug)
 	}
 }

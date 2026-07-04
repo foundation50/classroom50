@@ -77,6 +77,10 @@ const assetDownloadTimeout = 30 * time.Second
 // an explicit flag from a non-submission or older score row.
 var scoresCSVHeader = []string{
 	"username",
+	"first_name",
+	"last_name",
+	"email",
+	"section",
 	"score",
 	"max_score",
 	"datetime",
@@ -179,11 +183,6 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return err
 	}
 
-	roster, err := configrepo.LoadRoster(client, org, classroom, branch)
-	if err != nil {
-		return err
-	}
-
 	assignments, err := configrepo.LoadAssignments(client, org, classroom, branch)
 	if err != nil {
 		return err
@@ -201,9 +200,26 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	}
 	credited := creditedUsernames(scores, assignment)
 
-	if len(roster) == 0 {
+	// Team-driven username source: the classroom GitHub team is authoritative
+	// for who is enrolled. Resolve the slug the same way the web view and the
+	// Python collector do (classroom.json team.slug, fallback classroom50-<c>).
+	teamSlug, err := configrepo.ResolveClassroomTeamSlug(client, org, classroom, branch)
+	if err != nil {
+		return err
+	}
+	teamLogins, err := configrepo.ListTeamMembers(client, org, teamSlug)
+	if err != nil {
+		return fmt.Errorf("list team %q members: %w", teamSlug, err)
+	}
+
+	// students.csv is optional display metadata now — a missing/unreadable CSV
+	// yields blank metadata, never a skipped student. Load best-effort and index
+	// by github_id then login for the scores.csv join.
+	metaByLogin := loadRosterMetadata(client, org, classroom, branch, errOut)
+
+	if len(teamLogins) == 0 {
 		if !quiet {
-			_, _ = fmt.Fprintf(out, "%s: roster is empty — nothing to download\n", classroom)
+			_, _ = fmt.Fprintf(out, "%s: classroom team %q has no members — nothing to download\n", classroom, teamSlug)
 		}
 		return nil
 	}
@@ -222,12 +238,12 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	var (
 		clonedNew       []string
 		skippedExisting []string
-		missing         []string // rostered but no repo on the org yet
+		missing         []string // enrolled but no repo on the org yet
 		failed          []string
 		assetErrs       int
 	)
-	for _, row := range roster {
-		repoName := assignmentRepoName(classroom, assignment, row.Username)
+	for _, username := range teamLogins {
+		repoName := assignmentRepoName(classroom, assignment, username)
 		target := filepath.Join(dir, repoName)
 
 		switch existsOnDisk, statErr := targetExists(target); {
@@ -247,7 +263,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 			continue
 		}
 
-		// Probe before cloning so a rostered-but-not-accepted student
+		// Probe before cloning so an enrolled-but-not-accepted student
 		// surfaces as "missing" instead of a generic clone fatal.
 		exists, err := repoExistsOnOrg(client, org, repoName)
 		if err != nil {
@@ -257,27 +273,27 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		}
 		if !exists {
 			if isGroup {
-				if _, ok := credited[strings.ToLower(row.Username)]; ok {
+				if _, ok := credited[strings.ToLower(username)]; ok {
 					// Joined a teammate's repo: owns no derived repo,
 					// but already credited via the owner's fanned-out
 					// scores.json row. Expected — not a miss.
 					if verbose && !quiet {
-						_, _ = fmt.Fprintf(out, "Credited via group repo: %s (no own repo)\n", row.Username)
+						_, _ = fmt.Fprintf(out, "Credited via group repo: %s (no own repo)\n", username)
 					}
 					continue
 				}
 				// Group assignment, no own repo, and not credited in
 				// scores.json — a genuine non-participant. Still report.
 				if !quiet {
-					_, _ = fmt.Fprintf(out, "Missing: %s (group assignment — no own repo and not yet credited via a teammate)\n", row.Username)
+					_, _ = fmt.Fprintf(out, "Missing: %s (group assignment — no own repo and not yet credited via a teammate)\n", username)
 				}
-				missing = append(missing, row.Username)
+				missing = append(missing, username)
 				continue
 			}
 			if !quiet {
-				_, _ = fmt.Fprintf(out, "Missing: %s (no repo at %s/%s — not accepted yet?)\n", row.Username, org, repoName)
+				_, _ = fmt.Fprintf(out, "Missing: %s (no repo at %s/%s — not accepted yet?)\n", username, org, repoName)
 			}
-			missing = append(missing, row.Username)
+			missing = append(missing, username)
 			continue
 		}
 
@@ -294,7 +310,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	}
 
 	csvPath := filepath.Join(dir, "scores.csv")
-	csvErr := writeScoresCSV(csvPath, scores, assignment, roster)
+	csvErr := writeScoresCSV(csvPath, scores, assignment, teamLogins, metaByLogin)
 	if csvErr != nil {
 		_, _ = fmt.Fprintf(errOut, "scores.csv: %v\n", csvErr)
 	} else if !quiet {
@@ -302,8 +318,8 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	}
 
 	if !quiet {
-		_, _ = fmt.Fprintf(out, "%s: %d cloned, %d already on disk, %d missing, %d failed (of %d rostered)\n",
-			org, len(clonedNew), len(skippedExisting), len(missing), len(failed), len(roster))
+		_, _ = fmt.Fprintf(out, "%s: %d cloned, %d already on disk, %d missing, %d failed (of %d team member(s))\n",
+			org, len(clonedNew), len(skippedExisting), len(missing), len(failed), len(teamLogins))
 		if assetErrs > 0 {
 			_, _ = fmt.Fprintf(errOut, "Warning: %d result.json fetches failed; see stderr above.\n", assetErrs)
 		}
@@ -312,13 +328,49 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	switch {
 	case len(failed) > 0 && csvErr != nil:
 		return fmt.Errorf("%d of %d repo(s) failed to clone (%s); scores.csv write also failed: %w",
-			len(failed), len(roster), strings.Join(failed, ", "), csvErr)
+			len(failed), len(teamLogins), strings.Join(failed, ", "), csvErr)
 	case len(failed) > 0:
-		return fmt.Errorf("%d of %d repo(s) failed to clone: %s", len(failed), len(roster), strings.Join(failed, ", "))
+		return fmt.Errorf("%d of %d repo(s) failed to clone: %s", len(failed), len(teamLogins), strings.Join(failed, ", "))
 	case csvErr != nil:
 		return fmt.Errorf("scores.csv: %w", csvErr)
 	}
 	return nil
+}
+
+// RosterMeta is the optional display metadata joined into scores.csv from
+// students.csv (blank when the CSV is absent/partial).
+type RosterMeta struct {
+	FirstName string
+	LastName  string
+	Email     string
+	Section   string
+}
+
+// loadRosterMetadata reads students.csv best-effort and indexes it by
+// lowercased login for the scores.csv metadata join. A missing/unreadable CSV
+// is NOT fatal (the team drives enrollment; the CSV is only metadata) — it
+// warns and returns an empty map so every team member still gets a row, just
+// with blank name/section/email.
+func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, errOut io.Writer) map[string]RosterMeta {
+	rows, err := configrepo.LoadRoster(client, org, classroom, branch)
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "students.csv metadata unavailable (%v); scores.csv name/section/email will be blank\n", err)
+		return map[string]RosterMeta{}
+	}
+	byLogin := make(map[string]RosterMeta, len(rows))
+	for _, r := range rows {
+		login := strings.ToLower(strings.TrimSpace(r.Username))
+		if login == "" {
+			continue
+		}
+		byLogin[login] = RosterMeta{
+			FirstName: r.FirstName,
+			LastName:  r.LastName,
+			Email:     r.Email,
+			Section:   r.Section,
+		}
+	}
+	return byLogin
 }
 
 // downloadByPattern: page through <org>'s repos and clone every
@@ -550,7 +602,7 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 // blank line so teachers see the whole class at a glance. Per-test
 // breakdowns are intentionally omitted — that detail lives in the
 // per-repo result.json / results.json.
-func writeScoresCSV(path string, scores scoresschema.File, assignment string, roster []configrepo.RosterRow) error {
+func writeScoresCSV(path string, scores scoresschema.File, assignment string, teamLogins []string, metaByLogin map[string]RosterMeta) error {
 	entries := entriesForAssignment(scores, assignment)
 	// Map each credited student (lowercased) -> their gradebook entry.
 	// Group entries credit every member in member_usernames; individual
@@ -567,10 +619,11 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, ro
 	if err := w.Write(scoresCSVHeader); err != nil {
 		return fmt.Errorf("write header: %w", err)
 	}
-	for _, rosterEntry := range roster {
-		for _, record := range scoresCSVRows(rosterEntry.Username, byStudent[strings.ToLower(rosterEntry.Username)]) {
+	for _, username := range teamLogins {
+		meta := metaByLogin[strings.ToLower(username)]
+		for _, record := range scoresCSVRows(username, meta, byStudent[strings.ToLower(username)]) {
 			if err := w.Write(record); err != nil {
-				return fmt.Errorf("write %s: %w", rosterEntry.Username, err)
+				return fmt.Errorf("write %s: %w", username, err)
 			}
 		}
 	}
@@ -581,21 +634,31 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, ro
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-// scoresCSVRows renders the CSV lines for one roster student. A nil
-// `entry` (non-submitter) yields a single blank line. Otherwise it
+// scoresCSVRows renders the CSV lines for one team student. A nil
+// `entry` (non-submitter) yields a single blank-scored line. Otherwise it
 // yields one line per submission in the entry's `submissions` list
 // (newest first), each carrying that submission's score columns; the
 // entry-level `override` flag is repeated on every line. An entry with no
 // usable `submissions` list still yields one blank-scored line so the
-// student isn't dropped from the summary.
-func scoresCSVRows(username string, entry map[string]any) [][]string {
+// student isn't dropped from the summary. `meta` is the best-effort
+// students.csv join (blank when the CSV is absent/partial).
+func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]string {
+	// Display metadata is teacher/student-controllable free text, so guard it
+	// against spreadsheet formula injection like the other string cells.
+	firstName := csvSafeCell(meta.FirstName)
+	lastName := csvSafeCell(meta.LastName)
+	email := csvSafeCell(meta.Email)
+	section := csvSafeCell(meta.Section)
+	metaCells := func(rest ...string) []string {
+		return append([]string{csvSafeCell(username), firstName, lastName, email, section}, rest...)
+	}
 	if entry == nil {
-		return [][]string{{username, "", "", "", "", "", "", "", ""}}
+		return [][]string{metaCells("", "", "", "", "", "", "", "")}
 	}
 	override := csvSafeCell(stringifyOverride(entry["override"]))
 	subs := submissionRecords(entry)
 	if len(subs) == 0 {
-		return [][]string{{username, "", "", "", "", "", "", "", override}}
+		return [][]string{metaCells("", "", "", "", "", "", "", override)}
 	}
 	out := make([][]string, 0, len(subs))
 	for _, sub := range subs {
@@ -607,8 +670,7 @@ func scoresCSVRows(username string, entry map[string]any) [][]string {
 		// `late` and `override` go through stringifyOverride, which passes a
 		// hand-edited STRING through verbatim — so they're guarded too (a
 		// no-due assignment never overwrites a student-supplied `late`).
-		out = append(out, []string{
-			csvSafeCell(username),
+		out = append(out, metaCells(
 			stringifyNumber(sub["score"]),
 			stringifyNumber(sub["max-score"]),
 			csvSafeCell(stringifyString(sub["datetime"])),
@@ -617,7 +679,7 @@ func scoresCSVRows(username string, entry map[string]any) [][]string {
 			csvSafeCell(stringifyString(sub["review"])),
 			csvSafeCell(stringifyOverride(sub["late"])),
 			override,
-		})
+		))
 	}
 	return out
 }

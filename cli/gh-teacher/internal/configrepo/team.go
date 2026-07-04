@@ -467,3 +467,60 @@ func grantTeamRepo(client githubapi.Client, org, slug, repoOwner, repo, permissi
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return true, nil
 }
+
+// ResolveClassroomTeamSlug returns the classroom team's addressing slug:
+// the persisted classroom.json `team.slug` when present (authoritative —
+// GitHub may re-slug on a name collision, e.g. `classroom50-cs-1`), else the
+// derived `classroom50-<short>`. Mirrors the web app's resolveClassroomTeam and
+// the Python collector's resolve_team_slug so all three consumers target the
+// same team. A transient read failure propagates (so a caller doesn't target a
+// wrong slug); only a genuinely absent team block falls back to the derivation.
+func ResolveClassroomTeamSlug(client githubapi.Client, org, shortName, ref string) (string, error) {
+	team, ok, err := ResolveClassroomTeam(client, org, shortName, ref)
+	if err != nil {
+		return "", err
+	}
+	if ok {
+		return team.Slug, nil
+	}
+	return classroomTeamSlug(shortName), nil
+}
+
+// teamMember is the minimal shape decoded from GET .../teams/{slug}/members.
+type teamMember struct {
+	Login string `json:"login"`
+	ID    int64  `json:"id"`
+}
+
+// ListTeamMembers returns the logins of every member of the classroom team
+// addressed by `slug`, walking pagination. This is the team-driven username
+// source for grade collection: the classroom GitHub team is authoritative for
+// who is enrolled (students.csv is only optional display metadata). A 404 (team
+// doesn't exist yet) returns an empty slice so a classroom whose team hasn't
+// been created reads as "no members" rather than erroring.
+func ListTeamMembers(client githubapi.Client, org, slug string) ([]string, error) {
+	const perPage, maxPages = 100, 100
+	members, err := githubapi.PaginateAll[teamMember](
+		client, perPage, maxPages,
+		func(page int) string {
+			return fmt.Sprintf("orgs/%s/teams/%s/members?per_page=%d&page=%d",
+				url.PathEscape(org), url.PathEscape(slug), perPage, page)
+		},
+		func(path string, err error) error {
+			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+				return nil // sentinel: caller treats nil error + handles empty
+			}
+			return fmt.Errorf("GET %s: %w", path, err)
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+	logins := make([]string, 0, len(members))
+	for _, m := range members {
+		if strings.TrimSpace(m.Login) != "" {
+			logins = append(logins, m.Login)
+		}
+	}
+	return logins, nil
+}

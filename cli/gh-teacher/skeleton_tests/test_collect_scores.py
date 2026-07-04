@@ -89,6 +89,14 @@ def write_roster(path, rows: list[dict[str, str]]) -> None:
             writer.writerow({col: row.get(col, "") for col in cs.ROSTER_REQUIRED_COLUMNS})
 
 
+def stub_team_members(monkeypatch, logins: list[str]) -> None:
+    """Stub the team-member listing so collect_classroom's team-driven
+    username source yields `logins` (collection is now team-driven; the
+    classroom team, not students.csv, provides the (student, assignment)
+    pairs)."""
+    monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: list(logins))
+
+
 def write_minimal_classroom(root: pathlib.Path) -> pathlib.Path:
     """Create a tiny classroom fixture under `root` and return its path."""
     classroom = root / "cs-principles"
@@ -799,11 +807,13 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(
             cs, "list_repo_collaborator_logins", lambda *a, **k: ["alice", "bob", "carol"]
         )
+        stub_team_members(monkeypatch, ["alice", "bob", "carol"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[
                 {"username": "alice", "github_id": "1"},
@@ -830,11 +840,13 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(
             cs, "list_repo_collaborator_logins", lambda *a, **k: ["alice", "bob", "intruder"]
         )
+        stub_team_members(monkeypatch, ["alice", "bob"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[
                 {"username": "alice", "github_id": "1"},
@@ -862,11 +874,13 @@ class TestGroupCollectClassroom:
             raise urllib.error.HTTPError("u", 403, "Forbidden", None, None)
 
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", boom)
+        stub_team_members(monkeypatch, ["alice"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -892,11 +906,13 @@ class TestGroupCollectClassroom:
             raise ValueError("expected JSON array, got dict")
 
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", malformed)
+        stub_team_members(monkeypatch, ["alice"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -917,11 +933,13 @@ class TestGroupCollectClassroom:
         monkeypatch.setattr(
             cs, "list_repo_collaborator_logins", lambda *a, **k: ["alice", "bob"]
         )
+        stub_team_members(monkeypatch, ["alice", "bob"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[
                 {"username": "alice", "github_id": "1"},
@@ -955,11 +973,13 @@ class TestGroupCollectClassroom:
                                         username="alice", assignment_type="group"),
         )
         monkeypatch.setattr(cs, "list_repo_collaborator_logins", lambda *a, **k: ["alice"])
+        stub_team_members(monkeypatch, ["alice"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._group_assignments(),
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -967,7 +987,7 @@ class TestGroupCollectClassroom:
         assert results[0]["member_usernames"] == ["alice"]
         err = capsys.readouterr().err
         assert "credited to the owner" in err
-        assert "students.csv" in err
+        assert "classroom team" in err
 
 
 # assignment_repo_name --------------------------------------------------------
@@ -993,6 +1013,141 @@ class TestAssignmentRepoName:
 
 
 # Due-date / lateness ---------------------------------------------------------
+
+
+class TestResolveTeamSlug:
+    def test_prefers_persisted_slug(self):
+        # classroom.json team.slug is authoritative (GitHub may re-slug on a
+        # name collision, e.g. classroom50-cs-1).
+        assert (
+            cs.resolve_team_slug({"team": {"slug": "classroom50-cs-1"}}, "cs")
+            == "classroom50-cs-1"
+        )
+
+    def test_falls_back_to_derived_slug(self):
+        assert cs.resolve_team_slug({}, "cs-principles") == "classroom50-cs-principles"
+
+    def test_falls_back_when_team_block_lacks_slug(self):
+        assert cs.resolve_team_slug({"team": {"id": 7}}, "cs") == "classroom50-cs"
+
+    def test_falls_back_when_slug_blank(self):
+        assert cs.resolve_team_slug({"team": {"slug": "  "}}, "cs") == "classroom50-cs"
+
+
+class TestListTeamMemberLogins:
+    def test_returns_member_logins_and_paginates_via_link(self, monkeypatch):
+        page1 = [{"login": f"u{i}", "id": i} for i in range(100)]
+        page2 = [{"login": "alice", "id": 500}, {"login": "bob", "id": 501}]
+
+        class FakeHeaders:
+            def __init__(self, link):
+                self._link = link
+
+            def get(self, name):
+                return self._link if name == "Link" else None
+
+        def fake_http(url, token, *, accept, max_bytes=None):
+            if "cursor=two" in url:
+                return json.dumps(page2).encode("utf-8"), FakeHeaders(None)
+            link = '<https://api.github.com/x/members?cursor=two>; rel="next"'
+            return json.dumps(page1).encode("utf-8"), FakeHeaders(link)
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", fake_http)
+        logins = cs.list_team_member_logins(
+            "https://api.github.com", "cs50", "classroom50-cs-principles", "token"
+        )
+        assert "alice" in logins and "bob" in logins
+        assert len([x for x in logins if x.startswith("u")]) == 100
+
+    def test_propagates_http_error(self, monkeypatch):
+        import urllib.error
+
+        def boom(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+
+        monkeypatch.setattr(cs, "_http_get_with_headers", boom)
+        with pytest.raises(urllib.error.HTTPError):
+            cs.list_team_member_logins(
+                "https://api.github.com", "cs50", "classroom50-missing", "token"
+            )
+
+
+class TestCollectClassroomTeamDriven:
+    def _assignments(self):
+        return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
+
+    def test_team_members_drive_pairs_not_the_csv(self, monkeypatch):
+        # The team, not students.csv, provides the usernames. Here the CSV is
+        # empty but the team has one member — collection must poll that repo.
+        stub_team_members(monkeypatch, ["alice"])
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda *a, **k: [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                              "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}],
+        )
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(username="alice"),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+        )
+        assert len(results) == 1
+        assert results[0]["owner"] == "alice"
+
+    def test_empty_team_warns_and_collects_nothing(self, monkeypatch, capsys):
+        stub_team_members(monkeypatch, [])
+        results, mode_flip = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+        )
+        assert results == []
+        assert mode_flip == 0
+        assert "has no members" in capsys.readouterr().err
+
+    def test_team_read_404_warns_and_skips(self, monkeypatch, capsys):
+        import urllib.error
+
+        def boom(*a, **k):
+            raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", boom)
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+        )
+        assert results == []
+        assert "could not read team" in capsys.readouterr().err
+
+    def test_team_read_hard_error_propagates(self, monkeypatch):
+        import urllib.error
+
+        def boom(*a, **k):
+            raise urllib.error.HTTPError("u", 403, "Forbidden", None, None)
+
+        monkeypatch.setattr(cs, "list_team_member_logins", boom)
+        with pytest.raises(urllib.error.HTTPError):
+            cs.collect_classroom(
+                api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+                classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+            )
+
+    def test_dedupes_team_members_case_insensitively(self, monkeypatch):
+        stub_team_members(monkeypatch, ["Alice", "alice", "BOB"])
+        seen_repos = []
+
+        def fake_all(api_url, org, repo, token):
+            seen_repos.append(repo)
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), roster=[], service_token="token",
+        )
+        # Alice/alice collapse to one repo probe; BOB to another.
+        assert seen_repos == ["cs-principles-hello-alice", "cs-principles-hello-bob"]
 
 
 class TestLateness:
@@ -1050,11 +1205,13 @@ class TestLateness:
 
         monkeypatch.setattr(cs, "all_submit_releases", fake_all)
         monkeypatch.setattr(cs, "download_result_asset", fake_download)
+        stub_team_members(monkeypatch, ["alice"])
 
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello", "due": "2026-09-15T23:59:00-04:00"}]},
             roster=[{"username": "alice", "github_id": "111"}],
             service_token="token",
@@ -1502,10 +1659,12 @@ class TestReleaseLookup:
             raise ValueError("expected JSON array")
 
         monkeypatch.setattr(cs, "all_submit_releases", malformed_listing)
+        stub_team_members(monkeypatch, ["alice"])
         results, _ = cs.collect_classroom(
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "111"}],
             service_token="token",
@@ -1567,6 +1726,8 @@ class TestCollectAllSubmissions:
             for t in tags
         ]
         monkeypatch.setattr(cs, "all_submit_releases", lambda *a, **k: releases)
+        # Collection is team-driven; these tests exercise a single student.
+        stub_team_members(monkeypatch, ["alice"])
 
     def test_row_carries_full_history_newest_first(self, monkeypatch):
         # A student who pushed three times yields one scored row (the
@@ -1589,6 +1750,7 @@ class TestCollectAllSubmissions:
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -1627,6 +1789,7 @@ class TestCollectAllSubmissions:
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -1646,6 +1809,7 @@ class TestCollectAllSubmissions:
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -1666,6 +1830,7 @@ class TestCollectAllSubmissions:
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -1688,6 +1853,7 @@ class TestCollectAllSubmissions:
             api_url="https://api.github.com",
             org="cs50",
             classroom_short="cs-principles",
+            classroom_meta={},
             assignments={"assignments": [{"slug": "hello"}]},
             roster=[{"username": "alice", "github_id": "1"}],
             service_token="token",
@@ -1859,10 +2025,13 @@ class TestMain:
         assert cs.main() == 0
         assert "::warning::" not in capsys.readouterr().err
 
-    def test_no_warning_when_roster_is_empty(self, tmp_path, monkeypatch, capsys):
-        # A classroom with no students yet (header-only roster) has
-        # nothing to collect, so the zero-submission warning must stay
-        # quiet -- this is the roster guard, not a token problem.
+    def test_warns_when_zero_collected_but_assignments_exist(self, tmp_path, monkeypatch, capsys):
+        # Team-driven collection: an empty students.csv no longer means
+        # "nothing to collect" (the CSV is only metadata now). When
+        # assignments exist and zero submissions come back, main() warns —
+        # the cause is either an empty classroom team or a token that can't
+        # read the student repos. (The empty-team case additionally emits its
+        # own specific warning inside collect_classroom, which is mocked here.)
         write_minimal_classroom(tmp_path)
         write_roster(tmp_path / "cs-principles" / "students.csv", [])
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
@@ -1871,7 +2040,7 @@ class TestMain:
         monkeypatch.setattr(cs, "collect_classroom", lambda **kwargs: ([], 0))
 
         assert cs.main() == 0
-        assert "collected 0 submissions" not in capsys.readouterr().err
+        assert "collected 0 submissions" in capsys.readouterr().err
 
     def test_no_warning_when_no_assignments_registered(self, tmp_path, monkeypatch, capsys):
         # A classroom with no assignments registered yet also has
@@ -1967,8 +2136,10 @@ class TestCollectClassroomModeFlip:
             lambda *a, **k: make_result(username="alice", assignment_type="individual"),
         )
         # Manifest now says group.
+        stub_team_members(monkeypatch, ["alice"])
         results, mode_flip = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._assignments("group"),
             roster=[{"username": "alice", "github_id": "1"}], service_token="token",
         )
@@ -1994,8 +2165,10 @@ class TestCollectClassroomModeFlip:
             raise cs.AssetMissingError("no result.json asset on release")
 
         monkeypatch.setattr(cs, "download_result_asset", _no_asset)
+        stub_team_members(monkeypatch, ["alice"])
         results, mode_flip = cs.collect_classroom(
             api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={},
             assignments=self._assignments("individual"),
             roster=[{"username": "alice", "github_id": "1"}], service_token="token",
         )

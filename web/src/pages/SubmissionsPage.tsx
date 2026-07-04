@@ -47,6 +47,8 @@ import useGetScores from "@/hooks/useGetScores"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
+import { useTeamRoster } from "@/hooks/useTeamRoster"
+import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
@@ -132,7 +134,32 @@ const SubmissionsPageContent = () => {
     dataUpdatedAt: scoresUpdatedAt,
   } = useGetScores(org, classroom)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
-  const { students } = useGetStudents(org, classroom)
+  // Team-driven username source (Section 7): the classroom GitHub team is
+  // authoritative for who is enrolled; students.csv is joined by
+  // useTeamRoster only to enrich display (name/section/email). The dashboard
+  // (non-submitters, sections, accepted, gradebook) consumes a Student[], so
+  // map the enrolled team rows into that shape. Non-submitters = team members
+  // minus credited usernames (below).
+  const { students: csvStudents } = useGetStudents(org, classroom)
+  const { rows: teamRows } = useTeamRoster(
+    org ?? "",
+    classroom ?? "",
+    csvStudents,
+  )
+  const students: Student[] = useMemo(
+    () =>
+      teamRows
+        .filter((r) => r.state === "enrolled")
+        .map((r) => ({
+          username: r.username,
+          first_name: r.first_name,
+          last_name: r.last_name,
+          email: r.email,
+          section: r.section,
+          github_id: r.github_id,
+        })),
+    [teamRows],
+  )
   // Gate Regrade all / Collect now on an empty roster: dispatching a workflow
   // with no students to act on is wasted effort. `show` is loading-aware (won't
   // flash before the roster resolves), matching AssignmentsPage's usage.

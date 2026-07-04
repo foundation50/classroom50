@@ -156,7 +156,7 @@ def main() -> int:
 
     total_changes = 0
     failed_classrooms: list[str] = []
-    for classroom_short, _classroom_meta, assignments, roster in classroom_dirs:
+    for classroom_short, classroom_meta, assignments, roster in classroom_dirs:
         scores_path = base_dir / classroom_short / "scores.json"
         try:
             scores = load_scores(scores_path)
@@ -175,6 +175,7 @@ def main() -> int:
                 api_url=api_url,
                 org=org,
                 classroom_short=classroom_short,
+                classroom_meta=classroom_meta,
                 assignments=assignments,
                 roster=roster,
                 service_token=service_token,
@@ -201,26 +202,27 @@ def main() -> int:
         # A service token that can't read the student repos returns
         # 404 for every repo (GitHub hides repo existence), which is
         # indistinguishable from "not submitted" -- so collect_classroom
-        # reports the whole roster as unsubmitted and the run still exits
+        # reports the whole team as unsubmitted and the run still exits
         # cleanly (the 401/403 hard-fail guard never trips). When a
-        # non-empty roster x non-empty assignment set yields zero readable
-        # submissions, that almost always means the token lacks access,
-        # not that the entire class submitted nothing. Warn -- but don't
-        # fail: an early-term run legitimately collects zero.
+        # non-empty assignment set yields zero readable submissions, that
+        # often means the classroom team has no members yet OR the token
+        # lacks repo access. Warn -- but don't fail: an early-term run
+        # legitimately collects zero. (A team that is empty/unreadable also
+        # emits its own specific warning inside collect_classroom.)
         #
         # Suppress this when collect_classroom already attributed the empty
         # result to a mode flip (releases present but all rejected by
         # validation): that has its own loud, specific warning above, and
         # blaming the token here would misdirect the teacher.
         assignment_count = len(valid_assignment_slugs(assignments))
-        if assignment_count and roster and not updates and not mode_flip_assignments:
+        if assignment_count and not updates and not mode_flip_assignments:
             emit_warning(
                 f"{classroom_short}: collected 0 submissions across "
-                f"{len(roster)} student(s) x {assignment_count} assignment(s). "
-                f"If you expected submissions, the CLASSROOM50_SERVICE_TOKEN may "
-                f"lack read access to the student repos (a fine-grained PAT "
-                f"returns 404 for repos outside its scope, which is "
-                f'indistinguishable from "not submitted"). Re-scope it to all '
+                f"{assignment_count} assignment(s). If you expected submissions, "
+                f"either the classroom team has no members yet, or the "
+                f"CLASSROOM50_SERVICE_TOKEN lacks read access to the student repos "
+                f"(a fine-grained PAT returns 404 for repos outside its scope, which "
+                f'is indistinguishable from "not submitted"). Re-scope it to all '
                 f"org repos: gh teacher rotate-service-token {org}"
             )
 
@@ -257,9 +259,15 @@ def iter_classrooms(
     base_dir: pathlib.Path, classroom_filter: str
 ) -> Iterable[tuple[str, dict[str, Any], dict[str, Any], list[dict[str, str]]]]:
     """Yield (short_name, classroom_meta, assignments, roster) per
-    classroom. Non-v1 schemas and missing students.csv both skip
-    with a workflow warning (preserves forward-compat without
-    crashing the run).
+    classroom. Non-v1 schemas skip with a workflow warning (preserves
+    forward-compat without crashing the run).
+
+    Collection is TEAM-driven: the classroom GitHub team is the source of
+    truth for who is enrolled. students.csv is optional display metadata —
+    a missing/partial CSV no longer skips the classroom (the team member
+    list drives the (student, assignment) pairs). The parsed `roster` here
+    is CSV metadata only (possibly empty); the team enumeration happens in
+    collect_classroom (which has the API url/org/token).
     """
     if not base_dir.is_dir():
         return
@@ -289,17 +297,18 @@ def iter_classrooms(
                 f"{assignments.get('schema')!r}, want {ASSIGNMENTS_SCHEMA_V1!r}; skipping"
             )
             continue
-        if not roster_path.is_file():
-            emit_warning(
-                f"{entry.name}: students.csv missing — collect is roster-driven, "
-                f"so the classroom has no expected (student, assignment) pairs to poll; skipping"
-            )
-            continue
-        try:
-            roster = read_students_csv(roster_path)
-        except RosterFileError as exc:
-            emit_warning(f"{entry.name}: {exc}; skipping")
-            continue
+        # students.csv is optional display metadata now. Read it when present
+        # (a malformed file warns but doesn't skip — the team still drives
+        # collection); absent -> empty metadata.
+        roster: list[dict[str, str]] = []
+        if roster_path.is_file():
+            try:
+                roster = read_students_csv(roster_path)
+            except RosterFileError as exc:
+                emit_warning(
+                    f"{entry.name}: students.csv unreadable ({exc}); "
+                    f"continuing with team-driven collection and no CSV metadata"
+                )
         yield entry.name, classroom_meta, assignments, roster
 
 
@@ -401,6 +410,7 @@ def collect_classroom(
     api_url: str,
     org: str,
     classroom_short: str,
+    classroom_meta: dict[str, Any],
     assignments: dict[str, Any],
     roster: list[dict[str, str]],
     service_token: str,
@@ -420,10 +430,54 @@ def collect_classroom(
     # suppress its "rotate token" heuristic, which would otherwise misread a
     # mode-flip-induced empty result as a token-access problem.
     mode_flip_assignments = 0
-    # Roster usernames (lowercased) used to gate group attribution; depends
-    # only on the roster, so compute once outside the per-assignment loop.
-    roster_logins = {(s.get("username") or "").strip().lower() for s in roster}
-    roster_logins.discard("")
+
+    # Team-driven username source: the classroom GitHub team is authoritative
+    # for who is enrolled. students.csv is only optional display metadata, so
+    # the (student, assignment) pairs come from the team member list, NOT the
+    # CSV. A 404 (team missing) or empty team yields no pairs (warn + return),
+    # replacing the old "students.csv missing" skip. A hard auth/network error
+    # propagates so main() aborts the whole run loudly.
+    team_slug = resolve_team_slug(classroom_meta, classroom_short)
+    try:
+        team_logins = list_team_member_logins(api_url, org, team_slug, service_token)
+    except urllib.error.HTTPError as exc:
+        if is_hard_http_error(exc):
+            raise
+        emit_warning(
+            f"{classroom_short}: could not read team {team_slug!r} members: "
+            f"HTTP {exc.code} ({exc.reason or 'no reason'}); skipping collection for "
+            f"this classroom. Ensure CLASSROOM50_SERVICE_TOKEN can read org members "
+            f"(org-level read:org / members) — rotate it with "
+            f"`gh teacher rotate-service-token {org}`."
+        )
+        return results, mode_flip_assignments
+    except (json.JSONDecodeError, ValueError) as exc:
+        emit_warning(
+            f"{classroom_short}: team {team_slug!r} member listing malformed "
+            f"({exc}); skipping collection for this classroom."
+        )
+        return results, mode_flip_assignments
+
+    if not team_logins:
+        emit_warning(
+            f"{classroom_short}: team {team_slug!r} has no members — no "
+            f"(student, assignment) pairs to poll; skipping."
+        )
+        return results, mode_flip_assignments
+
+    # Deduplicate case-insensitively, preserving first-seen order/casing.
+    seen_logins: set[str] = set()
+    team_usernames: list[str] = []
+    for login in team_logins:
+        key = login.strip().lower()
+        if not key or key in seen_logins:
+            continue
+        seen_logins.add(key)
+        team_usernames.append(login.strip())
+
+    # Group attribution credits a collaborator only if they are on the team
+    # (owner always credited) — same trust model as before, team-sourced set.
+    roster_logins = set(seen_logins)
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
@@ -444,8 +498,7 @@ def collect_classroom(
         # Repos under THIS assignment whose only submissions were rejected by
         # validation (mode-flip symptom); reported once per assignment below.
         mode_flip_repos: list[str] = []
-        for student in roster:
-            username = student["username"]
+        for username in team_usernames:
             repo_name = assignment_repo_name(classroom_short, slug, username)
 
             try:
@@ -572,10 +625,10 @@ def collect_classroom(
                     # otherwise be silent. Surface it so the teacher can check.
                     emit_warning(
                         f"{org}/{repo_name}: group submission credited to the owner "
-                        f"{username!r} only — no other roster member is a collaborator "
+                        f"{username!r} only — no other team member is a collaborator "
                         f"on the repo. If this is a team submission, ensure each teammate "
-                        f"is on {classroom_short}/students.csv AND a collaborator on the "
-                        f"repo (added via `gh student invite`)."
+                        f"is on the {classroom_short} classroom team AND a collaborator on "
+                        f"the repo (added via `gh student invite`)."
                     )
 
             # Build the gradebook entry: identity/keying at the top, the full
@@ -599,7 +652,7 @@ def collect_classroom(
             results.append(entry_row)
             submitted += 1
 
-        print(f"{classroom_short}/{slug}: {submitted}/{len(roster)} submitted")
+        print(f"{classroom_short}/{slug}: {submitted}/{len(team_usernames)} submitted")
 
         if mode_flip_repos:
             mode_flip_assignments += 1
@@ -629,6 +682,21 @@ def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
     `assignmentRepoName` in cli/gh-student/accept.go; changing the
     shape here without updating Go silently breaks the collect loop."""
     return f"{classroom.lower()}-{assignment.lower()}-{username.lower()}"
+
+
+def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:
+    """The classroom's GitHub team slug: the persisted classroom.json
+    `team.slug` when present (authoritative — GitHub may re-slug on a name
+    collision, e.g. `classroom50-cs-1`), else the derived
+    `classroom50-<short>`. Mirrors the web app's resolveClassroomTeam and
+    Go's ResolveClassroomTeam so all three consumers target the same team."""
+    team = classroom_meta.get("team")
+    if isinstance(team, dict):
+        slug = team.get("slug")
+        if isinstance(slug, str) and slug.strip():
+            return slug.strip()
+    return f"classroom50-{classroom_short}"
+
 
 
 # Due-date / lateness ---------------------------------------------------------
@@ -1216,6 +1284,60 @@ def list_repo_collaborator_logins(
         )
     raise ValueError(
         f"repos/{owner}/{repo}/collaborators: too many collaborators to "
+        f"enumerate (hit the {max_pages}-page cap)"
+    )
+
+
+def list_team_member_logins(
+    api_url: str, org: str, team_slug: str, token: str
+) -> list[str]:
+    """Logins of every member of the classroom team, walking pagination.
+    This is the team-driven username source for collection: the classroom
+    GitHub team is authoritative for who is enrolled (students.csv is only
+    optional display metadata). Hits GET /orgs/{org}/teams/{slug}/members.
+
+    Pagination follows GitHub's `Link: rel="next"` header, host-pinned to
+    api_url (same defense as list_repo_collaborator_logins). Raises
+    urllib.error.HTTPError on any non-2xx (including 404 when the team
+    doesn't exist) so the caller can warn-and-skip vs. hard-fail."""
+    per_page = 100
+    max_pages = 100
+    logins: list[str] = []
+    members_url = (
+        f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
+        f"{urllib.parse.quote(team_slug, safe='')}/members"
+    )
+    url = f"{members_url}?per_page={per_page}&page=1"
+    seen_next: set[str] = set()
+    for page in range(1, max_pages + 1):
+        body, headers = _http_get_with_headers(
+            url, token, accept="application/vnd.github+json"
+        )
+        batch = json.loads(body.decode("utf-8"))
+        if not isinstance(batch, list):
+            raise ValueError(
+                f"GET {url}: expected JSON array, got {type(batch).__name__}"
+            )
+        for m in batch:
+            if not isinstance(m, dict):
+                continue
+            login = m.get("login")
+            if isinstance(login, str) and login:
+                logins.append(login)
+        link_header = headers.get("Link") if headers else None
+        next_url = _next_page_link(link_header)
+        if next_url:
+            next_url = _assert_same_host(next_url, api_url)
+            if next_url in seen_next:
+                return logins
+            seen_next.add(next_url)
+            url = next_url
+            continue
+        if link_header or len(batch) < per_page:
+            return logins
+        url = f"{members_url}?per_page={per_page}&page={page + 1}"
+    raise ValueError(
+        f"orgs/{org}/teams/{team_slug}/members: too many members to "
         f"enumerate (hit the {max_pages}-page cap)"
     )
 
