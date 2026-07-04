@@ -46,7 +46,7 @@ The agent should then:
 
 ### Auditing coverage in our own code
 
-[`verify_locale.py`](./verify_locale.py) checks a *pack* against `en.json`.
+[`verify_locale.py`](./verify_locale.py) checks a _pack_ against `en.json`.
 The complementary direction — checking that **our source code and `en.json`
 agree** — is [`audit_i18n.py`](./audit_i18n.py). Run it to sweep the whole web
 app for coverage problems:
@@ -62,7 +62,7 @@ It reports three things:
   the raw key; always a bug). Fails the run.
 - **DEAD keys** — keys in `en.json` no code references, directly or via a bare
   string constant (`labelKey`/`titleKey`/`what`/`why`/…) or a dynamic
-  `` t(`prefix.${x}`) `` prefix. These waste translator effort — every pack
+  ``t(`prefix.${x}`)`` prefix. These waste translator effort — every pack
   translates a string that never renders. Warning; fails only under `--strict`.
 - **HARDCODED strings** — user-facing literals that bypass i18n entirely
   (prose in `aria-label`/`alt`/`title`/`placeholder`, or `setError`/`toast`
