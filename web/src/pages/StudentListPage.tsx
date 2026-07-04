@@ -35,7 +35,15 @@ const StudentListContent = ({
   // Count enrolled from the team roster (the same source the Enrolled section
   // in EnrolledStudents uses), so header and section agree. Enrollment is
   // team membership, not the CSV.
-  const { counts } = useTeamRoster(org, classroom, students)
+  const {
+    counts,
+    isLoading: rosterLoading,
+    isError: rosterError,
+  } = useTeamRoster(org, classroom, students)
+  // Suppress the count while the enrolled source of truth is loading or errored
+  // (counts.enrolled reads 0 in both cases), so the header can't assert
+  // "0 enrolled" next to the error/retry banner EnrolledStudents shows.
+  const countReady = !rosterLoading && !rosterError
   const enrolledCount = counts.enrolled
   const className =
     classData?.name || classData?.short_name || t("students.untitledClass")
@@ -44,7 +52,9 @@ const StudentListContent = ({
     <>
       <h1 className="text-lg pt-8 pb-2 font-bold">{t("nav.students")}</h1>
       <h3 className="pb-10">
-        {t("students.enrolledIn", { count: enrolledCount, className })}
+        {countReady
+          ? t("students.enrolledIn", { count: enrolledCount, className })
+          : t("students.enrolledInLoading", { className })}
       </h3>
       <div className="grid grid-cols-12 gap-2">
         <div className="col-span-5 px-4">

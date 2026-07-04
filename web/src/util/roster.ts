@@ -51,3 +51,26 @@ export type EmptyRosterDecision = {
   hasRosterRows: boolean
   isLoading: boolean
 }
+
+// Pure decision for the empty-roster warning, kept React-free (no hooks) so the
+// branches are unit-testable in isolation. Enrollment is team membership, so
+// `enrolledCount` is the team-member enrolled count.
+//
+// A team-roster READ ERROR folds into loading on purpose: never assert an empty
+// classroom on a transient/permission failure — the view shows an error+retry
+// instead, and the banner self-heals on recovery. The alternative (treating an
+// error as "settled") would false-warn a populated classroom during a blip.
+export function resolveEmptyRosterWarning(input: {
+  studentsLoading: boolean
+  isLoading: boolean
+  isError: boolean
+  enrolledCount: number
+  hasRosterRows: boolean
+}): EmptyRosterDecision {
+  const loading = input.studentsLoading || input.isLoading || input.isError
+  return {
+    show: !loading && input.enrolledCount === 0,
+    hasRosterRows: input.hasRosterRows,
+    isLoading: loading,
+  }
+}

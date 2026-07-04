@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { removeFromRoster, splitName, studentKey, toStudent } from "./roster"
+import {
+  removeFromRoster,
+  resolveEmptyRosterWarning,
+  splitName,
+  studentKey,
+  toStudent,
+} from "./roster"
 import type { Student } from "@/types/classroom"
 
 const student = (overrides: Partial<Student> = {}): Student => ({
@@ -130,5 +136,58 @@ describe("removeFromRoster", () => {
     const dup2 = student({ github_id: "", username: "", email: "shared@x.io" })
     const keep = student({ github_id: "9", username: "c" })
     expect(removeFromRoster([dup1, dup2, keep], "shared@x.io")).toEqual([keep])
+  })
+})
+
+describe("resolveEmptyRosterWarning", () => {
+  const base = {
+    studentsLoading: false,
+    isLoading: false,
+    isError: false,
+    enrolledCount: 0,
+    hasRosterRows: false,
+  }
+
+  it("shows the warning once settled with zero enrolled team members", () => {
+    expect(resolveEmptyRosterWarning({ ...base })).toEqual({
+      show: true,
+      hasRosterRows: false,
+      isLoading: false,
+    })
+  })
+
+  it("hides the warning when at least one team member is enrolled", () => {
+    expect(
+      resolveEmptyRosterWarning({ ...base, enrolledCount: 3 }),
+    ).toMatchObject({ show: false, isLoading: false })
+  })
+
+  it("suppresses the warning while the roster is still loading", () => {
+    expect(resolveEmptyRosterWarning({ ...base, isLoading: true })).toEqual({
+      show: false,
+      hasRosterRows: false,
+      isLoading: true,
+    })
+    expect(
+      resolveEmptyRosterWarning({ ...base, studentsLoading: true }),
+    ).toMatchObject({ show: false, isLoading: true })
+  })
+
+  it("treats a team-roster read error as loading (never asserts empty on a failure)", () => {
+    // A transient/permission team-members read failure must NOT surface the
+    // "nobody can accept assignments" banner — the view shows error+retry, and
+    // the banner self-heals on recovery.
+    expect(resolveEmptyRosterWarning({ ...base, isError: true })).toEqual({
+      show: false,
+      hasRosterRows: false,
+      isLoading: true,
+    })
+  })
+
+  it("passes hasRosterRows through unchanged (rows exist even when enrolled is 0)", () => {
+    // e.g. zero CSV rows but >0 pending email-only invites -> hasRosterRows true.
+    expect(
+      resolveEmptyRosterWarning({ ...base, hasRosterRows: true }),
+    ).toMatchObject({ show: true, hasRosterRows: true })
   })
 })

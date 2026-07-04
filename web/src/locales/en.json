@@ -168,6 +168,7 @@
     "untitledClass": "Untitled class",
     "enrolledIn_one": "{{count}} student enrolled in {{className}}",
     "enrolledIn_other": "{{count}} students enrolled in {{className}}",
+    "enrolledInLoading": "Enrolled in {{className}}",
     "editStudentAria": "Edit {{label}}",
     "editStudentTitle": "Edit student",
     "unenrollStudentAria": "Unenroll {{label}}",

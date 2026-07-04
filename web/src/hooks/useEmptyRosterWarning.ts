@@ -1,5 +1,6 @@
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { resolveEmptyRosterWarning } from "@/util/roster"
 import type { EmptyRosterDecision } from "@/util/roster"
 
 // Whether to warn a teacher that no student can yet accept an assignment.
@@ -26,14 +27,15 @@ const useEmptyRosterWarning = (
     students,
   )
 
-  // Gate on load so the banner never flashes. Treat a roster read error as
-  // "still loading" (don't assert an empty classroom on a transient failure).
-  const loading = studentsLoading || isLoading || isError
-  return {
-    show: !loading && counts.enrolled === 0,
+  // Decision lives in a pure, unit-tested fn so the branches (esp. the
+  // error-as-loading fail-safe) can't drift silently.
+  return resolveEmptyRosterWarning({
+    studentsLoading,
+    isLoading,
+    isError,
+    enrolledCount: counts.enrolled,
     hasRosterRows: students.length > 0 || counts.pending > 0,
-    isLoading: loading,
-  }
+  })
 }
 
 export default useEmptyRosterWarning
