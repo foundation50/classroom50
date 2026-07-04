@@ -270,8 +270,9 @@ const UnenrollStudentButton = ({
   )
 }
 
-// Native GitHub org-invite link, behind an expandable toggle (the in-app
-// onboarding link is the primary path). Same org-wide URL for everyone.
+// Native GitHub org-invite link. This is how most students join: they accept
+// the org invite directly on GitHub. Behind an expandable toggle; same org-wide
+// URL for everyone.
 const InviteLink = ({
   org,
   expanded,
@@ -339,9 +340,10 @@ const InviteLink = ({
   )
 }
 
-// Classroom-wide onboarding link. Students open it after accepting the org
-// invite; it auto-accepts + verifies membership (no self-report form). Same URL
-// for everyone, so no per-student token.
+// Classroom-wide /onboard link. A secondary/courtesy path (most students join
+// by accepting the GitHub org invite directly): opening it accepts any pending
+// org invite and verifies membership. Same URL for everyone, so no per-student
+// token.
 const OnboardingLink = ({
   org,
   classroom,

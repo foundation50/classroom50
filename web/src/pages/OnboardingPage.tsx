@@ -19,6 +19,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useAcceptAndVerifyMembership } from "@/hooks/useAcceptAndVerifyMembership"
 import { isMembershipReadError } from "@/util/membershipReadError"
+import { deriveOnboardingState } from "@/util/onboardingState"
 import { EnterDiv } from "@/lib/motionComponents"
 
 const OnboardNavbar = () => {
@@ -216,18 +217,13 @@ const OnboardingPage = () => {
   // Precedence: a read error (or accept failure) takes priority over everything
   // else so a stale "active" can't mask a failure; then active; then loading
   // (initial read OR accept/verify in flight); then notInvited (no record).
-  let state: "loading" | "notInvited" | "active" | "error"
-  if (membershipReadError || accept.isError) {
-    state = "error"
-  } else if (active) {
-    state = "active"
-  } else if (loadingMembership || hasMembership) {
-    // A pending record with no verified-active yet means the accept/verify is
-    // (about to be) in flight — keep the student on the loading screen.
-    state = "loading"
-  } else {
-    state = "notInvited"
-  }
+  const state = deriveOnboardingState({
+    loadingMembership,
+    membershipReadError,
+    hasMembership,
+    acceptError: accept.isError,
+    active,
+  })
 
   // A read error can't be recovered by re-running accept (the read failed before
   // any pending record was seen), so refetch the membership query in that case;

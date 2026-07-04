@@ -4,8 +4,8 @@ import type { GitHubOrgMembership } from "@/hooks/github/types"
 
 // Accept a pending org invitation for the authenticated user. Returns whether
 // the PATCH succeeded so callers can distinguish "now active" from a transient
-// failure (a swallowed failure previously stranded the onboarding round-trip on
-// a redirect that never fired). Still best-effort: never throws.
+// failure (a swallowed failure previously stranded the accept/verify round-trip
+// on a redirect that never fired). Still best-effort: never throws.
 export async function acceptPendingOrgInvite(
   client: GitHubClient,
   org: string,
