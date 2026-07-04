@@ -62,13 +62,11 @@ describe("bulkAddToClassroom", () => {
       .mockImplementation((_c, id: number) =>
         Promise.resolve({ login: `user${id}` }),
       )
-    bulkEnrollMock
-      .mockReset()
-      .mockResolvedValue({
-        addedStudents: [],
-        skippedStudents: [],
-        teamResults: [],
-      })
+    bulkEnrollMock.mockReset().mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+      teamResults: [],
+    })
 
     await bulkAddToClassroom(client, {
       org: "acme",
@@ -88,13 +86,11 @@ describe("bulkAddToClassroom", () => {
 
   it("skips non-members (never invites) and reports them", async () => {
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice" })
-    bulkEnrollMock
-      .mockReset()
-      .mockResolvedValue({
-        addedStudents: [],
-        skippedStudents: [],
-        teamResults: [],
-      })
+    bulkEnrollMock.mockReset().mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+      teamResults: [],
+    })
 
     const res = await bulkAddToClassroom(client, {
       org: "acme",
@@ -138,13 +134,11 @@ describe("bulkAddToClassroom", () => {
 
   it("matches a member by login when the row github_id is stale", async () => {
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice-new" })
-    bulkEnrollMock
-      .mockReset()
-      .mockResolvedValue({
-        addedStudents: [],
-        skippedStudents: [],
-        teamResults: [],
-      })
+    bulkEnrollMock.mockReset().mockResolvedValue({
+      addedStudents: [],
+      skippedStudents: [],
+      teamResults: [],
+    })
 
     await bulkAddToClassroom(client, {
       org: "acme",

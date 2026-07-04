@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest"
-import { buildTeamRoster, countByState, rowToStudent, teamMembersMissingFromCsv } from "./teamRoster"
+import {
+  buildTeamRoster,
+  countByState,
+  rowToStudent,
+  teamMembersMissingFromCsv,
+} from "./teamRoster"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
