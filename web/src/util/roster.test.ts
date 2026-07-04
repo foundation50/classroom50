@@ -15,7 +15,6 @@ const student = (overrides: Partial<Student> = {}): Student => ({
   email: "octocat@example.com",
   section: "",
   github_id: "583231",
-  enrollment_status: "invited",
   ...overrides,
 })
 
@@ -57,64 +56,56 @@ describe("splitName", () => {
 })
 
 describe("toStudent", () => {
-  it("passes through valid enrollment_status / enrollment_method", () => {
+  it("passes through the 6 identity/metadata columns", () => {
     const row = {
       username: "x",
-      first_name: "",
-      last_name: "",
+      first_name: "First",
+      last_name: "Last",
       email: "x@y.io",
-      section: "",
+      section: "A",
       github_id: "9",
-      enrollment_status: "enrolled",
-      enrollment_method: "github",
-      email_hash: "",
-      invite_token: "",
-      invited_at: "",
-      enrolled_at: "",
     }
     const s = toStudent(row)
-    expect(s.enrollment_status).toBe("enrolled")
-    expect(s.enrollment_method).toBe("github")
+    expect(s).toEqual(row)
   })
 
-  it("coerces an off-list enrollment_status/method to empty string", () => {
-    const s = toStudent({
-      username: "x",
-      enrollment_status: "bogus",
-      enrollment_method: "carrier-pigeon",
-    } as unknown as Record<string, string>)
-    expect(s.enrollment_status).toBe("")
-    expect(s.enrollment_method).toBe("")
-    // Missing columns default to "".
+  it("defaults missing columns to empty string", () => {
+    const s = toStudent({ username: "x" } as Record<string, string>)
     expect(s.email).toBe("")
+    expect(s.section).toBe("")
     expect(s.username).toBe("x")
   })
 
-  it('coerces the removed legacy "onboarded" status to empty string', () => {
-    // "onboarded" was dropped from EnrollmentStatus; a legacy CSV row carrying
-    // it must not masquerade as a valid status.
+  it("drops unknown legacy columns (e.g. pruned onboarding columns)", () => {
     const s = toStudent({
       username: "x",
-      enrollment_status: "onboarded",
+      enrollment_status: "enrolled",
+      email_hash: "abc",
+      invite_token: "tok",
     } as unknown as Record<string, string>)
-    expect(s.enrollment_status).toBe("")
+    expect(s).toEqual({
+      username: "x",
+      first_name: "",
+      last_name: "",
+      email: "",
+      section: "",
+      github_id: "",
+    })
+    expect("enrollment_status" in s).toBe(false)
+    expect("email_hash" in s).toBe(false)
   })
 
   it("trims every field via the canonical normalizer (one defaulting rule)", () => {
-    // toStudent now delegates defaulting + trimming to normalizeStudentRow, so
-    // padded CSV cells are trimmed (the old toStudent skipped this).
     const s = toStudent({
       username: "  octocat  ",
       first_name: " Mona ",
       email: " octocat@x.io ",
       github_id: " 42 ",
-      enrollment_status: " enrolled ",
     } as unknown as Record<string, string>)
     expect(s.username).toBe("octocat")
     expect(s.first_name).toBe("Mona")
     expect(s.email).toBe("octocat@x.io")
     expect(s.github_id).toBe("42")
-    expect(s.enrollment_status).toBe("enrolled")
   })
 })
 

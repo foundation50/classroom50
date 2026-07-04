@@ -11,7 +11,6 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { isValidEmail } from "@/util/onboarding"
 import { studentKey } from "@/util/roster"
-import { isEnrolledRow } from "@/util/students"
 import type { Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/api/mutations/students"
 
@@ -51,13 +50,10 @@ const EditStudent = ({
   const [error, setError] = useState<string | null>(null)
 
   const displayHandle = student.username || student.email
-  const isEnrolled = isEnrolledRow(student)
-  // Identity (github username/id and email) is bound by membership and must not
-  // be overridden by the teacher before enrollment is confirmed. An email-only
-  // row (no username, no github_id) is keyed by its email, so even when
-  // "enrolled" the email can't be changed here without re-keying the row. Both
-  // cases lock the email field (the mutation also enforces this).
-  const emailLocked = !isEnrolled || (!student.username && !student.github_id)
+  // An email-only row (no username, no github_id) is keyed by its email, so it
+  // can't be changed here without re-keying the row. A github-identified row's
+  // email is just metadata and is freely editable.
+  const emailLocked = !student.username && !student.github_id
 
   const defaults = useCallback(
     (): EditStudentFormValues => ({
@@ -219,18 +215,9 @@ const EditStudent = ({
 
             <form.Field name="email">
               {(field) => {
-                const emailChangedWhileEnrolled =
-                  isEnrolled &&
-                  field.state.value.trim().toLowerCase() !==
-                    (student.email ?? "").trim().toLowerCase()
-                const emailHelp =
-                  emailLocked && !isEnrolled
-                    ? t("students.emailHelpNotEnrolled")
-                    : emailLocked
-                      ? t("students.emailHelpNoIdentity")
-                      : emailChangedWhileEnrolled
-                        ? t("students.emailHelpEnrolledChange")
-                        : null
+                const emailHelp = emailLocked
+                  ? t("students.emailHelpNoIdentity")
+                  : null
                 return (
                   <div>
                     <div className="flex items-center">

@@ -6,15 +6,6 @@ export { isSameGitHubUser, parseGitHubId }
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
 
-// Single source of truth for "is this row enrolled?" — the teacher has
-// confirmed the student's GitHub identity. Only an explicit "enrolled" counts;
-// "invited" and legacy ("") rows are NOT enrolled. The edit modal's email lock,
-// the inviteStatus classifier, and the updateStudent server guard all key off
-// this so they can't drift (a divergent definition would let the server accept
-// an email change the UI locked, or vice versa).
-export const isEnrolledRow = (row: { enrollment_status?: string }): boolean =>
-  row.enrollment_status === "enrolled"
-
 // Find a roster student by username, case-insensitively — GitHub logins are
 // case-insensitive and scores.json logins can differ in case from the CSV, so
 // an exact `===` would drop the name/section for a real student.

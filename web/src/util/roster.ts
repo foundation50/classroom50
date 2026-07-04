@@ -1,8 +1,4 @@
-import type {
-  EnrollmentMethod,
-  EnrollmentStatus,
-  Student,
-} from "@/types/classroom"
+import type { Student } from "@/types/classroom"
 import { normalizeStudentRow, splitName } from "@/api/mutations/students"
 import { studentKey } from "@/util/identity"
 
@@ -11,30 +7,12 @@ import { studentKey } from "@/util/identity"
 // alongside the CSV write path; studentKey in @/util/identity).
 export { splitName, studentKey }
 
-const ENROLLMENT_STATUSES: readonly EnrollmentStatus[] = [
-  "invited",
-  "enrolled",
-  "",
-]
-const ENROLLMENT_METHODS: readonly EnrollmentMethod[] = ["github", "email", ""]
-
 // Narrow a raw CSV row into a typed Student. Defaulting + trimming of every
-// column is delegated to the canonical normalizeStudentRow (one column list,
-// shared with the write path); toStudent only narrows enrollment_status/method
-// to their string-literal unions, coercing an unknown/off-list value to "".
+// column is delegated to the canonical normalizeStudentRow (one shared column
+// list with the write path). The CSV is now just the 6 identity/metadata
+// columns, so this is a thin pass-through.
 export function toStudent(row: Record<string, string>): Student {
-  const normalized = normalizeStudentRow(row)
-  const status = ENROLLMENT_STATUSES.includes(
-    normalized.enrollment_status as EnrollmentStatus,
-  )
-    ? (normalized.enrollment_status as EnrollmentStatus)
-    : ""
-  const method = ENROLLMENT_METHODS.includes(
-    normalized.enrollment_method as EnrollmentMethod,
-  )
-    ? (normalized.enrollment_method as EnrollmentMethod)
-    : ""
-  return { ...normalized, enrollment_status: status, enrollment_method: method }
+  return normalizeStudentRow(row)
 }
 
 // Remove rows matching `key` for the optimistic unenroll update. Removes ALL

@@ -36,12 +36,6 @@ const csvRow = (over: Partial<Student>): Student =>
     email: "",
     section: "",
     github_id: "",
-    enrollment_status: "",
-    enrollment_method: "",
-    email_hash: "",
-    invite_token: "",
-    invited_at: "",
-    enrolled_at: "",
     ...over,
   }) as Student
 

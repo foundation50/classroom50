@@ -1409,13 +1409,14 @@ class TestReadStudentsCSV:
             cs.read_students_csv(path)
 
     def test_full_roster_header_matches_go_constant(self):
-        # The exact 12-column header must stay in lockstep with FullRosterHeader
+        # The exact 6-column header must stay in lockstep with FullRosterHeader
         # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
         # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If
-        # this fails, a column or its order drifted between the codebases.
+        # this fails, a column or its order drifted between the codebases. The
+        # onboarding tail was pruned across all three, so this is now the 6
+        # identity/metadata columns only.
         assert cs.FULL_ROSTER_HEADER == (
-            "username,first_name,last_name,email,section,github_id,"
-            "enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at"
+            "username,first_name,last_name,email,section,github_id"
         )
 
     def test_duplicate_extra_column_is_rejected(self, tmp_path):

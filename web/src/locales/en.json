@@ -261,9 +261,7 @@
     "editingPrefix": "Editing",
     "editingSuffix": ". Their GitHub identity can't be changed here.",
     "thisStudent": "this student",
-    "emailHelpNotEnrolled": "This student isn't enrolled yet. Their email is part of the identity that onboarding confirms, so it can't be changed until enrollment is confirmed.",
     "emailHelpNoIdentity": "This student has no GitHub identity yet, so their email is their only identifier and can't be changed here. Unenroll and re-add them to change it.",
-    "emailHelpEnrolledChange": "This student is already enrolled. Changing their email won't re-bind their confirmed GitHub identity; it only affects future email-based matching.",
     "firstNamePlaceholder": "First name",
     "lastNamePlaceholder": "Last name",
     "editEmailPlaceholder": "student@university.edu",
@@ -1403,13 +1401,10 @@
     },
     "modals": {
       "studentProfile": {
-        "statusEnrolled": "Enrolled",
-        "statusInvited": "Invited",
         "github": "GitHub",
         "notLinkedYet": "Not linked yet",
         "email": "Email",
         "section": "Section",
-        "enrollment": "Enrollment",
         "openRepo": "Open assignment repo"
       },
       "groupCollaborators": {

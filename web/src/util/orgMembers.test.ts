@@ -22,7 +22,6 @@ const student = (over: Partial<Student>): Student => ({
   email: "",
   section: "",
   github_id: "",
-  enrollment_status: "enrolled",
   ...over,
 })
 

@@ -86,29 +86,20 @@ RESULT_ASSET_NAME = "result.json"
 MAX_RESULT_BYTES = 10 * 1024 * 1024
 
 # Required roster columns written by `gh teacher classroom add`. Mirrors
-# RosterColumns in cli/gh-teacher/internal/configrepo/students_csv.go. The
-# header must START with these (in order); the web app (classroom50-web)
-# appends optional onboarding columns after them, which the collector reads by
-# name (it only consumes `username` + `github_id`) and otherwise ignores.
+# RosterColumns in cli/gh-teacher/internal/configrepo/students_csv.go and the web
+# app's STUDENT_CSV_FIELDS. students.csv is now just these six identity/metadata
+# columns — the email-first onboarding tail was pruned across all three codebases
+# (the classroom GitHub team is the source of truth for enrollment).
 ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id")
 
-# Optional onboarding columns the web app appends after the required six.
-# Mirrors OnboardingColumns in the Go students_csv.go and the web app's
-# STUDENT_CSV_FIELDS tail. The collector ignores them (it reads only username +
-# github_id by name); they exist here so FULL_ROSTER_HEADER can pin the lockstep
-# across all three codebases. Keep them in sync.
-ROSTER_ONBOARDING_COLUMNS = (
-    "enrollment_status",
-    "enrollment_method",
-    "email_hash",
-    "invite_token",
-    "invited_at",
-    "enrolled_at",
-)
+# The onboarding tail was pruned to nothing. Kept as an empty tuple so
+# FULL_ROSTER_HEADER stays "required + onboarding" and read-tolerance for a
+# legacy tail (see read_students_csv) is unaffected.
+ROSTER_ONBOARDING_COLUMNS: tuple[str, ...] = ()
 
-# FULL_ROSTER_HEADER is the exact on-disk students.csv header written when all
-# onboarding columns are present. Must equal FullRosterHeader in the Go
-# students_csv.go (asserted by TestFullRosterHeader) and the web app's header.
+# FULL_ROSTER_HEADER is the exact on-disk students.csv header. Must equal
+# FullRosterHeader in the Go students_csv.go (asserted by TestFullRosterHeader)
+# and the web app's STUDENT_CSV_FIELDS header — a three-way lockstep.
 FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS + ROSTER_ONBOARDING_COLUMNS)
 
 # Coarse filter for obviously-bogus usernames (empty, slashes, etc.)

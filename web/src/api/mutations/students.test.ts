@@ -11,7 +11,6 @@ import {
 } from "./students"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubClient } from "@/hooks/github/client"
-import { emailHash } from "@/util/onboarding"
 
 // An already-org-member must land `enrolled` (not stuck "awaiting"), the
 // per-row confirm must refuse a non-member, and an already-member email invite
@@ -99,8 +98,7 @@ const makeClient = (opts: {
   return { client, committed }
 }
 
-const HEADER =
-  "username,first_name,last_name,email,section,github_id,enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n"
+const HEADER = "username,first_name,last_name,email,section,github_id\n"
 
 const rowsFromCsv = (csv: string) =>
   Papa.parse(csv, { header: true, skipEmptyLines: true }).data as Record<
@@ -108,8 +106,8 @@ const rowsFromCsv = (csv: string) =>
     string
   >[]
 
-describe("enrollStudentInClassroom — already-member writes enrolled directly", () => {
-  it("writes enrollment_status 'enrolled' + enrolled_at when the user is already an active org member", async () => {
+describe("enrollStudentInClassroom — already-member writes the row directly", () => {
+  it("writes the student row when the user is already an active org member", async () => {
     const { client, committed } = makeClient({
       startingCsv: HEADER,
       membershipState: "active",
@@ -124,11 +122,10 @@ describe("enrollStudentInClassroom — already-member writes enrolled directly",
 
     const rows = rowsFromCsv(committed.content!)
     const alice = rows.find((r) => r.username === "alice")
-    expect(alice?.enrollment_status).toBe("enrolled")
-    expect(alice?.enrolled_at).toBeTruthy()
+    expect(alice?.github_id).toBe("42")
   })
 
-  it("writes 'invited' (not enrolled) when the user is not yet a member", async () => {
+  it("writes the row when the user is not yet a member", async () => {
     const { client, committed } = makeClient({
       startingCsv: HEADER,
       membershipState: null,
@@ -143,8 +140,7 @@ describe("enrollStudentInClassroom — already-member writes enrolled directly",
 
     const rows = rowsFromCsv(committed.content!)
     const bob = rows.find((r) => r.username === "bob")
-    expect(bob?.enrollment_status).toBe("invited")
-    expect(bob?.enrolled_at).toBeFalsy()
+    expect(bob?.github_id).toBe("43")
   })
 })
 
@@ -280,11 +276,10 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
     firstName = "",
     lastName = "",
   ) => {
-    const hash = await emailHash(email)
-    return `${username},${firstName},${lastName},${email},sec-other,${id},enrolled,github,${hash},,2026-01-01T00:00:00Z,2026-01-02T00:00:00Z\n`
+    return `${username},${firstName},${lastName},${email},sec-other,${id}\n`
   }
 
-  it("invite succeeds for a new email -> row stays invited", async () => {
+  it("invite succeeds for a new email -> row is written", async () => {
     const { client, rosters } = makeEmailClient({
       rosters: { cs101: HEADER },
       inviteSucceeds: true,
@@ -298,9 +293,7 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
 
     expect(result.inviteWarning).toBeUndefined()
     const rows = rowsFromCsv(rosters.cs101)
-    expect(rows.find((r) => r.email === "new@x.edu")?.enrollment_status).toBe(
-      "invited",
-    )
+    expect(rows.find((r) => r.email === "new@x.edu")).toBeTruthy()
   })
 
   it("422 + email enrolled in another classroom -> enrolled here, name backfilled, section not copied", async () => {
@@ -323,14 +316,13 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
 
     const rows = rowsFromCsv(rosters.cs101)
     const row = rows.find((r) => r.email === "dup@x.edu")
-    expect(row?.enrollment_status).toBe("enrolled")
     // Fresh login derived from id 77, not the stale stored "carol-old".
     expect(row?.username).toBe("carol")
     expect(row?.github_id).toBe("77")
     expect(row?.first_name).toBe("Carol")
     expect(row?.last_name).toBe("Diaz")
     expect(row?.section ?? "").not.toBe("sec-other")
-    expect(result.student.enrollment_status).toBe("enrolled")
+    expect(result.student.username).toBe("carol")
   })
 
   it("teacher-entered name wins over the other classroom's name on backfill", async () => {
@@ -373,19 +365,16 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
     const rows = rowsFromCsv(rosters.cs101)
     const ghost = rows.find((r) => r.email === "ghost@x.edu")
     expect(ghost).toBeTruthy()
-    expect(ghost?.enrollment_status).toBe("invited")
     expect(ghost?.username).toBe("")
   })
 })
 
 describe("updateStudent — edit a roster row's teacher-facing fields in place", () => {
   // alice: enrolled github row (identity by github_id 42); bob: email-only.
-  const aliceRow =
-    "alice,Alice,A,alice@x.edu,Period 1,42,enrolled,github,oldhash,tok-1,2026-01-01T00:00:00Z,2026-01-02T00:00:00Z\n"
-  const bobRow =
-    ",Bob,B,bob@x.edu,,,invited,email,bobhash,tok-2,2026-01-01T00:00:00Z,\n"
+  const aliceRow = "alice,Alice,A,alice@x.edu,Period 1,42\n"
+  const bobRow = ",Bob,B,bob@x.edu,,\n"
 
-  it("rewrites only first/last/section and preserves identity + lifecycle columns", async () => {
+  it("rewrites only first/last/section and preserves identity columns", async () => {
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
 
     await updateStudent(client, {
@@ -406,56 +395,9 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(alice?.first_name).toBe("Alicia")
     expect(alice?.last_name).toBe("Anderson")
     expect(alice?.section).toBe("Period 2")
-    // identity + lifecycle preserved verbatim
+    // identity preserved verbatim
     expect(alice?.username).toBe("alice")
     expect(alice?.github_id).toBe("42")
-    expect(alice?.enrollment_status).toBe("enrolled")
-    expect(alice?.enrollment_method).toBe("github")
-    expect(alice?.invite_token).toBe("tok-1")
-    expect(alice?.invited_at).toBe("2026-01-01T00:00:00Z")
-    expect(alice?.enrolled_at).toBe("2026-01-02T00:00:00Z")
-    // email unchanged -> stored hash untouched (no drift)
-    expect(alice?.email_hash).toBe("oldhash")
-  })
-
-  it("recomputes email_hash when the email changes", async () => {
-    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
-
-    await updateStudent(client, {
-      org: "acme",
-      classroom: "cs101",
-      key: "42",
-      patch: {
-        first_name: "Alice",
-        last_name: "A",
-        email: "alice.new@x.edu",
-        section: "Period 1",
-      },
-    })
-
-    const alice = rowsFromCsv(committed.content!).find(
-      (r) => r.github_id === "42",
-    )
-    expect(alice?.email).toBe("alice.new@x.edu")
-    expect(alice?.email_hash).toBe(await emailHash("alice.new@x.edu"))
-    expect(alice?.email_hash).not.toBe("oldhash")
-  })
-
-  it("clears email_hash when the email is cleared", async () => {
-    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
-
-    await updateStudent(client, {
-      org: "acme",
-      classroom: "cs101",
-      key: "42",
-      patch: { first_name: "Alice", last_name: "A", email: "", section: "" },
-    })
-
-    const alice = rowsFromCsv(committed.content!).find(
-      (r) => r.username === "alice",
-    )
-    expect(alice?.email).toBe("")
-    expect(alice?.email_hash).toBe("")
   })
 
   it("matches an email-only row by its email key", async () => {
@@ -479,7 +421,6 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(bob?.first_name).toBe("Bobby")
     expect(bob?.last_name).toBe("Brown")
     expect(bob?.section).toBe("Lab A")
-    expect(bob?.enrollment_method).toBe("email")
   })
 
   it("throws and does not write when no row matches the key", async () => {
@@ -604,32 +545,8 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(committed.content).toBeNull()
   })
 
-  it("rejects changing the email before enrollment is confirmed (invited row with a github_id)", async () => {
-    // dave: invited (not enrolled) but already has a github_id + username, so
-    // the email-only guard doesn't apply — the pre-enrollment lock must.
-    const daveRow =
-      "dave,Dave,D,dave@x.edu,,77,invited,github,davehash,tok-4,2026-01-01T00:00:00Z,\n"
-    const { client, committed } = makeClient({ startingCsv: HEADER + daveRow })
-
-    await expect(
-      updateStudent(client, {
-        org: "acme",
-        classroom: "cs101",
-        key: "77",
-        patch: {
-          first_name: "Dave",
-          last_name: "D",
-          email: "dave.new@x.edu",
-          section: "",
-        },
-      }),
-    ).rejects.toThrow(/before enrollment is confirmed/i)
-    expect(committed.content).toBeNull()
-  })
-
   it("allows editing name/section (email unchanged) on an unenrolled row", async () => {
-    const daveRow =
-      "dave,Dave,D,dave@x.edu,,77,invited,github,davehash,tok-4,2026-01-01T00:00:00Z,\n"
+    const daveRow = "dave,Dave,D,dave@x.edu,,77\n"
     const { client, committed } = makeClient({ startingCsv: HEADER + daveRow })
 
     await updateStudent(client, {
@@ -650,7 +567,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(dave?.first_name).toBe("David")
     expect(dave?.last_name).toBe("Davies")
     expect(dave?.section).toBe("Period 3")
-    expect(dave?.enrollment_status).toBe("invited")
+    expect(dave?.username).toBe("dave")
   })
 
   it("preserves the canonical column order and drops no other rows", async () => {
@@ -677,8 +594,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
 
   it("matches a username-only row by its username key (no github_id)", async () => {
     // carol: a row with a username but no github_id (key falls through to username).
-    const carolRow =
-      "carol,Carol,C,carol@x.edu,,,invited,github,carolhash,tok-3,2026-01-01T00:00:00Z,\n"
+    const carolRow = "carol,Carol,C,carol@x.edu,,\n"
     const { client, committed } = makeClient({ startingCsv: HEADER + carolRow })
 
     await updateStudent(client, {
@@ -702,7 +618,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(carol?.github_id).toBe("")
   })
 
-  it("clears email + email_hash via a whitespace-only email on a github-keyed row", async () => {
+  it("clears email via a whitespace-only email on a github-keyed row", async () => {
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
 
     await updateStudent(client, {
@@ -716,7 +632,6 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
       (r) => r.github_id === "42",
     )
     expect(alice?.email).toBe("")
-    expect(alice?.email_hash).toBe("")
   })
 
   it("keeps a github-keyed row when all editable fields are cleared", async () => {
@@ -733,8 +648,6 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     const alice = rows.find((r) => r.github_id === "42")
     expect(alice).toBeTruthy()
     expect(alice?.username).toBe("alice")
-    expect(alice?.enrollment_status).toBe("enrolled")
-    expect(alice?.invite_token).toBe("tok-1")
     expect(rows).toHaveLength(1)
   })
 
@@ -784,9 +697,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(alice?.first_name).toBe("'=HYPERLINK(1)")
     expect(alice?.last_name).toBe("'+CMD")
     expect(alice?.section).toBe("'@SUM(A1)")
-    // email is also formula-guarded (member-controlled via sync/bulk import);
-    // email_hash is derived from the normalized pre-guard email, so reconcile
-    // matching is unaffected.
+    // email is also formula-guarded (member-controlled via sync/bulk import).
     expect(alice?.email).toBe("'=1+1@x.edu")
   })
 
@@ -929,10 +840,8 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
 // org). A pending invite is still cancelled. The fake tracks org-membership
 // DELETEs and the committed roster so we can assert both.
 describe("unenrollStudent — classroom-scoped, no active-member org removal", () => {
-  const aliceEnrolled =
-    "alice,Alice,A,alice@x.edu,,42,enrolled,github,,tok-1,2026-01-01T00:00:00Z,2026-01-02T00:00:00Z\n"
-  const bobInvited =
-    "bob,Bob,B,bob@x.edu,,43,invited,email,,tok-2,2026-01-01T00:00:00Z,\n"
+  const aliceEnrolled = "alice,Alice,A,alice@x.edu,,42\n"
+  const bobInvited = "bob,Bob,B,bob@x.edu,,43\n"
 
   const makeUnenrollClient = (opts: {
     startingCsv: string
@@ -1037,7 +946,6 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "alice@x.edu",
         section: "",
         github_id: "42",
-        enrollment_status: "enrolled",
       },
     })
 
@@ -1063,7 +971,6 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "bob@x.edu",
         section: "",
         github_id: "43",
-        enrollment_status: "invited",
       },
     })
 
@@ -1090,7 +997,6 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "alice@x.edu",
         section: "",
         github_id: "42",
-        enrollment_status: "enrolled",
       },
     })
 
@@ -1118,7 +1024,6 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "bob@x.edu",
         section: "",
         github_id: "43",
-        enrollment_status: "invited",
       },
     })
 
@@ -1192,10 +1097,9 @@ describe("matchStudentToAccountWithConflictRetry — teacher manual match (email
     }
   }
 
-  const emailOnlyRow =
-    ",,,frank@x.edu,,,invited,email,,tok-6,2026-01-01T00:00:00Z,\n"
+  const emailOnlyRow = ",,,frank@x.edu,,\n"
 
-  it("writes the picked identity + enrolled for an active member", async () => {
+  it("writes the picked identity onto the email-only row for an active member", async () => {
     const { client, committed } = makeMatchClient({
       startingCsv: HEADER + emailOnlyRow,
       membershipState: "active",
@@ -1215,8 +1119,6 @@ describe("matchStudentToAccountWithConflictRetry — teacher manual match (email
     )
     expect(frank?.username).toBe("frankgh")
     expect(frank?.github_id).toBe("66")
-    expect(frank?.enrollment_status).toBe("enrolled")
-    expect(frank?.enrolled_at).toBeTruthy()
   })
 
   it("refuses to match a non-active account (guard throws, no write)", async () => {

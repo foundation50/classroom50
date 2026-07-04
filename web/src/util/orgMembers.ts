@@ -2,11 +2,10 @@ import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 import { memberIdSet, rosterClaimSet, studentKey } from "@/util/identity"
 
-// One classroom a student appears on, with that classroom's per-row status.
+// One classroom a student appears on.
 export type ClassroomAccess = {
   classroom: string
   archived: boolean
-  enrollment_status: Student["enrollment_status"]
   section: string
 }
 
@@ -80,7 +79,6 @@ export function aggregateOrgMembers(
       const access: ClassroomAccess = {
         classroom: roster.classroom,
         archived: roster.archived,
-        enrollment_status: student.enrollment_status,
         section: student.section?.trim() ?? "",
       }
       const existing = byKey.get(key)

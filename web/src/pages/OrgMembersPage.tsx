@@ -275,7 +275,6 @@ const MemberDetail = ({
                           {access.section}
                         </span>
                       ) : null}
-                      {access.enrollment_status || "—"}
                       <ChevronRight
                         aria-hidden="true"
                         className="size-4 text-base-content/30 transition-transform duration-150 group-hover/cls:translate-x-0.5 group-hover/cls:text-base-content/70"

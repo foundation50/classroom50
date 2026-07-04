@@ -545,10 +545,12 @@ func TestEncodeRoster_RoundTripsOnboardingColumns(t *testing.T) {
 	}
 }
 
-func TestEncodeRoster_OnboardingColumnOrderIsCanonical(t *testing.T) {
-	// Even when the on-disk extra columns arrive out of canonical order, the
-	// CLI re-emits them in OnboardingColumns order so the written file is
-	// stable across round-trips regardless of source ordering.
+func TestEncodeRoster_UnknownColumnsPreserveSourceOrder(t *testing.T) {
+	// OnboardingColumns was pruned to empty, so the CLI no longer imposes a
+	// canonical order on a legacy tail — it preserves whatever unknown columns
+	// an existing file carries, in their on-disk (first-seen) order, via
+	// RosterRow.Extra/ExtraOrder. This keeps a between-deploys file readable and
+	// stable without the CLI reordering columns it doesn't manage.
 	in := []byte(
 		"username,first_name,last_name,email,section,github_id," +
 			"invite_token,enrollment_status\n" +
@@ -563,9 +565,9 @@ func TestEncodeRoster_OnboardingColumnOrderIsCanonical(t *testing.T) {
 		t.Fatalf("EncodeRoster: %v", err)
 	}
 	wantHeader := "username,first_name,last_name,email,section,github_id," +
-		"enrollment_status,invite_token\n"
+		"invite_token,enrollment_status\n"
 	if !strings.HasPrefix(string(encoded), wantHeader) {
-		t.Fatalf("extra columns not re-ordered to canonical.\ngot:\n%s\nwant prefix:\n%s", encoded, wantHeader)
+		t.Fatalf("unknown columns not preserved in source order.\ngot:\n%s\nwant prefix:\n%s", encoded, wantHeader)
 	}
 }
 
@@ -660,13 +662,13 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 // shared file. If you change RosterColumns or OnboardingColumns, update the web
 // app and the Python fixture in lockstep.
 func TestFullRosterHeader(t *testing.T) {
-	const want = "username,first_name,last_name,email,section,github_id," +
-		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at"
+	const want = "username,first_name,last_name,email,section,github_id"
 	if FullRosterHeader != want {
 		t.Fatalf("FullRosterHeader = %q, want %q", FullRosterHeader, want)
 	}
-	// EncodeRoster of a row carrying every onboarding column must emit exactly
-	// this header line, proving the constant matches real encoder output.
+	// EncodeRoster of a canonical row must emit exactly this header line,
+	// proving the constant matches real encoder output. OnboardingColumns is now
+	// empty, so there is no onboarding tail to append.
 	row := RosterRow{Username: "alice", GitHubID: 1, Extra: map[string]string{}, ExtraOrder: nil}
 	for _, c := range OnboardingColumns {
 		row.Extra[c] = ""

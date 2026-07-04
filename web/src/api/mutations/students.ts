@@ -29,15 +29,10 @@ import {
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
-import { isEnrolledRow, isSameGitHubUser } from "@/util/students"
+import { isSameGitHubUser } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { prefixCommit } from "@/util/commit"
-import {
-  emailHash,
-  generateInviteToken,
-  normalizeEmail,
-  rowMatchesEmailHash,
-} from "@/util/onboarding"
+import { normalizeEmail } from "@/util/onboarding"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { type Student } from "@/types/classroom"
 
@@ -108,13 +103,6 @@ export const STUDENT_CSV_FIELDS = [
   "email",
   "section",
   "github_id",
-  // Email-first columns appended after the original 6 so old CSVs still parse.
-  "enrollment_status",
-  "enrollment_method",
-  "email_hash",
-  "invite_token",
-  "invited_at",
-  "enrolled_at",
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
@@ -130,12 +118,6 @@ export function normalizeStudentRow(
     email: String(row.email ?? "").trim(),
     section: String(row.section ?? "").trim(),
     github_id: String(row.github_id ?? "").trim(),
-    enrollment_status: String(row.enrollment_status ?? "").trim(),
-    enrollment_method: String(row.enrollment_method ?? "").trim(),
-    email_hash: String(row.email_hash ?? "").trim(),
-    invite_token: String(row.invite_token ?? "").trim(),
-    invited_at: String(row.invited_at ?? "").trim(),
-    enrolled_at: String(row.enrolled_at ?? "").trim(),
   }
 }
 
@@ -267,7 +249,6 @@ export async function addStudentToClassroom(
 
   const studentEmail = input.email?.trim() ?? githubUser.email ?? ""
 
-  const now = new Date().toISOString()
   const student: StudentCsvRow = normalizeStudentRow({
     username: githubUser.login,
     first_name: input.first_name?.trim() ?? nameParts.first_name,
@@ -275,16 +256,6 @@ export async function addStudentToClassroom(
     email: studentEmail,
     section: input.section?.trim() ?? "",
     github_id: String(githubUser.id),
-    // Already-member students are written "enrolled" directly (input.enrolled):
-    // no invite/onboarding repo exists for them, so reconcile can't confirm them.
-    enrollment_status: input.enrolled ? "enrolled" : "invited",
-    enrollment_method: "github",
-    email_hash: studentEmail ? await emailHash(studentEmail) : "",
-    // Unique invite token so a per-student secure onboarding link always exists
-    // (reconcile's strongest match key; else falls back to github_id / email).
-    invite_token: generateInviteToken(),
-    invited_at: now,
-    enrolled_at: input.enrolled ? now : "",
   })
 
   const nextStudents = [...currentStudents, student]
@@ -384,15 +355,6 @@ export async function addEmailInviteToClassroom(
     email: normalizedEmail,
     section: input.section?.trim() ?? "",
     github_id: "",
-    enrollment_status: "invited",
-    enrollment_method: "email",
-    email_hash: await emailHash(normalizedEmail),
-    // Unique invite token so a per-student secure onboarding link always exists
-    // (reconcile's strongest match key when used; else falls back to github_id
-    // then email). The token never names the repo.
-    invite_token: generateInviteToken(),
-    invited_at: new Date().toISOString(),
-    enrolled_at: "",
   })
 
   const nextStudents = [...currentStudents, student]
@@ -460,7 +422,7 @@ async function resolveStudentIdentityByEmail(
   | { status: "ambiguous" }
   | null
 > {
-  const targetHash = await emailHash(email)
+  const targetEmail = normalizeEmail(email)
 
   let dirs
   try {
@@ -487,15 +449,13 @@ async function resolveStudentIdentityByEmail(
         return [] // no roster / unreadable — skip
       }
       const rows = parseStudentsCsv(csv)
-      // Match by email on rows with a real id. The email_hash/email guard blocks
-      // rowMatchesEmailHash's keyless-true fallthrough; requiring github_id keys
-      // the result on the immutable id.
+      // Match an email-first row on its raw email (case-insensitive), restricted
+      // to rows with a real github_id so the result keys on the immutable id.
       return rows
         .filter(
           (row) =>
             Boolean(row.github_id.trim()) &&
-            (Boolean(row.email_hash) || Boolean(row.email.trim())) &&
-            rowMatchesEmailHash(row, email, targetHash),
+            normalizeEmail(row.email) === targetEmail,
         )
         .map((row) => ({
           github_id: row.github_id.trim(),
@@ -545,7 +505,6 @@ async function enrollEmailRowWithResolvedIdentity(
     const currentStudents = parseStudentsCsv(currentCsv)
 
     const emailKey = input.email.trim().toLowerCase()
-    const now = new Date().toISOString()
     const nextStudents = currentStudents.map((row) =>
       row.email.toLowerCase() === emailKey && !row.username
         ? normalizeStudentRow({
@@ -556,8 +515,6 @@ async function enrollEmailRowWithResolvedIdentity(
             // section is not synced — it's classroom-specific.
             first_name: row.first_name?.trim() || (input.first_name ?? ""),
             last_name: row.last_name?.trim() || (input.last_name ?? ""),
-            enrollment_status: "enrolled",
-            enrolled_at: now,
           })
         : row,
     )
@@ -680,7 +637,6 @@ export async function inviteStudentByEmail(
                 result.student.first_name?.trim() || resolved.first_name || "",
               last_name:
                 result.student.last_name?.trim() || resolved.last_name || "",
-              enrollment_status: "enrolled",
             },
           }
         } catch (enrollErr) {
@@ -904,17 +860,10 @@ async function matchStudentToAccount(
     )
   }
 
-  if (target.enrollment_status === "enrolled") {
-    return { alreadyEnrolled: true, student: target }
-  }
-
-  const now = new Date().toISOString()
   const matchedRow = normalizeStudentRow({
     ...target,
     username: normalizedUsername,
     github_id: input.github_id.trim(),
-    enrollment_status: "enrolled",
-    enrolled_at: now,
   })
   const nextStudents = currentStudents.map((row) =>
     isTarget(row) ? matchedRow : row,
@@ -1109,15 +1058,6 @@ export async function addStudentsToClassroom(
         email: studentEmail,
         section: "",
         github_id: String(githubUser.id),
-        // Still onboards to supply name/email; reconcile flips to "enrolled".
-        // Cache email_hash when GitHub exposes a public email.
-        enrollment_status: "invited",
-        enrollment_method: "github",
-        email_hash: studentEmail ? await emailHash(studentEmail) : "",
-        // Unique per-student invite token so a secure onboarding link always
-        // exists (reconcile's strongest match key; else github_id / email).
-        invite_token: generateInviteToken(),
-        invited_at: new Date().toISOString(),
       })
 
       existingUsernameKeys.add(student.username.toLowerCase())
@@ -1692,18 +1632,6 @@ export async function updateStudent(
     )
   }
 
-  // Before enrollment is confirmed, the email is part of the identity that
-  // onboarding/reconcile binds (email-based match key). Letting the teacher
-  // override it pre-enrollment could break that match, so refuse any email
-  // change until the row is enrolled. The UI locks the field too (shared
-  // isEnrolledRow predicate); this is the server-side backstop.
-  if (emailChanged && !isEnrolledRow(existing)) {
-    throw new Error(
-      "Can't change the email before enrollment is confirmed: it's part of " +
-        "the identity onboarding binds. Confirm enrollment first, then edit.",
-    )
-  }
-
   // Guard against editing an email into one already held by ANOTHER row
   // (case-insensitive). The target row matching its own current email is fine.
   if (nextEmail) {
@@ -1716,22 +1644,14 @@ export async function updateStudent(
     }
   }
 
-  // Recompute the cached hash only when the email changed (a cleared email
-  // clears it), so an unchanged email keeps its stored hash without drift.
-  let nextEmailHash = existing.email_hash
-  if (emailChanged) {
-    nextEmailHash = nextEmail ? await emailHash(nextEmail) : ""
-  }
-
-  // Spread the existing row so every identity/lifecycle column is preserved,
-  // then overwrite only the four editable fields.
+  // Spread the existing row so identity columns are preserved, then overwrite
+  // only the four editable fields.
   const updatedStudent = normalizeStudentRow({
     ...existing,
     first_name: patch.first_name,
     last_name: patch.last_name,
     email: nextEmail,
     section: patch.section,
-    email_hash: nextEmailHash,
   })
 
   const nextStudents = currentStudents.map((row, idx) =>

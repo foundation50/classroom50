@@ -16,22 +16,13 @@ import (
 // defends against mid-class username changes. Email may be empty.
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id"}
 
-// OnboardingColumns: optional columns the web app (classroom50-web) appends
-// for its email-first onboarding flow, in their canonical on-disk order. The
-// CLI doesn't manage them but MUST preserve them on a read/modify/write cycle
-// (see RosterRow.Extra) so a CLI roster edit never wipes a student's onboarding
-// state. CROSS-BINARY CONTRACT: classroom50-web MUST write this tail in exactly
-// this order and the CLI re-emits it so — otherwise each side reorders the tail
-// on every write, churning the shared file and racing rebases. FullRosterHeader
-// pins the result; Go and Python tests assert it so drift fails CI loudly.
-var OnboardingColumns = []string{
-	"enrollment_status",
-	"enrollment_method",
-	"email_hash",
-	"invite_token",
-	"invited_at",
-	"enrolled_at",
-}
+// OnboardingColumns: the email-first onboarding tail the web app once appended
+// (enrollment_status/method, email_hash, invite_token, invited_at, enrolled_at)
+// was PRUNED — the classroom GitHub team is the source of truth for enrollment,
+// so students.csv is now just the identity/metadata columns. Kept as an empty
+// slice so FullRosterHeader stays "RosterColumns + OnboardingColumns" and any
+// legacy tail on an existing file still round-trips via RosterRow.Extra.
+var OnboardingColumns = []string{}
 
 // FullRosterHeader is the complete on-disk students.csv header the CLI writes
 // when all onboarding columns are present: the canonical RosterColumns followed

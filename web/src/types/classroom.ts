@@ -162,22 +162,12 @@ export type AssignmentTest = {
   points: number
 }
 
-// Lifecycle for an enrolment. "invited" (invite sent, no GitHub identity bound
-// yet — incl. self-reported-but-unconfirmed), "enrolled" (identity bound and
-// confirmed). Legacy rows ("") are treated as enrolled when they have a
-// github_id, else invited.
-//
-// CLI coupling: students.csv is a data contract shared with the gh-teacher CLI
-// (separate repo). "reconciled"/"reconciled_at" were renamed to "enrolled"/
-// "enrolled_at" with intentionally NO back-compat; the CLI must move in lockstep.
-export type EnrollmentStatus = "invited" | "enrolled" | ""
-
-// How the student was added: "github" (by username, already has github_id +
-// team access) or "email" (identity resolved later via onboarding). "" on
-// legacy rows. A UI/analytics hint only; reconcile matches each self-report's
-// YAML back to a row (invite_token, then github_id, then email), not by method.
-export type EnrollmentMethod = "github" | "email" | ""
-
+// students.csv is now just the 6 identity/metadata columns — the classroom
+// GitHub team is the source of truth for enrollment, so the email-first
+// onboarding lifecycle columns (enrollment_status/method, email_hash,
+// invite_token, invited_at, enrolled_at) were pruned. The CSV is a data
+// contract shared with the gh-teacher CLI (separate repo) and the Python
+// collector; all three moved in lockstep.
 export type Student = {
   username: string
   first_name: string
@@ -185,19 +175,4 @@ export type Student = {
   email: string
   section: string
   github_id: string
-  // Email-first onboarding columns (added after the original 6). Optional so
-  // legacy CSVs stay valid; the CSV layer defaults them to "".
-  enrollment_status?: EnrollmentStatus
-  enrollment_method?: EnrollmentMethod
-  // Cached emailHash(email): a stable key reconcile uses to match a self-report
-  // back to this row by email (fallback after invite_token and github_id).
-  email_hash?: string
-  // Per-student secure-link invite token, minted by default for every row. If
-  // the student onboards via that link, it's written into the self-report YAML
-  // and is reconcile's strongest match key; it never names the onboarding repo.
-  invite_token?: string
-  invited_at?: string
-  // UTC instant reconcile bound a GitHub identity into this row
-  // (enrollment_status -> "enrolled"). Empty until then.
-  enrolled_at?: string
 }

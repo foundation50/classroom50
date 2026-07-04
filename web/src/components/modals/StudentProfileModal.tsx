@@ -42,13 +42,6 @@ export const StudentProfileModal = ({
     student.email?.[0]?.toUpperCase() ||
     "?"
 
-  const statusLabel =
-    student.enrollment_status === "enrolled"
-      ? t("components.modals.studentProfile.statusEnrolled")
-      : student.enrollment_status === "invited"
-        ? t("components.modals.studentProfile.statusInvited")
-        : "—"
-
   const rows: ProfileRow[] = [
     {
       label: t("components.modals.studentProfile.github"),
@@ -74,10 +67,6 @@ export const StudentProfileModal = ({
     {
       label: t("components.modals.studentProfile.section"),
       value: student.section?.trim() || "—",
-    },
-    {
-      label: t("components.modals.studentProfile.enrollment"),
-      value: statusLabel,
     },
   ]
 
