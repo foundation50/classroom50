@@ -17,6 +17,22 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.1.0](https://github.com/foundation50/classroom50/compare/web-v1.0.0...web-v1.1.0) (2026-07-04)
+
+
+### Features
+
+* **web:** add docs link to logged-in account menu ([#91](https://github.com/foundation50/classroom50/issues/91)) ([#94](https://github.com/foundation50/classroom50/issues/94)) ([ae967f4](https://github.com/foundation50/classroom50/commit/ae967f4cb7ecc7cf3e3ca0540c020572fbc10b60))
+* **web:** global GitHub Actions activity banner ([#98](https://github.com/foundation50/classroom50/issues/98)) ([2362f8e](https://github.com/foundation50/classroom50/commit/2362f8e7edb4a7b2ddc2dcdcff34691df6e309fd))
+* **web:** localize relative timestamps to the active language ([#100](https://github.com/foundation50/classroom50/issues/100)) ([b78a768](https://github.com/foundation50/classroom50/commit/b78a76866bd104b6ba68b0204e16b8806eafeb01))
+* **web:** silently auto-update installed language packs on startup ([#104](https://github.com/foundation50/classroom50/issues/104)) ([1f31521](https://github.com/foundation50/classroom50/commit/1f3152124f404107d2eb8813dabce4cce6d9b2cf))
+* **web:** surface skeleton drift and bump skeleton action pins ([#90](https://github.com/foundation50/classroom50/issues/90)) ([2e6314f](https://github.com/foundation50/classroom50/commit/2e6314fc85ee05ee870d276f30efc7b515050af2)), closes [#88](https://github.com/foundation50/classroom50/issues/88)
+
+
+### Bug Fixes
+
+* **web:** match ConfirmModal cancel button to its description copy ([#93](https://github.com/foundation50/classroom50/issues/93)) ([240484b](https://github.com/foundation50/classroom50/commit/240484b3229d606cfa9a4bdff274e4dda6596f92))
+
 ## [1.0.0](https://github.com/foundation50/classroom50/releases/tag/web-v1.0.0) (2026-07-03)
 
 First versioned release of the web app.
