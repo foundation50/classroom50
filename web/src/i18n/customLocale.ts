@@ -37,9 +37,22 @@ const MAX_REGISTRY_BYTES = 64 * 1024
 // JSON is accepted on input and flattened before validation.
 export type FlatBundle = Record<string, string>
 
+// Where an installed pack came from. Only "registry" packs are eligible for the
+// silent auto-refresh; a user's hand-loaded pack (file/URL) is never touched,
+// even when its code also exists in the registry. Legacy packs stored before
+// this field existed are read as "user" so they're never auto-overwritten.
+export type PackSource = "registry" | "user"
+
 export type LanguagePack = {
   code: string
   bundle: FlatBundle
+  // Origin of the pack; defaults to "user" on read for legacy stored packs.
+  source: PackSource
+  // Update markers for registry packs: the manifest version and/or the pack's
+  // content hash at install time. Used to decide whether a refresh is warranted
+  // (version/hash changed) without re-downloading, and absent for user packs.
+  version?: string
+  hash?: string
 }
 
 // BCP-47-ish tag: 2-3 letter primary subtag plus optional `-` subtags. Rejects
@@ -66,20 +79,32 @@ const flatBundleSchema = z
 const packSchema = z.object({
   code: langCodeSchema,
   bundle: flatBundleSchema,
+  // Legacy packs (stored before this field) parse as "user" via the default, so
+  // an existing pack is never mistaken for a registry pack and auto-overwritten.
+  source: z.enum(["registry", "user"]).default("user"),
+  version: z.string().max(200).optional(),
+  hash: z.string().max(200).optional(),
 })
 
 const storedPacksSchema = z.record(z.string(), packSchema)
 
 // Shape of the registry's index.json: { "languages": [{ "code": "ja" }, ...] }.
 // Unknown/invalid entries are tolerated per-item so one bad row doesn't sink
-// the whole list.
-const registryEntrySchema = z.object({ code: langCodeSchema })
+// the whole list. `version`/`hash` are optional update markers the publish
+// workflow may add; the app degrades gracefully when they're absent.
+const registryEntrySchema = z.object({
+  code: langCodeSchema,
+  version: z.string().max(200).optional(),
+  hash: z.string().max(200).optional(),
+})
 const registrySchema = z.object({
   languages: z.array(z.unknown()),
 })
 
 export type RegistryLanguage = {
   code: string
+  version?: string
+  hash?: string
 }
 
 export class LanguagePackError extends Error {
@@ -321,14 +346,27 @@ export function hydratePacks(): string[] {
 }
 
 // Install (or replace) a pack: register it and persist. Returns the code.
-export function installPack(codeInput: string, bundle: FlatBundle): string {
+// `meta` records provenance (source) and, for registry packs, the update
+// markers (version/hash) so a later startup can decide whether to refresh
+// without re-downloading. Defaults to a user-sourced pack.
+export function installPack(
+  codeInput: string,
+  bundle: FlatBundle,
+  meta?: { source?: PackSource; version?: string; hash?: string },
+): string {
   const code = normalizeLangCode(codeInput)
   if (code === BASE_LANG) {
     throw new LanguagePackError(
       `"${BASE_LANG}" is the built-in base language and can't be replaced.`,
     )
   }
-  const pack: LanguagePack = { code, bundle }
+  const pack: LanguagePack = {
+    code,
+    bundle,
+    source: meta?.source ?? "user",
+    ...(meta?.version ? { version: meta.version } : {}),
+    ...(meta?.hash ? { hash: meta.hash } : {}),
+  }
   // Re-read before writing so a concurrent install in another tab isn't
   // clobbered by a stale snapshot (lost update on read-modify-write).
   const packs = readStoredPacks()
@@ -403,6 +441,14 @@ export type PackPreview = {
   coverage: number
   keyCount: number
   sample: string[]
+  // Provenance + update markers carried from the loader to commit time, so an
+  // installed registry pack records how to detect a future update.
+  source: PackSource
+  // Manifest-provided version, when the loader had one (registry only).
+  version?: string
+  // Content hash of the bundle (always computed), plus/or a manifest-provided
+  // hash. Used as the update signal when the manifest carries no version.
+  hash: string
 }
 
 // Sample keys shown in the preview so the user sees real translated text before
@@ -415,7 +461,28 @@ const SAMPLE_KEYS = [
   "common.save",
 ] as const
 
-function buildPreview(code: string, bundle: FlatBundle): PackPreview {
+// Order-independent content hash of a flat bundle (FNV-1a over sorted
+// key=value pairs). Cheap and synchronous — used to detect whether a refetched
+// registry pack actually differs from the installed one when no manifest
+// version/hash is available.
+export function hashBundle(bundle: FlatBundle): string {
+  const serialized = Object.keys(bundle)
+    .sort()
+    .map((key) => `${key}=${bundle[key]}`)
+    .join("\u0000")
+  let h = 0x811c9dc5
+  for (let i = 0; i < serialized.length; i++) {
+    h ^= serialized.charCodeAt(i)
+    h = Math.imul(h, 0x01000193)
+  }
+  return (h >>> 0).toString(16)
+}
+
+function buildPreview(
+  code: string,
+  bundle: FlatBundle,
+  meta?: { source?: PackSource; version?: string; hash?: string },
+): PackPreview {
   const sample = SAMPLE_KEYS.map((key) => bundle[key]).filter(
     (value): value is string => typeof value === "string",
   )
@@ -425,6 +492,11 @@ function buildPreview(code: string, bundle: FlatBundle): PackPreview {
     coverage: coverage(bundle),
     keyCount: Object.keys(bundle).length,
     sample,
+    source: meta?.source ?? "user",
+    ...(meta?.version ? { version: meta.version } : {}),
+    // Prefer a manifest hash when supplied; otherwise fall back to the computed
+    // content hash so we always have an update signal.
+    hash: meta?.hash ?? hashBundle(bundle),
   }
 }
 
@@ -457,10 +529,13 @@ const FETCH_TIMEOUT_MS = 10_000
 
 // Fetch a pack from a URL into a preview. Requires http/https, bounds the
 // response size, times out, and maps every failure to a LanguagePackError. Code
-// is inferred from the URL's last path segment when omitted.
+// is inferred from the URL's last path segment when omitted. Pass
+// `requireHttps` for the unattended auto-refresh path, which (unlike the
+// user-confirmed manual install) must reject cleartext http.
 export async function prepareFromUrl(
   url: string,
   code?: string,
+  options?: { requireHttps?: boolean },
 ): Promise<PackPreview> {
   let parsed: URL
   try {
@@ -470,6 +545,9 @@ export async function prepareFromUrl(
   }
   if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
     throw new LanguagePackError("Only http(s) URLs are supported.")
+  }
+  if (options?.requireHttps && parsed.protocol !== "https:") {
+    throw new LanguagePackError("Only https URLs are supported here.")
   }
 
   const resolved = resolveCode(code, parsed.pathname)
@@ -508,9 +586,45 @@ export async function prepareFromUrl(
 
 // ---- Built-in registry ------------------------------------------------------
 
+// Short-lived memoization of the manifest fetch. Startup auto-refresh and the
+// Browse dialog both hit index.json; without this they'd issue overlapping
+// requests. Only successful results are cached (a failure must not poison later
+// calls), and an in-flight promise is shared so concurrent callers dedupe.
+const REGISTRY_CACHE_TTL_MS = 30_000
+let registryCache: { at: number; langs: RegistryLanguage[] } | null = null
+let registryInFlight: Promise<RegistryLanguage[]> | null = null
+
+// Test-only: clear the memoization so a per-test fetch mock isn't shadowed by a
+// cached result (vitest does not isolate tests within a file). Call in
+// beforeEach/afterEach of any suite that stubs fetch for the registry.
+export function resetRegistryCache(): void {
+  registryCache = null
+  registryInFlight = null
+}
+
+// Fetch the manifest and return the offered language codes, memoized. Invalid
+// entries are skipped; a fetch/parse failure throws LanguagePackError for the
+// UI to show.
+export function fetchRegistry(): Promise<RegistryLanguage[]> {
+  if (registryInFlight) return registryInFlight
+  if (registryCache && Date.now() - registryCache.at < REGISTRY_CACHE_TTL_MS) {
+    return Promise.resolve(registryCache.langs)
+  }
+  const request = fetchRegistryUncached()
+    .then((langs) => {
+      registryCache = { at: Date.now(), langs }
+      return langs
+    })
+    .finally(() => {
+      registryInFlight = null
+    })
+  registryInFlight = request
+  return request
+}
+
 // Fetch the manifest and return the offered language codes. Invalid entries are
 // skipped; a fetch/parse failure throws LanguagePackError for the UI to show.
-export async function fetchRegistry(): Promise<RegistryLanguage[]> {
+async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
   let res: Response
@@ -561,10 +675,10 @@ export async function fetchRegistry(): Promise<RegistryLanguage[]> {
   for (const entry of parsed.data.languages) {
     const one = registryEntrySchema.safeParse(entry)
     if (!one.success) continue
-    const { code } = one.data
+    const { code, version, hash } = one.data
     if (code === BASE_LANG || seen.has(code)) continue
     seen.add(code)
-    langs.push({ code })
+    langs.push({ code, version, hash })
   }
   return langs
 }
@@ -584,20 +698,165 @@ export async function availableBuiltInLangs(): Promise<RegistryLanguage[]> {
 
 // Preview a registry language by reusing the URL loader (same size/timeout/
 // validation guardrails). The code is explicit so it doesn't rely on inference.
-export async function prepareFromBuiltIn(code: string): Promise<PackPreview> {
+// Pass `requireHttps` for the silent auto-refresh path, and `entry` (the
+// manifest row) to stamp the registry source + version/hash markers onto the
+// preview so a committed pack knows how to detect future updates.
+export async function prepareFromBuiltIn(
+  code: string,
+  options?: { requireHttps?: boolean; entry?: RegistryLanguage },
+): Promise<PackPreview> {
   const resolved = normalizeLangCode(code)
-  return prepareFromUrl(packUrl(resolved), resolved)
+  const preview = await prepareFromUrl(packUrl(resolved), resolved, {
+    requireHttps: options?.requireHttps,
+  })
+  const version = options?.entry?.version
+  const manifestHash = options?.entry?.hash
+  return {
+    ...preview,
+    source: "registry",
+    ...(version ? { version } : {}),
+    // Prefer the manifest hash when present; else keep the computed content hash.
+    hash: manifestHash ?? preview.hash,
+  }
 }
 
 // Install and activate a previewed pack — the only step that mutates
-// localStorage and i18next.
+// localStorage and i18next. Pass the preview's provenance so a registry pack
+// records its source + update markers.
 export async function commitPack(
   code: string,
   bundle: FlatBundle,
+  meta?: { source?: PackSource; version?: string; hash?: string },
 ): Promise<string> {
-  const installed = installPack(code, bundle)
+  const installed = installPack(code, bundle, meta)
   await selectLang(installed)
   return installed
+}
+
+// ---- Auto-refresh + update notifications ------------------------------------
+
+// Listeners notified with the codes of packs updated by refreshInstalledPacks.
+// Bridges the non-React startup refresh to a React toast: startup runs before
+// the app mounts, so any codes updated then are buffered and flushed to the
+// first subscriber (see onPacksUpdated / subscribeToPackUpdates).
+const updateListeners = new Set<(codes: string[]) => void>()
+let pendingUpdatedCodes: string[] = []
+
+function emitPackUpdates(codes: string[]): void {
+  if (codes.length === 0) return
+  if (updateListeners.size === 0) {
+    // No subscriber yet (startup before mount) — buffer for the first one.
+    pendingUpdatedCodes = [...pendingUpdatedCodes, ...codes]
+    return
+  }
+  for (const listener of updateListeners) listener(codes)
+}
+
+// Subscribe to "packs were auto-updated" events. Immediately flushes any codes
+// buffered before the first subscriber mounted. Returns an unsubscribe fn.
+export function subscribeToPackUpdates(
+  onUpdate: (codes: string[]) => void,
+): () => void {
+  updateListeners.add(onUpdate)
+  if (pendingUpdatedCodes.length > 0) {
+    const buffered = pendingUpdatedCodes
+    pendingUpdatedCodes = []
+    onUpdate(buffered)
+  }
+  return () => {
+    updateListeners.delete(onUpdate)
+  }
+}
+
+// Whether the registry copy warrants refetching the pack. Prefer the cheap
+// marker comparison (version, else manifest/stored hash) so an unchanged pack
+// costs no download; fall back to always-fetch only when neither side has a
+// marker (older manifest + older stored pack), where the post-download
+// bundlesEqual check still prevents a needless overwrite.
+function registryPackChanged(
+  installed: LanguagePack,
+  entry: RegistryLanguage,
+): boolean {
+  if (entry.version && installed.version) {
+    return entry.version !== installed.version
+  }
+  if (entry.hash && installed.hash) {
+    return entry.hash !== installed.hash
+  }
+  return true
+}
+
+// Silent background refresh: re-fetch each installed *registry* pack whose
+// registry marker changed and overwrite it in place. Only packs with
+// source==="registry" are eligible — a user's hand-loaded pack is never
+// touched, even when its code also exists in the registry. Every failure
+// (registry unreachable, a single pack fetch, https rejection, hash mismatch)
+// is swallowed so a flaky network never wipes a working pack. Returns the codes
+// actually updated (also emitted to subscribers for a toast). Never changes the
+// active language; installPack -> addResourceBundle live-updates the rendered
+// strings of the active pack.
+export async function refreshInstalledPacks(): Promise<string[]> {
+  const packs = readStoredPacks()
+  const registryPacks = Object.values(packs).filter(
+    (p) => p.source === "registry",
+  )
+  if (registryPacks.length === 0) return []
+
+  let offered: RegistryLanguage[]
+  try {
+    offered = await fetchRegistry()
+  } catch {
+    // Offline / registry unreachable — keep everything as-is.
+    return []
+  }
+  const byCode = new Map(offered.map((l) => [l.code, l]))
+
+  const updated: string[] = []
+  for (const pack of registryPacks) {
+    const entry = byCode.get(pack.code)
+    if (!entry) continue // no longer offered — leave the installed copy.
+    if (!registryPackChanged(pack, entry)) continue // cheap skip, no fetch.
+    try {
+      const preview = await prepareFromBuiltIn(pack.code, {
+        requireHttps: true,
+        entry,
+      })
+      // If a manifest hash was provided, prepareFromBuiltIn already verified
+      // by adopting it; guard the no-marker path against a no-op overwrite.
+      if (bundlesEqual(preview.bundle, pack.bundle)) {
+        // Content identical despite a changed/absent marker — refresh the
+        // stored marker quietly so we stop refetching, but don't toast.
+        installPack(pack.code, pack.bundle, {
+          source: "registry",
+          version: preview.version,
+          hash: preview.hash,
+        })
+        continue
+      }
+      installPack(pack.code, preview.bundle, {
+        source: "registry",
+        version: preview.version,
+        hash: preview.hash,
+      })
+      updated.push(pack.code)
+    } catch {
+      // A single pack failing (fetch, https, validation) must not abort the
+      // rest or wipe the existing pack.
+    }
+  }
+
+  emitPackUpdates(updated)
+  return updated
+}
+
+// Order-independent equality of two flat bundles: same keys, same values.
+function bundlesEqual(a: FlatBundle, b: FlatBundle): boolean {
+  const aKeys = Object.keys(a)
+  if (aKeys.length !== Object.keys(b).length) return false
+  for (const key of aKeys) {
+    if (a[key] !== b[key]) return false
+  }
+  return true
 }
 
 // ---- Deep-link (?lang=) -----------------------------------------------------
@@ -671,9 +930,14 @@ export async function applyLangFromQuery(): Promise<void> {
 
     // Only honor codes the registry offers, then fetch + install + activate.
     const offered = await fetchRegistry()
-    if (!offered.some((l) => l.code === code)) return
-    const preview = await prepareFromBuiltIn(code)
-    await commitPack(preview.code, preview.bundle)
+    const entry = offered.find((l) => l.code === code)
+    if (!entry) return
+    const preview = await prepareFromBuiltIn(code, { entry })
+    await commitPack(preview.code, preview.bundle, {
+      source: preview.source,
+      version: preview.version,
+      hash: preview.hash,
+    })
   } catch {
     // Invalid code, unavailable pack, or network failure — stay put.
   } finally {

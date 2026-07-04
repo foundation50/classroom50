@@ -342,7 +342,9 @@
     "errorCodeUndetectable": "Couldn't detect the language code from the file — enter it below and try again.",
     "errorUrlRequired": "Enter a URL to fetch the pack from.",
     "errorRegistry": "Couldn't load the available languages. Try again.",
-    "errorGeneric": "Couldn't install the language pack."
+    "errorGeneric": "Couldn't install the language pack.",
+    "updatedToast_one": "Updated the {{list}} language pack to the latest translations.",
+    "updatedToast_other": "Updated {{count}} language packs ({{list}}) to the latest translations."
   },
   "validation": {
     "githubOrEmailRequired": "Enter a GitHub username or an email.",

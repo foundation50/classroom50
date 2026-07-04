@@ -1,4 +1,6 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import i18n from "i18next"
+import { initReactI18next } from "react-i18next"
 
 import {
   LANG_QUERY_PARAM,
@@ -11,13 +13,17 @@ import {
   coverage,
   fetchRegistry,
   flattenBundle,
+  hashBundle,
   inferLangCode,
   missingKeys,
   normalizeLangCode,
   parseBundle,
   prepareFromBuiltIn,
   prepareFromUrl,
+  refreshInstalledPacks,
+  resetRegistryCache,
   shareUrlForLang,
+  subscribeToPackUpdates,
 } from "./customLocale"
 
 // The security-relevant guarantees of the sideload layer live in these pure
@@ -125,6 +131,18 @@ describe("loadFromUrl scheme gate", () => {
     )
   })
 
+  it("rejects http when requireHttps is set (silent auto-refresh path)", async () => {
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(
+      prepareFromUrl("http://example.com/de.json", "de", {
+        requireHttps: true,
+      }),
+    ).rejects.toThrow(/https/)
+    expect(fetchMock).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
   it("throws UndetectableCodeError when no code is given or inferable", async () => {
     await expect(
       prepareFromUrl("https://example.com/download"),
@@ -209,6 +227,7 @@ describe("loadFromUrl response handling", () => {
 describe("fetchRegistry", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetRegistryCache()
   })
 
   it("returns valid codes, dropping base, dupes, and malformed entries", async () => {
@@ -303,6 +322,7 @@ describe("fetchRegistry", () => {
 describe("availableBuiltInLangs", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetRegistryCache()
   })
 
   it("returns every language the manifest lists (no per-pack probe)", async () => {
@@ -341,6 +361,7 @@ describe("availableBuiltInLangs", () => {
 describe("prepareFromBuiltIn", () => {
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetRegistryCache()
   })
 
   it("fetches <base>/<code>.json and previews it with the given code", async () => {
@@ -411,6 +432,7 @@ describe("applyLangFromQuery", () => {
 
   afterEach(() => {
     vi.unstubAllGlobals()
+    resetRegistryCache()
     if (realWindow === undefined) {
       // @ts-expect-error - restore the node env's missing window
       delete globalThis.window
@@ -556,5 +578,329 @@ describe("coverage / missingKeys", () => {
     expect(missingKeys(partial).length).toBeGreaterThan(0)
     // A key the base doesn't have doesn't inflate coverage.
     expect(missingKeys(partial)).not.toContain("notFound.title")
+  })
+})
+
+describe("fetchRegistry memoization", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetRegistryCache()
+  })
+
+  it("dedupes two near-simultaneous calls into one fetch", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    const [a, b] = await Promise.all([fetchRegistry(), fetchRegistry()])
+    expect(a).toEqual(b)
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+  })
+
+  it("serves a cached result within the TTL, then refetches after reset", async () => {
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        }),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+    await fetchRegistry()
+    await fetchRegistry()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    resetRegistryCache()
+    await fetchRegistry()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+
+  it("does not cache a failure (a later call retries)", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response("nope", { status: 500 }))
+      .mockResolvedValue(
+        new Response(JSON.stringify({ languages: [{ code: "ja" }] }), {
+          status: 200,
+        }),
+      )
+    vi.stubGlobal("fetch", fetchMock)
+    await expect(fetchRegistry()).rejects.toThrow(LanguagePackError)
+    const langs = await fetchRegistry()
+    expect(langs.map((l) => l.code)).toEqual(["ja"])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe("hashBundle", () => {
+  it("is order-independent and value-sensitive", () => {
+    expect(hashBundle({ a: "1", b: "2" })).toBe(hashBundle({ b: "2", a: "1" }))
+    expect(hashBundle({ a: "1" })).not.toBe(hashBundle({ a: "2" }))
+  })
+})
+
+describe("refreshInstalledPacks", () => {
+  const realWindow = globalThis.window
+
+  beforeEach(async () => {
+    // installPack registers bundles via i18next.addResourceBundle, which throws
+    // pre-init. Production initializes i18next via ./i18n; the unit tests here
+    // import only ./customLocale, so init a minimal instance first.
+    if (!i18n.isInitialized) {
+      await i18n.use(initReactI18next).init({
+        lng: "en",
+        fallbackLng: "en",
+        resources: { en: { translation: {} } },
+        interpolation: { escapeValue: false },
+      })
+    }
+    // Drain any codes buffered by a prior test (the update buffer is module
+    // state that survives between tests).
+    subscribeToPackUpdates(() => {})()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    resetRegistryCache()
+    if (realWindow === undefined) {
+      // @ts-expect-error - restore the node env's missing window
+      delete globalThis.window
+    } else {
+      globalThis.window = realWindow
+    }
+  })
+
+  // In-memory localStorage-backed window so installPack/readStoredPacks work.
+  // Returns the live store so tests can read back what was persisted.
+  const stubWindow = (storageSeed?: Record<string, string>) => {
+    const store = new Map<string, string>(Object.entries(storageSeed ?? {}))
+    const localStorage = {
+      getItem: (key: string) => store.get(key) ?? null,
+      setItem: (key: string, value: string) => void store.set(key, value),
+      removeItem: (key: string) => void store.delete(key),
+    }
+    vi.stubGlobal("window", {
+      localStorage: localStorage as unknown as Storage,
+    })
+    return store
+  }
+
+  const readPacks = (store: Map<string, string>) =>
+    JSON.parse(store.get(PACKS_STORAGE_KEY) ?? "{}") as Record<
+      string,
+      { code: string; bundle: Record<string, string>; source?: string }
+    >
+
+  const httpsRegistry = "https://fifty.foundation/classroom50-language-packs"
+
+  it("overwrites a registry pack when the manifest version is newer", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "alt" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(
+          JSON.stringify({ languages: [{ code: "de", version: "2" }] }),
+          { status: 200 },
+        )
+      }
+      return new Response(
+        JSON.stringify({ nav: { roleStudent: "Studentin" } }),
+        {
+          status: 200,
+        },
+      )
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual(["de"])
+    const packs = readPacks(store)
+    expect(packs.de.bundle["nav.roleStudent"]).toBe("Studentin")
+    // The pack URL must be the https registry origin (silent path is https-only).
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(
+      urls.some((u) => u.startsWith(httpsRegistry) && /\/de\.json$/.test(u)),
+    ).toBe(true)
+  })
+
+  it("leaves a user-sourced pack untouched even when its code is in the registry", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "user",
+          bundle: { "nav.roleStudent": "mine" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({ languages: [{ code: "de", version: "9" }] }),
+          { status: 200 },
+        ),
+    )
+    vi.stubGlobal("fetch", fetchMock)
+
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual([])
+    // No registry-eligible packs, so the manifest is never even fetched.
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(readPacks(store).de.bundle["nav.roleStudent"]).toBe("mine")
+  })
+
+  it("treats a legacy pack with no source as user (not refreshed)", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: { code: "de", bundle: { "nav.roleStudent": "legacy" } },
+      }),
+    })
+    const fetchMock = vi.fn()
+    vi.stubGlobal("fetch", fetchMock)
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual([])
+    expect(fetchMock).not.toHaveBeenCalled()
+    expect(readPacks(store).de.bundle["nav.roleStudent"]).toBe("legacy")
+  })
+
+  it("keeps the pack when the registry is unreachable", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "keep" },
+        },
+      }),
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError("offline")
+      }),
+    )
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual([])
+    expect(readPacks(store).de.bundle["nav.roleStudent"]).toBe("keep")
+  })
+
+  it("does not abort the batch when a single pack fetch fails", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "de-old" },
+        },
+        fr: {
+          code: "fr",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "fr-old" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(
+          JSON.stringify({
+            languages: [
+              { code: "de", version: "2" },
+              { code: "fr", version: "2" },
+            ],
+          }),
+          { status: 200 },
+        )
+      }
+      if (/\/de\.json$/.test(u)) {
+        return new Response("boom", { status: 500 })
+      }
+      return new Response(JSON.stringify({ nav: { roleStudent: "fr-new" } }), {
+        status: 200,
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual(["fr"])
+    const packs = readPacks(store)
+    expect(packs.de.bundle["nav.roleStudent"]).toBe("de-old") // untouched
+    expect(packs.fr.bundle["nav.roleStudent"]).toBe("fr-new") // updated
+  })
+
+  it("skips the fetch entirely when the version is unchanged", async () => {
+    stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "3",
+          bundle: { "nav.roleStudent": "same" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(
+          JSON.stringify({ languages: [{ code: "de", version: "3" }] }),
+          { status: 200 },
+        )
+      }
+      throw new Error("should not fetch the pack when version is unchanged")
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const updated = await refreshInstalledPacks()
+    expect(updated).toEqual([])
+    const urls = fetchMock.mock.calls.map((c) => String(c[0]))
+    expect(urls.some((u) => /\/de\.json$/.test(u))).toBe(false)
+  })
+
+  it("emits updated codes to subscribers", async () => {
+    stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "old" },
+        },
+      }),
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: RequestInfo | URL) => {
+        const u = String(input)
+        if (/index\.json$/.test(u)) {
+          return new Response(
+            JSON.stringify({ languages: [{ code: "de", version: "2" }] }),
+            { status: 200 },
+          )
+        }
+        return new Response(JSON.stringify({ nav: { roleStudent: "neu" } }), {
+          status: 200,
+        })
+      }),
+    )
+
+    const seen: string[][] = []
+    const unsubscribe = subscribeToPackUpdates((codes) => seen.push(codes))
+    await refreshInstalledPacks()
+    unsubscribe()
+    expect(seen).toEqual([["de"]])
   })
 })

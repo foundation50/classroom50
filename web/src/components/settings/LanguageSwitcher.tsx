@@ -179,7 +179,11 @@ export const LanguageSwitcher = ({
     if (!preview) return
     setBusy(true)
     try {
-      await commitPack(preview.code, preview.bundle)
+      await commitPack(preview.code, preview.bundle, {
+        source: preview.source,
+        version: preview.version,
+        hash: preview.hash,
+      })
       setPreview(null)
       setCode("")
       setUrl("")

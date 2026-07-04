@@ -9,6 +9,7 @@ import {
   applyLangFromQuery,
   getStoredLang,
   hydratePacks,
+  refreshInstalledPacks,
 } from "./customLocale"
 
 // Single i18next instance. English is bundled as the base; custom packs are
@@ -45,6 +46,11 @@ void (async () => {
     await i18n.changeLanguage(stored)
   }
   await applyLangFromQuery()
+  // Silently pull any newer registry packs. Runs last so a just-installed
+  // deep-link pack is considered and the active pack's strings live-update.
+  // Swallows its own failures; updated codes surface as a toast via a
+  // subscriber mounted under NotificationProvider (LanguagePackUpdateToaster).
+  await refreshInstalledPacks()
 })()
 
 export default i18n

@@ -11,6 +11,7 @@ import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProvi
 import { NotificationProvider } from "./context/notifications/NotificationProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
+import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 
@@ -34,6 +35,7 @@ createRoot(document.getElementById("root")!).render(
               <NotificationProvider>
                 <App />
                 <ActionsBanner />
+                <LanguagePackUpdateToaster />
               </NotificationProvider>
             </ActionActivityProvider>
             {import.meta.env.DEV && (
