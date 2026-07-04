@@ -1,8 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { removeMemberFromOrg } from "./removeMemberFromOrg"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import { onboardingRepoName } from "@/util/onboarding"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // unenrollStudent and removeOrgMembership are stubbed: this helper's contract is
@@ -11,16 +9,12 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 const unenrollMock = vi.fn()
 const removeOrgMembershipMock = vi.fn()
 const getAuthenticatedUserMock = vi.fn()
-const deleteRepoMock = vi.fn()
-const archiveRepoMock = vi.fn()
 
 vi.mock("@/api/mutations/students", () => ({
   unenrollStudent: (...args: unknown[]) => unenrollMock(...args),
 }))
 vi.mock("@/hooks/github/mutations", () => ({
   removeOrgMembership: (...args: unknown[]) => removeOrgMembershipMock(...args),
-  deleteRepo: (...args: unknown[]) => deleteRepoMock(...args),
-  archiveRepo: (...args: unknown[]) => archiveRepoMock(...args),
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))
@@ -53,13 +47,6 @@ const access = (classroom: string) => ({
 describe("removeMemberFromOrg", () => {
   // Default: the signed-in viewer is someone else, so the self-guard never trips.
   const otherViewer = { id: 999, login: "teacher" }
-
-  // Onboarding-repo cleanup succeeds silently by default; the dedicated tests
-  // below override these.
-  beforeEach(() => {
-    deleteRepoMock.mockReset().mockResolvedValue(undefined)
-    archiveRepoMock.mockReset().mockResolvedValue(undefined)
-  })
 
   it("unenrolls every roster first, then removes org membership last", async () => {
     const calls: string[] = []
@@ -188,92 +175,9 @@ describe("removeMemberFromOrg", () => {
     expect(removeOrgMembershipMock).not.toHaveBeenCalled()
   })
 
-  it("deletes the leftover onboarding-<github-id> repo on removal", async () => {
+  it("reports a non-fatal warning when the org-membership removal fails", async () => {
     getAuthenticatedUserMock.mockReset().mockResolvedValue(otherViewer)
     unenrollMock.mockReset()
-    removeOrgMembershipMock.mockReset().mockResolvedValue(undefined)
-
-    const result = await removeMemberFromOrg(client, {
-      org: "acme",
-      row: row({ github_id: "42", classrooms: [] }),
-    })
-
-    expect(deleteRepoMock).toHaveBeenCalledWith(client, {
-      owner: "acme",
-      repo: onboardingRepoName("42"),
-    })
-    expect(result.removed).toBe(true)
-    expect(result.warnings).toHaveLength(0)
-  })
-
-  it("archives the onboarding repo when delete is forbidden (no delete_repo scope)", async () => {
-    getAuthenticatedUserMock.mockReset().mockResolvedValue(otherViewer)
-    unenrollMock.mockReset()
-    removeOrgMembershipMock.mockReset().mockResolvedValue(undefined)
-    deleteRepoMock.mockReset().mockRejectedValue(
-      new GitHubAPIError({
-        status: 403,
-        url: "/repos/acme/onboarding-42",
-        message: "forbidden",
-        body: null,
-        rateLimit: {
-          limit: null,
-          remaining: null,
-          used: null,
-          reset: null,
-          resource: null,
-          retryAfter: null,
-        },
-      }),
-    )
-
-    const result = await removeMemberFromOrg(client, {
-      org: "acme",
-      row: row({ github_id: "42", classrooms: [] }),
-    })
-
-    expect(archiveRepoMock).toHaveBeenCalledWith(client, {
-      owner: "acme",
-      repo: onboardingRepoName("42"),
-    })
-    // Falling back to archive is not a user-facing failure.
-    expect(result.warnings).toHaveLength(0)
-  })
-
-  it("warns (non-fatal) when the onboarding repo delete fails unexpectedly", async () => {
-    getAuthenticatedUserMock.mockReset().mockResolvedValue(otherViewer)
-    unenrollMock.mockReset()
-    removeOrgMembershipMock.mockReset().mockResolvedValue(undefined)
-    deleteRepoMock.mockReset().mockRejectedValue(new Error("network"))
-
-    const result = await removeMemberFromOrg(client, {
-      org: "acme",
-      row: row({ github_id: "42", classrooms: [] }),
-    })
-
-    expect(result.removed).toBe(true)
-    expect(result.warnings).toHaveLength(1)
-    expect(result.warnings[0]).toMatch(/onboarding-42/)
-  })
-
-  it("skips onboarding-repo cleanup when there is no github_id", async () => {
-    getAuthenticatedUserMock.mockReset().mockResolvedValue(otherViewer)
-    unenrollMock.mockReset()
-    removeOrgMembershipMock.mockReset().mockResolvedValue(undefined)
-
-    await removeMemberFromOrg(client, {
-      org: "acme",
-      row: row({ github_id: "", username: "alice", classrooms: [] }),
-    })
-
-    expect(deleteRepoMock).not.toHaveBeenCalled()
-  })
-
-  it("does NOT delete the onboarding repo when the org-membership removal failed", async () => {
-    getAuthenticatedUserMock.mockReset().mockResolvedValue(otherViewer)
-    unenrollMock.mockReset()
-    // Org DELETE fails -> the student is still a member; their self-report must
-    // survive (premature reaping on a retryable failure would be data loss).
     removeOrgMembershipMock
       .mockReset()
       .mockRejectedValue(new Error("503 service unavailable"))
@@ -284,9 +188,6 @@ describe("removeMemberFromOrg", () => {
     })
 
     expect(result.removed).toBe(false)
-    expect(deleteRepoMock).not.toHaveBeenCalled()
-    expect(archiveRepoMock).not.toHaveBeenCalled()
-    // The removal-failure warning is present; no repo-cleanup warning.
     expect(result.warnings.some((w) => /organization failed/i.test(w))).toBe(
       true,
     )

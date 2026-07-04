@@ -25,17 +25,8 @@ import {
 } from "./mutations"
 import { decodeBase64Utf8 } from "@/util/github"
 import { classroomPagesSegment } from "@/util/secret"
-import {
-  emailHash,
-  ONBOARDING_REPO_PREFIX,
-  ONBOARDING_YAML_PATH,
-  onboardingRepoName,
-} from "@/util/onboarding"
-import { parseOnboardingYaml, type OnboardingYaml } from "@/util/yaml"
-import { mapWithConcurrency } from "@/util/concurrency"
 import type { GetAssignmentsFileInput } from "@/api/queries/assignments"
 import type { OrgRunner, OrgRunnersResult } from "@/util/runners"
-import type { OnboardingSelfReport } from "@/util/inviteStatus"
 
 export const githubKeys = {
   all: ["github"] as const,
@@ -600,33 +591,6 @@ export async function getRepoFile(
   return decodeBase64Utf8(file.content)
 }
 
-// GitHub user ids on the latest commit touching `path`; reconcile checks these
-// against the claimed github_id. FOOTGUN: `author.id` is resolved from the
-// unverified commit author email, so it's forgeable — this is NOT a hard
-// anti-forgery guarantee. Accepted residual risk (small write-then-demote
-// window; students aren't expected to pre-create repos).
-export async function getFileCommitAuthorIds(
-  client: GitHubClient,
-  org: string,
-  repo: string,
-  path: string,
-): Promise<number[]> {
-  const commits = await client.request<
-    {
-      author: { id: number } | null
-      committer: { id: number } | null
-    }[]
-  >(`/repos/${org}/${repo}/commits?path=${encodeURIComponent(path)}&per_page=1`)
-
-  const latest = commits[0]
-  if (!latest) return []
-
-  const ids: number[] = []
-  if (latest.author?.id != null) ids.push(latest.author.id)
-  if (latest.committer?.id != null) ids.push(latest.committer.id)
-  return ids
-}
-
 export function listOrgMembers(client: GitHubClient, org: string, page = 1) {
   return client.request<GitHubUser[]>(
     `/orgs/${org}/members?per_page=100&page=${page}`,
@@ -682,21 +646,6 @@ export async function paginateAll<T>(
   }
 
   return all
-}
-
-// All onboarding repos in the org (names starting with the shared prefix).
-// Listed by prefix — not fetched by a derived name — because reconcile
-// enumerates every student's report in one org listing and matches by payload
-// content, never by the name (the name attests nothing).
-export async function listOnboardingRepos(
-  client: GitHubClient,
-  org: string,
-): Promise<GitHubRepo[]> {
-  const repos = await paginateAll<GitHubRepo>(
-    client,
-    (page) => `/orgs/${org}/repos?per_page=100&page=${page}&type=all`,
-  )
-  return repos.filter((repo) => repo.name.startsWith(ONBOARDING_REPO_PREFIX))
 }
 
 // Owner-only (403 for non-owners). Expired invites drop off this list and
@@ -982,143 +931,6 @@ export async function getClassroom50OrgSummary(
 // territory) while still beating a strictly-sequential loop.
 export const ONBOARDING_READ_CONCURRENCY = 8
 
-// One onboarding repo owned by a github-id. `payload` is null when the repo
-// exists but its YAML hasn't committed yet (half-finished) or couldn't parse.
-type OwnOnboardingRepo = { repo: string; payload: OnboardingYaml | null }
-
-// The signed-in student's own onboarding repos (by github-id prefix), each
-// with its self-report YAML when present. Throws on a transient list failure so
-// callers distinguish "no repos" from "couldn't determine" — a silent
-// degrade-to-empty would let submitOnboarding mint a duplicate repo.
-async function listOwnOnboardingRepos(
-  client: GitHubClient,
-  org: string,
-  githubId: number | string,
-): Promise<OwnOnboardingRepo[]> {
-  // The name is now fully derivable (`onboarding-<id>`), so match it exactly —
-  // a prefix match would also catch a different id whose digits start the same
-  // (e.g. `onboarding-42` is a prefix of `onboarding-420`).
-  const name = onboardingRepoName(githubId)
-  const repos = (await listOnboardingRepos(client, org)).filter(
-    (repo) => repo.name === name && !repo.archived,
-  )
-  const out: OwnOnboardingRepo[] = await mapWithConcurrency(
-    repos,
-    ONBOARDING_READ_CONCURRENCY,
-    async (repo) => {
-      try {
-        const payload = parseOnboardingYaml(
-          await getRepoFile(client, org, repo.name, ONBOARDING_YAML_PATH),
-        )
-        return { repo: repo.name, payload }
-      } catch {
-        // Repo exists but YAML not committed yet.
-        return { repo: repo.name, payload: null }
-      }
-    },
-  )
-  return out
-}
-
-// The student's onboarding repo for THIS classroom:
-//  - "matched":    committed YAML names this classroom -> reuse it.
-//  - "incomplete": exactly one same-prefix repo has no committed YAML yet and
-//                  no matched repo exists -> reuse the half-finished attempt so
-//                  a re-submit doesn't strand it. (Ambiguous when several lack
-//                  a YAML -> treat as "none" and mint fresh.)
-//  - "none":       no reusable repo.
-// Throws on a transient list/read failure (propagated from listOwnOnboardingRepos).
-export type OwnOnboardingResolution =
-  | { status: "matched"; repo: string }
-  | { status: "incomplete"; repo: string }
-  | { status: "none" }
-
-export async function resolveOwnOnboardingRepo(
-  client: GitHubClient,
-  org: string,
-  githubId: number | string,
-  classroom: string,
-): Promise<OwnOnboardingResolution> {
-  const repos = await listOwnOnboardingRepos(client, org, githubId)
-
-  const matched = repos.find((r) => r.payload?.classroom === classroom)
-  if (matched) return { status: "matched", repo: matched.repo }
-
-  // Repos that exist but have no committed YAML yet. Reuse only when unambiguous
-  // (exactly one), so a student mid-onboarding in another classroom can't have
-  // that classroom's lagging repo repurposed here.
-  const incomplete = repos.filter((r) => r.payload === null)
-  if (incomplete.length === 1) {
-    return { status: "incomplete", repo: incomplete[0].repo }
-  }
-  return { status: "none" }
-}
-
-// Whether the student has an onboarding repo for THIS classroom (matched YAML,
-// or a single in-progress repo whose YAML is still landing). The OnboardingPage
-// status probe uses this to show "pending confirmation" instead of re-showing
-// the form on reload.
-export async function hasActiveOnboardingForClassroom(
-  client: GitHubClient,
-  org: string,
-  githubId: number | string,
-  classroom: string,
-): Promise<boolean> {
-  const resolution = await resolveOwnOnboardingRepo(
-    client,
-    org,
-    githubId,
-    classroom,
-  )
-  return resolution.status !== "none"
-}
-
-// All onboarding self-reports in the org for a classroom: the GitHub-attested
-// github_id and claimed email from each onboarding repo's YAML. The teacher
-// roster uses this to tell a student who has onboarded (repo exists) apart from
-// one who hasn't. Best-effort per repo: an unreadable/missing payload is skipped.
-export async function listOnboardingSelfReports(
-  client: GitHubClient,
-  org: string,
-  classroom: string,
-): Promise<OnboardingSelfReport[]> {
-  const repos = (await listOnboardingRepos(client, org)).filter(
-    (repo) => !repo.archived,
-  )
-  // Bounded-parallel per-repo YAML reads: a busy classroom can have dozens of
-  // outstanding onboarding repos, and a sequential loop made the owner roster
-  // wait on N serial round trips.
-  const payloads = await mapWithConcurrency(
-    repos,
-    ONBOARDING_READ_CONCURRENCY,
-    async (repo) => {
-      try {
-        return parseOnboardingYaml(
-          await getRepoFile(client, org, repo.name, ONBOARDING_YAML_PATH),
-        )
-      } catch {
-        // Unreadable/missing payload -> not a confirmed self-report; skip.
-        return null
-      }
-    },
-  )
-  const reports: OnboardingSelfReport[] = []
-  for (const payload of payloads) {
-    if (payload && payload.classroom === classroom) {
-      reports.push({
-        github_id: String(payload.github_id),
-        email: payload.email,
-        email_hash: await emailHash(payload.email),
-        first_name: payload.first_name,
-        last_name: payload.last_name,
-        github_username: payload.github_username,
-        invite_token: payload.invite_token,
-      })
-    }
-  }
-  return reports
-}
-
 export async function getRepo(
   client: GitHubClient,
   owner: string,
@@ -1131,28 +943,6 @@ export async function getRepo(
       return null
     }
     throw err
-  }
-}
-
-// Whether `username` is a member of the org team `teamSlug`. GET .../memberships
-// 404s when they're not a member (or the team/slug is unknown) -> false. Any
-// other error also degrades to false so a transient read can't misroute the
-// onboarding repo-naming decision toward the team path.
-export async function isTeamMember(
-  client: GitHubClient,
-  org: string,
-  teamSlug: string,
-  username: string,
-): Promise<boolean> {
-  try {
-    const membership = await client.request<{ state?: string }>(
-      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
-        teamSlug,
-      )}/memberships/${encodeURIComponent(username)}`,
-    )
-    return membership.state === "active"
-  } catch {
-    return false
   }
 }
 

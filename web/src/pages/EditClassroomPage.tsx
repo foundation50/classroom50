@@ -136,7 +136,6 @@ const EditClassroomContent = ({
                       slug: classroom,
                       org,
                       term: values.term,
-                      onboarding_cleanup: values.onboarding_cleanup,
                     }),
                   )
                 }

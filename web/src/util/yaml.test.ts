@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  parseClassroom50Yaml,
-  parseOnboardingYaml,
-  stringifyOnboardingYaml,
-} from "./yaml"
+import { parseClassroom50Yaml } from "./yaml"
 import { createClassroom50Yaml } from "@/api/mutations/assignments"
 
 describe("parseClassroom50Yaml back-compat", () => {
@@ -109,41 +105,5 @@ describe("createClassroom50Yaml -> parseClassroom50Yaml round trip", () => {
 
     const cfg = parseClassroom50Yaml(yaml)
     expect(cfg.secret).toBeUndefined()
-  })
-})
-
-describe("onboarding yaml round-trip", () => {
-  it("stringifies and parses the self-report payload", () => {
-    const yaml = stringifyOnboardingYaml({
-      email: "student@uni.edu",
-      first_name: "Ada",
-      last_name: "Lovelace",
-      github_username: "octocat",
-      github_id: 583231,
-      classroom: "cs50",
-      created_at: "2026-06-26T00:00:00.000Z",
-    })
-
-    const parsed = parseOnboardingYaml(yaml)
-    expect(parsed.email).toBe("student@uni.edu")
-    expect(parsed.first_name).toBe("Ada")
-    expect(parsed.last_name).toBe("Lovelace")
-    expect(parsed.github_username).toBe("octocat")
-    expect(parsed.github_id).toBe(583231)
-    expect(parsed.classroom).toBe("cs50")
-  })
-
-  it("defaults name fields to empty for back-compat payloads", () => {
-    const parsed = parseOnboardingYaml(
-      `email: "a@b.com"\ngithub_username: "x"\ngithub_id: 1\nclassroom: "cs50"\n`,
-    )
-    expect(parsed.first_name).toBe("")
-    expect(parsed.last_name).toBe("")
-  })
-
-  it("rejects a payload missing required fields", () => {
-    expect(() =>
-      parseOnboardingYaml(`email: "a@b.com"\ngithub_username: "x"\n`),
-    ).toThrow()
   })
 })

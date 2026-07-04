@@ -89,19 +89,11 @@ describe("buildClassroomUpdate", () => {
   it("omits every optional field when none are provided (identity merge)", () => {
     expect(buildClassroomUpdate(base, {})).toEqual(base)
   })
-
-  it("writes onboarding_cleanup only when provided", () => {
-    expect(buildClassroomUpdate(base, { onboarding_cleanup: "keep" })).toEqual({
-      ...base,
-      onboarding_cleanup: "keep",
-    })
-    expect("onboarding_cleanup" in buildClassroomUpdate(base, {})).toBe(false)
-  })
 })
 
 // editClassroom enforces "archived classrooms are read-only" on the write path
 // — the authoritative guard, not just UI gating. The gate must (a) refuse a
-// settings edit (name/term/onboarding_cleanup) on an archived classroom even
+// settings edit (name/term) on an archived classroom even
 // when a crafted payload bundles `active: false` to re-assert the archived
 // state, and (b) let a genuine unarchive (active: true) through. editClassroom
 // does I/O via getBranchRef/getCommit/getClassroomJson/createBlob/

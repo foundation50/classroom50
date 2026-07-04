@@ -260,7 +260,6 @@
     "editingPrefix": "Editing",
     "editingSuffix": ". Their GitHub identity can't be changed here.",
     "thisStudent": "this student",
-    "emailHelpReportedLocked": "This is the email the student reported when onboarding. It's part of the identity that enrollment confirms, so it can't be changed until you confirm enrollment.",
     "emailHelpNotEnrolled": "This student isn't enrolled yet. Their email is part of the identity that onboarding confirms, so it can't be changed until enrollment is confirmed.",
     "emailHelpNoIdentity": "This student has no GitHub identity yet, so their email is their only identifier and can't be changed here. Unenroll and re-add them to change it.",
     "emailHelpEnrolledChange": "This student is already enrolled. Changing their email won't re-bind their confirmed GitHub identity; it only affects future email-based matching.",
@@ -1045,11 +1044,6 @@
       "regenerate": "Regenerate",
       "creating": "Creating...",
       "createButton": "Create Classroom",
-      "onboardingCleanup": "Onboarding repo cleanup",
-      "onboardingCleanupHint": "What to do with a student's onboarding repository once their GitHub identity is reconciled into the roster.",
-      "onboardingCleanupDelete": "Delete (default; removes the repo after reconcile)",
-      "onboardingCleanupArchive": "Archive (reversible; hides the repo)",
-      "onboardingCleanupKeep": "Keep (leave the repo untouched)",
       "noChangesToSave": "No changes to save",
       "saving": "Saving...",
       "saveButton": "Save Classroom"
@@ -1369,8 +1363,7 @@
     "removedWithUnenroll_other": "{{label}} was removed from the {{org}} organization and unenrolled from {{count}} classrooms.",
     "removeFailed": "Couldn't remove {{label}}: {{reason}}",
     "warnArchived": "{{who}} is still on the archived classroom \"{{classroom}}\"; unarchive it to remove them from that roster.",
-    "warnUnenrollFailed": "Couldn't unenroll {{who}} from \"{{classroom}}\" ({{reason}}); removed the others.",
-    "warnOnboardingRepo": "Couldn't delete the leftover onboarding repository \"{{repo}}\" ({{reason}}); you can remove it manually."
+    "warnUnenrollFailed": "Couldn't unenroll {{who}} from \"{{classroom}}\" ({{reason}}); removed the others."
   },
   "components": {
     "avatar": {

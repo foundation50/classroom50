@@ -12,11 +12,11 @@ import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import useGetStudents, { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import useRosterStatus from "@/hooks/useRosterStatus"
+import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
-import { countEnrolled, toStudent } from "@/util/roster"
+import { toStudent } from "@/util/roster"
 import { useTranslation } from "react-i18next"
 
 const StudentListContent = ({
@@ -32,11 +32,11 @@ const StudentListContent = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
-  // Count from the same live partition the Enrolled section uses, so header and
-  // badge agree. While status is loading/unavailable (non-owner), countEnrolled
-  // falls back to the CSV "enrolled" signal rather than flashing 0.
-  const rosterStatus = useRosterStatus(org, classroom, students)
-  const enrolledCount = countEnrolled(rosterStatus, students)
+  // Count enrolled from the team roster (the same source the Enrolled section
+  // in EnrolledStudents uses), so header and section agree. Enrollment is
+  // team membership, not the CSV.
+  const { counts } = useTeamRoster(org, classroom, students)
+  const enrolledCount = counts.enrolled
   const className =
     classData?.name || classData?.short_name || t("students.untitledClass")
 

@@ -1,4 +1,4 @@
-import { parseDocument, stringify as stringifyDocument } from "yaml"
+import { parseDocument } from "yaml"
 import { z } from "zod"
 import { SECRET_PATTERN } from "./secret"
 
@@ -48,38 +48,4 @@ export function parseClassroom50Yaml(source: string): Classroom50Yaml {
   const raw = doc.toJS()
 
   return Classroom50YamlSchema.parse(raw)
-}
-
-// Self-report payload for email-first onboarding. username/id are GitHub-
-// attested (from the authenticated session); email is claimed.
-const OnboardingYamlSchema = z.object({
-  email: z.string().min(1),
-  // Student-supplied display name. Optional for back-compat with pre-name
-  // payloads; default to "" so reconcile fills it when present, leaves when not.
-  first_name: z.string().optional().default(""),
-  last_name: z.string().optional().default(""),
-  github_username: z.string().min(1),
-  github_id: z.number(),
-  classroom: z.string().min(1),
-  created_at: z.string().optional(),
-  // Teacher-issued secure-link token, present only for secure-link onboarding.
-  // Reconcile's strongest match key; validated loosely here (any string) and
-  // pattern-checked by the consumer before use.
-  invite_token: z.string().optional(),
-})
-
-export type OnboardingYaml = z.infer<typeof OnboardingYamlSchema>
-
-export function parseOnboardingYaml(source: string): OnboardingYaml {
-  const doc = parseDocument(source, { schema: "core", prettyErrors: true })
-
-  if (doc.errors.length > 0) {
-    throw new Error(doc.errors.map((e) => e.message).join("\n"))
-  }
-
-  return OnboardingYamlSchema.parse(doc.toJS())
-}
-
-export function stringifyOnboardingYaml(payload: OnboardingYaml): string {
-  return stringifyDocument(payload)
 }

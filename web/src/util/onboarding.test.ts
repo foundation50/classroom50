@@ -1,13 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
-  ONBOARDING_REPO_PREFIX,
   emailHash,
   generateInviteToken,
-  isReconcilableRow,
   isValidEmail,
-  isValidInviteToken,
   normalizeEmail,
-  onboardingRepoName,
   rowMatchesEmailHash,
 } from "./onboarding"
 
@@ -41,25 +37,6 @@ describe("emailHash", () => {
   })
 })
 
-describe("onboardingRepoName", () => {
-  it("composes prefix + github-id", () => {
-    expect(onboardingRepoName("583231")).toBe(`${ONBOARDING_REPO_PREFIX}583231`)
-  })
-
-  it("accepts a numeric github id", () => {
-    expect(onboardingRepoName(42)).toBe(`${ONBOARDING_REPO_PREFIX}42`)
-  })
-
-  it("is deterministic: one id always yields the same name", () => {
-    expect(onboardingRepoName("42")).toBe(onboardingRepoName("42"))
-    expect(onboardingRepoName("42")).toBe(`${ONBOARDING_REPO_PREFIX}42`)
-  })
-
-  it("distinguishes ids that share a digit prefix", () => {
-    expect(onboardingRepoName("42")).not.toBe(onboardingRepoName("420"))
-  })
-})
-
 describe("isValidEmail", () => {
   it("accepts a typical address", () => {
     expect(isValidEmail("student@university.edu")).toBe(true)
@@ -74,43 +51,17 @@ describe("isValidEmail", () => {
   })
 })
 
-describe("generateInviteToken / isValidInviteToken", () => {
-  it("generates a 32-char lowercase-hex token that validates", () => {
-    const token = generateInviteToken()
-    expect(token).toMatch(/^[0-9a-f]{32}$/)
-    expect(isValidInviteToken(token)).toBe(true)
+describe("generateInviteToken", () => {
+  it("generates a 32-char lowercase-hex token", () => {
+    expect(generateInviteToken()).toMatch(/^[0-9a-f]{32}$/)
   })
 
   it("generates distinct tokens", () => {
     expect(generateInviteToken()).not.toBe(generateInviteToken())
   })
-
-  it("rejects malformed tokens", () => {
-    expect(isValidInviteToken("")).toBe(false)
-    expect(isValidInviteToken("xyz")).toBe(false)
-    expect(isValidInviteToken("A".repeat(32))).toBe(false)
-    expect(isValidInviteToken("a".repeat(31))).toBe(false)
-  })
 })
 
-describe("isReconcilableRow", () => {
-  it("is true for an unreconciled row with a key", () => {
-    expect(isReconcilableRow({ email_hash: "abc" })).toBe(true)
-    expect(isReconcilableRow({ github_id: "123" })).toBe(true)
-  })
-
-  it("is false once enrolled", () => {
-    expect(
-      isReconcilableRow({ enrollment_status: "enrolled", github_id: "123" }),
-    ).toBe(false)
-  })
-
-  it("is false with no key to look up by", () => {
-    expect(isReconcilableRow({ enrollment_status: "invited" })).toBe(false)
-  })
-})
-
-describe("rowMatchesEmailHash (hijack guard / email fallback)", () => {
+describe("rowMatchesEmailHash (email fallback)", () => {
   it("accepts a payload email that hashes to the row's email_hash", async () => {
     const email = "victim@uni.edu"
     const hash = await emailHash(email)

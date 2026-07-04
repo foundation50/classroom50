@@ -26,11 +26,6 @@ export type Classroom = {
   // when absent, the plain `<classroom>/...` path. Opt-in per classroom (off by
   // default). Kept in lockstep with the CLI's classroom-v1 schema (`[a-z0-9]{4,64}`).
   secret?: string
-  // How reconciliation disposes of a student's onboarding repo once folded into
-  // the roster. GUI-managed (like `secret`); absent -> default "delete".
-  // "delete" removes it (needs delete_repo scope; falls back to archive + a
-  // warning when missing), "archive" hides it reversibly, "keep" leaves it.
-  onboarding_cleanup?: OnboardingCleanupMode
 }
 
 // A minimal GitHub team identity (slug is authoritative for ops; id is the
@@ -50,10 +45,6 @@ export const STAFF_ROLES: readonly StaffRole[] = ["instructor", "ta"]
 // reads as active, so legacy classrooms (which never wrote `active`) are active.
 export const isClassroomArchived = (cl: { active?: boolean }): boolean =>
   cl.active === false
-
-export type OnboardingCleanupMode = "delete" | "archive" | "keep"
-
-export const DEFAULT_ONBOARDING_CLEANUP: OnboardingCleanupMode = "delete"
 
 // Inclusive bounds for a group assignment's max_group_size (owner included).
 // The CLI schema enforces the same range; an out-of-range value makes

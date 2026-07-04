@@ -1,16 +1,9 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import type { TFunction } from "i18next"
 import { unenrollStudent } from "@/api/mutations/students"
-import {
-  removeOrgMembership,
-  deleteRepo,
-  archiveRepo,
-  getErrorMessage,
-} from "@/hooks/github/mutations"
+import { removeOrgMembership, getErrorMessage } from "@/hooks/github/mutations"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { isSameGitHubUser } from "@/util/students"
-import { onboardingRepoName } from "@/util/onboarding"
-import { GitHubAPIError } from "@/hooks/github/errors"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
@@ -136,38 +129,6 @@ export async function removeMemberFromOrg(
         err,
       )}); retry from the organization's people page.`,
     )
-  }
-
-  // Delete the leftover onboarding repo — but ONLY once removal succeeded, else a
-  // transient DELETE failure would reap a still-present student's self-report.
-  // Removing a member directly bypasses the per-classroom unenroll cleanup, so
-  // onboarding-<id> can dangle; the name is derivable, so delete it by name (no
-  // listing). Best-effort/idempotent (404 = gone; 403 no delete_repo scope ->
-  // archive); only an unexpected failure warns.
-  if (removed && row.github_id) {
-    const onboardingRepo = onboardingRepoName(row.github_id)
-    try {
-      await deleteRepo(client, { owner: org, repo: onboardingRepo })
-    } catch (err) {
-      if (err instanceof GitHubAPIError && err.isForbidden) {
-        try {
-          await archiveRepo(client, { owner: org, repo: onboardingRepo })
-        } catch {
-          // Best-effort: leave the repo; it's no longer tied to an org member.
-        }
-      } else {
-        warnings.push(
-          t
-            ? t("orgMembers.warnOnboardingRepo", {
-                repo: onboardingRepo,
-                reason: getErrorMessage(err),
-              })
-            : `Couldn't delete the leftover onboarding repository "${onboardingRepo}" (${getErrorMessage(
-                err,
-              )}); you can remove it manually.`,
-        )
-      }
-    }
   }
 
   return { unenrolledClassrooms, warnings, removed }

@@ -15,17 +15,11 @@ import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  DEFAULT_ONBOARDING_CLEANUP,
-  isClassroomArchived,
-  type Classroom,
-  type OnboardingCleanupMode,
-} from "@/types/classroom"
+import { isClassroomArchived, type Classroom } from "@/types/classroom"
 
 export type EditClassroomFormValues = {
   name: string
   term: string
-  onboarding_cleanup: OnboardingCleanupMode
 }
 
 type EditClassroomFormProps = {
@@ -257,7 +251,6 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
     defaultValues: {
       name: cl?.name || cl?.short_name || "",
       term: cl?.term || "",
-      onboarding_cleanup: cl?.onboarding_cleanup ?? DEFAULT_ONBOARDING_CLEANUP,
     } satisfies EditClassroomFormValues,
     validators: {
       onSubmit: ({ value }) => {
@@ -278,7 +271,6 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
       await onSubmit({
         name: value.name.trim(),
         term: value.term.trim(),
-        onboarding_cleanup: value.onboarding_cleanup,
       })
       setSubmitted(true)
     },
@@ -410,40 +402,6 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                     {field.state.meta.errors[0]}
                   </p>
                 )}
-              </>
-            )}
-          </form.Field>
-
-          <form.Field name="onboarding_cleanup">
-            {(field) => (
-              <>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("classes.form.onboardingCleanup")}
-                </label>
-                <p className="text-sm text-base-content/70 mb-2">
-                  {t("classes.form.onboardingCleanupHint")}
-                </p>
-
-                <select
-                  id={field.name}
-                  name={field.name}
-                  className="select w-full mb-4"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) =>
-                    field.handleChange(e.target.value as OnboardingCleanupMode)
-                  }
-                >
-                  <option value="delete">
-                    {t("classes.form.onboardingCleanupDelete")}
-                  </option>
-                  <option value="archive">
-                    {t("classes.form.onboardingCleanupArchive")}
-                  </option>
-                  <option value="keep">
-                    {t("classes.form.onboardingCleanupKeep")}
-                  </option>
-                </select>
               </>
             )}
           </form.Field>
