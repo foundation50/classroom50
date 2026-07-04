@@ -8,6 +8,7 @@ import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
   countByState,
+  teamMembersMissingFromCsv,
   type TeamRosterRow,
   type TeamRosterRowState,
 } from "@/util/teamRoster"
@@ -34,6 +35,12 @@ export type UseTeamRosterResult = {
   pendingHidden: boolean
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
+  // Count of team members with no students.csv metadata row — the exact set
+  // "Sync roster" appends. 0 = the CSV is in sync with the team (the button is
+  // disabled and reads "In sync"); >0 = drift the teacher can sync (and which
+  // the page auto-syncs on open). Distinct from the `unprovisioned` count,
+  // which is the opposite direction (on CSV, not on team) that sync can't fix.
+  csvMissingCount: number
   // Re-run the team-member fetch (the enrolled source of truth) so an error
   // surface can offer a retry without a full page reload.
   refetch: () => void
@@ -82,6 +89,12 @@ export function useTeamRoster(
 
   const counts = useMemo(() => countByState(rows), [rows])
 
+  // Team members absent from students.csv — what "Sync roster" would append.
+  const csvMissingCount = useMemo(
+    () => teamMembersMissingFromCsv(members ?? [], students).length,
+    [members, students],
+  )
+
   // Enrolled rows come from team membership (readable by non-owners), so the
   // roster is usable even when invites are forbidden. Only wait on the invite
   // fetch when it's actually readable.
@@ -95,6 +108,7 @@ export function useTeamRoster(
     isEmpty: !isLoading && !membersError && rows.length === 0,
     pendingHidden: invitesForbidden,
     teamSlug,
+    csvMissingCount,
     refetch: () => {
       void refetchMembers()
     },

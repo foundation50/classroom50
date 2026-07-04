@@ -666,8 +666,16 @@ const EnrolledStudents = ({
   const [confirmResendAllOpen, setConfirmResendAllOpen] = useState(false)
   const [resendingKeys, setResendingKeys] = useState<Set<string>>(new Set())
 
-  const { rows, counts, isLoading, isError, isEmpty, pendingHidden, teamSlug } =
-    useTeamRoster(org, classroom, students)
+  const {
+    rows,
+    counts,
+    isLoading,
+    isError,
+    isEmpty,
+    pendingHidden,
+    teamSlug,
+    csvMissingCount,
+  } = useTeamRoster(org, classroom, students)
 
   const enrolled = useMemo(
     () => rows.filter((r) => r.state === "enrolled"),
@@ -750,6 +758,31 @@ const EnrolledStudents = ({
       })
     },
   })
+
+  // Auto-sync on open: when team members are missing a students.csv metadata row
+  // (csvMissingCount > 0), append them automatically so the teacher never has to
+  // press "Sync roster" for the common case. Reaching this component already
+  // implies config-repo write access (RequireTeacher staff-gates the page).
+  //
+  // Fire once per drift episode: the ref latches after we trigger, so a re-render
+  // (or the post-sync CSV refetch briefly still showing >0) can't re-fire it, and
+  // it re-arms only once the roster is genuinely back in sync (count returns to
+  // 0). A failed auto-sync toasts (via onError) and, because it stays latched,
+  // does NOT retry in a loop — the teacher retries with the now-enabled button.
+  const autoSyncedRef = useRef(false)
+  useEffect(() => {
+    if (isLoading || isError) return
+    if (csvMissingCount === 0) {
+      autoSyncedRef.current = false // back in sync — re-arm for future drift.
+      return
+    }
+    if (autoSyncedRef.current || syncMutation.isPending) return
+    autoSyncedRef.current = true
+    syncMutation.mutate()
+    // syncMutation identity is stable across renders (useMutation); the guard
+    // ref + count/loading deps are what gate re-firing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [csvMissingCount, isLoading, isError])
 
   const resendForRow = async (row: TeamRosterRow) => {
     const inviteeId = Number(row.github_id)
@@ -1064,9 +1097,13 @@ const EnrolledStudents = ({
           <button
             type="button"
             className="btn btn-sm btn-ghost"
-            disabled={syncMutation.isPending}
+            disabled={syncMutation.isPending || csvMissingCount === 0}
             onClick={() => syncMutation.mutate()}
-            title={t("students.syncRosterTitle")}
+            title={
+              csvMissingCount === 0
+                ? t("students.syncInSyncTitle")
+                : t("students.syncRosterTitle")
+            }
           >
             <RefreshCw
               aria-hidden="true"
@@ -1074,7 +1111,9 @@ const EnrolledStudents = ({
             />
             {syncMutation.isPending
               ? t("students.syncing")
-              : t("students.syncRoster")}
+              : csvMissingCount === 0
+                ? t("students.syncInSync")
+                : t("students.syncRosterCount", { count: csvMissingCount })}
           </button>
         </div>
         <OnboardingLink org={org} classroom={classroom} />

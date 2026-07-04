@@ -1,5 +1,6 @@
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
+import { rosterClaimSet } from "@/util/identity"
 
 // Team-driven roster: the classroom GitHub team is the source of truth for who
 // belongs, not students.csv. This module computes the teacher-facing roster
@@ -236,5 +237,30 @@ export function countByState(
       TeamRosterRowState,
       number
     >,
+  )
+}
+
+// Team members with NO students.csv metadata row — the exact set
+// syncRosterFromTeam appends. A member is "missing" when their numeric id,
+// login, AND profile email are all unclaimed by any CSV row (the same
+// id -> login -> email fallback join syncRosterFromTeam uses, so this count and
+// the write can't diverge). Drives the "Sync roster" button's enabled/in-sync
+// state and the auto-sync-on-open trigger. Pure so it's unit-testable and can
+// be evaluated before deciding whether to write.
+export function teamMembersMissingFromCsv(
+  members: GitHubUser[],
+  students: Student[],
+): GitHubUser[] {
+  const { ids, logins } = rosterClaimSet(students)
+  const emails = new Set(
+    students
+      .map((s) => s.email?.trim().toLowerCase())
+      .filter((e): e is string => Boolean(e)),
+  )
+  return members.filter(
+    (m) =>
+      !ids.has(String(m.id)) &&
+      !logins.has(m.login.toLowerCase()) &&
+      !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
   )
 }

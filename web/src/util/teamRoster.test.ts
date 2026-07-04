@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildTeamRoster, countByState, rowToStudent } from "./teamRoster"
+import { buildTeamRoster, countByState, rowToStudent, teamMembersMissingFromCsv } from "./teamRoster"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
@@ -224,5 +224,52 @@ describe("buildTeamRoster", () => {
       section: "A",
       github_id: "101",
     })
+  })
+})
+
+describe("teamMembersMissingFromCsv", () => {
+  it("returns team members with no CSV row (matched by id/login/email)", () => {
+    const missing = teamMembersMissingFromCsv(
+      [member(101, "ada"), member(202, "grace"), member(303, "edsger")],
+      [
+        csvRow({ github_id: "101" }), // ada matched by id
+        csvRow({ username: "GRACE" }), // grace matched by login (case-insensitive)
+      ],
+    )
+    expect(missing.map((m) => m.login)).toEqual(["edsger"])
+  })
+
+  it("matches by profile email too (mirrors syncRosterFromTeam)", () => {
+    const missing = teamMembersMissingFromCsv(
+      [member(101, "ada", { email: "ADA@uni.edu" })],
+      [csvRow({ email: "ada@uni.edu" })],
+    )
+    expect(missing).toEqual([])
+  })
+
+  it("is empty when every team member already has a CSV row (in sync)", () => {
+    const missing = teamMembersMissingFromCsv(
+      [member(101, "ada"), member(202, "grace")],
+      [csvRow({ github_id: "101" }), csvRow({ github_id: "202" })],
+    )
+    expect(missing).toEqual([])
+  })
+
+  it("counts every team member missing when the CSV is empty", () => {
+    const missing = teamMembersMissingFromCsv(
+      [member(101, "ada"), member(202, "grace")],
+      [],
+    )
+    expect(missing.map((m) => m.login)).toEqual(["ada", "grace"])
+  })
+
+  it("does not count a CSV-only row (unprovisioned) as missing — wrong direction", () => {
+    // grace is on the CSV but not the team; that's the opposite drift and is
+    // NOT what this helper (or Sync) addresses.
+    const missing = teamMembersMissingFromCsv(
+      [member(101, "ada")],
+      [csvRow({ github_id: "101" }), csvRow({ username: "grace" })],
+    )
+    expect(missing).toEqual([])
   })
 })
