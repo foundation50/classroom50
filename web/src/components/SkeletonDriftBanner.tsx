@@ -6,11 +6,11 @@ import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
-import { RERUN_ONBOARDING_ANCHOR } from "@/pages/orgSettings/RerunOnboarding"
+import { RERUN_ORG_SETUP_ANCHOR } from "@/pages/orgSettings/RerunOrgSetup"
 
 // Global warning banner shown to an org owner when the `classroom50` config
 // repo's scaffolded workflows have drifted from the current bundled skeleton
-// (e.g. after an action-pin bump). Routes to the owner-only "Re-run onboarding"
+// (e.g. after an action-pin bump). Routes to the owner-only "Re-run org setup"
 // Org Settings section, which performs the overwrite.
 //
 // The copy warns that re-running overwrites customized workflow files with the
@@ -50,7 +50,7 @@ export function SkeletonDriftBanner() {
           <Link
             to="/$org/settings"
             params={{ org: org as string }}
-            hash={RERUN_ONBOARDING_ANCHOR}
+            hash={RERUN_ORG_SETUP_ANCHOR}
             className="btn btn-sm btn-warning self-start"
           >
             {t("skeletonDrift.action")}

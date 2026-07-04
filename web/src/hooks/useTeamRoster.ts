@@ -4,7 +4,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
 import { teamMembersQuery } from "@/hooks/github/queries"
-import { classroomTeamSlugHeuristic } from "@/util/onboarding"
+import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
   countByState,

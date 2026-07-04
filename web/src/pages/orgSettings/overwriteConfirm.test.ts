@@ -7,7 +7,7 @@ import {
 } from "./overwriteConfirm"
 
 // These pin the "settle the parked overwrite promise exactly once" guarantees
-// that RerunOnboarding/OrgSetupPage depend on but can't easily assert without a
+// that RerunOrgSetup/OrgSetupPage depend on but can't easily assert without a
 // DOM. The modal calls onConfirm() (settle true) and then onClose() (settle
 // false) on every confirm, and the native <dialog> close fires onClose again —
 // so the resolver is hit multiple times per interaction and must not flip.

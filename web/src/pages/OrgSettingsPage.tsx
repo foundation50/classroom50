@@ -15,7 +15,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import RequireTeacher from "@/components/RequireTeacher"
 import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
-import RerunOnboarding from "@/pages/orgSettings/RerunOnboarding"
+import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
 import { CalloutDiv } from "@/lib/motionComponents"
@@ -521,7 +521,7 @@ const OrgSettingsPage = () => {
             <div className="mt-8 space-y-8">
               <OrgSettingsPane />
               {org && <OrgPolicyAuditPane org={org} />}
-              {org && <RerunOnboarding org={org} />}
+              {org && <RerunOrgSetup org={org} />}
               {org && <TeardownSection org={org} />}
             </div>
           </RequireTeacher>

@@ -5,7 +5,7 @@ import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
 import type { GitHubOrgMembership } from "@/hooks/github/types"
 
 // The shared membership query key, read by useGetOwnOrgMembership on both the
-// onboarding and accept pages. Kept here so success can seed it directly.
+// /onboard and accept pages. Kept here so success can seed it directly.
 const membershipQueryKey = (org?: string) => [
   "github",
   "memberships",
@@ -21,8 +21,8 @@ export type UseAcceptAndVerifyMembershipResult = {
   retry: () => void
 }
 
-// Centralizes the accept-and-verify orchestration shared by OnboardingPage and
-// AcceptAssignmentPage: a mount-fired mutation (once, while `enabled`), a
+// Centralizes the accept-and-verify orchestration shared by the /onboard page
+// and AcceptAssignmentPage: a mount-fired mutation (once, while `enabled`), a
 // success path that seeds the shared membership cache, and a single retry()
 // source of truth that never overlaps an in-flight verify. The seed and retry
 // rationale live at their call sites below.

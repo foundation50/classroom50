@@ -172,7 +172,7 @@ const OrgSetupPage = () => {
   // 3 = finished
   const [currentStage, setCurrentStage] = useState(1)
 
-  // Skeleton-overwrite confirmation, mirroring RerunOnboarding. The wizard
+  // Skeleton-overwrite confirmation, mirroring RerunOrgSetup. The wizard
   // usually runs on a fresh repo (nothing pre-exists), but the /setup route has
   // no re-entry guard, so a re-run on an already-set-up org can hit drifted,
   // hand-edited skeleton files — prompt before overwriting those rather than

@@ -39,7 +39,7 @@ export const getName = (key: string, students: Student[]) => {
   return nameFromParts(student.first_name, student.last_name)
 }
 
-// Display name from self-reported names (onboarding YAML). CSV stays
+// Display name from a roster row's first/last name parts. CSV stays
 // authoritative; callers use this only to fill a row that has no CSV name yet.
 // Empty when neither name is present.
 export const nameFromParts = (

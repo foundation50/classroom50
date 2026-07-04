@@ -788,7 +788,7 @@ export type OrgMembershipState = "active" | "pending"
 
 // PATCH /repos/{owner}/{repo} { archived: true }. Reversible and covered by the
 // existing `repo` scope (unlike deletion, which needs delete_repo and a
-// re-auth). Retires an onboarding repo once reconciled. 404 = success.
+// re-auth). Used as the safe fallback when deletion isn't permitted. 404 = success.
 export async function archiveRepo(
   client: GitHubClient,
   input: { owner: string; repo: string },

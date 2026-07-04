@@ -1,7 +1,9 @@
-// Email + team-slug helpers shared by the CSV write path (students.ts) and the
-// student onboarding flow. (The self-report / onboarding-repo machinery and the
-// email_hash/invite-token columns this file once also held were removed with
-// the team-as-source-of-truth rework and the students.csv schema prune.)
+// Email + classroom-team-slug helpers shared by the CSV write path
+// (students.ts) and the student org-membership flow (the /onboard and accept
+// pages). These are the survivors of the team-as-source-of-truth rework — the
+// self-report / onboarding-repo machinery and the email_hash/invite-token
+// columns that once lived alongside them were removed with the students.csv
+// schema prune.
 
 // The classroom team slug a STUDENT derives (the authoritative slug is in the
 // private classroom.json they can't read). Safe-degrade: on a slug collision the

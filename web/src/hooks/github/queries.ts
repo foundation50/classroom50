@@ -570,27 +570,6 @@ export async function getClassroom50Yaml(
   return decodeBase64Utf8(file.content)
 }
 
-// Read a file from an arbitrary repo's default branch (onboarding reconcile
-// reads the self-report YAML out of each onboarding repo).
-export async function getRepoFile(
-  client: GitHubClient,
-  org: string,
-  repo: string,
-  path: string,
-): Promise<string> {
-  const file = await client.request<{
-    type: "file"
-    encoding: "base64"
-    content: string
-  }>(`/repos/${org}/${repo}/contents/${path}`)
-
-  if (file.type !== "file") {
-    throw new Error(`${path} is not a file in ${repo}`)
-  }
-
-  return decodeBase64Utf8(file.content)
-}
-
 export function listOrgMembers(client: GitHubClient, org: string, page = 1) {
   return client.request<GitHubUser[]>(
     `/orgs/${org}/members?per_page=100&page=${page}`,
@@ -926,10 +905,10 @@ export async function getClassroom50OrgSummary(
   }
 }
 
-// Max simultaneous per-repo onboarding reads. Bounded so a large class doesn't
-// fan out into hundreds of concurrent requests (GitHub secondary-rate-limit
-// territory) while still beating a strictly-sequential loop.
-export const ONBOARDING_READ_CONCURRENCY = 8
+// Max simultaneous per-repo reads. Bounded so a large class doesn't fan out
+// into hundreds of concurrent requests (GitHub secondary-rate-limit territory)
+// while still beating a strictly-sequential loop.
+export const REPO_READ_CONCURRENCY = 8
 
 export async function getRepo(
   client: GitHubClient,

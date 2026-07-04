@@ -3,7 +3,7 @@ import {
   classroomTeamSlugHeuristic,
   isValidEmail,
   normalizeEmail,
-} from "./onboarding"
+} from "./orgMembership"
 
 describe("normalizeEmail", () => {
   it("lowercases and trims", () => {

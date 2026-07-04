@@ -19,7 +19,7 @@ import {
   getOrgRepos,
   getRepo,
   listClassroomDirs,
-  ONBOARDING_READ_CONCURRENCY,
+  REPO_READ_CONCURRENCY,
   sleep,
 } from "@/hooks/github/queries"
 import { CONFIG_REPO } from "@/hooks/github/orgChecks"
@@ -83,7 +83,7 @@ async function collectClassroomTeams(
   }
 
   const bySlug = new Map<string, ClassroomTeamRef>()
-  await mapWithConcurrency(dirs, ONBOARDING_READ_CONCURRENCY, async (dir) => {
+  await mapWithConcurrency(dirs, REPO_READ_CONCURRENCY, async (dir) => {
     try {
       const json = await getClassroomJson(client, { org, classroom: dir.name })
       // classroom.json is anyone-with-config-repo-write authored and parsed

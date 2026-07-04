@@ -4,7 +4,7 @@
 // cleanup) can settle the awaiting hook. This factors the resolver bookkeeping
 // out of the React components so the tricky "settle exactly once" guarantees
 // are unit-testable without a DOM: both the wizard (OrgSetupPage) and the
-// re-run surface (RerunOnboarding) build their confirmSkeletonOverwrite hook
+// re-run surface (RerunOrgSetup) build their confirmSkeletonOverwrite hook
 // from this.
 
 // A mutable ref cell — structurally compatible with React's

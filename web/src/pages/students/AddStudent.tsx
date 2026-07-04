@@ -10,7 +10,7 @@ import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { enrollStudentInClassroom } from "@/hooks/github/mutations"
 import { inviteStudentByEmail } from "@/api/mutations/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { isValidEmail } from "@/util/onboarding"
+import { isValidEmail } from "@/util/orgMembership"
 import { splitName, toStudent } from "@/util/roster"
 
 type AddStudentProps = {

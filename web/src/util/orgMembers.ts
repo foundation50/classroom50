@@ -168,8 +168,8 @@ export function aggregateOrgMembers(
 }
 
 // A candidate GitHub account for a teacher to manually match to an email-only
-// roster row that joined the org directly (no onboarding repo, no recoverable
-// identity). github_id is the immutable bind key; login/name/avatar are display.
+// roster row that joined the org directly (no recoverable identity on the row).
+// github_id is the immutable bind key; login/name/avatar are display.
 export type MatchCandidate = {
   github_id: string
   login: string

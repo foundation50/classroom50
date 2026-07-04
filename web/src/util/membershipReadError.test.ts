@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isMembershipReadError } from "./useOnboardingState"
-import { deriveOnboardingState } from "./onboardingState"
+import { isMembershipReadError } from "./membershipReadError"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
 const apiError = (status: number) =>
@@ -21,7 +20,7 @@ const apiError = (status: number) =>
     ssoHeader: null,
   })
 
-describe("isMembershipReadError (onboarding 404 -> notInvited boundary)", () => {
+describe("isMembershipReadError (/onboard 404 -> notInvited boundary)", () => {
   it("treats a definitive 404 as NOT a read error (never invited)", () => {
     // Regression for the bug where getPendingOrgInvite's 404 set
     // membershipReadError, routing a never-invited student to the error screen
@@ -42,18 +41,5 @@ describe("isMembershipReadError (onboarding 404 -> notInvited boundary)", () => 
   it("is not a read error when there is no error", () => {
     expect(isMembershipReadError(null)).toBe(false)
     expect(isMembershipReadError(undefined)).toBe(false)
-  })
-
-  it("end-to-end: a 404 read feeds hasMembership:false -> notInvited", () => {
-    // The live hook maps a 404 to membershipReadError:false + hasMembership:false;
-    // fold that through the state machine to prove the calm screen is reached.
-    const state = deriveOnboardingState({
-      loadingMembership: false,
-      membershipReadError: isMembershipReadError(apiError(404)),
-      hasMembership: false,
-      acceptError: false,
-      active: false,
-    })
-    expect(state).toBe("notInvited")
   })
 })

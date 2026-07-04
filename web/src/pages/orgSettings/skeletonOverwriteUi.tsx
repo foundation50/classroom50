@@ -10,7 +10,7 @@ import {
 // Wires the skeleton-overwrite confirmation into a React surface: owns the
 // modal-open state, the resolver ref, and the unmount cleanup that settles a
 // parked run rather than letting it hang. Shared by the wizard (OrgSetupPage)
-// and the re-run surface (RerunOnboarding) so the two can't drift. Pass the
+// and the re-run surface (RerunOrgSetup) so the two can't drift. Pass the
 // returned `confirmSkeletonOverwrite` to initClassroom50 and render
 // <SkeletonOverwriteModal> with `overwritePaths`/`resolveOverwrite`.
 export function useSkeletonOverwriteConfirm() {

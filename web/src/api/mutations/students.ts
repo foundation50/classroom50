@@ -24,7 +24,7 @@ import {
   getUserById,
   listClassroomDirs,
   listTeamMembers,
-  ONBOARDING_READ_CONCURRENCY,
+  REPO_READ_CONCURRENCY,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
@@ -32,7 +32,7 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import { isSameGitHubUser } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { prefixCommit } from "@/util/commit"
-import { normalizeEmail } from "@/util/onboarding"
+import { normalizeEmail } from "@/util/orgMembership"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { type Student } from "@/types/classroom"
 
@@ -437,7 +437,7 @@ async function resolveStudentIdentityByEmail(
 
   const matches = await mapWithConcurrency(
     otherClassrooms,
-    ONBOARDING_READ_CONCURRENCY,
+    REPO_READ_CONCURRENCY,
     async (classroom) => {
       let csv: string
       try {
@@ -671,10 +671,10 @@ export async function inviteStudentByEmail(
       } else if (!resolved || resolved.status === "ambiguous") {
         // Member but unidentifiable from any roster (no match, or an ambiguous
         // email mapping to multiple students). Keep the invited email row
-        // (don't drop it): the student is in the org without onboarding, and the
-        // email->login link is unrecoverable post-accept, so the teacher must
-        // complete the match by hand (the "Match account" affordance) or delete
-        // the row from this classroom's roster. Reconcile surfaces it as
+        // (don't drop it): the student is in the org, but the email->login link
+        // is unrecoverable post-accept, so the teacher must complete the match
+        // by hand (the "Match account" affordance) or delete the row from this
+        // classroom's roster. Reconcile surfaces it as
         // needsMatch.
         return {
           ...result,
@@ -805,8 +805,8 @@ export type MatchStudentToAccountInput = {
 }
 
 // Teacher-initiated manual match for an email-invited row whose student joined
-// the org directly (no onboarding repo) and whose identity GitHub no longer
-// exposes (the email->login link is dropped once an invite is accepted). The
+// the org directly and whose identity GitHub no longer exposes (the
+// email->login link is dropped once an invite is accepted). The
 // teacher selects which org/team member owns the email; this writes that
 // identity onto the email-keyed row and enrolls it. Re-verifies the chosen
 // account is an ACTIVE member before binding (the same active-membership
@@ -1417,8 +1417,8 @@ export async function unenrollStudent(
   const normalizedUsername = toRemoveStudent?.username.trim()
   const normalizedEmail = toRemoveStudent?.email?.trim()
 
-  // A mid-onboarding email row has no username yet, so accept email too. One of
-  // the two must be present to target a row.
+  // An email-invited row that hasn't been claimed yet has no username, so accept
+  // email too. One of the two must be present to target a row.
   if (!normalizedUsername && !normalizedEmail) {
     throw new Error("Student's GitHub username or email is required")
   }
