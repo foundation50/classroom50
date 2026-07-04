@@ -51,10 +51,15 @@ export const githubKeys = {
   orgMembersAll: (org: string) =>
     ["orgs", "list", "members", "all", org] as const,
 
+  orgAdmins: (org: string) =>
+    ["orgs", "list", "members", "admins", org] as const,
+
   orgRunners: (org: string) => [...githubKeys.all, "org-runners", org] as const,
 
   teamMembers: (org: string, teamSlug: string) =>
     [...githubKeys.all, "team-members", org, teamSlug] as const,
+
+  orgTeams: (org: string) => [...githubKeys.all, "org-teams", org] as const,
 
   repo: (owner: string, repo: string) =>
     [...githubKeys.all, "repo", owner, repo] as const,
@@ -586,6 +591,40 @@ export function listAllOrgMembers(client: GitHubClient, org: string) {
   )
 }
 
+// Org owners/admins across all pages (GET /orgs/{org}/members?role=admin). Used
+// to badge the Members page: an admin is an "Owner", not a "Member". 403/404
+// (can't read the member list with role filter) -> [] so the page degrades to
+// treating everyone as a plain member rather than erroring.
+export async function listOrgAdmins(
+  client: GitHubClient,
+  org: string,
+): Promise<GitHubUser[]> {
+  try {
+    return await paginateAll<GitHubUser>(
+      client,
+      (page) =>
+        `/orgs/${encodeURIComponent(org)}/members?role=admin&per_page=100&page=${page}`,
+    )
+  } catch (error) {
+    if (
+      error instanceof GitHubAPIError &&
+      (error.status === 403 || error.status === 404)
+    ) {
+      return []
+    }
+    throw error
+  }
+}
+
+export function orgAdminsQuery(client: GitHubClient, org: string) {
+  return queryOptions({
+    queryKey: githubKeys.orgAdmins(org),
+    queryFn: () => listOrgAdmins(client, org),
+    enabled: Boolean(org),
+    staleTime: 5 * 60 * 1000,
+  })
+}
+
 // Server-side equivalent of useGetClasses: classroom dirs in the org's
 // classroom50 repo (root contents, dirs minus .github), for non-hook callers.
 export async function listClassroomDirs(
@@ -956,6 +995,36 @@ export function teamMembersQuery(
     queryFn: () => listTeamMembers(client, org, teamSlug),
     enabled: Boolean(org && teamSlug),
     staleTime: 60 * 1000,
+  })
+}
+
+// Every team in the org across all pages (GET /orgs/{org}/teams). Owner/member
+// visibility applies (secret teams are only listed for members who can see
+// them). Used to cross-reference each `classroom50-<classroom>` team's live
+// membership against CSV-derived classroom access, surfacing drift on the
+// Members page. 404 (no access) -> [] so the page degrades to CSV-only display.
+export async function listOrgTeams(
+  client: GitHubClient,
+  org: string,
+): Promise<GitHubTeam[]> {
+  try {
+    return await paginateAll<GitHubTeam>(
+      client,
+      (page) =>
+        `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
+    )
+  } catch (error) {
+    if (error instanceof GitHubAPIError && error.status === 404) return []
+    throw error
+  }
+}
+
+export function orgTeamsQuery(client: GitHubClient, org: string) {
+  return queryOptions({
+    queryKey: githubKeys.orgTeams(org),
+    queryFn: () => listOrgTeams(client, org),
+    enabled: Boolean(org),
+    staleTime: 5 * 60 * 1000,
   })
 }
 

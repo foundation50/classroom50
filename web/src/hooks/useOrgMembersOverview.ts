@@ -7,6 +7,7 @@ import {
   githubKeys,
   jsonFileQuery,
   listAllOrgMembers,
+  orgAdminsQuery,
 } from "@/hooks/github/queries"
 import useGetClasses from "@/hooks/useGetClasses"
 import { toStudent } from "@/util/roster"
@@ -16,9 +17,16 @@ import {
   type Student,
 } from "@/types/classroom"
 import { aggregateOrgMembers, type OrgMemberRow } from "@/util/orgMembers"
+import type { GitHubUser } from "@/hooks/github/types"
 
 export type OrgMembersOverview = {
   rows: OrgMemberRow[]
+  // The org's live members (all pages), the trust anchor for bulk-add
+  // membership verification.
+  members: GitHubUser[]
+  // Numeric ids of org owners/admins, so the view can badge them "Owner"
+  // instead of "Member". Empty when the admin list couldn't be read.
+  ownerIds: Set<string>
   isLoading: boolean
   isError: boolean
   // Per-classroom roster read failures (a 404 / parse error contributes no
@@ -37,6 +45,11 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     queryFn: () => listAllOrgMembers(client, org ?? ""),
     enabled: Boolean(org),
     staleTime: 5 * 60 * 1000,
+  })
+
+  const adminsQuery = useQuery({
+    ...orgAdminsQuery(client, org ?? ""),
+    enabled: Boolean(org),
   })
 
   const { classes } = useGetClasses(org)
@@ -111,13 +124,18 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     [members, rosters],
   )
 
+  const ownerIds = useMemo(
+    () => new Set((adminsQuery.data ?? []).map((m) => String(m.id))),
+    [adminsQuery.data],
+  )
+
   const isLoading =
     membersQuery.isLoading ||
     metaQueries.some((q) => q.isLoading) ||
     rosterQueries.some((q) => q.isLoading)
   const isError = membersQuery.isError
 
-  return { rows, isLoading, isError, notes }
+  return { rows, members, ownerIds, isLoading, isError, notes }
 }
 
 export default useOrgMembersOverview
