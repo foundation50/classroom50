@@ -33,9 +33,9 @@ import {
 } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
-import type { TeamRosterRow } from "@/util/teamRoster"
+import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
 import { unmatchedTeamMembers, type MatchCandidate } from "@/util/orgMembers"
-import { toStudent } from "@/util/roster"
+import { studentKey, toStudent } from "@/util/roster"
 import EditStudent from "@/pages/students/EditStudent"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { Link2 } from "lucide-react"
@@ -44,17 +44,6 @@ import { collapseVariants, enterExit } from "@/lib/motion"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-
-// A team-driven roster row rendered as a Student for the metadata-editing and
-// unenroll/match affordances (which key on username/github_id/email).
-const rowToStudent = (row: TeamRosterRow): Student => ({
-  username: row.username,
-  first_name: row.first_name,
-  last_name: row.last_name,
-  email: row.email,
-  section: row.section,
-  github_id: row.github_id,
-})
 
 // Group rows by `section`, sorted by name with the unlabeled ("No section")
 // bucket last. Generic over any row carrying a `section` field, so it serves
@@ -843,15 +832,11 @@ const EnrolledStudents = ({
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
       const next = current.map((s) =>
-        (s.github_id || s.username || s.email) === rowKey
-          ? toStudent(updated)
-          : s,
+        studentKey(s) === rowKey ? toStudent(updated) : s,
       )
       // A member with no prior CSV row (blank metadata) has no row to replace;
       // append the newly-written one so the edit sticks optimistically.
-      const exists = current.some(
-        (s) => (s.github_id || s.username || s.email) === rowKey,
-      )
+      const exists = current.some((s) => studentKey(s) === rowKey)
       return exists ? next : [...next, toStudent(updated)]
     })
     invalidateInviteQueries()
@@ -940,7 +925,7 @@ const EnrolledStudents = ({
                 if (warning) setWarning(row.key, warning)
                 updateRosterCache((current) =>
                   current.map((s) =>
-                    (s.github_id || s.username || s.email) === row.key
+                    studentKey(s) === row.key
                       ? {
                           ...s,
                           username: matched.username,

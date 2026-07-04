@@ -212,17 +212,17 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return fmt.Errorf("list team %q members: %w", teamSlug, err)
 	}
 
-	// students.csv is optional display metadata now — a missing/unreadable CSV
-	// yields blank metadata, never a skipped student. Load best-effort and index
-	// by github_id then login for the scores.csv join.
-	metaByLogin := loadRosterMetadata(client, org, classroom, branch, errOut)
-
 	if len(teamLogins) == 0 {
 		if !quiet {
 			_, _ = fmt.Fprintf(out, "%s: classroom team %q has no members — nothing to download\n", classroom, teamSlug)
 		}
 		return nil
 	}
+
+	// students.csv is optional display metadata now — a missing/unreadable CSV
+	// yields blank metadata, never a skipped student. Load best-effort and index
+	// by github_id then login for the scores.csv join.
+	metaByLogin := loadRosterMetadata(client, org, classroom, branch, errOut)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("create %s: %w", dir, err)
