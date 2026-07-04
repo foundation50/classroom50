@@ -1,17 +1,13 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import type { TFunction } from "i18next"
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
   AlertTriangle,
   ChevronRight,
   ExternalLink,
-  Info,
   Search,
-  ShieldCheck,
   UserPlus,
-  X,
 } from "lucide-react"
 
 import Drawer, {
@@ -22,26 +18,26 @@ import Drawer, {
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireTeacher from "@/components/RequireTeacher"
 import Avatar from "@/components/avatar"
-import GitHub from "@/assets/github.svg?react"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import {
-  useToast,
-  type NotifyInput,
-} from "@/context/notifications/NotificationProvider"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
 import { githubKeys, invalidateInviteQueries } from "@/hooks/github/queries"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { isSameGitHubUser } from "@/util/students"
-import { removeMemberFromOrg } from "@/pages/orgMembers/removeMemberFromOrg"
 import { motion } from "motion/react"
 import { enterExit } from "@/lib/motion"
 import { ClickableRow } from "@/lib/motionComponents"
-import { inviteMemberToOrg } from "@/pages/orgMembers/inviteMemberToOrg"
 import BulkActionsBar from "@/pages/orgMembers/BulkActionsBar"
+import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
+import {
+  ClassificationBadge,
+  GitHubIdentity,
+  initialsFor,
+  runInviteMember,
+} from "@/pages/orgMembers/memberPresentation"
 import useGetClasses from "@/hooks/useGetClasses"
-import type { GitHubClient } from "@/hooks/github/client"
 
 // How long to wait before reconciling an optimistically-updated students.csv
 // cache with the authoritative GitHub read. GitHub's contents API lags a fresh
@@ -52,384 +48,6 @@ const CSV_RECONCILE_DELAY_MS = 4000
 // Sentinel classroom-filter value for "members on no classroom roster". A real
 // classroom path can't collide with it (paths don't contain a leading colon).
 const NO_CLASSROOM_FILTER = ":none:"
-
-// Shared invite flow for the inline button and the detail drawer. Errors are
-// toasted here so both call sites only track their own in-flight flag.
-const runInviteMember = async (
-  client: GitHubClient,
-  org: string,
-  row: OrgMemberRow,
-  notify: (input: NotifyInput) => void,
-  onDone: () => void,
-  t: TFunction,
-) => {
-  const label = row.username || row.email
-  try {
-    const result = await inviteMemberToOrg(client, { org, row })
-    const who = result.currentUsername ? `@${result.currentUsername}` : label
-    notify({
-      tone: "success",
-      durationMs: 6000,
-      message: t("toasts.invited", { who, org }),
-    })
-    onDone()
-  } catch (err) {
-    notify({
-      tone: "error",
-      message: t("orgMembers.inviteFailed", {
-        label,
-        reason:
-          err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
-      }),
-    })
-  }
-}
-
-// First initial of a row's best display string, for the avatar fallback.
-const initialsFor = (row: OrgMemberRow) =>
-  (row.name || row.username || row.email || "?")[0]?.toUpperCase() ?? "?"
-
-// GitHub identity line: makes it explicit these are GitHub members by showing
-// the @username and the immutable numeric GitHub id together.
-const GitHubIdentity = ({ row }: { row: OrgMemberRow }) => {
-  const { t } = useTranslation()
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
-      <GitHub aria-hidden="true" className="size-3.5 opacity-50" />
-      {row.username ? (
-        <span className="font-mono">@{row.username}</span>
-      ) : (
-        <span className="italic">{t("orgMembers.noGitHubUsername")}</span>
-      )}
-      {row.github_id ? (
-        <span className="text-base-content/70">
-          {t("orgMembers.idSuffix", { id: row.github_id })}
-        </span>
-      ) : null}
-    </span>
-  )
-}
-
-const ClassificationBadge = ({
-  row,
-  isOwner = false,
-}: {
-  row: OrgMemberRow
-  isOwner?: boolean
-}) => {
-  const { t } = useTranslation()
-  if (row.classification === "on-roster-not-member") {
-    return (
-      <span className="badge badge-sm badge-error badge-soft gap-1">
-        <AlertTriangle aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeNotMember")}
-      </span>
-    )
-  }
-  // An org owner/admin is labeled "Owner", not "Member" — takes precedence over
-  // the no-roster badge (an owner with no classroom is still an owner).
-  if (isOwner) {
-    return (
-      <span className="badge badge-sm badge-info badge-soft gap-1">
-        <ShieldCheck aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeOwner")}
-      </span>
-    )
-  }
-  if (row.classification === "member-no-roster") {
-    return (
-      <span className="badge badge-sm badge-ghost gap-1">
-        <Info aria-hidden="true" className="size-3" />{" "}
-        {t("orgMembers.badgeNoClassroom")}
-      </span>
-    )
-  }
-  return (
-    <span className="badge badge-sm badge-success badge-soft">
-      {t("orgMembers.badgeMember")}
-    </span>
-  )
-}
-
-const MemberDetail = ({
-  org,
-  row,
-  isSelf,
-  isOwner,
-  onClose,
-  onRemoved,
-}: {
-  org: string
-  row: OrgMemberRow
-  isSelf: boolean
-  isOwner: boolean
-  onClose: () => void
-  onRemoved: () => void
-}) => {
-  const { t } = useTranslation()
-  const client = useGitHubClient()
-  const { notify } = useToast()
-  const [confirming, setConfirming] = useState(false)
-  const [working, setWorking] = useState(false)
-  const [inviting, setInviting] = useState(false)
-  const label = row.username || row.email
-  // Only non-archived classrooms are actually unenrolled (archived ones can't
-  // be; removeMemberFromOrg skips them), so the confirm copy counts those.
-  const activeClassrooms = row.classrooms.filter((c) => !c.archived)
-
-  const handleInvite = async () => {
-    if (inviting) return
-    setInviting(true)
-    try {
-      await runInviteMember(client, org, row, notify, onRemoved, t)
-    } finally {
-      setInviting(false)
-    }
-  }
-
-  const handleRemove = async () => {
-    if (working) return
-    setWorking(true)
-    try {
-      const result = await removeMemberFromOrg(client, { org, row }, t)
-      if (result.warnings.length > 0) {
-        notify({
-          tone: "warning",
-          durationMs: 8000,
-          message: result.warnings.join(" "),
-        })
-      } else {
-        notify({
-          tone: "success",
-          durationMs: 6000,
-          message: result.unenrolledClassrooms.length
-            ? t("orgMembers.removedWithUnenroll", {
-                label,
-                org,
-                count: result.unenrolledClassrooms.length,
-              })
-            : t("orgMembers.removed", { label, org }),
-        })
-      }
-      onRemoved()
-    } catch (err) {
-      notify({
-        tone: "error",
-        message: t("orgMembers.removeFailed", {
-          label,
-          reason:
-            err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
-        }),
-      })
-    } finally {
-      setWorking(false)
-      setConfirming(false)
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      <div
-        className="absolute inset-0 bg-black/30"
-        onClick={onClose}
-        aria-hidden
-      />
-      <div className="relative z-10 flex h-full w-full max-w-md flex-col overflow-y-auto bg-base-100 shadow-xl">
-        <div className="flex items-center justify-between border-b border-base-300 px-6 py-4">
-          <h2 className="text-lg font-semibold">
-            {t("orgMembers.detailTitle")}
-          </h2>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-square"
-            onClick={onClose}
-            aria-label={t("common.close")}
-          >
-            <X aria-hidden="true" className="size-4" />
-          </button>
-        </div>
-
-        <div className="flex flex-col gap-4 px-6 py-5">
-          <Avatar
-            name={row.name || label}
-            github={row.username}
-            initials={initialsFor(row)}
-            subtitle={<GitHubIdentity row={row} />}
-          />
-
-          <div className="flex items-center gap-2">
-            <ClassificationBadge row={row} isOwner={isOwner} />
-            {row.email ? (
-              <span className="text-sm text-base-content/70">{row.email}</span>
-            ) : null}
-          </div>
-
-          <a
-            href={`https://github.com/orgs/${org}/people${
-              row.username ? `?query=${encodeURIComponent(row.username)}` : ""
-            }`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
-          >
-            <ExternalLink aria-hidden="true" className="size-3.5" />
-            {t("orgMembers.manageOnGitHub")}
-          </a>
-
-          <div>
-            <h3 className="mb-2 text-sm font-semibold">
-              {t("orgMembers.classroomAccess")}
-            </h3>
-            {row.classrooms.length === 0 ? (
-              <p className="text-sm text-base-content/70">
-                {t("orgMembers.noRoster")}
-              </p>
-            ) : (
-              <ul className="divide-y divide-base-300 rounded-box border border-base-300">
-                {row.classrooms.map((access) => (
-                  <Link
-                    key={access.classroom}
-                    to="/$org/$classroom"
-                    params={{ org, classroom: access.classroom }}
-                    onClick={onClose}
-                    className="group/cls flex items-center justify-between px-3 py-2 text-sm first:rounded-t-box last:rounded-b-box cursor-pointer transition-[background-color,transform,box-shadow] duration-150 ease-out hover:bg-base-200 hover:-translate-y-px hover:shadow-sm motion-reduce:transition-none motion-reduce:hover:translate-y-0 motion-reduce:hover:shadow-none"
-                  >
-                    <span className="font-medium">
-                      {access.classroom}
-                      {access.archived ? (
-                        <span className="badge badge-xs badge-ghost ml-2">
-                          {t("orgMembers.archived")}
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="flex items-center gap-2 text-base-content/70">
-                      {access.section ? (
-                        <span className="badge badge-xs badge-ghost">
-                          {access.section}
-                        </span>
-                      ) : null}
-                      <ChevronRight
-                        aria-hidden="true"
-                        className="size-4 text-base-content/30 transition-transform duration-150 group-hover/cls:translate-x-0.5 group-hover/cls:text-base-content/70"
-                      />
-                    </span>
-                  </Link>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          {isSelf ? (
-            <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t("orgMembers.selfNotice")}
-            </div>
-          ) : !row.isMember ? (
-            row.github_id ? (
-              <div className="rounded-box border border-warning/30 bg-warning/5 p-4 text-sm">
-                <p className="text-base-content/80">
-                  {t("orgMembers.notMemberPrefix", { label })}{" "}
-                  <span className="font-semibold">
-                    {t("orgMembers.notMemberEmphasis")}
-                  </span>
-                  {t("orgMembers.notMemberSuffix")}
-                </p>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-sm mt-3"
-                  disabled={inviting}
-                  onClick={() => void handleInvite()}
-                >
-                  {inviting ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-xs"
-                        aria-hidden="true"
-                      />
-                      {t("orgMembers.inviting")}
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus aria-hidden="true" className="size-4" />
-                      {t("orgMembers.inviteToOrg")}
-                    </>
-                  )}
-                </button>
-              </div>
-            ) : (
-              <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-                {t("orgMembers.notMemberNoId")}
-              </div>
-            )
-          ) : confirming ? (
-            <div className="rounded-box border border-error/30 bg-error/5 p-4 text-sm">
-              <p className="text-base-content/80">
-                {activeClassrooms.length > 0 ? (
-                  <>
-                    {t("orgMembers.confirmUnenrollPrefix", { label })}{" "}
-                    <span className="font-semibold">
-                      {t("orgMembers.confirmClassroomCount", {
-                        count: activeClassrooms.length,
-                      })}
-                    </span>{" "}
-                    {t("orgMembers.confirmUnenrollMid", {
-                      classrooms: activeClassrooms
-                        .map((c) => c.classroom)
-                        .join(", "),
-                    })}{" "}
-                    <span className="font-semibold">{org}</span>{" "}
-                    {t("orgMembers.confirmUnenrollSuffix")}
-                  </>
-                ) : (
-                  <>
-                    {t("orgMembers.confirmRemovePrefix", { label })}{" "}
-                    <span className="font-semibold">{org}</span>{" "}
-                    {t("orgMembers.confirmRemoveSuffix")}
-                  </>
-                )}
-              </p>
-              <div className="mt-3 flex justify-end gap-2">
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  disabled={working}
-                  onClick={() => setConfirming(false)}
-                >
-                  {t("common.cancel")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-error btn-sm"
-                  disabled={working}
-                  onClick={() => void handleRemove()}
-                >
-                  {working ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-xs"
-                        aria-hidden="true"
-                      />
-                      {t("orgMembers.removing")}
-                    </>
-                  ) : (
-                    t("orgMembers.removeFromOrg")
-                  )}
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              className="btn btn-error btn-outline btn-sm self-start"
-              onClick={() => setConfirming(true)}
-            >
-              {t("orgMembers.removeFromOrg")}
-            </button>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 const OrgMembersPage = () => {
   const { t } = useTranslation()
@@ -897,16 +515,18 @@ const OrgMembersPage = () => {
         <DrawerSidebar page="classes" selected="members" />
       </Drawer>
 
-      {selected && org ? (
-        <MemberDetail
+      {org ? (
+        <MemberDetailModal
+          open={Boolean(selected)}
           org={org}
           row={selected}
-          isSelf={isSelf(selected)}
-          isOwner={isOwner(selected)}
+          isSelf={selected ? isSelf(selected) : false}
+          isOwner={selected ? isOwner(selected) : false}
           onClose={() => setSelectedKey(null)}
           onRemoved={() => {
+            const affected = selected
             setSelectedKey(null)
-            refresh(selected)
+            if (affected) refresh(affected)
           }}
         />
       ) : null}
