@@ -16,8 +16,8 @@ import type { GitHubUser } from "@/hooks/github/types"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useEffect, useState } from "react"
+import { useMutation } from "@tanstack/react-query"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import {
@@ -25,7 +25,7 @@ import {
   type AcceptStepId,
   type AcceptStepStatus,
 } from "@/api/mutations/assignments"
-import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
+import { useAcceptAndVerifyMembership } from "@/hooks/onboarding/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,
   MembershipError,
@@ -410,6 +410,7 @@ const AcceptAssignmentPage = () => {
     data: orgInvite,
     isLoading: loadingOrgMembership,
     error: orgMembershipError,
+    refetch: refetchMembership,
   } = useGetOwnOrgMembership(org)
 
   const assignmentData = assignmentsData?.find((a) => a.slug === assignment)
@@ -433,27 +434,16 @@ const AcceptAssignmentPage = () => {
   const [steps, setSteps] = useState<StepState>(initialStepState)
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
   const runAccept = useSafeSubmit()
-  const queryClient = useQueryClient()
 
   // A pending invitee opened the accept link before becoming an active member.
   // Rather than bouncing them to /onboard, accept + verify membership inline
   // (same shared verified-accept path), showing loading + error UI here, then
   // proceed to the accept flow once active.
   const isPending = orgInvite?.state === "pending"
-  const membershipAcceptMutation = useMutation({
-    mutationFn: () => acceptAndVerifyOrgMembership(client, org ?? ""),
-    onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["github", "memberships", "orgs", org],
-      })
-    },
+  const membershipAccept = useAcceptAndVerifyMembership({
+    org,
+    enabled: Boolean(isPending && org),
   })
-  useEffect(() => {
-    if (isPending && org && membershipAcceptMutation.isIdle) {
-      membershipAcceptMutation.mutate()
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPending, org])
 
   const acceptMutation = useMutation({
     mutationFn: () => {
@@ -514,7 +504,11 @@ const AcceptAssignmentPage = () => {
       <div className="min-h-screen bg-base-100">
         <AcceptNavbar />
         <AcceptCard>
-          <MembershipError info={info} org={org} />
+          <MembershipError
+            info={info}
+            org={org}
+            onRetry={() => void refetchMembership()}
+          />
         </AcceptCard>
       </div>
     )
@@ -526,19 +520,22 @@ const AcceptAssignmentPage = () => {
       <div className="min-h-screen bg-base-100">
         <AcceptNavbar />
         <AcceptCard>
-          <MembershipError info={info} org={org} />
+          <MembershipError
+            info={info}
+            org={org}
+            onRetry={() => void refetchMembership()}
+          />
         </AcceptCard>
       </div>
     )
   }
 
-  // Pending invitee opened the accept link before becoming an active member.
-  // Auto-accept + verify inline (the effect above fires the mutation), showing
-  // loading, then a cause-specific error (SSO / not-a-member / retryable) if it
-  // fails — no longer a bounce to /onboard.
-  if (isPending && !membershipAcceptMutation.isSuccess) {
-    if (membershipAcceptMutation.isError) {
-      const info = classifyMembershipError(membershipAcceptMutation.error, {
+  // Render the inline accept+verify while the pending invitee is being made
+  // active: a cause-specific error (SSO / not-a-member / retryable) on failure,
+  // otherwise a spinner until the hook reports active.
+  if (isPending && !membershipAccept.isActive) {
+    if (membershipAccept.isError) {
+      const info = classifyMembershipError(membershipAccept.error, {
         org,
         username,
         membershipState: orgInvite.state,
@@ -550,16 +547,7 @@ const AcceptAssignmentPage = () => {
             <MembershipError
               info={info}
               org={org}
-              onRetry={() => {
-                // Re-fire directly: the auto-accept effect gates on
-                // `isPending`, which doesn't change on retry, so reset() alone
-                // would strand the student on a spinner.
-                void queryClient.invalidateQueries({
-                  queryKey: ["github", "memberships", "orgs", org],
-                })
-                membershipAcceptMutation.reset()
-                if (org) membershipAcceptMutation.mutate()
-              }}
+              onRetry={membershipAccept.retry}
             />
           </AcceptCard>
         </div>

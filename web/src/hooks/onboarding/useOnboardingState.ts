@@ -1,9 +1,6 @@
-import { useEffect } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
-import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
+import { useAcceptAndVerifyMembership } from "@/hooks/onboarding/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,
   type MembershipErrorInfo,
@@ -30,57 +27,40 @@ export function useOnboardingState(input: {
   classroom?: string
 }): UseOnboardingStateResult {
   const { org } = input
-  const client = useGitHubClient()
   const { user } = useGithubAuth()
-  const queryClient = useQueryClient()
 
   const {
     data: orgMembership,
     isLoading: loadingMembership,
     error: membershipReadError,
+    refetch: refetchMembership,
   } = useGetOwnOrgMembership(org)
 
   const hasMembership = Boolean(orgMembership)
   const alreadyActive = orgMembership?.state === "active"
 
-  const acceptMutation = useMutation({
-    mutationFn: () => acceptAndVerifyOrgMembership(client, org ?? ""),
-    onSuccess: () => {
-      // The shared membership query (also read by the accept page) is now
-      // stale — invalidate so both this page's redirect gate and the accept
-      // page re-read "active" and can't diverge into a bounce loop.
-      void queryClient.invalidateQueries({
-        queryKey: ["github", "memberships", "orgs", org],
-      })
-    },
-  })
-
-  // Fire the accept-and-verify once, only when a (pending) membership exists
-  // and isn't already active. A never-invited student (no record) shows
-  // notInvited without a mutation; an already-active one is active immediately.
+  // Derive the accept trigger: a (pending) membership record exists, isn't
+  // already active, and the read didn't error. The hook owns the fire-once
+  // semantics and the never-invited/already-active outcomes.
   const shouldAccept = hasMembership && !alreadyActive && !membershipReadError
-  useEffect(() => {
-    if (shouldAccept && acceptMutation.isIdle) {
-      acceptMutation.mutate()
-    }
-    // acceptMutation identity is stable per render for our purposes; gate on
-    // the derived trigger only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [shouldAccept])
+  const accept = useAcceptAndVerifyMembership({ org, enabled: shouldAccept })
 
-  const active = alreadyActive || acceptMutation.isSuccess
+  const active = alreadyActive || accept.isActive
 
   const state = deriveOnboardingState({
     loadingMembership,
     membershipReadError: Boolean(membershipReadError),
     hasMembership,
-    acceptError: acceptMutation.isError,
+    acceptError: accept.isError,
     active,
   })
 
   let errorInfo: MembershipErrorInfo | null = null
   if (state === "error") {
-    const err = membershipReadError ?? acceptMutation.error
+    // Mirror deriveOnboardingState's precedence: a read error takes priority,
+    // so classify it over any accept error to keep the cause aligned with the
+    // flag that produced the error state.
+    const err = membershipReadError ? membershipReadError : accept.error
     errorInfo = classifyMembershipError(err, {
       org,
       username: user?.login,
@@ -91,18 +71,9 @@ export function useOnboardingState(input: {
   return {
     state,
     errorInfo,
-    retry: () => {
-      // Re-fire the accept/verify directly — the mount effect gates on
-      // `shouldAccept`, which doesn't change on retry, so it won't re-run on
-      // its own. Invalidate the shared membership query too so a genuinely
-      // flipped membership is observed.
-      void queryClient.invalidateQueries({
-        queryKey: ["github", "memberships", "orgs", org],
-      })
-      acceptMutation.reset()
-      if (hasMembership && !alreadyActive) {
-        acceptMutation.mutate()
-      }
-    },
+    // A read error can't be recovered by re-running the accept mutation (the
+    // read failed before any pending record was seen), so refetch the
+    // membership query in that case; otherwise re-run the accept/verify.
+    retry: membershipReadError ? () => void refetchMembership() : accept.retry,
   }
 }
