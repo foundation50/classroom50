@@ -59,7 +59,12 @@ python web/src/locales/audit_i18n.py --strict   # also fail on dead/hardcoded
 It reports three things:
 
 - **MISSING keys** — a `t("...")` in code whose key isn't in `en.json` (renders
-  the raw key; always a bug). Fails the run.
+  the raw key; always a bug). Fails the run. Recognizes double/single-quoted and
+  no-interpolation backtick (``t(`foo.bar`)``) keys, hyphenated segments, and
+  `ns:key` namespaces (the namespace is stripped before comparing); a
+  concatenated `t("prefix." + x)` is treated as a dynamic prefix, not a miss.
+  Runs over `.ts`/`.tsx`/`.mts`/`.cts` files. The tool has a pytest suite
+  ([`test_audit_i18n.py`](./test_audit_i18n.py)) that pins this detection logic.
 - **DEAD keys** — keys in `en.json` no code references, directly or via a bare
   string constant (`labelKey`/`titleKey`/`what`/`why`/…) or a dynamic
   ``t(`prefix.${x}`)`` prefix. These waste translator effort — every pack

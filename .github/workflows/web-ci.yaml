@@ -2,6 +2,8 @@ name: web CI
 
 # Quality gate for the web app (web/): type-check, lint, format, tests, and an
 # i18n key audit (missing t() keys fail; dead/hardcoded strings are advisory).
+# The audit tool has its own pytest suite (i18n audit tests) that runs first so
+# a regex regression can't silently turn the audit into a permanent PASS.
 # Blocks merge and can't be bypassed like a local hook. Scoped to web/** so
 # it only runs when the frontend changes, independent of the Go/Python CI.
 #
@@ -66,6 +68,25 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # Unit tests for the i18n audit tool itself. Its detection logic is
+      # entirely regex-driven, so these lock down the source-of-truth behavior
+      # (missing-key hard-fail, --strict flip, key-form capture, plural base,
+      # flatten/PLURAL_SUFFIXES parity with verify_locale.py) on inline
+      # fixtures -- a regex regression that silently stops catching a missing
+      # key fails here before it can turn the gate below into a permanent PASS.
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.x'
+
+      - name: Install audit test deps
+        working-directory: ${{ github.workspace }}
+        run: python -m pip install --quiet pytest
+
+      - name: i18n audit tests
+        working-directory: ${{ github.workspace }}
+        run: python -m pytest web/src/locales/test_audit_i18n.py -v
 
       # i18n coverage gate: fails if any t("...") in the source references a key
       # missing from en.json (those render as a raw key / English fallback in

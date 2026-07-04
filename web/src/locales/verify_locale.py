@@ -15,6 +15,7 @@ import sys
 from pathlib import Path
 
 BASE_FILE = "en.json"
+# keep in sync with audit_i18n.py
 PLURAL_SUFFIXES = ("_zero", "_one", "_two", "_few", "_many", "_other")
 
 

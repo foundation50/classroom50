@@ -15,7 +15,11 @@ It reports three independent things:
 
   1. MISSING keys  -- a t("...") / i18n.t("...") reference in code whose key is
      absent from en.json. These render as the raw key (or English fallback) and
-     are always a bug. Fails the run (exit 1).
+     are always a bug. Fails the run (exit 1). Quoted, single-quoted, and
+     no-interpolation backtick keys (t(`foo.bar`)) are all recognized, as are
+     hyphenated segments and i18next namespaces (the "ns:" prefix is stripped
+     before comparing, since en.json is flattened without it). A concatenated
+     key (t("prefix." + x)) is treated as a dynamic prefix, not a missing key.
 
   2. DEAD keys     -- keys in en.json that no source string literal references,
      directly or indirectly. "Indirectly" matters: many keys are stored as bare
@@ -45,12 +49,23 @@ LOCALES_DIR = Path(__file__).resolve().parent
 SRC_DIR = LOCALES_DIR.parent
 EN_FILE = LOCALES_DIR / "en.json"
 
+# keep in sync with verify_locale.py
 PLURAL_SUFFIXES = ("_zero", "_one", "_two", "_few", "_many", "_other")
 
-# t("key") / t('key') / i18n.t("key") with a static dotted key
-STATIC_KEY_RE = re.compile(r'\b(?:i18n\.)?t\(\s*["\']([A-Za-z0-9_.]+)["\']')
+# Legal characters in an i18next key: dotted segments, plus '-' (JSON keys allow
+# hyphens) and ':' (the i18next namespace separator, e.g. "common:foo.bar").
+_KEY_CHARS = r"[A-Za-z0-9_.:-]+"
+# The translator call, matched for both quoted and backtick-static keys below.
+# The (?<![.\w]) look-behind rejects any object method named `t` (e.g.
+# `builder.t("a.b")`) so only a bare `t(` or `i18n.t(` translator call matches.
+_T_CALL = r"(?<![.\w])(?:i18n\.)?t\("
+# t("key") / t('key') / i18n.t("key") with a static dotted key.
+STATIC_KEY_RE = re.compile(_T_CALL + r'\s*["\'](' + _KEY_CHARS + r')["\']')
+# t(`key`) with a static dotted key and NO interpolation (a no-${} template
+# literal is idiomatic i18next and must be caught by the MISSING gate too).
+STATIC_BACKTICK_RE = re.compile(_T_CALL + r"\s*`(" + _KEY_CHARS + r")`")
 # dynamic: t(`prefix.${...}`) -> record the literal prefix so we don't flag its keys
-DYNAMIC_PREFIX_RE = re.compile(r'\b(?:i18n\.)?t\(\s*`([A-Za-z0-9_.]*)\$\{')
+DYNAMIC_PREFIX_RE = re.compile(_T_CALL + r"\s*`([A-Za-z0-9_.]*)\$\{")
 # any dotted string literal in source (catches labelKey/titleKey/what/why consts)
 STRING_LITERAL_RE = re.compile(r'["\']([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)["\']')
 
@@ -85,12 +100,41 @@ def base_stem(key: str) -> str:
     return key
 
 
+def strip_namespace(key: str) -> str:
+    """Drop an i18next namespace prefix (`common:foo.bar` -> `foo.bar`).
+
+    en.json is flattened without a namespace prefix, so a namespaced reference
+    must be compared against the bare key. Only the first ':' separates the
+    namespace; anything after is the key path.
+    """
+    return key.split(":", 1)[1] if ":" in key else key
+
+
+def collect_static_key(raw: str, static_keys: set[str], dynamic_prefixes: set[str]) -> None:
+    """Route a captured static-key token to the right bucket.
+
+    A concatenated key like `t("prefix." + x)` captures the partial token
+    `prefix.` (trailing dot). That is not a real key -- treat it as a dynamic
+    prefix so it neither fires a spurious MISSING nor flags its own keys DEAD.
+    """
+    key = strip_namespace(raw)
+    if key.endswith("."):
+        dynamic_prefixes.add(key)
+    else:
+        static_keys.add(key)
+
+
+SOURCE_SUFFIXES = ("ts", "tsx", "mts", "cts")
+TEST_SUFFIXES = tuple(f".test.{ext}" for ext in SOURCE_SUFFIXES)
+
+
 def iter_source_files() -> list[Path]:
     files: list[Path] = []
-    for path in SRC_DIR.rglob("*.ts*"):
-        if path.suffix not in (".ts", ".tsx"):
-            continue
-        if path.name.endswith((".test.ts", ".test.tsx")):
+    # Glob per suffix so the filesystem walk prunes by name -- rglob("*") would
+    # descend into (and stat) the whole node_modules tree before the guard below
+    # could skip it.
+    for path in (p for ext in SOURCE_SUFFIXES for p in SRC_DIR.rglob(f"*.{ext}")):
+        if path.name.endswith(TEST_SUFFIXES):
             continue
         if "node_modules" in path.parts:
             continue
@@ -128,28 +172,32 @@ def main() -> int:
 
     for path in iter_source_files():
         text = path.read_text(encoding="utf-8")
+        relpath = rel(path)
         for m in STATIC_KEY_RE.finditer(text):
-            static_keys.add(m.group(1))
+            collect_static_key(m.group(1), static_keys, dynamic_prefixes)
+        for m in STATIC_BACKTICK_RE.finditer(text):
+            collect_static_key(m.group(1), static_keys, dynamic_prefixes)
         for m in DYNAMIC_PREFIX_RE.finditer(text):
             if m.group(1):
                 dynamic_prefixes.add(m.group(1))
         for m in STRING_LITERAL_RE.finditer(text):
             literal_strings.add(m.group(1))
-        # hardcoded-string heuristics only apply to component files
-        if path.suffix == ".tsx":
-            for i, line in enumerate(text.splitlines(), 1):
-                for m in ATTR_RE.finditer(line):
-                    val = m.group(1).strip()
-                    if CODEISH_RE.match(val):
-                        continue
-                    hardcoded.append((rel(path), i, val))
+        # Hardcoded JSX-attribute prose can appear in any component-bearing file
+        # (a .ts helper returning JSX via createElement, not just .tsx), so scan
+        # every source file; ATTR_RE is specific enough that non-JSX files match
+        # nothing.
         for i, line in enumerate(text.splitlines(), 1):
+            for m in ATTR_RE.finditer(line):
+                val = m.group(1).strip()
+                if CODEISH_RE.match(val):
+                    continue
+                hardcoded.append((relpath, i, val))
             for m in USERFACING_CALL_RE.finditer(line):
                 val = m.group(2)
                 # skip developer-only "must be used within" invariants
                 if "must be used" in val:
                     continue
-                hardcoded.append((rel(path), i, val))
+                hardcoded.append((relpath, i, val))
 
     # 1) MISSING: statically referenced but absent from en.json (allow plural base)
     missing = sorted(
