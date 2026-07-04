@@ -850,9 +850,9 @@ export async function getOrgMembershipState(
 // membership re-check used across the enroll/reconcile paths. A missing username
 // or any read failure resolves to false (never throws), so callers that just
 // need a yes/no gate don't each re-inline the getOrgMembershipState === "active"
-// + try/catch dance. Callers that must surface a tailored error on a non-member
-// (markStudentEnrolled, matchStudentToAccount) still call getOrgMembershipState
-// directly so they can throw their own message.
+// + try/catch dance. A caller that must surface a tailored error on a
+// non-member (matchStudentToAccount) still calls getOrgMembershipState
+// directly so it can throw its own message.
 export async function isActiveMember(
   client: GitHubClient,
   org: string,

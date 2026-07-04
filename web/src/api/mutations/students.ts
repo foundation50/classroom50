@@ -831,8 +831,9 @@ export type MatchStudentToAccountInput = {
 // exposes (the email->login link is dropped once an invite is accepted). The
 // teacher selects which org/team member owns the email; this writes that
 // identity onto the email-keyed row and enrolls it. Re-verifies the chosen
-// account is an ACTIVE member before binding (same #65/#50 trust model as
-// markStudentEnrolled), so a wrong/stale pick can't bind a non-member.
+// account is an ACTIVE member before binding (the same active-membership
+// trust model used across the enroll paths, #65/#50), so a wrong/stale pick
+// can't bind a non-member.
 async function matchStudentToAccount(
   client: GitHubClient,
   input: MatchStudentToAccountInput,
