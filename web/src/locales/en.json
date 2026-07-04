@@ -24,6 +24,8 @@
     "loadingApp": "Loading Classroom 50",
     "working": "Working...",
     "done": "Done",
+    "yes": "Yes",
+    "no": "No",
     "skipToMainContent": "Skip to main content"
   },
   "notFound": {
@@ -646,6 +648,12 @@
   "getStarted": {
     "badge": "Onboarding",
     "continueToAssignment": "Continue to your assignment",
+    "checking": {
+      "title": "Setting up your access…",
+      "message": "We're accepting your invitation to {{org}} and checking your access. This only takes a moment.",
+      "stillChecking": "This is taking longer than usual. GitHub can lag for a few seconds — you can wait or retry.",
+      "retry": "Retry"
+    },
     "notInvited": {
       "title": "Nothing to do here yet",
       "body_prefix": "We couldn't find an invitation for your account to the",
@@ -654,33 +662,45 @@
       "waitingBody_prefix": "If your instructor has invited you to",
       "waitingBody_suffix": ", check your email for the GitHub invitation and accept it, then return to this page and refresh. Otherwise, there's nothing you need to do here right now."
     },
-    "pending": {
-      "title": "Pending confirmation",
-      "enrolledTitle": "You're enrolled",
-      "message": "Your details are in — your instructor just needs to confirm your enrollment. There's nothing more for you to do here.",
-      "takingBack": "Taking you back to your assignment…",
-      "enrolledManual": "You're enrolled. If you're not redirected automatically, continue to your assignment below."
-    },
-    "allSet": {
+    "active": {
       "title": "You're all set",
-      "message": "You already have access to this classroom — there's nothing more you need to do here. You can accept assignments your instructor shares with you."
+      "message": "You now have access to this classroom — there's nothing more you need to do here. You can accept assignments your instructor shares with you.",
+      "takingBack": "Taking you back to your assignment…"
+    }
+  },
+  "membership": {
+    "badge": "Access",
+    "showDetails": "Show details for your instructor",
+    "copyDetails": "Copy details",
+    "copied": "Copied!",
+    "details": {
+      "org": "Organization",
+      "username": "GitHub username",
+      "endpoint": "Endpoint",
+      "httpStatus": "HTTP status",
+      "ssoRequired": "SSO required",
+      "membershipState": "Membership state",
+      "timestamp": "Timestamp"
     },
-    "form": {
-      "title": "Confirm your enrollment",
-      "titleWithReturn": "Confirm your enrollment before accepting the assignment",
-      "subtitle_prefix": "This links your GitHub account to your instructor's class roster for",
-      "subtitle_suffix": ".",
-      "checkingUser": "Checking GitHub user...",
-      "firstName": "First name",
-      "firstNamePlaceholder": "Ada",
-      "lastName": "Last name",
-      "lastNamePlaceholder": "Lovelace",
-      "email": "Your university email",
-      "emailHint": "Enter the email your instructor used to invite you, so they can match you to the class roster.",
-      "emailPlaceholder": "student@university.edu",
-      "genericError": "Something went wrong. Please try again.",
-      "confirming": "Confirming...",
-      "confirm": "Confirm enrollment"
+    "ssoRequired": {
+      "title": "Authorize single sign-on",
+      "body_prefix": "The",
+      "body_suffix": "organization requires SAML single sign-on (SSO), and your current session isn't authorized for it yet. You may already be a member — you just need to authorize SSO before continuing.",
+      "instructionsWithUrl": "Use the button below to authorize single sign-on for this organization, then reload this page.",
+      "instructionsUrlless": "Open this link from within your school's learning management system (LMS) so you're signed in through single sign-on first, or re-authenticate with GitHub, then reload this page.",
+      "authorizeButton": "Authorize single sign-on"
+    },
+    "notAMember": {
+      "title": "Not a member yet",
+      "body_prefix": "We couldn't confirm your membership in the",
+      "body_suffix": "organization.",
+      "instructions": "Ask your instructor to confirm they've invited you, then reload this page. If you just accepted an email invitation, give GitHub a moment and try again."
+    },
+    "generic": {
+      "title": "Something went wrong",
+      "body": "We couldn't finish setting up your access.",
+      "instructions": "This is usually temporary. Try again in a moment — if it keeps happening, share the details below with your instructor.",
+      "retry": "Retry"
     }
   },
   "setup": {
@@ -1098,27 +1118,9 @@
       "checkUrl_prefix": "Check that the URL is correct, or ask your instructor to confirm that this assignment has been added to",
       "checkUrl_suffix": "."
     },
-    "notOrgMember": {
-      "badge": "Access Denied",
-      "title": "Not an org member",
-      "body_prefix": "You are not currently a member of the",
-      "body_suffix": "organization.",
-      "askInstructor": "Ask your instructor for access",
-      "inviteBody_prefix": "Your instructor needs to invite you to the",
-      "inviteBody_middle": "GitHub organization and the",
-      "inviteBody_suffix": "class roster before you can accept this assignment.",
-      "afterAccepting": "After accepting the GitHub organization invite, return to this page and try again."
-    },
-    "ssoRequired": {
-      "badge": "Single sign-on required",
-      "title": "Authorize single sign-on",
-      "body_prefix": "The",
-      "body_suffix": "organization requires SAML single sign-on (SSO), and your current session isn't authorized for it yet. You may already be a member — you just need to authorize SSO before continuing.",
-      "instructions": "Open this assignment link from within your school's learning management system (LMS) so you're signed in through single sign-on first, or use the button below to authorize single sign-on for this organization, then reload this page.",
-      "authorizeButton": "Authorize single sign-on"
-    },
     "steps": {
       "account": "Checking your GitHub account",
+      "membership": "Confirming your classroom membership",
       "assignment": "Looking up the assignment",
       "autograder": "Resolving the autograder",
       "repo": "Creating your repository",

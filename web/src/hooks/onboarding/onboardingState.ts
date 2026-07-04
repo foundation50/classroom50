@@ -1,52 +1,51 @@
 // The onboarding page's state machine as a pure function (ordering + gates are
 // unit-testable without React). OnboardingPage renders the returned state;
-// useOnboardingState feeds it the query results.
+// useOnboardingState feeds it the membership read + auto-accept mutation status.
 //
-// Precedence the page short-circuits through:
-//   1. loading            — membership resolving, or (once present) the repo/team probes.
-//   2. notInvited         — no membership record. A PENDING invite is NOT this
-//                           (submitOnboarding accepts it before creating the repo).
-//   3. pendingConfirmation — just submitted, or an onboarding repo exists.
-//                           Before allSet, so a fresh submit shows pending even
-//                           if team membership already activated.
-//   4. allSet             — already on the classroom team.
-//   5. form               — fall-through.
-export type OnboardingState =
-  "loading" | "notInvited" | "pendingConfirmation" | "allSet" | "form"
+// The page no longer collects a self-report form. On mount it reads the
+// student's own org membership, then (if a membership record exists) runs the
+// shared accept-and-verify mutation. Precedence the page short-circuits through:
+//   1. loading    — the initial membership read is resolving, OR a membership
+//                   exists and the accept/verify mutation is in flight.
+//   2. notInvited — no membership record at all (never invited). A pending
+//                   invite is NOT this: the mutation accepts it.
+//   3. error      — the membership read failed, or accept/verify failed. The
+//                   page renders the cause-specific MembershipError component.
+//   4. active     — verified active membership; "you're all set" / redirect.
+export type OnboardingState = "loading" | "notInvited" | "active" | "error"
 
 export type OnboardingStateInput = {
+  // The initial GET /user/memberships/orgs/{org} read is still resolving.
   loadingMembership: boolean
-  // True once we have a membership and the dependent probes (onboarding repo,
-  // team) are still loading. Kept separate so the caller can gate these probes
-  // on membership having resolved first (they're disabled until then).
-  loadingDependents: boolean
+  // That read errored (e.g. SSO 403, unexpected). Surfaces the error screen
+  // without ever attempting the accept mutation.
+  membershipReadError: boolean
   // A membership record exists (active OR pending). Absent = never invited.
   hasMembership: boolean
-  // The student just submitted onboarding in this session.
-  justSubmitted: boolean
-  // An onboarding repo for this classroom already exists (survives reload).
-  hasOnboarded: boolean
-  // The student is an active member of the (heuristic) classroom team.
-  onClassroomTeam: boolean
+  // The accept-and-verify mutation failed (SSO / not-a-member / transient).
+  acceptError: boolean
+  // Verified active membership (mutation succeeded, or the initial read was
+  // already "active").
+  active: boolean
 }
 
 export function deriveOnboardingState(
   input: OnboardingStateInput,
 ): OnboardingState {
-  if (
-    input.loadingMembership ||
-    (input.hasMembership && input.loadingDependents)
-  ) {
+  if (input.membershipReadError || input.acceptError) {
+    return "error"
+  }
+  if (input.active) {
+    return "active"
+  }
+  if (input.loadingMembership) {
     return "loading"
   }
   if (!input.hasMembership) {
     return "notInvited"
   }
-  if (input.justSubmitted || input.hasOnboarded) {
-    return "pendingConfirmation"
-  }
-  if (input.onClassroomTeam) {
-    return "allSet"
-  }
-  return "form"
+  // Membership record exists but is not yet verified active and there's no
+  // error: the accept/verify mutation is in flight or about to fire — keep the
+  // student on the loading screen until it resolves.
+  return "loading"
 }

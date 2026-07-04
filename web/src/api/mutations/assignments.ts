@@ -48,7 +48,7 @@ import {
   withFreshRepoRetry,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "../queries/users"
-import { acceptPendingOrgInvite } from "./users"
+import { acceptAndVerifyOrgMembership } from "./users"
 import {
   TemplateAccessError,
   inOrgTemplateError,
@@ -82,7 +82,13 @@ class AcceptStepError extends Error {
 // Ordered phases of the accept flow, surfaced as a progress checklist in the
 // GUI.
 export type AcceptStepId =
-  "account" | "assignment" | "autograder" | "repo" | "access" | "setup"
+  | "account"
+  | "membership"
+  | "assignment"
+  | "autograder"
+  | "repo"
+  | "access"
+  | "setup"
 
 export type AcceptStepStatus = "pending" | "running" | "complete" | "error"
 
@@ -1714,16 +1720,22 @@ export async function acceptAssignment(params: {
   )
   const username = user.login
 
-  // Best-effort: auto-accept a pending org invite. Failures are ignored (the
-  // student may already be a member), so this isn't a tracked step.
-  //
-  // TODO(#66 follow-up): a SAML-SSO-gated 403 here (org enforces SSO and this
-  // token has no live SSO session) surfaces later as a generic step failure
-  // (repo/access), not the SSO-aware screen the accept gate now renders. The
-  // gate covers the common case (initial membership read); routing this
-  // mutation-side SSO 403 to the same "Authorize single sign-on" affordance is
-  // still open.
-  await acceptPendingOrgInvite(client, org)
+  // Tracked membership step: accept any pending org invite and verify the
+  // student is now an ACTIVE member before we attempt repo creation (a pending
+  // invitee can't create their repo). Verifying here means a SAML-SSO-gated 403
+  // surfaces as an actionable step failure right away (with the SSO/HTTP status
+  // in the message) instead of a confusing downstream repo/access failure.
+  await withAcceptStep(
+    {
+      id: "membership",
+      label: "Confirming your classroom membership",
+      actions:
+        "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your instructor to confirm your invitation.",
+      doneMessage: "Confirmed your classroom membership",
+      onStepUpdate,
+    },
+    () => acceptAndVerifyOrgMembership(client, org),
+  )
 
   const assignment = await withAcceptStep(
     {

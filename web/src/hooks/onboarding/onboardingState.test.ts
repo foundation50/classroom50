@@ -6,77 +6,77 @@ import {
 
 const base: OnboardingStateInput = {
   loadingMembership: false,
-  loadingDependents: false,
+  membershipReadError: false,
   hasMembership: true,
-  justSubmitted: false,
-  hasOnboarded: false,
-  onClassroomTeam: false,
+  acceptError: false,
+  active: false,
 }
 
 describe("deriveOnboardingState", () => {
-  it("is loading while membership is resolving", () => {
+  it("is loading while the initial membership read is resolving", () => {
     expect(deriveOnboardingState({ ...base, loadingMembership: true })).toBe(
       "loading",
     )
   })
 
-  it("is loading while dependents load once a membership exists", () => {
-    expect(
-      deriveOnboardingState({
-        ...base,
-        hasMembership: true,
-        loadingDependents: true,
-      }),
-    ).toBe("loading")
+  it("is loading once a membership exists but is not yet active", () => {
+    // A pending invite exists; the accept/verify mutation is (about to be) in
+    // flight. Never fall through to notInvited here.
+    expect(deriveOnboardingState(base)).toBe("loading")
   })
 
-  it("does NOT wait on dependents when there is no membership", () => {
-    // No membership + dependents still 'loading' should resolve to notInvited,
-    // not spin — the dependent probes are disabled without a membership anyway.
+  it("is notInvited without a membership record", () => {
     expect(
       deriveOnboardingState({
         ...base,
+        loadingMembership: false,
         hasMembership: false,
-        loadingDependents: true,
       }),
     ).toBe("notInvited")
   })
 
-  it("is notInvited without a membership record", () => {
-    expect(deriveOnboardingState({ ...base, hasMembership: false })).toBe(
-      "notInvited",
-    )
-  })
-
-  it("is pendingConfirmation right after a submit", () => {
-    expect(deriveOnboardingState({ ...base, justSubmitted: true })).toBe(
-      "pendingConfirmation",
-    )
-  })
-
-  it("is pendingConfirmation when an onboarding repo already exists", () => {
-    expect(deriveOnboardingState({ ...base, hasOnboarded: true })).toBe(
-      "pendingConfirmation",
-    )
-  })
-
-  it("prefers pendingConfirmation over allSet after a fresh submit", () => {
+  it("does NOT wait past a resolved read when there is no membership", () => {
     expect(
       deriveOnboardingState({
         ...base,
-        justSubmitted: true,
-        onClassroomTeam: true,
+        loadingMembership: false,
+        hasMembership: false,
       }),
-    ).toBe("pendingConfirmation")
+    ).toBe("notInvited")
   })
 
-  it("is allSet when on the classroom team and nothing pending", () => {
-    expect(deriveOnboardingState({ ...base, onClassroomTeam: true })).toBe(
-      "allSet",
+  it("is active when membership is verified active", () => {
+    expect(deriveOnboardingState({ ...base, active: true })).toBe("active")
+  })
+
+  it("prefers active over a still-loading read once verified", () => {
+    expect(
+      deriveOnboardingState({
+        ...base,
+        loadingMembership: true,
+        active: true,
+      }),
+    ).toBe("active")
+  })
+
+  it("is error when the initial membership read failed", () => {
+    expect(deriveOnboardingState({ ...base, membershipReadError: true })).toBe(
+      "error",
     )
   })
 
-  it("falls through to the form otherwise", () => {
-    expect(deriveOnboardingState(base)).toBe("form")
+  it("is error when the accept/verify mutation failed", () => {
+    expect(deriveOnboardingState({ ...base, acceptError: true })).toBe("error")
+  })
+
+  it("prefers error over active when both are set", () => {
+    // A read error takes precedence so a stale 'active' can't mask a failure.
+    expect(
+      deriveOnboardingState({
+        ...base,
+        membershipReadError: true,
+        active: true,
+      }),
+    ).toBe("error")
   })
 })
