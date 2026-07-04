@@ -32,6 +32,13 @@ import { ClickableRow } from "@/lib/motionComponents"
 import BulkActionsBar from "@/pages/orgMembers/BulkActionsBar"
 import MemberDetailModal from "@/pages/orgMembers/MemberDetailModal"
 import {
+  resolveSelectedRows,
+  selectableRows,
+  selectAllState,
+  toggleRow,
+  toggleSelectAll,
+} from "@/pages/orgMembers/selection"
+import {
   ClassificationBadge,
   GitHubIdentity,
   initialsFor,
@@ -253,53 +260,34 @@ const OrgMembersPage = () => {
   const isOwner = (row: OrgMemberRow) =>
     (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
 
-  // Rows backing the current selection (across the full set, not just the
-  // filtered view — a selected row hidden by search is still acted on). Self is
-  // always excluded, so even a stale selection can't target the signed-in owner.
+  // The signed-in account (an org owner, since this page is owner-gated) can't
+  // be bulk-added/removed — a row is selectable only when it isn't self.
+  const isSelectable = (row: OrgMemberRow) => !isSelf(row)
+
+  // Rows backing the current selection, across the full set (a selected row
+  // hidden by search is still acted on), with self always excluded so even a
+  // stale selection can't target the signed-in owner.
   const selectedRows = useMemo(
-    () => rows.filter((row) => selectedKeys.has(row.key) && !isSelf(row)),
+    () => resolveSelectedRows(rows, selectedKeys, isSelectable),
+    // isSelf/isSelectable depend on viewer; recompute when it changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [rows, selectedKeys, viewer],
   )
 
-  const toggleRow = (key: string) =>
-    setSelectedKeys((prev) => {
-      const next = new Set(prev)
-      if (next.has(key)) next.delete(key)
-      else next.add(key)
-      return next
-    })
+  const handleToggleRow = (key: string) =>
+    setSelectedKeys((prev) => toggleRow(prev, key))
 
-  // The signed-in account (an org owner, since this page is owner-gated) can't
-  // be bulk-added/removed — its checkbox is disabled and it's excluded from
-  // select-all. isSelf is defined below; a row is selectable when it isn't self.
-  const isSelectable = (row: OrgMemberRow) => !isSelf(row)
+  // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
+  // without disturbing any selected rows outside the current filter.
   const selectableFiltered = useMemo(
-    () => filtered.filter(isSelectable),
-    // isSelf depends on viewer; recompute when the filtered set or viewer changes.
+    () => selectableRows(filtered, isSelectable),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [filtered, viewer],
   )
-
-  // Header checkbox: select-all targets the currently-filtered SELECTABLE rows
-  // (self is never selectable). It reads "all selectable-filtered selected" and
-  // toggles that subset without disturbing any selected rows outside the filter.
-  const allFilteredSelected =
-    selectableFiltered.length > 0 &&
-    selectableFiltered.every((row) => selectedKeys.has(row.key))
-  const someFilteredSelected = selectableFiltered.some((row) =>
-    selectedKeys.has(row.key),
-  )
-  const toggleSelectAll = () =>
-    setSelectedKeys((prev) => {
-      const next = new Set(prev)
-      if (allFilteredSelected) {
-        for (const row of selectableFiltered) next.delete(row.key)
-      } else {
-        for (const row of selectableFiltered) next.add(row.key)
-      }
-      return next
-    })
+  const { allSelected: allFilteredSelected, someSelected: someFilteredSelected } =
+    selectAllState(selectableFiltered, selectedKeys)
+  const handleToggleSelectAll = () =>
+    setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
 
   const classroomOptions = useMemo(
     () => classes.map((c) => ({ name: c.name, path: c.path })),
@@ -398,7 +386,16 @@ const OrgMembersPage = () => {
                 </div>
               ) : filtered.length === 0 ? (
                 <div className="px-6 py-10 text-center text-sm text-base-content/70">
-                  {t("orgMembers.noMatch")}
+                  {classroomFilter === NO_CLASSROOM_FILTER
+                    ? t("orgMembers.noMembersNoClassroom")
+                    : classroomFilter
+                      ? t("orgMembers.noMembersInClassroom", {
+                          classroom:
+                            classroomOptions.find(
+                              (c) => c.path === classroomFilter,
+                            )?.name ?? classroomFilter,
+                        })
+                      : t("orgMembers.noMatch")}
                 </div>
               ) : (
                 <>
@@ -410,7 +407,7 @@ const OrgMembersPage = () => {
                       totalCount={filtered.length}
                       allSelected={allFilteredSelected}
                       someSelected={someFilteredSelected}
-                      onToggleSelectAll={toggleSelectAll}
+                      onToggleSelectAll={handleToggleSelectAll}
                       members={members}
                       classrooms={classroomOptions}
                       onClearSelection={() => setSelectedKeys(new Set())}
@@ -455,7 +452,7 @@ const OrgMembersPage = () => {
                           }
                           checked={selectedKeys.has(row.key)}
                           onClick={(e) => e.stopPropagation()}
-                          onChange={() => toggleRow(row.key)}
+                          onChange={() => handleToggleRow(row.key)}
                         />
                         <div className="min-w-0 flex-1">
                           <Avatar
@@ -498,6 +495,20 @@ const OrgMembersPage = () => {
                               count: row.classrooms.length,
                             })}
                           </span>
+                          {row.driftClassrooms.length > 0 ? (
+                            <span
+                              className="badge badge-sm badge-warning badge-soft gap-1"
+                              title={t("orgMembers.driftTitle", {
+                                classrooms: row.driftClassrooms.join(", "),
+                              })}
+                            >
+                              <AlertTriangle
+                                aria-hidden="true"
+                                className="size-3"
+                              />
+                              {t("orgMembers.driftBadge")}
+                            </span>
+                          ) : null}
                           <ClassificationBadge row={row} isOwner={isOwner(row)} />
                           <ChevronRight
                             aria-hidden="true"

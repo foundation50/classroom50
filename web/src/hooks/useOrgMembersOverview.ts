@@ -8,8 +8,10 @@ import {
   jsonFileQuery,
   listAllOrgMembers,
   orgAdminsQuery,
+  teamMembersQuery,
 } from "@/hooks/github/queries"
 import useGetClasses from "@/hooks/useGetClasses"
+import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { toStudent } from "@/util/roster"
 import {
   isClassroomArchived,
@@ -89,6 +91,33 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     .map((q) => (q.isError ? "e" : q.data ? "d" : ""))
     .join("|")
 
+  // Live members of each classroom's `classroom50-<classroom>` team — the
+  // enrollment source of truth. Cross-referenced against the CSV-derived access
+  // to surface CSV/team drift. Slug resolves from classroom.json when present
+  // (GitHub may slugify a collided name differently), else the heuristic.
+  const teamSlugs = useMemo(
+    () =>
+      classroomNames.map(
+        (name, i) =>
+          (metaQueries[i]?.data as Classroom | undefined)?.team?.slug ||
+          classroomTeamSlugHeuristic(name),
+      ),
+    // metaQueries is a fresh array each render; depend on the stable signature.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [classroomNames, metaSignature],
+  )
+
+  const teamQueries = useQueries({
+    queries: teamSlugs.map((slug) => ({
+      ...teamMembersQuery(client, org ?? "", slug),
+      enabled: Boolean(org && slug),
+    })),
+  })
+
+  const teamSignature = teamQueries
+    .map((q) => (q.data ? String(q.data.length) : "-"))
+    .join("|")
+
   const { rosters, notes } = useMemo(() => {
     const collected = classroomNames.map((name, i) => {
       const meta = metaQueries[i]?.data
@@ -119,9 +148,25 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomNames, metaSignature, rosterSignature])
 
+  // classroom -> set of live team-member numeric-id strings. Only classrooms
+  // whose team query has resolved are included; an unresolved/failed team read
+  // is omitted so aggregateOrgMembers treats it as "unknown" (never drift).
+  const teamMembersByClassroom = useMemo(() => {
+    const map = new Map<string, Set<string>>()
+    classroomNames.forEach((name, i) => {
+      const data = teamQueries[i]?.data
+      if (data) {
+        map.set(name, new Set(data.map((m) => String(m.id))))
+      }
+    })
+    return map
+    // teamQueries is a fresh array each render; depend on the stable signature.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [classroomNames, teamSignature])
+
   const rows = useMemo(
-    () => aggregateOrgMembers(members, rosters),
-    [members, rosters],
+    () => aggregateOrgMembers(members, rosters, teamMembersByClassroom),
+    [members, rosters, teamMembersByClassroom],
   )
 
   const ownerIds = useMemo(

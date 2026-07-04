@@ -7,6 +7,12 @@ export type ClassroomAccess = {
   classroom: string
   archived: boolean
   section: string
+  // Whether the member is confirmed on the actual `classroom50-<classroom>`
+  // GitHub team (the enrollment source of truth). True when team membership is
+  // verified OR when team data wasn't available for this classroom (unknown is
+  // treated as fine, not as drift). False = on the CSV roster but NOT on the
+  // team — a drift row grade collection would miss.
+  onTeam: boolean
 }
 
 // How an aggregated row relates org membership to roster presence:
@@ -28,6 +34,11 @@ export type OrgMemberRow = {
   isMember: boolean
   classrooms: ClassroomAccess[]
   classification: MemberClassification
+  // Classrooms where the member is on the CSV roster but NOT on the live
+  // `classroom50-<classroom>` team (CSV/team drift). Empty when team data was
+  // unavailable or everything is consistent. Only meaningful for members
+  // (a non-member is already flagged on-roster-not-member).
+  driftClassrooms: string[]
 }
 
 export type ClassroomRoster = {
@@ -52,6 +63,11 @@ const fullName = (s: Student) =>
 export function aggregateOrgMembers(
   members: GitHubUser[],
   rosters: ClassroomRoster[],
+  // Optional classroom -> set of live team-member numeric-id strings. When
+  // provided, each ClassroomAccess is marked onTeam and CSV/team drift is
+  // surfaced. A classroom absent from the map has "unknown" team data and is
+  // never flagged as drift.
+  teamMembersByClassroom?: Map<string, Set<string>>,
 ): OrgMemberRow[] {
   const memberIds = memberIdSet(members)
   // Login -> numeric id, so a roster row that carries a username but no
@@ -62,13 +78,16 @@ export function aggregateOrgMembers(
     members.map((m) => [m.login.toLowerCase(), String(m.id)]),
   )
 
+  // Raw per-classroom access before the member id is resolved; onTeam is
+  // computed in the classify loop below once we know the member's numeric id.
+  type RawAccess = { classroom: string; archived: boolean; section: string }
   type Acc = {
     key: string
     username: string
     github_id: string
     name: string
     email: string
-    classrooms: ClassroomAccess[]
+    classrooms: RawAccess[]
   }
   const byKey = new Map<string, Acc>()
 
@@ -76,7 +95,7 @@ export function aggregateOrgMembers(
     for (const student of roster.students) {
       const key = studentKey(student)
       if (!key) continue
-      const access: ClassroomAccess = {
+      const access: RawAccess = {
         classroom: roster.classroom,
         archived: roster.archived,
         section: student.section?.trim() ?? "",
@@ -120,6 +139,24 @@ export function aggregateOrgMembers(
         : (loginId ?? "")
     const isMember = Boolean(matchedId)
     if (isMember) matchedMemberIds.add(matchedId)
+
+    // Finalize each access with team-verified membership. A classroom with no
+    // team data (absent from the map) is "unknown" -> onTeam true (never
+    // flagged as drift). Drift = a member on the CSV roster but not the team.
+    const driftClassrooms: string[] = []
+    const classrooms: ClassroomAccess[] = acc.classrooms.map((raw) => {
+      const teamSet = teamMembersByClassroom?.get(raw.classroom)
+      const onTeam =
+        !teamSet || (Boolean(matchedId) && teamSet.has(matchedId))
+      // Only real members can meaningfully "drift" — a non-member is already
+      // flagged on-roster-not-member. Archived classrooms are excluded (their
+      // team may be intentionally gone).
+      if (isMember && teamSet && !onTeam && !raw.archived) {
+        driftClassrooms.push(raw.classroom)
+      }
+      return { ...raw, onTeam }
+    })
+
     rows.push({
       key: acc.key,
       username: acc.username,
@@ -129,8 +166,9 @@ export function aggregateOrgMembers(
       name: acc.name,
       email: acc.email,
       isMember,
-      classrooms: acc.classrooms,
+      classrooms,
       classification: isMember ? "member-on-roster" : "on-roster-not-member",
+      driftClassrooms,
     })
   }
 
@@ -147,6 +185,7 @@ export function aggregateOrgMembers(
       isMember: true,
       classrooms: [],
       classification: "member-no-roster",
+      driftClassrooms: [],
     })
   }
 

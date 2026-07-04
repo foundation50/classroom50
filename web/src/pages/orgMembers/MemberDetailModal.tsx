@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import { ChevronRight, ExternalLink, UserPlus, X } from "lucide-react"
+import { AlertTriangle, ChevronRight, ExternalLink, UserPlus, X } from "lucide-react"
 
 import Avatar from "@/components/avatar"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -208,6 +208,18 @@ const MemberDetailModal = ({
                       {access.archived ? (
                         <span className="badge badge-xs badge-ghost ml-2">
                           {t("orgMembers.archived")}
+                        </span>
+                      ) : null}
+                      {!access.onTeam && !access.archived ? (
+                        <span
+                          className="badge badge-xs badge-warning badge-soft ml-2 gap-1"
+                          title={t("orgMembers.driftAccessTitle")}
+                        >
+                          <AlertTriangle
+                            aria-hidden="true"
+                            className="size-2.5"
+                          />
+                          {t("orgMembers.driftAccessBadge")}
                         </span>
                       ) : null}
                     </span>
