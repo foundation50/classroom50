@@ -1,6 +1,7 @@
 name: web CI
 
-# Quality gate for the web app (web/): type-check, lint, format, and tests.
+# Quality gate for the web app (web/): type-check, lint, format, tests, and an
+# i18n key audit (missing t() keys fail; dead/hardcoded strings are advisory).
 # Blocks merge and can't be bypassed like a local hook. Scoped to web/** so
 # it only runs when the frontend changes, independent of the Go/Python CI.
 #
@@ -65,3 +66,14 @@ jobs:
 
       - name: Test
         run: npm test
+
+      # i18n coverage gate: fails if any t("...") in the source references a key
+      # missing from en.json (those render as a raw key / English fallback in
+      # every language). Dead keys and hardcoded user-facing strings are printed
+      # as advisory warnings only (default mode, not --strict), so they don't
+      # block merges. Uses the runner's preinstalled python3; the audit has no
+      # third-party deps. Run from the repo root since the script resolves web/src
+      # relative to itself.
+      - name: i18n key audit
+        working-directory: ${{ github.workspace }}
+        run: python3 web/src/locales/audit_i18n.py

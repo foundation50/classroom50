@@ -44,6 +44,35 @@ The agent should then:
    silently break a pack. It mirrors the installer's own validation, so a
    passing pack also installs cleanly.
 
+### Auditing coverage in our own code
+
+[`verify_locale.py`](./verify_locale.py) checks a *pack* against `en.json`.
+The complementary direction — checking that **our source code and `en.json`
+agree** — is [`audit_i18n.py`](./audit_i18n.py). Run it to sweep the whole web
+app for coverage problems:
+
+```bash
+python web/src/locales/audit_i18n.py            # report
+python web/src/locales/audit_i18n.py --strict   # also fail on dead/hardcoded
+```
+
+It reports three things:
+
+- **MISSING keys** — a `t("...")` in code whose key isn't in `en.json` (renders
+  the raw key; always a bug). Fails the run.
+- **DEAD keys** — keys in `en.json` no code references, directly or via a bare
+  string constant (`labelKey`/`titleKey`/`what`/`why`/…) or a dynamic
+  `` t(`prefix.${x}`) `` prefix. These waste translator effort — every pack
+  translates a string that never renders. Warning; fails only under `--strict`.
+- **HARDCODED strings** — user-facing literals that bypass i18n entirely
+  (prose in `aria-label`/`alt`/`title`/`placeholder`, or `setError`/`toast`
+  calls), so **no pack can ever translate them.** Heuristic; warning, fails
+  only under `--strict`.
+
+The dead/hardcoded checks are heuristic (indirect references and prose
+detection aren't exact), so they're warnings by default — skim them rather than
+treating every line as a defect.
+
 ### Automated packs (CI)
 
 The target languages in [`targets.json`](./targets.json) are also produced
