@@ -802,6 +802,11 @@ export async function refreshInstalledPacks(): Promise<string[]> {
         requireHttps: true,
         entry,
       })
+      // The per-pack fetch above is an await window in which another tab may
+      // have removed this pack. Re-read storage and skip if it's gone, so we
+      // don't resurrect a pack the user just deleted elsewhere (installPack
+      // does its own read-modify-write and would otherwise re-add the code).
+      if (!(pack.code in readStoredPacks())) continue
       // Content identical despite a changed marker: refresh the stored marker
       // quietly (stop refetching) but don't toast.
       if (bundlesEqual(preview.bundle, pack.bundle)) {

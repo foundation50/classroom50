@@ -839,6 +839,41 @@ describe("refreshInstalledPacks", () => {
     expect(packs.fr.bundle["nav.roleStudent"]).toBe("fr-new") // updated
   })
 
+  it("does not resurrect a pack removed by another tab during the fetch", async () => {
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "registry",
+          version: "1",
+          bundle: { "nav.roleStudent": "old" },
+        },
+      }),
+    })
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const u = String(input)
+      if (/index\.json$/.test(u)) {
+        return new Response(
+          JSON.stringify({ languages: [{ code: "de", version: "2" }] }),
+          { status: 200 },
+        )
+      }
+      // Simulate another tab removing the pack while this pack fetch is in
+      // flight: mutate the backing store before refreshInstalledPacks persists.
+      store.delete(PACKS_STORAGE_KEY)
+      return new Response(JSON.stringify({ nav: { roleStudent: "neu" } }), {
+        status: 200,
+      })
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    const updated = await refreshInstalledPacks()
+    // The pack was removed mid-fetch, so it must stay gone (not re-added) and
+    // must not be reported as updated.
+    expect(updated).toEqual([])
+    expect(readPacks(store).de).toBeUndefined()
+  })
+
   it("skips the fetch entirely when the version is unchanged", async () => {
     stubWindow({
       [PACKS_STORAGE_KEY]: JSON.stringify({
