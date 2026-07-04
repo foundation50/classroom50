@@ -985,32 +985,36 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Warnings / action results surface at the top. */}
-      <div className="flex w-full flex-col gap-2">
-        <AnimatePresence initial={false}>
-          {Object.entries(warnings).map(([key, warning]) => (
-            <motion.div
-              key={key}
-              layout
-              variants={collapseVariants}
-              initial="initial"
-              animate="animate"
-              exit="exit"
-              role="alert"
-              className="alert alert-warning alert-soft overflow-hidden"
-            >
-              <span className="text-sm">{warning}</span>
-              <button
-                type="button"
-                className="btn btn-ghost btn-xs"
-                onClick={() => dismissWarning(key)}
+      {/* Warnings / action results surface at the top. Rendered only when
+          present so the empty container doesn't add a phantom gap that pushes
+          the first card below the sibling column's top. */}
+      {Object.keys(warnings).length > 0 ? (
+        <div className="flex w-full flex-col gap-2">
+          <AnimatePresence initial={false}>
+            {Object.entries(warnings).map(([key, warning]) => (
+              <motion.div
+                key={key}
+                layout
+                variants={collapseVariants}
+                initial="initial"
+                animate="animate"
+                exit="exit"
+                role="alert"
+                className="alert alert-warning alert-soft overflow-hidden"
               >
-                {t("students.dismiss")}
-              </button>
-            </motion.div>
-          ))}
-        </AnimatePresence>
-      </div>
+                <span className="text-sm">{warning}</span>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs"
+                  onClick={() => dismissWarning(key)}
+                >
+                  {t("students.dismiss")}
+                </button>
+              </motion.div>
+            ))}
+          </AnimatePresence>
+        </div>
+      ) : null}
 
       {/* Data-drift banner: CSV-only rows with no team member / pending invite.
           Kept VISIBLE below as a distinct "not yet provisioned" section, but the
