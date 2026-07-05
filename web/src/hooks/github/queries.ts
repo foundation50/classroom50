@@ -46,7 +46,7 @@ export const githubKeys = {
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,
 
   // Distinct from `orgMembers` (page-1 via listOrgMembers): this keys the
-  // all-pages fetch used by the org Members page. Sharing one key would let the
+  // all-pages fetch for the org Members page. Sharing one key would let the
   // page-1 and all-pages results overwrite each other in the cache.
   orgMembersAll: (org: string) =>
     ["orgs", "list", "members", "all", org] as const,
@@ -163,7 +163,7 @@ export function getUser(client: GitHubClient, username: string) {
 }
 
 // Resolve a user by their immutable numeric account id (GET /user/{id}). The
-// stored CSV username can be stale if the student renamed their GitHub account,
+// stored CSV username goes stale if the student renames their GitHub account,
 // but the id never changes — so this returns their CURRENT login. Used when
 // re-inviting a roster student whose username may have drifted.
 export function getUserById(client: GitHubClient, id: number | string) {
@@ -196,10 +196,10 @@ export function orgMembershipQuery(client: GitHubClient, org: string) {
   })
 }
 
-// Self-hosted runners registered in the org (GitHub's admin:org endpoint),
-// used only to advise whether a typed label exists. Tolerant: 403/404 resolve
-// to an "unavailable" sentinel so the form degrades to "couldn't verify"
-// instead of erroring. GitHub-hosted labels are recognized separately.
+// Self-hosted runners registered in the org (GitHub's admin:org endpoint), used
+// only to advise whether a typed label exists. Tolerant: 403/404 resolve to an
+// "unavailable" sentinel so the form degrades to "couldn't verify" instead of
+// erroring. GitHub-hosted labels are recognized separately.
 export function orgRunnersQuery(client: GitHubClient, org: string) {
   return queryOptions<OrgRunnersResult>({
     queryKey: githubKeys.orgRunners(org),
@@ -276,9 +276,9 @@ function isNotFoundError(error: unknown) {
 }
 
 // A freshly-generated repo's git-data APIs lag the 200 from POST .../generate:
-// reads 404 and first write 409s "Git Repository is empty" while GitHub seeds.
-// A bare 409 (no empty-repo message) is a real conflict (e.g. non-fast-forward
-// updateRef), so the 409 branch is gated on the message.
+// reads 404 and the first write 409s "Git Repository is empty" while GitHub
+// seeds. A bare 409 (no empty-repo message) is a real conflict (e.g.
+// non-fast-forward updateRef), so the 409 branch is gated on the message.
 export function isFreshRepoLagError(error: unknown) {
   if (error instanceof GitHubAPIError) {
     if (error.status === 404) {
@@ -459,8 +459,8 @@ export function jsonFileQuery<T>(
 const SUBMISSION_TAG_PREFIX = "submit/"
 
 // All graded-submission releases for a student's repo, newest first. A repo
-// with no releases yet (or the very first push still grading) returns []. The
-// release page itself shows the rendered grade, so we only need the metadata.
+// with no releases yet (or a first push still grading) returns []. The release
+// page shows the rendered grade, so we only need the metadata.
 export function releasesQuery(
   client: GitHubClient,
   owner: string,
@@ -483,7 +483,7 @@ export function releasesQuery(
       } catch (err) {
         // A missing repo (student hasn't accepted, or a previewing teacher with
         // no repo) 404s here — no releases. Return [] so the page falls through
-        // to its empty state instead of erroring. Other errors throw.
+        // to its empty state. Other errors throw.
         if (err instanceof GitHubAPIError && err.status === 404) {
           return []
         }
@@ -593,8 +593,8 @@ export function listAllOrgMembers(client: GitHubClient, org: string) {
 
 // Org owners/admins across all pages (GET /orgs/{org}/members?role=admin). Used
 // to badge the Members page: an admin is an "Owner", not a "Member". 403/404
-// (can't read the member list with role filter) -> [] so the page degrades to
-// treating everyone as a plain member rather than erroring.
+// (can't read the filtered member list) -> [] so the page degrades to treating
+// everyone as a plain member rather than erroring.
 export async function listOrgAdmins(
   client: GitHubClient,
   org: string,
@@ -795,12 +795,12 @@ export async function orgPublishesClassroom50Pages(
       // Bound the probe so a hung github.io host can't stall the orgs load.
       signal: AbortSignal.timeout(5000),
     })
-    // A clean 404 is a definitive "not a Classroom50 org". Other non-ok
-    // statuses (5xx, 429) are transient -> indeterminate, don't penalize.
+    // A clean 404 is a definitive "not a Classroom50 org". Other non-ok statuses
+    // (5xx, 429) are transient -> indeterminate.
     if (res.status === 404) return "no"
     if (!res.ok) return "indeterminate"
-    // Confirm it's actually the index shape, not a stray 200 (e.g. a custom
-    // 404 page served with 200).
+    // Confirm it's actually the index shape, not a stray 200 (e.g. a custom 404
+    // page served with 200).
     const data = (await res.json()) as { classrooms?: unknown }
     return Array.isArray(data?.classrooms) ? "yes" : "no"
   } catch {
@@ -899,10 +899,10 @@ export async function getClassroom50OrgSummary(
     status = "ready"
 
     // The service-token read is deliberately NOT done here: this summary runs
-    // for every org the user can see, and reading the token per org fans out
-    // an extra GitHub API call across potentially many orgs. The token (and
-    // the full policy audit) is checked only when a specific org is opened
-    // (the teacher preflight on ClassesPage).
+    // for every org the user can see, so reading the token per org fans out an
+    // extra API call across many orgs. The token (and full policy audit) is
+    // checked only when a specific org is opened (teacher preflight on
+    // ClassesPage).
   } catch (error) {
     if (error instanceof GitHubAPIError && error.status === 404) {
       canAccessRepo = false
@@ -995,10 +995,10 @@ export function teamMembersQuery(
 }
 
 // Every team in the org across all pages (GET /orgs/{org}/teams). Owner/member
-// visibility applies (secret teams are only listed for members who can see
-// them). Used to cross-reference each `classroom50-<classroom>` team's live
-// membership against CSV-derived classroom access, surfacing drift on the
-// Members page. 404 (no access) -> [] so the page degrades to CSV-only display.
+// visibility applies (secret teams only listed for members who can see them).
+// Used to cross-reference each `classroom50-<classroom>` team's live membership
+// against CSV-derived classroom access, surfacing drift on the Members page.
+// 404 (no access) -> [] so the page degrades to CSV-only display.
 export async function listOrgTeams(
   client: GitHubClient,
   org: string,
@@ -1059,9 +1059,9 @@ export async function getOpenPullRequests(
 export async function getOrgRepos(client: GitHubClient, owner: string) {
   try {
     // Paginate to exhaustion: a single per_page=100 page silently under-counts
-    // orgs with >100 repos, which would make repo-list-derived signals (e.g.
-    // assignment acceptance on the submissions dashboard) miss students in
-    // large orgs. The first page's failure still surfaces a 404 as null below.
+    // orgs with >100 repos, making repo-list-derived signals (e.g. assignment
+    // acceptance on the submissions dashboard) miss students in large orgs. A
+    // first-page failure still surfaces a 404 as null below.
     return await paginateAll<GitHubRepo>(
       client,
       (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
@@ -1164,10 +1164,10 @@ export async function getRepoPermissionForUser(params: {
   )
 }
 
-// Fetches the most recent workflow run matching the given filters (or null if
-// none) from a classroom50 workflow. Shared by the collect-scores "track my
-// dispatch" / "last collected" reads and the regrade dispatch tracker, so the
-// workflow file is a parameter (defaults to collect-scores).
+// Fetches the most recent workflow run matching the given filters (or null) from
+// a classroom50 workflow. Shared by the collect-scores "track my dispatch" /
+// "last collected" reads and the regrade dispatch tracker, so the workflow file
+// is a parameter (defaults to collect-scores).
 async function listLatestWorkflowRun(
   client: GitHubClient,
   org: string,
@@ -1200,8 +1200,8 @@ async function listLatestWorkflowRun(
 // Finds the run we dispatched: run ids are monotonic, so it's the oldest
 // dispatch run with an id greater than `sinceRunId` (the newest id before our
 // POST). Binding to our own run avoids mistaking a concurrent dispatch for ours
-// and needs no clock. Returns null until our run registers; `sinceRunId === null`
-// means no prior runs, so the oldest run on the first page is ours.
+// and needs no clock. Null until our run registers; `sinceRunId === null` means
+// no prior runs, so the oldest run on the first page is ours.
 export async function getCollectScoresRunAfterId(
   client: GitHubClient,
   org: string,
@@ -1223,16 +1223,16 @@ export async function getCollectScoresRunAfterId(
 }
 
 // Finds the regrade run we dispatched, by the same monotonic-id binding as
-// getCollectScoresRunAfterId but against the regrade.yaml workflow. Returns
-// null until our run registers.
+// getCollectScoresRunAfterId but against regrade.yaml. Null until our run
+// registers.
 //
-// Unlike collect (one org-wide dispatcher), regrade can fan out one dispatch
-// per student via the per-row buttons, so far more than a single page of
-// dispatch runs can pile up between our snapshot and this poll. A fixed first
-// page would let our own run scroll off and bind us to a later student's run.
-// So we page newest-first, accumulating only runs with id > sinceRunId, and
-// stop as soon as a page contains a run at/below the baseline (everything older
-// is irrelevant) or we hit the page cap. The bound run is the oldest such run.
+// Unlike collect (one org-wide dispatcher), regrade can fan out one dispatch per
+// student via the per-row buttons, so far more than a page of dispatch runs can
+// pile up between our snapshot and this poll. A fixed first page would let our
+// own run scroll off and bind us to a later student's run. So we page
+// newest-first, accumulating only runs with id > sinceRunId, and stop once a
+// page contains a run at/below the baseline (everything older is irrelevant) or
+// we hit the page cap. The bound run is the oldest such run.
 const REGRADE_RUNS_PER_PAGE = 30
 const REGRADE_MAX_PAGES = 10
 

@@ -31,8 +31,8 @@ type AddStudentFormValues = {
 }
 
 // Single add/invite form. A username enrolls via GitHub (resolve, add to team,
-// send org invite) and still stores the email; email-only sends an email invite.
-// Either way the student joins the classroom team when they accept the invite.
+// send org invite) and stores the email; email-only sends an email invite.
+// Either way the student joins the classroom team on accepting the invite.
 const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const queryClient = useQueryClient()
@@ -66,8 +66,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
           label: username,
           warning: result?.teamWarning ?? "",
           student: toStudent(result.student),
-          // Already-active org member: team-added directly (no invite), so seed
-          // the members cache to avoid an "unprovisioned" flash.
+          // Already-active member: team-added directly (no invite), so seed the
+          // members cache to avoid an "unprovisioned" flash.
           enrolledMember: result.enrolled
             ? {
                 id: Number(result.student.github_id),
@@ -78,7 +78,7 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
       }
 
       // Email-only -> email invite carrying the classroom team, so the student
-      // lands in the team when they accept.
+      // lands in the team on accept.
       const result = await inviteStudentByEmail(githubClient, {
         org,
         classroom,
@@ -102,15 +102,15 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
     }) => {
       setWarning(warningMessage)
       // Clear the form so the next student starts clean and a stray re-click
-      // can't resubmit into a duplicate error. A warning still shows alongside.
+      // can't resubmit into a duplicate error.
       setSuccess(t("students.added", { label }))
       form.reset()
       // Show the new row immediately (see useUpdateRosterCache).
       updateRosterCache((current) => [...current, student])
       invalidateInviteQueries(queryClient, org)
-      // Enrolled member -> seed the team-members cache (drives the enrolled
-      // list) so the row shows enrolled at once; the invited path is already
-      // represented by a pending invite, so just invalidate.
+      // Enrolled member -> seed the team-members cache so the row shows enrolled
+      // at once; the invited path already shows a pending invite, so just
+      // invalidate.
       if (enrolledMember) {
         seedTeamMember(enrolledMember)
       } else {
@@ -127,8 +127,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
       section: "",
     } satisfies AddStudentFormValues,
     // Validate on submit, then re-validate on every change after the first
-    // attempt. Without this, a failed form-level validation leaves canSubmit
-    // false and the validator never re-runs, so the button never recovers.
+    // attempt. Otherwise a failed form-level validation leaves canSubmit false
+    // and never re-runs, so the button never recovers.
     validationLogic: revalidateLogic(),
     validators: {
       onDynamic: ({ value }) => {

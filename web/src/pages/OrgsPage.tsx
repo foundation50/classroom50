@@ -98,22 +98,21 @@ function OrgCard({
   const isAdmin = membership.role === "admin"
   const isActiveMember = membership.state === "active"
 
-  // Show a plan badge whenever GitHub actually returned a plan name (owners of
+  // Show a plan badge whenever GitHub returned a plan name (owners of
   // Team/Enterprise/Free orgs). Unknown (non-owner, no plan visible) stays
-  // badge-less — there's nothing accurate to show.
+  // badge-less.
   const showPlanBadge = classifyPlan(planName) !== "unknown"
 
-  // No-access-as-admin is the only role-derived badge we keep: it's a concrete
-  // "you can't read classroom50 here" state, not an inferred Teacher/Student
-  // label (which is just GitHub org-admin status and misleads students).
+  // No-access-as-admin is the only role-derived badge we keep: a concrete "you
+  // can't read classroom50 here" state, not an inferred Teacher/Student label
+  // (which is just GitHub org-admin status and misleads students).
   const showNoAccessBadge = noAccess && isAdmin
 
   // A student is an active member who can't read the classroom50 config repo
-  // (hence no_access). That's the normal student state, not a dead end: they
-  // can still open the org to reach their own assignment repos. A teacher
-  // (admin) opens any ready org; the service-token / policy preflight runs
-  // inside the org (ClassesPage), not here — checking every org in the list
-  // would fan out far too many GitHub API calls.
+  // (no_access). Normal, not a dead end: they can still open the org to reach
+  // their assignment repos. A teacher (admin) opens any ready org; the
+  // service-token/policy preflight runs inside the org (ClassesPage), not here
+  // — checking every org would fan out too many GitHub API calls.
   const canOpen = isAdmin ? isReady : isActiveMember
 
   return (
@@ -215,32 +214,31 @@ const OrgsPage = () => {
   const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
   const [showUnsupported, setShowUnsupported] = useState(false)
 
-  // Orgs that are confirmed Classroom 50 orgs the user can use: a teacher's
-  // ready org, or a student's enrolled org (no_access but the public Pages
-  // index confirmed it).
+  // Confirmed Classroom 50 orgs the user can use: a teacher's ready org, or a
+  // student's enrolled org (no_access but the public Pages index confirmed it).
   const cl50Orgs = orgs?.filter(
     (summary) =>
       summary.classroom50.status === "ready" ||
       summary.classroom50.status === "no_access",
   )
-  // Orgs where the signed-in user is an admin who hasn't set up Classroom 50
-  // yet — offered in the "Set Up" section. Unrelated orgs (not_classroom50)
-  // and indeterminate ones (unknown) are filtered out entirely.
+  // Orgs where the user is an admin who hasn't set up Classroom 50 yet —
+  // offered in "Set Up". Unrelated (not_classroom50) and indeterminate
+  // (unknown) orgs are filtered out.
   const nonCl50Orgs = orgs?.filter(
     (summary) => summary.classroom50.status === "needs_setup",
   )
 
   // Plan is fetched only for the needs-setup subset (all admin-owned, so plan
-  // is visible) to drive the badge, the eligible-first sort, and the free-org
-  // filter — without paying the per-org fan-out on the whole list.
+  // is visible) to drive the badge, sort, and free-org filter — without the
+  // per-org fan-out on the whole list.
   const needsSetupLogins = useMemo(
     () => nonCl50Orgs.map((summary) => summary.org.login),
     [nonCl50Orgs],
   )
   const plans = useNeedsSetupPlans(needsSetupLogins)
 
-  // Bubble Team/Enterprise (supported) orgs to the top, then unknown, then
-  // free. Stable sort keeps GitHub's original order within each bucket.
+  // Bubble Team/Enterprise (supported) to top, then unknown, then free. Stable
+  // sort keeps GitHub's order within each bucket.
   const sortedNonCl50Orgs = useMemo(
     () =>
       [...nonCl50Orgs].sort((a, b) => {
@@ -252,8 +250,7 @@ const OrgsPage = () => {
   )
 
   // Free-plan orgs can't be set up, so hide them by default. Unknown plan
-  // (never happens for admins here, but guarded anyway) is always shown so a
-  // usable org is never hidden.
+  // (guarded anyway) is always shown so a usable org is never hidden.
   const visibleNonCl50Orgs = showUnsupported
     ? sortedNonCl50Orgs
     : sortedNonCl50Orgs.filter(

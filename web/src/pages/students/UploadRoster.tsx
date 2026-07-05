@@ -125,8 +125,8 @@ const UploadRoster = ({
 
   const isOpen = phase !== "idle"
 
-  // Drive the native <dialog> so we get focus-trap, Escape, and backdrop
-  // inertness for free (matches the app's other modals).
+  // Drive the native <dialog> for free focus-trap, Escape, and backdrop
+  // inertness (matches the app's other modals).
   useEffect(() => {
     const dialog = dialogRef.current
     if (!dialog) return

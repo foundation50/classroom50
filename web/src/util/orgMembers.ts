@@ -2,15 +2,13 @@ import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 import { memberIdSet, rosterClaimSet, studentKey } from "@/util/identity"
 
-// Per-classroom enrollment state for an aggregated member, mirroring the
-// per-classroom roster's model (buildTeamRoster) so the two views agree:
-//  - enrolled:      on the classroom's `classroom50-<classroom>` GitHub team
-//                   (the enrollment source of truth), OR team data wasn't
-//                   available for this classroom (unknown is treated as enrolled,
-//                   never surfaced as a problem).
-//  - unprovisioned: on the CSV roster but NOT on the team — a rostered student
-//                   who hasn't formed team membership yet (or a failed team-add).
-//                   Grade collection is team-driven, so these are uncollected.
+// Per-classroom enrollment state for an aggregated member, mirroring
+// buildTeamRoster so the two views agree:
+//  - enrolled:      on the classroom's `classroom50-<classroom>` team (the
+//                   enrollment source of truth), OR team data was unavailable
+//                   (unknown is treated as enrolled, never flagged).
+//  - unprovisioned: on the CSV roster but NOT on the team (or a failed
+//                   team-add). Grade collection is team-driven, so uncollected.
 export type ClassroomAccessState = "enrolled" | "unprovisioned"
 
 // One classroom a student appears on.
@@ -23,10 +21,10 @@ export type ClassroomAccess = {
 
 // How an aggregated row relates org membership to roster presence:
 //  - member-on-roster: a healthy member on >=1 roster.
-//  - on-roster-not-member: the discrepancy this classification targets — on a roster but
-//    no longer (or never) an org member.
-//  - member-no-roster: an org member on no classroom roster (e.g. a co-teacher,
-//    or a leftover after an unenroll).
+//  - on-roster-not-member: the target discrepancy — on a roster but no longer
+//    (or never) an org member.
+//  - member-no-roster: an org member on no roster (e.g. co-teacher, or a
+//    leftover after an unenroll).
 export type MemberClassification =
   "member-on-roster" | "on-roster-not-member" | "member-no-roster"
 
@@ -41,10 +39,9 @@ export type OrgMemberRow = {
   classrooms: ClassroomAccess[]
   classification: MemberClassification
   // Classrooms where the member is on the CSV roster but NOT on the live
-  // `classroom50-<classroom>` team (state: "unprovisioned") — grade collection
-  // is team-driven, so these are uncollected. Empty when team data was
-  // unavailable or everything is consistent. Only meaningful for members
-  // (a non-member is already flagged on-roster-not-member).
+  // `classroom50-<classroom>` team (grade collection is team-driven, so
+  // uncollected). Empty when team data was unavailable or all consistent. Only
+  // meaningful for members (a non-member is already on-roster-not-member).
   unprovisionedClassrooms: string[]
 }
 
@@ -62,31 +59,30 @@ const fullName = (s: Student) =>
     .filter(Boolean)
     .join(" ")
 
-// Deduplicate students across every roster (by studentKey), match each to a live
-// org member by numeric github_id, fold in org members that appear on no roster,
-// and classify every row. Pure so the dedupe/match/classify logic is testable
-// without react-query. Members and rosters are matched on the SAME keys the
-// per-classroom roster uses (studentKey / memberIdSet) so the two views agree.
+// Deduplicate students across rosters (by studentKey), match each to a live org
+// member by numeric github_id, fold in members on no roster, and classify every
+// row. Pure so the dedupe/match/classify logic is testable without react-query.
+// Uses the SAME keys as the per-classroom roster (studentKey / memberIdSet) so
+// the two views agree.
 export function aggregateOrgMembers(
   members: GitHubUser[],
   rosters: ClassroomRoster[],
-  // Optional classroom -> set of live team-member numeric-id strings. When
-  // provided, each ClassroomAccess is marked onTeam and CSV/team drift is
-  // surfaced. A classroom absent from the map has "unknown" team data and is
-  // never flagged as drift.
+  // Optional classroom -> set of live team-member id strings. When provided,
+  // each ClassroomAccess is marked onTeam and CSV/team drift surfaced. A
+  // classroom absent from the map has "unknown" team data and is never flagged.
   teamMembersByClassroom?: Map<string, Set<string>>,
 ): OrgMemberRow[] {
   const memberIds = memberIdSet(members)
-  // Login -> numeric id, so a roster row that carries a username but no
-  // github_id (typed before reconcile) can still be matched to a live member.
-  // Without this, such a row is classified on-roster-not-member AND the member
-  // is also emitted as member-no-roster — the same person counted twice.
+  // Login -> id, so a roster row with a username but no github_id (typed before
+  // reconcile) still matches a live member. Without this it's classified
+  // on-roster-not-member AND the member is emitted as member-no-roster — the
+  // same person counted twice.
   const memberIdByLogin = new Map<string, string>(
     members.map((m) => [m.login.toLowerCase(), String(m.id)]),
   )
 
   // Raw per-classroom access before the member id is resolved; onTeam is
-  // computed in the classify loop below once we know the member's numeric id.
+  // computed in the classify loop once we know the member's id.
   type RawAccess = { classroom: string; archived: boolean; section: string }
   type Acc = {
     key: string
@@ -134,9 +130,9 @@ export function aggregateOrgMembers(
   const matchedMemberIds = new Set<string>()
 
   for (const acc of byKey.values()) {
-    // Match by github_id when present; otherwise fall back to login (a row that
-    // hasn't been reconciled to an id yet). The resolved id is recorded in
-    // matchedMemberIds so the no-roster fold below doesn't emit a duplicate row.
+    // Match by github_id when present, else fall back to login (a row not yet
+    // reconciled to an id). The resolved id is recorded in matchedMemberIds so
+    // the no-roster fold below doesn't emit a duplicate.
     const loginId = acc.username
       ? memberIdByLogin.get(acc.username.toLowerCase())
       : undefined
@@ -148,11 +144,10 @@ export function aggregateOrgMembers(
     if (isMember) matchedMemberIds.add(matchedId)
 
     // Finalize each access with its team-authoritative state. A classroom with
-    // no team data (absent from the map) is "unknown" -> enrolled (never
-    // surfaced as a problem). unprovisioned = a member on the CSV roster but not
-    // the team. Only real members can be unprovisioned — a non-member is already
-    // flagged on-roster-not-member. Archived classrooms are excluded (their team
-    // may be intentionally gone).
+    // no team data is "unknown" -> enrolled. unprovisioned = a member on the CSV
+    // roster but not the team; only real members can be unprovisioned (a
+    // non-member is already on-roster-not-member). Archived classrooms are
+    // excluded (their team may be intentionally gone).
     const unprovisionedClassrooms: string[] = []
     const classrooms: ClassroomAccess[] = acc.classrooms.map((raw) => {
       const teamSet = teamMembersByClassroom?.get(raw.classroom)
@@ -170,8 +165,8 @@ export function aggregateOrgMembers(
     rows.push({
       key: acc.key,
       username: acc.username,
-      // Prefer the resolved live member id over a roster id: a stale CSV id that
-      // matched a member only by login would otherwise be displayed/used.
+      // Prefer the resolved live member id over a roster id: a stale CSV id
+      // that matched only by login would otherwise be shown/used.
       github_id: matchedId || acc.github_id,
       name: acc.name,
       email: acc.email,
@@ -227,13 +222,12 @@ export type MatchCandidate = {
 }
 
 // Live org/team members NOT already claimed by any roster row in this classroom
-// — the smallest, most accurate set for the manual-match picker. A member is
-// "claimed" when their numeric id or login appears on a roster row (by github_id
-// or username), so a teacher only sees accounts that aren't yet bound to a
-// student here. Pure for unit-testing without react-query.
+// — the tightest set for the manual-match picker. "Claimed" = their id or login
+// appears on a row (by github_id or username), so a teacher only sees accounts
+// not yet bound to a student. Pure for testing without react-query.
 //
-// Accepts the minimal member shape it reads (id/login/name/avatar_url) so
-// callers don't have to fabricate a full GitHubUser just to feed it.
+// Accepts the minimal member shape it reads so callers needn't fabricate a full
+// GitHubUser.
 export type MatchMember = Pick<
   GitHubUser,
   "id" | "login" | "name" | "avatar_url"

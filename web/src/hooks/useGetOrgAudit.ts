@@ -5,8 +5,8 @@ import { githubKeys } from "./github/queries"
 import { buildOrgAuditReport } from "@/orgPolicy/audit"
 
 // Read-only org policy audit. Plan-aware (enterprise unlocks the 4
-// enterprise-only fields), so it waits for the org plan to be known before
-// running — otherwise an enterprise org would be audited as non-enterprise.
+// enterprise-only fields), so it waits for the plan to be known — otherwise an
+// enterprise org would be audited as non-enterprise.
 const useGetOrgAudit = (org: string, plan: string | undefined) => {
   const client = useGitHubClient()
   return useQuery({

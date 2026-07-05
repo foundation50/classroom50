@@ -8,22 +8,21 @@ import {
   type PropsWithChildren,
 } from "react"
 
-// Coordinates every regrade tracker on a Submissions page — the page-level
-// "Regrade all" hook and each per-row RegradeButton hook — so they share one
-// in-flight signal. Without this, the page's `regrading` flag only reflected
-// the assignment-wide hook and couldn't see per-row regrades, so "Collect now"
-// / "Regrade all" stayed enabled during a single-student regrade (overlapping
-// dispatches) and two trackers polling the same regrade.yaml run list could
-// bind to each other's run. The provider is page-scoped, so its membership is
-// implicitly the current assignment.
+// Coordinates every regrade tracker on a Submissions page — the "Regrade all"
+// hook and each per-row RegradeButton hook — so they share one in-flight signal.
+// Without it the page's `regrading` flag only saw the assignment-wide hook, so
+// "Collect now" / "Regrade all" stayed enabled during a single-student regrade
+// (overlapping dispatches) and two trackers polling the same regrade.yaml run
+// list could bind to each other's run. Page-scoped, so membership is implicitly
+// the current assignment.
 
 type RegradeCoordinator = {
   // True while ANY regrade (whole-assignment or per-student) is in flight.
   anyInFlight: boolean
   setInFlight: (key: string, inFlight: boolean) => void
-  // Whether a NEW regrade may be dispatched now. False while any regrade is in
-  // flight, so concurrent dispatches against the shared run list are prevented
-  // (the monotonic-id binding assumes one outstanding dispatch at a time).
+  // Whether a NEW regrade may dispatch now. False while any regrade is in
+  // flight, preventing concurrent dispatches against the shared run list (the
+  // monotonic-id binding assumes one outstanding dispatch at a time).
   canDispatch: () => boolean
 }
 
@@ -55,8 +54,8 @@ export function RegradeCoordinatorProvider({ children }: PropsWithChildren) {
   )
 }
 
-// Optional: trackers used outside a provider (e.g. in isolation/tests) get a
-// no-op coordinator so they keep working standalone.
+// Optional: trackers outside a provider (isolation/tests) get a no-op
+// coordinator so they keep working standalone.
 export function useRegradeCoordinator(): RegradeCoordinator {
   const ctx = useContext(RegradeCoordinatorContext)
   if (ctx) return ctx

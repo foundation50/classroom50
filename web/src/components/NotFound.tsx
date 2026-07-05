@@ -5,11 +5,10 @@ import { useTranslation } from "react-i18next"
 
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
-// Role/visibility-gated pages render this when the current user can't access a
-// resource. We deliberately present a 404 ("not found") rather than a 403
-// ("forbidden"): access is ultimately enforced by GitHub, so this is a UX
-// concern, and a 404 avoids confirming the resource exists to someone whose
-// role can't see it. Reused across teacher-only pages and future TA roles.
+// Rendered by role/visibility-gated pages when the user can't access a resource.
+// We present a 404 ("not found"), not a 403 ("forbidden"): access is enforced by
+// GitHub, so this is UX-only, and a 404 avoids confirming the resource exists to
+// someone whose role can't see it. Reused across teacher-only pages and TA roles.
 const NotFound = ({ title, message }: { title?: string; message?: string }) => {
   const { t } = useTranslation()
   const resolvedTitle = title ?? t("notFound.title")
@@ -17,9 +16,9 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
   useDocumentTitle(resolvedTitle)
   const headingRef = useRef<HTMLHeadingElement | null>(null)
 
-  // Client-side navigation doesn't reload the page, so a screen reader isn't
-  // told the view changed to "not found". Move focus to the heading to announce
-  // it and give keyboard users a sensible starting point.
+  // Client-side navigation doesn't reload, so a screen reader isn't told the
+  // view changed to "not found". Move focus to the heading to announce it and
+  // give keyboard users a sensible starting point.
   useEffect(() => {
     headingRef.current?.focus()
   }, [])

@@ -22,9 +22,9 @@ const apiError = (status: number) =>
 
 describe("isMembershipReadError (/onboard 404 -> notInvited boundary)", () => {
   it("treats a definitive 404 as NOT a read error (never invited)", () => {
-    // Regression for the bug where getPendingOrgInvite's 404 set
-    // membershipReadError, routing a never-invited student to the error screen
-    // instead of notInvited. A 404 means "no membership record".
+    // Regression: getPendingOrgInvite's 404 once set membershipReadError,
+    // routing a never-invited student to the error screen instead of notInvited.
+    // A 404 means "no membership record".
     expect(isMembershipReadError(apiError(404))).toBe(false)
   })
 

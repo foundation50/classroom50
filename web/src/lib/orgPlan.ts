@@ -1,8 +1,7 @@
 // Org-plan eligibility for Classroom 50. GitHub's GET /orgs/{org} only returns
-// `plan` to org owners; a non-owner member gets a response without it, so the
-// plan name is often absent (unknown). Team/Enterprise are the plans Classroom
-// 50 can be set up on; free can't. Unknown must never be treated as free — we'd
-// hide/demote orgs the user can actually work with.
+// `plan` to org owners, so it's often absent (unknown) for a non-owner member.
+// Team/Enterprise are supported; free isn't. Unknown must never be treated as
+// free — we'd hide orgs the user can actually work with.
 
 export type PlanCategory = "supported" | "free" | "unknown"
 

@@ -11,7 +11,7 @@ import {
 } from "@/version"
 
 // A single feedback/support link card. The two support links differ only in
-// href + labels, so they share one definition to stay in sync.
+// href + labels, so they share one definition.
 function SupportLink({
   href,
   title,
@@ -40,10 +40,10 @@ function SupportLink({
   )
 }
 
-// About modal shown from the profile menu — always-accessible build/version
-// info. Version links to the GitHub Release for this build's `web-v<version>`
-// tag (when it exists); the commit links to the exact source commit, so a bug
-// report can point at precisely what shipped.
+// About modal from the profile menu — always-accessible build/version info.
+// Version links to the GitHub Release for this build's `web-v<version>` tag
+// (when it exists); the commit links to the exact source commit, so a bug report
+// can point at precisely what shipped.
 export const AboutDialog = forwardRef<HTMLDialogElement, { titleId: string }>(
   function AboutDialog({ titleId }, ref) {
     const { t } = useTranslation()

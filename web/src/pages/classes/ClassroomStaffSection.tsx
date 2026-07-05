@@ -23,17 +23,16 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
-// i18n key for each role's singular display label. Kept as a map (not inline
-// t() calls) so it stays usable in module scope; components translate it via
-// t(ROLE_LABEL_KEY[role]).
+// i18n key for each role's singular label. A map (not inline t()) so it works in
+// module scope; components translate via t(ROLE_LABEL_KEY[role]).
 const ROLE_LABEL_KEY: Record<StaffRole, string> = {
   instructor: "classes.staff.roleInstructor",
   ta: "classes.staff.roleTa",
 }
 
 // Manage a classroom's staff (instructor / TA), backed by the per-classroom
-// GitHub teams `classroom50-<classroom>-<role>`. The page already gates the
-// route; the actions assume instructor/owner.
+// GitHub teams `classroom50-<classroom>-<role>`. The route already gates; the
+// actions assume instructor/owner.
 const ClassroomStaffSection = ({
   org,
   classroom,
@@ -85,9 +84,9 @@ const ClassroomStaffSection = ({
   )
 }
 
-// Add a GitHub user to a role team. Ensures the team exists first (the
-// "preflight" guarantee: a classroom missing a staff team self-heals here) and
-// grants it config-repo write, then adds the user.
+// Add a GitHub user to a role team. Ensures the team exists first (self-healing
+// preflight: a classroom missing a staff team is created here) and grants it
+// config-repo write, then adds the user.
 const AddStaff = ({
   org,
   classroom,
@@ -119,10 +118,9 @@ const AddStaff = ({
         input.role,
       )
       await grantTeamConfigRepoWrite(client, org, team.slug)
-      // GitHub auto-adds the team CREATOR as a maintainer. If THIS action just
-      // created the team, the acting user got auto-added — remove them unless
-      // they're the intended target, so adding a TA doesn't make the instructor
-      // a TA too.
+      // GitHub auto-adds the team CREATOR as maintainer. If this action just
+      // created the team, remove the acting user unless they're the target — so
+      // adding a TA doesn't also make the instructor a TA.
       if (
         team.created &&
         user?.login &&

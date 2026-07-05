@@ -1,8 +1,8 @@
-// Per-concern repair dispatcher for the org policy audit. Maps each audit
-// ConcernId to the callable mutation that restores its required setting, so the
-// settings page can offer a per-concern "Fix it" button. This lives in its own
-// module (not orgChecks.ts) to avoid an import cycle: mutations.ts already
-// imports orgChecks.ts for repairOrgDefaults.
+// Per-concern repair dispatcher for the org policy audit. Maps each ConcernId to
+// the mutation that restores its setting, so the settings page can offer a
+// per-concern "Fix it" button. Kept in its own module (not orgChecks.ts) to
+// avoid an import cycle: mutations.ts already imports orgChecks.ts for
+// repairOrgDefaults.
 
 import type { GitHubClient } from "@/hooks/github/client"
 import {
@@ -19,7 +19,7 @@ import type { ConcernId } from "./audit"
 
 // Whether a concern can be repaired by an API call. The four manual-only
 // member-privilege settings have no API and are excluded by design; every
-// audit concern here is API-repairable.
+// concern here is API-repairable.
 export const REPAIRABLE_CONCERNS: ReadonlySet<ConcernId> = new Set<ConcernId>([
   "orgDefaults",
   "orgActions",
@@ -34,7 +34,7 @@ export const REPAIRABLE_CONCERNS: ReadonlySet<ConcernId> = new Set<ConcernId>([
 // Result of a repair attempt. `unfixableFields` lists member-default fields the
 // API accepted but that didn't stick on read-back — silently overridden by an
 // enterprise policy (200 but ignored). Plan-gated fields the API rejected
-// (403/422) are excluded. Only populated for the orgDefaults concern.
+// (403/422) are excluded. Only populated for orgDefaults.
 export type RepairResult = {
   unfixableFields: string[]
 }

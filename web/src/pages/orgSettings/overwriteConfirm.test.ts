@@ -7,10 +7,9 @@ import {
 } from "./overwriteConfirm"
 
 // These pin the "settle the parked overwrite promise exactly once" guarantees
-// that RerunOrgSetup/OrgSetupPage depend on but can't easily assert without a
-// DOM. The modal calls onConfirm() (settle true) and then onClose() (settle
-// false) on every confirm, and the native <dialog> close fires onClose again —
-// so the resolver is hit multiple times per interaction and must not flip.
+// RerunOrgSetup/OrgSetupPage depend on but can't easily assert with a DOM. Every
+// confirm hits the resolver multiple times (onConfirm true, onClose false, the
+// native <dialog> close false again) and must not flip.
 
 describe("settleOverwrite", () => {
   it("resolves the parked promise with the first value and ignores later calls", async () => {
@@ -19,8 +18,8 @@ describe("settleOverwrite", () => {
       ref.current = resolve
     })
 
-    // onConfirm -> true, then ConfirmModal's onClose -> false, then the dialog's
-    // native onClose -> false again. True must win; the later falses are inert.
+    // onConfirm -> true, then onClose -> false, then the dialog's native onClose
+    // -> false again. True must win; the falses are inert.
     settleOverwrite(ref, true)
     settleOverwrite(ref, false)
     settleOverwrite(ref, false)

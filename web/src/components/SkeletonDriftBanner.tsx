@@ -8,18 +8,14 @@ import { AppBanner } from "@/components/AppBanner"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { RERUN_ORG_SETUP_ANCHOR } from "@/pages/orgSettings/RerunOrgSetup"
 
-// Global warning banner shown to an org owner when the `classroom50` config
-// repo's scaffolded workflows have drifted from the current bundled skeleton
-// (e.g. after an action-pin bump). Routes to the owner-only "Re-run org setup"
-// Org Settings section, which performs the overwrite.
+// Global warning banner for an org owner when the `classroom50` config repo's
+// scaffolded workflows have drifted from the bundled skeleton (e.g. after an
+// action-pin bump). Routes to the owner-only "Re-run org setup" section, which
+// overwrites (its modal still confirms per file).
 //
-// The copy warns that re-running overwrites customized workflow files with the
-// skeleton defaults (the re-run flow's modal still confirms per file).
-//
-// Dismiss is per-session and per-org: the banner is mounted once in the stable
+// Dismiss is per-session and per-org: the banner mounts once in the stable
 // _authed layout and never remounts on org navigation, so dismissal is tracked
-// by org — dismissing org A must not suppress org B's drift. Reappears on
-// reload until resolved.
+// by org — dismissing org A must not suppress org B. Reappears on reload.
 export function SkeletonDriftBanner() {
   // Loose param read: org-less routes (the org picker) yield undefined and the
   // owner-gated hook stays disabled.

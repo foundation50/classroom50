@@ -172,9 +172,8 @@ const AllSet = ({
   )
 }
 
-// Surface a "still checking…" hint plus a manual Retry once the loading state
-// has persisted this long, so a GitHub lag never strands the student on an
-// unbounded spinner.
+// Show a "still checking…" hint + manual Retry once loading persists this
+// long, so a GitHub lag never strands the student on an unbounded spinner.
 const SLOW_AFTER_MS = 10_000
 
 const OnboardingPage = () => {
@@ -182,8 +181,8 @@ const OnboardingPage = () => {
   useDocumentTitle(t("documentTitle.getStarted"))
   const { org, classroom } = useParams({ strict: false })
   const { user } = useGithubAuth()
-  // Where to send the student once they've become an active org member (set by
-  // the accept page). The route already validated it's a safe relative path.
+  // Where to send the student once they're an active org member (set by the
+  // accept page). The route already validated it's a safe relative path.
   const search = useSearch({ strict: false }) as { returnTo?: string }
   const returnTo =
     typeof search.returnTo === "string" ? search.returnTo : undefined
@@ -196,27 +195,26 @@ const OnboardingPage = () => {
     refetch: refetchMembership,
   } = useGetOwnOrgMembership(org)
 
-  // A 404 from GET /user/memberships/orgs/{org} is not a read *failure* — it is
-  // GitHub's authoritative "no membership record", i.e. the student was never
-  // invited. Treat it as "no membership" so we fall through to the calm
-  // notInvited screen, and reserve the error screen for genuine read failures
-  // (403 / SSO-gated / transient). The accept page keeps its own 404 handling;
-  // this remapping is scoped to /onboard.
+  // A 404 from GET /user/memberships/orgs/{org} isn't a read *failure* — it's
+  // GitHub's authoritative "no membership record" (student never invited).
+  // Treat it as "no membership" so we fall through to the calm notInvited
+  // screen, reserving the error screen for genuine read failures (403 / SSO /
+  // transient). This remapping is scoped to /onboard.
   const membershipReadError = isMembershipReadError(rawMembershipError)
 
   const hasMembership = Boolean(orgMembership)
   const alreadyActive = orgMembership?.state === "active"
 
-  // Fire the accept/verify only when a (pending) membership record exists, isn't
-  // already active, and the read didn't error. The hook owns fire-once semantics.
+  // Fire accept/verify only when a pending membership record exists, isn't
+  // active, and the read didn't error. The hook owns fire-once semantics.
   const shouldAccept = hasMembership && !alreadyActive && !membershipReadError
   const accept = useAcceptAndVerifyMembership({ org, enabled: shouldAccept })
 
   const active = alreadyActive || accept.isActive
 
-  // Precedence: a read error (or accept failure) takes priority over everything
-  // else so a stale "active" can't mask a failure; then active; then loading
-  // (initial read OR accept/verify in flight); then notInvited (no record).
+  // Precedence: a read error (or accept failure) beats everything so a stale
+  // "active" can't mask a failure; then active; then loading (initial read OR
+  // accept/verify in flight); then notInvited (no record).
   const state = deriveOnboardingState({
     loadingMembership,
     membershipReadError,
@@ -225,15 +223,15 @@ const OnboardingPage = () => {
     active,
   })
 
-  // A read error can't be recovered by re-running accept (the read failed before
-  // any pending record was seen), so refetch the membership query in that case;
-  // otherwise re-run the accept/verify.
+  // A read error can't be fixed by re-running accept (it failed before any
+  // pending record was seen), so refetch the membership query then; else re-run
+  // accept/verify.
   const retry = membershipReadError
     ? () => void refetchMembership()
     : accept.retry
 
-  // One-shot latch: history.push stacks entries, so fire once when membership
-  // first goes active rather than on every re-render.
+  // One-shot latch: fire once when membership first goes active, not on every
+  // re-render (history.push stacks entries).
   const navigatedRef = useRef(false)
   useEffect(() => {
     if (state === "active" && returnTo && !navigatedRef.current) {
@@ -308,7 +306,6 @@ const OnboardingPage = () => {
     )
   }
 
-  // active
   return (
     <AllSet
       org={org}

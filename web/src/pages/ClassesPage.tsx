@@ -57,13 +57,11 @@ const ClassCard = ({
   const canEdit = isTeacher && cl.name
   const archived = isClassroomArchived(classroomData ?? {})
 
-  // Defer rendering until the classroom's lifecycle is known, for every tab.
-  // We can't tell active from archived until classroomData loads, so painting a
-  // full card (or even a skeleton slot) under Active/All and then unmounting it
-  // when it resolves archived causes a grid relayout flash. Rendering nothing
-  // until resolved means each card appears exactly once, in its correct tab —
-  // never painted then self-unmounted. (The page already shows a top-level
-  // skeleton grid during the initial classes load.)
+  // Defer rendering until the classroom's lifecycle is known. We can't tell
+  // active from archived until classroomData loads, so painting a card under
+  // Active/All then unmounting it when it resolves archived causes a grid
+  // relayout flash. Rendering nothing until resolved means each card appears
+  // once, in its correct tab.
   if (!classroomData) return null
   if (filter === "active" && archived) return null
   if (filter === "archived" && !archived) return null
@@ -395,8 +393,8 @@ const ClassesPage = () => {
 
   const isMember = membership?.state === "active"
   // The org preflight (service token + policy audit) is an OWNER concern: a
-  // non-owner can't read the service-token secret, which would surface a false
-  // "failed" alert. Gate it on org ownership, not the broad teacher signal.
+  // non-owner can't read the service-token secret and would see a false
+  // "failed" alert. Gate on ownership, not the broad teacher signal.
   const isOwner = membership?.role === "admin"
   const [filter, setFilter] = useState<ClassFilter>("active")
 

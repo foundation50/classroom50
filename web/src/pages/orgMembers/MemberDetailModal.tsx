@@ -22,11 +22,10 @@ import {
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Centered modal showing one org member's details: identity, classification,
-// per-classroom access, and the member-level actions (invite an on-roster
-// non-member; remove an active member from the org). Replaces the former
-// right-side drawer. Driven by an `open` prop over a native <dialog> (matching
-// BulkActionsBar / ConfirmModal) so it gets focus-trap, Escape, and an inert
-// backdrop for free.
+// per-classroom access, and member-level actions (invite an on-roster
+// non-member; remove an active member). Driven by an `open` prop over a native
+// <dialog> (like BulkActionsBar / ConfirmModal) for free focus-trap, Escape, and
+// an inert backdrop.
 const MemberDetailModal = ({
   open,
   org,
@@ -40,15 +39,15 @@ const MemberDetailModal = ({
   open: boolean
   org: string
   // The member to show. Null is tolerated so the modal can stay mounted across
-  // open/close without the caller juggling conditional rendering.
+  // open/close without conditional rendering by the caller.
   row: OrgMemberRow | null
   isSelf: boolean
   isOwner: boolean
   onClose: () => void
   // Called after the member is removed from the org (refresh + optimistic drop).
   onRemoved: () => void
-  // Called after an on-roster non-member is invited to the org (refresh only —
-  // no classroom membership changed).
+  // Called after an on-roster non-member is invited (refresh only — no classroom
+  // membership changed).
   onInvited: () => void
 }) => {
   const { t } = useTranslation()
@@ -67,10 +66,9 @@ const MemberDetailModal = ({
     if (!open && dialog.open) dialog.close()
   }, [open])
 
-  // Close and reset the transient confirm/in-flight state in one place. Every
-  // close path (the X button, the backdrop, and Escape via onCancel) routes
-  // through here, so a reopened modal never shows a stale "confirm remove"
-  // panel — no reset-in-effect needed.
+  // Close and reset transient confirm/in-flight state in one place. Every close
+  // path (X, backdrop, Escape via onCancel) routes here, so a reopened modal
+  // never shows a stale "confirm remove" panel — no reset-in-effect needed.
   const handleClose = () => {
     if (working) return
     setConfirming(false)
@@ -79,14 +77,14 @@ const MemberDetailModal = ({
   }
 
   if (!row) {
-    // Keep the <dialog> element mounted (so the open/close effect has a target)
-    // but render no body when there's no member selected.
+    // Keep the <dialog> mounted (so the open/close effect has a target) but
+    // render no body with no member selected.
     return <dialog ref={dialogRef} className="modal" aria-hidden />
   }
 
   const label = row.username || row.email
-  // Only non-archived classrooms are actually unenrolled (archived ones can't
-  // be; removeMemberFromOrg skips them), so the confirm copy counts those.
+  // Only non-archived classrooms are unenrolled (removeMemberFromOrg skips
+  // archived), so the confirm copy counts those.
   const activeClassrooms = row.classrooms.filter((c) => !c.archived)
 
   const handleInvite = async () => {

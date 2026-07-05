@@ -34,8 +34,7 @@ const PENDING_GRACE_MS = 20_000
 
 // Drop a still-pending op only if it NEVER produced a run within this window (a
 // mis-registration). Generous — a push-triggered deploy can take minutes. An op
-// that bound to a run or finished is never dropped by this; it persists as
-// history until dismissed.
+// bound to a run or finished persists as history until dismissed.
 const PENDING_TTL_MS = 5 * 60_000
 
 // After a retry, show the tracker "running" for this window (holding the poll
@@ -60,7 +59,7 @@ export type Tracker = {
   htmlUrl?: string
   // Resolved run id, when known — enables retry.
   runId?: number
-  // Terminal session-op trackers can be dismissed; discovered/non-terminal cannot.
+  // Terminal session-op trackers can be dismissed; discovered/non-terminal can't.
   dismissible: boolean
   // A failed run with a known runId can be retried.
   retriable: boolean
@@ -82,8 +81,8 @@ export type ActionActivity = {
 
 // Drives the global activity banner: one repo-wide poll advances a collection of
 // per-operation trackers. Each session op resolves to its own run and reflects
-// that run's real status/conclusion; runs matching no op surface as "discovered"
-// trackers. Terminal trackers persist as history until dismissed.
+// that run's status/conclusion; runs matching no op surface as "discovered".
+// Terminal trackers persist as history until dismissed.
 export function useActionActivity(): ActionActivity {
   const { t } = useTranslation()
   const org = useActiveOrg()
@@ -100,7 +99,7 @@ export function useActionActivity(): ActionActivity {
   const lastSeenRegisteredAt = useRef(registeredAt)
   // While nowMs() < expectingUntil the poll stays fast — set on a new
   // registration and on retry. A self-expiring timestamp (not a boolean+timer)
-  // can't get stuck on: once the window passes, the poll backs off on its own.
+  // can't get stuck: once the window passes, the poll backs off on its own.
   const [expectingUntil, setExpectingUntil] = useState(0)
   const bumpExpecting = useCallback(
     () => setExpectingUntil(nowMs() + PENDING_GRACE_MS),
@@ -129,7 +128,7 @@ export function useActionActivity(): ActionActivity {
     // Fast while anything runs or a dispatch/retry is expected; slow while a
     // finished run or outstanding op is still shown; stop (false) once there's
     // nothing to track. A new dispatch/retry re-arms via invalidate +
-    // bumpExpecting, so an idle tab doesn't poll GitHub forever.
+    // bumpExpecting, so an idle tab doesn't poll forever.
     refetchInterval: (query) => {
       const runs = query.state.data ?? []
       const anyRunning = runs.some(isRunning)
@@ -214,8 +213,8 @@ export function useActionActivity(): ActionActivity {
     const remembered = boundRunId[op.id]
     // A bound op stays pinned to THAT run — never re-resolves. A poll that
     // transiently omits it yields null (reads as pending/latched) rather than
-    // falling through to resolveOpRun, which would re-bind onto a sibling's run.
-    // Claim the remembered id even when absent so a sibling can't grab it.
+    // re-binding onto a sibling's run via resolveOpRun. Claim the remembered id
+    // even when absent so a sibling can't grab it.
     let run: GitHubWorkflowRun | null
     if (remembered !== undefined) {
       run = claimed.has(remembered) ? null : (runsById.get(remembered) ?? null)
@@ -293,8 +292,8 @@ export function useActionActivity(): ActionActivity {
   }, [phaseSignature])
 
   // Time-based GC (kept in an effect so render stays pure): drop a pending op
-  // only if it never produced a run within the window. An op that bound to a run
-  // or reached a terminal state is real history and persists until dismissed.
+  // only if it never produced a run within the window. An op bound to a run or
+  // terminal is real history and persists until dismissed.
   const [tick, setTick] = useState(0)
   useEffect(() => {
     const at = nowMs()
@@ -322,8 +321,8 @@ export function useActionActivity(): ActionActivity {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phaseSignature, tick, clearOp])
 
-  // Session trackers: every non-dismissed op, as a pure projection of ops +
-  // resolved phase (time-based removal is handled by the GC effect above). The
+  // Session trackers: every non-dismissed op, a pure projection of ops +
+  // resolved phase (time-based removal handled by the GC effect above). The
   // runId/URL fall back to the stable binding so a transient poll gap doesn't
   // drop the "View run" link.
   const sessionTrackers: Tracker[] = resolved
@@ -375,8 +374,8 @@ export function useActionActivity(): ActionActivity {
     })
 
   // Newest-first so trackers[0] leads the collapsed header: session ops (a
-  // retried op jumps ahead as a fresh action, else reverse registration order),
-  // then discovered runs by descending id.
+  // retried op jumps ahead, else reverse registration order), then discovered
+  // runs by descending id.
   const discoveredNewestFirst = [...discoveredTrackers].sort(
     (a, b) => (b.runId ?? 0) - (a.runId ?? 0),
   )
@@ -397,9 +396,9 @@ export function useActionActivity(): ActionActivity {
   const trackers = [...sessionNewestFirst, ...discoveredNewestFirst]
 
   // Reconcile the optimistic-running set: clear an id once the poll sees its
-  // re-run running or succeeded — or re-failed, but only once GitHub has
-  // re-touched the run since the retry (endedAtMs >= retriedAt), so we don't
-  // clear on the stale pre-retry "failed". A safety timer backstops the rest.
+  // re-run running or succeeded — or re-failed, but only once GitHub re-touched
+  // the run since the retry (endedAtMs >= retriedAt), so we don't clear on the
+  // stale pre-retry "failed". A safety timer backstops the rest.
   const optimisticSignature = [...optimisticRunning].sort().join(",")
   const realStateById = new Map(
     resolved.map(({ op, run, realPhase }) => [op.id, { realPhase, run }]),
@@ -444,7 +443,7 @@ export function useActionActivity(): ActionActivity {
     setOptimisticRunning((prev) => new Set(prev).add(id))
     // rerun-failed-jobs reuses the same run id, so the monotonic latch would
     // otherwise pin the pre-retry "failed" forever (resurrecting a stale red row
-    // once the re-run scrolls out). Clear it so the re-run re-latches its new
+    // once the re-run scrolls out). Clear it so the re-run re-latches its
     // outcome; optimisticRunning + boundRunId keep the row from being GC'd.
     setLatchedPhase((prev) => {
       if (prev[id] === undefined) return prev

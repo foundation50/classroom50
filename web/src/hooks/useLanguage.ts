@@ -23,8 +23,8 @@ const SERVER_INSTALLED: string[] = []
 
 // React hook over the i18n custom-locale layer. Loading a pack is two-step:
 // prepare (parse + preview, no side effects) then commit (install + activate).
-// Pack operations are module-level functions with stable identity, so they're
-// returned directly rather than wrapped in useCallback.
+// Pack operations have stable module-level identity, so they're returned
+// directly rather than wrapped in useCallback.
 export function useLanguage() {
   const { i18n } = useTranslation()
 

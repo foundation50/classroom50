@@ -40,21 +40,19 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 })
 
 // Remove selected members from ONE classroom in a SINGLE roster commit (drops
-// the CSV rows + classroom-team membership, cancels pending invites; org
-// membership is left intact — that stays the separate, guarded "Remove from
-// organization" action).
+// CSV rows + classroom-team membership, cancels pending invites; org membership
+// stays intact — that's the separate, guarded "Remove from organization"
+// action).
 //
 // Delegates the write to bulkUnenrollStudents, which drops every matched row in
-// one commit instead of one commit per student — real classes are unenrolled in
-// bulk, and the per-student loop this used to run cluttered students.csv history
-// with N racing "Remove student" commits.
+// one commit instead of one-per-student, avoiding N racing "Remove student"
+// commits cluttering students.csv history.
 //
-// This layer still owns the per-row PRE-filtering the members view needs:
+// This layer owns the per-row PRE-filtering the members view needs:
 //   - rows not on the target classroom (nothing to remove) -> skipped
-//   - rows on an ARCHIVED instance of the classroom -> skipped (an archived
-//     classroom is read-only; the write would throw)
-// so only genuinely-removable rows are sent to the batch writer. Per-row
-// outcomes are reconciled from the batch result (removed / not-found).
+//   - rows on an ARCHIVED instance -> skipped (read-only; the write would throw)
+// so only removable rows reach the batch writer. Per-row outcomes are
+// reconciled from the batch result (removed / not-found).
 export async function bulkRemoveFromClassroom(
   client: GitHubClient,
   input: {
@@ -97,7 +95,7 @@ export async function bulkRemoveFromClassroom(
   }
 
   // Map each eligible row to the Student we send, keeping the row alongside so
-  // outcomes can be reconciled back to a row key/label.
+  // outcomes reconcile back to a row key/label.
   const byStudent = eligible.map((row) => ({ row, student: rowToStudent(row) }))
 
   try {
@@ -108,12 +106,12 @@ export async function bulkRemoveFromClassroom(
       onProgress,
     })
 
-    // Reconcile the batch result back to per-row outcomes by studentKey (the
-    // shared identity precedence github_id || username || email) rather than
-    // object reference: a row whose person is in the writer's `removed` set was
-    // dropped; one only in `notFound` was already gone at write time (a racing
-    // edit / prior removal) — distinct from the pre-filter "not-on-classroom".
-    // rowToStudent copies the row's identity fields, so both sides key alike.
+    // Reconcile the batch result to per-row outcomes by studentKey (shared
+    // identity precedence github_id || username || email), not object ref: a
+    // person in `removed` was dropped; one only in `notFound` was already gone
+    // at write time (racing edit / prior removal) — distinct from the pre-filter
+    // "not-on-classroom". rowToStudent copies identity fields so both sides key
+    // alike.
     const removedKeys = new Set(result.removed.map((s) => studentKey(s)))
     for (const { row } of byStudent) {
       const wasRemoved = removedKeys.has(studentKey(row))
@@ -131,8 +129,8 @@ export async function bulkRemoveFromClassroom(
       warnings: result.warnings,
     }
   } catch (err) {
-    // A hard failure of the single roster write fails the whole eligible batch
-    // (nothing was committed). Report each eligible row as failed.
+    // A hard failure of the single roster write fails the whole batch (nothing
+    // committed). Report each eligible row as failed.
     const detail = getErrorMessage(err)
     for (const { row } of byStudent) {
       outcomes.push({

@@ -8,7 +8,7 @@ import {
 
 // Regression guard for #71: a query-bearing returnTo (e.g. the ?k= accept key)
 // must survive navigation. navigate({ to: returnTo }) folds "?k=..." into the
-// pathname; history.push preserves it. Pins the behavior useGithubAuth and the
+// pathname; history.push preserves it — the behavior useGithubAuth and the
 // /login guard rely on.
 function buildTestRouter() {
   const rootRoute = createRootRoute()
@@ -45,8 +45,8 @@ describe("returnTo navigation (query preservation)", () => {
     const router = buildTestRouter()
 
     const built = router.buildLocation({
-      // Cast: the point of this test is passing a raw path+query string, which
-      // is not a literal member of the typed route union.
+      // Cast: this test passes a raw path+query string, not a literal member of
+      // the typed route union.
       to: "/org/cls/assignments/a1/accept?k=SECRET" as never,
     })
 

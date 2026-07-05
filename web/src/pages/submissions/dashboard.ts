@@ -1,6 +1,6 @@
 // Pure derivation/filter/sort primitives for the assignment overview dashboard,
 // over already-loaded scores/roster data — no fetches, no React, so the
-// classification is reusable and unit-testable.
+// classification is reusable and testable.
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/hooks/github/types"
@@ -9,8 +9,8 @@ import { getName } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 
 // `thresholdFraction` is the passing bar as a fraction of max, or `null` when
-// the assignment sets no threshold (the opt-in feature is off) — then every
-// row is "ungraded" (also the case for an ungraded/zero-max row).
+// the assignment sets no threshold — then every row is "ungraded" (as is an
+// ungraded/zero-max row).
 export type PassState = "passing" | "failing" | "ungraded"
 
 export function rowPassState(
@@ -27,9 +27,9 @@ export function rowPassState(
   return row.score / max >= thresholdFraction ? "passing" : "failing"
 }
 
-// Top-line stat-strip counts. `rostered` is meaningless as a denominator for
-// group assignments (the UI hides it there); `ungraded` is kept separate so it
-// inflates neither passing nor failing.
+// Top-line stat-strip counts. `rostered` is meaningless as a group-assignment
+// denominator (hidden there); `ungraded` is separate so it inflates neither
+// passing nor failing.
 export type SubmissionStats = {
   submitted: number
   rostered: number
@@ -71,9 +71,9 @@ export function computeStats(
   }
 }
 
-// Mean of the numeric scores, rounded to 2 decimals, or null when none is
-// finite (rendered "N/A"). Avoids the old `sum/length || 1` bug where an
-// empty/NaN result showed "1" (`/` binds before `||`).
+// Mean of the numeric scores, rounded to 2 decimals, or null when none is finite
+// (rendered "N/A"). Avoids the old `sum/length || 1` bug where an empty/NaN
+// result showed "1" (`/` binds before `||`).
 export function classAverage(rows: SubmissionRow[]): number | null {
   const numericScores = rows
     .map((row) => Number(row["score"]))
@@ -84,9 +84,8 @@ export function classAverage(rows: SubmissionRow[]): number | null {
   return Math.round(avg * 100) / 100
 }
 
-// Filters the dashboard exposes. Each is independent; an unset value ("all")
-// means "no constraint on this axis". Combined filters AND together. `section`
-// is "all" or an exact section value from the roster.
+// Filters the dashboard exposes. Each is independent ("all" = no constraint);
+// combined filters AND together. `section` is "all" or an exact roster value.
 export type SubmissionFilters = {
   submission: "all" | "submitted" | "on-time" | "late" | "not-submitted"
   passing: "all" | "passing" | "failing"
@@ -146,17 +145,16 @@ export const DEFAULT_SORT: SubmissionSort = "recent"
 
 // Who has accepted an INDIVIDUAL assignment, derived from the org repo list: a
 // student accepted iff `<classroom>-<assignment>-<username>` exists. Independent
-// of submission — a student can accept (repo exists) without a graded push.
+// of submission — a repo can exist without a graded push.
 //
-// We forward-construct each roster student's expected name and test existence,
-// rather than reverse-parsing a `<classroom>-<assignment>-` prefix off repo
-// names — prefix-stripping over-matches a sibling assignment whose slug extends
-// this one (assignment "hw" would capture `cs-hw-bonus-alice` from "hw-bonus"),
-// polluting the set and risking a 404 when the modal rebuilds a URL from a bogus
-// owner. (See docs/solutions/.../forward-only-cross-binary-repo-name-contract.md.)
+// Forward-construct each student's expected repo name rather than reverse-parsing
+// a `<classroom>-<assignment>-` prefix: prefix-stripping over-matches a sibling
+// whose slug extends this one (assignment "hw" would capture `cs-hw-bonus-alice`
+// from "hw-bonus"), polluting the set and risking a 404 when the modal rebuilds
+// a URL. (See docs/solutions/.../forward-only-cross-binary-repo-name-contract.md.)
 //
-// Group assignments are excluded (the repo is named after the owner, not each
-// member), so callers offer the accepted filter for individual assignments only.
+// Group assignments are excluded (repo named after the owner, not each member),
+// so callers offer the accepted filter for individual assignments only.
 export function acceptedUsernames(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
@@ -184,7 +182,7 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
 
 // Count of ROSTER students who accepted. Intersecting with the roster keeps the
 // "Accepted N / roster" stat from exceeding its denominator when `accepted`
-// includes non-roster owners (a since-unenrolled student, a stray test repo).
+// includes non-roster owners (an unenrolled student, a stray test repo).
 export function acceptedRosterCount(
   students: Student[],
   accepted: Set<string>,
@@ -194,8 +192,8 @@ export function acceptedRosterCount(
 }
 
 // Case-insensitive match of a query against a row's identities: each credited
-// username plus its roster display name (so searching a real name works even
-// though scores.json only carries logins).
+// username plus its roster display name (so searching a real name works though
+// scores.json only carries logins).
 export function rowMatchesQuery(
   row: SubmissionRow,
   query: string,
@@ -211,8 +209,8 @@ export function rowMatchesQuery(
 }
 
 // Search + filters + sort over the submitted rows. "not-submitted" lives in the
-// caller's nonSubmitters list, not here, so that filter hides every submitted
-// row; likewise "not-accepted", since a submitted row always has a repo.
+// caller's nonSubmitters list, so that filter hides every submitted row;
+// likewise "not-accepted", since a submitted row always has a repo.
 export function filterAndSortRows(
   rows: SubmissionRow[],
   {
@@ -270,8 +268,8 @@ export function filterAndSortRows(
       ""
     ).toLowerCase()
 
-  // Key each row's name + time once before sorting: byName does a linear roster
-  // scan, so calling it inside the comparator would repeat it O(rows·log rows).
+  // Key each row's name + time once before sorting: byName scans the roster
+  // linearly, so calling it in the comparator would repeat it O(rows·log rows).
   const keyed = filtered.map((row) => ({
     row,
     name: byName(row),
@@ -296,16 +294,16 @@ export function filterAndSortRows(
 }
 
 // Whether non-submitters should still appear under the current filters. Any
-// submission/passing constraint implies a submission exists, so it hides them;
-// the accepted filter does not (both accepted-not-submitted and not-accepted
-// are non-submitter states).
+// submission/passing constraint implies a submission exists, hiding them; the
+// accepted filter does not (both accepted-not-submitted and not-accepted are
+// non-submitter states).
 export function showsNonSubmitters(filters: SubmissionFilters): boolean {
   if (filters.passing !== "all") return false
   return filters.submission === "all" || filters.submission === "not-submitted"
 }
 
-// Filters non-submitters by search query and the accepted filter. `accepted`
-// is the set from acceptedUsernames (empty for group assignments, where the UI
+// Filters non-submitters by search query and the accepted filter. `accepted` is
+// the set from acceptedUsernames (empty for group assignments, where the UI
 // disables the accepted filter).
 export function filterNonSubmitters(
   nonSubmitters: Student[],

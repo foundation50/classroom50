@@ -5,7 +5,7 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 
 // unenrollStudent and removeOrgMembership are stubbed: this helper's contract is
 // the SEQUENCE (unenroll every roster, then remove org membership last) and its
-// warning accumulation, not the underlying GitHub calls.
+// warning accumulation, not the GitHub calls.
 const unenrollMock = vi.fn()
 const removeOrgMembershipMock = vi.fn()
 const getAuthenticatedUserMock = vi.fn()

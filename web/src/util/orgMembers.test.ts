@@ -126,9 +126,8 @@ describe("aggregateOrgMembers", () => {
   })
 
   it("matches an empty-github_id roster row to a member by login (no duplicate row)", () => {
-    // A roster row typed before reconcile has a username but no github_id. It
-    // must be classified member-on-roster and NOT also surface as a separate
-    // member-no-roster row for the same person.
+    // A roster row typed before reconcile has a username but no github_id. Must
+    // be member-on-roster and NOT also surface as a separate member-no-roster.
     const rows = aggregateOrgMembers(
       [member(42, "alice")],
       [roster("cs101", [student({ username: "alice", github_id: "" })])],
@@ -141,10 +140,10 @@ describe("aggregateOrgMembers", () => {
   })
 
   it("matches a STALE-github_id roster row to a member by login and prefers the live id", () => {
-    // CSV carries a stale/wrong github_id ("999") that no longer matches any
-    // member, but the username still matches a live member. The row must be
-    // classified member-on-roster, not duplicated, and surface the LIVE id (42)
-    // rather than the stale one so id-keyed display/actions don't use "999".
+    // CSV carries a stale github_id ("999") that matches no member, but the
+    // username still matches a live member. The row must be member-on-roster,
+    // not duplicated, and surface the LIVE id (42) so id-keyed display/actions
+    // don't use "999".
     const rows = aggregateOrgMembers(
       [member(42, "alice")],
       [roster("cs101", [student({ username: "alice", github_id: "999" })])],

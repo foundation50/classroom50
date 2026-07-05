@@ -11,11 +11,10 @@ import {
 } from "@/i18n/customLocale"
 
 // Minimal language switcher for the login card. Installed languages (base +
-// any previously installed packs) switch instantly; registry languages are
-// loaded on mount and installed on select so a first-time visitor can still
-// read the login page in their own language. Native names are used
-// (languageLabel(code, code)) so each entry is legible regardless of the
-// current UI language.
+// previously installed packs) switch instantly; registry languages load on
+// mount and install on select so a first-time visitor can read the login page
+// in their own language. Native names (languageLabel(code, code)) keep each
+// entry legible regardless of the current UI language.
 export function LoginLanguageMenu() {
   const { t } = useTranslation()
   const { lang, availableLangs, setLang, availableBuiltInLangs, commitPack } =
@@ -40,7 +39,7 @@ export function LoginLanguageMenu() {
     try {
       setRegistry(await availableBuiltInLangs())
     } catch {
-      // Registry unreachable: keep the installed list usable and let the user
+      // Registry unreachable: keep the installed list usable; the user can
       // retry by reopening the menu.
       setRegistryError(true)
       setRegistry(null)
@@ -49,9 +48,8 @@ export function LoginLanguageMenu() {
     }
   }
 
-  // Prefetch the registry on mount so the full list is ready the moment the
-  // menu opens (don't wait for the trigger click). Set state only after the
-  // fetch resolves, and bail if unmounted mid-flight.
+  // Prefetch the registry on mount so the list is ready when the menu opens.
+  // Set state only after the fetch resolves, and bail if unmounted mid-flight.
   useEffect(() => {
     let active = true
     availableBuiltInLangs()
@@ -108,7 +106,7 @@ export function LoginLanguageMenu() {
       const preview = await prepareFromBuiltIn(code)
       await commitPack(preview.code, preview.bundle)
       // Newly installed language becomes available; reflect it locally so it
-      // moves to the "available now" group without a second registry fetch.
+      // moves to "available now" without a second registry fetch.
       setRegistry((prev) => (prev ? prev.filter((l) => l.code !== code) : prev))
       return preview.code
     } catch {

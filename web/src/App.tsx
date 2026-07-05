@@ -7,10 +7,10 @@ import { Spinner } from "@/components/Spinner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 
 // Auth-gated route prefixes. When the session ends mid-flight, the router keeps
-// the matched _authed route mounted until a post-commit invalidate() swaps it
-// out — one render frame in which the authed subtree re-renders against a now
-// null GitHub client and useGitHubClient() throws into the root error boundary.
-// We detect that transient window below and render a redirect state instead.
+// the matched _authed route mounted until invalidate() swaps it out — one frame
+// where the authed subtree re-renders against a now-null GitHub client and
+// useGitHubClient() throws into the root error boundary. We detect that window
+// below and render a redirect state instead.
 function isAuthedPath(pathname: string): boolean {
   const base = import.meta.env.BASE_URL.replace(/\/$/, "")
   const path =
@@ -27,10 +27,10 @@ export function App() {
     void router.invalidate()
   }, [status, token])
 
-  // When the session ends while on an authed route, redirect to /login eagerly
-  // (carrying the destination so re-auth can return there — see issue #71)
-  // rather than waiting for the post-commit invalidate(). This unmounts the
-  // authed subtree synchronously, closing the null-client crash window.
+  // When the session ends on an authed route, redirect to /login eagerly
+  // (carrying the destination for re-auth return — #71) rather than waiting for
+  // invalidate(). Unmounts the authed subtree synchronously, closing the
+  // null-client crash window.
   const pathname = window.location.pathname
   const sessionEndedOnAuthedRoute =
     status === "unauthenticated" && isAuthedPath(pathname)

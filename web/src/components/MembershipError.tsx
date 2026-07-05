@@ -3,14 +3,14 @@ import { useTranslation } from "react-i18next"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
-// The distinct membership-failure causes the student flow (onboarding + accept)
-// can hit. Each maps to a specific title/body and at least one recovery action.
+// Distinct membership-failure causes the student flow (onboarding + accept) can
+// hit; each maps to a title/body and at least one recovery action.
 //   - ssoWithUrl:  403 + X-GitHub-SSO carrying a usable authorization URL.
 //   - ssoUrlless:  403 + X-GitHub-SSO but no parseable url (enterprise
 //                  `partial-results` shape). Same screen minus the button.
-//   - notAMember:  404 / the accept genuinely failed — no membership record.
-//   - generic:     anything else (transient, unexpected). Absorbs the widest
-//                  range, so it must not be a dead end — always offers Retry.
+//   - notAMember:  404 / accept genuinely failed — no membership record.
+//   - generic:     anything else. Widest range, so never a dead end — always
+//                  offers Retry.
 export type MembershipErrorCause =
   "ssoWithUrl" | "ssoUrlless" | "notAMember" | "generic"
 
@@ -19,9 +19,8 @@ export type MembershipErrorInfo = {
   // Present only for `ssoWithUrl`; a validated https://github.com SSO URL.
   ssoUrl: string | null
   // Data-minimized diagnostics for the copyable "for your instructor" block.
-  // Deliberately NOT the raw response body or the raw X-GitHub-SSO header (that
-  // header carries an authorization_request token) — only an allow-listed,
-  // non-sensitive subset leaves the client.
+  // NOT the raw response body or raw X-GitHub-SSO header (which carries an
+  // authorization_request token) — only an allow-listed, non-sensitive subset.
   details: {
     org?: string
     username?: string
@@ -32,8 +31,8 @@ export type MembershipErrorInfo = {
   }
 }
 
-// Classify a caught error (plus context) into one of the membership causes.
-// Keeps the branching in one place so onboarding and accept can't diverge.
+// Classify a caught error (plus context) into a membership cause. One place so
+// onboarding and accept can't diverge.
 export function classifyMembershipError(
   error: unknown,
   context: { org?: string; username?: string; membershipState?: string },
@@ -73,8 +72,8 @@ const CopyableDetails = ({
   details: MembershipErrorInfo["details"]
 }) => {
   const { t } = useTranslation()
-  // Build the allow-listed, human-readable diagnostics block. Never includes
-  // the raw response body or the raw X-GitHub-SSO header value.
+  // Allow-listed, human-readable diagnostics. Never the raw response body or
+  // raw X-GitHub-SSO header value.
   const lines = [
     details.org ? `${t("membership.details.org")}: ${details.org}` : null,
     details.username
@@ -126,11 +125,11 @@ const CopyableDetails = ({
   )
 }
 
-// A shared, cause-specific membership error card used by both the onboarding
-// and accept pages. Renders a specific title/body per cause, at least one
-// recovery action (never a dead end), and a collapsed, data-minimized copyable
-// diagnostics block for the student's instructor. `onRetry` (when provided)
-// backs the generic Retry action; SSO/not-a-member causes point elsewhere.
+// Shared, cause-specific membership error card for the onboarding and accept
+// pages: a per-cause title/body, at least one recovery action (never a dead
+// end), and a collapsed, data-minimized diagnostics block for the instructor.
+// `onRetry` backs the generic Retry action; SSO/not-a-member causes point
+// elsewhere.
 export const MembershipError = ({
   info,
   org,

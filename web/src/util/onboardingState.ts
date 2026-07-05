@@ -1,14 +1,14 @@
-// The /onboard page's state precedence as a pure function, so the ordering +
-// gates are unit-testable without a DOM. OnboardingPage feeds it the membership
-// read + auto-accept mutation status and renders the returned state.
+// The /onboard page's state precedence as a pure function, so ordering + gates
+// are testable without a DOM. OnboardingPage feeds it the membership read +
+// auto-accept status and renders the returned state.
 //
-// Precedence the page short-circuits through:
-//   1. error      — the membership read failed, or accept/verify failed. A read
-//                   error takes priority so a stale "active" can't mask it.
+// Precedence:
+//   1. error      — membership read or accept/verify failed. A read error wins
+//                   so a stale "active" can't mask it.
 //   2. active     — verified active membership; "you're all set" / redirect.
-//   3. loading    — the initial membership read is resolving, OR a membership
-//                   record exists and the accept/verify mutation is (about to
-//                   be) in flight. A pending invite is NOT notInvited.
+//   3. loading    — the initial read is resolving, OR a membership record exists
+//                   and accept/verify is (about to be) in flight. A pending
+//                   invite is NOT notInvited.
 //   4. notInvited — no membership record at all (never invited).
 export type OnboardingState = "loading" | "notInvited" | "active" | "error"
 

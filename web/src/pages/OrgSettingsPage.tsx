@@ -32,12 +32,12 @@ const DEFAULT_EXPIRY_DAYS = 120
 const MIN_EXPIRY_DAYS = 1
 
 // GitHub rejects a fine-grained PAT *name* over 40 chars, so the prefill must
-// fit. We don't interpolate the org (most slugs overflow it) — the prefilled
-// `target_name` and description identify the org instead.
+// fit. We don't interpolate the org (most slugs overflow) — the prefilled
+// target_name and description identify the org instead.
 const GITHUB_TOKEN_NAME_MAX = 40
 
-// Guarded at module load so a future edit that overflows the 40-char limit
-// fails fast in dev/CI instead of shipping a name GitHub's form rejects.
+// Guarded at module load so a future edit overflowing the 40-char limit fails
+// fast in dev/CI instead of shipping a name GitHub's form rejects.
 const SERVICE_TOKEN_NAME = "Classroom 50 Actions Token"
 if (SERVICE_TOKEN_NAME.length > GITHUB_TOKEN_NAME_MAX) {
   throw new Error(
@@ -46,10 +46,9 @@ if (SERVICE_TOKEN_NAME.length > GITHUB_TOKEN_NAME_MAX) {
   )
 }
 
-// GitHub caps a token at one calendar year, so the max day count is 366 when that
-// window spans a leap day and 365 otherwise. `from` is a proxy for the token's
-// start (GitHub's clock actually starts at "Generate"); pass a real start date
-// here if we ever add a picker.
+// GitHub caps a token at one calendar year, so max days is 366 across a leap
+// day, else 365. `from` proxies the token's start (GitHub's clock starts at
+// "Generate"); pass a real start date here if we ever add a picker.
 function maxExpiryDays(from: Date): number {
   const oneYearOut = new Date(from)
   oneYearOut.setFullYear(oneYearOut.getFullYear() + 1)
@@ -57,8 +56,8 @@ function maxExpiryDays(from: Date): number {
   return Math.round((oneYearOut.getTime() - from.getTime()) / msPerDay)
 }
 
-// One descriptor per service-token status, keeping the banner's style, icon, and
-// titleKey in sync from a single source.
+// One descriptor per service-token status, keeping the banner's style, icon,
+// and titleKey in sync from a single source.
 const TOKEN_STATUS_BANNER = {
   present: {
     className: "border-success/30 bg-success/10",
@@ -157,10 +156,9 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
     useGetServiceTokenStatus(org ?? "")
   const tokenAlreadySet = tokenStatus?.status === "present"
 
-  // When a token is already set, collapse the configuration fields by default
-  // and let the user expand them. When the token is missing/unknown (an issue),
-  // they stay expanded. `manualOpen` lets the user override the default once
-  // they interact; until then it follows the token status.
+  // When a token is set, collapse the config fields by default; when
+  // missing/unknown they stay expanded. `manualOpen` lets the user override
+  // once they interact; until then it follows the token status.
   const [manualOpen, setManualOpen] = useState<boolean | null>(null)
   const configOpen = manualOpen ?? !tokenAlreadySet
 
@@ -187,10 +185,10 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
       expires_in: String(expiryValid ? parsedExpiry : DEFAULT_EXPIRY_DAYS),
       contents: "write",
       actions: "write",
-      // Organization-level Members: Read. Collection is team-driven — it
-      // lists the classroom team's members — which needs this org permission,
-      // and it is NOT implied by any repository scope. GitHub only honors the
-      // `members` prefill param when target_name is an org (it is, above).
+      // Org-level Members: Read. Collection is team-driven (it lists the
+      // classroom team's members), which needs this org permission and is NOT
+      // implied by any repo scope. GitHub only honors the `members` prefill
+      // when target_name is an org (it is, above).
       members: "read",
     }).toString()
 
@@ -336,8 +334,8 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
             rel="noreferrer"
             aria-disabled={!expiryValid}
             onClick={(e) => {
-              // aria-disabled is visual only; also block activation so an invalid
-              // expiry can't navigate to GitHub with the silent default.
+              // aria-disabled is visual only; also block activation so an
+              // invalid expiry can't navigate to GitHub with the silent default.
               if (!expiryValid) {
                 e.preventDefault()
                 expiryInputRef.current?.focus()

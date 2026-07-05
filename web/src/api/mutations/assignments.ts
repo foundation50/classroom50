@@ -56,19 +56,16 @@ import {
 } from "@/util/templateAccessError"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
 
-// The accept commit's subject. Written by both this GUI and the CLI's
-// `gh student accept`; kept byte-identical (via prefixCommit) per the
-// synchronized-release rule. The subject carries NO contract — the runner
-// resolves the trusted Feedback-PR baseline by the commit that introduced
-// the `.classroom50.yaml` marker (runner.py: ACCEPT_MARKER_PATH), not by
-// matching this string — so it can be reworded freely as long as both
-// accept clients stay in lockstep.
+// Kept byte-identical with the CLI's `gh student accept` (via prefixCommit) per
+// the synchronized-release rule. Carries no contract — the runner keys the
+// Feedback-PR baseline off the `.classroom50.yaml` marker commit, not this
+// string — so it's freely rewordable as long as both accept clients match.
 const ACCEPT_COMMIT_SUBJECT = prefixCommit(
   "Initialize .classroom50.yaml and autograde workflow (gh student accept)",
 )
 
-// A student-facing accept failure. The accept page renders `error.message`
-// verbatim, so this keeps a raw GitHub "Not Found" from reaching a student.
+// Student-facing accept failure: the accept page renders `error.message`
+// verbatim, so a raw GitHub "Not Found" never reaches a student.
 class AcceptStepError extends Error {
   constructor(message: string, cause?: unknown) {
     super(message)
@@ -79,8 +76,7 @@ class AcceptStepError extends Error {
   }
 }
 
-// Ordered phases of the accept flow, surfaced as a progress checklist in the
-// GUI.
+// Ordered accept-flow phases, shown as a progress checklist in the GUI.
 export type AcceptStepId =
   | "account"
   | "membership"
@@ -95,18 +91,18 @@ export type AcceptStepStatus = "pending" | "running" | "complete" | "error"
 type AcceptStepUpdate = {
   id: AcceptStepId
   status: AcceptStepStatus
-  // The label shown for the step; on resolution it can override the default
-  // (e.g. "Repository already exists").
+  // Step label; on resolution can override the default (e.g. "Repository
+  // already exists").
   message?: string
   error?: string
 }
 
 type OnAcceptStepUpdate = (update: AcceptStepUpdate) => void
 
-// Run one accept step, emitting progress around it. Its core job is to
-// translate a raw GitHubAPIError into a student-facing, actionable message
-// (`actions`) so a bare "Not Found" never reaches the student; already-friendly
-// errors pass through untouched.
+// Run one accept step, emitting progress around it. Translates a raw
+// GitHubAPIError into a student-facing, actionable message (`actions`) so a
+// bare "Not Found" never reaches the student; already-friendly errors pass
+// through untouched.
 async function withAcceptStep<T>(
   params: {
     id: AcceptStepId
@@ -152,8 +148,8 @@ async function withAcceptStep<T>(
       }
       fail(`${label} failed (HTTP ${err.status}). ${actions}`, err)
     }
-    // Unexpected non-GitHub error (network/parse/etc.): surface it on the step
-    // so the checklist row leaves "running" instead of spinning forever.
+    // Unexpected non-GitHub error (network/parse/etc.): surface it so the
+    // checklist row leaves "running" instead of spinning forever.
     onStepUpdate?.({
       id,
       status: "error",
@@ -163,15 +159,15 @@ async function withAcceptStep<T>(
   }
 }
 
-// Parse a `--template` ref — `<owner>/<repo>[@<branch>]` or a bare `<repo>`
+// Parse a `--template` ref — `<owner>/<repo>[@<branch>]` or bare `<repo>`
 // (owner defaults to the org). Mirrors the CLI's parseTemplateRef so the GUI
 // accepts the same inputs and writes the same template block.
 type ParsedTemplate = { owner: string; repo: string; branch?: string }
 function parseTemplateRef(raw: string, defaultOwner: string): ParsedTemplate {
   const trimmed = raw.trim()
   if (!trimmed) {
-    // Callers gate on a non-empty ref (the template is optional), so this is
-    // an internal invariant, not user input.
+    // Callers gate on a non-empty ref (template is optional), so this is an
+    // internal invariant, not user input.
     throw new Error("Template ref is empty.")
   }
 
@@ -218,11 +214,10 @@ export type TemplateAccessVerification =
   // (e.g. a commitless template). resolveTemplate rejects this too.
   | { kind: "no-branch"; owner: string; repo: string }
   | { kind: "private-out-of-org"; owner: string; repo: string }
-  // Read denied (HTTP 403): the owning org likely restricts third-party apps,
-  // OR the per-user OAuth-App grant for this org was never authorized, OR the
-  // token's scopes are stale. `message` carries GitHub's actual error text and
-  // `httpStatus` the status, so the note surfaces the real cause instead of a
-  // fixed assumption. `scopeGap` is true when GitHub reported required scopes
+  // Read denied (HTTP 403): org restricts third-party apps, the per-user
+  // OAuth-App grant was never authorized, or the token's scopes are stale.
+  // `message`/`httpStatus` carry GitHub's actual error so the note shows the
+  // real cause. `scopeGap` is true when GitHub reported required scopes
   // (X-Accepted-OAuth-Scopes) the token appears to lack.
   | {
       kind: "restricted"
@@ -233,7 +228,7 @@ export type TemplateAccessVerification =
       httpStatus: number
       scopeGap: boolean
     }
-  // GitHub rate limit hit; the check is inconclusive and should be retried.
+  // Rate limit hit; the check is inconclusive and should be retried.
   | { kind: "rate-limited"; owner: string; repo: string }
   // Verification couldn't complete (network or unexpected error).
   | { kind: "unknown"; owner: string; repo: string }
@@ -258,10 +253,9 @@ export type TemplateAccessVerification =
     }
   // A private fork used as a template. `generate` copies the fork's tree but can
   // fail (403/404) when the fork's upstream parent is private and inaccessible
-  // to the OAuth token. `parentInOrg` distinguishes the two cases: a parent in
-  // the classroom org (Classroom 50 already has access — usually fine, advisory)
-  // vs. a cross-org private parent (likely to fail at generate — strongly
-  // discouraged). `parent` names the upstream when GitHub reported it.
+  // to the OAuth token. `parentInOrg` splits the cases: an in-org parent
+  // (usually fine, advisory) vs. a cross-org private parent (likely to fail —
+  // strongly discouraged). `parent` names the upstream when GitHub reported it.
   | {
       kind: "private-fork"
       owner: string
@@ -274,14 +268,13 @@ export type TemplateAccessVerification =
 // Classify a repo as a risky private fork for template use. `generate` copies
 // the fork's tree but can be blocked (403/404) when GitHub can't reach the
 // fork's private upstream parent — common when the parent lives in another org.
-// A public parent (or a non-fork / non-private repo) generates fine, so
-// `isRiskyPrivateFork` is only true when the repo is a private fork whose parent
-// is private or of unknown visibility. `parentInOrg` splits the two risky cases:
-// an in-org private parent (reachable, usually fine) vs. a cross-org or unknown
-// parent (likely to fail at generate). An absent/malformed parent fails closed
-// to the higher-risk cross-org case (`parentInOrg: false`). Single source of
-// truth for the pre-flight verdict (verifyTemplateAccess), the create/edit block
-// (resolveTemplate), and the reuse re-check (copyAssignmentToClassroom).
+// True only for a private fork whose parent is private or of unknown
+// visibility (a public parent or non-fork/non-private repo generates fine).
+// `parentInOrg` splits the risky cases: an in-org private parent (reachable,
+// usually fine) vs. a cross-org or unknown parent (likely to fail). An
+// absent/malformed parent fails closed to cross-org (`parentInOrg: false`).
+// Single source of truth for verifyTemplateAccess, resolveTemplate, and
+// copyAssignmentToClassroom.
 function classifyPrivateFork(
   repo: GitHubRepo,
   org: string,
@@ -299,7 +292,7 @@ function classifyPrivateFork(
   }
 }
 
-// The hard-block error thrown at create/edit/reuse for a cross-org (or
+// Hard-block error thrown at create/edit/reuse for a cross-org (or
 // unknown-parent) private fork. `parent` is the upstream's full_name when
 // GitHub reported it. Shared so every write path emits identical guidance.
 function crossOrgPrivateForkError(
@@ -336,8 +329,8 @@ export async function verifyTemplateAccess(
 
   let repo: GitHubRepo | null
   try {
-    // getRepo is 404-tolerant (returns null). A rate-limit also surfaces as 403,
-    // so check it before treating a 403 as an org restriction.
+    // getRepo is 404-tolerant (returns null). A rate-limit also surfaces as
+    // 403, so check it before treating a 403 as an org restriction.
     repo = await getRepo(client, parsed.owner, parsed.repo)
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isRateLimited) {
@@ -351,10 +344,10 @@ export async function verifyTemplateAccess(
         policyUrl: githubOrgOAuthPolicyUrl(parsed.owner),
         message: err.message,
         httpStatus: err.status,
-        // A true scope gap is the token's granted scopes failing to satisfy the
-        // endpoint's required scopes — not the mere presence of the header, which
-        // GitHub sends on most 403s (an org restriction would otherwise be
-        // mislabeled as a scope problem). See GitHubAPIError.isScopeGap.
+        // A true scope gap is granted scopes failing to satisfy the endpoint's
+        // required scopes — not the mere presence of the header, which GitHub
+        // sends on most 403s (else an org restriction would be mislabeled a
+        // scope problem). See GitHubAPIError.isScopeGap.
         scopeGap: err.isScopeGap,
       }
     }
@@ -401,9 +394,9 @@ export async function verifyTemplateAccess(
 
   // A private fork whose upstream parent is private: `generate` copies the
   // fork's tree but can be blocked (403/404) when GitHub can't reach the private
-  // parent — common when the parent lives in another org. Warn before create so
-  // the teacher isn't surprised at accept. A public parent generates fine, so
-  // only warn when the parent is private (or its visibility is unknown).
+  // parent — common cross-org. Warn before create so the teacher isn't
+  // surprised at accept. A public parent generates fine, so only warn when the
+  // parent is private (or unknown).
   const fork = classifyPrivateFork(repo, org)
   if (fork.isRiskyPrivateFork) {
     return {
@@ -465,11 +458,11 @@ export async function resolveTemplate(
     )
   }
 
-  // Block a private fork whose upstream parent is private and cross-org (or of
-  // unknown visibility): GitHub's template generate reaches into the private
-  // upstream, which Classroom 50 can't access across orgs, so accept would fail.
-  // In-org private forks are allowed (the upstream is reachable). Mirrors the
-  // red "private-fork" pre-flight verdict. A public parent generates fine.
+  // Block a private fork whose upstream parent is private and cross-org (or
+  // unknown): generate reaches into the private upstream, which Classroom 50
+  // can't access across orgs, so accept would fail. In-org private forks are
+  // allowed (upstream reachable). Mirrors the "private-fork" verdict; a public
+  // parent generates fine.
   const fork = classifyPrivateFork(repo, org)
   if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
     throw crossOrgPrivateForkError(parsed.owner, parsed.repo, org, fork.parent)
@@ -483,8 +476,8 @@ export async function resolveTemplate(
 
 // True when a parsed ref still points at the assignment's stored template, so
 // an edit can reuse the stored block instead of re-resolving live. Owner/repo
-// are case-insensitive (per GitHub); an omitted @branch means "keep the
-// stored branch". Edit only.
+// case-insensitive (per GitHub); an omitted @branch means "keep the stored
+// branch". Edit only.
 function templateRefUnchanged(
   parsed: ParsedTemplate,
   existing: Assignment["template"] | undefined,
@@ -496,8 +489,8 @@ function templateRefUnchanged(
   return sameOwner && sameRepo && sameBranch
 }
 
-// 404 -> false, 200 -> true, else throws. Wraps repoContentsPathExists for
-// the config repo (classroom50).
+// 404 -> false, 200 -> true, else throws. Wraps repoContentsPathExists for the
+// config repo (classroom50).
 async function contentsPathExists(
   client: GitHubClient,
   org: string,
@@ -558,10 +551,9 @@ export async function editAssignment(
     throw new Error(`Existing assignment matching ${slug} was not found.`)
   }
 
-  // Normalize the edit the same way as create so it never leaves stray
-  // non-schema keys the CLI rejects. Pass the stored template so an unchanged
-  // ref is reused without a live lookup (non-template edits save even if the
-  // template moved).
+  // Normalize the edit like create so it never leaves stray non-schema keys
+  // the CLI rejects. Pass the stored template so an unchanged ref is reused
+  // without a live lookup (non-template edits save even if the template moved).
   const { entry: editedAssignment, needsTeamGrant } =
     await buildAssignmentEntry(client, input, targetAssignment.template)
 
@@ -625,8 +617,8 @@ export async function editAssignment(
   }
 }
 
-// Same pre-write probes gh-teacher runs before writing declarative
-// tests (see the "For other clients" section of the Autograders wiki).
+// Same pre-write probes gh-teacher runs before writing declarative tests (see
+// the "For other clients" section of the Autograders wiki).
 async function ensureDeclarativeTestsWritable(
   client: GitHubClient,
   org: string,
@@ -672,10 +664,9 @@ async function buildAssignmentEntry(
 ): Promise<{ entry: Assignment; needsTeamGrant: boolean }> {
   const userTests = input.tests.map(draftToTest)
 
-  // A setup command is written as a leading 0-point `run` test named "setup"
-  // — the CLI-blessed pre-grading idiom (no runtime.setup field exists; the
-  // runner runs tests in order, non-zero exit fails the step). See
-  // makeSetupTest/isSetupTest.
+  // A setup command is written as a leading 0-point `run` test named "setup" —
+  // the CLI-blessed pre-grading idiom (no runtime.setup field; the runner runs
+  // tests in order, non-zero exit fails the step). See makeSetupTest/isSetupTest.
   const setupCommand = input.setup_command?.trim()
   const tests = setupCommand
     ? [makeSetupTest(setupCommand), ...userTests]
@@ -699,13 +690,11 @@ async function buildAssignmentEntry(
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
     if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
-      // The ref is unchanged, so the team was already granted at create time —
-      // no re-grant needed (needsTeamGrant stays false). But the stored ref may
-      // point at a template that has since become unreliable (e.g. a fork whose
-      // upstream went private, or a repo created before the fork guard shipped),
-      // so still re-validate it live via resolveTemplate — which now runs the
-      // cross-org private-fork guard — and fail closed before any commit rather
-      // than trusting the stored block blindly.
+      // Ref unchanged, so the team was already granted at create (needsTeamGrant
+      // stays false). But the stored ref may now be unreliable (e.g. a fork whose
+      // upstream went private, or a repo predating the fork guard), so still
+      // re-validate live via resolveTemplate — which runs the cross-org
+      // private-fork guard — and fail closed before any commit.
       await resolveTemplate(client, input.org, parsedTemplate)
       template = existingTemplate!
     } else {
@@ -716,8 +705,8 @@ async function buildAssignmentEntry(
   }
 
   // Must match classroom50/assignments/v1 exactly — the CLI rejects unknown
-  // fields, so a stray key breaks `gh teacher` for the whole classroom.
-  // Optional fields are omitted (not written empty), as the CLI writes them.
+  // fields, so a stray key breaks `gh teacher` for the whole classroom. Omit
+  // optional fields (don't write them empty), as the CLI does.
   const entry: Assignment = {
     slug: input.slug,
     name: input.name,
@@ -727,7 +716,7 @@ async function buildAssignmentEntry(
     feedback_pr: input.feedback_pr ?? true,
   }
   // Omit the template block entirely for a template-less assignment, matching
-  // how the CLI writes a nil TemplateRef.
+  // the CLI's nil TemplateRef.
   if (template) {
     entry.template = template
   }
@@ -743,8 +732,8 @@ async function buildAssignmentEntry(
   }
   if (input.mode === "group") {
     // A group size outside [GROUP_SIZE_MIN, GROUP_SIZE_MAX] (or non-integer)
-    // produces an assignments.json the CLI refuses to parse; enforce the schema
-    // bounds here, not just in the form.
+    // produces an assignments.json the CLI refuses to parse; enforce the
+    // schema bounds here, not just in the form.
     if (
       !Number.isInteger(input.max_group_size) ||
       input.max_group_size < GROUP_SIZE_MIN ||
@@ -792,10 +781,10 @@ async function buildAssignmentEntry(
     entry.tests = tests
   }
 
-  // pass_threshold: opt-in integer percentage [0,100]. Absent (undefined) means
-  // the teacher didn't enable a passing threshold, so the field is omitted
-  // entirely — absent = "no passing concept" everywhere downstream. Validate
-  // the bounds so a bad value can't produce a file the CLI refuses to parse.
+  // pass_threshold: opt-in integer percentage [0,100]. Absent means the teacher
+  // didn't enable a passing threshold, so omit the field entirely — absent =
+  // "no passing concept" everywhere downstream. Validate bounds so a bad value
+  // can't produce a file the CLI refuses to parse.
   if (input.pass_threshold !== undefined) {
     const threshold = input.pass_threshold
     if (
@@ -857,8 +846,8 @@ async function grantTeamTemplateRead(
   })
 }
 
-// Grant the template read but never throw: the commit has already landed, so
-// a grant failure can't be reported as a failed save. Returns an actionable
+// Grant the template read but never throw: the commit already landed, so a
+// grant failure can't be reported as a failed save. Returns an actionable
 // warning on failure (the assignment works except for student accept against
 // the private template), or undefined on success. Mirrors teamDeleteWarning.
 async function tryGrantTeamTemplateRead(
@@ -887,18 +876,17 @@ async function tryGrantTeamTemplateRead(
 }
 
 // Refuse a write into an archived classroom (active: false). The UI hides the
-// New-assignment / reuse / edit affordances, but the write path is the
-// authoritative guard — a stale tab, a direct API call, or a CLI/agent must not
-// be able to mutate an archived classroom. Reads classroom.json fresh and fails
-// closed before any commit. A genuinely teamless/legacy classroom (no `active`)
-// reads as active, so this never blocks normal use.
+// affordances, but the write path is the authoritative guard — a stale tab, a
+// direct API call, or a CLI/agent must not mutate an archived classroom. Reads
+// classroom.json fresh and fails closed before any commit. A teamless/legacy
+// classroom (no `active`) reads as active, so this never blocks normal use.
 export async function createAssignment(
   client: GitHubClient,
   input: CreateAssignmentInput,
 ): Promise<CreateAssignmentResult> {
-  // The archive guard, the assignment-entry build, and the org ref read are
-  // independent, so run them concurrently — Promise.all rejects on the first
-  // rejection, so an archived classroom still fails closed before any write.
+  // The archive guard, entry build, and org ref read are independent, so run
+  // them concurrently — Promise.all rejects on the first rejection, so an
+  // archived classroom still fails closed before any write.
   const [, { entry: assignmentBody, needsTeamGrant }, ref] = await Promise.all([
     assertClassroomNotArchived(client, input.org, input.classroom),
     buildAssignmentEntry(client, input),
@@ -1047,15 +1035,14 @@ export async function createAssignmentRepo(params: {
             )
       }
 
-      // Any other status is a real failure too — don't mask it with an empty
-      // repo.
+      // Any other status is a real failure too — don't mask it with an empty repo.
       throw err
     }
   }
 
   // No template specified — create an empty starter repo. auto_init seeds the
-  // README/initial commit; the metadata + shim land in the downstream tree
-  // commit (see provisionAcceptedRepo), together in one commit.
+  // initial commit; the metadata + shim land in the downstream tree commit (see
+  // provisionAcceptedRepo), all in one commit.
   return await createEmptyAssignmentRepo({
     client,
     owner,
@@ -1090,9 +1077,8 @@ async function createEmptyAssignmentRepo(params: {
   try {
     // metadata + workflow must land in ONE commit so the accept marker and the
     // autograde workflow share the runner's Feedback-PR baseline. auto_init
-    // gives us the initial commit to build that single tree commit on; we used
-    // to commit .classroom50.yaml alone first, splitting them and skewing the
-    // baseline.
+    // gives the initial commit to build that single tree commit on; committing
+    // .classroom50.yaml alone first would split them and skew the baseline.
     repo = await client.request<GitHubRepo>(`/orgs/${owner}/repos`, {
       method: "POST",
       body: {
@@ -1119,7 +1105,6 @@ async function createEmptyAssignmentRepo(params: {
   // Commit onto the repo's real default branch (GitHub picks it for an
   // auto_init repo); fall back to the requested branch, then "main".
   const targetBranch = repo.default_branch || branch || "main"
-
   return {
     kind: "fallback-empty",
     repo: {
@@ -1161,8 +1146,8 @@ export type CopyAssignmentInput = {
   // A resolved, schema-valid record from the source classroom's
   // assignments.json — copied verbatim, not re-derived from form input.
   source: Assignment
-  // Sibling classroom under classroom50/. In-org only for v1: a private template
-  // can only be team-granted within its own org.
+  // Sibling classroom under classroom50/. In-org only for v1: a private
+  // template can only be team-granted within its own org.
   targetClassroom: string
   // Default to the source slug/name; the slug must be unique in the target.
   targetSlug?: string
@@ -1213,10 +1198,10 @@ export function buildReusedEntry(
   const entry: Assignment = {
     // Spread the whole source so a field this client doesn't model yet rides
     // through — deliberate. assignments.json is a strict cross-binary contract
-    // that evolves by one binary adding a field before the others; preserving
-    // unknown keys is the "tolerate AND preserve" rule from
-    // evolving-strict-cross-binary-schemas.md (an allowlist would drop them).
-    // Known nested objects/arrays are re-cloned below so nothing is shared.
+    // that evolves by one binary adding a field before the others; "tolerate
+    // AND preserve" (evolving-strict-cross-binary-schemas.md; an allowlist would
+    // drop them). Known nested objects/arrays are re-cloned below so nothing is
+    // shared.
     ...source,
     slug,
     name,
@@ -1244,13 +1229,13 @@ export function buildReusedEntry(
 }
 
 // Ownership of every Assignment entry-level key on the edit path. Typed as a
-// total Record<keyof Assignment, ...>, so adding a field to the Assignment type
-// fails to compile here until it is classified — closing the silent-desync trap
-// where a new managed field omitted from the set lets an edit that clears it get
+// total Record<keyof Assignment, ...>, so adding a field to Assignment fails to
+// compile here until classified — closing the silent-desync trap where a new
+// managed field omitted from the set lets an edit that clears it get
 // re-populated from the stale existing entry. "managed": buildAssignmentEntry
-// rebuilds it from input, so an edit clearing it must win. "unmanaged": the form
-// never touches it; preserve it verbatim on a read-modify-write (mirrors the
-// CLI's AssignmentEntry.Extra).
+// rebuilds it from input, so a clearing edit must win. "unmanaged": the form
+// never touches it; preserve verbatim on read-modify-write (mirrors the CLI's
+// AssignmentEntry.Extra).
 const ASSIGNMENT_KEY_OWNERSHIP: Record<
   keyof Assignment,
   "managed" | "unmanaged"
@@ -1312,11 +1297,10 @@ export async function copyAssignmentToClassroom(
     name: input.targetName ?? source.name,
   })
 
-  // The archive guard (refuse reuse into an archived target), the template
-  // re-check, and the org ref read are all independent, so run them
-  // concurrently — one fewer serial round-trip per conflict-retry attempt.
-  // Promise.all rejects on the first rejection, so an archived classroom or a
-  // bad template still throws before any write — no commit.
+  // The archive guard, template re-check, and org ref read are independent, so
+  // run them concurrently — one fewer serial round-trip per retry attempt.
+  // Promise.all rejects on the first rejection, so an archived classroom or bad
+  // template throws before any write.
   const [, repo, ref] = await Promise.all([
     assertClassroomNotArchived(client, org, targetClassroom),
     entry.template
@@ -1348,8 +1332,8 @@ export async function copyAssignmentToClassroom(
     }
     // Same cross-org private-fork guard as resolveTemplate (create/edit): a
     // private fork whose private upstream lives in another org can't be reached
-    // by generate, so accept would fail. Enforce it here so reuse can't smuggle
-    // in a template that create/edit would have rejected.
+    // by generate, so accept would fail. Enforce here so reuse can't smuggle in
+    // a template create/edit would reject.
     const fork = classifyPrivateFork(repo, org)
     if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
       throw crossOrgPrivateForkError(
@@ -1440,8 +1424,8 @@ export async function copyAssignmentWithConflictRetry(
 
 // editAssignment writes to the same classroom50 main branch as createAssignment
 // and the roster commits, so a concurrent write 409s non-fast-forward. It
-// re-reads the ref + assignments.json each call, so it's safe to retry — mirror
-// the create path.
+// re-reads the ref + assignments.json each call, so it's safe to retry —
+// mirror the create path.
 export async function editAssignmentWithConflictRetry(
   client: GitHubClient,
   input: CreateAssignmentInput,
@@ -1452,14 +1436,14 @@ export async function editAssignmentWithConflictRetry(
 export function createClassroom50Yaml(params: {
   classroom: string
   assignment: string
-  // `id` is the immutable numeric GitHub user id, recorded so the
-  // repo<->student binding survives a username rename.
+  // `id` is the immutable numeric GitHub user id, recorded so the repo<->student
+  // binding survives a username rename.
   ownerUsername: string
   ownerId?: number | null
   acceptedAt?: string
   // Optional capability-URL secret copied from the classroom's classroom.json
-  // at accept. Written only for a protected classroom; when present, submit
-  // and the autograde runner build the `<classroom>/<secret>/...` Pages path.
+  // at accept. Written only for a protected classroom; when present, submit and
+  // the autograde runner build the `<classroom>/<secret>/...` Pages path.
   secret?: string
   // Lets `gh student submit` re-fetch instructor files; omitted when template-less.
   sourceOwner?: string
@@ -1490,8 +1474,8 @@ export function createClassroom50Yaml(params: {
     `assignment: ${JSON.stringify(assignment)}`,
   ]
 
-  // Emit the secret right after the identity fields (matching the CLI's
-  // field order) and only when present, mirroring the CLI's `omitempty`.
+  // Emit the secret right after the identity fields (matching the CLI's field
+  // order) and only when present, mirroring the CLI's `omitempty`.
   if (secret) {
     lines.push(`secret: ${JSON.stringify(secret)}`)
   }
@@ -1591,8 +1575,8 @@ export async function deleteAssignment(
 }
 
 // Grant the student `admin` (not `maintain`) on their own repo. Intentional and
-// CLI-aligned: only an admin can manage collaborators for the
-// founder-driven group-invite flow (`gh student invite`).
+// CLI-aligned: only an admin can manage collaborators for the founder-driven
+// group-invite flow (`gh student invite`).
 async function addAdminCollaborator(params: {
   client: GitHubClient
   owner: string
@@ -1703,8 +1687,8 @@ function freshRepoNotReadyError(owner: string, repo: string) {
 
 // Land .classroom50.yaml + the autograde workflow as one Tree commit, riding out
 // GitHub's git-data lag after POST .../generate (reads 404, the first write 409s
-// "Git Repository is empty"). The whole read→build→commit→update sequence runs
-// inside withFreshRepoRetry, re-reading the ref + parent commit each attempt and
+// "Git Repository is empty"). The whole read→build→commit→update runs inside
+// withFreshRepoRetry, re-reading the ref + parent commit each attempt and
 // requiring non-empty SHAs before writing. Safe because the student's
 // just-accepted repo has no concurrent writers.
 async function commitAcceptFilesWithFreshRepoRetry(params: {
@@ -1834,10 +1818,10 @@ export async function acceptAssignment(params: {
   classroom: string
   assignmentSlug: string
   // Capability-URL access key from the accept link (?k=). Selects the
-  // <classroom>/<secret>/ Pages path for a protected classroom and is
-  // written into .classroom50.yaml so submit + the runner can rebuild the
-  // URLs. Undefined for an unprotected classroom (plain path). Not read
-  // from classroom.json — students can't access the private config repo.
+  // <classroom>/<secret>/ Pages path for a protected classroom and is written
+  // into .classroom50.yaml so submit + the runner can rebuild the URLs.
+  // Undefined for an unprotected classroom (plain path). Not read from
+  // classroom.json — students can't access the private config repo.
   secret?: string
   onStepUpdate?: OnAcceptStepUpdate
 }): Promise<AcceptAssignmentResult> {
@@ -1858,10 +1842,10 @@ export async function acceptAssignment(params: {
   const username = user.login
 
   // Tracked membership step: accept any pending org invite and verify the
-  // student is now an ACTIVE member before we attempt repo creation (a pending
-  // invitee can't create their repo). Verifying here means a SAML-SSO-gated 403
-  // surfaces as an actionable step failure right away (with the SSO/HTTP status
-  // in the message) instead of a confusing downstream repo/access failure.
+  // student is now an ACTIVE member before repo creation (a pending invitee
+  // can't create their repo). Verifying here means a SAML-SSO-gated 403 surfaces
+  // as an actionable step failure right away (with the SSO/HTTP status) instead
+  // of a confusing downstream repo/access failure.
   await withAcceptStep(
     {
       id: "membership",
@@ -1958,11 +1942,10 @@ export async function acceptAssignment(params: {
   if (created.kind === "already-accepted") {
     // The repo exists, but a prior accept may have failed AFTER creating it but
     // BEFORE committing the metadata/workflow (seeding lag, transient 5xx),
-    // leaving a repo that looks accepted but never autogrades. Heal it: a repo
-    // is only "genuinely accepted" when BOTH the metadata and the autograde
-    // workflow landed (they're written in one commit, so a missing workflow
-    // means the prior accept failed mid-flow). If either is missing, re-run the
-    // idempotent provisioning.
+    // leaving a repo that looks accepted but never autogrades. A repo is only
+    // "genuinely accepted" when BOTH the metadata and workflow landed (one
+    // commit, so a missing workflow means the prior accept failed mid-flow). If
+    // either is missing, re-run the idempotent provisioning.
     const [hasMetadata, hasWorkflow] = await Promise.all([
       repoContentsPathExists(
         client,

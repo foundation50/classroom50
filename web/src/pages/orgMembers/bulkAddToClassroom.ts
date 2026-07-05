@@ -8,8 +8,8 @@ import type { GitHubUser } from "@/hooks/github/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Per-row outcome of resolving a selection to a placeable current login BEFORE
-// the enroll engine runs. `skipped` covers the rows we intentionally don't send
-// (not a live member, no id to resolve, already on the target classroom).
+// the enroll engine runs. `skipped` = rows we intentionally don't send (not a
+// live member, no id to resolve, already on the target classroom).
 export type BulkAddSkip = {
   key: string
   label: string
@@ -23,11 +23,11 @@ export type BulkAddProgress = {
 }
 
 export type BulkAddToClassroomResult = {
-  // The enroll engine's result (added / skipped-by-csv / per-student team
-  // results), null when nothing was eligible to send.
+  // Enroll engine's result (added / skipped-by-csv / per-student team results);
+  // null when nothing was eligible to send.
   enroll: BulkEnrollStudentsResult | null
-  // Rows we filtered out before the engine (with why), so the UI can report
-  // them alongside the engine's own duplicate/team skips.
+  // Rows we filtered out before the engine (with why), reported alongside the
+  // engine's own duplicate/team skips.
   preSkipped: BulkAddSkip[]
 }
 
@@ -35,23 +35,20 @@ const labelFor = (row: OrgMemberRow) => row.username || row.email || row.key
 
 // Place selected org members into a classroom's team + roster in one bulk
 // action. Composition-only over the existing engine:
-//   1. Pre-filter to rows that look like members in the already-loaded org-member
-//      list (numeric id, or login fallback) — a cheap gate that avoids a live
-//      read for the obvious non-members, and the SAML "place existing members"
-//      requirement (we never invite from here).
+//   1. Pre-filter to rows that look like members in the already-loaded list
+//      (numeric id, or login fallback) — a cheap gate, and enforces the SAML
+//      "place existing members" rule (we never invite from here).
 //   2. Skip rows already on the target classroom (by CSV-derived access).
 //   3. Resolve each remaining row to its CURRENT login via the immutable
-//      github_id (stored usernames go stale), then RE-VERIFY the account is a
-//      live ACTIVE member (the loaded list can be up to its staleTime old; a
-//      since-removed member must not be enrolled, or the engine would still
-//      write a CSV roster row for a non-member — a drift row).
-//   4. Hand the surviving logins to bulkEnrollStudentsInClassroom, which is
-//      itself idempotent (skips CSV duplicates; addUserToTeam is a PUT).
+//      github_id (stored usernames go stale), then RE-VERIFY it's a live ACTIVE
+//      member (the loaded list may be staleTime old; enrolling a since-removed
+//      member would write a CSV drift row).
+//   4. Hand surviving logins to bulkEnrollStudentsInClassroom (idempotent:
+//      skips CSV duplicates; addUserToTeam is a PUT).
 //
 // The engine commits the roster append first, then best-effort team-adds each
-// student, returning per-student teamResults + skips — so a partial team
-// failure never rejects the whole batch. We surface both our pre-skips and the
-// engine's results to the caller.
+// student, so a partial team failure never rejects the batch. We surface both
+// our pre-skips and the engine's results.
 export async function bulkAddToClassroom(
   client: GitHubClient,
   input: {
@@ -59,7 +56,7 @@ export async function bulkAddToClassroom(
     classroom: string
     rows: OrgMemberRow[]
     // The org's live members, already loaded by the page — the trust anchor for
-    // "is this selection a real member" without an extra read per row.
+    // "is this selection a real member" without a per-row read.
     members: GitHubUser[]
     onProgress?: (progress: BulkAddProgress) => void
   },
@@ -72,13 +69,13 @@ export async function bulkAddToClassroom(
   )
 
   const preSkipped: BulkAddSkip[] = []
-  // Rows that pass the member/duplicate gates, paired with the immutable id we
+  // Rows passing the member/duplicate gates, paired with the immutable id we
   // resolve their current login from.
   const toResolve: { row: OrgMemberRow; matchedId: string }[] = []
 
   for (const row of rows) {
     // Already on the target classroom (CSV-derived): nothing to do. The engine
-    // would skip it anyway, but reporting it here is clearer and saves a lookup.
+    // would skip it, but reporting here is clearer and saves a lookup.
     if (row.classrooms.some((c) => c.classroom === classroom)) {
       preSkipped.push({
         key: row.key,
@@ -96,8 +93,8 @@ export async function bulkAddToClassroom(
         ? row.github_id
         : (loginId ?? null)
 
-    // Not a live active member -> never invite from here (SAML-safe: we only
-    // place existing members). Send them to the row's invite affordance instead.
+    // Not a live active member -> never invite from here (SAML-safe: place
+    // existing members only). Send them to the row's invite affordance instead.
     if (!matchedId) {
       preSkipped.push({
         key: row.key,
@@ -116,9 +113,9 @@ export async function bulkAddToClassroom(
 
   // Resolve current logins from the immutable id (usernames drift after a
   // rename), then re-verify LIVE active membership before enrolling — the loaded
-  // member list can be stale, and enrolling a since-removed account would write
-  // a CSV drift row. A row whose id no longer resolves, or is no longer an
-  // active member, is skipped rather than enrolled.
+  // list can be stale, and enrolling a since-removed account writes a CSV drift
+  // row. A row whose id no longer resolves, or isn't an active member, is
+  // skipped.
   const usernames: string[] = []
   let resolved = 0
   for (const { row, matchedId } of toResolve) {
@@ -130,7 +127,7 @@ export async function bulkAddToClassroom(
     const id = parseGitHubId(matchedId)
     if (id === null) {
       // matchedId came from a live member, so this is unexpected; treat as a
-      // resolve failure rather than trusting a possibly-stale username.
+      // resolve failure rather than trusting a maybe-stale username.
       preSkipped.push({
         key: row.key,
         label: labelFor(row),
@@ -151,9 +148,9 @@ export async function bulkAddToClassroom(
       resolved++
       continue
     }
-    // Authoritative membership re-check on the resolved current login. A read
-    // failure resolves to false (isActiveMember never throws), so we fail safe:
-    // an unverifiable account is not enrolled.
+    // Authoritative membership re-check on the resolved login. A read failure
+    // resolves to false (isActiveMember never throws), so we fail safe: an
+    // unverifiable account is not enrolled.
     if (!(await isActiveMember(client, org, login))) {
       preSkipped.push({
         key: row.key,

@@ -31,9 +31,9 @@ type EditStudentFormValues = {
 }
 
 // Edit modal for a roster row's teacher-facing fields. Identity (username,
-// github_id, email) is shown read-only until the student is enrolled — it's
-// bound by membership, not the teacher — and first/last name and section stay
-// editable. Once enrolled, the email becomes editable too.
+// github_id, email) is read-only until the student is enrolled — it's bound by
+// membership, not the teacher — while name and section stay editable. Once
+// enrolled, the email becomes editable too.
 const EditStudent = ({
   org,
   classroom,
@@ -51,8 +51,8 @@ const EditStudent = ({
 
   const displayHandle = student.username || student.email
   // An email-only row (no username, no github_id) is keyed by its email, so it
-  // can't be changed here without re-keying the row. A github-identified row's
-  // email is just metadata and is freely editable.
+  // can't change here without re-keying the row. A github-identified row's email
+  // is just metadata and is freely editable.
   const emailLocked = !student.username && !student.github_id
 
   const defaults = useCallback(
@@ -112,8 +112,8 @@ const EditStudent = ({
   })
 
   // Drive the native dialog from the `open` prop. Reset to the student's CURRENT
-  // values on open: this dialog is never remounted (its row key is stable), so
-  // an argument-less reset would restore mount-time values that go stale after a
+  // values on open: this dialog is never remounted (stable row key), so an
+  // argument-less reset would restore mount-time values that go stale after a
   // save.
   useEffect(() => {
     const dialog = dialogRef.current

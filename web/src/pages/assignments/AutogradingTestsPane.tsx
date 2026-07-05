@@ -33,8 +33,8 @@ const FieldError = ({ error, id }: { error?: string; id?: string }) =>
     </p>
   ) : null
 
-// Every draft field that can carry a validation error; stale errors on
-// these are cleared whenever the test re-validates.
+// Draft fields that can carry a validation error; stale errors are cleared on
+// each re-validation.
 const VALIDATED_FIELDS = [
   "name",
   "run",
@@ -63,9 +63,8 @@ const AutogradingTestModal = ({
   const titleId = useId()
   if (index === null) return null
 
-  // Validate this test now (the form-level validator only runs on the
-  // page's submit) and surface per-field errors. Returns whether the
-  // test is valid; "Done" keeps the modal open until it is.
+  // Validate this test now (form-level validator only runs on page submit) and
+  // surface per-field errors. Returns valid?; "Done" waits until valid.
   const validateAndShowErrors = () => {
     const drafts: AssignmentTestDraft[] = form.state.values.tests
     const otherNames = drafts
@@ -78,9 +77,8 @@ const AutogradingTestModal = ({
       const key = `tests[${index}].${fieldName}` as Parameters<
         typeof form.getFieldMeta
       >[0]
-      // Fields that never mounted (e.g. exit code on an io test, or the
-      // not-yet-built fixture-file inputs) have no meta to update — and
-      // nowhere to display an error anyway.
+      // Fields that never mounted (e.g. exit code on an io test, or unbuilt
+      // fixture-file inputs) have no meta and nowhere to show an error.
       if (!form.getFieldMeta(key)) continue
       form.setFieldMeta(key, (meta) => ({
         ...meta,
@@ -102,10 +100,9 @@ const AutogradingTestModal = ({
       aria-labelledby={titleId}
       onClose={onClose}
       onKeyDown={(e) => {
-        // Enter inside a modal input would implicitly submit the
-        // surrounding create-assignment form (this dialog renders
-        // inside it). Repurpose it as "Done"; textareas keep Enter
-        // for newlines.
+        // Enter inside a modal input would implicitly submit the surrounding
+        // create-assignment form (this dialog renders inside it). Repurpose as
+        // "Done"; textareas keep Enter for newlines.
         if (
           e.key === "Enter" &&
           e.target instanceof HTMLElement &&

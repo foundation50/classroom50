@@ -1,10 +1,9 @@
-// Open-redirect guard for post-auth / post-onboarding return targets: accept
-// only a same-origin relative path. Beyond the leading-single-slash checks
-// (which reject "//host" and absolute URLs), we also reject vectors that a
-// naive startsWith("/") misses and then confirm same-origin via the URL parser
-// so the guard owns its property rather than relying on a browser quirk:
-//   - "\": URL parsers treat it as "/", so "/\evil.com" resolves cross-origin.
-//   - Encoded slashes/backslashes (%2F, %5C): a downstream decode can restore "//".
+// Open-redirect guard for post-auth return targets: accept only a same-origin
+// relative path. Beyond the leading-slash checks (reject "//host" and absolute
+// URLs), we also reject vectors a naive startsWith("/") misses, then confirm
+// same-origin via the URL parser so the guard owns its property:
+//   - "\": parsers treat it as "/", so "/\evil.com" resolves cross-origin.
+//   - Encoded slashes (%2F, %5C): a downstream decode can restore "//".
 //   - ASCII control chars: parsers strip some, shifting how the value resolves.
 const SAME_ORIGIN_FALLBACK = "http://localhost"
 

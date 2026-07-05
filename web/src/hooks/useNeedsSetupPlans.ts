@@ -5,10 +5,10 @@ import type { GitHubOrgDetails } from "@/hooks/github/types"
 
 // Batch plan-name fetches for a set of org logins. Only the "needs setup" subset
 // of the home view is passed in — every such org is admin-owned, so `plan` is
-// visible there — which keeps this fan-out off the general org list the home
-// path deliberately avoids paying for. Keyed identically to useGetOrgPlanDetails
-// so the setup page reuses the same cache entry. Maps login -> plan name, or
-// undefined when the plan isn't visible (non-owner) or hasn't loaded yet.
+// visible — which keeps this fan-out off the general org list the home path
+// avoids paying for. Keyed identically to useGetOrgPlanDetails so the setup page
+// reuses the same cache. Maps login -> plan name, or undefined when the plan
+// isn't visible (non-owner) or hasn't loaded.
 const useNeedsSetupPlans = (
   logins: string[],
 ): Record<string, string | undefined> => {

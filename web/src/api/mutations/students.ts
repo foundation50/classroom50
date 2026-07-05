@@ -157,23 +157,21 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
     .filter((row) => row.username || row.github_id || row.email)
 }
 
-// Neutralize spreadsheet formula injection (OWASP CSV injection) in the
-// free-text fields a teacher OR a GitHub member can influence. A value starting
-// with = + - @ (or a leading tab/CR that a spreadsheet treats as a formula
-// lead) is prefixed with a single quote so Excel/Sheets render it as text.
-// Idempotent: a value already quote-guarded isn't double-prefixed. Applied to
-// name/section free text AND to email — email is a member-controlled GitHub
-// profile field written verbatim by syncRosterFromTeam/bulk import, so a
+// Neutralize spreadsheet formula injection (OWASP CSV injection) in free-text
+// fields a teacher OR a GitHub member can influence. A value starting with
+// = + - @ (or a leading tab/CR a spreadsheet treats as a formula lead) is
+// prefixed with a single quote so Excel/Sheets render it as text. Idempotent.
+// Applied to name/section free text AND email — email is a member-controlled
+// GitHub profile field written verbatim by syncRosterFromTeam/bulk import, so a
 // formula-leading verified email (e.g. `=1+1@evil.com`) would otherwise reach
-// students.csv and execute on open. Deliberately NOT applied to
+// students.csv and execute on open. NOT applied to
 // github_id/tokens/hashes/timestamps, which must round-trip byte-exact.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
-// students.csv (this app's parse layer and the gh-teacher CLI) sees and must
-// tolerate it on these fields. The gh-teacher Go writer defangs the same set;
-// keep them in lockstep. The guard runs on the stored cell only; email matching
-// keys on the normalized (trim+lowercase) email, so guarding the cell does not
-// affect match-by-email.
+// students.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
+// these fields. The Go writer defangs the same set; keep them in lockstep.
+// Email matching keys on the normalized (trim+lowercase) email, so guarding the
+// cell doesn't affect match-by-email.
 const FORMULA_LEAD = /^[=+\-@\t\r]/
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
@@ -582,12 +580,12 @@ export async function inviteStudentByEmail(
   // Attach the classroom team to the invite so the student lands in it on
   // acceptance. If the team id can't be attached — the resolve threw, or the
   // classroom has no persisted team block — we still send the invite (the row
-  // already landed and a team-less org member is recoverable), but we MUST warn:
-  // the reconcile path that used to re-add such a student was removed with the
+  // landed and a team-less org member is recoverable), but we MUST warn: the
+  // reconcile path that used to re-add such a student was removed with the
   // self-report subsystem, and grade collection is now team-driven — a student
   // who accepts a team-less invite becomes an org member absent from the team,
-  // so they render as an `unprovisioned` drift row and are silently uncollected
-  // until the teacher runs "Sync roster" or "Match account".
+  // rendering as an `unprovisioned` drift row, silently uncollected until the
+  // teacher runs "Sync roster" or "Match account".
   let teamId: number | undefined
   try {
     teamId = (await resolveClassroomTeam(client, input.org, input.classroom)).id
@@ -670,12 +668,10 @@ export async function inviteStudentByEmail(
         }
       } else if (!resolved || resolved.status === "ambiguous") {
         // Member but unidentifiable from any roster (no match, or an ambiguous
-        // email mapping to multiple students). Keep the invited email row
-        // (don't drop it): the student is in the org, but the email->login link
-        // is unrecoverable post-accept, so the teacher must complete the match
-        // by hand (the "Match account" affordance) or delete the row from this
-        // classroom's roster. Reconcile surfaces it as
-        // needsMatch.
+        // email mapping to multiple students). Keep the invited email row: the
+        // student is in the org, but the email->login link is unrecoverable
+        // post-accept, so the teacher must complete the match by hand ("Match
+        // account") or delete the row. Reconcile surfaces it as needsMatch.
         return {
           ...result,
           inviteWarning:
@@ -720,7 +716,8 @@ export async function enrollStudentInClassroom(
   const { org, classroom } = input
   await assertClassroomNotArchived(client, org, classroom)
   // Resolve the classroom team (slug + id) once, concurrently with the commit.
-  // Can reject on a transient read; attach a catch to avoid an unhandled rejection.
+  // Can reject on a transient read; attach a catch to avoid an unhandled
+  // rejection.
   const teamPromise = resolveClassroomTeam(client, org, classroom)
   teamPromise.catch(() => {})
 
@@ -809,13 +806,12 @@ export type MatchStudentToAccountInput = {
 }
 
 // Teacher-initiated manual match for an email-invited row whose student joined
-// the org directly and whose identity GitHub no longer exposes (the
-// email->login link is dropped once an invite is accepted). The
-// teacher selects which org/team member owns the email; this writes that
-// identity onto the email-keyed row and enrolls it. Re-verifies the chosen
-// account is an ACTIVE member before binding (the same active-membership
-// trust model used across the enroll paths, #65/#50), so a wrong/stale pick
-// can't bind a non-member.
+// the org directly and whose identity GitHub no longer exposes (the email->login
+// link is dropped once an invite is accepted). The teacher picks which org/team
+// member owns the email; this writes that identity onto the email-keyed row and
+// enrolls it. Re-verifies the chosen account is an ACTIVE member before binding
+// (the active-membership trust model used across the enroll paths, #65/#50), so
+// a wrong/stale pick can't bind a non-member.
 async function matchStudentToAccount(
   client: GitHubClient,
   input: MatchStudentToAccountInput,
@@ -1182,11 +1178,11 @@ export type SyncRosterFromTeamResult = {
 // team is the source of truth for enrollment; this only persists optional
 // display metadata. Never removes rows (CSV-only rows are drift, not deletions).
 //
-// The diff is recomputed INSIDE the retried closure (re-reading both the team
-// and the CSV each attempt) so a 409 retry or a concurrent teacher edit can't
-// reintroduce or duplicate rows. Uses the same github_id -> username fallback
-// join as the roster view when deciding "missing", so a pre-resolution row with
-// an empty github_id isn't treated as missing (which would append a duplicate).
+// The diff is recomputed INSIDE the retried closure (re-reading both team and
+// CSV each attempt) so a 409 retry or concurrent edit can't reintroduce or
+// duplicate rows. Uses the same github_id -> username fallback join as the
+// roster view when deciding "missing", so a pre-resolution row with an empty
+// github_id isn't treated as missing (which would append a duplicate).
 export async function syncRosterFromTeam(
   client: GitHubClient,
   input: { org: string; classroom: string },
@@ -1215,10 +1211,10 @@ export async function syncRosterFromTeam(
 
     const { ids, logins } = rosterClaimSet(currentStudents)
     // Email set mirrors buildTeamRoster's indexCsv.byEmail fold: a member whose
-    // GitHub profile email matches an existing (e.g. pre-resolution, id/login-
-    // less) CSV row is the SAME person the view already folds by email, so
-    // appending would create a duplicate email-colliding row the view masks but
-    // that breaks email-keyed logic (match-by-email, invite dedupe).
+    // GitHub email matches an existing (e.g. pre-resolution, id/login-less) CSV
+    // row is the SAME person the view folds by email, so appending would create
+    // a duplicate email-colliding row the view masks but that breaks email-keyed
+    // logic (match-by-email, invite dedupe).
     const emails = new Set(
       currentStudents
         .map((s) => s.email?.trim().toLowerCase())
@@ -1412,12 +1408,11 @@ export async function bulkEnrollStudentsInClassroom(
 // unenrollStudent and bulkUnenrollStudents so the two can't drift.
 //
 // Precedence mirrors enrollment identity: when the target carries a username or
-// github_id, match on those only (never on email — a shared email must not
-// widen the match). Email is a fallback ONLY for an email-only target (no
-// username, no github_id), and then it matches ONLY an email-only row (a row
-// that is itself unclaimed: no username, no github_id). Without that guard a
-// batch remove of one email-only invite would drop every other roster row that
-// happens to share the email, silently unenrolling an unselected student.
+// github_id, match on those only (never email — a shared email must not widen
+// the match). Email is a fallback ONLY for an email-only target (no username,
+// no github_id), and then matches ONLY an email-only row (itself unclaimed).
+// Without that guard, batch-removing one email-only invite would drop every
+// other row sharing the email, silently unenrolling an unselected student.
 export function matchesRosterRow(row: StudentCsvRow, target: Student): boolean {
   const username = target.username?.trim()
   const githubId = target.github_id?.trim()
@@ -1453,8 +1448,8 @@ export async function unenrollStudent(
   const normalizedUsername = toRemoveStudent?.username.trim()
   const normalizedEmail = toRemoveStudent?.email?.trim()
 
-  // An email-invited row that hasn't been claimed yet has no username, so accept
-  // email too. One of the two must be present to target a row.
+  // An email-invited row not yet claimed has no username, so accept email too.
+  // One of the two must be present to target a row.
   if (!normalizedUsername && !normalizedEmail) {
     throw new Error("Student's GitHub username or email is required")
   }
@@ -1553,8 +1548,8 @@ export async function unenrollStudent(
 
   // Cancel a pending invite (a not-yet-accepted invitee has no cross-classroom
   // footprint). An ACTIVE member is never removed here — unenroll is
-  // classroom-scoped; org removal lives on the Members page.
-  // Resolve defensively: a reject after the roster commit landed would discard
+  // classroom-scoped; org removal lives on the Members page. Resolve
+  // defensively: a reject after the roster commit landed would discard
   // accumulated warnings and break the "commit landed -> non-fatal" guarantee.
   const orgState = await orgStatePromise.catch(() => null)
 
@@ -1620,18 +1615,16 @@ export type BulkUnenrollStudentsResult = {
 
 // Remove MANY students from one classroom in a SINGLE roster commit, then run
 // the per-student org-side side effects (team drop + pending-invite cancel)
-// best-effort. This is the batch form of unenrollStudent: looping that per
-// student produces one commit PER student (N noisy "Remove student" commits
-// racing the same ref), whereas real classes are unenrolled in bulk. Mirrors
-// bulkEnrollStudentsInClassroom / addStudentsToClassroom, which already write
-// all rows in one commit.
+// best-effort. The batch form of unenrollStudent: looping that per student
+// would produce one commit PER student (N noisy commits racing the same ref),
+// whereas real classes are unenrolled in bulk. Mirrors
+// bulkEnrollStudentsInClassroom / addStudentsToClassroom (one commit for all).
 //
 // The CSV rewrite is conflict-retried and re-reads inside the closure, so a
 // concurrent edit can't be clobbered. Org-side steps run only AFTER the commit
-// lands, so — as in unenrollStudent — they are non-fatal warnings, never fail
-// the removal. Active members are never removed from the org here (unenroll is
-// classroom-scoped); only a still-PENDING invite is cancelled, and never the
-// signed-in teacher's own.
+// lands, so — as in unenrollStudent — they are non-fatal warnings. Active
+// members are never removed from the org here (unenroll is classroom-scoped);
+// only a still-PENDING invite is cancelled, and never the signed-in teacher's.
 export async function bulkUnenrollStudents(
   client: GitHubClient,
   input: BulkUnenrollStudentsInput,
@@ -1855,11 +1848,10 @@ export async function updateStudent(
   const emailChanged = nextEmail.toLowerCase() !== existing.email.toLowerCase()
 
   // An email-only row (no username, no github_id) is identified solely by its
-  // email: it's that row's studentKey, both server-side here and in the UI's
-  // optimistic cache. Editing the email would re-key (or, if cleared, drop) the
-  // row — stringifyStudentsCsv discards keyless rows, so a cleared email
-  // silently deletes the student. Refuse any email change on such a row; the
-  // teacher should unenroll instead.
+  // email — its studentKey, both here and in the UI's optimistic cache. Editing
+  // the email would re-key it (or, if cleared, drop it: stringifyStudentsCsv
+  // discards keyless rows, silently deleting the student). Refuse any email
+  // change on such a row; the teacher should unenroll instead.
   if (emailChanged && !existing.username && !existing.github_id) {
     throw new Error(
       "Can't change the email for this student: they have no GitHub username " +

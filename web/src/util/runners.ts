@@ -1,11 +1,11 @@
-// Advisory, non-blocking verification for the "GitHub Runner" field.
-// Per the autograder spec, `runtime.runs-on` is one or more GitHub Actions
-// labels with no allow-list: a single GitHub-hosted label ("ubuntu-latest")
-// or AND-ed labels for a self-hosted runner ("self-hosted, linux, x64").
-// Helpers never rewrite the teacher's value — they only classify it.
+// Advisory, non-blocking verification for the "GitHub Runner" field. Per the
+// autograder spec, `runtime.runs-on` is one or more GitHub Actions labels with
+// no allow-list: a single GitHub-hosted label ("ubuntu-latest") or AND-ed
+// labels for a self-hosted runner ("self-hosted, linux, x64"). Helpers only
+// classify the teacher's value, never rewrite it.
 
 // GitHub-hosted labels (from the org's default runner settings). Not
-// exhaustive; used only to recognize a label as always-available.
+// exhaustive; only used to recognize a label as always-available.
 const KNOWN_HOSTED_RUNNER_LABELS = [
   "ubuntu-latest",
   "ubuntu-24.04",
@@ -27,9 +27,9 @@ const KNOWN_HOSTED_RUNNER_SET = new Set<string>(
   KNOWN_HOSTED_RUNNER_LABELS.map((label) => label.toLowerCase()),
 )
 
-// Default labels a self-hosted runner gets at registration (self-hosted +
-// OS + arch). Recognized as valid so the UI doesn't flag them as typos when
-// the org runner list can't be read.
+// Default labels a self-hosted runner gets at registration (self-hosted + OS +
+// arch). Recognized as valid so the UI doesn't flag them as typos when the org
+// runner list can't be read.
 const STANDARD_SELF_HOSTED_LABELS = new Set<string>([
   "self-hosted",
   "linux",
@@ -60,10 +60,9 @@ export function isRunnerLabelShapeValid(label: string): boolean {
 // The CLI rejects more than 10 labels.
 const MAX_RUNNER_LABELS = 10
 
-// Mirrors the CLI exactly: a prefix-only deny-list of the labels we KNOW
-// can't run a Linux container. Bare "macos"/"windows" pass (the CLI accepts
-// them — the teacher owns OS matching), so flagging them would be a false
-// warning.
+// Mirrors the CLI exactly: a prefix-only deny-list of labels we KNOW can't run
+// a Linux container. Bare "macos"/"windows" pass (the CLI accepts them — the
+// teacher owns OS matching), so flagging them would be a false warning.
 function isNonUbuntuHostedLabel(label: string): boolean {
   const normalized = label.trim().toLowerCase()
   return normalized.startsWith("macos-") || normalized.startsWith("windows-")
@@ -165,8 +164,8 @@ export function verifyRunnerLabels(
   )
 
   if (looksSelfHosted) {
-    // Unconfirmed only when an unrecognized label couldn't be checked (org
-    // list unreadable); standard/known-hosted labels are self-evidently fine.
+    // Unconfirmed only when an unrecognized label couldn't be checked (org list
+    // unreadable); standard/known-hosted labels are self-evidently fine.
     const confirmed = !labels.some((l) => l.kind === "unknown")
     return { kind: "self-hosted", labels, confirmed }
   }
@@ -174,9 +173,9 @@ export function verifyRunnerLabels(
   return { kind: "unknown", labels }
 }
 
-// Non-blocking warning mirroring the CLI's container rule: a macOS/Windows
-// label with a container image is rejected (containers run on Ubuntu only).
-// Returns a message only — the caller must NOT clear the runner value.
+// Non-blocking warning mirroring the CLI's container rule: a macOS/Windows label
+// with a container image is rejected (containers run on Ubuntu only). Returns a
+// message only — the caller must NOT clear the runner value.
 export function containerRunnerWarning(
   raw: string,
   rawContainerImage: string,

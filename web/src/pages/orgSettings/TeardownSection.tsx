@@ -20,8 +20,8 @@ import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 
 // Teardown / org reset: deletes ALL repos in the org (mirroring the CLI's
-// `gh teacher teardown`), marker-gated and behind a typed-org-name
-// confirmation. Owner-gated; destructive and irreversible.
+// `gh teacher teardown`), marker-gated and behind a typed-org-name confirmation.
+// Owner-gated; destructive and irreversible.
 const TeardownSection = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
@@ -69,8 +69,8 @@ const TeardownSection = ({ org }: { org: string }) => {
       }
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
       // Redirect home only on a fully-clean run. executeTeardown RESOLVES on
-      // partial failure (marker retained, run re-runnable); on that path the
-      // `done` banner carries the re-run remedy, so stay on the page to show it.
+      // partial failure (marker retained, re-runnable); on that path the `done`
+      // banner carries the re-run remedy, so stay to show it.
       const cleanRun =
         !!result &&
         result.markerDeleted &&
@@ -193,9 +193,9 @@ const TeardownSection = ({ org }: { org: string }) => {
         }
         onConfirm={async () => {
           // Let a failure REJECT so ConfirmModal's catch keeps the modal open
-          // with the error inline (its submittingRef already guards double
-          // submits). Scope/rate-limit errors carry user-facing messages;
-          // anything else is normalized.
+          // with the error inline (its submittingRef guards double submits).
+          // Scope/rate-limit errors carry user-facing messages; anything else is
+          // normalized.
           try {
             await runMutation.mutateAsync()
           } catch (err) {

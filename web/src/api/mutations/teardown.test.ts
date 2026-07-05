@@ -14,9 +14,9 @@ import type { GitHubClient } from "@/hooks/github/client"
 
 // Teardown mirrors the CLI: marker-gated (refuse orgs without classroom50),
 // delete ALL org repos, marker deleted last (re-runnable), 403 = scope wall.
-// It also deletes the per-classroom team of every classroom in classroom.json
-// (only teams a classroom links to — never a stray classroom50-* team). The
-// fake client serves the marker probe, repo list, classroom dir listing,
+// Also deletes the per-classroom team of every classroom in classroom.json
+// (only teams a classroom links to — never a stray classroom50-* team). The fake
+// client serves the marker probe, repo list, classroom dir listing,
 // per-classroom classroom.json, and the team id-match GET + DELETE.
 
 function notFound(): GitHubAPIError {
@@ -539,7 +539,7 @@ describe("executeTeardown", () => {
 
   it("refuses to delete a team whose live id no longer matches (reused slug)", async () => {
     // The slug now points at a different team (different id) than the one this
-    // classroom recorded — deleteClassroomTeam refuses with a TeamIdMismatchError,
+    // classroom recorded — deleteClassroomTeam refuses with TeamIdMismatchError,
     // it lands in teamsFailed without clobbering the unrelated team, and because
     // the refusal is PERMANENT (a re-run repeats it) the marker is still deleted
     // so teardown isn't wedged forever.

@@ -143,7 +143,7 @@ describe("buildReusedEntry", () => {
   })
 
   it("preserves an empty tests/allowed_files array (present, not dropped)", () => {
-    // An empty array is truthy, so the omitempty cleanup must NOT delete it —
+    // Empty array is truthy, so the omitempty cleanup must NOT delete it —
     // absent vs [] can mean different things to the CLI, so reuse copies the
     // source's choice verbatim.
     const source: Assignment = {
@@ -277,8 +277,8 @@ describe("editAssignment (preserved-entry integration)", () => {
   const SLUG = "hw1"
 
   // The CLI-authored entry the GUI is about to edit: carries a CLI-only
-  // migrated_from block (the form never manages it) and a managed `due` the
-  // edit clears.
+  // migrated_from block (the form never manages it) and a managed `due` the edit
+  // clears.
   const existingEntry: Assignment = {
     slug: SLUG,
     name: "Homework 1",
@@ -295,10 +295,10 @@ describe("editAssignment (preserved-entry integration)", () => {
     },
   }
 
-  // Wire up a route-table GitHubClient covering exactly the endpoints
-  // editAssignment hits on the template-less path: ref read, commit read,
-  // assignments.json contents read, then tree/commit/ref writes. classroom.json
-  // is absent (404) so the archive guard reads the classroom as active.
+  // Route-table GitHubClient covering exactly the endpoints editAssignment hits
+  // on the template-less path: ref read, commit read, assignments.json contents
+  // read, then tree/commit/ref writes. classroom.json is absent (404) so the
+  // archive guard reads the classroom as active.
   function makeClient(): {
     client: GitHubClient
     committedContent: () => string
@@ -401,10 +401,10 @@ describe("editAssignment (preserved-entry integration)", () => {
   })
 
   it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
-    // An assignment whose stored template is an in-org private fork of a
-    // private cross-org upstream (created before the fork guard shipped, or a
-    // parent that went private after create). Editing WITHOUT changing the ref
-    // must still trip the fork guard rather than trusting the stored block.
+    // An assignment whose stored template is an in-org private fork of a private
+    // cross-org upstream (created before the fork guard shipped, or a parent
+    // that went private after create). Editing WITHOUT changing the ref must
+    // still trip the fork guard rather than trusting the stored block.
     const forkEntry: Assignment = {
       slug: SLUG,
       name: "Homework 1",
@@ -484,9 +484,9 @@ describe("copyAssignmentToClassroom (reuse fork guard)", () => {
     retryAfter: null,
   }
 
-  // A client that answers the three pre-commit reads copyAssignmentToClassroom
-  // runs in parallel (archive guard via requestRaw 404, getRepo, getBranchRef).
-  // The fork guard throws before any commit, so no write routes are needed.
+  // Answers the three pre-commit reads copyAssignmentToClassroom runs in
+  // parallel (archive guard via requestRaw 404, getRepo, getBranchRef). The fork
+  // guard throws before any commit, so no write routes are needed.
   function makeClient(repo: unknown): GitHubClient {
     const request = vi.fn(async (url: string) => {
       if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }

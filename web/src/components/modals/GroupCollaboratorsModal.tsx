@@ -27,8 +27,8 @@ const rejectedItems = <T,>(
     result.status === "rejected" ? [items[i]] : [],
   )
 
-// Map a rejected add/remove to a human-readable reason. Collapsing every
-// status into "bad username" hides real causes like a 429 rate limit or a 403.
+// Map a rejected add/remove to a human-readable reason. Collapsing every status
+// into "bad username" would hide real causes like a 429 or a 403.
 const describeFailure = (reason: unknown, t: TFunction): string | null => {
   if (reason instanceof GitHubAPIError) {
     if (reason.isRateLimited)
@@ -45,7 +45,7 @@ const describeFailure = (reason: unknown, t: TFunction): string | null => {
 }
 
 // Two-line identity when we have a roster name (name + @handle), else just the
-// @handle. Shared by the owner, member, and marked-for-removal rows.
+// @handle. Shared by owner, member, and marked-for-removal rows.
 const CollaboratorIdentity = ({
   login,
   students,
@@ -77,7 +77,7 @@ type GroupCollaboratorsModalProps = {
   repoUrl?: string
   assignmentName?: string
   maxGroupSize?: number
-  // Optional roster, used to show full names alongside GitHub handles.
+  // Optional roster, to show full names alongside GitHub handles.
   students?: Student[]
 }
 
@@ -95,8 +95,8 @@ export function GroupCollaboratorsModal({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  // Synchronous re-entrancy guard: isSaving (from mutation.isPending) updates a
-  // tick late, so a rapid double-click could start two overlapping saves.
+  // Synchronous re-entrancy guard: isSaving (mutation.isPending) updates a tick
+  // late, so a rapid double-click could start two overlapping saves.
   const savingRef = useRef(false)
   const { user } = useGithubAuth()
   const { t } = useTranslation()
@@ -126,8 +126,8 @@ export function GroupCollaboratorsModal({
 
   // Manage access = founder, or admin on this repo. We read the viewer's
   // effective permission from the repo object (which includes inherited
-  // org-owner admin) rather than the affiliation=direct collaborator list,
-  // which omits inherited access and would lock out org-owner teachers.
+  // org-owner admin) rather than the affiliation=direct collaborator list, which
+  // omits inherited access and would lock out org-owner teachers.
   const { data: repo } = useGetRepo(org, repoName, { enabled: open })
   const viewerLogin = user?.login ? normalizeUsername(user.login) : null
   const canManage = Boolean(
@@ -135,7 +135,7 @@ export function GroupCollaboratorsModal({
     (viewerLogin === ownerLoginResolved || repo?.permissions?.admin === true),
   )
 
-  // Members = every direct collaborator except the founder.
+  // Direct collaborators except the founder.
   const initialCollaborators = useMemo(
     () =>
       collaborators
@@ -222,7 +222,7 @@ export function GroupCollaboratorsModal({
     addCollaboratorMutation.isPending || removeCollaboratorMutation.isPending
 
   // Dropped from the draft but still a live collaborator: removed only on Save,
-  // and restorable via undo until then.
+  // restorable via undo until then.
   const draftSet = useMemo(
     () => new Set(draftCollaborators.map(normalizeUsername)),
     [draftCollaborators],
@@ -294,8 +294,8 @@ export function GroupCollaboratorsModal({
 
       const failedRemoves = rejectedItems(removeResults, toRemove)
 
-      // A failed remove keeps its slot, so cap adds at the remaining capacity —
-      // otherwise a swap at max size would push GitHub to max+1.
+      // A failed remove keeps its slot, so cap adds at remaining capacity —
+      // else a swap at max size would push GitHub to max+1.
       const succeededRemoves = toRemove.length - failedRemoves.length
       const liveCount = initialCollaborators.length - succeededRemoves
       const capacity = Math.max(maxCollaborators - liveCount, 0)
@@ -472,8 +472,8 @@ export function GroupCollaboratorsModal({
                 </span>
               </div>
 
-              {/* One bordered list for owner + members + pending removals, so
-                  the modal reads as a single roster rather than stacked cards. */}
+              {/* One bordered list for owner + members + pending removals, so it
+                  reads as a single roster rather than stacked cards. */}
               <ul className="divide-y divide-base-200 rounded-2xl border border-base-200">
                 {ownerDisplayLogin && (
                   <li className="flex items-center gap-3 px-4 py-2.5">

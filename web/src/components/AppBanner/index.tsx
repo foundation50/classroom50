@@ -20,11 +20,11 @@ const TONE_CLASS: Record<AppBannerTone, { bar: string; icon: string }> = {
   },
 }
 
-// Presentational shell for a global, full-bleed banner pinned to the top of the
-// app (above the routed content). Height-collapses on exit via collapseVariants
-// so a dismissed banner leaves no gap. Owns only chrome — callers supply copy,
-// actions, and the icon. Wrap in an <AnimatePresence> and set a stable `key` on
-// this element (AnimatePresence tracks the key of its direct child).
+// Presentational shell for a global, full-bleed banner pinned to the top (above
+// routed content). Height-collapses on exit via collapseVariants so a dismissed
+// banner leaves no gap. Owns only chrome — callers supply copy, actions, icon.
+// Wrap in <AnimatePresence> and set a stable `key` on this element
+// (AnimatePresence tracks its direct child's key).
 export const AppBanner = ({
   tone,
   icon,

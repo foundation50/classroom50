@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
-// pattern: a single localStorage key, applied by toggling `data-theme` on <html>.
+// pattern: one localStorage key, applied by toggling `data-theme` on <html>.
 // The two theme names are the ones registered in index.css.
 export const THEME_STORAGE_KEY = "classroom50:theme"
 
@@ -10,9 +10,9 @@ export type Theme = "corporate" | "corporate-dark"
 const LIGHT: Theme = "corporate"
 const DARK: Theme = "corporate-dark"
 
-// Resolve the initial theme: an explicit stored choice always wins; otherwise
-// fall back to the OS `prefers-color-scheme`. Kept in sync with the anti-flash
-// inline script in index.html, which applies the same logic before React mounts.
+// Resolve the initial theme: an explicit stored choice wins; else fall back to
+// the OS `prefers-color-scheme`. Kept in sync with the anti-flash inline script
+// in index.html, which applies the same logic before React mounts.
 export function resolveInitialTheme(): Theme {
   if (typeof window === "undefined") return LIGHT
   const stored = window.localStorage.getItem(THEME_STORAGE_KEY)
@@ -38,15 +38,15 @@ export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme)
 
   // Apply the active theme to <html>. Persistence is deliberately NOT done here:
-  // writing on mount would freeze a first-visit OS-derived default into a locked
-  // explicit choice, so `follow the OS` could never recover. We persist only on
-  // an explicit user action (setTheme/toggleTheme) below.
+  // writing on mount would freeze a first-visit OS default into a locked explicit
+  // choice, so "follow the OS" could never recover. We persist only on an
+  // explicit user action (setTheme/toggleTheme) below.
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
 
-  // While the user has made no explicit choice, keep following the OS and any
-  // choice made in another tab. Both listeners are no-ops once a value is stored.
+  // While the user has made no explicit choice, follow the OS and any choice
+  // made in another tab. Both listeners are no-ops once a value is stored.
   useEffect(() => {
     if (typeof window === "undefined") return
 

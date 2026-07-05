@@ -1,17 +1,13 @@
 import type { TemplateAccessVerification } from "@/api/mutations/assignments"
 
-// Pure view-model helpers for the two template-access verdicts whose rendering
-// branches on data (tone + which i18n key). Extracted from TemplateField's
-// TemplateVerificationNote so the tone/key decision is a single source of truth
-// and unit-testable without a DOM (mirrors classifyMembershipError). The JSX
-// only interpolates the returned keys and picks the Note tone.
+// Pure view-model for the two data-branched template verdicts (tone + i18n key),
+// so the decision is one testable source of truth (mirrors classifyMembershipError).
 
 export type NoteTone = "warning" | "error"
 
-// A private fork used as a template. In-org parent is usually reachable
-// (advisory amber); a cross-org or unknown parent is likely to fail at generate
-// (error red). The no-parent case reuses the cross-org suffix (no dedicated
-// privateForkNoParent_2 key) because an unknown upstream is treated as the
+// Private fork used as a template. In-org parent is usually reachable (advisory
+// amber); cross-org or unknown parent likely fails at generate (error red). The
+// no-parent case reuses the cross-org suffix, treating unknown upstream as the
 // higher-risk cross-org case.
 export function templateForkNoteView(
   verification: Extract<TemplateAccessVerification, { kind: "private-fork" }>,
@@ -34,9 +30,9 @@ export function templateForkNoteView(
       }
 }
 
-// A 403 read denial. A real token scope gap points the user at re-authorizing
+// A 403 read denial. A real token scope gap points at re-authorizing
 // (restrictedScope); any other 403 uses the org-restriction copy (restricted).
-// GitHub's actual message + status is always surfaced alongside via githubSaid.
+// GitHub's own message + status is surfaced alongside via githubSaid.
 export function templateRestrictedNoteView(
   verification: Extract<TemplateAccessVerification, { kind: "restricted" }>,
 ): { messageKey: string } {

@@ -5,8 +5,7 @@ import { studentRepoName } from "@/util/studentRepo"
 
 // The student's graded-submission releases (`submit/*` tags) for an assignment,
 // newest first. Each release page renders the score + per-test table, so the
-// student page links straight to them. Empty until the autograder publishes the
-// first release.
+// student page links straight to them. Empty until the first release.
 const useGetSubmissionReleases = (
   org: string | undefined,
   classroom: string | undefined,

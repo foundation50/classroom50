@@ -44,26 +44,24 @@ export type ClassroomRoleInput = {
 export function resolveClassroomRole(input: ClassroomRoleInput): EffectiveRole {
   const { org, classroom, isOwner, staffRoleResolved, isStaff } = input
 
-  // No org at all => no role to resolve.
   if (!org) return "student"
 
-  // Owner (org admin) outranks all and isn't classroom-scoped: resolve it before
-  // the classroom check so an owner on an org-level route (e.g. Create
-  // Classroom) isn't misclassified. While in flight (undefined) fall through.
+  // Owner (org admin) outranks all and isn't classroom-scoped: resolve before
+  // the classroom check so an owner on an org-level route isn't misclassified.
+  // While in flight (undefined) fall through.
   if (isOwner === true) return "owner"
 
-  // Below here we refine the CLASSROOM role (instructor/ta), which needs a
-  // classroom. A non-owner on an org-level route has no finer role; hold
-  // `unresolved` while ownership is still resolving so we don't flash NotFound.
+  // Refine the CLASSROOM role (instructor/ta), which needs a classroom. A
+  // non-owner on an org-level route has no finer role; hold `unresolved` while
+  // ownership is still resolving so we don't flash NotFound.
   if (!classroom) return isOwner === undefined ? "unresolved" : "student"
 
   // Need the staff (config-repo) verdict before deciding non-owner roles.
   if (!staffRoleResolved) return "unresolved"
 
   // Staff team membership is definitive and outranks the (slower) owner read, so
-  // resolve a confirmed instructor/ta before waiting on ownership. Only these
-  // positive matches are safe while isOwner is unknown — a demotion below must
-  // still wait for ownership.
+  // resolve a confirmed instructor/ta before waiting on ownership. Only positive
+  // matches are safe while isOwner is unknown — a demotion below must wait.
   if (isStaff) {
     if (input.instructor === "member") return "instructor"
     if (input.ta === "member") return "ta"
@@ -79,8 +77,8 @@ export function resolveClassroomRole(input: ClassroomRoleInput): EffectiveRole {
   // A non-staff non-owner is a student, regardless of any stale team signal.
   if (!isStaff) return "student"
 
-  // Staff (reads the config repo) but in neither staff team — treat as student
-  // for role-gated UI; owners are handled above.
+  // Staff (reads the config repo) but in neither staff team — treat as student;
+  // owners are handled above.
   return "student"
 }
 
@@ -101,8 +99,8 @@ export function isInstructorRole(role: EffectiveRole): boolean {
   return role === "owner" || role === "instructor" || role === "unresolved"
 }
 
-// The roles an instructor/owner can preview the app AS. A client-side
-// lens for verifying what each role sees — never escalates.
+// The roles an instructor/owner can preview the app AS. A client-side lens for
+// verifying what each role sees — never escalates.
 export type ViewAsRole = "ta" | "student"
 
 // Rank for the downgrade-only clamp. `unresolved` is intentionally absent — we
@@ -126,10 +124,9 @@ export function applyViewAs(
   return ROLE_RANK[viewAs] < ROLE_RANK[actual] ? viewAs : actual
 }
 
-// Translation key for the human role label per the product mapping:
-// owner + instructor => "nav.roleInstructor", ta => "nav.roleTa",
-// student => "nav.roleStudent", unresolved => null (so callers show a skeleton
-// rather than guessing mid-load). Callers pass the returned key through t().
+// Translation key for the human role label: owner + instructor =>
+// "nav.roleInstructor", ta => "nav.roleTa", student => "nav.roleStudent",
+// unresolved => null (so callers show a skeleton mid-load). Pass through t().
 export function roleLabelKey(role: EffectiveRole): string | null {
   switch (role) {
     case "owner":
@@ -145,8 +142,7 @@ export function roleLabelKey(role: EffectiveRole): string | null {
 }
 
 // Reduce a team-membership query (404 => non-member, other error => unresolved)
-// to the tri-state. Distinguishes a definitive "not a member" from a transient
-// failure so a blip never demotes a real staff member.
+// to the tri-state, so a blip never demotes a real staff member.
 function membershipFromQuery(isSuccess: boolean, error: unknown): Membership {
   if (isSuccess) return "member"
   if (error instanceof GitHubAPIError && error.status === 404) {
@@ -202,8 +198,8 @@ export function teamMembershipQuery(
 
 // Resolve the viewer's effective role for an org/classroom from live queries:
 // org membership (owner), the classroom50 repo read (staff gate), and
-// instructor/ta team membership. Applies the "view as" preview as a
-// downgrade-only lens: `role` reflects the preview, `actualRole` is the real one.
+// instructor/ta team membership. Applies "view as" as a downgrade-only lens:
+// `role` reflects the preview, `actualRole` is the real one.
 export function useClassroomRole(
   org: string | undefined,
   classroom: string | undefined,
@@ -215,9 +211,9 @@ export function useClassroomRole(
   const ownerQuery = useQuery({
     ...orgMembershipQuery(client, org ?? ""),
     enabled: Boolean(org),
-    // orgMembershipQuery defaults to retry:false, but a transient blip on the
-    // membership read must self-heal rather than pin isOwner at `undefined`
-    // (which would silently demote a real owner). A 404/403 is definitive.
+    // orgMembershipQuery defaults to retry:false, but a transient blip must
+    // self-heal rather than pin isOwner at `undefined` (silently demoting a real
+    // owner). A 404/403 is definitive.
     retry: retryTransientGitHubError,
   })
 
@@ -248,9 +244,9 @@ export function useClassroomRole(
     enabled: Boolean(org && classroom && username),
   })
 
-  // owner = active org admin. A success or a 404/403 (not a member) both give a
-  // concrete true/false; only an in-flight/transient read leaves it `undefined`,
-  // which the resolver holds as `unresolved`.
+  // owner = active org admin. A success or a 404/403 both give a concrete
+  // true/false; only an in-flight/transient read leaves it `undefined`, which
+  // the resolver holds as `unresolved`.
   const ownerErrorIsDefinitive =
     ownerQuery.error instanceof GitHubAPIError &&
     (ownerQuery.error.status === 404 || ownerQuery.error.status === 403)

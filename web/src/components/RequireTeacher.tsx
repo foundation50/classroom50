@@ -8,17 +8,17 @@ import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 
 // What a guarded surface requires:
 // - "staff": any classroom staff (owner/instructor/ta) — for classroom CONTENT
-//   (roster, assignment authoring, submissions). Backed by config-repo access.
+//   (roster, authoring, submissions). Backed by config-repo access.
 // - "instructor": owner OR instructor of THIS classroom (excludes TAs) — for
 //   classroom SETTINGS. Needs a `$classroom` route param.
 // - "owner": org admin only — for ORG-wide settings/setup, where TA and
 //   instructor can't be distinguished without a classroom context.
 export type RequireRole = "staff" | "instructor" | "owner"
 
-// Gate page content by role. While the role resolves we render a spinner (so we
-// never flash a 404 at a real teacher), then the children or NotFound. Access
-// is GitHub-enforced underneath; this is a UX guard that 404s rather than 403s
-// by design. Default `allow: "staff"` preserves the original behavior.
+// Gate page content by role. While the role resolves we show a spinner (never
+// flash a 404 at a real teacher), then children or NotFound. Access is
+// GitHub-enforced underneath; this UX guard 404s rather than 403s by design.
+// Default `allow: "staff"` preserves the original behavior.
 const RequireTeacher = ({
   children,
   allow = "staff",
@@ -55,7 +55,7 @@ const RequireElevated = ({
   const { role, isLoading } = useClassroomRole(org, classroom, user?.login)
 
   // `unresolved` means a signal is still in flight or hit a transient error —
-  // hold the spinner rather than flashing NotFound at a real instructor/owner.
+  // hold the spinner rather than flash NotFound at a real instructor/owner.
   if (isLoading || role === "unresolved") return <RoleResolvingFallback />
 
   // "instructor" allows owner OR instructor; "owner" is owner-only.

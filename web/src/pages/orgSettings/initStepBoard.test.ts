@@ -9,9 +9,9 @@ import {
 } from "./initStepBoard"
 
 // The board is the single source of truth shared by the org setup wizard and
-// the re-run surface. These guard against the three ways the surfaces could
-// drift: a step missing from the order, a step missing its explanation, or a
-// settings link that no longer points at the org/repo it's supposed to.
+// re-run surface. These guard the three drift modes: a step missing from the
+// order, a step missing its explanation, or a settings link pointing at the
+// wrong org/repo.
 
 describe("init step board metadata", () => {
   it("orders, initial state, and explanations cover the exact same steps", () => {

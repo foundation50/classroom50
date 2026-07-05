@@ -4,9 +4,9 @@ import i18n from "@/i18n"
 import { BASE_LANG } from "@/i18n/customLocale"
 
 // Drive Intl formatting off the active language. Bare "en" maps to "en-US" to
-// preserve the exact US-style output the app/tests expect. A sideloaded pack
-// can carry a code Intl rejects with a RangeError, so validate and fall back to
-// "en-US" rather than let every date render throw.
+// preserve US-style output. A sideloaded pack can carry a code Intl rejects with
+// a RangeError, so validate and fall back to "en-US" rather than throw on every
+// date render.
 const resolveLocale = (): string => {
   const lang = i18n.language || "en-US"
   const candidate = lang === BASE_LANG ? "en-US" : lang
@@ -75,9 +75,8 @@ export const formatDueDateTime = (dateString: string): string => {
   return dueDateTimeFormatter().format(date)
 }
 
-// Unlike DateTimeFormat above, an unsupported-but-well-formed tag must fall
-// back to English, not to the browser's default locale — hence the extra
-// supportedLocalesOf check.
+// Unlike DateTimeFormat above, an unsupported-but-well-formed tag must fall back
+// to English, not the browser default — hence the supportedLocalesOf check.
 const relativeTimeFormatter = () => {
   const supported = Intl.RelativeTimeFormat.supportedLocalesOf([
     resolveLocale(),
@@ -97,8 +96,8 @@ const RELATIVE_UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
   ["minute", 60],
 ]
 
-// Relative "x ago" / "in x" in the active UI language, via the platform's
-// Intl locale data — sideloaded languages need no per-language bundles.
+// Relative "x ago" / "in x" in the active UI language via the platform's Intl
+// locale data — sideloaded languages need no per-language bundles.
 export const formatRelativeToNow = (date: Date | number): string => {
   const diffSeconds = Math.round((new Date(date).getTime() - Date.now()) / 1000)
   const abs = Math.abs(diffSeconds)
@@ -120,7 +119,7 @@ export const formatInvitedAt = (dateString?: string | null): string | null => {
 export const isPastDue = (dateString: string): boolean => {
   // A bare YYYY-MM-DD has no time. buildDueFields pins such a deadline to 23:59
   // local, so treat the whole day as "not past due" until local end-of-day —
-  // otherwise we'd flag it past-due ~24h early (at local midnight).
+  // else we'd flag it ~24h early (at local midnight).
   const date = isBareDate(dateString)
     ? new Date(`${dateString}T23:59:59.999`)
     : parseDueDate(dateString)
@@ -146,7 +145,7 @@ export type DueFields = { due: string; due_meta?: DueMeta }
 // gh-teacher's --due: local wall time becomes a UTC instant, with the
 // pre-normalization local value/offset/zone in due_meta. Accepts
 // `YYYY-MM-DDTHH:MM` and bare `YYYY-MM-DD` (pinned to 23:59 local); anything
-// else is stored verbatim.
+// else stored verbatim.
 export const buildDueFields = (dueInput: string): DueFields => {
   const dateOnly = isBareDate(dueInput)
   const localDateTime = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?$/.test(
@@ -173,8 +172,8 @@ export const buildDueFields = (dueInput: string): DueFields => {
 
   const local = new Date(year, month - 1, day, hour, minute, 0)
   // `new Date` rolls over out-of-range components (Feb 30 -> Mar 2) instead of
-  // returning NaN; reject anything that didn't round-trip so `due` can't
-  // silently disagree with due_meta.input.
+  // NaN; reject anything that didn't round-trip so `due` can't disagree with
+  // due_meta.input.
   const rolledOver =
     local.getFullYear() !== year ||
     local.getMonth() !== month - 1 ||

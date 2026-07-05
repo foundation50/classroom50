@@ -19,8 +19,8 @@ const RUNS_PER_PAGE = 50
 //
 // A 404 (repo missing / not a classroom50 org / not visible) means "no runs" ->
 // []. A 403/429/5xx (rate limit, lost Actions read, outage) MUST propagate so
-// React Query marks the query errored — otherwise the banner would show a false
-// "all clear". Aborts also propagate.
+// React Query marks the query errored — else the banner shows a false "all
+// clear". Aborts also propagate.
 export async function listActiveAndRecentRuns(
   client: GitHubClient,
   org: string,

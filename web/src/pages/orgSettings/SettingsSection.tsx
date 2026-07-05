@@ -1,11 +1,10 @@
 import type { PropsWithChildren, ReactNode } from "react"
 
-// Standardized wrapper for each Org Settings group (Service Token,
-// Organization Policy, Re-run Setup, Danger Zone) so the page reads as a set
-// of consistent sections rather than mismatched cards. Owns the card shell and
-// the header (title + optional description, an optional right-aligned action,
-// and an optional adornment beside the title such as an info popover). The
-// `tone="danger"` variant styles destructive groups (Danger Zone).
+// Standardized wrapper for each Org Settings group (Service Token, Organization
+// Policy, Re-run Setup, Danger Zone) so the page reads as consistent sections.
+// Owns the card shell and header (title + optional description, optional
+// right-aligned action, optional title adornment). `tone="danger"` styles
+// destructive groups (Danger Zone).
 const SettingsSection = ({
   title,
   description,

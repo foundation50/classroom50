@@ -2,8 +2,8 @@ import { GITHUB_OAUTH_WORKER_BASE } from "./constants"
 import type { GithubDeviceCodeResponse, GithubTokenResponse } from "./types"
 
 // Must exactly match the OAuth App's registered callback URL (.../login).
-// Deriving it from the live pathname breaks the web flow when launched from
-// any other route (e.g. the re-authorize banner). See issue #57.
+// Deriving it from the live pathname breaks the flow when launched from another
+// route (e.g. the re-authorize banner). See #57.
 const OAUTH_CALLBACK_PATH = "/login"
 
 function redirectUri() {

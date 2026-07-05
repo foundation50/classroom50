@@ -28,9 +28,8 @@ import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { classroomPagesSegment } from "@/util/secret"
 
-// The Pages base for an org's classroom50 config repo. The `classroom50`
-// path segment is the fixed repo name, not the org name. Single-sourced
-// here so every row below derives from the same builder.
+// Pages base for an org's classroom50 config repo. `classroom50` is the fixed
+// repo name, not the org name. Single-sourced so every row derives from it.
 function pagesBaseUrl(org: string) {
   return `https://${org}.github.io/classroom50`
 }
@@ -46,8 +45,8 @@ type Resource = {
   // Why it's published / who reads it.
   description: string
   kind: ResourceKind
-  // Some artifacts are only present once a teacher configures them (e.g. a
-  // classroom default autograder), so a 404 is expected, not a problem.
+  // Some artifacts exist only once a teacher configures them (e.g. a classroom
+  // default autograder), so a 404 is expected, not a problem.
   optional?: boolean
 }
 
@@ -66,8 +65,8 @@ const KIND_BADGE: Record<
 }
 
 // Live reachability probe for a published URL. Anonymous GET (exactly how
-// students and the autograder fetch it) so the teacher sees what the public
-// sees. Bounded so a hung github.io host can't stall the page.
+// students and the autograder fetch it) so the teacher sees the public view.
+// Bounded so a hung github.io host can't stall the page.
 function useResourceStatus(url: string, enabled: boolean) {
   return useQuery({
     queryKey: ["published-resource", url],
@@ -89,12 +88,11 @@ function useResourceStatus(url: string, enabled: boolean) {
   })
 }
 
-// Reports whether `ref` has entered the viewport at least once. Used to defer
-// the per-resource reachability probe until the row is actually visible, so a
-// teacher with many classrooms/assignments doesn't fire dozens of simultaneous
-// anonymous github.io requests on mount (which edge rate-limits would surface
-// as false "Unreachable" badges). Once seen, it stays true so the status
-// doesn't flip back to "Checking" on scroll-out.
+// Whether `ref` has entered the viewport at least once. Defers the
+// reachability probe until the row is visible, so a teacher with many
+// classrooms/assignments doesn't fire dozens of simultaneous anonymous
+// github.io requests on mount (edge rate-limits would show as false
+// "Unreachable"). Stays true once seen, so it doesn't flip to "Checking".
 function useInView<T extends Element>(ref: RefObject<T | null>): boolean {
   // Fail open when IntersectionObserver is unavailable (jsdom/older browsers):
   // start visible so the probe still runs rather than hanging on "Checking".
@@ -145,9 +143,8 @@ function StatusBadge({ url }: { url: string }) {
   const inView = useInView(ref)
   const { data: status, isLoading } = useResourceStatus(url, inView)
 
-  // Before the row scrolls into view the probe is disabled (so status is
-  // undefined and isLoading is false); show the pending state rather than a
-  // premature "Unreachable".
+  // Before the row scrolls into view the probe is disabled (status undefined,
+  // isLoading false); show pending rather than a premature "Unreachable".
   if (!inView || isLoading) {
     return (
       <span
@@ -238,10 +235,10 @@ function ResourceRow({ resource }: { resource: Resource }) {
   )
 }
 
-// Per-classroom artifacts. Reads the published assignments.json to enumerate
-// the exact per-assignment bundles/shims so the list reflects reality, not a
-// guess. A classroom that hasn't published yet still shows its index/manifest
-// rows (which will read "Not published").
+// Per-classroom artifacts. Reads published assignments.json to enumerate the
+// exact per-assignment bundles/shims so the list reflects reality. A classroom
+// that hasn't published yet still shows its index/manifest rows (as "Not
+// published").
 function ClassroomResources({
   org,
   classroom,
@@ -258,9 +255,8 @@ function ClassroomResources({
   const { data: assignments } = usePagesAssignments(org, classroom, secret)
   const [open, setOpen] = useState(true)
 
-  // When the classroom is protected, everything for it is served under the
-  // capability-URL segment; otherwise the plain classroom path. Same segment
-  // builder the Pages URL helpers use, so the two can't drift.
+  // When protected, everything is served under the capability-URL segment; else
+  // the plain classroom path. Same segment builder the Pages URL helpers use.
   const classroomBase = `${base}/${classroomPagesSegment(classroom, secret)}`
 
   const resources = useMemo<Resource[]>(() => {
@@ -290,7 +286,7 @@ function ClassroomResources({
         kind: "data",
       })
       // Only assignments using a non-default named autograder publish a
-      // workflow shim; the default autograder uses the embedded shim instead.
+      // workflow shim; the default uses the embedded shim instead.
       if (a.autograder && a.autograder !== "default") {
         rows.push({
           url: `${classroomBase}/autograders/${a.autograder}.yaml`,
@@ -372,8 +368,8 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
   const base = pagesBaseUrl(org)
   const { classes } = useGetClasses(org)
 
-  // Org-level resources are independent of any classroom: the public index
-  // and the two generic engine scripts served at the Pages site root.
+  // Org-level resources are classroom-independent: the public index and the two
+  // generic engine scripts served at the Pages site root.
   const orgResources: Resource[] = [
     {
       url: `${base}/classrooms-index.json`,

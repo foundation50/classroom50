@@ -10,8 +10,8 @@ import {
 // Wires the skeleton-overwrite confirmation into a React surface: owns the
 // modal-open state, the resolver ref, and the unmount cleanup that settles a
 // parked run rather than letting it hang. Shared by the wizard (OrgSetupPage)
-// and the re-run surface (RerunOrgSetup) so the two can't drift. Pass the
-// returned `confirmSkeletonOverwrite` to initClassroom50 and render
+// and re-run surface (RerunOrgSetup). Pass the returned
+// `confirmSkeletonOverwrite` to initClassroom50 and render
 // <SkeletonOverwriteModal> with `overwritePaths`/`resolveOverwrite`.
 export function useSkeletonOverwriteConfirm() {
   const [overwritePaths, setOverwritePaths] = useState<string[] | null>(null)
@@ -31,8 +31,8 @@ export function useSkeletonOverwriteConfirm() {
     setOverwritePaths(null)
   }
 
-  // Built lazily (useCallback) so the resolver ref is only touched when the hook
-  // is actually invoked mid-run, not during render.
+  // Built lazily (useCallback) so the resolver ref is only touched when invoked
+  // mid-run, not during render.
   const confirmSkeletonOverwrite = useCallback(
     (paths: string[]) =>
       makeConfirmSkeletonOverwrite(
@@ -52,8 +52,8 @@ export function useSkeletonOverwriteConfirm() {
 }
 
 // The "are you sure" prompt before overwriting drifted skeleton files. Open when
-// `paths` is non-null; the bundled copy explains that overwriting resets local
-// customizations (matching the CLI's stance that these files are user-editable).
+// `paths` is non-null; the copy explains overwriting resets local customizations
+// (matching the CLI's stance that these files are user-editable).
 export function SkeletonOverwriteModal({
   paths,
   onConfirm,

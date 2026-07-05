@@ -10,10 +10,10 @@ const Avatar = ({
   initials: string
   name: string
   github: string
-  // Secondary line under the name (e.g. a section badge, or a GitHub handle).
-  // Shown only when set — no implicit handle fallback.
+  // Secondary line under the name (e.g. section badge or GitHub handle). Shown
+  // only when set — no implicit handle fallback.
   subtitle?: React.ReactNode
-  // When provided, the avatar circle + name become a button opening details.
+  // When set, the avatar circle + name become a button opening details.
   onClick?: () => void
 }) => {
   const { t } = useTranslation()

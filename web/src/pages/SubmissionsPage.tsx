@@ -67,7 +67,7 @@ import {
 } from "@/hooks/github/mutations"
 import { formatDueDateTime, formatRelativeToNow } from "@/util/formatDate"
 
-// Re-renders on an interval to keep relative timestamps fresh; returns nothing.
+// Re-renders on an interval to keep relative timestamps fresh.
 const usePeriodicRerender = (intervalMs = 30_000) => {
   const [, setNow] = useState(() => Date.now())
 
@@ -77,9 +77,8 @@ const usePeriodicRerender = (intervalMs = 30_000) => {
   }, [intervalMs])
 }
 
-// Shared presentational copy button: a primary outline button that swaps to a
-// success check while `copied`. The clipboard state itself is owned by the
-// caller (via useCopyToClipboard) so each button tracks its own copy.
+// Copy button that swaps to a success check while `copied`; clipboard state is
+// owned by the caller (useCopyToClipboard) so each button tracks its own copy.
 const CopyIconButton = ({
   copied,
   onCopy,
@@ -104,9 +103,7 @@ const CopyIconButton = ({
   </button>
 )
 
-// Shared chrome for the dashboard stat strip: a bordered card with an uppercase
-// label. The body (value, denominator, sub-links) varies per stat and is passed
-// as children.
+// Bordered stat card with an uppercase label; body varies per stat.
 const StatCard = ({
   label,
   children,
@@ -136,16 +133,13 @@ const SubmissionsPageContent = () => {
     dataUpdatedAt: scoresUpdatedAt,
   } = useGetScores(org, classroom)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
-  // Team-driven username source (Section 7): the classroom GitHub team is
-  // authoritative for who is enrolled; students.csv is joined by
-  // useTeamRoster only to enrich display (name/section/email). The dashboard
-  // (non-submitters, sections, accepted, gradebook) consumes a Student[], so
-  // map the enrolled team rows into that shape. Non-submitters = team members
-  // minus credited usernames (below).
+  // Team-driven usernames (Section 7): the classroom GitHub team is
+  // authoritative for enrollment; students.csv enriches display only. The
+  // dashboard consumes Student[], so map enrolled team rows into that shape.
   const { students: csvStudents } = useGetStudents(org, classroom)
-  // Surface the team-member fetch's error/loading (useTeamRoster exposes them
-  // deliberately): a transient or permission failure of the enrolled source of
-  // truth must render as an error+retry, not as an authoritative empty roster.
+  // Surface the team fetch's error/loading: a transient or permission failure
+  // of the enrolled source of truth must render as error+retry, not an
+  // authoritative empty roster.
   const {
     rows: teamRows,
     isError: rosterError,
@@ -155,14 +149,13 @@ const SubmissionsPageContent = () => {
     () => teamRows.filter((r) => r.state === "enrolled").map(rowToStudent),
     [teamRows],
   )
-  // Gate Regrade all / Collect now on an empty roster: dispatching a workflow
-  // with no students to act on is wasted effort. `show` is loading-aware (won't
-  // flash before the roster resolves), matching AssignmentsPage's usage.
+  // Gate Regrade all / Collect now on an empty roster: dispatching with no
+  // students is wasted effort. `show` is loading-aware (won't flash before the
+  // roster resolves).
   const emptyRoster = useEmptyRosterWarning(org, classroom)
-  // This is a teacher-only page, so reading the classroom's capability-URL
-  // secret from the (teacher-readable) classroom.json is fine. When the
-  // classroom is protected, the shared accept link must carry the key as
-  // `?k=<secret>` — otherwise students hit "assignment not found".
+  // Teacher-only page, so reading the classroom's capability-URL secret from
+  // classroom.json is fine. For a protected classroom the shared accept link
+  // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
   const scoresLastUpdated =
@@ -173,7 +166,7 @@ const SubmissionsPageContent = () => {
   const assignmentSubmitUrl =
     `${window.location.origin}/${org}/${classroom}/assignments/${assignment}/accept` +
     (secret ? `?k=${secret}` : "")
-  // The CLI equivalent of the browser accept link, for students who prefer it.
+  // CLI equivalent of the browser accept link, for students who prefer it.
   const assignmentSubmitCli =
     `gh student accept ${org} ${classroom} ${assignment}` +
     (secret ? ` --key ${secret}` : "")
@@ -196,18 +189,14 @@ const SubmissionsPageContent = () => {
     [scoresData, assignment],
   )
 
-  // Count repos whose latest submission landed after the deadline. `late` is
-  // computed upstream (collect_scores.py) from the push time, not the grade
-  // time, so an on-time push graded after the deadline still counts as on time.
+  // Repos whose latest submission landed after the deadline. `late` is computed
+  // upstream (collect_scores.py) from push time, not grade time.
   const lateCount = scoresInfo.filter((row) => row.late).length
 
-  // Roster students with no submission. A student is "credited" if their login
-  // appears in any row's `usernames` (which is `member_usernames` for groups,
-  // else `[owner]`), so group teammates aren't falsely flagged. Group
-  // assignments don't surface an "X of Y" roster denominator, so we only
-  // compute non-submitters for individual assignments. Gated on scores having
-  // loaded (`scoresData` present): until then `scoresInfo` is empty, which
-  // would otherwise flag the entire roster as non-submitters mid-load.
+  // Roster students with no submission. "Credited" = login appears in any row's
+  // `usernames` (member_usernames for groups, else [owner]), so group teammates
+  // aren't falsely flagged. Individual assignments only. Gated on scores having
+  // loaded — until then scoresInfo is empty and would flag the whole roster.
   const scoresLoaded = scoresData !== undefined
   const nonSubmitters = useMemo(() => {
     if (isGroupAssignment || !scoresLoaded) return []
@@ -227,7 +216,7 @@ const SubmissionsPageContent = () => {
   const [sort, setSort] = useState<SubmissionSort>(DEFAULT_SORT)
 
   // Deterministic acceptance from the org repo list (see acceptedUsernames);
-  // individual assignments only, so the filter is gated on acceptedAvailable.
+  // individual assignments only, so gated on acceptedAvailable.
   const { data: orgRepos } = useGetOrgRepos(org ?? "")
   const acceptedSet = useMemo(
     () =>
@@ -236,7 +225,7 @@ const SubmissionsPageContent = () => {
   )
   const acceptedAvailable = !isGroupAssignment && orgRepos != null
 
-  // Section filtering: distinct sections for the dropdown, and a username ->
+  // Section filtering: distinct sections for the dropdown, plus a username ->
   // section lookup so submitted rows (which carry only logins) can be matched.
   const sections = useMemo(() => distinctSections(students), [students])
   const sectionByUsername = useMemo(
@@ -244,8 +233,8 @@ const SubmissionsPageContent = () => {
     [students],
   )
 
-  // With a section filter active, scope the roster and rows to that section so
-  // the stat cards describe the filtered view, not the whole class.
+  // With a section filter active, scope roster and rows to it so the stat cards
+  // describe the filtered view, not the whole class.
   const sectionFilter = filters.section
   const scopedStudents = useMemo(
     () =>
@@ -272,7 +261,7 @@ const SubmissionsPageContent = () => {
   )
 
   // Passing bar as a fraction of max, or null when the teacher didn't opt in
-  // (off by default) — then no Passing rollup/filter and neutral badges.
+  // (off by default) — then no Passing rollup/filter, neutral badges.
   const passThresholdPct = assignmentInfo?.pass_threshold
   const passingEnabled =
     typeof passThresholdPct === "number" && Number.isFinite(passThresholdPct)
@@ -284,25 +273,24 @@ const SubmissionsPageContent = () => {
     [scopedScores, scopedStudents, thresholdFraction],
   )
 
-  // Class average over numeric scores in the (section-scoped) set; null -> "N/A".
+  // Class average over numeric scores in the section-scoped set; null -> "N/A".
   const avgScore = useMemo(() => classAverage(scopedScores), [scopedScores])
 
-  // Roster-scoped accepted count (scoped to the active section to match the
-  // Accepted card's denominator).
+  // Accepted count scoped to the active section (matches the card's denominator).
   const acceptedCount = useMemo(
     () => acceptedRosterCount(scopedStudents, acceptedSet),
     [scopedStudents, acceptedSet],
   )
 
-  // Accepted-but-not-submitted count: roster students who accepted (repo
-  // exists) but have no submission row. Individual assignments only.
+  // Roster students who accepted (repo exists) but have no submission row.
+  // Individual assignments only.
   const acceptedNotSubmittedCount = acceptedAvailable
     ? scopedNonSubmitters.filter((s) => hasAccepted(s.username, acceptedSet))
         .length
     : 0
 
-  // One-click stat shortcuts: jump straight to the students a sub-label calls
-  // out. Reset the other axes so the surfaced set matches the label exactly.
+  // One-click stat shortcuts: jump to the students a sub-label calls out. Reset
+  // the other axes so the surfaced set matches the label exactly.
   const showFailing = () =>
     setFilters({ ...DEFAULT_FILTERS, passing: "failing" })
   const showAcceptedNotSubmitted = () =>
@@ -312,8 +300,8 @@ const SubmissionsPageContent = () => {
       submission: "not-submitted",
     })
 
-  // Rows actually rendered. When acceptance data isn't loaded yet, neutralize
-  // the accepted axis so a transient empty repo list can't flip the visible set.
+  // Rows actually rendered. When acceptance data isn't loaded, neutralize the
+  // accepted axis so a transient empty repo list can't flip the visible set.
   const effectiveFilters = useMemo(
     () =>
       acceptedAvailable ? filters : { ...filters, accepted: "all" as const },
@@ -355,11 +343,11 @@ const SubmissionsPageContent = () => {
   const collectScores = useTriggerScoreCollection(org)
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   // `anyRegrading` covers the whole-assignment regrade AND every per-row
-  // regrade (shared via the page coordinator), so collect/regrade controls
-  // disable while any regrade is in flight — not just the assignment-wide one.
+  // regrade (via the page coordinator), so collect/regrade controls disable
+  // while any regrade is in flight.
   const regrading = regradeAll.anyRegrading
-  // Whether the assignment-wide "Regrade all" specifically is mid-dispatch, for
-  // its own spinner/label (distinct from the page-wide `regrading` gate).
+  // Whether "Regrade all" specifically is mid-dispatch, for its own
+  // spinner/label (distinct from the page-wide `regrading` gate).
   const regradeAllActive =
     regradeAll.phase === "dispatching" || regradeAll.phase === "running"
   const { data: lastRun, refetch: refetchLastRun } =
@@ -369,10 +357,10 @@ const SubmissionsPageContent = () => {
   const collecting =
     collectScores.phase === "dispatching" || collectScores.phase === "running"
 
-  // Which action the single "View …" link points at and which status strip
-  // (if any) shows. Running takes precedence; otherwise the most recently
-  // finished action; else null (both idle → link defaults to collect). Derived
-  // fresh every render so the link can never get "stuck" on a stale action.
+  // Which action the single "View …" link points at and which status strip (if
+  // any) shows. Running takes precedence; else most recently finished; else
+  // null. Derived fresh every render so the link never gets stuck on a stale
+  // action.
   const activeAction: "collect" | "regrade" | null = (() => {
     if (collecting) return "collect"
     if (regrading) return "regrade"
@@ -399,7 +387,7 @@ const SubmissionsPageContent = () => {
       ? formatRelativeToNow(new Date(lastRun.created_at))
       : null
 
-  // Refresh scores and the last-run timestamp once a manual collection finishes.
+  // Refresh scores + last-run timestamp once a manual collection finishes.
   useEffect(() => {
     if (collectScores.phase === "completed") {
       refetchScores()
@@ -427,8 +415,8 @@ const SubmissionsPageContent = () => {
         }),
       )
 
-    // Append non-submitters so the exported gradebook covers the whole roster.
-    // Scored 0 with blank submission fields; pinned after submitters.
+    // Append non-submitters so the exported gradebook covers the whole roster:
+    // scored 0, blank submission fields, pinned after submitters.
     const nonSubmittedRows = nonSubmitters.map((student) => ({
       usernames: student.username,
       score: 0,
@@ -538,8 +526,8 @@ const SubmissionsPageContent = () => {
             </div>
           </div>
           <div className="mb-4 rounded-box border border-info/20 bg-info/5">
-            {/* Compact action bar: standing note on the left, the two actions
-                + a single contextual View link on the right. */}
+            {/* Action bar: standing note left, the two actions + a single
+                contextual View link right. */}
             <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
               <div className="flex items-start gap-3">
                 <Info
@@ -627,7 +615,7 @@ const SubmissionsPageContent = () => {
               </div>
             </div>
 
-            {/* Status strip — only when an action is active or recently
+            {/* Status strip — only while an action is active or recently
                 finished. Color + copy reflect that one action. */}
             {activeAction === "collect" && collectScores.phase !== "idle" && (
               <div
@@ -956,10 +944,9 @@ const SubmissionsPageContent = () => {
   )
 }
 
-// The teacher gradebook. Students who land here directly (e.g. an old link)
-// are redirected to their own submission view; we wait for the role to resolve
-// so a real teacher never bounces. Gating here (before mounting the content)
-// also avoids firing the teacher-only score/roster reads for a student.
+// The teacher gradebook. Students who land here directly (e.g. an old link) are
+// redirected to their own submission view; we wait for the role to resolve so a
+// real teacher never bounces, and avoid firing teacher-only reads for a student.
 const SubmissionsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.submissions"))

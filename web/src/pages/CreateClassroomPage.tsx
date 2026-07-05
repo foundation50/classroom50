@@ -45,16 +45,12 @@ const CreateClassroomPage = () => {
       if (err instanceof GitHubAPIError) {
         switch (err.status) {
           case 409:
-            // conflict
             break
           case 404:
-            // not found
             break
           case 422:
-            // validation
             break
           default:
-            // unspecified
             break
         }
       } else {
@@ -69,8 +65,7 @@ const CreateClassroomPage = () => {
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
       })
-      // Track the publish-pages deploy this commit triggers, anchored on the
-      // commit SHA (head_sha on the runs API).
+      // Track the publish-pages deploy this commit triggers, anchored on SHA.
       if (org && result.newCommitSha) {
         register({
           org,

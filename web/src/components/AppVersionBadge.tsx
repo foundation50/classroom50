@@ -1,9 +1,8 @@
 import { appVersion, shortCommit } from "@/version"
 
 // Small, unobtrusive build identifier. The version is a build-time constant
-// (see version.ts), not user-facing prose, so it is not translated; the commit
-// is included to make bug reports precise, and the full build date is exposed
-// via the title tooltip.
+// (version.ts), not user-facing prose, so it isn't translated; the commit makes
+// bug reports precise and the full build date shows in the title tooltip.
 export function AppVersionBadge({ className }: { className?: string }) {
   return (
     <span

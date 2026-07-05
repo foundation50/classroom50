@@ -4,11 +4,10 @@ import { bulkAddToClassroom } from "./bulkAddToClassroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import type { GitHubUser } from "@/hooks/github/types"
 
-// The engine (bulkEnrollStudentsInClassroom), getUserById, and the live
-// membership re-check (isActiveMember) are stubbed: this orchestrator's contract
-// is the pre-filter (skip already-on-classroom + obvious non-members), resolving
-// the current login by id, re-verifying live active membership, and how it feeds
-// the engine — not the engine's own CSV/team work.
+// The engine (bulkEnrollStudentsInClassroom), getUserById, and isActiveMember
+// are stubbed: this orchestrator's contract is the pre-filter, resolving the
+// current login by id, re-verifying live membership, and how it feeds the
+// engine — not the engine's own CSV/team work.
 const bulkEnrollMock = vi.fn()
 const getUserByIdMock = vi.fn()
 const isActiveMemberMock = vi.fn()
@@ -114,9 +113,8 @@ describe("bulkAddToClassroom", () => {
   })
 
   it("reports an isMember row that resolves to no member id as 'no-id'", async () => {
-    // isMember:true but neither the github_id nor the username matches any
-    // loaded org member, so matchedId stays null on the isMember branch of the
-    // reason ternary. The engine is never called for it.
+    // isMember:true but neither github_id nor username matches a loaded member,
+    // so matchedId stays null on the isMember branch. Engine never called.
     getUserByIdMock.mockReset()
     bulkEnrollMock.mockReset()
 
@@ -197,8 +195,8 @@ describe("bulkAddToClassroom", () => {
   })
 
   it("skips a since-removed member (stale loaded list) after the live re-check", async () => {
-    // Passes the loaded-list pre-filter, resolves a current login, but the live
-    // membership re-check says they're no longer an active member.
+    // Passes the loaded-list pre-filter, resolves a login, but the live re-check
+    // says they're no longer an active member.
     getUserByIdMock.mockReset().mockResolvedValue({ login: "alice" })
     isActiveMemberMock.mockReset().mockResolvedValue(false)
     bulkEnrollMock.mockReset()

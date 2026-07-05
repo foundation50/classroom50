@@ -26,7 +26,7 @@ export type GitHubRequestOptions = {
   timeoutMs?: number
 }
 
-// A per-response signal about the token's live state, reported to the provider
+// Per-response signal about the token's live state, reported to the provider
 // for the session/scope banner. Fires on every response (success and error)
 // before any throw.
 export type GitHubResponseSignal = {
@@ -82,8 +82,8 @@ export function createGitHubClient(args: {
     // Report the token's live state to the provider before any throw, so the
     // 401/403 revocation path still surfaces. `scopes` is the X-OAuth-Scopes
     // header (`null` when absent, e.g. a fine-grained PAT — distinct from an
-    // empty grant); `status` lets the provider distinguish a dead token (401)
-    // from a healthy one.
+    // empty grant); `status` lets the provider tell a dead token (401) from a
+    // healthy one.
     args.onResponse?.({
       status: res.status,
       scopes: res.headers.get("x-oauth-scopes"),

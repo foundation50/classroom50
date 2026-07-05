@@ -38,10 +38,9 @@ const EditAssignmentFormStudent = ({
   const { user } = useGithubAuth()
   const { isLoading: loadingRepo, assignment: assignmentRepo } =
     useGetAssignmentRepo(org, classroom, assignment, user?.login)
-  // The group student is on this page post-accept, so the capability-URL
-  // secret (if the classroom is protected) lives in their repo's
-  // .classroom50.yaml — the source they can actually read (not the private
-  // classroom.json). Empty for an unprotected classroom -> plain path.
+  // Post-accept, so the capability-URL secret (protected classroom) lives in
+  // the student's repo .classroom50.yaml — the source they can read (not the
+  // private classroom.json). Empty for unprotected -> plain path.
   const { secret } = useDotClassroom50(org, assignmentRepo?.name ?? "")
   const { isLoading: loadingPublic, assignment: assignmentData } =
     useGetPublicAssignment(org, classroom, assignment, secret)
@@ -236,8 +235,8 @@ const EditAssignmentPage = () => {
                 window.scrollTo({ top: 0, behavior: "smooth" })
               }}
               onSuccess={(result) => {
-                // Surface a non-fatal template-grant warning inline if
-                // present; otherwise show the success banner.
+                // Surface a non-fatal template-grant warning inline; else show
+                // the success banner.
                 if (result?.templateGrantWarning) {
                   setEditWarning(result.templateGrantWarning)
                 } else {

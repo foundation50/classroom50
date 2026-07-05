@@ -4,10 +4,9 @@ import type {
   AssignmentTestType,
 } from "@/types/classroom"
 
-// Form-side draft for one declarative test. Camel-cased and
-// all-fields-present so it plugs into @tanstack/react-form cleanly;
-// `draftToTest` converts to the kebab-case v1 wire shape and drops
-// fields that don't apply to the chosen type.
+// Form-side draft for one declarative test. Camel-cased and all-fields-present
+// so it plugs into @tanstack/react-form cleanly; `draftToTest` converts to the
+// kebab-case v1 wire shape and drops fields that don't apply to the type.
 export type AssignmentTestDraft = {
   name: string
   type: AssignmentTestType
@@ -24,9 +23,9 @@ export type AssignmentTestDraft = {
 }
 
 // A setup command is encoded as a leading 0-point `run` test with this reserved
-// name — the CLI-blessed pre-grading idiom (no runtime.setup field; the runner
-// runs tests in order, non-zero exit fails). Reserved from user-authored tests
-// so a graded "setup" test can't be confused with the synthesized one.
+// name — the CLI-blessed pre-grading idiom (the runner runs tests in order,
+// non-zero exit fails). Reserved from user tests so a graded "setup" can't be
+// confused with the synthesized one.
 export const SETUP_TEST_NAME = "setup"
 
 export const makeSetupTest = (command: string): AssignmentTest => ({
@@ -76,11 +75,10 @@ export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
   points: test.points,
 })
 
-// draftToTest serializes a draft into the exact v1 wire shape:
-// kebab-case keys, type-inapplicable fields dropped (the CLI rejects
-// e.g. `expected` on a run test), and optional fields omitted when
-// empty/zero — the same normalized form `gh teacher assignment test
-// add` writes.
+// draftToTest serializes a draft into the exact v1 wire shape: kebab-case keys,
+// type-inapplicable fields dropped (the CLI rejects e.g. `expected` on a run
+// test), optional fields omitted when empty/zero — the same normalized form
+// `gh teacher assignment test add` writes.
 export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {
   const test: AssignmentTest = {
     name: draft.name.trim(),
@@ -92,9 +90,9 @@ export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {
   if (draft.setup.trim()) test.setup = draft.setup.trim()
   if (draft.timeout > 0) test.timeout = draft.timeout
 
-  // Commands and file names are trimmed; stdin and expected output are
-  // written raw (leading/trailing whitespace and newlines are
-  // meaningful there) and only their *emptiness* is judged trimmed.
+  // Commands and file names are trimmed; stdin and expected output are written
+  // raw (leading/trailing whitespace and newlines are meaningful there), only
+  // their *emptiness* judged trimmed.
   if (draft.type === "io") {
     test.comparison = draft.comparison
     if (draft.input.trim() && !draft.inputFile.trim()) test.input = draft.input
@@ -125,9 +123,9 @@ const hasControlChars = (value: string) =>
 
 // validateTestDraft mirrors the rules gh-teacher enforces at write time
 // (cli/gh-teacher/tests.go, pinned by schemas/assignments-v1.schema.json),
-// including the two rules JSON Schema can't express: unique names and a
-// 100-UTF-8-byte name cap. Returns one message per offending field,
-// keyed for `tests[index].<field>` form errors.
+// including the two JSON Schema can't express: unique names and a 100-UTF-8-byte
+// name cap. Returns one message per offending field, keyed for
+// `tests[index].<field>` form errors.
 export function validateTestDraft(
   draft: AssignmentTestDraft,
   otherNames: string[],
@@ -175,9 +173,9 @@ export function validateTestDraft(
       errors.expectedFile =
         "Provide inline expected output or an expected file, not both."
     }
-    // `included`/`regex` against an empty (or whitespace-only) expected
-    // match almost everything — an always-passing test, so reject it
-    // here like the CLI does at write time.
+    // `included`/`regex` against an empty (or whitespace-only) expected match
+    // almost everything — an always-passing test, so reject it here like the CLI
+    // does at write time.
     if (
       draft.comparison !== "exact" &&
       !draft.expected.trim() &&
@@ -201,8 +199,8 @@ export function validateTestDraft(
 }
 
 // validateTestDrafts validates the whole list, returning a flat map of
-// `tests[i].<field>` -> message (the key shape @tanstack/react-form
-// expects for array-field errors).
+// `tests[i].<field>` -> message (the key shape @tanstack/react-form expects for
+// array-field errors).
 export function validateTestDrafts(
   drafts: AssignmentTestDraft[],
 ): Record<string, string> {

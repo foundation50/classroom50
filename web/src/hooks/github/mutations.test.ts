@@ -93,12 +93,11 @@ describe("buildClassroomUpdate", () => {
 
 // editClassroom enforces "archived classrooms are read-only" on the write path
 // — the authoritative guard, not just UI gating. The gate must (a) refuse a
-// settings edit (name/term) on an archived classroom even
-// when a crafted payload bundles `active: false` to re-assert the archived
-// state, and (b) let a genuine unarchive (active: true) through. editClassroom
-// does I/O via getBranchRef/getCommit/getClassroomJson/createBlob/
-// createTreeFromEntries/createCommit/updateRef, all on the GitHubClient, so we
-// stub a path-routing fake client.
+// settings edit (name/term) on an archived classroom even when a crafted payload
+// bundles `active: false` to re-assert the archived state, and (b) let a genuine
+// unarchive (active: true) through. editClassroom does I/O via getBranchRef/
+// getCommit/getClassroomJson/createBlob/createTreeFromEntries/createCommit/
+// updateRef, all on the GitHubClient, so we stub a path-routing fake client.
 describe("editClassroom archived read-only guard", () => {
   // A fake client routing each git/contents path to a canned response. The
   // archived classroom.json is returned by the contents endpoint; if the guard
@@ -797,8 +796,7 @@ describe("ensureSkeletonFiles overwrite confirmation", () => {
 // The skeleton commit uses a force:false ref PATCH and retries on a 422
 // non-fast-forward (the concurrent-writer race the confirm-modal pause opens),
 // re-diffing against the freshly-read parent each attempt; a non-422 error and
-// retry exhaustion both surface to the caller. This is the PR's concurrency
-// safety claim, so it gets its own coverage.
+// retry exhaustion both surface to the caller.
 describe("ensureSkeletonFiles non-fast-forward retry", () => {
   const org = "acme"
 

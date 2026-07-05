@@ -167,16 +167,13 @@ const OrgSetupPage = () => {
     useGetOrgPlanDetails(org)
   const [nextStep, setNextStep] = useState(false)
 
-  // 1 = init classroom50 repo etc
-  // 2 = PAT
-  // 3 = finished
+  // Stage: 1 = init classroom50 repo, 2 = PAT, 3 = finished.
   const [currentStage, setCurrentStage] = useState(1)
 
-  // Skeleton-overwrite confirmation, mirroring RerunOrgSetup. The wizard
-  // usually runs on a fresh repo (nothing pre-exists), but the /setup route has
-  // no re-entry guard, so a re-run on an already-set-up org can hit drifted,
-  // hand-edited skeleton files — prompt before overwriting those rather than
-  // clobbering them silently.
+  // Skeleton-overwrite confirmation, mirroring RerunOrgSetup. /setup has no
+  // re-entry guard, so a re-run on an already-set-up org can hit drifted,
+  // hand-edited skeleton files — prompt before overwriting rather than
+  // clobbering silently.
   const { overwritePaths, resolveOverwrite, confirmSkeletonOverwrite } =
     useSkeletonOverwriteConfirm()
 
@@ -199,8 +196,8 @@ const OrgSetupPage = () => {
       queryClient.invalidateQueries({
         queryKey: ["orgs"],
       })
-      // Don't advance the wizard if a prerequisite step failed; initClassroom50
-      // resolves with status "error" rather than throwing.
+      // Don't advance if a prerequisite step failed; initClassroom50 resolves
+      // with status "error" rather than throwing.
       if (data && data.status === "error") {
         return
       }

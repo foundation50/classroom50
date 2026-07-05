@@ -8,7 +8,7 @@ import { AppBanner } from "@/components/AppBanner"
 import { useMissingScopes } from "@/context/github/GitHubProvider"
 
 // Surfaces missing required scopes detected from live API responses:
-// best-effort, non-blocking; offers a re-authorize action. A revoked/expired
+// best-effort, non-blocking, with a re-authorize action. A revoked/expired
 // token is handled separately — a live 401 tears the session down and redirects
 // to /login (see GitHubProvider.onResponse and useGithubAuth.expireSession).
 export function ScopeWarningBanner() {

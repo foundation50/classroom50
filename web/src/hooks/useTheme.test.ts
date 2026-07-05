@@ -6,9 +6,9 @@ import { THEME_STORAGE_KEY, type Theme } from "./useTheme"
 
 // The anti-flash inline script in index.html hand-mirrors resolveInitialTheme
 // (same storage key + theme names) so the pre-mount paint matches what React
-// resolves. Nothing else binds them, and the drift symptom (a wrong-theme
-// flash) is nearly invisible in review — so guard the contract here, mirroring
-// the repo's other hand-mirrored-contract drift tests (e.g. skeleton.test.ts).
+// resolves. Nothing else binds them and the drift symptom (a wrong-theme flash)
+// is nearly invisible in review — so guard the contract here, like the repo's
+// other hand-mirrored-contract drift tests (e.g. skeleton.test.ts).
 describe("theme anti-flash contract (index.html <-> useTheme)", () => {
   const indexHtml = readFileSync(
     fileURLToPath(new URL("../../index.html", import.meta.url)),

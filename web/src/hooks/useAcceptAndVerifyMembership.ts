@@ -23,9 +23,8 @@ export type UseAcceptAndVerifyMembershipResult = {
 
 // Centralizes the accept-and-verify orchestration shared by the /onboard page
 // and AcceptAssignmentPage: a mount-fired mutation (once, while `enabled`), a
-// success path that seeds the shared membership cache, and a single retry()
-// source of truth that never overlaps an in-flight verify. The seed and retry
-// rationale live at their call sites below.
+// success path that seeds the shared membership cache, and one retry() source of
+// truth that never overlaps an in-flight verify. Seed/retry rationale below.
 export function useAcceptAndVerifyMembership(input: {
   org?: string
   // Fire the verify only when a (pending) membership record exists and isn't
@@ -40,8 +39,8 @@ export function useAcceptAndVerifyMembership(input: {
     mutationFn: () => acceptAndVerifyOrgMembership(client, org ?? ""),
     onSuccess: (membership: GitHubOrgMembership) => {
       // Seed the shared membership query with the active membership the verify
-      // authoritatively read, so this page's redirect gate and the accept
-      // page's read agree immediately instead of racing a lagged re-fetch.
+      // read, so this page's redirect gate and the accept page's read agree
+      // immediately instead of racing a lagged re-fetch.
       queryClient.setQueryData(membershipQueryKey(org), membership)
     },
   })
@@ -62,10 +61,10 @@ export function useAcceptAndVerifyMembership(input: {
     error: mutation.error,
     retry: () => {
       // Single source of truth: reset() then mutate(). Do NOT also invalidate
-      // the membership query here — an unawaited invalidate refetch resolving
-      // to a lagged value would race this mutate(). On success, onSuccess seeds
-      // the cache with the verified value. Skip while a verify is in flight so
-      // a retry tap can't spawn a second overlapping PATCH+verify.
+      // the membership query — an unawaited invalidate refetch resolving to a
+      // lagged value would race this mutate(); onSuccess seeds the verified
+      // value instead. Skip while a verify is in flight so a retry tap can't
+      // spawn a second overlapping PATCH+verify.
       if (!enabled || mutation.isPending) {
         return
       }

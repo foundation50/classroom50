@@ -42,12 +42,12 @@ export async function removeMemberFromOrg(
   const warnings: string[] = []
 
   // Defense-in-depth self-guard: the Members page hides this action for the
-  // signed-in viewer, but that guard is UI-only and depends on the viewer query
-  // being loaded. Re-resolve the viewer server-side and refuse to remove the
-  // acting account from the org. This guards an org-wide DELETE that is
-  // effectively irreversible from the app, so it fails CLOSED: if the viewer
-  // can't be resolved we refuse rather than risk a self-lockout. (unenrollStudent
-  // can fail open since it's classroom-scoped and reversible; this can't.)
+  // viewer, but that guard is UI-only and depends on the viewer query loading.
+  // Re-resolve the viewer server-side and refuse to remove the acting account.
+  // This org-wide DELETE is effectively irreversible from the app, so it fails
+  // CLOSED: if the viewer can't be resolved we refuse rather than risk a
+  // self-lockout. (unenrollStudent can fail open — classroom-scoped and
+  // reversible; this can't.)
   const viewer = await getAuthenticatedUser(client).catch(() => null)
   if (!viewer) {
     throw new Error(
@@ -65,10 +65,9 @@ export async function removeMemberFromOrg(
     )
   }
 
-  // Without a GitHub username we can't DELETE the org membership (the GitHub
-  // endpoint is keyed by username). Bail BEFORE clearing any rosters — clearing
-  // them under a "Remove from organization" action that can't actually remove
-  // the membership would be misleading, destructive work.
+  // Without a GitHub username we can't DELETE the org membership (endpoint keyed
+  // by username). Bail BEFORE clearing rosters — doing so under an action that
+  // can't actually remove membership would be misleading, destructive work.
   if (!row.username) {
     return {
       unenrolledClassrooms: [],
@@ -81,9 +80,9 @@ export async function removeMemberFromOrg(
 
   for (const access of row.classrooms) {
     // Archived classrooms can't be unenrolled (unenrollStudent throws via
-    // assertClassroomNotArchived), and the org DELETE below would still run —
-    // leaving the student off the org but stuck on the archived roster, the very
-    // inconsistency this flow exists to prevent. Skip them and report instead.
+    // assertClassroomNotArchived); the org DELETE below would still run, leaving
+    // the student off the org but stuck on the archived roster — the very
+    // inconsistency this flow prevents. Skip and report instead.
     if (access.archived) {
       warnings.push(
         t

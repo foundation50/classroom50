@@ -11,8 +11,8 @@ import {
 
 // Reuse an assignment FROM another classroom INTO the current one — the "pull"
 // counterpart to the per-row "push" reuse on the assignments table. Opened from
-// the assignments page's "New assignment" split button. v1 is in-org only:
-// source classrooms are siblings under classroom50/, never a different org.
+// the "New assignment" split button. v1 is in-org only: sources are siblings
+// under classroom50/, never a different org.
 export const ReuseFromClassroomModal = ({
   org,
   classroom,

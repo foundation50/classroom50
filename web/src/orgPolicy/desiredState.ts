@@ -1,10 +1,10 @@
 // Web mirror of the CLI's org-policy desired-state seam
 // (classroom50-cli/cli/gh-teacher/internal/orgpolicy/orgpolicy.go).
 //
-// This is the single source of truth for the org member-default lockdown the
-// GUI enforces and audits. It must stay a 1:1 mirror of the CLI's
-// allMemberDefaultSettings()/MemberDefaultSettings()/ClassifyDefaults() so the
-// two tools can't drift — a divergence here is a parity bug.
+// Single source of truth for the org member-default lockdown the GUI enforces
+// and audits. Must stay a 1:1 mirror of the CLI's
+// allMemberDefaultSettings()/MemberDefaultSettings()/ClassifyDefaults() — a
+// divergence here is a parity bug.
 
 export type MemberDefaultValue = boolean | string
 
@@ -18,10 +18,9 @@ export type MemberDefaultSetting = {
 }
 
 // The 16 member-default fields, in the CLI's order. Criticality and
-// enterprise-only flags mirror the CLI exactly: critical marks the lockdown
-// fields whose absence re-opens the org-wide repo-admin danger; the
-// enterprise-only fields have no member-privileges toggle on Team/Free, so
-// init skips them there.
+// enterprise-only flags mirror the CLI: critical marks lockdown fields whose
+// absence re-opens the org-wide repo-admin danger; enterprise-only fields have
+// no member-privileges toggle on Team/Free, so init skips them there.
 const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
   {
     field: "default_repository_permission",
@@ -80,8 +79,8 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
     enterpriseOnly: false,
   },
   {
-    // Enforced TRUE for the same reason: the config-repo Pages site must be
-    // allowed to publish publicly.
+    // Enforced TRUE for the same reason: the config-repo Pages site must be able
+    // to publish publicly.
     field: "members_can_create_public_pages",
     value: true,
     desc: "public Pages creation enabled (required for the public config-repo site)",
@@ -167,9 +166,8 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
 ]
 
 // memberDefaultSettings returns the in-scope settings for a plan. Only
-// "enterprise" gets the full 16; every other plan (team/free/unknown) is
-// treated conservatively as non-enterprise and the 4 enterprise-only fields
-// are filtered out, leaving 12.
+// "enterprise" gets all 16; every other plan (team/free/unknown) is treated as
+// non-enterprise and the 4 enterprise-only fields are filtered out, leaving 12.
 export function memberDefaultSettings(
   plan: string | undefined,
 ): MemberDefaultSetting[] {
@@ -191,9 +189,8 @@ export type ClassifyResult = {
 
 // classifyDefaults compares each in-scope (plan-filtered) setting against the
 // live GET /orgs/{org} values, reporting per-setting whether it's enforced and
-// whether any critical setting is unenforced. The single source of truth for
-// interpreting an org response against the desired lockdown — shared by the
-// settings page and the audit so they can't drift.
+// whether any critical setting is unenforced. Single source of truth for
+// interpreting an org response — shared by the settings page and the audit.
 export function classifyDefaults(
   live: Record<string, unknown>,
   plan: string | undefined,
@@ -216,16 +213,16 @@ export type ManualStep = {
   url: string
 }
 
-// The org member-privileges settings page — the single place a teacher
-// inspects/sets the member-default lockdown by hand. Shared so the desired
-// state, audit, and any deep links can't drift on the path.
+// The org member-privileges settings page — where a teacher inspects/sets the
+// member-default lockdown by hand. Shared so desired state, audit, and deep
+// links can't drift on the path.
 export function memberPrivilegesUrl(org: string): string {
   return `https://github.com/organizations/${org}/settings/member_privileges`
 }
 
 // manualHardeningSteps is the canonical list of the four member-privilege
-// settings with no REST API — the teacher applies them by hand. All four live
-// on the org member-privileges settings page.
+// settings with no REST API — applied by hand, all on the org
+// member-privileges settings page.
 export function manualHardeningSteps(org: string): ManualStep[] {
   const url = memberPrivilegesUrl(org)
   return [

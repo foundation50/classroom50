@@ -25,11 +25,11 @@ export type Toast = {
 
 export type NotifyInput = {
   tone?: ToastTone
-  // Toast content. NOTE: the toast viewport is mounted ABOVE the RouterProvider
-  // (so toasts survive route changes), which means it has NO router context.
-  // Do NOT put a TanStack Router <Link> in here — it throws on render and blanks
-  // the app (the throw escapes the route-level errorComponent). Use plain text,
-  // or a plain <a href> / a button calling router.navigate if a link is needed.
+  // Toast content. The toast viewport mounts ABOVE the RouterProvider (so toasts
+  // survive route changes), so it has NO router context. Do NOT put a TanStack
+  // <Link> here — it throws on render and blanks the app (the throw escapes the
+  // route-level errorComponent). Use plain text, a plain <a href>, or a button
+  // calling router.navigate.
   message: React.ReactNode
   // Optional dedup key: a later notify() with the same key replaces the prior
   // toast in place instead of stacking a duplicate (e.g. repeated retries).
@@ -44,8 +44,8 @@ type NotificationContextValue = {
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
 
-// daisyUI alert classes per tone. `alert-soft` matches the house style used by
-// the inline alerts this provider generalizes (EnrolledStudents, EditAssignment).
+// daisyUI alert classes per tone. `alert-soft` matches the inline alerts this
+// provider generalizes (EnrolledStudents, EditAssignment).
 const TONE_CLASS: Record<ToastTone, string> = {
   info: "alert alert-info alert-soft",
   success: "alert alert-success alert-soft",
@@ -58,9 +58,8 @@ const nextId = () => `toast-${++toastSeq}`
 
 // App-wide toast surface. Lives above the router so a toast survives the
 // component that fired it unmounting (archiving removes the card, reuse
-// navigates away). Modeled on the ad-hoc inline-alert region in
-// EnrolledStudents (tones, keyed dedup, dismissible) — that surface still runs
-// its own inline alerts; migrating it onto notify()/useToast is a follow-up.
+// navigates away). Modeled on EnrolledStudents' inline-alert region (tones,
+// keyed dedup, dismissible); migrating that onto notify()/useToast is a follow-up.
 export function NotificationProvider({ children }: PropsWithChildren) {
   const [toasts, setToasts] = useState<Toast[]>([])
   // Track auto-dismiss timers so a keyed replace / manual dismiss clears them.
@@ -175,7 +174,7 @@ export function useToast() {
 }
 
 // Like useToast() but returns null instead of throwing when no provider is
-// mounted, for consumers that render both inside and outside it (e.g. the banner).
+// mounted, for consumers rendered both inside and outside it (e.g. the banner).
 export function useOptionalToast() {
   return useContext(NotificationContext)
 }

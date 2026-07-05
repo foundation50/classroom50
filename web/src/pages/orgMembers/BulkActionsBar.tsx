@@ -23,8 +23,7 @@ type Phase = "idle" | "working" | "complete" | "error"
 type Progress = { processed: number; total: number; message: string }
 
 // A completed run of either action, normalized so the results modal renders one
-// shape. `sections` are labeled groups of per-row lines (added / skipped /
-// failed etc.).
+// shape. `sections` are labeled groups of per-row lines (added / skipped etc.).
 type ResultView = {
   headline: string
   sections: {
@@ -121,8 +120,8 @@ const buildRemoveResult = (
       })),
     })
   }
-  // Non-fatal side-effect warnings (team drop / invite cancel) — the roster
-  // removal itself still succeeded, so these are informational.
+  // Non-fatal side-effect warnings (team drop / invite cancel) — roster removal
+  // itself succeeded, so these are informational.
   if (res.warnings.length > 0) {
     sections.push({
       title: t("orgMembers.bulk.resultWarnings"),
@@ -167,13 +166,12 @@ const ResultSection = ({
   </div>
 )
 
-// The members table's header toolbar. It always shows the select-all checkbox +
-// a contextual label; once rows are selected it reveals the classroom picker +
-// Add/Remove/Clear actions inline (no separate floating bar, no layout shift —
-// the header is always present and only its right side fills in). Owns its own
-// run modal (progress -> results) and drives the bulk add/remove orchestrators.
-// On a successful run it calls onDone with the rows the server enrolled so the
-// page can optimistically seed its caches.
+// The members table's header toolbar: always shows select-all + a contextual
+// label; once rows are selected it reveals the classroom picker +
+// Add/Remove/Clear inline (no floating bar, no layout shift — only the right
+// side fills in). Owns its run modal (progress -> results) and drives the bulk
+// orchestrators. On success it calls onDone with the enrolled rows so the page
+// can optimistically seed caches.
 const BulkActionsBar = ({
   org,
   client,
@@ -201,10 +199,10 @@ const BulkActionsBar = ({
   onDone: (input: {
     classroom: string
     action: "add" | "remove"
-    // Rows the server actually enrolled (add only), for optimistic cache seeding.
+    // Rows the server actually enrolled (add only), for optimistic seeding.
     addedStudents: StudentCsvRow[]
     // Keys of the selection acted on (both actions), so the page can locate the
-    // affected members for optimistic cache updates.
+    // affected members for cache updates.
     affectedKeys: string[]
   }) => void
 }) => {
@@ -227,9 +225,9 @@ const BulkActionsBar = ({
 
   const hasSelection = selectedRows.length > 0
 
-  // The picker starts unset; until the teacher picks one, default to the first
-  // classroom. Derived (not synced via an effect) so there's no cascading
-  // render, and it stays correct if the classroom list arrives after mount.
+  // Picker starts unset; until the teacher picks one, default to the first
+  // classroom. Derived (not effect-synced) so there's no cascading render, and
+  // it stays correct if the classroom list arrives after mount.
   const effectiveClassroom =
     classroom || (classrooms.length > 0 ? classrooms[0].path : "")
 
@@ -422,10 +420,10 @@ const BulkActionsBar = ({
         })}
         confirmLabel={t("orgMembers.bulk.remove")}
         onConfirm={async () => {
-          // Close the confirm dialog first, then start the run on the next tick:
-          // two open <dialog showModal> at once is invalid (the second throws),
-          // so let the confirm dialog's close settle before run() opens the
-          // progress/results dialog. Not awaited — run() drives its own dialog.
+          // Close the confirm dialog first, then start the run next tick: two
+          // open <dialog showModal> at once is invalid (the second throws), so
+          // let the confirm close settle before run() opens the progress dialog.
+          // Not awaited — run() drives its own dialog.
           setConfirmingRemove(false)
           setTimeout(() => void run("remove"), 0)
         }}

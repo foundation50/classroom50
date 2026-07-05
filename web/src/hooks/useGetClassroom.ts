@@ -17,8 +17,8 @@ const useGetClassroom = (
       `${classroom ?? ""}/classroom.json`,
     ),
     // classroom.json lives in the private config repo, so a student fetch is a
-    // guaranteed 404. Callers on student-reachable pages pass enabled:false
-    // (or gate on teacher role); the default stays enabled for teacher views.
+    // guaranteed 404. Student-reachable callers pass enabled:false (or gate on
+    // teacher role); the default stays enabled for teacher views.
     enabled: Boolean(org && classroom) && (options?.enabled ?? true),
   })
 }

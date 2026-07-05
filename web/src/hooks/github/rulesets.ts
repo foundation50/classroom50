@@ -1,8 +1,8 @@
 // Web mirror of the CLI's org ruleset install (classroom50-cli init_repo.go
 // ensureClassroomRulesets). Two org branch rulesets protect submission history
-// and lock the Feedback PR base branch. Reconciled by name: PUT over an
-// existing ruleset, else POST to create. Definitions must match the CLI
-// exactly — a divergence is a parity bug.
+// and lock the Feedback PR base branch. Reconciled by name: PUT over an existing
+// ruleset, else POST to create. Definitions must match the CLI exactly — a
+// divergence is a parity bug.
 
 import type { GitHubClient } from "./client"
 import { paginateAll } from "./queries"
@@ -41,7 +41,7 @@ type OrgRulesetBody = {
 }
 
 // OrganizationAdmin (actor_id 1) is the org-owner role — the teacher — so they
-// can merge the Feedback PR and force-push/delete in a pinch while students
+// can merge the Feedback PR and force-push/delete in a pinch, while students
 // (maintain, no bypass) cannot.
 const ADMIN_BYPASS: RulesetBypassActor[] = [
   { actor_id: 1, actor_type: "OrganizationAdmin", bypass_mode: "always" },
@@ -127,8 +127,8 @@ export type RulesetsRepairResult = {
 }
 
 // repairRulesets: reconcile both rulesets — PUT over an existing one (by id),
-// else POST to create. Warn-and-continue on any single failure (init never
-// fails on a ruleset error), mirroring the CLI's ensureClassroomRulesets.
+// else POST to create. Warn-and-continue on any single failure (init never fails
+// on a ruleset error), mirroring the CLI's ensureClassroomRulesets.
 export async function repairRulesets(
   client: GitHubClient,
   org: string,

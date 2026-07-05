@@ -17,9 +17,9 @@ const Classroom50YamlSchema = z.object({
   classroom: z.string().min(1),
   assignment: z.string().min(1),
   // Optional capability-URL secret, present only for a protected classroom.
-  // Mirrors the CLI's repo-config-v1 schema. Pattern-checked at the read
-  // boundary so a hand-edited/desynced value can't reach a Pages URL segment;
-  // an invalid value degrades to "no secret" rather than failing the parse.
+  // Mirrors the CLI's repo-config-v1 schema. Pattern-checked here so a
+  // hand-edited/desynced value can't reach a Pages URL segment; an invalid
+  // value degrades to "no secret" rather than failing the parse.
   secret: z.string().regex(SECRET_PATTERN).optional().catch(undefined),
   owner: IdentitySchema.optional(),
   source: z

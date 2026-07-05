@@ -15,10 +15,9 @@ import type {
   InitStepUpdate,
 } from "@/hooks/github/mutations"
 
-// Shared init "badge board" used by both the org setup wizard (OrgSetupPage)
-// and the re-run action on the Org Settings page. One source of truth for the
-// step order, titles, per-step explanations, and rendering so the two surfaces
-// can't drift.
+// Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
+// re-run action on Org Settings. One source of truth for step order, titles,
+// explanations, and rendering so the two surfaces can't drift.
 
 export const INIT_STEP_ORDER: InitStepId[] = [
   "orgDefaults",
@@ -33,21 +32,18 @@ export const INIT_STEP_ORDER: InitStepId[] = [
   "rulesets",
 ]
 
-// Per-step explanation shared by the wizard and the re-run surface. `what`
-// says what we change on the org/repo, `why` says why Classroom 50 needs it,
-// and `remediation` is the actionable next step a teacher takes when the step
-// warns or errors (paired with the GitHub deep link below). The three text
-// fields hold i18n keys (resolved with `t()` at render), so translations live
-// in the locale files while this map stays the single source of truth for
-// which steps exist and where they deep-link.
+// Per-step explanation shared by the wizard and re-run surface. `what` = what we
+// change, `why` = why Classroom 50 needs it, `remediation` = the teacher's next
+// step on warn/error (paired with the GitHub deep link). The three text fields
+// hold i18n keys (resolved with `t()` at render), so this map stays the single
+// source of truth for which steps exist and where they deep-link.
 type InitStepMeta = {
   what: string
   why: string
   remediation: string
-  // The GitHub settings page where the teacher inspects/fixes this step. Some
-  // steps are org-scoped, others target the classroom50 config repo. Returns
-  // null for steps with no single settings page to point at (repo + file
-  // creation), where the remediation is "retry" rather than "go change X".
+  // GitHub settings page where the teacher inspects/fixes this step (org- or
+  // config-repo-scoped). Null for steps with no single page (repo + file
+  // creation), where remediation is "retry" rather than "go change X".
   settingsUrl: (org: string) => string | null
 }
 
@@ -217,17 +213,16 @@ export const InitStep = ({
   status: InitStepStatus
   message?: string
   // Without an org the per-step GitHub deep link can't be built, so it's
-  // omitted; the explanation and remediation text still render.
+  // omitted; the explanation and remediation still render.
   org?: string
 }) => {
   const { t } = useTranslation()
   const meta = INIT_STEP_META[id]
   const needsAttention = status === "warning" || status === "error"
-  // Auto-expand the steps that need action so the teacher sees the fix without
-  // hunting; everything else starts collapsed to keep the board scannable. We
-  // keep `open` as the single source of truth (seeded from needsAttention and
-  // re-opened whenever a step transitions into attention) so the disclosure
-  // toggle can always collapse a panel — even a warning/error one.
+  // Auto-expand steps needing action so the teacher sees the fix without
+  // hunting; the rest start collapsed. `open` is the single source of truth
+  // (seeded from needsAttention, re-opened on each transition into attention) so
+  // the toggle can always collapse a panel — even a warning/error one.
   const [open, setOpen] = useState(needsAttention)
   const prevNeedsAttention = useRef(needsAttention)
   useEffect(() => {

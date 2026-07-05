@@ -21,10 +21,10 @@ describe("bundled skeleton", () => {
   })
 
   it("deploys every bundled path it declares (no silent CLI-side additions)", () => {
-    // Reverse of the check above: a skeleton file the CLI commits (now in the
-    // bundle) that the GUI forgot to add to SKELETON_PATHS would ship via
-    // `gh teacher init` but never via GUI org setup — the action-parity gap
-    // this bundling closes, silently reopened. Fail the build instead.
+    // Reverse of the check above: a skeleton file the CLI commits (now bundled)
+    // that the GUI forgot to add to SKELETON_PATHS would ship via
+    // `gh teacher init` but never via GUI org setup — silently reopening the
+    // action-parity gap this bundling closes. Fail the build instead.
     const declared = new Set<string>(SKELETON_PATHS)
     for (const rel of bundledSkeletonPaths()) {
       expect(
@@ -64,8 +64,8 @@ describe("bundled skeleton", () => {
 
   it("throws a build-bug error when a declared path is not bundled", () => {
     // The drift safety net buildSkeletonFiles relies on: a SKELETON_PATHS entry
-    // missing from the bundle (renamed/removed/extension-swapped source file)
-    // must fail loudly at build time, not 404 a teacher's first org setup.
+    // missing from the bundle (renamed/removed/extension-swapped source) must
+    // fail loudly at build time, not 404 a teacher's first org setup.
     const partialBundle = new Map<string, string>([
       ["workflows/publish-pages.yaml", "on: push\n"],
     ])

@@ -1,9 +1,9 @@
 import type { Transition, Variants } from "motion/react"
 
 // Shared motion primitives mirroring the CSS token values in index.css
-// (durations 100/150/200ms, ease-out). Keep JS and CSS motion consistent so
-// the app feels like one system. Every consumer pairs with MotionConfig
-// reducedMotion="user", so these never need their own reduced-motion guard.
+// (durations 100/150/200ms, ease-out) so JS and CSS motion stay consistent.
+// Every consumer pairs with MotionConfig reducedMotion="user", so these need no
+// reduced-motion guard.
 
 export const DURATION = {
   fast: 0.1,
@@ -11,13 +11,11 @@ export const DURATION = {
   slow: 0.2,
 } as const
 
-// Standard ease-out curve (fast start, gentle settle), matching the
-// `--ease-out-soft` token in index.css.
+// Standard ease-out curve, matching the `--ease-out-soft` token in index.css.
 export const EASE_OUT: Transition["ease"] = [0, 0, 0.2, 1]
 
-// Staggered entrance for a list of cards: each item's delay is its index * 60ms,
-// capped so a long list doesn't leave later items visibly waiting. Pair with the
-// `enterExit` variants.
+// Staggered entrance for a list of cards: delay is index * 60ms, capped so a
+// long list doesn't leave later items waiting. Pair with `enterExit`.
 export const staggerTransition = (index: number): Transition => ({
   duration: DURATION.slow,
   ease: EASE_OUT,
@@ -38,9 +36,9 @@ export const enterExit: Variants = {
   },
 }
 
-// Entrance for notice/alert-style callouts that appear after an async check and
-// push content down: a gentle slide-down + fade, distinct from the scale-up
-// used for cards/content so a "notice arrived" reads differently from a card.
+// Entrance for notice/alert callouts that appear after an async check and push
+// content down: a gentle slide-down + fade, distinct from the card scale-up so a
+// "notice arrived" reads differently.
 export const calloutVariants: Variants = {
   initial: { opacity: 0, y: -8 },
   animate: {
@@ -55,8 +53,8 @@ export const calloutVariants: Variants = {
   },
 }
 
-// Hover affordance for clickable list rows: a subtle lift + shadow, matching
-// the former `clickable-row` CSS utility. Pair with a `bg` hover via className.
+// Hover affordance for clickable list rows: a subtle lift + shadow (the former
+// `clickable-row` CSS utility). Pair with a `bg` hover via className.
 export const rowHover = {
   whileHover: { y: -1, boxShadow: "0 1px 3px rgb(0 0 0 / 0.08)" },
   transition: { duration: DURATION.base, ease: EASE_OUT },
@@ -96,7 +94,7 @@ export const collapseVariants: Variants = {
 }
 
 // Short cross-fade for swapping loading skeletons with resolved content
-// (LoadingSwap). Deliberately fast so the app never feels sluggish.
+// (LoadingSwap). Fast so the app never feels sluggish.
 export const crossFade: Variants = {
   initial: { opacity: 0 },
   animate: { opacity: 1, transition: { duration: DURATION.base } },

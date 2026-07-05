@@ -166,8 +166,7 @@ describe("resolveEmptyRosterWarning", () => {
 
   it("treats a team-roster read error as loading (never asserts empty on a failure)", () => {
     // A transient/permission team-members read failure must NOT surface the
-    // "nobody can accept assignments" banner — the view shows error+retry, and
-    // the banner self-heals on recovery.
+    // "nobody can accept" banner — the view shows error+retry and self-heals.
     expect(resolveEmptyRosterWarning({ ...base, isError: true })).toEqual({
       show: false,
       hasRosterRows: false,

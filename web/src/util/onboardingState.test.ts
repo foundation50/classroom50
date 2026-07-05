@@ -23,8 +23,8 @@ describe("deriveOnboardingState", () => {
   })
 
   it("is loading once a membership exists but is not yet active", () => {
-    // A pending invite exists; the accept/verify mutation is (about to be) in
-    // flight. Never fall through to notInvited here.
+    // A pending invite exists; accept/verify is (about to be) in flight. Never
+    // fall through to notInvited here.
     expect(deriveOnboardingState(base)).toBe("loading")
   })
 
@@ -86,8 +86,8 @@ const apiError = (status: number) =>
 describe("404 -> notInvited boundary (end-to-end through the precedence)", () => {
   it("a 404 read feeds hasMembership:false -> notInvited", () => {
     // The live page maps a 404 to membershipReadError:false + hasMembership:false;
-    // fold that through the precedence to prove the calm screen is reached (the
-    // regression guarded here: a 404 must not route to the error screen).
+    // fold that through precedence to prove the calm screen is reached (a 404
+    // must not route to the error screen).
     const state = deriveOnboardingState({
       loadingMembership: false,
       membershipReadError: isMembershipReadError(apiError(404)),

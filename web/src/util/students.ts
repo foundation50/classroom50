@@ -6,16 +6,14 @@ export { isSameGitHubUser, parseGitHubId }
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""
 
-// Find a roster student by username, case-insensitively — GitHub logins are
-// case-insensitive and scores.json logins can differ in case from the CSV, so
-// an exact `===` would drop the name/section for a real student.
+// Find a roster student by username, case-insensitively: GitHub logins and
+// scores.json logins can differ in case from the CSV, so `===` would miss.
 const findByUsername = (key: string, students: Student[]) => {
   const k = key.trim().toLowerCase()
   return students.find((s) => s.username.trim().toLowerCase() === k)
 }
 
-// A minimal Student carrying only the username; fallback when a row's username
-// isn't on the roster.
+// Minimal Student carrying only the username; fallback when off-roster.
 export const placeholderStudent = (username: string): Student => ({
   username,
   first_name: "",
@@ -29,19 +27,13 @@ export const placeholderStudent = (username: string): Student => ({
 export const resolveStudent = (key: string, students: Student[]): Student =>
   findByUsername(key, students) ?? placeholderStudent(key)
 
-// Whether a GitHub account is the same person as a roster student: numeric id
-// first, then case-insensitive login (the CSV may predate id capture).
-// (Canonical implementation in @/util/identity; re-exported above.)
-
 export const getName = (key: string, students: Student[]) => {
   const student = findByUsername(key, students)
   if (!student) return ""
   return nameFromParts(student.first_name, student.last_name)
 }
 
-// Display name from a roster row's first/last name parts. CSV stays
-// authoritative; callers use this only to fill a row that has no CSV name yet.
-// Empty when neither name is present.
+// Display name from a roster row's first/last parts; "" when neither present.
 export const nameFromParts = (
   firstName?: string,
   lastName?: string,
@@ -60,8 +52,7 @@ export const getInitials = (key: string, students: Student[]) => {
   return initialsFromParts(student.first_name, student.last_name)
 }
 
-// Avatar initials from self-reported names, mirroring getInitials. Empty when
-// neither name is present.
+// Avatar initials from first/last parts; "" when neither present.
 export const initialsFromParts = (
   firstName?: string,
   lastName?: string,

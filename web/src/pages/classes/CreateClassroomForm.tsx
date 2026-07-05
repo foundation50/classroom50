@@ -15,10 +15,10 @@ export type CreateClassroomFormValues = {
   name: string
   slug: string
   term: string
-  // Opt-in: when true the classroom's published resources are served under
-  // an unguessable capability-URL secret path segment. Off by default.
+  // Opt-in: when true, published resources are served under an unguessable
+  // capability-URL secret path segment. Off by default.
   protectPages: boolean
-  // The capability-URL secret. Empty when protectPages is false; a generated
+  // Capability-URL secret. Empty when protectPages is false; a generated
   // (editable) value when true. Validated to `[a-z0-9]{4,64}` on submit.
   secret: string
 }
@@ -26,7 +26,7 @@ export type CreateClassroomFormValues = {
 type CreateClassroomFormProps = {
   defaultValues?: Partial<CreateClassroomFormValues>
   // Returns the submit's settling promise (or void) so the form can await the
-  // real write and only latch its loading state on success.
+  // real write and latch its loading state only on success.
   onSubmit: (values: CreateClassroomFormValues) => void | Promise<unknown>
 }
 
@@ -63,8 +63,8 @@ const CreateClassroomForm = ({
           errors.slug = t("validation.classroomSlugTaken")
         }
 
-        // Only validate the secret when protection is enabled; a disabled
-        // toggle leaves it empty (unprotected, the default).
+        // Only validate the secret when protection is on; a disabled toggle
+        // leaves it empty (unprotected, the default).
         if (value.protectPages && !isValidSecret(value.secret.trim())) {
           errors.secret = t("classes.form.secretInvalid", {
             description: SECRET_PATTERN_DESCRIPTION,
@@ -79,9 +79,9 @@ const CreateClassroomForm = ({
       },
     },
     onSubmit: async ({ value }) => {
-      // Latch `submitted` only on success: a rejected create skips it (the
-      // page's mutation onError toasts), so the button re-enables for a retry
-      // instead of sticking on "Creating...".
+      // Latch `submitted` only on success: a rejected create skips it (page's
+      // mutation onError toasts), so the button re-enables for a retry instead
+      // of sticking on "Creating...".
       await onSubmit({
         name: value.name.trim(),
         slug: slugify(value.slug),
@@ -229,11 +229,10 @@ const CreateClassroomForm = ({
                   onChange={(e) => {
                     const on = e.target.checked
                     field.handleChange(on)
-                    // Generate a candidate the first time protection is
-                    // enabled (and the field is empty) so the teacher sees a
-                    // ready-to-use key they can accept or replace. Turning it
-                    // off clears the secret so an unprotected classroom never
-                    // carries one.
+                    // Generate a candidate the first time protection is enabled
+                    // (and the field is empty) so the teacher sees a ready-to-use
+                    // key to accept or replace. Turning it off clears the secret
+                    // so an unprotected classroom never carries one.
                     if (on) {
                       if (!form.getFieldValue("secret")) {
                         form.setFieldValue(
@@ -320,8 +319,8 @@ const CreateClassroomForm = ({
             selector={(state) => [state.canSubmit, state.isSubmitting]}
           >
             {([canSubmit, isSubmitting]) => {
-              // Hold the loading state through the post-create navigation, so
-              // the button never reverts to a bare disabled state.
+              // Hold the loading state through post-create navigation so the
+              // button never reverts to a bare disabled state.
               const busy = isSubmitting || submitted
               return (
                 <button

@@ -4,9 +4,9 @@ const BASE_TITLE = "Classroom 50"
 
 /**
  * Sets `document.title` for the current page and restores the base title on
- * unmount. Client-only SPA, so we manage the title imperatively rather than via
- * a server-rendered <head>. Pass the page-specific part; the base app name is
- * appended automatically (e.g. "Assignments · Classroom 50").
+ * unmount. Client-only SPA, so the title is managed imperatively. Pass the
+ * page-specific part; the app name is appended (e.g. "Assignments · Classroom
+ * 50").
  */
 export function useDocumentTitle(title?: string) {
   useEffect(() => {

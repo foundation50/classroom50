@@ -29,8 +29,8 @@ import {
 } from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
-// the OAuth token can reach the typed repo and annotates the field without
-// rewriting it. Mirrors RunnerField.
+// the OAuth token can reach the typed repo and annotates without rewriting it.
+// Mirrors RunnerField.
 export const TemplateField = ({
   field,
   org,
@@ -61,7 +61,7 @@ export const TemplateField = ({
     retry: false,
   })
 
-  // A cleared field has nothing to verify, so don't show "Checking…" while the
+  // Cleared field has nothing to verify — don't show "Checking…" while the
   // debounce drains.
   const pending =
     enabled &&
@@ -156,7 +156,7 @@ const TemplateVerificationNote = ({
   pending: boolean
   org?: string
   // For an in-org private template: true if the classroom team already has
-  // read, false if it'll be granted on create, undefined if N/A or unresolved.
+  // read, false if granted on create, undefined if N/A or unresolved.
   teamHasAccess?: boolean
 }) => {
   const { t } = useTranslation()
@@ -176,8 +176,8 @@ const TemplateVerificationNote = ({
   switch (verification.kind) {
     case "ok": {
       // Students can't read an in-org private template directly; the classroom
-      // team grant is what lets them. Show whether that grant already exists or
-      // will be added on create (see tryGrantTeamTemplateRead).
+      // team grant is what lets them. Show whether it already exists or will be
+      // added on create (see tryGrantTeamTemplateRead).
       if (verification.inOrg && verification.visibility === "private") {
         if (teamHasAccess === true) {
           return (
@@ -231,16 +231,14 @@ const TemplateVerificationNote = ({
 
     case "private-fork": {
       const view = templateForkNoteView(verification)
-      // labelKey/tone/suffixKey all come from templateForkNoteView (single
-      // source of truth, tested). All three label keys take the same
-      // interpolation set; t() ignores `parent` for the no-parent key.
+      // tone/labelKey/suffixKey come from templateForkNoteView (tested source of
+      // truth). All three label keys share this interpolation set; t() ignores
+      // `parent` for the no-parent key.
       const label = t(view.labelKey, {
         owner: verification.owner,
         repo: verification.repo,
         parent: verification.parent,
       })
-      // In-org parent is usually reachable (advisory, amber); a cross-org or
-      // unknown parent is likely to fail at generate (error, red).
       return (
         <Note
           tone={view.tone}
@@ -348,8 +346,8 @@ const TemplateVerificationNote = ({
   }
 }
 
-// Wraps InlineNote with an optional OAuth-policy link for the cases where an
-// org owner must approve the app.
+// Wraps InlineNote with an optional OAuth-policy link for cases where an org
+// owner must approve the app.
 const Note = ({
   tone,
   icon,

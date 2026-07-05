@@ -13,8 +13,8 @@ const useDotClassroom50 = (
     queryKey: ["github", "repos", org, repo, ".classroom50.yaml"],
     queryFn: () => getClassroom50Yaml(client, org, repo),
     // Skip until both coordinates are known — callers may pass "" while a
-    // username/repo name is still resolving, and an empty repo would fetch a
-    // malformed contents path (guaranteed 404).
+    // username/repo name resolves, and an empty repo fetches a malformed contents
+    // path (guaranteed 404).
     enabled: Boolean(org && repo),
     staleTime: 10 * 60 * 1000,
   })

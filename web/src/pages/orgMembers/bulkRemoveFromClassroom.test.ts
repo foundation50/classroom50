@@ -6,8 +6,8 @@ import type { Student } from "@/types/classroom"
 
 // bulkUnenrollStudents (the single-commit batch writer) is stubbed: this
 // orchestrator's contract is the per-row PRE-filter (only rows on the target,
-// non-archived classroom reach the writer) and reconciling the batch result
-// back to per-row outcomes.
+// non-archived classroom reach the writer) and reconciling the batch result to
+// per-row outcomes.
 const bulkUnenrollMock = vi.fn()
 
 vi.mock("@/api/mutations/students", () => ({

@@ -168,8 +168,8 @@ describe("repairOrgDefaults", () => {
     })
     await repairOrgDefaults(client, "acme", "enterprise")
     // Exactly one fallback sub-PATCH carries the repo-creation booleans, and it
-    // carries ALL four of them together (never split — splitting makes GitHub
-    // reset the omitted ones via the deprecated legacy field).
+    // carries ALL four together (never split — splitting makes GitHub reset the
+    // omitted ones via the deprecated legacy field).
     const repoCreationPatches = patchBodies.filter((b) =>
       Object.keys(b).some(
         (k) =>

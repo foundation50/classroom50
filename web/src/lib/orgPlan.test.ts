@@ -17,8 +17,8 @@ describe("classifyPlan", () => {
   })
 
   it("treats unrecognized or future plan names as unknown, never free", () => {
-    // An unknown value must not be misclassified as free, or we'd hide/demote
-    // an org the user can actually work with.
+    // An unknown value must not be misclassified as free, or we'd hide an org
+    // the user can actually work with.
     expect(classifyPlan("business")).toBe("unknown")
     expect(classifyPlan("Team")).toBe("unknown")
   })

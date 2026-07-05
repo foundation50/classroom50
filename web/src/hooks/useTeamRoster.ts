@@ -22,34 +22,32 @@ export type UseTeamRosterResult = {
   isLoading: boolean
   // The team-member fetch (enrolled source of truth) failed for a reason other
   // than a missing team (listTeamMembers swallows 404 -> []). When true, the
-  // roster couldn't be read and the view must show an error+retry instead of
-  // the empty state, so a transient/permission failure isn't rendered as an
-  // authoritative "nobody enrolled".
+  // view must show error+retry instead of the empty state, so a
+  // transient/permission failure isn't rendered as "nobody enrolled".
   isError: boolean
   // The classroom has zero team members AND zero pending invites — a brand-new
   // classroom nobody has joined yet.
   isEmpty: boolean
   // Pending invites couldn't be read (getOrgInvitations is owner-only; a
   // non-owner TA/instructor gets 403). The view then hides the pending section
-  // and shows an "owners only" note instead of silently rendering zero pending.
+  // and shows an "owners only" note instead of rendering zero pending.
   pendingHidden: boolean
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
-  // Count of team members with no students.csv metadata row — the exact set
-  // "Sync roster" appends. 0 = the CSV is in sync with the team (the button is
-  // disabled and reads "In sync"); >0 = drift the teacher can sync (and which
-  // the page auto-syncs on open). Distinct from the `unprovisioned` count,
-  // which is the opposite direction (on CSV, not on team) that sync can't fix.
+  // Count of team members with no students.csv row — the exact set "Sync roster"
+  // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
+  // can sync (auto-synced on open). Opposite direction from `unprovisioned` (on
+  // CSV, not on team), which sync can't fix.
   csvMissingCount: number
-  // Re-run the team-member fetch (the enrolled source of truth) so an error
-  // surface can offer a retry without a full page reload.
+  // Re-run the team-member fetch so an error surface can offer a retry without a
+  // full page reload.
   refetch: () => void
 }
 
 // The teacher roster, driven by GitHub (team members + pending org invites),
 // with students.csv joined only as optional display metadata. Resolves the team
-// slug from classroom.json (fallback classroom50-<classroom>), matching the
-// grade collector and Go download so all three consumers agree on the slug.
+// slug from classroom.json (fallback classroom50-<classroom>) so the grade
+// collector, Go download, and this view agree on the slug.
 export function useTeamRoster(
   org: string,
   classroom: string,
@@ -96,8 +94,8 @@ export function useTeamRoster(
   )
 
   // Enrolled rows come from team membership (readable by non-owners), so the
-  // roster is usable even when invites are forbidden. Only wait on the invite
-  // fetch when it's actually readable.
+  // roster is usable even when invites are forbidden. Wait on the invite fetch
+  // only when it's readable.
   const isLoading = membersLoading || (!invitesForbidden && invitesLoading)
 
   return {
@@ -116,9 +114,9 @@ export function useTeamRoster(
 }
 
 // Invalidate the team-members query that drives the enrolled roster (slug
-// resolved as in useTeamRoster). Any mutation that changes classroom-team
+// resolved as in useTeamRoster). Any mutation changing classroom-team
 // membership (enroll/unenroll/match) must call this, or the change only shows
-// after the members query's 60s staleTime lapses. Stable callback.
+// after the members query's staleTime lapses.
 export function useInvalidateTeamRoster(
   org: string,
   classroom: string,
@@ -146,8 +144,8 @@ export type OptimisticMember = {
 // Optimistically add a just-enrolled member to the team-members cache, then
 // invalidate to reconcile. Enrolling an already-active org member team-adds them
 // with no pending invite, so without the seed buildTeamRoster flashes the row as
-// "unprovisioned" until the refetch lands. Dedup is by id; the refetch replaces
-// the stub (or drops it if the add didn't land). No-ops a blank/invalid id.
+// "unprovisioned" until the refetch lands. Dedup by id; the refetch replaces the
+// stub (or drops it if the add didn't land). No-ops a blank/invalid id.
 export function useSeedTeamMember(
   org: string,
   classroom: string,

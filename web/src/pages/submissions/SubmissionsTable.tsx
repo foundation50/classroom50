@@ -36,7 +36,7 @@ const formatDateTime = (datetime: string) =>
   })
 
 // Badge color from the assignment's pass threshold: green at/above the bar, red
-// below, neutral when ungraded (max 0) or no threshold is set (`null`).
+// below, neutral when ungraded (max 0) or no threshold (`null`).
 const scoreToBadgeType = (
   score: number,
   max: number,
@@ -47,7 +47,7 @@ const scoreToBadgeType = (
 }
 
 // Icon action in the Actions cell: an external link when a URL is present, else
-// a dimmed non-clickable span (with a "no … yet" label) so the row stays aligned.
+// a dimmed non-clickable span (with a "no … yet" label) to keep the row aligned.
 type IconComponent = React.ComponentType<{ className?: string }>
 
 const ACTION_BTN = "btn btn-ghost btn-sm btn-square"
@@ -88,10 +88,9 @@ const ActionIconLink = ({
     </span>
   )
 
-// An inline commit/details link in the expanded submission-history row.
-// Renders an external link when a URL is present, else dimmed non-clickable
-// text. The label text is shown next to the icon (unlike the icon-only
-// row-action variant above).
+// Inline commit/details link in the expanded history row: external link when a
+// URL is present, else dimmed non-clickable text (label shown beside the icon,
+// unlike the icon-only row-action above).
 const HistoryLink = ({
   href,
   icon: Icon,
@@ -119,9 +118,9 @@ const HistoryLink = ({
   )
 
 // Compact group identity: shared repo + stacked avatars. Renders from the
-// scores.json `usernames` snapshot and never fetches (enabled: false) to avoid
-// a per-row GitHub call on mount; reads the shared collaborators cache so the
-// avatars upgrade to live data once the Members modal populates it.
+// scores.json `usernames` snapshot and never fetches (enabled: false) to avoid a
+// per-row GitHub call; reads the shared collaborators cache so avatars upgrade to
+// live data once the Members modal populates it.
 const MAX_VISIBLE_AVATARS = 4
 
 const GroupMembers = ({
@@ -201,11 +200,8 @@ const GroupMembers = ({
 
 // Review action: links to the open Feedback PR (opened by the autograde
 // workflow) when one exists, else opens an info modal. The PR is the source of
-// truth — the old scores.json `review` compare-link is unused.
-//
-// The /pulls lookup is deferred until Review is clicked; an eager per-row query
-// would fan out to one request per repo on table mount. On click we refetch and
-// act on the result.
+// truth. The /pulls lookup is deferred until Review is clicked (an eager per-row
+// query would fan out to one request per repo on mount); on click we refetch.
 const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
@@ -218,8 +214,8 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
   const handleReview = async () => {
     setResolving(true)
     try {
-      // getOpenPullRequests maps 404 -> [], so a non-404 failure surfaces here
-      // as `error`; show it rather than the misleading "no PR yet" message.
+      // getOpenPullRequests maps 404 -> [], so a non-404 failure surfaces as
+      // `error`; show it rather than the misleading "no PR yet" message.
       const { data: pr, error } = await refetch()
       if (error) {
         setErrorMsg(error instanceof Error ? error.message : String(error))
@@ -303,10 +299,9 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
   )
 }
 
-// Per-row regrade: dispatches regrade.yaml scoped to one owner and tracks the
-// run via useTriggerRegrade (icon shows progress; disabled while any regrade is
-// in flight). The button only kicks off grading — the gradebook refreshes on
-// the next collect.
+// Per-row regrade: dispatches regrade.yaml scoped to one owner, tracked via
+// useTriggerRegrade (icon shows progress; disabled while any regrade is in
+// flight). Only kicks off grading — the gradebook refreshes on the next collect.
 const RegradeButton = ({
   org,
   classroom,
@@ -319,7 +314,7 @@ const RegradeButton = ({
   assignment: string
   owner: string
   // The student's display name (individual assignments) when known; falls back
-  // to the `owner` login. Omitted for group repos (owner is the founder/group).
+  // to `owner`. Omitted for group repos (owner is the founder/group).
   displayName?: string
 }) => {
   const { t } = useTranslation()
@@ -330,9 +325,9 @@ const RegradeButton = ({
     owner,
   })
   const inFlight = phase === "dispatching" || phase === "running"
-  // Disable while ANY regrade (this row, another row, or "Regrade all") is in
-  // flight: trackers share one regrade.yaml run list and bind by monotonic id,
-  // so only one outstanding dispatch at a time keeps the binding unambiguous.
+  // Disable while ANY regrade (this row, another, or "Regrade all") is in flight:
+  // trackers share one regrade.yaml run list and bind by monotonic id, so a
+  // single outstanding dispatch keeps the binding unambiguous.
   const blocked = anyRegrading && !inFlight
   const [confirmOpen, setConfirmOpen] = useState(false)
 
@@ -502,13 +497,12 @@ const SubmissionsTable = ({
   assignment: string
   assignmentName?: string
   maxGroupSize?: number
-  // Lowercased usernames with an assignment repo (individual assignments).
-  // Used to decide whether the profile modal shows the "Open repo" button for a
-  // non-submitter — a never-accepted student has no repo, so the link would 404.
+  // Lowercased usernames with an assignment repo (individual assignments). Used
+  // to decide whether the profile modal shows "Open repo" for a non-submitter —
+  // a never-accepted student has no repo, so the link would 404.
   acceptedUsernames?: Set<string>
-  // Passing bar as a fraction of max (e.g. 1.0 = full marks); drives score
-  // badge color. `null`/omitted means the assignment has no passing threshold
-  // (badges render neutral).
+  // Passing bar as a fraction of max (e.g. 1.0 = full marks); drives score badge
+  // color. `null`/omitted means no passing threshold (badges render neutral).
   thresholdFraction?: number | null
 }) => {
   const { t } = useTranslation()
@@ -520,17 +514,16 @@ const SubmissionsTable = ({
   // The owner (group founder) whose collaborators modal is open, or null.
   const [manageOwner, setManageOwner] = useState<string | null>(null)
 
-  // The student whose profile modal is open (resolved from a row's username),
-  // or null. Resolves to a roster Student for the richer detail view.
+  // The student whose profile modal is open (resolved from a row's username), or
+  // null. Resolves to a roster Student for the richer detail view.
   const [profileUsername, setProfileUsername] = useState<string | null>(null)
   const profileStudent = profileUsername
     ? resolveStudent(profileUsername, students)
     : null
 
-  // The profiled student has an assignment repo iff they submitted (their
-  // login is credited on a score row) or they accepted (in acceptedUsernames).
-  // A never-accepted non-submitter has no repo, so we omit the modal's repo link
-  // rather than point it at a 404.
+  // The profiled student has a repo iff they submitted (login credited on a
+  // score row) or accepted (in acceptedUsernames). A never-accepted non-submitter
+  // has none, so we omit the modal's repo link rather than point it at a 404.
   const profileHasRepo = (() => {
     if (!profileUsername) return false
     const login = profileUsername.toLowerCase()

@@ -3,13 +3,12 @@ import type { ReactNode } from "react"
 import { crossFade } from "./motion"
 
 /**
- * Cross-fades a loading fallback with resolved content. While `loading` is
- * true it renders `fallback`; once false it renders `children`, and Motion
- * fades the outgoing view out as the incoming one fades in (`mode="wait"`).
+ * Cross-fades a loading fallback with resolved content. Renders `fallback`
+ * while `loading`, else `children`, with Motion fading out->in (`mode="wait"`).
  *
- * Keyed on the loading boolean so it fires once on the load->resolved
- * boundary and not on subsequent content re-renders. Honors reduced motion
- * via the app-level MotionConfig.
+ * Keyed on the loading boolean so it fires once on the load->resolved boundary,
+ * not on subsequent content re-renders. Honors reduced motion via the app-level
+ * MotionConfig.
  */
 export function LoadingSwap({
   loading,

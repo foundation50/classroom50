@@ -1,9 +1,9 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-// A dismissable-free error banner with an inline retry, shared by the panels
-// that load an independent data source (roster, gradebook) on the submissions
-// dashboard. Extracted so the two blocks can't drift on markup/retry wiring.
+// Error banner (no dismiss) with an inline retry, shared by the submissions
+// dashboard panels that load an independent data source (roster, gradebook).
+// Extracted so the two blocks can't drift on markup/retry wiring.
 export function QueryErrorAlert({
   message,
   onRetry,

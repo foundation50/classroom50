@@ -19,8 +19,7 @@ export type StringField = {
   handleChange: (value: string) => void
 }
 
-// onBlur handler that normalizes the value (default: trim), writing back
-// only on change.
+// onBlur handler that normalizes (default: trim), writing back only on change.
 export const normalizeOnBlur = (
   field: StringField,
   normalize: (value: string) => string = (value) => value.trim(),

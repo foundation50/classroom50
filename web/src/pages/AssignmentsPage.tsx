@@ -25,7 +25,7 @@ import { isClassroomArchived } from "@/types/classroom"
 import { OrgRepos } from "./ClassesPage"
 
 // Split button: primary "Assignment" creates; the caret reveals "Reuse
-// assignment", which pulls one from another classroom into this one.
+// assignment", pulling one from another classroom into this one.
 const NewAssignmentButton = ({
   org,
   classroom,

@@ -72,8 +72,8 @@ describe("SAML SSO detection", () => {
 
   it("isSsoRequired is false when the header rides a non-403 status", () => {
     // GitHub only emits X-GitHub-SSO on a 403; a header echoed onto a dead-token
-    // 401 or a transient 5xx/429 (e.g. copied by a proxy) must NOT be read as an
-    // SSO gate, or it would mask a re-auth / outage as "authorize SSO".
+    // 401 or a transient 5xx/429 (e.g. proxy-copied) must NOT read as an SSO
+    // gate, or it would mask a re-auth / outage as "authorize SSO".
     const header = `required; url=${orgSsoUrl}`
     expect(apiError(401, header).isSsoRequired).toBe(false)
     expect(apiError(500, header).isSsoRequired).toBe(false)
@@ -108,8 +108,8 @@ describe("SAML SSO detection", () => {
   it("rejects github.com spoofs that shift the real host (userinfo / subdomain)", () => {
     // The `hostname === "github.com"` guard is the security-relevant sentinel;
     // these are the classic ways a naive substring/`includes` check would be
-    // fooled. `new URL()` puts `github.com` in the userinfo (host = evil.com)
-    // for the `@` form, and the trailing-domain form has host github.com.evil.com.
+    // fooled. `new URL()` puts `github.com` in the userinfo (host = evil.com) for
+    // the `@` form, and the trailing-domain form has host github.com.evil.com.
     expect(
       parseSsoAuthorizationUrl("required; url=https://github.com@evil.com/sso"),
     ).toBeNull()

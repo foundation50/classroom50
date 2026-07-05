@@ -45,8 +45,8 @@ const createClassroomMetadata = (
   // Written only when a team was provisioned (matches the CLI's `omitempty`).
   // Grants rostered students read on private org templates.
   ...(team ? { team } : {}),
-  // Per-classroom staff teams (instructor/ta) backing in-app roles. Written
-  // only when provisioned.
+  // Per-classroom staff teams (instructor/ta) backing in-app roles. Written only
+  // when provisioned.
   ...(teams && (teams.instructor || teams.ta) ? { teams } : {}),
   // Written only when the teacher opted into protected resources (CLI
   // `omitempty`). When present, Pages resources publish under
@@ -56,8 +56,8 @@ const createClassroomMetadata = (
 
 // Seed header for a new classroom's empty students.csv. Derived from the single
 // source of truth (STUDENT_CSV_FIELDS) so it can't drift; computed lazily (not
-// at module-eval time) to avoid the students.ts <-> mutations.ts circular-import
-// TDZ. The parser is header-based, so an older roster still parses.
+// at module-eval) to dodge the students.ts <-> mutations.ts circular-import TDZ.
+// The parser is header-based, so an older roster still parses.
 const studentsCsvHeader = () => STUDENT_CSV_FIELDS.join(",") + "\n"
 const createClassroomBody = (
   base_tree: string,
@@ -417,10 +417,9 @@ export type ClassroomTeamRef = {
 // classroom.json is config-repo-write authored and parsed without schema
 // validation, so a team ref read from it is untrusted input to a destructive
 // DELETE. A ref is safe to delete only when it (a) names a slug in the
-// `classroom50-` namespace this app owns — so a drifted ref can't steer a
-// delete into an unrelated org team — and (b) carries a positive integer id to
-// confirm against the live team before deleting, so a reused slug isn't
-// clobbered blind.
+// `classroom50-` namespace this app owns — so a drifted ref can't steer a delete
+// into an unrelated org team — and (b) carries a positive integer id, confirmed
+// against the live team before deleting so a reused slug isn't clobbered blind.
 export function isDeletableClassroomTeamRef(
   team: { id?: unknown; slug?: unknown } | undefined | null,
 ): team is ClassroomTeamRef {
@@ -441,7 +440,7 @@ function isCanonicalTeamShortName(shortName: string): boolean {
 // Create (or adopt) a `secret` team by exact name. Idempotent: adopts a
 // same-named team on 422 and reconciles privacy to `secret`. `created: false`
 // means it pre-existed and must NOT be deleted on a create-failure rollback.
-// The shared core both the students team and the staff teams build on.
+// The shared core the students team and staff teams build on.
 async function ensureSecretTeamByName(
   client: GitHubClient,
   org: string,
@@ -563,10 +562,9 @@ export async function ensureStaffTeams(
 }
 
 // Thrown by deleteClassroomTeam when the live team's id no longer matches the
-// id recorded in classroom.json (a slug was reused for a different team). A
-// dedicated type lets callers and telemetry distinguish this deliberate safety
-// refusal — which a re-run will repeat forever — from a transient failure that
-// is worth retrying.
+// id recorded in classroom.json (a slug reused for a different team). A
+// dedicated type lets callers and telemetry tell this deliberate safety refusal
+// — which a re-run repeats forever — from a transient, worth-retrying failure.
 export class TeamIdMismatchError extends Error {
   slug: string
   recordedId: number
@@ -788,7 +786,7 @@ export type OrgMembershipState = "active" | "pending"
 
 // PATCH /repos/{owner}/{repo} { archived: true }. Reversible and covered by the
 // existing `repo` scope (unlike deletion, which needs delete_repo and a
-// re-auth). Used as the safe fallback when deletion isn't permitted. 404 = success.
+// re-auth). The safe fallback when deletion isn't permitted. 404 = success.
 export async function archiveRepo(
   client: GitHubClient,
   input: { owner: string; repo: string },
@@ -848,11 +846,11 @@ export async function getOrgMembershipState(
 
 // Error-safe "is this login an active org member?" — the boolean form of the
 // membership re-check used across the enroll/reconcile paths. A missing username
-// or any read failure resolves to false (never throws), so callers that just
-// need a yes/no gate don't each re-inline the getOrgMembershipState === "active"
-// + try/catch dance. A caller that must surface a tailored error on a
-// non-member (matchStudentToAccount) still calls getOrgMembershipState
-// directly so it can throw its own message.
+// or any read failure resolves to false (never throws), so a yes/no-gate caller
+// needn't re-inline the getOrgMembershipState === "active" + try/catch dance. A
+// caller that must surface a tailored error on a non-member
+// (matchStudentToAccount) calls getOrgMembershipState directly to throw its own
+// message.
 export async function isActiveMember(
   client: GitHubClient,
   org: string,
@@ -867,7 +865,7 @@ type EnsureOrgMembershipResult = {
   state: OrgMembershipState | "invited"
 }
 
-// Precheck membership, only invite when neither active nor pending, and treat a
+// Precheck membership, invite only when neither active nor pending, and treat a
 // 422 (already member/invited) as success via a follow-up read. Optional
 // teamIds attach to a fresh invite so accepting the single org invitation
 // activates team membership atomically (no separate team invite that could
@@ -911,8 +909,8 @@ export async function ensureOrgMembership(
 // pending. When they ARE still pending and we know the stale invitation id,
 // cancel it and recreate so the invite is genuinely re-sent (previously this
 // short-circuited on the pending precheck and re-sent nothing). If the recreate
-// then hits a 422 (a pending invite still blocks it), that existing invite is
-// the live one, so leave it in place.
+// then 422s (a pending invite still blocks it), that existing invite is the
+// live one, so leave it in place.
 export async function resendOrgInvitation(
   client: GitHubClient,
   input: {
@@ -1106,7 +1104,7 @@ async function listTargetRepoBlobs(
   )
 }
 
-// The git blob SHA-1 GitHub reports for a file: sha1("blob <bytelen>\0" + body),
+// The git blob SHA-1 GitHub reports for a file: sha1("blob <bytelen>\0" + body)
 // over the UTF-8 bytes. Lets us compare a bundled skeleton file against the
 // repo's tree entry by SHA, mirroring `git hash-object`. (See the CLI's
 // gitBlobSHA in autograder_crud.go.)
@@ -1120,10 +1118,10 @@ export async function gitBlobSha(content: string): Promise<string> {
   return bytesToHex(new Uint8Array(digest))
 }
 
-// A bundled skeleton file that needs writing, tagged with whether a file
-// already exists at that path in the repo. `exists: false` is a create (always
-// safe); `exists: true` is an overwrite of a drifted file (the GUI confirms
-// these with the teacher first, mirroring the CLI's refresh prompt).
+// A bundled skeleton file that needs writing, tagged with whether a file already
+// exists at that path in the repo. `exists: false` is a create (always safe);
+// `exists: true` is an overwrite of a drifted file (the GUI confirms these with
+// the teacher first, mirroring the CLI's refresh prompt).
 export type StaleSkeletonFile = SkeletonFile & { exists: boolean }
 
 // Bounded retries for the skeleton commit's optimistic-rebase loop: re-diff
@@ -1144,7 +1142,7 @@ function isNonFastForward(err: unknown): boolean {
 // Skeleton files whose repo content is missing OR differs from the bundled
 // version. Mirrors the CLI's diffSkeleton/refreshSkeleton: re-running setup
 // picks up skeleton updates (new workflows, updated runner/scripts) instead of
-// only filling in absent paths. Skeleton files are not teacher-editable, so a
+// only filling in absent paths. Skeleton files aren't teacher-editable, so a
 // drifted file is treated as stale; callers decide whether to overwrite.
 export async function findStaleSkeletonFiles(
   client: GitHubClient,
@@ -1178,10 +1176,10 @@ export async function findStaleSkeletonFiles(
 
 // Commits missing skeleton files and refreshes drifted ones. Overwriting an
 // existing (drifted) file resets it to the bundled version, so callers can gate
-// that with confirmOverwrite: it's invoked with the existing paths about to be
-// overwritten, and resolving false leaves those files untouched while still
-// creating any missing ones. Omitting the hook overwrites without asking (the
-// first-time wizard, where nothing pre-exists).
+// that with confirmOverwrite: invoked with the existing paths about to be
+// overwritten, resolving false leaves those files untouched while still creating
+// any missing ones. Omitting the hook overwrites without asking (the first-time
+// wizard, where nothing pre-exists).
 export async function ensureSkeletonFiles(
   client: GitHubClient,
   org: string,
@@ -1219,8 +1217,8 @@ export async function ensureSkeletonFiles(
   }
 
   // Commit the stale files. The confirm modal can park this for an arbitrarily
-  // long time, so the branch tip may have advanced (another tab/owner, any
-  // push) by the time we write; updateRefForRepo uses force:false and rejects a
+  // long time, so the branch tip may have advanced (another tab/owner, any push)
+  // by the time we write; updateRefForRepo uses force:false and rejects a
   // non-fast-forward rather than clobbering. On such a rejection we re-diff
   // against the new parent and retry, mirroring the CLI's refreshSkeleton
   // (init_skeleton.go): the retry sees the new parent and never re-commits an
@@ -1229,11 +1227,11 @@ export async function ensureSkeletonFiles(
   let changed = toWrite.map((f) => f.path)
 
   for (let attempt = 0; attempt < SKELETON_COMMIT_ATTEMPTS; attempt++) {
-    // Attempt 0 reuses the diff we already computed; only a retry re-diffs,
-    // where a concurrent writer may have advanced the tip during the confirm
-    // pause (the force:false PATCH's 422 below is what catches that race). The
-    // re-diff avoids reverting that writer's changes and never re-commits an
-    // already-current file; an empty re-diff is a clean no-op.
+    // Attempt 0 reuses the diff we already computed; a retry re-diffs, where a
+    // concurrent writer may have advanced the tip during the confirm pause (the
+    // force:false PATCH's 422 below catches that race). The re-diff avoids
+    // reverting that writer's changes and never re-commits an already-current
+    // file; an empty re-diff is a clean no-op.
     const stillStale =
       attempt === 0
         ? toWrite
@@ -1409,8 +1407,8 @@ export async function ensurePages(
 
   // Trust the live read-back, not the write outcome: the writes are idempotent
   // and a re-run on an already-public site can 422 the visibility PUT while the
-  // site is in fact correct. Using checkPages also keeps this in lockstep with
-  // the audit.
+  // site is in fact correct. checkPages also keeps this in lockstep with the
+  // audit.
   const verdict = await checkPages(client, org, repo)
 
   const base = {
@@ -1506,18 +1504,18 @@ export async function ensureWorkflowPermissions(
       message: `${owner}/${repo}: workflow permissions set to write.`,
     }
   } catch {
-    // The PUT failed — typically a 409 because workflow write is org/enterprise-
-    // managed. That's benign (the skeleton workflows declare their own
-    // permissions), so re-read and report the effective state instead of
-    // failing setup.
+    // The PUT failed — typically a 409 because workflow write is
+    // org/enterprise-managed. That's benign (the skeleton workflows declare
+    // their own permissions), so re-read and report the effective state instead
+    // of failing setup.
     return reportOrgWorkflowPermissions(client, owner, repo)
   }
 }
 
-// Report the effective (org-managed) workflow-permission state when the repo
-// PUT didn't apply. A read default is acceptable because the skeleton workflows
-// declare workflow-level write where needed, so both "write" and "read" are
-// reported complete; only an unreadable state warrants a warning.
+// Report the effective (org-managed) workflow-permission state when the repo PUT
+// didn't apply. A read default is acceptable because the skeleton workflows
+// declare workflow-level write where needed, so both "write" and "read" report
+// complete; only an unreadable state warrants a warning.
 async function reportOrgWorkflowPermissions(
   client: GitHubClient,
   owner: string,
@@ -1545,7 +1543,8 @@ async function reportOrgWorkflowPermissions(
     }
   } catch {
     // Couldn't confirm the effective state — surface a warning to check rather
-    // than a clean complete. Setup still proceeds (skeleton workflows self-declare).
+    // than a clean complete. Setup still proceeds (skeleton workflows
+    // self-declare).
     return {
       status: "warning",
       repo: `${owner}/${repo}`,
@@ -1784,18 +1783,17 @@ export async function encryptSecret(publicKey: string, secret: string) {
  * reading the classroom50 repo *as the supplied token* and asserting it can
  * WRITE (permissions.push), mapping failures to actionable messages.
  *
- * The shared token now needs Contents: Read and write AND Actions: Read and
- * write on the student repos: collect-scores reads, but regrade (re-running a
- * student repo's autograde run, or pushing a submit/* tag) WRITES. We can't
- * introspect a fine-grained PAT's Actions scope via the API, so we assert the
- * Contents write capability (permissions.push) here — a read-only token is
- * rejected — and the UI instructs the teacher to also grant Actions: Read and
- * write. Mirrors the CLI's servicetoken.validateTokenWithClient.
+ * The shared token needs Contents: Read and write AND Actions: Read and write on
+ * student repos: collect-scores reads, but regrade (re-running an autograde run,
+ * or pushing a submit/* tag) WRITES. We can't introspect a fine-grained PAT's
+ * Actions scope via the API, so we assert the Contents write capability
+ * (permissions.push) here — a read-only token is rejected — and the UI instructs
+ * the teacher to also grant Actions: Read and write. Mirrors the CLI's
+ * servicetoken.validateTokenWithClient.
  *
- * Caveat: GET /repos/{org}/classroom50 proves the token's access to the config
- * repo, not the student repos the workflows touch (fine-grained PATs don't
- * expose their repo selection via the API). Hence the UI requires "All
- * repositories".
+ * Caveat: GET /repos/{org}/classroom50 proves access to the config repo, not the
+ * student repos the workflows touch (fine-grained PATs don't expose their repo
+ * selection via the API). Hence the UI requires "All repositories".
  */
 export async function validateServiceToken(
   token: string,
@@ -1848,8 +1846,8 @@ export async function validateServiceToken(
         )
       }
     }
-    // A fetch that never reached GitHub (network/CORS) throws a TypeError, not
-    // a GitHubAPIError — don't blame the token for that.
+    // A fetch that never reached GitHub (network/CORS) throws a TypeError, not a
+    // GitHubAPIError — don't blame the token for that.
     if (err instanceof TypeError) {
       throw new Error(
         `Couldn't reach GitHub to verify the token (network or CORS issue). Check your connection and try again. (${err.message})`,
@@ -1864,9 +1862,9 @@ export async function validateServiceToken(
     )
   }
 
-  // The token can read the repo, but regrade needs to write (re-run runs /
-  // push submit/* tags). A read-only PAT reports permissions.push === false;
-  // reject it with the same actionable scope hint.
+  // The token can read the repo, but regrade needs to write (re-run runs / push
+  // submit/* tags). A read-only PAT reports permissions.push === false; reject
+  // it with the same actionable scope hint.
   if (!repo.permissions?.push) {
     throw new Error(
       `This token can read ${org}/classroom50 but lacks write access — collecting scores needs read, but regrading needs write. ${scopeHint}`,
@@ -1874,18 +1872,18 @@ export async function validateServiceToken(
   }
 
   // Contents/Actions are proven, but collection is team-driven: it lists the
-  // classroom team's members, which needs the org-level Members: Read
-  // permission — NOT implied by any repository scope, so a Contents/Actions-only
-  // token passes every check above yet 403s on the first API call collect-scores
-  // makes. Probe GET /orgs/{org}/members (same Members: Read permission the
+  // classroom team's members, which needs the org-level Members: Read permission
+  // — NOT implied by any repository scope, so a Contents/Actions-only token
+  // passes every check above yet 403s on the first collect-scores API call.
+  // Probe GET /orgs/{org}/members (same Members: Read permission the
   // team-members endpoint needs, but not dependent on a specific team existing).
   //
-  // FAIL-OPEN on ambiguity: a 403/404 is a definitive scope gap and is
-  // rejected; any other failure (401 after a 200 repo read, 5xx, rate-limit,
-  // network/CORS) is inconclusive and allowed to proceed — the repo read above
-  // already proved the token live, so blocking on this second round-trip's
-  // flakiness would reject a valid token. The probe-token.yaml workflow is the
-  // exhaustive post-provision signal.
+  // FAIL-OPEN on ambiguity: a 403/404 is a definitive scope gap and is rejected;
+  // any other failure (401 after a 200 repo read, 5xx, rate-limit, network/CORS)
+  // is inconclusive and allowed to proceed — the repo read above already proved
+  // the token live, so blocking on this second round-trip's flakiness would
+  // reject a valid token. The probe-token.yaml workflow is the exhaustive
+  // post-provision signal.
   try {
     await tokenClient.request(
       `/orgs/${encodeURIComponent(org)}/members?per_page=1`,
@@ -1900,17 +1898,17 @@ export async function validateServiceToken(
         { cause: err },
       )
     }
-    // Inconclusive (401/5xx/network) — proceed; the repo read already
-    // proved the token valid.
+    // Inconclusive (401/5xx/network) — proceed; the repo read already proved the
+    // token valid.
   }
 }
 
 export const COLLECT_SCORES_WORKFLOW = "collect-scores.yaml"
 
-// The regrade fan-out workflow in <org>/classroom50.
-// Dispatched per assignment (optionally per repo owner); it re-runs each
-// student repo's autograde workflow. Grading then happens asynchronously inside
-// the student repos, so a follow-up collect-scores run refreshes the gradebook.
+// The regrade fan-out workflow in <org>/classroom50. Dispatched per assignment
+// (optionally per repo owner); it re-runs each student repo's autograde
+// workflow. Grading then happens asynchronously inside the student repos, so a
+// follow-up collect-scores run refreshes the gradebook.
 export const REGRADE_WORKFLOW = "regrade.yaml"
 
 /**
@@ -2235,10 +2233,10 @@ type OrgWorkflowPermissions = {
   can_approve_pull_request_reviews: boolean
 }
 
-// The opt-in Feedback PR, opened by each student repo's autograde
-// workflow, is rejected unless the org-level "Allow GitHub Actions to create
-// and approve pull requests" toggle is on (defaults off, settable only at the
-// org level). Preserves default_workflow_permissions.
+// The opt-in Feedback PR, opened by each student repo's autograde workflow, is
+// rejected unless the org-level "Allow GitHub Actions to create and approve pull
+// requests" toggle is on (defaults off, settable only at the org level).
+// Preserves default_workflow_permissions.
 export async function ensureOrgCanCreatePullRequests(
   client: GitHubClient,
   org: string,
@@ -2349,7 +2347,7 @@ export async function initClassroom50({
   // Invoked before drifted skeleton files are overwritten, with the paths at
   // risk. Resolving false skips the overwrite (missing files are still created)
   // — the GUI's "are you sure" prompt. Omitted on the first-time wizard, where
-  // the repo is fresh and nothing pre-exists to overwrite.
+  // the repo is fresh and nothing pre-exists.
   confirmSkeletonOverwrite?: (paths: string[]) => Promise<boolean>
 }) {
   const results: Partial<Record<InitStepId, unknown>> = {}
@@ -2394,8 +2392,8 @@ export async function initClassroom50({
   })
 
   // configRepo is a hard prerequisite for every step below. If it errored,
-  // continuing only cascades 404s and would report success on a half-
-  // initialized org. Stop here.
+  // continuing only cascades 404s and would report success on a
+  // half-initialized org. Stop here.
   if (stepFailed(results.configRepo)) {
     return buildResult("error")
   }
@@ -2622,9 +2620,9 @@ export async function editClassroom(
   // Archived classrooms are read-only — refuse a settings edit (name / term),
   // but let a lifecycle toggle through since unarchiving re-enables editing.
   // Gate on whether a settings field is actually present rather than on
-  // `active === undefined`, so a payload that bundles a settings change with
-  // `active: false` (a stale tab, a direct API call, or a CLI/agent) cannot slip
-  // an edit past the guard by re-asserting the archived state.
+  // `active === undefined`, so a payload bundling a settings change with
+  // `active: false` (a stale tab, direct API call, or CLI/agent) can't slip an
+  // edit past the guard by re-asserting the archived state.
   const editsSettings = name !== undefined || term !== undefined
   if (editsSettings && active !== true && isClassroomArchived(current)) {
     throw new Error(

@@ -3,9 +3,9 @@ import { getPendingOrgInvite } from "@/hooks/github/mutations"
 import type { GitHubOrgMembership } from "@/hooks/github/types"
 
 // Accept a pending org invitation for the authenticated user. Returns whether
-// the PATCH succeeded so callers can distinguish "now active" from a transient
-// failure (a swallowed failure previously stranded the accept/verify round-trip
-// on a redirect that never fired). Still best-effort: never throws.
+// the PATCH succeeded so callers can tell "now active" from a transient failure
+// (a swallowed failure previously stranded the accept/verify round-trip on a
+// redirect that never fired). Still best-effort: never throws.
 export async function acceptPendingOrgInvite(
   client: GitHubClient,
   org: string,
@@ -18,10 +18,10 @@ export async function acceptPendingOrgInvite(
   }
 }
 
-// PATCH /user/memberships/orgs/{org} -> {state:"active"}. The throwing variant:
+// PATCH /user/memberships/orgs/{org} -> {state:"active"}. Throwing variant:
 // surfaces the raw GitHubAPIError (status, url, body, X-GitHub-SSO) so callers
-// can distinguish an SSO-gated 403 from a genuine failure. Used by the shared
-// verified-accept path below; acceptPendingOrgInvite wraps it best-effort.
+// can tell an SSO-gated 403 from a genuine failure. Used by the verified-accept
+// path below; acceptPendingOrgInvite wraps it best-effort.
 export async function acceptPendingOrgInviteOrThrow(
   client: GitHubClient,
   org: string,
@@ -34,11 +34,11 @@ export async function acceptPendingOrgInviteOrThrow(
   })
 }
 
-// The single verified-accept path consumed by every call site (OnboardingPage,
+// The single verified-accept path used by every call site (OnboardingPage,
 // AcceptAssignmentPage, the accept mutation): accept the pending org invite,
 // re-read GET /user/memberships/orgs/{org}, and assert state === "active".
 // Throws the raw GitHubAPIError on any read/PATCH failure (a 403 + X-GitHub-SSO
-// SSO gate, a 404 not-a-member, or a transient blip) so the caller can render a
+// gate, a 404 not-a-member, or a transient blip) so the caller can render a
 // cause-specific screen from the shared MembershipError component. Returns the
 // active membership on success.
 export async function acceptAndVerifyOrgMembership(
@@ -46,7 +46,7 @@ export async function acceptAndVerifyOrgMembership(
   org: string,
 ): Promise<GitHubOrgMembership> {
   // Accepting a pending invite is idempotent-ish: an already-active member's
-  // PATCH still succeeds, so we don't pre-read state here — one PATCH then one
+  // PATCH still succeeds, so we don't pre-read state — one PATCH then one
   // authoritative read keeps the composition thin.
   await acceptPendingOrgInviteOrThrow(client, org)
   const membership = await getPendingOrgInvite(client, org)

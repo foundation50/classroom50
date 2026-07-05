@@ -1,8 +1,8 @@
 // Read-only org/repo policy checks — the non-mutating half of the
-// check*/repair* split. The audit (useGetOrgAudit) and the
-// centralized Org Settings page consume these to render drift verdicts
-// without writing. Each check tolerates 404/403 with a verdict rather than
-// throwing, so a single unreadable concern never breaks the whole audit.
+// check*/repair* split. The audit (useGetOrgAudit) and the centralized Org
+// Settings page consume these to render drift verdicts without writing. Each
+// check tolerates 404/403 with a verdict rather than throwing, so a single
+// unreadable concern never breaks the whole audit.
 
 import type { GitHubClient } from "./client"
 import { GitHubAPIError } from "./errors"
@@ -293,9 +293,9 @@ function rateLimitedResult(org: string): OrgDefaultsRepairResult {
 }
 
 // repairOrgDefaults applies the full plan-filtered member-default lockdown,
-// mirroring the CLI's applyOrgMemberDefaults: one combined PATCH /orgs/{org};
-// on a 403/422 (not a rate limit) drop to a per-field fallback; on a
-// secondary-rate-limit abort as transient (do not amplify the throttle); then
+// mirroring the CLI's applyOrgMemberDefaults: one combined PATCH /orgs/{org}; on
+// a 403/422 (not a rate limit) drop to a per-field fallback; on a
+// secondary-rate-limit abort as transient (don't amplify the throttle); then
 // always read the org back and classify.
 export async function repairOrgDefaults(
   client: GitHubClient,
@@ -361,9 +361,9 @@ export async function repairOrgDefaults(
 }
 
 // The four repo-creation booleans are entangled at the API layer through the
-// deprecated members_allowed_repository_creation_type field: sending any of
-// them alone makes GitHub recompute that legacy field from the partial input
-// and silently reset the omitted ones. They must always be PATCHed together.
+// deprecated members_allowed_repository_creation_type field: sending any alone
+// makes GitHub recompute that legacy field from the partial input and silently
+// reset the omitted ones. They must always be PATCHed together.
 // (https://github.com/integrations/terraform-provider-github/issues/3429)
 const REPO_CREATION_FIELDS = new Set([
   "members_can_create_repositories",

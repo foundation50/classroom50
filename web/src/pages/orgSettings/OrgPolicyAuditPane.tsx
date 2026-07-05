@@ -28,12 +28,11 @@ import type { CheckState } from "@/hooks/github/orgChecks"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv } from "@/lib/motionComponents"
 
-// Org policy audit pane: surfaces every org/repo policy concern with its live
-// drift verdict, the unenforced member-default fields (each with its manual
-// fix), and the four API-less manual steps. Each drifted, API-repairable
-// concern gets an owner-gated per-concern "Fix it" button; Re-run Setup below
-// is the "repair everything" alternative. Mirrors the service-token pane's
-// banner shape.
+// Org policy audit pane: surfaces every policy concern with its live drift
+// verdict, the unenforced member-default fields (each with a manual fix), and
+// the API-less manual steps. Each drifted, API-repairable concern gets an
+// owner-gated "Fix it"; Re-run Setup is the "repair everything" alternative.
+// Mirrors the service-token pane's banner shape.
 
 const VERDICT_BANNER: Record<
   AuditVerdict,
@@ -91,7 +90,7 @@ function ConcernRow({
   const { t } = useTranslation()
   const isDrifted = concern.verdict.state === "unenforced"
   // Hide "Fix it" when every drifted member-default is enterprise-pinned — the
-  // API write can't change them, so the button would silently do nothing.
+  // API write can't change them, so the button would do nothing.
   const allPinned =
     driftedDetails !== undefined &&
     driftedDetails.length > 0 &&
@@ -367,9 +366,9 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
   const isOwner = membership?.role === "admin"
 
   // Member-default fields a Fix it / re-run wrote but that didn't stick on
-  // read-back — silently overridden by an enterprise policy (GitHub returns
-  // 200 but ignores the change). Surfaced as "Managed by enterprise" so we
-  // stop offering a Fix it that can't work.
+  // read-back — silently overridden by an enterprise policy (GitHub returns 200
+  // but ignores the change). Surfaced as "Managed by enterprise" so we stop
+  // offering a Fix it that can't work.
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
     new Set(),
   )

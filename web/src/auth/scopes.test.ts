@@ -62,10 +62,10 @@ describe("missingScopes", () => {
   })
 
   // Drift guard: a captured X-OAuth-Scopes header for a token authorized with
-  // DEFAULT_GITHUB_SCOPE. GitHub returns the granted scopes comma-delimited and
-  // may add implied entries. If GitHub's expansion drifts from SCOPE_IMPLICATIONS
-  // such that a required scope no longer resolves, this diff goes non-empty and
-  // the test fails — catching a source of spurious production banners.
+  // DEFAULT_GITHUB_SCOPE (comma-delimited, possibly with implied entries). If
+  // GitHub's expansion drifts from SCOPE_IMPLICATIONS such that a required scope
+  // no longer resolves, this diff goes non-empty and the test fails — catching a
+  // source of spurious production banners.
   it("diffs a captured DEFAULT_GITHUB_SCOPE header to zero missing", () => {
     const capturedHeader =
       "read:org, read:user, repo, workflow, admin:org, write:org, delete_repo"

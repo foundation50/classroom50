@@ -8,9 +8,9 @@ import type {
 import { DEFAULT_FILTERS } from "@/pages/submissions/dashboard"
 
 // Search + sort + filter controls for the assignment overview dashboard.
-// Controlled by SubmissionsPage; emits filter/sort/query changes.
-// The not-submitted filter is hidden for group assignments (no roster
-// denominator); passing/accepted selects appear only when available.
+// Controlled by SubmissionsPage; emits filter/sort/query changes. The
+// not-submitted filter is hidden for group assignments; passing/accepted selects
+// appear only when available.
 const SubmissionsControls = ({
   query,
   onQueryChange,

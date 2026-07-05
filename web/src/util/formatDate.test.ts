@@ -37,8 +37,8 @@ describe("formatDueDateTime", () => {
 
   it("includes a time component for a full timestamp", () => {
     const out = formatDueDateTime("2026-06-23T23:59:00Z")
-    // Wall-clock time + timezone abbreviation are locale/TZ-dependent, so just
-    // assert a time-like "HH:MM" pattern is present rather than an exact string.
+    // Wall-clock time + TZ abbreviation are locale/TZ-dependent, so assert a
+    // time-like "HH:MM" pattern rather than an exact string.
     expect(out).toMatch(/\d{1,2}:\d{2}/)
   })
 
@@ -56,8 +56,8 @@ describe("isPastDue", () => {
   })
 
   it("treats a bare date as past due only after local end-of-day", () => {
-    // Same calendar day as the deadline: must NOT be past due (the bug this
-    // guards against flagged it past due at local midnight, ~24h early).
+    // Same calendar day as the deadline: must NOT be past due (the guarded bug
+    // flagged it past due at local midnight, ~24h early).
     vi.setSystemTime(new Date(2026, 5, 23, 9, 0, 0)) // local 2026-06-23 09:00
     expect(isPastDue("2026-06-23")).toBe(false)
 

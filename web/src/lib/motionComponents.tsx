@@ -2,14 +2,13 @@ import { motion } from "motion/react"
 import type { ComponentPropsWithoutRef } from "react"
 import { calloutVariants, enterExit, rowHover } from "./motion"
 
-// Reusable Motion wrappers that replace the per-element CSS animation utilities
-// (animate-enter, animate-callout, clickable-row). Centralizing them keeps
-// every call site terse and every animation consistent. All honor reduced
-// motion via the app-level MotionConfig, so no per-component guard is needed.
+// Reusable Motion wrappers replacing the per-element CSS animation utilities
+// (animate-enter, animate-callout, clickable-row), keeping call sites terse and
+// animations consistent. All honor reduced motion via the app-level MotionConfig.
 //
-// Note: the global `.btn` press feedback and `skeleton-shimmer` intentionally
-// stay as CSS utilities in index.css — they apply broadly (every button, every
-// skeleton) where a single CSS rule is simpler than a per-site Motion wrapper.
+// The global `.btn` press feedback and `skeleton-shimmer` intentionally stay as
+// CSS utilities in index.css — they apply broadly (every button, every skeleton)
+// where a single CSS rule beats a per-site Motion wrapper.
 
 type DivProps = ComponentPropsWithoutRef<typeof motion.div>
 

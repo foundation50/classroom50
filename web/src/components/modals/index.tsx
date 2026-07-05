@@ -34,18 +34,17 @@ export function ConfirmModal({
   const resolvedConfirmLabel =
     confirmLabel ?? t("components.confirmModal.confirm")
   const resolvedCancelLabel = cancelLabel ?? t("common.cancel")
-  // Honor a caller's cancelLabel here too (not just the type-to-confirm step),
-  // since the description copy may refer to it; default to "No".
+  // Honor a caller's cancelLabel here too (the description copy may refer to it);
+  // default to "No".
   const acknowledgeCancelLabel = cancelLabel ?? t("components.confirmModal.no")
   const [hasAcknowledged, setHasAcknowledged] = useState(false)
   const [typedText, setTypedText] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   // Synchronous re-entrancy latch. `isSubmitting` (React state) updates a tick
-  // late and the button's disabled attribute lags one render, so two clicks in
-  // the same tick would both pass an `isSubmitting` check and both run
-  // onConfirm(). This ref flips synchronously, so a second same-tick submit is
-  // rejected before it can start a duplicate write.
+  // late and the button's disabled attr lags a render, so two same-tick clicks
+  // could both pass the check and both run onConfirm(). This ref flips
+  // synchronously, rejecting the second before it starts a duplicate write.
   const submittingRef = useRef(false)
 
   const matches = typedText === confirmText
@@ -66,9 +65,9 @@ export function ConfirmModal({
     }
   }, [open])
 
-  // The acknowledge → confirm step swaps content inside the same open dialog, so
-  // the input's `autoFocus` won't re-fire. Move focus to it explicitly so a
-  // keyboard/SR user lands on the field they now have to fill in.
+  // The acknowledge → confirm step swaps content in the same open dialog, so the
+  // input's `autoFocus` won't re-fire. Focus it explicitly so a keyboard/SR user
+  // lands on the field they now have to fill in.
   useEffect(() => {
     if (hasAcknowledged) confirmInputRef.current?.focus()
   }, [hasAcknowledged])

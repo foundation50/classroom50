@@ -64,9 +64,7 @@ export const LanguageSwitcher = ({
   const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
     null,
   )
-  // Synchronous re-entry lock shared by all prepare entry points (file, URL,
-  // built-in): `busy` is async React state, so a fast second click can fire
-  // before it re-renders. A ref flips immediately. Owned by runPrepare.
+  // Synchronous re-entry lock owned by runPrepare (see there for why).
   const preparingRef = useRef(false)
 
   const showError = (err: unknown) => {
@@ -82,16 +80,16 @@ export const LanguageSwitcher = ({
 
   const runPrepare = async (
     prepare: () => Promise<PackPreview>,
-    // The accordion section this prepare belongs to. On preview/error we keep it
-    // open so the resulting preview/error card stays visually tied to its origin
-    // (the cards render below all sections; a detached preview is confusing).
+    // Accordion section this prepare belongs to; kept open on preview/error so
+    // the resulting card stays tied to its origin (cards render below all
+    // sections, and a detached preview is confusing).
     section: "add" | "install",
   ) => {
     // Synchronous re-entry lock shared by all prepare entry points (file, URL,
     // built-in). `busy` is async React state, so a fast second click or an
-    // overlapping URL/file prepare would otherwise race two fetches over the
-    // shared preview and let the last fetch to resolve win — installing a pack
-    // that isn't the one the user last chose. The ref flips immediately.
+    // overlapping prepare would race two fetches over the shared preview and let
+    // the last to resolve win — installing a pack the user didn't last choose.
+    // The ref flips immediately.
     if (preparingRef.current) return
     preparingRef.current = true
     setError(null)
@@ -131,7 +129,7 @@ export const LanguageSwitcher = ({
   }
 
   // Lazily load the registry when Browse first opens; every language the
-  // manifest lists is offered (the publish workflow only lists deployed packs).
+  // manifest lists is offered (publish only lists deployed packs).
   const loadRegistry = async () => {
     if (registry || registryBusy) return
     setRegistryBusy(true)
@@ -149,9 +147,9 @@ export const LanguageSwitcher = ({
     }
   }
 
-  // Controlled accordion: driving the native <details> via its own toggle event
-  // fights React's `open` prop (a closed section needs two clicks to open), so
-  // we intercept the summary click and set the open section ourselves.
+  // Controlled accordion: driving native <details> via its toggle event fights
+  // React's `open` prop (closed sections need two clicks), so we intercept the
+  // summary click and set the open section ourselves.
   const toggleSection = (
     event: React.MouseEvent,
     section: AccordionSectionId,
@@ -163,9 +161,7 @@ export const LanguageSwitcher = ({
   }
 
   const handleBuiltIn = async (builtInCode: string) => {
-    // The re-entry lock now lives in runPrepare (shared across all entry
-    // points), so a second concurrent click is a no-op there. Set preparingCode
-    // for the per-row spinner; runPrepare's guard prevents the racing install.
+    // runPrepare owns the re-entry lock; set preparingCode for the per-row spinner.
     if (preparingRef.current) return
     setPreparingCode(builtInCode)
     try {
@@ -212,10 +208,9 @@ export const LanguageSwitcher = ({
     reset: resetShareCopied,
   } = useCopyToClipboard(shareUrl ?? "")
 
-  // One storage read for all installed packs (vs. one per pack), memoized so
-  // unrelated re-renders (typing, accordion toggles, copy timer) don't re-parse
-  // the whole localStorage pack store. installedLangs is a stable-identity
-  // useSyncExternalStore snapshot, so it's a reliable memo key.
+  // One storage read for all installed packs, memoized so unrelated re-renders
+  // (typing, accordion toggles, copy timer) don't re-parse the pack store.
+  // installedLangs is a stable useSyncExternalStore snapshot — a reliable key.
   const coverages = useMemo(
     () => (installedLangs.length > 0 ? packCoverages() : {}),
     [installedLangs, packCoverages],
@@ -544,8 +539,8 @@ export const LanguageSwitcher = ({
 
 export default LanguageSwitcher
 
-// Shared shell for the collapsible sections: a controlled native <details> with
-// a rotating chevron. `open` stays an explicit prop so a section can widen its
+// Shared shell for collapsible sections: a controlled native <details> with a
+// rotating chevron. `open` stays an explicit prop so a section can widen its
 // open condition (e.g. install also opens when a code is needed).
 const AccordionSection = ({
   section,

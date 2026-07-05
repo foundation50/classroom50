@@ -9,8 +9,8 @@ import { getName, getInitials } from "@/util/students"
 type ProfileRow = { label: string; value: React.ReactNode }
 
 // Read-only student profile. Opened from a gradebook/roster avatar to surface
-// the details we hide from the dense row (GitHub handle, email, section,
-// enrollment) plus a link to the student's assignment repo when known.
+// details hidden in the dense row (GitHub handle, email, section) plus a link to
+// the student's assignment repo when known.
 export const StudentProfileModal = ({
   onClose,
   student,
@@ -28,9 +28,8 @@ export const StudentProfileModal = ({
   const titleId = useId()
   const { t } = useTranslation()
 
-  // Mounted only while a profile is selected (caller gates on `profileStudent`
-  // + remounts via `key`), so open once on mount; ESC/backdrop/X fire onClose,
-  // which the caller uses to clear the selection.
+  // Mounted only while a profile is selected (caller gates + remounts via
+  // `key`), so open once; ESC/backdrop/X fire onClose to clear the selection.
   useEffect(() => {
     dialogRef.current?.showModal()
   }, [])

@@ -9,9 +9,9 @@ import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
 
 const RootComponent = () => {
-  // Scope the "view as" preview to the current org (reset across orgs via
-  // the key); the provider re-syncs on classroom change so it's classroom-scoped.
-  // Reading params at the root keeps the provider inside the router.
+  // Scope "view as" to the current org (reset across orgs via the key); the
+  // provider re-syncs on classroom change. Reading params at the root keeps the
+  // provider inside the router.
   const { org, classroom } = useParams({ strict: false })
   return (
     <RoleViewProvider key={org ?? "no-org"} org={org} classroom={classroom}>
@@ -20,9 +20,8 @@ const RootComponent = () => {
   )
 }
 
-// App-wide safety net: any uncaught render error in a route subtree (e.g. a
-// malformed external payload reaching a component) degrades to this screen
-// instead of a blank white page.
+// App-wide safety net: any uncaught render error in a route subtree degrades to
+// this screen instead of a blank white page.
 const RootErrorComponent = ({ error }: { error: Error }) => {
   const { t } = useTranslation()
   return (

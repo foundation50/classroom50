@@ -10,8 +10,8 @@ import {
 import type { GitHubClient } from "@/hooks/github/client"
 
 // repairConcern dispatches each audit concern to the mutation that restores its
-// setting. The fake client records the write paths/methods so each case can
-// assert it hit the right GitHub endpoint.
+// setting. The fake client records write paths/methods so each case can assert
+// it hit the right GitHub endpoint.
 
 type Recorded = { method: string; path: string }
 

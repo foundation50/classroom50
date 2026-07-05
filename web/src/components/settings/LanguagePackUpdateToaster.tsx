@@ -5,8 +5,8 @@ import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { languageLabel, subscribeToPackUpdates } from "@/i18n/customLocale"
 
 // Bridges the non-React startup auto-refresh (refreshInstalledPacks) to a toast:
-// codes updated before mount are buffered and flushed to this subscriber; later
-// refreshes notify live. Renders nothing. Mount under NotificationProvider.
+// codes updated before mount are buffered and flushed here; later refreshes
+// notify live. Renders nothing. Mount under NotificationProvider.
 export function LanguagePackUpdateToaster() {
   const { t, i18n } = useTranslation()
   const toast = useOptionalToast()

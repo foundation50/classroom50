@@ -3,32 +3,29 @@ import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import { rosterClaimSet } from "@/util/identity"
 
 // Team-driven roster: the classroom GitHub team is the source of truth for who
-// belongs, not students.csv. This module computes the teacher-facing roster
-// PURELY from team members + pending org invitations, then enriches each row
-// with optional students.csv metadata (name/section/email). The CSV never
-// decides enrollment — it can be absent or partial and the roster still renders.
+// belongs, not students.csv. The roster is computed PURELY from team members +
+// pending org invitations, then enriched with optional students.csv metadata
+// (name/section/email). The CSV never decides enrollment — it can be absent or
+// partial and the roster still renders.
 //
 // Row states:
-//  - enrolled:     an active classroom-team / org member.
-//  - pending:      a pending org invitation (no active membership yet).
-//  - unprovisioned: on students.csv but NOT a team member and NOT a pending
-//                   invite — e.g. a rostered student who can't yet form
-//                   membership (not yet IdP/SSO-provisioned). Kept VISIBLE as a
-//                   distinct state so a student the teacher trusts never
-//                   silently disappears (decided over hiding-behind-drift).
+//  - enrolled:      an active classroom-team / org member.
+//  - pending:       a pending org invitation (no active membership yet).
+//  - unprovisioned: on students.csv but NOT a member and NOT a pending invite
+//                   (e.g. not yet IdP/SSO-provisioned). Kept VISIBLE as a
+//                   distinct state so a trusted rostered student never silently
+//                   disappears.
 //
-// "drift" in this model is folded into `unprovisioned` (a CSV row with no
-// matching member/invite); the count of unprovisioned rows drives the banner.
+// "drift" is folded into `unprovisioned`; its count drives the banner.
 
 export type TeamRosterRowState = "enrolled" | "pending" | "unprovisioned"
 
 export type TeamRosterRow = {
-  // Stable identity for React keys and joins: github_id (member) || login ||
-  // email (invite/CSV-only). Mirrors studentKey.
+  // Stable identity for React keys and joins: github_id || login || email.
+  // Mirrors studentKey.
   key: string
   state: TeamRosterRowState
-  // GitHub identity when known (member or username-invite). Empty for an
-  // email-only pending invite or an email-only CSV row.
+  // GitHub identity when known. Empty for an email-only invite or CSV row.
   username: string
   github_id: string
   // Display metadata joined from students.csv (blank when absent).
@@ -37,19 +34,16 @@ export type TeamRosterRow = {
   section: string
   email: string
   avatar_url: string
-  // The pending org-invitation id, set only for `pending` rows. Threaded to
-  // resendOrgInvitation so a still-pending invite is actually recreated (a
-  // resend without it short-circuits and re-sends nothing).
+  // Pending org-invitation id, set only for `pending` rows. Threaded to
+  // resendOrgInvitation, which short-circuits without it.
   invitation_id?: number
 }
 
-// A CSV row keyed for the fallback join: github_id first, then lowercased
-// username, then lowercased email. Section 4/5 require the SAME fallback chain
-// (github_id -> username) so an imported/hand-edited/pre-resolution row with an
-// empty github_id isn't misclassified as drift AND doesn't cause the backfill
-// to append a duplicate. Exported so the org-wide members aggregation
-// (aggregateOrgMembers) reconciles team-vs-CSV with the SAME join this
-// per-classroom roster uses, so the two views can't disagree.
+// A CSV row keyed for the fallback join: github_id, then lowercased username,
+// then lowercased email. The same fallback chain (github_id -> username) keeps
+// a pre-resolution row with an empty github_id from being misclassified as
+// drift or causing a duplicate backfill. Exported so aggregateOrgMembers
+// reconciles team-vs-CSV with the SAME join, so the two views can't disagree.
 export type CsvIndex = {
   byGithubId: Map<string, Student>
   byLogin: Map<string, Student>
@@ -92,29 +86,27 @@ const metadataFrom = (student: Student | undefined) => ({
 export type BuildTeamRosterInput = {
   // Active classroom-team / org members (the enrolled source of truth).
   members: GitHubUser[]
-  // Pending org invitations. May be empty/omitted for a non-owner who can't
-  // read them (owner-only endpoint) — the roster still renders enrolled rows.
+  // Pending org invitations. May be empty for a non-owner who can't read them
+  // (owner-only endpoint) — enrolled rows still render.
   invitations?: GitHubOrgInvitation[]
   // Optional students.csv rows (display metadata only).
   students: Student[]
 }
 
-// Compute the team-driven roster. Members -> enrolled; pending invitations that
-// don't correspond to an already-counted member -> pending; students.csv rows
-// with no matching member or invite -> unprovisioned. Never returns duplicates
-// for the same person (a member on the CSV appears once; a username-invite that
-// is also a member is credited as the member).
+// Compute the team-driven roster. Members -> enrolled; pending invitations not
+// already a member -> pending; CSV rows with no member/invite -> unprovisioned.
+// Never duplicates a person (a member on the CSV appears once; a username-invite
+// that is also a member is credited as the member).
 export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   const { members, invitations = [], students } = input
   const csv = indexCsv(students)
 
   const rows: TeamRosterRow[] = []
-  // Track which identities we've already emitted so invites/CSV don't double up.
+  // Track emitted identities so invites/CSV don't double up.
   const seenIds = new Set<string>()
   const seenLogins = new Set<string>()
   const seenEmails = new Set<string>()
 
-  // 1. Members -> enrolled.
   for (const member of members) {
     const id = String(member.id)
     const login = member.login.toLowerCase()
@@ -133,14 +125,13 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     })
   }
 
-  // 2. Pending invitations -> pending (unless already an active member).
   for (const invite of invitations) {
     const login = invite.login?.trim() ?? ""
     const loginKey = login.toLowerCase()
     const email = invite.email?.trim() ?? ""
     const emailKey = email.toLowerCase()
-    // A login-carrying invite for an account already counted as a member is
-    // stale — skip it. Email-only invites can't collide with a member here.
+    // A login-carrying invite for an account already a member is stale — skip.
+    // Email-only invites can't collide with a member here.
     if (loginKey && seenLogins.has(loginKey)) continue
 
     // Join CSV metadata by login first, then email.
@@ -161,12 +152,11 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     })
   }
 
-  // 3. students.csv rows with no matching member or invite -> unprovisioned.
   for (const student of students) {
     const id = student.github_id?.trim() ?? ""
     const login = student.username?.trim().toLowerCase() ?? ""
     const email = student.email?.trim().toLowerCase() ?? ""
-    // Already represented as an enrolled member or a pending invite?
+    // Already an enrolled member or a pending invite?
     if (id && seenIds.has(id)) continue
     if (login && seenLogins.has(login)) continue
     if (email && seenEmails.has(email)) continue
@@ -209,10 +199,9 @@ function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
 }
 
 // Project a roster row back to the display-metadata Student shape the grade
-// dashboard consumes. Single-sourced here (the row already carries every
-// Student field) so callers can't drift on the field list — a new Student
-// field surfaces as a type error here rather than a silently dropped column at
-// each inline call site.
+// dashboard consumes. Single-sourced here so callers can't drift on the field
+// list — a new Student field surfaces as a type error rather than a dropped
+// column at each call site.
 export function rowToStudent(row: TeamRosterRow): Student {
   return {
     username: row.username,
@@ -240,13 +229,11 @@ export function countByState(
   )
 }
 
-// Team members with NO students.csv metadata row — the exact set
-// syncRosterFromTeam appends. A member is "missing" when their numeric id,
-// login, AND profile email are all unclaimed by any CSV row (the same
-// id -> login -> email fallback join syncRosterFromTeam uses, so this count and
-// the write can't diverge). Drives the "Sync roster" button's enabled/in-sync
-// state and the auto-sync-on-open trigger. Pure so it's unit-testable and can
-// be evaluated before deciding whether to write.
+// Team members with NO students.csv row — the exact set syncRosterFromTeam
+// appends. "Missing" when their id, login, AND profile email are all unclaimed
+// by any CSV row (the same id -> login -> email join syncRosterFromTeam uses,
+// so this count and the write can't diverge). Drives the "Sync roster" button
+// and auto-sync-on-open. Pure so it's testable before deciding to write.
 export function teamMembersMissingFromCsv(
   members: GitHubUser[],
   students: Student[],

@@ -6,8 +6,8 @@ const useGetPublicAssignment = (
   classroom: string | undefined,
   assignment: string | undefined,
   // Optional capability-URL secret, supplied by the caller (see
-  // usePagesAssignments). Not fetched here — students can't read the
-  // private classroom.json. Empty/undefined uses the plain path.
+  // usePagesAssignments). Not fetched here — students can't read the private
+  // classroom.json. Empty/undefined uses the plain path.
   secret?: string,
 ) => {
   const assignmentQuery = useQuery({

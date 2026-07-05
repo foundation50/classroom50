@@ -2,13 +2,11 @@ import { DEFAULT_GITHUB_SCOPE } from "./constants"
 
 export const REQUIRED_SCOPES = DEFAULT_GITHUB_SCOPE.split(/\s+/).filter(Boolean)
 
-// GitHub normalizes granted scopes and a broader scope implies narrower ones.
-// We encode each grantable scope -> the set of scopes it also satisfies, so a
-// token granted `repo` covers `repo:status`, a token granted `admin:org`
-// covers `read:org`, etc. The map is intentionally small and focused on the
-// scopes in DEFAULT_GITHUB_SCOPE; unknown granted scopes simply satisfy
-// themselves. Keep this biased toward over-satisfying: a missed gap is a softer
-// failure than a spurious banner a re-auth can't clear.
+// GitHub normalizes granted scopes and a broader scope implies narrower ones,
+// so we map each grantable scope -> the scopes it also satisfies (e.g. `repo`
+// covers `repo:status`, `admin:org` covers `read:org`); unknown scopes satisfy
+// only themselves. Biased toward over-satisfying: a missed gap is softer than a
+// spurious banner a re-auth can't clear.
 const SCOPE_IMPLICATIONS: Record<string, readonly string[]> = {
   repo: [
     "repo:status",
@@ -39,8 +37,8 @@ export function expandScopes(granted: string): Set<string> {
 }
 
 // Required scopes not satisfied by the expanded granted set. Empty granted ->
-// every required scope is reported missing; callers decide whether an absent
-// signal should suppress the warning entirely (see useMissingScopes).
+// every required scope reported missing; callers decide whether an absent
+// signal should suppress the warning (see useMissingScopes).
 export function missingScopes(granted: string): string[] {
   const have = expandScopes(granted)
   return REQUIRED_SCOPES.filter((scope) => !have.has(scope))

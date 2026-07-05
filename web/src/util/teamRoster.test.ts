@@ -86,8 +86,8 @@ describe("buildTeamRoster", () => {
   })
 
   it("joins CSV by login when the CSV row has no github_id (no drift, no dup)", () => {
-    // Pre-resolution CSV row: username only, empty github_id. Must be treated as
-    // the SAME person as the member, not counted as drift + member twice.
+    // Pre-resolution CSV row: username only, empty github_id. Must be the SAME
+    // person as the member, not counted as drift + member twice.
     const rows = buildTeamRoster({
       members: [member(55, "linus")],
       students: [csvRow({ username: "Linus", first_name: "Linus" })],
@@ -105,8 +105,7 @@ describe("buildTeamRoster", () => {
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ state: "pending", username: "pendinguser" })
     // The pending row MUST carry the org-invitation id: resendOrgInvitation
-    // short-circuits (re-sends nothing) without it, so dropping it is a silent
-    // no-op, not a crash. Pin it here so a regression fails loudly.
+    // short-circuits without it (a silent no-op). Pin it so a regression fails.
     expect(rows[0].invitation_id).toBe(2)
   })
 
@@ -269,8 +268,8 @@ describe("teamMembersMissingFromCsv", () => {
   })
 
   it("does not count a CSV-only row (unprovisioned) as missing — wrong direction", () => {
-    // grace is on the CSV but not the team; that's the opposite drift and is
-    // NOT what this helper (or Sync) addresses.
+    // grace is on the CSV but not the team — the opposite drift, NOT what this
+    // helper (or Sync) addresses.
     const missing = teamMembersMissingFromCsv(
       [member(101, "ada")],
       [csvRow({ github_id: "101" }), csvRow({ username: "grace" })],

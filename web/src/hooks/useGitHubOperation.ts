@@ -88,8 +88,7 @@ const saveDispatch = (
  * past it — binding to our own run, independent of clocks and concurrent
  * dispatches. State persists to sessionStorage (per `storageKey`) so a remount
  * re-attaches; `phase` latches at completed/failed/timeout until the next
- * dispatch or a `resetKey` change. Callers supply the workflow specifics and
- * layer their own concerns (banner registration, the regrade coordinator).
+ * dispatch or a `resetKey` change. Callers supply the workflow specifics.
  */
 export function useGitHubOperation(config: GitHubOperationConfig) {
   const timeoutMs = config.timeoutMs ?? DEFAULTS.timeoutMs
@@ -104,7 +103,7 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
   const [timedOut, setTimedOut] = useState(false)
 
   // Re-derive tracking when the reset key changes (org / target), during render
-  // — the idiomatic alternative to a setState-in-effect.
+  // — the idiomatic alternative to setState-in-effect.
   const [trackedKey, setTrackedKey] = useState(config.resetKey)
   if (config.resetKey !== trackedKey) {
     setTrackedKey(config.resetKey)
@@ -147,9 +146,9 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
   const run = runQuery.data
   const runCompleted = Boolean(dispatch) && isRunFinished(run)
 
-  // Clear persisted state once the run terminates so a remount doesn't re-attach
-  // to it; `phase` stays latched (dispatch is only reset on a reset-key change
-  // or a new dispatch).
+  // Clear persisted state once the run terminates so a remount doesn't re-attach;
+  // `phase` stays latched (dispatch resets only on a reset-key change or new
+  // dispatch).
   useEffect(() => {
     if (runCompleted) saveDispatch(config.storageKey, null)
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -157,8 +156,7 @@ export function useGitHubOperation(config: GitHubOperationConfig) {
 
   // Time out the wait: flip a flag that stops the query and latches phase to
   // "timeout". Deadline anchored to dispatch time, so a remount doesn't grant a
-  // fresh window (a past deadline fires a 0ms timer rather than setting state
-  // during render).
+  // fresh window (a past deadline fires a 0ms timer, not a render-time setState).
   useEffect(() => {
     if (!dispatch || runCompleted || timedOut) return
     const remaining = Math.max(0, dispatch.startedAt + timeoutMs - Date.now())

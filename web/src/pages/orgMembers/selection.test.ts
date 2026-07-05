@@ -55,8 +55,8 @@ describe("selection helpers", () => {
   })
 
   it("toggleSelectAll selects the filtered set and leaves out-of-filter selections intact", () => {
-    // Selection already holds "z" (hidden by the current filter). Toggling
-    // select-all over [a, b] adds them without disturbing "z".
+    // Selection already holds "z" (hidden by the filter). Select-all over [a, b]
+    // adds them without disturbing "z".
     const next = toggleSelectAll([row("a"), row("b")], new Set(["z"]))
     expect([...next].sort()).toEqual(["a", "b", "z"])
   })
@@ -75,8 +75,8 @@ describe("selection helpers", () => {
   })
 
   it("resolveSelectedRows spans the full set and drops the non-selectable (self) row", () => {
-    // "self" is checked (a stale selection) but must never be resolved into the
-    // actionable set; "hidden" is selected but not in the filtered view — still
+    // "self" is checked (stale selection) but must never resolve into the
+    // actionable set; "hidden" is selected but out of the filtered view — still
     // acted on because resolve spans the full row set.
     const all = [row("a"), row("self"), row("hidden")]
     const resolved = resolveSelectedRows(

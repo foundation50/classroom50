@@ -30,8 +30,8 @@ type UseReuseAssignmentParams = {
 
 // Shared reuse machinery for both modals: the derived slug (auto-suffixed
 // default + optimistic case-insensitive collision check) and the copy mutation
-// with its success/grant-warning handling. Each modal owns its own <dialog> and
-// renders its direction-specific selectors; this hook is ref-free.
+// with its success/grant-warning handling. Ref-free — each modal owns its own
+// <dialog> and direction-specific selectors.
 export function useReuseAssignment({
   org,
   targetClassroom,
@@ -66,8 +66,7 @@ export function useReuseAssignment({
   }, [normalizedSlug, takenSlugs])
 
   // Synchronous re-entrancy guard: reuse.isPending updates a tick late, so a
-  // rapid double-click could start two overlapping copy commits (mirrors
-  // GroupCollaboratorsModal's savingRef).
+  // rapid double-click could start two overlapping copy commits.
   const submittingRef = useRef(false)
 
   const reuse = useMutation({

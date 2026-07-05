@@ -1,9 +1,9 @@
 import GitHub from "@/assets/github.svg?react"
 import { useTranslation } from "react-i18next"
 
-// Shared GitHub-plan badge (org's billing plan). GitHub only returns the plan
-// name to org owners, so callers pass `undefined` for non-owners and nothing
-// renders. The GitHub mark signals this reflects the org's GitHub plan, not a
+// Shared GitHub-plan badge (org's billing plan). GitHub returns the plan name
+// only to org owners, so callers pass `undefined` for non-owners and nothing
+// renders. The GitHub mark signals this is the org's GitHub plan, not a
 // Classroom 50 state.
 const PlanBadge = ({
   name,

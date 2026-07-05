@@ -4,9 +4,8 @@ import { createSafeSubmit } from "./useSafeSubmit"
 
 // useSafeSubmit's correctness is the synchronous latch: a second same-tick call
 // must be a no-op while the first is in flight, and the latch must reset after
-// the work settles (success or failure) so the next genuine submit proceeds.
-// The latch lives in createSafeSubmit (pure, no React) so it tests in this
-// repo's pure-function style.
+// the work settles so the next genuine submit proceeds. The latch lives in
+// createSafeSubmit (pure, no React) so it tests in the pure-function style.
 describe("createSafeSubmit", () => {
   it("rejects a second same-tick call while the first is in flight", async () => {
     const run = createSafeSubmit()

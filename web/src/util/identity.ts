@@ -1,12 +1,11 @@
 import type { GitHubUser } from "@/hooks/github/types"
 
-// Canonical identity helpers for relating GitHub accounts, org members, and
-// roster rows — one home so the id/login/"claimed" logic can't drift across the
-// callers that used to each re-implement it.
+// Canonical identity helpers relating GitHub accounts, org members, and roster
+// rows — one home so id/login/"claimed" logic can't drift across callers.
 
-// Stable, position-independent per-row identity. Prefer github_id (survives a
-// rename), then username, then email. Rows always carry at least one
-// (parseStudentsCsv drops fully-empty rows), so no index fallback is needed.
+// Stable, position-independent per-row identity: github_id (survives rename),
+// then username, then email. Rows always carry one (parseStudentsCsv drops
+// fully-empty rows), so no index fallback is needed.
 export function studentKey(student: {
   github_id?: string
   username?: string
@@ -28,23 +27,22 @@ export function isSameGitHubUser(
   )
 }
 
-// Parse a roster row's github_id into a positive numeric GitHub id, or null
-// when it's absent/non-numeric. GitHub ids are positive integers; the CSV stores
-// them as strings.
+// Parse a roster row's github_id into a positive numeric id, else null. GitHub
+// ids are positive integers; the CSV stores them as strings.
 export function parseGitHubId(githubId: string): number | null {
   const id = Number(githubId)
   return Number.isFinite(id) && id > 0 ? id : null
 }
 
-// String github_ids of the org's live members — the key member-status
-// classification and the "Mark enrolled" gate match a roster row's github_id on.
+// String github_ids of the org's live members — member-status classification
+// and the "Mark enrolled" gate match a roster row's github_id against these.
 export function memberIdSet(members: GitHubUser[]): Set<string> {
   return new Set(members.map((member) => String(member.id)))
 }
 
-// The set of GitHub ids and lowercased logins already claimed by a roster. A
-// member is "claimed" when their numeric id or login appears on any row. Shared
-// so the org-members aggregation and the manual-match picker apply one predicate.
+// GitHub ids and lowercased logins already claimed by a roster; a member is
+// "claimed" when their id or login appears on any row. Shared so org-members
+// aggregation and the manual-match picker apply one predicate.
 export function rosterClaimSet(
   students: { github_id?: string; username?: string }[],
 ): {

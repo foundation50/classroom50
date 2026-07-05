@@ -1,15 +1,14 @@
-// Release identity for the built web app, sourced from compile-time constants
-// injected by Vite (see vite.config.ts). Centralised here so nothing reads the
-// `__APP_*__` globals directly.
+// Release identity for the built web app, from compile-time constants injected
+// by Vite (see vite.config.ts). Centralised so nothing reads the `__APP_*__`
+// globals directly.
 
 export interface AppVersion {
   /** Semver from package.json, or the `web-v*` release tag when built in CI. */
   version: string
   /**
-   * Commit the build was produced from. Length varies by build: the full
-   * 40-char `github.sha` in CI, a 12-char short hash from the local git
-   * fallback. Use `shortCommit()` for display; `commitUrl()` links the raw
-   * value (GitHub resolves any prefix length).
+   * Commit the build came from. Length varies: full 40-char `github.sha` in CI,
+   * 12-char short hash from the local git fallback. Use `shortCommit()` for
+   * display; `commitUrl()` links the raw value (GitHub resolves any prefix).
    */
   commit: string
   /** ISO-8601 UTC build timestamp. */
@@ -36,9 +35,8 @@ export function formatAppVersion(v: AppVersion = appVersion): string {
 }
 
 /**
- * Commit truncated for display. The stored `commit` length varies by build
- * (see AppVersion.commit), so every display site truncates to a single width
- * here rather than duplicating a slice literal.
+ * Commit truncated for display. The stored `commit` length varies by build (see
+ * AppVersion.commit), so every display site truncates to one width here.
  */
 export function shortCommit(v: AppVersion = appVersion): string {
   return v.commit.slice(0, 7)
@@ -50,13 +48,13 @@ export function commitUrl(v: AppVersion = appVersion): string {
 }
 
 /**
- * Link to the GitHub Release for this build's `web-v<version>` tag. Returns
- * null for untagged/dev builds (version still at package.json's placeholder or
- * a non-release value), where no release page exists to link to.
+ * Link to the GitHub Release for this build's `web-v<version>` tag. Returns null
+ * for untagged/dev builds (version at package.json's placeholder or non-release),
+ * where no release page exists.
  */
 export function releaseUrl(v: AppVersion = appVersion): string | null {
   // A real release is a semver like 1.2.3[-rc.1]; the dev placeholder (0.0.0)
-  // and anything non-semver has no published release page.
+  // and non-semver have no published release page.
   if (!/^\d+\.\d+\.\d+(?:[-+].+)?$/.test(v.version) || v.version === "0.0.0") {
     return null
   }

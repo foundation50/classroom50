@@ -61,8 +61,8 @@ function sleep(ms: number, signal: AbortSignal) {
   })
 }
 
-// Holds all auth state. Must only be instantiated once, by GitHubAuthProvider;
-// every other consumer goes through the useGithubAuth() context hook below.
+// Holds all auth state. Instantiate only once, in GitHubAuthProvider; other
+// consumers use the useGithubAuth() context hook below.
 function useGithubAuthState() {
   const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
@@ -79,8 +79,8 @@ function useGithubAuthState() {
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
-  // Set when a live API 401 (revoked/expired token) tears the session down,
-  // so /login can explain why the user was signed out. A deliberate signOut()
+  // Set when a live API 401 (revoked/expired token) tears the session down, so
+  // /login can explain why the user was signed out. A deliberate signOut()
   // clears it.
   const [sessionExpired, setSessionExpired] = useState(false)
 
@@ -90,11 +90,10 @@ function useGithubAuthState() {
     enabled: Boolean(token),
     staleTime: 60 * 60 * 1000,
     // A definitive status (401 revoked, 403 SSO/blocked, 404) resolves
-    // immediately — retrying can't change it and only widens the window before
-    // the session settles. Transient failures (5xx / network) still self-heal
-    // with a bounded retry so a momentary GitHub blip doesn't eject a signed-in
-    // user. Shares the definitive-status policy with the GitHub-client reads
-    // (see retryTransientGitHubError / isDefinitiveGitHubStatus).
+    // immediately — retrying can't change it. Transient failures (5xx/network)
+    // self-heal with a bounded retry so a momentary blip doesn't eject a
+    // signed-in user. Shares the policy with the GitHub-client reads (see
+    // retryTransientGitHubError / isDefinitiveGitHubStatus).
     retry: (failureCount, error) => {
       if (
         error instanceof GitHubUserFetchError &&
@@ -114,10 +113,9 @@ function useGithubAuthState() {
     mutationFn: requestDeviceCode,
   })
 
-  // Shared landing point for both web and device flows. Shows the success
-  // screen; once the profile loads, the /login route guard redirects to "/".
-  // The timeout below settles the screen state in case that doesn't happen
-  // (e.g. the profile fetch fails and the user stays on the card).
+  // Shared landing for both web and device flows. Shows the success screen; once
+  // the profile loads, the /login guard redirects to "/". The timeout below
+  // settles the screen state if that doesn't happen (e.g. profile fetch fails).
   const completeSignIn = useCallback(
     (data: { access_token: string; scope?: string }) => {
       persistGithubToken(data.access_token, data.scope || "")
@@ -141,7 +139,7 @@ function useGithubAuthState() {
   )
 
   // On unmount mid-flow, abort the device poll loop and clear the pending
-  // success-screen timer so neither runs (or setStates) after teardown.
+  // success-screen timer so neither runs after teardown.
   useEffect(
     () => () => {
       abortRef.current?.abort()
@@ -225,8 +223,8 @@ function useGithubAuthState() {
         onSuccess: (data) => {
           completeSignIn(data)
           // Defer the return until status is "authenticated" (effect below);
-          // navigating now would race the router context and bounce through
-          // the _authed guard (#71).
+          // navigating now would race the router context and bounce through the
+          // _authed guard (#71).
           pendingReturnToRef.current = returnTo
         },
         onError: (err) => {
@@ -475,8 +473,8 @@ function useGithubAuthState() {
       setError(null)
       setScreen("config")
       setSessionExpired(expired)
-      // Cancel in-flight ["github"] requests before evicting them so they
-      // don't resolve/reject into removed cache state after teardown.
+      // Cancel in-flight ["github"] requests before evicting them so they don't
+      // resolve into removed cache state after teardown.
       void queryClient.cancelQueries({ queryKey: ["github"] })
       queryClient.removeQueries({ queryKey: ["github"] })
     },
@@ -486,19 +484,16 @@ function useGithubAuthState() {
   const signOut = useCallback(() => clearSession(false), [clearSession])
 
   // Called when a revoked/expired token is detected on a live API 401. Clears
-  // the token so `status` flips to unauthenticated and the _authed guard
-  // redirects to /login. Guards on the in-memory token (the authoritative
-  // source) rather than localStorage, so a live 401 still tears the session
-  // down even if storage was cleared out-of-band. No-ops once the token is
-  // already gone, keeping it safe to call repeatedly.
+  // the token so `status` flips to unauthenticated and the guard redirects to
+  // /login. Guards on the in-memory token (authoritative) so a live 401 tears
+  // down even if storage was cleared out-of-band. No-ops once the token is gone.
   const expireSession = useCallback(() => {
     if (!token) return
     clearSession(true)
   }, [clearSession, token])
 
   // Cold-reload path: a stored-but-revoked token fails /user validation with a
-  // 401. Tear the session down so the token doesn't linger across reloads and
-  // the guard redirects to /login.
+  // 401. Tear down so the token doesn't linger and the guard redirects to /login.
   useEffect(() => {
     const error = githubUserQuery.error
     if (error instanceof GitHubUserFetchError && error.status === 401) {
@@ -559,8 +554,7 @@ function useGithubAuthState() {
   // Navigate to the stashed deep link once status is "authenticated", so the
   // target _authed guard sees an authenticated context instead of bouncing
   // through /login (#71). history.push (not navigate({ to })) preserves the
-  // query — e.g. the ?k= accept key — which navigate({ to }) would fold into
-  // the pathname. A bad path degrades to the homepage.
+  // query — e.g. the ?k= accept key. A bad path degrades to the homepage.
   useEffect(() => {
     if (status !== "authenticated") return
     const returnTo = pendingReturnToRef.current

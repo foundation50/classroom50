@@ -26,18 +26,17 @@ export type OrgMembersOverview = {
   // The org's live members (all pages), the trust anchor for bulk-add
   // membership verification.
   members: GitHubUser[]
-  // Numeric ids of org owners/admins, so the view can badge them "Owner"
-  // instead of "Member". Empty when the admin list couldn't be read.
+  // Numeric ids of org owners/admins, so the view can badge them "Owner".
+  // Empty when the admin list couldn't be read.
   ownerIds: Set<string>
   isLoading: boolean
   isError: boolean
   // classroom path -> resolved GitHub team slug (classroom.json.team.slug, else
   // the classroom50-<classroom> heuristic). The SAME slug teamMembersByClassroom
-  // is keyed from, so optimistic team-cache writes on the Members page target the
-  // cache this hook actually reads (a name-collision classroom's real slug can
-  // differ from the heuristic).
+  // keys from, so optimistic team-cache writes on the Members page target the
+  // cache this hook reads (a collided classroom's real slug can differ).
   teamSlugByClassroom: Map<string, string>
-  // Per-classroom roster read failures (a 404 / parse error contributes no
+  // Per-classroom roster read failures (a 404/parse error contributes no
   // students rather than failing the whole page).
   notes: string[]
 }
@@ -98,9 +97,9 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     .join("|")
 
   // Live members of each classroom's `classroom50-<classroom>` team — the
-  // enrollment source of truth. Cross-referenced against the CSV-derived access
-  // to surface CSV/team drift. Slug resolves from classroom.json when present
-  // (GitHub may slugify a collided name differently), else the heuristic.
+  // enrollment source of truth, cross-referenced against CSV-derived access to
+  // surface drift. Slug resolves from classroom.json when present (GitHub may
+  // slugify a collided name differently), else the heuristic.
   const teamSlugs = useMemo(
     () =>
       classroomNames.map(
@@ -154,9 +153,9 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroomNames, metaSignature, rosterSignature])
 
-  // classroom -> set of live team-member numeric-id strings. Only classrooms
-  // whose team query has resolved are included; an unresolved/failed team read
-  // is omitted so aggregateOrgMembers treats it as "unknown" (never drift).
+  // classroom -> set of live team-member id strings. Only classrooms whose team
+  // query resolved are included; an unresolved/failed read is omitted so
+  // aggregateOrgMembers treats it as "unknown" (never drift).
   const teamMembersByClassroom = useMemo(() => {
     const map = new Map<string, Set<string>>()
     classroomNames.forEach((name, i) => {
@@ -181,8 +180,8 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   )
 
   // classroom path -> resolved team slug, from the same teamSlugs array that
-  // keys the team-member queries above, so the Members page seeds/invalidates
-  // the exact team cache this hook reads.
+  // keys the team-member queries, so the Members page seeds/invalidates the
+  // exact team cache this hook reads.
   const teamSlugByClassroom = useMemo(() => {
     const map = new Map<string, string>()
     classroomNames.forEach((name, i) => {

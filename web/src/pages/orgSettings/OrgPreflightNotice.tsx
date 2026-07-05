@@ -8,9 +8,9 @@ import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { CalloutDiv } from "@/lib/motionComponents"
 
 // Teacher preflight banner shown when an org is opened. The service-token and
-// policy checks live here (one org at a time) rather than on the org list,
-// which would fan these reads out across every org. One aggregated banner names
-// every failing category; the org settings page holds the per-item detail.
+// policy checks live here (one org at a time), not on the org list where they'd
+// fan out across every org. One aggregated banner names every failing category;
+// per-item detail lives on the org settings page.
 const OrgPreflightNotice = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const { data: tokenStatus, isPending: tokenPending } =
@@ -26,14 +26,13 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
   // the audit: it's false for a disabled query, so an org whose plan can't be
   // read (GitHub omits it for non-owners) doesn't keep the banner suppressed.
   const checking = tokenPending || planPending || auditLoading
-
   if (checking) return null
 
   const tokenMissing = tokenStatus?.status === "missing"
   const policyFail = audit?.verdict === "fail"
 
-  // Both categories are hard failures, so the banner is always an error; it
-  // just names every failing one at once.
+  // Both categories are hard failures, so the banner is always an error; it just
+  // names every failing one at once.
   const failing: string[] = []
   if (tokenMissing)
     failing.push(t("orgSettings.preflight.categoryServiceToken"))

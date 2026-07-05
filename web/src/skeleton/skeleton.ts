@@ -2,8 +2,8 @@
 // into its deploy artifact rather than fetching it from the CLI mirror at
 // runtime. The one canonical copy stays at `cli/gh-teacher/skeleton/dotgithub/`
 // because the CLI embeds it via `//go:embed`, which can't reference a parent
-// directory. Vite inlines the files below at build time, so each deploy carries
-// the skeleton from its own commit.
+// dir. Vite inlines the files below at build time, so each deploy carries the
+// skeleton from its own commit.
 
 // dotgithub/ is rewritten to .github/ at commit time; the source dir is named
 // `dotgithub` because `//go:embed` (no `all:`) skips dot-prefixed paths.
@@ -73,10 +73,10 @@ export type SkeletonFile = {
   content: string
 }
 
-// Resolve a declared skeleton set into target-repo files from a given bundle,
-// with the default-branch placeholder substituted. Throws if a declared path
-// isn't in the bundle. Extracted from buildSkeletonFiles so the missing-path
-// throw is exercisable in skeleton.test.ts without faking the build-time glob.
+// Resolve a declared skeleton set into target-repo files from a bundle, with the
+// default-branch placeholder substituted. Throws if a declared path isn't in the
+// bundle. Extracted from buildSkeletonFiles so the missing-path throw is
+// exercisable in skeleton.test.ts without faking the build-time glob.
 export function buildSkeletonFilesFromBundle(
   paths: readonly string[],
   bundle: ReadonlyMap<string, string>,

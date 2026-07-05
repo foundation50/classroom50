@@ -1,6 +1,6 @@
 // Read-only org audit — the web mirror of the CLI's buildAuditReport.
 // Deliberate divergence: the CLI is three-state (OK / WARN / FAIL), but the GUI
-// collapses WARN into FAIL — any drift is treated as actionable (deriveVerdict).
+// collapses WARN into FAIL — any drift is actionable (deriveVerdict).
 
 import type { GitHubClient } from "@/hooks/github/client"
 import {
@@ -54,8 +54,8 @@ export type OrgAuditReport = {
   // Per-field member-default drift, each carrying its manualFix.
   unenforcedDefaults: MemberDefaultSetting[]
   // The full member-default lockdown we configure, each with whether the live
-  // org value currently matches — so teachers can see every permission we set,
-  // not just the drifted ones. Empty when the org couldn't be read.
+  // org value matches — so teachers see every permission we set, not just the
+  // drifted ones. Empty when the org couldn't be read.
   defaultVerdicts: DefaultVerdict[]
   // Per-concern check verdicts (Actions, Pages, rulesets, …).
   concerns: ConcernCheck[]
@@ -74,9 +74,9 @@ const CONCERN_TITLES: Record<ConcernId, string> = {
   rulesets: "Branch protection rulesets",
 }
 
-// The GitHub settings page each concern maps to, so a teacher can jump
-// straight to where they'd inspect or fix it. Org-level concerns point at the
-// org settings; repo-level concerns point at the classroom50 config repo.
+// The GitHub settings page each concern maps to, so a teacher can jump straight
+// to where they'd fix it. Org-level concerns point at org settings; repo-level
+// concerns at the classroom50 config repo.
 function concernSettingsUrl(id: ConcernId, org: string): string {
   const orgBase = `https://github.com/organizations/${org}/settings`
   const repoBase = `https://github.com/${org}/classroom50/settings`
@@ -100,7 +100,7 @@ function concernSettingsUrl(id: ConcernId, org: string): string {
 
 // Any drift fails the audit — stricter than the CLI, which warns on
 // non-critical drift (see header). An unreadable concern also fails: a partial
-// read outage is "needs attention", not a clean bill of health.
+// read outage is "needs attention", not a clean bill.
 function deriveVerdict(
   readOk: boolean,
   lockdownComplete: boolean,
@@ -147,9 +147,9 @@ export async function buildOrgAuditReport(
       .filter((v) => !v.enforced)
       .map((v) => v.setting) ?? []
   const defaultVerdicts = defaults.classification?.verdicts ?? []
-  // lockdownComplete mirrors the CLI: critical defaults only. Non-critical
-  // drift leaves it true but still fails the verdict via the orgDefaults
-  // concern being "unenforced" (see deriveVerdict).
+  // lockdownComplete mirrors the CLI: critical defaults only. Non-critical drift
+  // leaves it true but still fails the verdict via the orgDefaults concern being
+  // "unenforced" (see deriveVerdict).
   const lockdownComplete =
     readOk && !(defaults.classification?.criticalMissed ?? false)
 
@@ -170,7 +170,7 @@ export async function buildOrgAuditReport(
     verdict,
     settingsUrl: concernSettingsUrl(id, org),
   }))
-  // Sort the audit list alphabetically by title for predictable scanning.
+  // Sort alphabetically by title for predictable scanning.
   concerns.sort((a, b) => a.title.localeCompare(b.title))
 
   return {

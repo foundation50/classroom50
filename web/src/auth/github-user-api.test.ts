@@ -42,8 +42,8 @@ describe("fetchGithubUser", () => {
       vi.fn(async () => new Response("Bad credentials", { status: 401 })),
     )
 
-    // The session-expiry logic in useGithubAuth branches on `status === 401`,
-    // so the carried status is the contract this test locks in.
+    // useGithubAuth's session-expiry logic branches on `status === 401`, so the
+    // carried status is the contract this test locks in.
     const error = await fetchGithubUser("tok").catch((e) => e)
 
     expect(error).toBeInstanceOf(GitHubUserFetchError)

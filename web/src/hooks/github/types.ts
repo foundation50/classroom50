@@ -12,7 +12,8 @@ export type GitHubOrgMembership = {
 
 // Shared by GET /orgs/{org}/invitations and /failed_invitations. failed_at /
 // failed_reason are only set on the failed list. No invitee numeric id, so
-// students match on login / email. id is needed to cancel (DELETE) before resend.
+// students match on login / email. id is needed to cancel (DELETE) before
+// resend.
 export type GitHubOrgInvitation = {
   id: number
   login: string | null

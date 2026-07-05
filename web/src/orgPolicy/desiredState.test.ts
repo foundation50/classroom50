@@ -7,9 +7,9 @@ import {
 } from "./desiredState"
 
 // The desired-state module is the web mirror of the CLI's orgpolicy seam.
-// These tests pin the parity-critical invariants: the plan-aware field count,
-// the criticality flags, and the three-state classification both the settings
-// page and the audit depend on.
+// These tests pin the parity-critical invariants: plan-aware field count,
+// criticality flags, and the three-state classification the settings page and
+// audit depend on.
 
 const ENTERPRISE_ONLY_FIELDS = [
   "members_can_create_public_repositories",

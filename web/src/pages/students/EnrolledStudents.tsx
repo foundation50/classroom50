@@ -46,8 +46,8 @@ import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 // Group rows by `section`, sorted by name with the unlabeled ("No section")
-// bucket last. Generic over any row carrying a `section` field, so it serves
-// both the CSV Student shape and the team-driven TeamRosterRow.
+// bucket last. Generic over any row with a `section` field, so it serves both
+// the CSV Student shape and the team-driven TeamRosterRow.
 const NO_SECTION = "No section"
 export function groupStudentsBySection<T extends { section?: string }>(
   students: T[],
@@ -393,10 +393,10 @@ const OnboardingLink = ({
 }
 
 // Manual-match affordance for an email-invited row whose student joined the org
-// directly and whose GitHub identity GitHub no longer exposes (the email->login
-// link is dropped once an invite is accepted). The teacher picks which unmatched
-// team member owns the email; matchStudentToAccount re-verifies the pick is an
-// active member before binding. Kept because email invites remain supported.
+// directly (GitHub drops the email->login link once an invite is accepted). The
+// teacher picks which unmatched team member owns the email; matchStudentToAccount
+// re-verifies the pick is an active member before binding. Kept because email
+// invites remain supported.
 const MatchAccountButton = ({
   org,
   classroom,
@@ -729,7 +729,7 @@ const EnrolledStudents = ({
 
   // Explicit teacher-triggered backfill: append missing team members into
   // students.csv as metadata (Section 5). Not automatic — the team-driven view
-  // renders correctly without it; this only persists optional metadata.
+  // renders fine without it; this only persists optional metadata.
   const syncMutation = useMutation({
     mutationFn: () => syncRosterFromTeam(client, { org, classroom }),
     onSuccess: (result) => {
@@ -740,9 +740,9 @@ const EnrolledStudents = ({
           ? t("students.syncUpToDate")
           : t("students.syncAdded", { count: result.addedUsernames.length }),
       })
-      // The CSV changed; invalidate the roster (csv-file) query so a refetch
-      // picks up the newly-appended metadata rows. Uses the same key
-      // useGetStudents reads (a bare prefix wouldn't match).
+      // CSV changed; invalidate the roster (csv-file) query so a refetch picks
+      // up the appended metadata rows. Uses the same key useGetStudents reads (a
+      // bare prefix wouldn't match).
       void queryClient.invalidateQueries({
         queryKey: githubKeys.csvFile(
           org,
@@ -759,16 +759,16 @@ const EnrolledStudents = ({
     },
   })
 
-  // Auto-sync on open: when team members are missing a students.csv metadata row
-  // (csvMissingCount > 0), append them automatically so the teacher never has to
-  // press "Sync roster" for the common case. Reaching this component already
-  // implies config-repo write access (RequireTeacher staff-gates the page).
+  // Auto-sync on open: when team members lack a students.csv metadata row
+  // (csvMissingCount > 0), append them automatically so the teacher needn't
+  // press "Sync roster" for the common case. Reaching this component implies
+  // config-repo write (RequireTeacher staff-gates the page).
   //
-  // Fire once per drift episode: the ref latches after we trigger, so a re-render
-  // (or the post-sync CSV refetch briefly still showing >0) can't re-fire it, and
-  // it re-arms only once the roster is genuinely back in sync (count returns to
-  // 0). A failed auto-sync toasts (via onError) and, because it stays latched,
-  // does NOT retry in a loop — the teacher retries with the now-enabled button.
+  // Fire once per drift episode: the ref latches after triggering so a re-render
+  // (or the post-sync CSV refetch briefly showing >0) can't re-fire it, and it
+  // re-arms only once count returns to 0. A failed auto-sync toasts (onError)
+  // and, staying latched, does NOT retry in a loop — the teacher retries via the
+  // now-enabled button.
   const autoSyncedRef = useRef(false)
   useEffect(() => {
     if (isLoading || isError) return
@@ -779,8 +779,8 @@ const EnrolledStudents = ({
     if (autoSyncedRef.current || syncMutation.isPending) return
     autoSyncedRef.current = true
     syncMutation.mutate()
-    // syncMutation identity is stable across renders (useMutation); the guard
-    // ref + count/loading deps are what gate re-firing.
+    // syncMutation identity is stable (useMutation); the ref + count/loading
+    // deps gate re-firing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csvMissingCount, isLoading, isError])
 
@@ -857,8 +857,8 @@ const EnrolledStudents = ({
         }),
       )
     } else if (resent === 0 && skipped > 0) {
-      // Nothing was actually re-sent (e.g. every row lacked a resolvable invite
-      // id). Don't report an unqualified success.
+      // Nothing was re-sent (e.g. every row lacked a resolvable invite id).
+      // Don't report an unqualified success.
       setWarning(key, t("students.resendAllNothing", { count: skipped }))
     } else {
       setWarning(key, t("students.resendAllSuccess", { count: resent }))
@@ -871,7 +871,7 @@ const EnrolledStudents = ({
         studentKey(s) === rowKey ? toStudent(updated) : s,
       )
       // A member with no prior CSV row (blank metadata) has no row to replace;
-      // append the newly-written one so the edit sticks optimistically.
+      // append the new one so the edit sticks optimistically.
       const exists = current.some((s) => studentKey(s) === rowKey)
       return exists ? next : [...next, toStudent(updated)]
     })
@@ -1002,8 +1002,8 @@ const EnrolledStudents = ({
             onRemoveStudent={(_username, warning) => {
               if (warning) setWarning(row.key, warning)
               // Drop the CSV metadata row so nothing lingers as
-              // unprovisioned/pending, then refresh the team-driven enrolled
-              // list (unenroll removed them from the classroom team).
+              // unprovisioned/pending, then refresh the enrolled list (unenroll
+              // removed them from the classroom team).
               updateRosterCache((current) =>
                 current.filter((s) => studentKey(s) !== row.key),
               )
@@ -1018,9 +1018,8 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Warnings / action results surface at the top. Rendered only when
-          present so the empty container doesn't add a phantom gap that pushes
-          the first card below the sibling column's top. */}
+      {/* Warnings / action results at the top. Rendered only when present so an
+          empty container doesn't add a phantom gap. */}
       {Object.keys(warnings).length > 0 ? (
         <div className="flex w-full flex-col gap-2">
           <AnimatePresence initial={false}>
@@ -1050,8 +1049,8 @@ const EnrolledStudents = ({
       ) : null}
 
       {/* Data-drift banner: CSV-only rows with no team member / pending invite.
-          Kept VISIBLE below as a distinct "not yet provisioned" section, but the
-          banner surfaces the count + a disclosure so the teacher sees which. */}
+          Also shown below as a distinct "not yet provisioned" section; this just
+          surfaces the count + disclosure. */}
       {!isLoading && !isError && unprovisioned.length > 0 ? (
         <div
           role="alert"

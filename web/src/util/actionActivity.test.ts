@@ -166,7 +166,7 @@ describe("runMatchesOp", () => {
   it("null baseline does NOT match a run that started well before the dispatch (later cron/other run)", () => {
     const started = Date.now()
     // A run that started 10 minutes before this op was dispatched — e.g. an
-    // earlier cron run that only now shows in the poll window.
+    // earlier cron run only now in the poll window.
     const r = dispatchRun(5, "regrade.yaml", {
       run_started_at: new Date(started - 10 * 60_000).toISOString(),
     })

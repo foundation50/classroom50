@@ -270,8 +270,8 @@ describe("acceptedUsernames / hasAccepted / acceptedRosterCount", () => {
   const repos = [
     repo("cs101-hw1-alice"),
     repo("cs101-hw1-bob"),
-    repo("cs101-hw2-alice"), // different assignment
-    repo("cs101-hw1"), // bare prefix, no owner -> ignored
+    repo("cs101-hw2-alice"),
+    repo("cs101-hw1"),
     repo("unrelated-repo"),
   ]
 
@@ -289,15 +289,15 @@ describe("acceptedUsernames / hasAccepted / acceptedRosterCount", () => {
   })
 
   it("does NOT bleed a sibling assignment whose slug extends this one", () => {
-    // Assignment "hw" (prefix "cs101-hw-") must not capture repos belonging to
-    // assignment "hw-bonus" (regression test for the prefix-collision bug).
+    // Assignment "hw" (prefix "cs101-hw-") must not capture repos of "hw-bonus"
+    // (prefix-collision regression).
     const set = acceptedUsernames(
       [repo("cs101-hw-bonus-alice"), repo("cs101-hw-alice")],
       "cs101",
       "hw",
       [student({ username: "alice" })],
     )
-    expect([...set]).toEqual(["alice"]) // only the exact cs101-hw-alice repo
+    expect([...set]).toEqual(["alice"])
     expect(set.has("bonus-alice")).toBe(false)
   })
 

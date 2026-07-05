@@ -277,9 +277,9 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
   const isRunning = stepStates.some((s) => s.status === "running")
   const allDone = completed === ACCEPT_STEP_ORDER.length
 
-  // Start collapsed — the header summary + count carries enough signal — and
-  // let the student expand the per-step detail on demand. Force open only on
-  // an error so a failure is never hidden. An explicit toggle takes precedence.
+  // Start collapsed (header summary + count is enough); let the student expand
+  // detail on demand. Force open on error so a failure is never hidden; an
+  // explicit toggle takes precedence.
   const [userOpen, setUserOpen] = useState<boolean | null>(null)
   const expanded = userOpen ?? hasError
 
@@ -393,10 +393,9 @@ const AcceptAssignmentPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.acceptAssignment"))
   const { org, classroom, assignment } = useParams({ strict: false })
-  // The capability key from the accept link (?k=...). For a protected
-  // classroom this selects the <classroom>/<secret>/ Pages path; absent for
-  // an unprotected classroom. Read loosely so the page also works if
-  // mounted without the typed route in tests.
+  // Capability key from the accept link (?k=...). For a protected classroom it
+  // selects the <classroom>/<secret>/ Pages path; absent otherwise. Read
+  // loosely so the page works if mounted without the typed route in tests.
   const search = useSearch({ strict: false }) as { k?: string }
   const secret = typeof search.k === "string" ? search.k : undefined
   const client = useGitHubClient()
@@ -436,9 +435,8 @@ const AcceptAssignmentPage = () => {
   const runAccept = useSafeSubmit()
 
   // A pending invitee opened the accept link before becoming an active member.
-  // Rather than bouncing them to /onboard, accept + verify membership inline
-  // (same shared verified-accept path), showing loading + error UI here, then
-  // proceed to the accept flow once active.
+  // Rather than bouncing to /onboard, accept + verify membership inline (shared
+  // verified-accept path), then proceed to the accept flow once active.
   const isPending = orgInvite?.state === "pending"
   const membershipAccept = useAcceptAndVerifyMembership({
     org,
@@ -467,7 +465,7 @@ const AcceptAssignmentPage = () => {
     },
     onSuccess: (result) => {
       // Celebrate a freshly created repo; an already-accepted repo isn't a new
-      // milestone, so it skips the confetti.
+      // milestone, so skip the confetti.
       if (result.status === "created") {
         fireConfetti()
       }
@@ -487,14 +485,11 @@ const AcceptAssignmentPage = () => {
     )
   }
 
-  // Membership read failed on the INITIAL read. Distinguish causes rather than a
-  // blanket "not a member": classifyMembershipError routes a 403 + X-GitHub-SSO
-  // to the SSO screen (with the authorize button when GitHub gave a URL, or the
-  // url-less LMS/re-auth copy otherwise), a 404 to not-a-member, and anything
-  // else to a retryable generic. (Transient 5xx/429 are retried by the query, so
-  // they don't reach here as errors — and on any error the query's `data` is
-  // undefined, so the pending auto-accept below is only reachable from a
-  // successful read.)
+  // Initial membership read failed. classifyMembershipError routes a 403 +
+  // X-GitHub-SSO to the SSO screen (authorize button when GitHub gave a URL,
+  // else url-less LMS/re-auth copy), a 404 to not-a-member, else a retryable
+  // generic. (Transient 5xx/429 are retried by the query, so on any error
+  // `data` is undefined and the pending auto-accept below stays unreachable.)
   if (orgMembershipError) {
     const info = classifyMembershipError(orgMembershipError, {
       org,
@@ -530,9 +525,9 @@ const AcceptAssignmentPage = () => {
     )
   }
 
-  // Render the inline accept+verify while the pending invitee is being made
-  // active: a cause-specific error (SSO / not-a-member / retryable) on failure,
-  // otherwise a spinner until the hook reports active.
+  // Inline accept+verify while the pending invitee is made active: a
+  // cause-specific error (SSO / not-a-member / retryable) on failure, else a
+  // spinner until the hook reports active.
   if (isPending && !membershipAccept.isActive) {
     if (membershipAccept.isError) {
       const info = classifyMembershipError(membershipAccept.error, {

@@ -2,8 +2,8 @@ import type { ComponentType, ReactNode, SVGProps } from "react"
 
 export type InlineNoteTone = "success" | "warning" | "error" | "neutral"
 
-// Explicit dark-on-light colors rather than daisyUI's *-content tones, which
-// are too light to read on a white form background.
+// Explicit dark-on-light colors rather than daisyUI's *-content tones, too light
+// to read on a white form background.
 const TONE_CLASS: Record<InlineNoteTone, string> = {
   success: "bg-green-50 border-green-200 text-green-800",
   warning: "bg-amber-50 border-amber-200 text-amber-900",

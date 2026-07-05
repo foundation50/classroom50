@@ -11,7 +11,7 @@ import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 export type RegradePhase = OperationPhase
 
 // The regrade dispatch is quick; the timeout is generous but shorter than
-// collect's since we're only tracking the fan-out kickoff, not grading itself.
+// collect's since we only track the fan-out kickoff, not grading itself.
 const REGRADE_TIMEOUT_MS = 5 * 60 * 1000
 const REGRADE_INTERVAL_MS = 4000
 const REGRADE_BACKOFF_AFTER_MS = 45 * 1000
@@ -112,7 +112,7 @@ const useTriggerRegrade = (target: RegradeTarget) => {
     run,
     error,
     // True while ANY regrade (this one, another row, or "Regrade all") is in
-    // flight — callers use it to disable collect/regrade controls page-wide.
+    // flight — callers disable collect/regrade controls page-wide.
     anyRegrading: coordinator.anyInFlight,
   }
 }

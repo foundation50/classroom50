@@ -89,9 +89,9 @@ const DeleteClassroomButton = ({
 }
 
 // Archive / unarchive toggles the classroom's `active` flag (false = archived)
-// via the conflict-retried edit, immediately (not through the Save form), and
-// surfaces the result as a toast. Archived classrooms drop out of the default
-// classes list and refuse new assignments/accepts.
+// via the conflict-retried edit, immediately (not through Save), toasting the
+// result. Archived classrooms drop out of the default list and refuse new
+// assignments/accepts.
 const ArchiveClassroomButton = ({
   org,
   classroom,
@@ -108,8 +108,8 @@ const ArchiveClassroomButton = ({
   const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
-  // A pure archive/unarchive write: editClassroom now preserves name/term when
-  // they're omitted, so we send only `active` — no refetch, no stale name/term.
+  // A pure archive/unarchive write: editClassroom preserves name/term when
+  // omitted, so we send only `active` — no refetch, no stale name/term.
   const archiveMutation = useMutation({
     mutationFn: (active: boolean) =>
       editClassroomWithConflictRetry(client, {
@@ -119,12 +119,11 @@ const ArchiveClassroomButton = ({
       }),
     onSuccess: (_result, active) => {
       // Optimistically flip the cached classroom.json `active` so the button,
-      // the read-only fieldset, and the badges update immediately — GitHub's
-      // contents API is read-after-write eventual, so we do NOT invalidate (and
-      // thus refetch) this exact classroom.json key: an immediate unpinned
-      // refetch can read the pre-write body and clobber the optimistic flip,
-      // reverting the UI until staleTime expires. The optimistic value stays
-      // authoritative and the normal staleTime refetch reconciles later.
+      // read-only fieldset, and badges update immediately. GitHub's contents API
+      // is read-after-write eventual, so we do NOT invalidate this exact key: an
+      // immediate refetch can read the pre-write body and clobber the optimistic
+      // flip. The optimistic value stays authoritative; the staleTime refetch
+      // reconciles later.
       const key = githubKeys.jsonFile(
         org,
         "classroom50",
@@ -135,8 +134,8 @@ const ArchiveClassroomButton = ({
         (prev: Record<string, unknown> | undefined) =>
           prev ? { ...prev, active } : prev,
       )
-      // Repartition the classes list (Active/Archived/All) — this is a
-      // different query than the per-classroom classroom.json above.
+      // Repartition the classes list (Active/Archived/All) — a different query
+      // than the per-classroom classroom.json above.
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, "classroom50"),
       })
@@ -243,8 +242,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const [submitted, setSubmitted] = useState(false)
-  // Archived = read-only: disable the settings fields + Save (the Archive /
-  // Delete header actions stay live). editClassroom enforces this server-side.
+  // Archived = read-only: disable settings fields + Save (Archive/Delete header
+  // actions stay live). editClassroom enforces this server-side.
   const archived = isClassroomArchived(cl ?? {})
 
   const form = useForm({

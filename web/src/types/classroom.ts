@@ -1,11 +1,10 @@
 export type Classroom = {
   path: string
-  // Archive lifecycle flag. `active: false` means the classroom is ARCHIVED —
-  // it blocks new assignments and new student accepts and drops out of the
-  // default classes list, while preserving its roster/assignments. Reversible
-  // (unarchive sets it back to true). Absent or true = active; legacy
-  // classrooms (no `active` written) therefore read as active. Written via the
-  // omitempty pattern; kept in lockstep with the CLI's classroom-v1 schema.
+  // Archive lifecycle flag. `active: false` = ARCHIVED: blocks new assignments
+  // and student accepts and drops out of the default classes list, while
+  // preserving roster/assignments. Reversible. Absent or true = active, so
+  // legacy classrooms (no `active` written) read as active. Written omitempty;
+  // in lockstep with the CLI's classroom-v1 schema.
   active?: boolean
   term: string
   name: string
@@ -15,16 +14,16 @@ export type Classroom = {
   // templates. Absent on classrooms created before this feature.
   team?: TeamRef
   // Per-classroom GitHub staff teams backing in-app roles. Each is a `secret`
-  // team `classroom50-<short_name>-<role>` granted config-repo write;
-  // ensured-on-touch. Absent on classrooms created before this feature.
+  // team `classroom50-<short_name>-<role>` granted config-repo write, ensured
+  // on touch. Absent on classrooms created before this feature.
   teams?: {
     instructor?: TeamRef
     ta?: TeamRef
   }
   // Optional capability-URL secret. When present, this classroom's Pages
   // resources live under `<classroom>/<secret>/...` (every consumer inserts it);
-  // when absent, the plain `<classroom>/...` path. Opt-in per classroom (off by
-  // default). Kept in lockstep with the CLI's classroom-v1 schema (`[a-z0-9]{4,64}`).
+  // else the plain `<classroom>/...` path. Opt-in, off by default. In lockstep
+  // with the CLI's classroom-v1 schema (`[a-z0-9]{4,64}`).
   secret?: string
 }
 
@@ -41,8 +40,7 @@ export type StaffRole = "instructor" | "ta"
 
 export const STAFF_ROLES: readonly StaffRole[] = ["instructor", "ta"]
 
-// A classroom is archived when `active` is explicitly false. Absent or true
-// reads as active, so legacy classrooms (which never wrote `active`) are active.
+// Archived when `active` is explicitly false (see the `active` field).
 export const isClassroomArchived = (cl: { active?: boolean }): boolean =>
   cl.active === false
 
@@ -101,11 +99,10 @@ export type Assignment = {
   // Empty/absent = all files allowed. Enforced server-side.
   allowed_files?: string[]
   // Integer percentage (0–100) at/above which a submission counts as "passing"
-  // in the gradebook's Passing rollup, badges, and passing/failing filter. A
-  // display/contract field only — it does not change a student's actual score
-  // (grading is points-based via the autograder). Absent = default (see
-  // DEFAULT_PASS_THRESHOLD). Kept in lockstep with the CLI's assignments-v1
-  // schema (`pass_threshold`, integer, omitempty) — see classroom50-cli.
+  // in the gradebook rollup, badges, and passing/failing filter. Display/contract
+  // only — it doesn't change a student's actual (points-based) score. Absent =
+  // DEFAULT_PASS_THRESHOLD. In lockstep with the CLI's assignments-v1 schema
+  // (`pass_threshold`, integer, omitempty).
   pass_threshold?: number
   tests?: AssignmentTest[]
   // CLI migrate provenance. The GUI doesn't write it but must round-trip it.
@@ -128,8 +125,8 @@ export const PASS_THRESHOLD_MIN = 0
 export const PASS_THRESHOLD_MAX = 100
 
 // Default passing bar when an assignment sets no pass_threshold: a submission
-// must score full marks to count as "passing". Deliberately strict — a teacher
-// lowers it per assignment when partial credit should count as a pass.
+// must score full marks. Deliberately strict — a teacher lowers it when partial
+// credit should count as a pass.
 export const DEFAULT_PASS_THRESHOLD = 100
 
 // Write-side provenance for `due`. Since `due` is stored as a UTC instant
@@ -162,12 +159,10 @@ export type AssignmentTest = {
   points: number
 }
 
-// students.csv is now just the 6 identity/metadata columns — the classroom
-// GitHub team is the source of truth for enrollment, so the email-first
-// onboarding lifecycle columns (enrollment_status/method, email_hash,
-// invite_token, invited_at, enrolled_at) were pruned. The CSV is a data
-// contract shared with the gh-teacher CLI (separate repo) and the Python
-// collector; all three moved in lockstep.
+// students.csv is just the 6 identity/metadata columns — the classroom GitHub
+// team is the source of truth for enrollment, so the email-first onboarding
+// lifecycle columns were pruned. A data contract shared with the gh-teacher CLI
+// and the Python collector; all three moved in lockstep.
 export type Student = {
   username: string
   first_name: string

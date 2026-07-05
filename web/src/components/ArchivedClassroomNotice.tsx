@@ -2,8 +2,8 @@ import type { PropsWithChildren } from "react"
 
 // The "this classroom is archived" info banner. Owns the daisyUI alert shell +
 // ARIA so the three teacher pages that surface it (assignments list, edit
-// assignment, classroom settings) can't drift in markup; each passes its own
-// page-specific copy as children. `className` tunes spacing per page.
+// assignment, settings) can't drift in markup; each passes its own copy as
+// children. `className` tunes spacing per page.
 export const ArchivedClassroomNotice = ({
   className = "mb-4",
   children,

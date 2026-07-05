@@ -14,10 +14,10 @@ import {
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubClient } from "@/hooks/github/client"
 
-// An already-org-member must land `enrolled` (not stuck "awaiting"), the
-// per-row confirm must refuse a non-member, and an already-member email invite
-// must resolve cross-roster or drop the stub. I/O is stubbed via a path-routing
-// fake client; assertions read the students.csv committed to git/trees.
+// An already-org-member must land `enrolled` (not stuck "awaiting"), the per-row
+// confirm must refuse a non-member, and an already-member email invite must
+// resolve cross-roster or drop the stub. I/O is stubbed via a path-routing fake
+// client; assertions read the students.csv committed to git/trees.
 
 type CommittedCsv = { content: string | null }
 
@@ -104,11 +104,11 @@ const HEADER = "username,first_name,last_name,email,section,github_id\n"
 
 // The web leg of the three-way students.csv header lockstep. The Go
 // (TestFullRosterHeader) and Python (test_full_roster_header_matches_go_constant)
-// suites each pin their own header constant to this exact string; the web app is
-// what WRITES the file's column order (via STUDENT_CSV_FIELDS), so without this
+// suites each pin their own header constant to this exact string; the web app
+// WRITES the file's column order (via STUDENT_CSV_FIELDS), so without this
 // assertion a web-only reorder/rename would keep every web test green while the
 // CLI's ParseRoster and the collector's read_students_csv reject every roster
-// the web subsequently writes. Pin the source-of-truth constant, not a fixture.
+// the web writes. Pin the source-of-truth constant, not a fixture.
 describe("students.csv header lockstep (web leg)", () => {
   it("STUDENT_CSV_FIELDS matches the Go/Python header verbatim", () => {
     expect(STUDENT_CSV_FIELDS.join(",")).toBe(
@@ -329,8 +329,8 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
   it("warns when the classroom team can't be attached (team-less invite risk)", async () => {
     // With no persisted team block, the invite goes out team-less. That must
     // warn: with the onboarding reconcile path removed and collection now
-    // team-driven, a student who accepts a team-less invite is uncollected
-    // until the teacher runs Sync roster. The invite MUST still be sent.
+    // team-driven, a student who accepts a team-less invite is uncollected until
+    // the teacher runs Sync roster. The invite MUST still be sent.
     const { client, rosters } = makeEmailClient({
       rosters: { cs101: HEADER },
       inviteSucceeds: true,
@@ -903,10 +903,10 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
   })
 })
 
-// Unenroll is classroom-scoped — it never removes an ACTIVE org member
-// (that would leave other rosters showing them enrolled while non-member of the
-// org). A pending invite is still cancelled. The fake tracks org-membership
-// DELETEs and the committed roster so we can assert both.
+// Unenroll is classroom-scoped — it never removes an ACTIVE org member (that
+// would leave other rosters showing them enrolled while non-member of the org).
+// A pending invite is still cancelled. The fake tracks org-membership DELETEs
+// and the committed roster so we can assert both.
 describe("unenrollStudent — classroom-scoped, no active-member org removal", () => {
   const aliceEnrolled = "alice,Alice,A,alice@x.edu,,42\n"
   const bobInvited = "bob,Bob,B,bob@x.edu,,43\n"
@@ -1306,8 +1306,8 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
 
   it("email-only target drops ONLY an email-only row, never a same-email identified sibling", async () => {
     // Regression: an email-only removal target (no username, no github_id) must
-    // match only an unclaimed email-only row. Two rows share sam@x.edu — one is
-    // a fully-identified enrolled student, the other an unclaimed email invite.
+    // match only an unclaimed email-only row. Two rows share sam@x.edu — one a
+    // fully-identified enrolled student, the other an unclaimed email invite.
     // Removing the email-only target must not silently unenroll the sibling.
     const startingCsv =
       HEADER +

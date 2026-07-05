@@ -20,8 +20,8 @@ export type CourseManifest = {
   }>
 }
 
-// The repo-query state the verdict depends on. Structural so the verdict logic
-// stays a pure, unit-testable function (no React Query needed).
+// The repo-query state the verdict depends on. Structural so the verdict stays a
+// pure, testable function (no React Query).
 export type TeacherVerdictInput = {
   org: string | undefined
   isSuccess: boolean
@@ -46,8 +46,7 @@ export type TeacherVerdict = {
 // teacher = repo GET succeeded with a non-trivial permission, student = 404,
 // blocked = 403. Resolved only on a definitive verdict (success/404/403) — a
 // transient 5xx/429/network error must NOT resolve, or a student during a blip
-// would be promoted into teacher UI. showTeacherUi also needs a positive
-// success, so a transient error keeps it false. Org-less routes have no role.
+// would be promoted into teacher UI. Org-less routes have no role.
 export function resolveTeacherVerdict(
   input: TeacherVerdictInput,
 ): TeacherVerdict {
@@ -71,11 +70,11 @@ export function resolveTeacherVerdict(
   return { isTeacher, isStudent, isBlocked, roleResolved, showTeacherUi }
 }
 
-// Apply a "view as" preview to the coarse teacher/student verdict, so
-// every surface reading showTeacherUi/isStudent transforms together.
-// DOWNGRADE-ONLY: a preview can only hide teacher UI, never reveal it. Only
-// "student" affects this coarse switch (a TA still sees staff content); the
-// TA/instructor split lives in useClassroomRole.
+// Apply a "view as" preview to the coarse teacher/student verdict, so every
+// surface reading showTeacherUi/isStudent transforms together. DOWNGRADE-ONLY:
+// a preview can only hide teacher UI, never reveal it. Only "student" affects
+// this coarse switch (a TA still sees staff content); the TA/instructor split
+// lives in useClassroomRole.
 export function applyViewAsToVerdict(
   verdict: TeacherVerdict,
   viewAs: ViewAsRole | null,
@@ -92,8 +91,8 @@ export function applyViewAsToVerdict(
 export function useCourseTeacherAccess(org: string | undefined) {
   const teacherRepo = "classroom50"
   // Bounded retry on transient errors only: a 404 (student) / 403 (blocked) is
-  // a definitive verdict and must not be retried, but a 5xx/429/network blip
-  // should self-heal instead of stranding the role unresolved.
+  // definitive and must not retry, but a 5xx/429/network blip should self-heal
+  // instead of stranding the role unresolved.
   const repoQuery = useGitHubRepo(org, teacherRepo, {
     retry: retryTransientGitHubError,
   })

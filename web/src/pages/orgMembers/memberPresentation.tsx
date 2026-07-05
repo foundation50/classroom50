@@ -9,16 +9,15 @@ import { inviteMemberToOrg } from "@/pages/orgMembers/inviteMemberToOrg"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Presentation helpers shared by the Members list rows and the member-detail
-// modal: the avatar-initial fallback, the GitHub identity line, the
-// classification badge, and the shared invite flow. Kept in one module so the
-// row and the modal render members identically and there's a single invite path.
+// modal (avatar-initial fallback, GitHub identity line, classification badge,
+// invite flow), so both render identically via a single invite path.
 
 // First initial of a row's best display string, for the avatar fallback.
 export const initialsFor = (row: OrgMemberRow) =>
   (row.name || row.username || row.email || "?")[0]?.toUpperCase() ?? "?"
 
-// GitHub identity line: makes it explicit these are GitHub members by showing
-// the @username and the immutable numeric GitHub id together.
+// GitHub identity line: shows @username and the immutable numeric GitHub id to
+// make clear these are GitHub members.
 export const GitHubIdentity = ({ row }: { row: OrgMemberRow }) => {
   const { t } = useTranslation()
   return (
@@ -54,8 +53,8 @@ export const ClassificationBadge = ({
       </span>
     )
   }
-  // An org owner/admin is labeled "Owner", not "Member" — takes precedence over
-  // the no-roster badge (an owner with no classroom is still an owner).
+  // An owner/admin is labeled "Owner", not "Member" — takes precedence over the
+  // no-roster badge (an owner with no classroom is still an owner).
   if (isOwner) {
     return (
       <span className="badge badge-sm badge-info badge-soft gap-1">

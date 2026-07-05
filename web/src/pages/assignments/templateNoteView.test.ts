@@ -39,8 +39,7 @@ describe("templateForkNoteView", () => {
     const view = templateForkNoteView({ ...base, parentInOrg: false })
     expect(view.tone).toBe("error")
     expect(view.labelKey).toBe("assignments.template.privateForkNoParent_1")
-    // No dedicated privateForkNoParent_2 key — unknown upstream is the
-    // higher-risk cross-org case and reuses that suffix.
+    // Unknown upstream is the higher-risk cross-org case and reuses that suffix.
     expect(view.suffixKey).toBe("assignments.template.privateForkCrossOrg_2")
   })
 })

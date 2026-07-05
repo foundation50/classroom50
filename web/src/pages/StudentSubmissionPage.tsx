@@ -36,8 +36,8 @@ const releaseLabel = (release: GitHubRelease): string =>
 
 const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
   const { t } = useTranslation()
-  // html_url comes from the GitHub API (always http(s)); guard anyway to keep
-  // the no-unsafe-href rule uniform across views.
+  // html_url is from the GitHub API (always http(s)); guard anyway to keep the
+  // no-unsafe-href rule uniform across views.
   const href = safeHttpUrl(release.html_url)
   const when = release.published_at ?? release.created_at
 
@@ -124,8 +124,8 @@ const SubmissionBody = ({
   } = useGetSubmissionReleases(org, classroom, assignment, user?.login)
   // Distinguish "never accepted" (no repo) from "accepted but not yet graded".
   // getRepo returns null only on a true 404; a 403/5xx throws, so read the repo
-  // query's error too — otherwise a transient/permission failure falls through
-  // to the "haven't accepted yet" CTA and misdirects the student.
+  // query's error too — else a transient/permission failure falls through to
+  // the "haven't accepted yet" CTA and misdirects the student.
   const {
     assignment: studentRepo,
     isLoading: repoLoading,
@@ -229,17 +229,17 @@ const StudentSubmissionPage = () => {
   useDocumentTitle(t("documentTitle.mySubmission"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const { user } = useGithubAuth()
-  // Resolve the capability-URL secret (if the classroom is protected) from two
-  // sources, in order: (1) the student's own accepted repo's .classroom50.yaml —
-  // the only source a real student can read; (2) the private classroom.json —
-  // readable only by staff (incl. an instructor previewing as a student), so a
-  // not-yet-accepted preview still gets a working link. Empty when unprotected.
+  // Resolve the capability-URL secret (protected classrooms) from two sources
+  // in order: (1) the student's accepted repo's .classroom50.yaml — the only
+  // source a real student can read; (2) the private classroom.json — staff-only
+  // (incl. an instructor previewing as a student), so a not-yet-accepted
+  // preview still gets a working link. Empty when unprotected.
   const repoName =
     classroom && assignment && user?.login
       ? studentRepoName(classroom, assignment, user.login)
       : ""
   const { secret: repoSecret } = useDotClassroom50(org ?? "", repoName)
-  // classroom.json 404s for a real student (private) — fine, it just yields no
+  // classroom.json 404s for a real student (private) — fine, just yields no
   // secret; the repo secret covers the post-accept case.
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = repoSecret || classroomMeta?.secret || undefined

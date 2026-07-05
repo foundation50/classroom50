@@ -22,9 +22,9 @@ type SubmissionRecord = {
   tests: unknown[]
   late?: boolean
   // The wall-clock instant this submission was last (re-)graded. Distinct from
-  // `datetime` (the fixed submission time = commit committer date): a teacher
-  // regrade refreshes `graded_at` but never moves `datetime`. Optional —
-  // absent on results graded before the field existed.
+  // `datetime` (fixed submission time = commit committer date): a teacher
+  // regrade refreshes `graded_at` but never moves `datetime`. Optional — absent
+  // on results graded before the field existed.
   graded_at?: string
   submitted_by?: {
     username: string
@@ -49,9 +49,9 @@ type ScoresSchema = {
   assignments: Record<string, AssignmentBucket>
 }
 
-// The flattened row the submissions UI renders: one per student repo, with
-// the latest submission's fields, credited usernames, and submission count.
-// Keeps the legacy field names so table/CSV consumers stay simple.
+// The flattened row the submissions UI renders: one per student repo, with the
+// latest submission's fields, credited usernames, and count. Keeps the legacy
+// field names so table/CSV consumers stay simple.
 export type SubmissionRow = {
   usernames: string[]
   owner: string
@@ -88,7 +88,7 @@ export type NormalizedScores = {
 
 // Collapse a bucket's entries to one row each (latest submission first).
 // `member_usernames` credits the whole group; individual entries fall back to
-// `owner`. We sort defensively in case a hand-edit reordered submissions.
+// `owner`. Sorted defensively in case a hand-edit reordered submissions.
 function bucketToRows(bucket: AssignmentBucket): SubmissionRow[] {
   // A hand-edited or partial scores.json bucket can lack `entries`; degrade to
   // no rows instead of throwing in the react-query select (which would blank

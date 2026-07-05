@@ -170,14 +170,13 @@ const navItemClass = (active: boolean, collapsed: boolean) =>
       : "border-transparent hover:bg-[var(--sidebar-surface)]/60"
   }`
 
-// Shared sidebar tooltip tokens (dark rail): the tooltip bubble + text colors
-// that every collapsed-sidebar tooltip uses. Kept as one source so a token
-// rename lands in one place instead of ~5 hand-copied class strings.
+// Shared sidebar tooltip tokens (dark rail): bubble + text colors every
+// collapsed-sidebar tooltip uses. One source so a token rename lands once.
 const sidebarTooltip =
   "tooltip tooltip-right [--tt-bg:var(--sidebar-surface)] before:text-neutral-content"
 
-// Interactive icon-button row inside the rail (back-links, collapse/expand):
-// the tooltip base plus a muted icon that lightens and gains a surface on hover.
+// Interactive icon-button row in the rail (back-links, collapse/expand): tooltip
+// base plus a muted icon that lightens and gains a surface on hover.
 const sidebarIconButton = (padding: "p-1" | "p-2" = "p-1") =>
   `${sidebarTooltip} cursor-pointer rounded-md ${padding} text-neutral-content/60 transition-colors hover:bg-[var(--sidebar-surface)] hover:text-neutral-content`
 
@@ -191,8 +190,8 @@ const Tip = ({ label, children }: { label: string; children: ReactNode }) => {
   )
 }
 
-// Inner markup of a sidebar nav row. Callers keep their own typed
-// <Link to params> wrapping this so router type inference stays intact.
+// Inner markup of a sidebar nav row. Callers keep their own typed <Link to
+// params> around this so router type inference stays intact.
 const SidebarItemBody = ({
   label,
   icon,
@@ -348,7 +347,7 @@ const AssignmentSidebarMenu = ({
   const { user } = useGithubAuth()
 
   // Resolve the display name from whichever source the role can read. The
-  // teacher config-repo source is gated on role so a student doesn't fire a
+  // teacher config-repo source is role-gated so a student doesn't fire a
   // guaranteed 404; the public Pages source covers the student (and is a
   // teacher fallback before Pages publishes).
   const { data: teacherAssignments } = useGetClassroomAssignments(
@@ -356,12 +355,12 @@ const AssignmentSidebarMenu = ({
     classroom,
     { enabled: showTeacherUi },
   )
-  // For a protected classroom the public Pages fetch needs the capability
-  // secret. A student reads it from their own repo's .classroom50.yaml (the
-  // only source they can access); a teacher gets it from classroom.json. Gate
-  // the classroom.json read on the viewer's ACTUAL role (not the preview) so an
-  // instructor previewing as a student still resolves the secret for a working
-  // accept link — a real student's read stays disabled (guaranteed 404).
+  // A protected classroom's public Pages fetch needs the capability secret. A
+  // student reads it from their own repo's .classroom50.yaml (their only
+  // source); a teacher gets it from classroom.json. Gate the classroom.json read
+  // on the viewer's ACTUAL role (not the preview) so an instructor previewing as
+  // a student still resolves the secret for a working accept link — a real
+  // student's read stays disabled (guaranteed 404).
   const studentRepoNameForSecret = user?.login
     ? studentRepoName(classroom, assignment, user.login)
     : ""
@@ -386,9 +385,9 @@ const AssignmentSidebarMenu = ({
     publicAssignment?.name ||
     assignment
 
-  // Group assignments give students something to manage (collaborators);
-  // individual assignments have nothing student-editable, so we omit the
-  // settings entry rather than route them to a dead-end.
+  // Group assignments give students collaborators to manage; individual
+  // assignments have nothing student-editable, so we omit the settings entry
+  // rather than route to a dead-end.
   const isGroupAssignment = publicAssignment?.mode === "group"
 
   const onRoute = (to: Parameters<typeof matchRoute>[0]["to"]) =>
@@ -404,8 +403,8 @@ const AssignmentSidebarMenu = ({
   const onAccept = onRoute("/$org/$classroom/assignments/$assignment/accept")
 
   // Students only: surface "Accept" until they have their repo. Hidden while
-  // loading to avoid a flash. Also hidden for a real staff member previewing as
-  // a student — they have no student repo and "Accept" would be a dead-end.
+  // loading (avoid a flash) and for a real staffer previewing as a student —
+  // they have no student repo, so "Accept" would dead-end.
   const { assignment: studentRepo, isLoading: repoLoading } =
     useGetAssignmentRepo(org, classroom, assignment, user?.login)
   const showAccept =
@@ -417,7 +416,6 @@ const AssignmentSidebarMenu = ({
 
   return (
     <>
-      {/* Back to the assignments list */}
       {collapsed ? (
         <div className="flex justify-center py-2 text-sm">
           <Link
@@ -544,10 +542,9 @@ export const TeacherSidebarMenu = ({
 }) => {
   // Placeholder while pending so items never flash in then out.
   const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
-  // Finer, preview-aware classroom role. The roster is staff-only and Settings
-  // is instructor-only; gating on this role makes "View as student/TA"
-  // faithfully hide what a real student/TA wouldn't see. `unresolved` is
-  // permissive to avoid flashing.
+  // Finer, preview-aware classroom role. Roster is staff-only, Settings
+  // instructor-only; gating on this makes "View as student/TA" faithfully hide
+  // what a real student/TA wouldn't see. `unresolved` is permissive (no flash).
   const { user } = useGithubAuth()
   const { role: classroomRole } = useClassroomRole(org, classroom, user?.login)
   const showStaffItems = showTeacherUi && isStaffRole(classroomRole)
@@ -622,23 +619,22 @@ export const SidebarFooter = () => {
     shouldThrow: false,
   })
   const { isStudent, isLoading: roleLoading } = useCourseTeacherAccess(org)
-  // Precise classroom role (Instructor vs TA) inside a classroom; respects the
-  // "view as" preview. `actualRole` is the real (preview-independent) role.
+  // Precise classroom role (Instructor vs TA); respects the "view as" preview.
+  // `actualRole` is the real (preview-independent) role.
   const {
     role: classroomRole,
     actualRole: actualClassroomRole,
     isLoading: classroomRoleLoading,
   } = useClassroomRole(org, classroom, user?.login)
   const { viewAs, setViewAs } = useRoleView()
-  // Offer "View as" only to a real owner/instructor inside a classroom (they're
-  // the roles with something lower to preview).
+  // Offer "View as" only to a real owner/instructor in a classroom (the roles
+  // with something lower to preview).
   const canPreviewRoles =
     Boolean(classroom) &&
     (actualClassroomRole === "owner" || actualClassroomRole === "instructor")
 
   // Apply a "view as" change and, if the current route is role-specific, move to
-  // the analogous route for the new role so the user isn't stranded on a page
-  // meant for the other side.
+  // the analogous route for the new role so the user isn't stranded.
   const selectViewAs = (next: ViewAsRole | null) => {
     setViewAs(next)
     if (!org || !classroom || !assignment) return
@@ -655,15 +651,15 @@ export const SidebarFooter = () => {
       to: "/$org/$classroom/assignments/$assignment/edit",
       fuzzy: false,
     })
-    // -> student view while on a staff-only assignment page: land on the student
-    // per-assignment page rather than stranding them on a staff surface.
+    // -> student view on a staff-only assignment page: land on the student
+    // per-assignment page, not a staff surface.
     if (next === "student" && (onStaffSubmissions || onStaffEdit)) {
       void navigate({
         to: "/$org/$classroom/assignments/$assignment/submission",
         params,
       })
     } else if (next !== "student" && onStudentSubmission) {
-      // -> staff view while on the student submission page: go to the gradebook.
+      // -> staff view on the student submission page: go to the gradebook.
       void navigate({
         to: "/$org/$classroom/assignments/$assignment/submissions",
         params,
@@ -677,9 +673,9 @@ export const SidebarFooter = () => {
     useGetOrgMembership(org)
   const isOwner = orgMembership?.role === "admin"
 
-  // Role label per the product mapping (owner shows as Instructor). On a
-  // classroom route use the precise role; on an org-level route only assert
-  // owner or a definite student, else blank.
+  // Role label per product mapping (owner shows as Instructor). On a classroom
+  // route use the precise role; on org-level routes assert only owner or a
+  // definite student, else blank.
   let roleLabelText: string | null
   if (classroom) {
     const key = classroomRoleLoading ? null : roleLabelKey(classroomRole)
@@ -951,8 +947,8 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
   const { org, classroom, assignment } = useParams({ strict: false })
   const { data: classData } = useGetClassroom(org, classroom)
 
-  // Inside a single assignment the nav becomes assignment-scoped: show
-  // assignment actions (and a back link) instead of the classroom menu.
+  // Inside a single assignment the nav is assignment-scoped: show assignment
+  // actions (and a back link) instead of the classroom menu.
   if (org && classroom && assignment) {
     return (
       <>
@@ -990,8 +986,8 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
   const { t } = useTranslation()
   const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
-  // Org-level Members/Settings are owner-only surfaces, so gate those two links
-  // on org ownership rather than the broad staff signal.
+  // Org-level Members/Settings are owner-only, so gate those two links on org
+  // ownership rather than the broad staff signal.
   const { data: orgMembership } = useGetOrgMembership(org)
   const isOwner = orgMembership?.role === "admin"
   const onSettings = settings || selected === "settings"

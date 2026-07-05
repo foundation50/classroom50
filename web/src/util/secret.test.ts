@@ -70,8 +70,8 @@ describe("classroomPagesSegment", () => {
   })
 
   it("URL-encodes the secret segment defensively", () => {
-    // A well-formed secret is [a-z0-9] and unaffected by encoding; a value
-    // that slipped past the boundary guards must not break out of the path.
+    // A well-formed secret is [a-z0-9] and unaffected by encoding; a value that
+    // slipped past the boundary guards must not break out of the path.
     expect(classroomPagesSegment("cs50", "a/b")).toBe("cs50/a%2Fb")
   })
 })

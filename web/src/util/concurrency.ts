@@ -1,8 +1,8 @@
 // Map over items running at most `limit` async tasks at once, preserving input
 // order. The bound keeps GitHub's per-repo reads from fanning out into hundreds
 // of simultaneous requests (which trip secondary rate limits) while staying far
-// faster than a sequential loop. The first rejection rejects the returned
-// promise (Promise.all semantics).
+// faster than a sequential loop. The first rejection rejects the result
+// (Promise.all semantics).
 export async function mapWithConcurrency<T, R>(
   items: readonly T[],
   limit: number,

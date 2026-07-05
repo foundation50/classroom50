@@ -64,8 +64,6 @@ const EditClassroomContent = ({
     onSuccess: (result) => {
       // Refresh the exact classroom.json query useGetClassroom reads (so a
       // renamed name/term updates in place), plus the classes-list listing.
-      // A bare rawFile("/") key matched no live query — useGetClassroom keys on
-      // jsonFile(org,"classroom50",`${classroom}/classroom.json`).
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(
           org ?? "",
@@ -77,7 +75,7 @@ const EditClassroomContent = ({
         queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
       })
       // A classroom.json write triggers a publish-pages deploy — surface it in
-      // the global activity banner, anchored on the commit SHA (head_sha).
+      // the global activity banner, anchored on the commit SHA.
       if (org && result?.newCommitSha) {
         register({
           org,
@@ -85,11 +83,10 @@ const EditClassroomContent = ({
           anchor: { kind: "sha", sha: result.newCommitSha },
         })
       }
-      // Plain-text message only: the toast surface (NotificationProvider) is
-      // mounted ABOVE the RouterProvider, so a TanStack <Link> here has no
-      // router context and throws on render, blanking the whole app (the throw
-      // escapes the route-level errorComponent). The settings already update in
-      // place via the invalidations above, so no navigation link is needed.
+      // Plain-text message only: NotificationProvider is mounted ABOVE the
+      // RouterProvider, so a TanStack <Link> here has no router context and
+      // throws on render, blanking the app. Settings update in place via the
+      // invalidations above, so no navigation link is needed.
       notify({
         tone: "success",
         durationMs: 5000,

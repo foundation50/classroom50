@@ -2,7 +2,7 @@ import type { GitHubWorkflowRun } from "@/hooks/github/types"
 import type { ActionOperation } from "@/context/actions/ActionActivityProvider"
 
 // Pure helpers behind the activity banner, split out so run-attribution and
-// org-parsing are unit-testable without React / the router.
+// org-parsing are testable without React / the router.
 
 // Reserved top-level URL segments that aren't an org slug.
 const RESERVED_FIRST_SEGMENTS = new Set(["login"])
@@ -25,8 +25,8 @@ export function orgFromPathname(
 }
 
 // Wall-clock now via a named import, so callers can read the clock inside
-// effects without tripping the react-hooks purity rule (which flags a bare
-// `Date.now()` in a hook body but not an imported call).
+// effects without tripping the react-hooks purity rule (bare `Date.now()` in a
+// hook body is flagged, an imported call isn't).
 export function nowMs(): number {
   return Date.now()
 }
@@ -72,7 +72,7 @@ const NULL_BASELINE_SKEW_MS = 60_000
 // Null-baseline (no prior dispatch runs at dispatch time): an id comparison
 // alone would match ANY future run, mis-attributing a later cron/other run — so
 // gate on the run having started at/after the dispatch (with skew). A run
-// missing a timestamp falls back to the id-only match.
+// missing a timestamp falls back to id-only.
 export function runMatchesOp(
   run: GitHubWorkflowRun,
   op: ActionOperation,
@@ -95,7 +95,7 @@ export function runMatchesOp(
 // Resolve the run an op is tracking from the polled runs. "sha" -> matching
 // head_sha; "sinceRunId" -> the OLDEST run past the baseline (ids are
 // monotonic). `claimedRunIds` excludes runs already bound to an earlier op, so
-// racing same-workflow dispatches each claim a distinct run. Null until surfaced.
+// racing same-workflow dispatches each claim a distinct run.
 export function resolveOpRun(
   op: ActionOperation,
   runs: GitHubWorkflowRun[],
@@ -107,7 +107,7 @@ export function resolveOpRun(
   const candidates = runs
     .filter((r) => runMatchesOp(r, op))
     .filter((r) => !claimedRunIds?.has(r.id))
-    // Oldest first — the oldest run past the baseline is the one this dispatch created.
+    // Oldest run past the baseline is the one this dispatch created.
     .sort((a, b) => a.id - b.id)
   return candidates[0] ?? null
 }

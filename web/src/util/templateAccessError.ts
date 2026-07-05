@@ -1,6 +1,6 @@
 // A template-generate failure at accept time, with a plain-text message the
-// accept page renders as-is. Messages point students at their instructor —
-// they can't approve an OAuth app or grant team read themselves.
+// accept page renders as-is. Messages point students at their instructor (they
+// can't approve an OAuth app or grant team read themselves).
 export class TemplateAccessError extends Error {
   constructor(message: string) {
     super(message)
@@ -9,8 +9,8 @@ export class TemplateAccessError extends Error {
 }
 
 // Out-of-org template: the owning org likely restricts third-party apps, but a
-// 403 has other causes too (per-user OAuth grant, SSO, scope), so GitHub's
-// actual message is appended rather than asserting a single cause.
+// 403 has other causes (per-user OAuth grant, SSO, scope), so GitHub's message
+// is appended rather than asserting one cause.
 export function outOfOrgTemplateError(
   templateOwner: string,
   templateRepo: string,

@@ -5,8 +5,8 @@ import { findStaleSkeletonFiles } from "./github/mutations"
 import { githubKeys } from "./github/queries"
 import useGetOrgMembership from "./useGetOrgMembership"
 
-// State subset the verdict depends on — kept structural so the fail-open logic
-// stays a pure, unit-testable function.
+// State subset the verdict depends on — structural so the fail-open logic stays
+// a pure, testable function.
 export type SkeletonDriftInput = {
   isSuccess: boolean
   driftedCount: number | undefined
@@ -15,7 +15,7 @@ export type SkeletonDriftInput = {
 
 // Fail-open verdict: show only on a definitive success that found drift. A read
 // error or in-flight query resolves to "no drift" so we never nag on incomplete
-// info (the issue's "on any read error, show nothing").
+// info.
 export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
   const { isSuccess, driftedCount, isError } = input
   if (isError || !isSuccess) return false
@@ -23,13 +23,12 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 }
 
 // Owner-gated, cached, fail-open check for whether the org's `classroom50`
-// config repo has drifted from the bundled skeleton (e.g. after #88's pin
-// bump). Reuses findStaleSkeletonFiles read-only — no version marker.
+// config repo has drifted from the bundled skeleton. Reuses findStaleSkeletonFiles
+// read-only — no version marker.
 //
-// Gated on org owner (admin), not any staff: the banner routes to the
-// owner-only Re-run org setup section, so surfacing it to a TA/non-owner
-// instructor would dead-end their CTA on a NotFound — and only an owner should
-// trigger the config-repo read.
+// Gated on org owner (admin), not any staff: the banner routes to the owner-only
+// Re-run org setup section, so surfacing it to a TA/non-owner instructor would
+// dead-end their CTA on a NotFound.
 export function useSkeletonDrift(org: string | undefined) {
   const client = useGitHubClient()
   const { data: membership } = useGetOrgMembership(org)

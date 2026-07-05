@@ -34,7 +34,7 @@ type ActionActivityContextValue = {
   // Ops recorded this session for the org, oldest first (stable order for
   // same-workflow disambiguation).
   operationsForOrg: (org: string | undefined) => ActionOperation[]
-  // Time of the most recent register() for an org (0 if none) — the banner uses
+  // Time of the most recent register() for an org (0 if none); the banner uses
   // it to appear and poll immediately, before the run shows in the API.
   lastRegisteredAt: (org: string | undefined) => number
   // Whether the teacher dismissed an op (hidden from the banner).
@@ -88,8 +88,8 @@ const saveState = (state: PersistedState) => {
   }
 }
 
-// Records session-initiated GitHub operations for the banner. Mounted above the
-// router so a registration survives the page that fired it navigating away;
+// Records session-initiated GitHub operations for the banner. Above the router
+// so a registration survives the page that fired it navigating away;
 // sessionStorage-backed (tab-scoped) to match the trackers' lifetime.
 export function ActionActivityProvider({ children }: PropsWithChildren) {
   const [state, setState] = useState<PersistedState>(() => loadState())

@@ -5,18 +5,16 @@ import { X } from "lucide-react"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 
 // Language-pack modal shown from the sidebar footer. Extracted alongside
-// AboutDialog (same forwardRef<HTMLDialogElement> shape) so the sidebar footer
-// wires two consistent portalled dialogs rather than inlining one and importing
-// the other. Closing on apply is driven by the same ref the caller opens with.
+// AboutDialog (same forwardRef<HTMLDialogElement> shape) so the footer wires two
+// consistent portalled dialogs. Closing on apply uses the caller's open ref.
 export const LanguageDialog = forwardRef<
   HTMLDialogElement,
   { titleId: string }
 >(function LanguageDialog({ titleId }, ref) {
   const { t } = useTranslation()
 
-  // Close via the forwarded ref once a pack is applied. The ref is a
-  // MutableRefObject here (the caller passes useRef), so read .current; guard
-  // the RefCallback shape defensively.
+  // Close via the forwarded ref once a pack is applied. It's a MutableRefObject
+  // here (caller passes useRef), so read .current; guard the RefCallback shape.
   const close = () => {
     if (typeof ref === "object" && ref !== null) {
       ref.current?.close()

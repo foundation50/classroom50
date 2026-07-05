@@ -97,8 +97,8 @@ describe("buildOrgAuditReport", () => {
     expect(report.lockdownComplete).toBe(true)
     expect(report.unenforcedDefaults).toHaveLength(0)
     expect(report.manualUnreadable).toHaveLength(4)
-    // The full member-default list is surfaced so teachers see every
-    // permission we set, all enforced here (12 on a team plan).
+    // The full member-default list is surfaced so teachers see every permission
+    // we set, all enforced here (12 on a team plan).
     expect(report.defaultVerdicts).toHaveLength(12)
     expect(report.defaultVerdicts.every((v) => v.enforced)).toBe(true)
   })
@@ -132,7 +132,7 @@ describe("buildOrgAuditReport", () => {
     )
     expect(report.verdict).toBe("fail")
     // lockdownComplete is critical-only (CLI parity): non-critical drift keeps
-    // it true, but the overall verdict still fails since any drift is actionable.
+    // it true, but the verdict still fails since any drift is actionable.
     expect(report.lockdownComplete).toBe(true)
     expect(report.unenforcedDefaults.map((s) => s.field)).toContain(
       "members_can_create_pages",
@@ -283,9 +283,9 @@ describe("buildOrgAuditReport", () => {
 
   it("emits a concern for every ConcernId (no concern silently dropped)", async () => {
     const report = await buildOrgAuditReport(makeClient(), "acme", "team")
-    // Guards against a new ConcernId being wired into titles/repair but
-    // forgotten in buildOrgAuditReport's concerns array. Keep this list in
-    // sync with the ConcernId union.
+    // Guards against a new ConcernId wired into titles/repair but forgotten in
+    // buildOrgAuditReport's concerns array. Keep in sync with the ConcernId
+    // union.
     const expected: ConcernId[] = [
       "orgDefaults",
       "orgActions",

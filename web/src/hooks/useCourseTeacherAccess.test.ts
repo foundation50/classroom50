@@ -120,7 +120,7 @@ describe("resolveTeacherVerdict", () => {
         error: null,
       })
       expect(v.showTeacherUi).toBe(false)
-      // isTeacher is still true (the permission is real); only the UI gate is
+      // isTeacher stays true (the permission is real); only the UI gate is
       // org-scoped, so an org-less route can't surface teacher UI.
       expect(v.isTeacher).toBe(true)
     })

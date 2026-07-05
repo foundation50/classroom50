@@ -1,9 +1,9 @@
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Pure selection logic for the Members page's multi-select, extracted so the
-// tricky invariants (select-all targets only the filtered + selectable rows;
-// the signed-in owner is never selectable; a selection persists across search
-// filtering) are unit-testable without rendering the page.
+// tricky invariants (select-all targets only filtered + selectable rows; the
+// signed-in owner is never selectable; a selection persists across filtering)
+// are unit-testable without rendering.
 
 // The rows in the current filtered view that MAY be selected — everything the
 // `selectable` predicate (typically "not the signed-in self") allows.
@@ -57,9 +57,9 @@ export function toggleRow(
   return next
 }
 
-// The rows backing the current selection, across the FULL set (not just the
-// filtered view — a selected row hidden by search is still acted on), with any
-// non-selectable row (self) excluded so a stale selection can't target it.
+// Rows backing the current selection across the FULL set (a selected row hidden
+// by search is still acted on), with non-selectable rows (self) excluded so a
+// stale selection can't target them.
 export function resolveSelectedRows(
   rows: OrgMemberRow[],
   selectedKeys: ReadonlySet<string>,

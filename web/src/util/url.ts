@@ -1,6 +1,6 @@
 // Guards hrefs built from untrusted data (e.g. a student's committed
-// `result.json`): a `javascript:`/`data:` value in an anchor href is a script
-// sink, so only http(s) links are safe to render.
+// `result.json`): a `javascript:`/`data:` href is a script sink, so only
+// http(s) links are safe to render.
 
 export function isSafeHttpUrl(
   value: string | null | undefined,

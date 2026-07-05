@@ -17,9 +17,9 @@ import { appVersion, formatAppVersion } from "./version"
 
 const client = new QueryClient()
 
-// Make the deployed release identifiable from the browser console (there is no
-// version in the URL or a server header for a static SPA). Deliberate release
-// diagnostic, not stray debug logging — hence the no-console exception.
+// Make the deployed release identifiable from the browser console (a static SPA
+// has no version in the URL or a server header). Deliberate release diagnostic,
+// not stray debug logging — hence the no-console exception.
 // eslint-disable-next-line no-console
 console.info(
   `Classroom 50 — ${formatAppVersion()} — built ${appVersion.buildDate}`,

@@ -1,16 +1,16 @@
 // Authoring helpers for an assignment's `allowed_files`: an ordered,
 // .gitignore-style allowlist (last match wins, `!` re-includes; empty = all
-// files allowed). Edited as a textarea (one pattern per line); these convert
-// to/from the wire-shape `string[]`. Validation mirrors the CLI's
-// ValidateAllowedFiles and the assignments-v1 schema so a bad value is caught
-// here, not by a rejected commit that breaks assignments.json.
+// allowed). Edited as a textarea (one pattern per line); these convert to/from
+// the wire-shape `string[]`. Validation mirrors the CLI's ValidateAllowedFiles
+// and the assignments-v1 schema so a bad value is caught here, not by a rejected
+// commit.
 
 export const ALLOWED_FILES_CAP = 100
 
 // One pattern per line; blank lines dropped. Strips only the line separator
 // (trailing CR from CRLF) — other whitespace is significant in .gitignore and
 // stored verbatim by the CLI, so rewriting it would corrupt CLI-authored
-// patterns on re-save. Order is preserved (last match wins).
+// patterns on re-save. Order preserved (last match wins).
 export function parseAllowedFiles(raw: string): string[] {
   return raw
     .split("\n")

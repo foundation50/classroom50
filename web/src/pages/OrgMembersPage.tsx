@@ -47,14 +47,13 @@ import {
 } from "@/pages/orgMembers/memberPresentation"
 import useGetClasses from "@/hooks/useGetClasses"
 
-// How long to wait before reconciling an optimistically-updated students.csv
-// cache with the authoritative GitHub read. GitHub's contents API lags a fresh
-// commit by a beat, so an immediate refetch would read the pre-commit file and
-// revert the optimistic change; this delay lets it catch up.
+// Delay before reconciling an optimistically-updated students.csv cache with
+// the authoritative GitHub read: the contents API lags a fresh commit, so an
+// immediate refetch reads the pre-commit file and reverts the optimistic change.
 const CSV_RECONCILE_DELAY_MS = 4000
 
-// Sentinel classroom-filter value for "members on no classroom roster". A real
-// classroom path can't collide with it (paths don't contain a leading colon).
+// Sentinel classroom-filter value for "members on no roster". A real classroom
+// path can't collide (paths don't contain a leading colon).
 const NO_CLASSROOM_FILTER = ":none:"
 
 const OrgMembersPage = () => {
@@ -86,11 +85,10 @@ const OrgMembersPage = () => {
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
 
-  // Refresh after an org-level member removal (removeMemberFromOrg unenrolls the
-  // member from every classroom + removes org membership). Optimistically drop
-  // them from each affected classroom's CSV + team caches CONSISTENTLY (so no
-  // false "unprovisioned" flashes while the two reconcile), then reconcile with
-  // the server on a delay.
+  // Refresh after an org-level member removal (unenrolls from every classroom +
+  // removes org membership). Optimistically drop them from each affected
+  // classroom's CSV + team caches together (no false "unprovisioned" flash),
+  // then reconcile with the server on a delay.
   const refresh = (affected?: OrgMemberRow) => {
     if (!org) return
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
@@ -102,32 +100,29 @@ const OrgMembersPage = () => {
     }
   }
 
-  // Refresh after an org invite (no classroom membership changed — only the
-  // org-invite state). Just re-read the members + invite lists.
+  // Refresh after an org invite (only org-invite state changed). Just re-read
+  // the members + invite lists.
   const refreshInvite = () => {
     if (!org) return
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
     invalidateInviteQueries(queryClient, org)
   }
 
-  // The resolved GitHub team slug for a classroom (classroom.json.team.slug,
-  // else the classroom50-<classroom> heuristic). Must match the key
-  // useOrgMembersOverview reads the team cache under, or optimistic team-cache
-  // writes below would target a cache nobody reads (a name-collision classroom's
-  // real slug differs from the heuristic) and reintroduce the false
-  // "unprovisioned" flash the optimistic machinery exists to prevent.
+  // Resolved GitHub team slug for a classroom (classroom.json.team.slug, else
+  // the classroom50-<classroom> heuristic). Must match the key
+  // useOrgMembersOverview reads the team cache under, or optimistic writes below
+  // target a cache nobody reads (a name-collision classroom's real slug differs
+  // from the heuristic) and reintroduce the false "unprovisioned" flash.
   const teamSlugFor = (classroom: string) =>
     teamSlugByClassroom.get(classroom) ?? `classroom50-${classroom}`
 
-  // Invalidate the non-racy caches a roster write touches for one classroom:
-  // classroom.json (rarely changes) and, unless suppressed, the CSV. The
-  // team-members query is deliberately NOT invalidated here — it's handled by
-  // the optimistic seed + delayed reconcile in the bulk/remove paths, because
-  // invalidating the CSV and the team at different beats lets aggregateOrgMembers
-  // momentarily compare a fresh team against a stale CSV (or vice-versa) and
-  // flash a false "unprovisioned" state. `skipCsv` is set right after we've
-  // optimistically seeded the CSV (invalidating it would refetch the pre-commit
-  // file and revert the seed).
+  // Invalidate the non-racy caches a roster write touches: classroom.json and,
+  // unless suppressed, the CSV. The team-members query is deliberately NOT
+  // invalidated here — it's handled by the optimistic seed + delayed reconcile,
+  // because invalidating CSV and team at different beats lets aggregateOrgMembers
+  // compare a fresh team against a stale CSV and flash a false "unprovisioned"
+  // state. `skipCsv` is set after we've optimistically seeded the CSV
+  // (invalidating it would refetch the pre-commit file and revert the seed).
   const invalidateClassroom = (
     classroom: string,
     opts?: { skipCsv?: boolean },
@@ -152,10 +147,9 @@ const OrgMembersPage = () => {
   }
 
   // Optimistically drop members (by resolved id/login) from BOTH the target
-  // classroom's students.csv cache AND its team-members cache, in the same tick,
-  // so the two never momentarily disagree (which would flash a false
-  // "unprovisioned" state). teamSlug is the resolved slug (matches the cache the
-  // Members overview reads), so a collided-name classroom is updated correctly.
+  // classroom's students.csv AND its team-members cache, in the same tick, so
+  // the two never disagree (which would flash a false "unprovisioned" state).
+  // teamSlug is the resolved slug, so a collided-name classroom updates right.
   const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
     if (!org || removed.length === 0) return
     const ids = new Set(removed.map((r) => r.github_id?.trim()).filter(Boolean))
@@ -180,10 +174,9 @@ const OrgMembersPage = () => {
     )
   }
 
-  // Reconcile a classroom's CSV + team caches with the authoritative server
-  // once GitHub's APIs have caught up with the commit (both lag a beat). Done on
-  // one delayed tick so they refetch together and can't flash an inconsistent
-  // intermediate state.
+  // Reconcile a classroom's CSV + team caches with the server once GitHub's
+  // APIs have caught up with the commit (both lag). Done on one delayed tick so
+  // they refetch together and can't flash an inconsistent intermediate state.
   const scheduleClassroomReconcile = (classroom: string) => {
     if (!org) return
     window.setTimeout(() => {
@@ -201,8 +194,8 @@ const OrgMembersPage = () => {
   }
 
   // After a bulk add/remove: optimistically reflect the change in the CSV +
-  // team caches the row status derives from (keeping them consistent so no false
-  // "unprovisioned" flashes), then reconcile both with the server on a delay.
+  // team caches the row status derives from (kept consistent, no false
+  // "unprovisioned" flash), then reconcile both with the server on a delay.
   const handleBulkDone = (input: {
     classroom: string
     action: "add" | "remove"
@@ -233,8 +226,8 @@ const OrgMembersPage = () => {
         )
         return toAppend.length > 0 ? [...list, ...toAppend] : list
       })
-      // Seed the team cache too, so the member reads as "enrolled" (not
-      // "unprovisioned") immediately. buildTeamRoster/aggregate read id+login.
+      // Seed the team cache too, so the member reads as "enrolled" immediately.
+      // buildTeamRoster/aggregate read id+login.
       queryClient.setQueryData<GitHubUser[]>(
         githubKeys.teamMembers(org, teamSlugFor(classroom)),
         (current) => {
@@ -270,8 +263,8 @@ const OrgMembersPage = () => {
       optimisticRemove(classroom, removedRows)
     }
 
-    // Recompute the members list against the (now-consistently-seeded) caches,
-    // leaving the seeded CSV/team alone; reconcile both on a delay.
+    // Recompute members against the seeded caches, leaving them alone;
+    // reconcile both on a delay.
     queryClient.invalidateQueries({ queryKey: githubKeys.orgMembersAll(org) })
     invalidateInviteQueries(queryClient, org)
     invalidateClassroom(classroom, { skipCsv: true })
@@ -294,7 +287,6 @@ const OrgMembersPage = () => {
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter((row) => {
-      // Text search across username / name / email.
       if (
         q &&
         ![row.username, row.name, row.email].some((field) =>
@@ -332,18 +324,17 @@ const OrgMembersPage = () => {
     })
 
   // An org owner/admin: in the fetched admin-id set, or the signed-in account
-  // (always an owner here — the page is owner-gated — even if the admin list
+  // (always an owner here — page is owner-gated — even if the admin list
   // couldn't be read).
   const isOwner = (row: OrgMemberRow) =>
     (Boolean(row.github_id) && ownerIds.has(row.github_id)) || isSelf(row)
 
-  // The signed-in account (an org owner, since this page is owner-gated) can't
-  // be bulk-added/removed — a row is selectable only when it isn't self.
+  // The signed-in owner can't be bulk-added/removed — a row is selectable only
+  // when it isn't self.
   const isSelectable = (row: OrgMemberRow) => !isSelf(row)
 
   // Rows backing the current selection, across the full set (a selected row
-  // hidden by search is still acted on), with self always excluded so even a
-  // stale selection can't target the signed-in owner.
+  // hidden by search is still acted on), self always excluded.
   const selectedRows = useMemo(
     () => resolveSelectedRows(rows, selectedKeys, isSelectable),
     // isSelf/isSelectable depend on viewer; recompute when it changes.
@@ -355,7 +346,7 @@ const OrgMembersPage = () => {
     setSelectedKeys((prev) => toggleRow(prev, key))
 
   // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
-  // without disturbing any selected rows outside the current filter.
+  // without disturbing selected rows outside the current filter.
   const selectableFiltered = useMemo(
     () => selectableRows(filtered, isSelectable),
     // eslint-disable-next-line react-hooks/exhaustive-deps

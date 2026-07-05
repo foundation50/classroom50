@@ -72,10 +72,9 @@ export type CreateAssignmentFormValues = {
   tests: AssignmentTestDraft[]
 }
 
-// The concrete form instance type for this form's values, shared with child
-// panes (AutogradingTestsPane, FormErrors) so their `form` prop is fully typed
-// without re-stating useForm's many (invariant) generics. Derived from the
-// actual hook below so the validator generics always match the real form.
+// Concrete form-instance type shared with child panes (AutogradingTestsPane,
+// FormErrors) so their `form` prop is typed without restating useForm's
+// generics. Derived from the hook below so the generics always match.
 export type AssignmentForm = ReturnType<typeof useAssignmentForm>
 
 const useAssignmentForm = (
@@ -112,7 +111,7 @@ const useAssignmentForm = (
         if (!value.name.trim()) {
           errors.name = t("assignments.form.validation.nameRequired")
         }
-        // edit mode does not rename, so the slug is only validated on create.
+        // Edit mode doesn't rename, so slug is only validated on create.
         if (!slugContext?.edit) {
           const slug = slugify(value.slug)
           if (!slug) {
@@ -123,7 +122,7 @@ const useAssignmentForm = (
             )
           ) {
             // Case-insensitive collision (slugs become repo path segments);
-            // the write path re-checks authoritatively (nextAvailableSlug).
+            // write path re-checks authoritatively (nextAvailableSlug).
             errors.slug = t("validation.assignmentSlugTaken", { slug })
           }
         }
@@ -137,17 +136,16 @@ const useAssignmentForm = (
             Number(value.max_group_size) < GROUP_SIZE_MIN ||
             Number(value.max_group_size) > GROUP_SIZE_MAX)
         ) {
-          // Mirror the buildAssignmentEntry guard: the CLI schema needs a whole
-          // number in [MIN, MAX] or assignments.json becomes unparseable.
+          // Mirror buildAssignmentEntry: CLI schema needs a whole number in
+          // [MIN, MAX] or assignments.json becomes unparseable.
           errors.max_group_size = t("validation.groupSizeRange", {
             min: GROUP_SIZE_MIN,
             max: GROUP_SIZE_MAX,
           })
         }
 
-        // Mirrors gh-teacher's write-time validation so a bad test is
-        // caught in the form, not by a failed commit (or worse, a file
-        // the CLI later refuses to parse).
+        // Mirror gh-teacher's write-time validation so a bad test is caught in
+        // the form, not by a failed commit or an unparseable file.
         Object.assign(errors, validateTestDrafts(value.tests))
 
         // Mirror the CLI's cap/shape rules so a bad value can't reach the file.
@@ -158,8 +156,8 @@ const useAssignmentForm = (
           errors.allowed_files = allowedFilesError
         }
 
-        // pass_threshold: only validated when the teacher enabled it. Integer
-        // percentage in [0, 100] (mirrors the CLI schema bounds).
+        // Only validated when the teacher enabled it. Integer percentage in
+        // [0, 100] (mirrors the CLI schema bounds).
         if (value.pass_threshold_enabled) {
           const threshold = Number(value.pass_threshold)
           if (
@@ -205,15 +203,14 @@ type CreateAssignmentFormProps = {
   onCancel?: () => void
   edit?: boolean
   loading?: boolean
-  // Render every field/button disabled (e.g. an archived classroom's assignment
-  // is viewable but read-only). A disabled <fieldset> natively disables all
-  // descendant controls, including the submit button.
+  // Render every field/button disabled (e.g. an archived classroom). A disabled
+  // <fieldset> natively disables all descendant controls, including submit.
   readOnly?: boolean
   // Org slug for verifying a runner label against the org's self-hosted
   // runners. When absent, verification never blocks.
   org?: string
-  // Classroom slug, used by the template pre-flight to check whether the
-  // classroom team already has read on an in-org private template.
+  // Classroom slug; template pre-flight uses it to check whether the classroom
+  // team already has read on an in-org private template.
   classroom?: string
   // Existing assignment slugs, for the create-mode uniqueness check.
   takenSlugs?: string[]
@@ -232,16 +229,16 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
   </form.Subscribe>
 )
 
-// Free-form runner input with advisory, non-blocking verification: it
-// annotates the value but never rewrites or clears what the teacher typed.
+// Free-form runner input with advisory, non-blocking verification: annotates
+// the value but never rewrites or clears what the teacher typed.
 const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
   const { t } = useTranslation()
   const client = useOptionalGitHubClient()
   const rawValue = field.state.value
   const debouncedValue = useDebouncedValue(rawValue.trim(), 400)
 
-  // Hit the org runners API only for a well-shaped label not already
-  // recognized client-side; everything else needs no network call.
+  // Hit the org runners API only for a well-shaped label not already recognized
+  // client-side; everything else needs no network call.
   const needsOrgLookup = Boolean(
     client &&
     org &&
@@ -442,17 +439,17 @@ const utcIsoToDatetimeLocalValue = (value?: string) => {
   return toDatetimeLocalValue(date)
 }
 
-// Map a stored classroom50/assignments/v1 entry back into the form's value
-// shape: template as `owner/repo`, due as datetime-local, runtime split into
-// runner/container fields, and the leading 0-point "setup" run-test lifted
-// back into the setup command.
+// Map a stored classroom50/assignments/v1 entry back into form values:
+// template as `owner/repo`, due as datetime-local, runtime split into
+// runner/container fields, and the leading 0-point "setup" test lifted back
+// into the setup command.
 export const assignmentToFormValues = (
   assignment: Assignment,
 ): Partial<CreateAssignmentFormValues> => {
   const allTests = (assignment.tests ?? []).map(testToDraft)
-  // Lift the setup command only from a leading setup test (isSetupTest), never
-  // a later or graded one, so a round-trip can't swallow a user-authored test.
-  // (Reserved at write time; this also guards pre-reservation assignments.)
+  // Lift the setup command only from a leading setup test (isSetupTest), never a
+  // later or graded one, so a round-trip can't swallow a user-authored test.
+  // (Also guards pre-reservation assignments.)
   const head = allTests[0]
   const setupIsLeading = head !== undefined && isSetupTest(head)
   const setupCommand = setupIsLeading ? head.run : ""
@@ -497,8 +494,8 @@ const CreateAssignmentForm = ({
     takenSlugs,
     edit,
   })
-  // Auto-prefill the slug from the name until the teacher edits the slug
-  // directly, so a deliberate slug isn't clobbered by later name edits.
+  // Auto-prefill slug from name until the teacher edits it directly, so a
+  // deliberate slug isn't clobbered by later name edits.
   const [slugTouched, setSlugTouched] = useState(false)
   const tzShort = new Intl.DateTimeFormat(undefined, {
     timeZoneName: "short",
@@ -514,7 +511,7 @@ const CreateAssignmentForm = ({
         form.handleSubmit()
       }}
     >
-      {/* readOnly disables every descendant control at once. */}
+      {/* readOnly disables every descendant control. */}
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
         <div className="card bg-base-100 w-full shadow-sm mb-6">
           <div className="card-body">

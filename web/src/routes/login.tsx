@@ -5,12 +5,10 @@ import { isSafeReturnTo } from "@/auth/returnTo"
 // `redirect`: same-origin path to return to after sign-in, set when the _authed
 // guard (or App's session-expiry redirect) bounces an unauthenticated user here
 // (#71). useGithubAuth handles the sign-in round-trip; this guard covers the
-// already-authenticated case.
-//
-// The value is built as pathname + search (see _authed.tsx / App.tsx), so it may
-// carry a query (e.g. the ?k= accept capability key). Passing it whole as
-// `redirect({ to })` folds the query into the pathname, so split it into
-// { to, search } first. /login itself is rejected to avoid a self-redirect hop.
+// already-authenticated case. The value is pathname + search, so it may carry a
+// query (e.g. the ?k= accept key); `redirect({ to })` would fold that into the
+// pathname, so split into { to, search } first. /login is rejected to avoid a
+// self-redirect hop.
 function toRedirectTarget(value: string): {
   to: string
   search: Record<string, string>

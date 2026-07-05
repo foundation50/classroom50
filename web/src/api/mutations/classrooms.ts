@@ -34,9 +34,9 @@ export async function createClassroomFiles(
   input: CreateClassroomInput,
 ): Promise<CreateClassroomResult> {
   // Create (or adopt) the teams BEFORE scaffolding so their { id, slug } land in
-  // classroom.json (mirrors the CLI's ordering). The students team grants
-  // rostered students read on private org templates; the staff teams
-  // (instructor, ta) get config-repo write and back the in-app roles.
+  // classroom.json (mirrors the CLI). The students team grants rostered students
+  // read on private org templates; the staff teams (instructor, ta) get
+  // config-repo write and back the in-app roles.
   const { created: teamCreated, ...team } = await ensureClassroomTeam(
     client,
     input.org,
@@ -160,10 +160,9 @@ export type CreateClassroomInput = {
   name?: string
   classroom: string
   term: string
-  // Optional capability-URL secret (opt-in). When set, classroom.json
-  // records it and published Pages resources live under
-  // `<classroom>/<secret>/...`. Validated to `[a-z0-9]{4,64}` before the
-  // mutation runs.
+  // Optional capability-URL secret (opt-in). When set, classroom.json records
+  // it and published Pages resources live under `<classroom>/<secret>/...`.
+  // Validated to `[a-z0-9]{4,64}` before the mutation runs.
   secret?: string
   // The viewer's GitHub login, added to the instructor staff team on create so
   // the creator gets the instructor role. Optional — the classroom still
@@ -177,9 +176,6 @@ export async function createClassroomFilesWithConflictRetry(
   return withGitConflictRetry(() => createClassroomFiles(client, input))
 }
 
-// editClassroom does a read-modify-write on the shared classroom50 main branch
-// (re-reading the ref + classroom.json each call), so a concurrent write 409s
-// the updateRef. It is safe to retry.
 // Refuse a write into an archived classroom (active: false). The UI hides the
 // affordances, but the write path is the authoritative guard (stale tab, direct
 // API call, CLI/agent). Reads classroom.json fresh and fails closed before any
@@ -197,9 +193,8 @@ export async function assertClassroomNotArchived(
     // A missing/legacy classroom.json reads as active — never block.
     if (err instanceof GitHubAPIError && err.isNotFound) return
     // A transient read failure (rate-limit / 5xx / network) can't prove the
-    // classroom's state. Stay fail-closed (don't let a write into a possibly
-    // archived classroom through), but surface an actionable message instead
-    // of bubbling the raw GitHub error as if the write itself failed.
+    // classroom's state. Stay fail-closed, but surface an actionable message
+    // instead of bubbling the raw GitHub error as if the write itself failed.
     if (isTransientReadError(err)) {
       throw new Error(
         `Couldn't verify whether classroom "${classroom}" is archived (a temporary problem reading its settings). Please try again.`,
@@ -301,8 +296,8 @@ export async function deleteClassroom(
 
   // Resolve the team refs from classroom.json BEFORE the deletion commit
   // removes the file. No team block (pre-feature) or a read failure yields no
-  // refs, making the deletes below no-ops. Both the students team and the staff
-  // teams are removed so repo deletion doesn't orphan them.
+  // refs, making the deletes below no-ops. Both the students and staff teams are
+  // removed so repo deletion doesn't orphan them.
   let team: { id: number; slug: string } | undefined
   let staffTeams: StaffTeamRefs
   try {
@@ -385,12 +380,12 @@ export async function deleteClassroom(
     },
   })
 
-  // Delete the per-classroom teams (idempotent; 404 = already gone): the
-  // students team plus the staff teams. Filtered through the shared guard so a
-  // drifted/hand-edited ref outside the classroom50- namespace never enters the
-  // delete set. A delete failure must NOT undo the already-committed config
-  // removal — surface it as a non-fatal warning. Each delete retries a transient
-  // blip; a permanent refusal is recorded without retrying.
+  // Delete the per-classroom teams (idempotent; 404 = already gone): students
+  // plus staff. Filtered through the shared guard so a drifted/hand-edited ref
+  // outside the classroom50- namespace never enters the delete set. A delete
+  // failure must NOT undo the already-committed config removal — surface it as a
+  // non-fatal warning. Each delete retries a transient blip; a permanent refusal
+  // is recorded without retrying.
   const refsToDelete = [team, staffTeams.instructor, staffTeams.ta].filter(
     isDeletableClassroomTeamRef,
   )

@@ -29,8 +29,8 @@ export function useCopyToClipboard(text: string, resetMs = 2000) {
     }
   }
 
-  // Clear the flag and any pending timer immediately (e.g. when the text to
-  // copy changes so a stale "Copied" doesn't linger).
+  // Clear the flag and any pending timer immediately (e.g. when the copy text
+  // changes so a stale "Copied" doesn't linger).
   const reset = () => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current)
     resetTimerRef.current = null

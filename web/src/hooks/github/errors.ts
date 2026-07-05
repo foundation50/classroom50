@@ -12,17 +12,16 @@ export class GitHubAPIError extends Error {
   url: string
   body: unknown
   rateLimit: GitHubRateLimit
-  // Raw X-GitHub-SSO response header, when present. GitHub sets this on a
-  // 403 (and omits SSO-gated orgs from multi-org reads) when the token lacks a
-  // live SAML SSO session for the org/enterprise. `null` when the header was
-  // absent. See parseSsoAuthorizationUrl for extracting the authorization URL.
+  // Raw X-GitHub-SSO response header, when present. GitHub sets this on a 403
+  // (and omits SSO-gated orgs from multi-org reads) when the token lacks a live
+  // SAML SSO session for the org/enterprise. `null` when absent. See
+  // parseSsoAuthorizationUrl for extracting the authorization URL.
   ssoHeader: string | null
-  // Raw X-Accepted-OAuth-Scopes response header, when present. On a 403 caused
-  // by a scope gap, GitHub reports the scopes the endpoint *requires* here (vs
-  // X-OAuth-Scopes, the scopes the token actually has). `null` when absent.
-  // Used with `oauthScopes` to distinguish a real scope gap from an org
-  // restriction — presence alone is NOT a gap (GitHub sends this header on most
-  // responses); a gap is `acceptedScopes` not satisfied by `oauthScopes`.
+  // Raw X-Accepted-OAuth-Scopes response header, when present. On a scope-gap
+  // 403, GitHub reports the scopes the endpoint *requires* here (vs
+  // X-OAuth-Scopes, what the token has). `null` when absent. Used with
+  // `oauthScopes` to tell a real scope gap from an org restriction — presence
+  // alone is NOT a gap (GitHub sends it on most responses).
   acceptedScopes: string | null
   // Raw X-OAuth-Scopes response header (the scopes the token actually holds),
   // when present. `null` for a fine-grained PAT or when absent. Compared against
@@ -71,22 +70,21 @@ export class GitHubAPIError extends Error {
   }
 
   // The org/enterprise enforces SAML SSO and this token has no live SSO session
-  // for it. GitHub signals this with the X-GitHub-SSO header (a 403 carrying
-  // `required; url=…`, or `partial-results; organizations=…` on multi-org reads).
-  // Scoped to 403: GitHub only emits X-GitHub-SSO on a forbidden response, so a
-  // header echoed on any other status (a 401 dead token, a 5xx/429 that a proxy
-  // copied the header onto) is NOT an SSO gate and must not misroute the user.
+  // for it. GitHub signals this via X-GitHub-SSO (a 403 carrying `required;
+  // url=…`, or `partial-results; organizations=…` on multi-org reads). Scoped to
+  // 403: GitHub only emits X-GitHub-SSO on a forbidden response, so a header
+  // echoed on any other status (a 401 dead token, a proxy-copied 5xx/429) is NOT
+  // an SSO gate and must not misroute the user.
   get isSsoRequired() {
     return this.status === 403 && this.ssoHeader !== null
   }
 
-  // A 403 caused by the token missing a scope the endpoint requires — as opposed
-  // to an org restriction, SAML gate, or rate limit (all also 403). GitHub sends
-  // X-Accepted-OAuth-Scopes on most responses, so its mere presence is NOT a gap;
-  // a real gap is when the accepted set has a requirement the token's granted
-  // scopes (X-OAuth-Scopes) don't satisfy. When either header is absent we cannot
-  // prove a gap, so this is false (fail closed — never mislabel a restriction as
-  // a scope problem). An empty required set ("" — endpoint needs no scope) is
+  // A 403 caused by the token missing a scope the endpoint requires — vs an org
+  // restriction, SAML gate, or rate limit (all also 403). GitHub sends
+  // X-Accepted-OAuth-Scopes on most responses, so its mere presence is NOT a
+  // gap; a real gap is when the accepted set has a requirement the token's
+  // granted scopes (X-OAuth-Scopes) don't satisfy. When either header is absent
+  // we can't prove a gap, so false (fail closed). An empty required set ("") is
   // never a gap.
   get isScopeGap() {
     if (this.status !== 403) return false
@@ -100,13 +98,13 @@ export class GitHubAPIError extends Error {
     if (required.length === 0) return false
     const granted = new Set(parse(this.oauthScopes))
     // GitHub treats X-Accepted-OAuth-Scopes as "any one of these satisfies the
-    // endpoint", so a gap is only when the token holds NONE of the accepted scopes.
+    // endpoint", so a gap is only when the token holds NONE of them.
     return !required.some((scope) => granted.has(scope))
   }
 
   // The GitHub SSO authorization URL to send the user to, if the header carried
-  // one (`required; url=…`). Returns null for the `partial-results` shape or
-  // when no header is present.
+  // one (`required; url=…`). Null for the `partial-results` shape or when no
+  // header is present.
   get ssoAuthorizationUrl() {
     return parseSsoAuthorizationUrl(this.ssoHeader)
   }
@@ -128,10 +126,10 @@ export function parseSsoAuthorizationUrl(
   try {
     const url = new URL(match[1])
     // Only ever hand back an https://github.com SSO URL, never an
-    // attacker-influenced origin or scheme (the header is from GitHub, but stay
-    // defensive since we render this as a clickable redirect). The explicit
-    // https: check makes the intent durable rather than relying on the
-    // incidental fact that javascript:/data: URLs parse to an empty hostname.
+    // attacker-influenced origin or scheme (the header is from GitHub, but we
+    // render this as a clickable redirect). The explicit https: check makes the
+    // intent durable rather than relying on javascript:/data: URLs parsing to an
+    // empty hostname.
     if (url.protocol !== "https:") return null
     if (url.hostname !== "github.com") return null
     return url.toString()
@@ -143,8 +141,7 @@ export function parseSsoAuthorizationUrl(
 // Shared React Query `retry` predicate for fail-closed role/permission reads: a
 // definitive status (401 revoked/expired, 403 blocked, 404 not found / not a
 // member — see isDefinitiveGitHubStatus) must NOT retry, while a transient
-// 5xx/429/network blip self-heals (bounded to 2). Named for its behavior (retry
-// only transient errors); the definitive set includes 401 as well as 403/404.
+// 5xx/429/network blip self-heals (bounded to 2).
 export function retryTransientGitHubError(
   failureCount: number,
   error: unknown,
@@ -158,12 +155,11 @@ export function retryTransientGitHubError(
   return failureCount < 2
 }
 
-// Statuses that are DEFINITIVE for a GitHub read — retrying cannot change the
-// outcome, so the query should resolve immediately: 401 (revoked/expired
-// credentials), 403 (blocked, incl. SAML-SSO-gated — see #66), 404 (absent).
-// Any other failure (5xx / 429 / network) is treated as transient by the retry
-// predicates above/below. Works off a bare status so it is shared across the
-// bespoke GitHubUserFetchError and the canonical GitHubAPIError.
+// Statuses that are DEFINITIVE for a GitHub read — retrying can't change the
+// outcome, so the query resolves immediately: 401 (revoked/expired), 403
+// (blocked, incl. SAML-SSO-gated — see #66), 404 (absent). Any other failure
+// (5xx / 429 / network) is transient per the retry predicates. Works off a bare
+// status so it's shared across GitHubUserFetchError and GitHubAPIError.
 export function isDefinitiveGitHubStatus(status: number): boolean {
   return status === 401 || status === 403 || status === 404
 }

@@ -54,16 +54,12 @@ const CreateAssignmentPage = () => {
       if (err instanceof GitHubAPIError) {
         switch (err.status) {
           case 409:
-            // conflict
             break
           case 404:
-            // not found
             break
           case 422:
-            // validation
             break
           default:
-            // unspecified
             break
         }
       } else {
@@ -80,8 +76,7 @@ const CreateAssignmentPage = () => {
           `${classroom ?? ""}/assignments.json`,
         ),
       })
-      // Track the publish-pages deploy this commit triggers, anchored on the
-      // commit SHA (head_sha on the runs API).
+      // Track the publish-pages deploy this commit triggers, anchored on SHA.
       if (org && result.newCommitSha) {
         register({
           org,
@@ -89,8 +84,8 @@ const CreateAssignmentPage = () => {
           anchor: { kind: "sha", sha: result.newCommitSha },
         })
       }
-      // Assignment created. If the template team grant failed, stay on the
-      // page to show the warning instead of navigating away.
+      // If the template team grant failed, stay on the page to show the warning
+      // instead of navigating away.
       if (result.templateGrantWarning) {
         setWarningMessage(result.templateGrantWarning)
         window.scrollTo({ top: 0, behavior: "smooth" })

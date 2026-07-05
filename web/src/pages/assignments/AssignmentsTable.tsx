@@ -164,8 +164,8 @@ const AssignmentsTable = ({
   assignments?: Assignment[]
   students?: Student[]
   loading?: boolean
-  // When the classroom is archived, hide the per-row mutating actions
-  // (edit / reuse / delete) — viewing stays available.
+  // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
+  // stays available.
   archived?: boolean
 }) => {
   const { t } = useTranslation()
@@ -276,7 +276,7 @@ const AssignmentsTable = ({
                       scoresData?.submissions?.[assignment.slug]?.length || 0
 
                     // Group assignments submit per-repo, not per-student, so a
-                    // roster-size denominator is meaningless — show the count.
+                    // roster denominator is meaningless — show the count.
                     if (assignment.mode === "group") {
                       return (
                         <span className="whitespace-nowrap">

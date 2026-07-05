@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
-// alerts, Cancel/Reuse footer — so each only supplies its title, description,
+// alerts, Cancel/Reuse footer — so each supplies only its title, description,
 // and direction-specific selectors. The modal owns the <dialog> ref (the reuse
-// hook needs it for its closer); the shell just opens it on mount.
+// hook needs it); the shell just opens it on mount.
 export const ReuseModalShell = ({
   dialogRef,
   title,
@@ -27,8 +27,8 @@ export const ReuseModalShell = ({
   warning: string | null
   errorMessage: string | null
   canSubmit: boolean
-  // Hide the Reuse button when there's nothing to submit into / from, or after a
-  // grant warning has turned the flow into a "Done" acknowledgement.
+  // Hide the Reuse button when there's nothing to submit into/from, or after a
+  // grant warning turns the flow into a "Done" acknowledgement.
   showSubmit: boolean
   onSubmit: () => void
   onClose: () => void
@@ -132,8 +132,8 @@ export const ReuseModalShell = ({
 
 export default ReuseModalShell
 
-// Slug-field helper text. `loading`/`error`/`slugTaken` are prioritized in
-// order; otherwise preview the normalized form or fall back to `uniqueHint`.
+// Slug-field helper text. `loading`/`error`/`slugTaken` take priority in order;
+// otherwise preview the normalized form or fall back to `uniqueHint`.
 // `classroomLabel`/`uniqueHint` carry each modal's wording.
 export const reuseSlugStatus = ({
   t,

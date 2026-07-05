@@ -54,9 +54,9 @@ const SummaryBanner = ({
 export const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 
 // Re-run the org setup from Org Settings: re-invokes the idempotent
-// initClassroom50 to re-apply the full lockdown, rulesets, and repo settings.
-// Owner-gated; shows the same badge board the wizard uses. This is the
-// "repair everything" path that complements the per-concern audit (U5/U6).
+// initClassroom50 to re-apply lockdown, rulesets, and repo settings. Owner-gated;
+// shows the wizard's badge board. The "repair everything" path complementing the
+// per-concern audit (U5/U6).
 const RerunOrgSetup = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
@@ -73,8 +73,8 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
   const [failed, setFailed] = useState(false)
   const [done, setDone] = useState(false)
 
-  // Skeleton-overwrite confirmation. initClassroom50 calls confirmSkeletonOverwrite
-  // mid-run with the drifted files about to be overwritten; the hook opens the
+  // Skeleton-overwrite confirmation. initClassroom50 calls
+  // confirmSkeletonOverwrite mid-run with the drifted files; the hook opens the
   // modal and parks the run until the teacher confirms or cancels.
   const {
     overwritePaths,
@@ -83,8 +83,8 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
     mountedRef,
   } = useSkeletonOverwriteConfirm()
 
-  // After a completed run, surface whether any step finished with a warning so
-  // the per-step messages on the board have a headline to explain them.
+  // After a run, surface whether any step warned so the board's per-step
+  // messages have a headline.
   const warningCount = started
     ? INIT_STEP_ORDER.filter((id) => steps[id].status === "warning").length
     : 0
@@ -102,7 +102,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
         onStepUpdate: (update) => {
           // init fires onStepUpdate across ~10 sequential steps; the user can
           // navigate away mid-run. The work isn't cancelable (no AbortSignal),
-          // so the mounted guard just stops the setState churn.
+          // so the mounted guard just stops setState churn.
           if (!mountedRef.current) return
           setSteps((prev) => applyStepUpdate(prev, update))
         },
@@ -113,7 +113,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       if (!mountedRef.current) return
       setDone(true)
       // init resolves (not throws) with status "error" on a prerequisite
-      // failure; surface it instead of treating it as a clean success.
+      // failure; surface it instead of treating it as success.
       if (data && data.status === "error") {
         setFailed(true)
         return
