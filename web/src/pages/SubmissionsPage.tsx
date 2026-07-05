@@ -186,7 +186,6 @@ const SubmissionsPageContent = () => {
     1500,
   )
 
-  // Re-render every 30s so the relative "last collected"/"last updated" labels stay fresh.
   usePeriodicRerender()
   const assignmentInfo = assignmentData?.assignments.find(
     (a) => a.slug === assignment,

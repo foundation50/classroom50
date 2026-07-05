@@ -1545,7 +1545,6 @@ export async function deleteAssignment(
     ref: ref.object.sha,
   })
 
-  // find the assignment if it exists already
   const targetAssignment = currentAssignments.assignments.find(
     (a) => a.slug === slug,
   )
@@ -1554,7 +1553,6 @@ export async function deleteAssignment(
     throw new Error(`Existing assignment matching ${slug} was not found.`)
   }
 
-  // expand all but the targeted assignment to filter it out
   const nextAssignments = {
     ...currentAssignments,
     assignments: [

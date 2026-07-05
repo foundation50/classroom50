@@ -755,10 +755,6 @@ export async function ensureTeam(
 export async function fetchJson<T>(url: string): Promise<T> {
   const response = await fetch(url, {
     cache: "no-store",
-    // headers: {
-    //   "Cache-Control": "no-cache, no-store, max-age=0",
-    //   Pragma: "no-cache",
-    // },
   })
 
   if (response.status === 404) {
