@@ -12,7 +12,6 @@ import csv
 import json
 import os
 import pathlib
-import textwrap
 
 import pytest
 
@@ -1254,178 +1253,18 @@ class TestLateness:
         assert results[0]["submissions"][0]["late"] is True
 
 
-# read_students_csv -----------------------------------------------------------
+# students.csv header lockstep -----------------------------------------------
 
 
-class TestReadStudentsCSV:
-    def test_canonical_header_with_rows(self, tmp_path):
-        path = tmp_path / "students.csv"
-        write_roster(
-            path,
-            [
-                {"username": "alice", "first_name": "Alice", "github_id": "111"},
-                {"username": "bob", "first_name": "Bob", "github_id": "222"},
-            ],
-        )
-        roster = cs.read_students_csv(path)
-        assert roster == [
-            {"username": "alice", "github_id": "111"},
-            {"username": "bob", "github_id": "222"},
-        ]
-
-    def test_utf8_bom_header_is_accepted(self, tmp_path):
-        # Mirrors the Go-side students_csv.go BOM tolerance for
-        # spreadsheet-edited CSVs.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "\ufeffusername,first_name,last_name,email,section,github_id\n"
-            "alice,Alice,A,alice@x,1,111\n",
-            encoding="utf-8",
-        )
-        assert cs.read_students_csv(path) == [{"username": "alice", "github_id": "111"}]
-
-    def test_skips_rows_with_empty_username(self, tmp_path):
-        # A blank/template row mustn't become a fake student.
-        path = tmp_path / "students.csv"
-        write_roster(
-            path,
-            [
-                {"username": "alice"},
-                {"username": ""},
-                {"username": "bob"},
-            ],
-        )
-        roster = cs.read_students_csv(path)
-        assert [r["username"] for r in roster] == ["alice", "bob"]
-
-    def test_skips_rows_with_malformed_username(self, tmp_path):
-        # Slashes/spaces must not reach the URL builder — warn and skip.
-        path = tmp_path / "students.csv"
-        write_roster(
-            path,
-            [
-                {"username": "alice"},
-                {"username": "../mallory"},
-                {"username": "bob"},
-            ],
-        )
-        roster = cs.read_students_csv(path)
-        assert [r["username"] for r in roster] == ["alice", "bob"]
-
-    def test_empty_file_raises(self, tmp_path):
-        path = tmp_path / "students.csv"
-        path.write_text("")
-        with pytest.raises(cs.RosterFileError, match="empty"):
-            cs.read_students_csv(path)
-
-    def test_wrong_header_raises(self, tmp_path):
-        # A renamed or short header is rejected so the run can't
-        # finish with silent missing data.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "user,first_name,last_name,email,section,github_id\nalice,Alice,A,a@x,1,111\n"
-        )
-        with pytest.raises(cs.RosterFileError, match="header"):
-            cs.read_students_csv(path)
-
-    def test_handles_quoted_fields(self, tmp_path):
-        # Quoted values with embedded commas must round-trip through DictReader.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            textwrap.dedent(
-                """\
-                username,first_name,last_name,email,section,github_id
-                alice,Alice,"Andersson, Jr.",alice@x,1,111
-                """
-            )
-        )
-        roster = cs.read_students_csv(path)
-        assert roster == [{"username": "alice", "github_id": "111"}]
-
-    def test_header_only_file_returns_empty_list(self, tmp_path):
-        # Fresh classroom, no students: report 0/0, don't crash.
-        path = tmp_path / "students.csv"
-        write_roster(path, [])
-        assert cs.read_students_csv(path) == []
-
-    def test_legacy_extra_columns_are_accepted_and_ignored(self, tmp_path):
-        # An earlier web app appended optional extra columns. The collector must
-        # accept the wider header (not skip the classroom) and still extract only
-        # username + github_id by name.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "username,first_name,last_name,email,section,github_id,"
-            "enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n"
-            "alice,Alice,A,alice@x,1,111,enrolled,github,abcd1234ef567890,,2026-01-01T00:00:00Z,2026-01-02T00:00:00Z\n"
-            "bob,Bob,B,bob@x,1,222,invited,email,beef0000beef0000,tok123,2026-01-03T00:00:00Z,\n"
-        )
-        roster = cs.read_students_csv(path)
-        assert roster == [
-            {"username": "alice", "github_id": "111"},
-            {"username": "bob", "github_id": "222"},
-        ]
-
-    def test_legacy_extra_header_with_utf8_bom_is_accepted(self, tmp_path):
-        # The wider header must also survive Excel's BOM.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "\ufeffusername,first_name,last_name,email,section,github_id,"
-            "enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n"
-            "alice,Alice,A,alice@x,1,111,invited,email,abcd,,2026-01-01T00:00:00Z,\n",
-            encoding="utf-8",
-        )
-        assert cs.read_students_csv(path) == [{"username": "alice", "github_id": "111"}]
-
-    def test_shuffled_required_prefix_is_rejected(self, tmp_path):
-        # Tolerance applies only to columns AFTER the required six; a reordered
-        # required prefix is still a hand-edit that could shift data.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "username,last_name,first_name,email,section,github_id,enrollment_status\n"
-            "alice,A,Alice,a@x,1,111,invited\n"
-        )
-        with pytest.raises(cs.RosterFileError, match="header"):
-            cs.read_students_csv(path)
-
-    def test_full_roster_header_matches_go_constant(self):
-        # The exact 6-column header must stay in lockstep with FullRosterHeader
-        # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
-        # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If
-        # this fails, a column or its order drifted between the codebases. An
-        # earlier trailing tail was pruned across all three, so this is now the 6
-        # identity/metadata columns only.
-        assert cs.FULL_ROSTER_HEADER == (
-            "username,first_name,last_name,email,section,github_id"
-        )
-
-    def test_duplicate_extra_column_is_rejected(self, tmp_path):
-        # csv.DictReader would silently last-wins a duplicate header; reject it
-        # so the collector and the Go reader agree the file is malformed.
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "username,first_name,last_name,email,section,github_id,note,note\n"
-            "alice,A,A,a@x,1,111,x,y\n"
-        )
-        with pytest.raises(cs.RosterFileError, match="duplicate column"):
-            cs.read_students_csv(path)
-
-    def test_extra_column_reusing_required_name_is_rejected(self, tmp_path):
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "username,first_name,last_name,email,section,github_id,email\n"
-            "alice,A,A,a@x,1,111,dup\n"
-        )
-        with pytest.raises(cs.RosterFileError, match="reserved column name"):
-            cs.read_students_csv(path)
-
-    def test_formula_trigger_extra_column_name_is_rejected(self, tmp_path):
-        path = tmp_path / "students.csv"
-        path.write_text(
-            "username,first_name,last_name,email,section,github_id,=HYPERLINK(1)\n"
-            "alice,A,A,a@x,1,111,v\n"
-        )
-        with pytest.raises(cs.RosterFileError, match="formula trigger"):
-            cs.read_students_csv(path)
+def test_full_roster_header_matches_go_constant():
+    # The exact 6-column header must stay in lockstep with FullRosterHeader
+    # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
+    # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If this
+    # fails, a column or its order drifted between the codebases. Collection is
+    # team-driven and no longer reads students.csv, but the Go download-metadata
+    # join and the web writer still share this header, so the Python leg of the
+    # 3-way lockstep is retained.
+    assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id"
 
 
 # load_scores / save_scores ---------------------------------------------------

@@ -44,7 +44,6 @@ Exit codes:
 
 from __future__ import annotations
 
-import csv
 import datetime
 import json
 import os
@@ -90,19 +89,11 @@ ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "sect
 
 # The exact on-disk students.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
-# STUDENT_CSV_FIELDS header — a three-way lockstep. Legacy trailing columns on
-# an existing file are tolerated on read (see read_students_csv), not written.
+# STUDENT_CSV_FIELDS header — a three-way lockstep. Collection is team-driven
+# and no longer reads students.csv, but this constant remains the Python leg of
+# that header lockstep (the Go download-metadata join and the web writer still
+# share it), pinned by test_full_roster_header_matches_go_constant.
 FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
-
-# Coarse filter for obviously-bogus usernames (empty, slashes, etc.) so they
-# don't get formatted into a URL. Not a strict GitHub username validator.
-_USERNAME_BAD_CHARS = re.compile(r"[^A-Za-z0-9-]")
-
-# Leading bytes a spreadsheet (Excel/LibreOffice) treats as a formula trigger.
-# Mirrors isFormulaTrigger in students_csv.go; rejects a hand-edited extra
-# column whose NAME would re-introduce CSV-injection when the CLI rewrites the
-# header verbatim.
-_CSV_FORMULA_TRIGGERS = ("=", "+", "-", "@", "\t", "\r")
 
 
 # Top-level dispatch ----------------------------------------------------------
@@ -272,85 +263,6 @@ def iter_classrooms(
             )
             continue
         yield entry.name, classroom_meta, assignments
-
-
-# Roster CSV parsing ----------------------------------------------------------
-
-
-class RosterFileError(Exception):
-    """Malformed students.csv."""
-
-
-def read_students_csv(path: pathlib.Path) -> list[dict[str, str]]:
-    """Parse students.csv into row dicts. Rejects a renamed/short header so a
-    hand-edit can't silently drop data. Empty-username rows are skipped.
-
-    NOTE: score collection is TEAM-driven and no longer reads students.csv (the
-    team drives the pairs). This reader is retained as the Python-side validator
-    of the shared CSV contract — exercised by the test suite and available to
-    any future consumer — and its header must stay in lockstep with the Go/web
-    header (see FULL_ROSTER_HEADER).
-    """
-    try:
-        # utf-8-sig strips Excel's BOM, matching the Go students_csv.go reader.
-        with path.open(newline="", encoding="utf-8-sig") as fh:
-            reader = csv.DictReader(fh)
-            if reader.fieldnames is None:
-                raise RosterFileError("students.csv is empty")
-            header = tuple(reader.fieldnames)
-            # Tolerate trailing extras (e.g. a legacy tail on a between-deploys
-            # file): only username + github_id are read by name. A renamed/
-            # short/shuffled required prefix is still rejected so a hand-edit
-            # can't silently drop or shift roster data.
-            if header[: len(ROSTER_REQUIRED_COLUMNS)] != ROSTER_REQUIRED_COLUMNS:
-                raise RosterFileError(
-                    f"students.csv header = {header}, want it to start with "
-                    f"{ROSTER_REQUIRED_COLUMNS} (hand-edited?). Use "
-                    f"`gh teacher roster add/import` to manage the file."
-                )
-            # Reject the same malformed extra headers the Go reader rejects so
-            # both binaries agree the shared file is well-formed: a reused
-            # required name, a duplicate (csv.DictReader silently last-wins it),
-            # or a formula-trigger name (CSV-injection on a CLI rewrite).
-            extra_columns = header[len(ROSTER_REQUIRED_COLUMNS) :]
-            seen_extra: set[str] = set()
-            for name in extra_columns:
-                if name in ROSTER_REQUIRED_COLUMNS:
-                    raise RosterFileError(
-                        f"students.csv extra column {name!r} reuses a reserved "
-                        f"column name (hand-edited?)."
-                    )
-                if name in seen_extra:
-                    raise RosterFileError(
-                        f"students.csv has a duplicate column {name!r} "
-                        f"(hand-edited?)."
-                    )
-                if name[:1] in _CSV_FORMULA_TRIGGERS:
-                    raise RosterFileError(
-                        f"students.csv extra column {name!r} begins with a "
-                        f"spreadsheet formula trigger (hand-edited?)."
-                    )
-                seen_extra.add(name)
-            roster: list[dict[str, str]] = []
-            for row in reader:
-                username = (row.get("username") or "").strip()
-                if not username:
-                    continue
-                if _USERNAME_BAD_CHARS.search(username):
-                    emit_warning(
-                        f"{path.parent.name}: students.csv row with malformed username "
-                        f"{username!r}; skipping that student"
-                    )
-                    continue
-                roster.append(
-                    {
-                        "username": username,
-                        "github_id": (row.get("github_id") or "").strip(),
-                    }
-                )
-            return roster
-    except OSError as exc:
-        raise RosterFileError(f"read {path}: {exc}") from exc
 
 
 # Per-classroom collection ----------------------------------------------------

@@ -24,15 +24,17 @@ now"). Until then the gradebook shows PRE-regrade scores — an eventual-
 consistency window, by design (collecting here would race the still-running
 grade jobs).
 
-Roster-driven (unlike collect_scores.py, which is team-driven): the (student,
-assignment) pairs come from `<classroom>/students.csv` x
-`<classroom>/assignments.json`. A single `OWNER_FILTER` narrows to one repo
-(the per-row "Regrade" web action); empty means the whole assignment.
+Team-driven (mirroring collect_scores.py): the (student, assignment) pairs come
+from the classroom GitHub team x `<classroom>/assignments.json`. The classroom
+team is the source of truth for enrollment; `students.csv` is not read. A single
+`OWNER_FILTER` narrows to one repo (the per-row "Regrade" web action); empty
+means the whole assignment.
 
 Environment (set by `regrade.yaml`):
   CLASSROOM50_SERVICE_TOKEN — fine-grained PAT, Contents: Read and write AND
-                              Actions: Read and write on the student repos.
-                              Actions: write re-runs a run; Contents: write
+                              Actions: Read and write on the student repos, plus
+                              Organization -> Members: Read to list the classroom
+                              team. Actions: write re-runs a run; Contents: write
                               pushes a submit/* tag for the first-grade case.
   CLASSROOM_FILTER          — classroom short-name (required for regrade).
   ASSIGNMENT_FILTER         — assignment slug (required for regrade).
@@ -50,7 +52,6 @@ Exit codes:
 
 from __future__ import annotations
 
-import csv
 import datetime
 import json
 import os
@@ -61,6 +62,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from typing import Any, Callable
 
 # Schema sentinels — keep in lockstep with collect_scores.py and the Go
 # constants in cli/gh-teacher/classroom.go / assignments_json.go.
@@ -79,17 +81,6 @@ SUBMISSION_BRANCH = "main"
 # killed by the Actions job timeout still leaves per-repo accounting in the log
 # rather than only the final summary.
 PROGRESS_EVERY = 25
-
-# Required roster columns written by `gh teacher classroom add`. Mirrors
-# ROSTER_REQUIRED_COLUMNS in collect_scores.py; we only read `username`.
-ROSTER_REQUIRED_COLUMNS = (
-    "username",
-    "first_name",
-    "last_name",
-    "email",
-    "section",
-    "github_id",
-)
 
 # Coarse filter for obviously-bogus usernames so they don't get formatted
 # into a URL. Mirrors collect_scores.py; not a strict GitHub validator.
@@ -138,21 +129,35 @@ def main() -> int:
 
     classroom_dir = base_dir / classroom_filter
     try:
-        roster = load_roster(classroom_dir, assignment_filter)
+        roster = load_roster(classroom_dir, assignment_filter, api_url, org, service_token)
     except RegradeInputError as exc:
         emit_error(str(exc))
         return 1
+    except urllib.error.HTTPError as exc:
+        if is_hard_http_error(exc):
+            emit_error(
+                f"{classroom_filter}: could not list the classroom team — service token "
+                f"rejected or network unavailable (HTTP {exc.code} {exc.reason or 'no reason'}). "
+                f"Ensure CLASSROOM50_SERVICE_TOKEN has Organization -> Members: Read with "
+                f"`gh teacher rotate-service-token {org}`"
+            )
+            return 1
+        emit_error(
+            f"{classroom_filter}: listing the classroom team failed with HTTP {exc.code} "
+            f"({exc.reason or 'no reason'})"
+        )
+        return 1
 
     # Narrow to a single owner for the per-row regrade action. A filter matching
-    # no rostered student is a teacher mistake (typo / stale row), so fail loudly
-    # rather than silently tagging nothing.
+    # no team member is a teacher mistake (typo / off-team student), so fail
+    # loudly rather than silently tagging nothing.
     targets = roster
     if owner_filter:
         targets = [u for u in roster if u.lower() == owner_filter.lower()]
         if not targets:
             emit_error(
-                f"OWNER_FILTER={owner_filter!r} is not on {classroom_filter}/students.csv "
-                f"for assignment {assignment_filter!r}; nothing to regrade"
+                f"OWNER_FILTER={owner_filter!r} is not a member of the {classroom_filter} "
+                f"classroom team for assignment {assignment_filter!r}; nothing to regrade"
             )
             return 1
 
@@ -486,16 +491,24 @@ def _http_error_says_ref_exists(exc: urllib.error.HTTPError) -> bool:
 
 
 class RegradeInputError(Exception):
-    """A missing/malformed classroom dir, assignments.json, or roster."""
+    """A missing/malformed classroom dir, classroom.json, or assignments.json."""
 
 
-def load_roster(classroom_dir: pathlib.Path, assignment_slug: str) -> list[str]:
-    """Rostered usernames for an assignment registered in this classroom.
+def load_roster(
+    classroom_dir: pathlib.Path,
+    assignment_slug: str,
+    api_url: str,
+    org: str,
+    token: str,
+) -> list[str]:
+    """Team members to regrade for an assignment registered in this classroom.
 
     Validates the assignments.json schema and that the target slug is
     registered (so a typo'd slug fails loudly rather than tagging nothing), then
-    returns the usernames from students.csv. Mirrors the roster/manifest reads
-    in collect_scores.py.
+    enumerates the classroom GitHub team — the source of truth for enrollment.
+    Mirrors collect_scores.py's team-driven username source; students.csv is not
+    read. Config problems raise RegradeInputError; a team-listing HTTP error
+    propagates so main() can classify it (hard auth/network vs. transient).
     """
     if not classroom_dir.is_dir():
         raise RegradeInputError(
@@ -525,44 +538,160 @@ def load_roster(classroom_dir: pathlib.Path, assignment_slug: str) -> list[str]:
             f"{classroom_dir.name}/assignments.json"
         )
 
-    roster_path = classroom_dir / "students.csv"
-    if not roster_path.is_file():
-        raise RegradeInputError(
-            f"{classroom_dir.name}/students.csv not found — regrade is roster-driven"
+    # The classroom GitHub team drives enrollment (not students.csv). Read
+    # classroom.json for the authoritative team.slug (GitHub may re-slug on a
+    # name collision), else fall back to the derived slug.
+    classroom_meta: dict[str, Any] = {}
+    classroom_path = classroom_dir / "classroom.json"
+    if classroom_path.is_file():
+        try:
+            loaded = json.loads(classroom_path.read_text())
+        except (OSError, json.JSONDecodeError) as exc:
+            raise RegradeInputError(
+                f"{classroom_dir.name}/classroom.json: {exc}"
+            ) from exc
+        if isinstance(loaded, dict):
+            classroom_meta = loaded
+    team_slug = resolve_team_slug(classroom_meta, classroom_dir.name)
+
+    logins = list_team_member_logins(api_url, org, team_slug, token)
+
+    # Dedupe case-insensitively (first-seen casing wins) and drop obviously-bogus
+    # logins so they don't reach the repo-name/URL builder.
+    seen: set[str] = set()
+    usernames: list[str] = []
+    for login in logins:
+        username = login.strip()
+        key = username.lower()
+        if not username or key in seen:
+            continue
+        if _USERNAME_BAD_CHARS.search(username):
+            emit_warning(
+                f"{classroom_dir.name}: classroom team member with malformed login "
+                f"{username!r}; skipping that student"
+            )
+            continue
+        seen.add(key)
+        usernames.append(username)
+    return usernames
+
+
+def resolve_team_slug(classroom_meta: dict[str, Any], classroom_short: str) -> str:
+    """The classroom's GitHub team slug: persisted classroom.json `team.slug`
+    when present (authoritative — GitHub may re-slug on a name collision, e.g.
+    `classroom50-cs-1`), else the derived `classroom50-<short>`. Mirrors
+    collect_scores.py's resolve_team_slug and the web/Go resolvers so all target
+    the same team."""
+    team = classroom_meta.get("team")
+    if isinstance(team, dict):
+        slug = team.get("slug")
+        if isinstance(slug, str) and slug.strip():
+            return slug.strip()
+    return f"classroom50-{classroom_short}"
+
+
+def list_team_member_logins(
+    api_url: str, org: str, team_slug: str, token: str
+) -> list[str]:
+    """Logins of every member of the classroom team, walking pagination. The
+    team-driven username source for regrade (mirrors collect_scores.py): the
+    classroom GitHub team is authoritative for enrollment. Hits
+    GET /orgs/{org}/teams/{slug}/members.
+
+    Pagination follows GitHub's `Link: rel="next"` header, host-pinned to
+    api_url so a crafted Link can't pivot the token. Raises
+    urllib.error.HTTPError on any non-2xx (including 404 when the team doesn't
+    exist) so the caller can classify hard vs. transient."""
+    per_page = 100
+    base = (
+        f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
+        f"{urllib.parse.quote(team_slug, safe='')}/members"
+    )
+    return _paginate_login_list(
+        page_url=lambda page: f"{base}?per_page={per_page}&page={page}",
+        api_url=api_url,
+        token=token,
+        resource_label=f"orgs/{org}/teams/{team_slug}/members",
+    )
+
+
+def _paginate_login_list(
+    page_url: Callable[[int], str],
+    api_url: str,
+    token: str,
+    resource_label: str,
+) -> list[str]:
+    """Walk a paginated GitHub list-of-accounts endpoint, returning every
+    `login`. Only the first page uses `page_url`; subsequent pages follow
+    GitHub's `Link: rel="next"`, host-pinned via _assert_same_host so a crafted
+    Link can't pivot the token. When no Link header is present, falls back to
+    page+1 and stops on a short page. A self/looping rel="next" is bounded by
+    seen_next. Mirrors collect_scores.py's helper of the same name.
+
+    Raises urllib.error.HTTPError on any non-2xx (including 404) so the caller
+    can classify; raises ValueError on a non-array body or on hitting the cap.
+    """
+    per_page = 100
+    max_pages = 100
+    logins: list[str] = []
+    url = page_url(1)
+    seen_next: set[str] = set()
+    for page in range(1, max_pages + 1):
+        body, headers = _http_get_with_headers(
+            url, token, accept="application/vnd.github+json"
         )
-    return read_roster_usernames(roster_path)
+        batch = json.loads(body.decode("utf-8"))
+        if not isinstance(batch, list):
+            raise ValueError(
+                f"GET {url}: expected JSON array, got {type(batch).__name__}"
+            )
+        for item in batch:
+            if not isinstance(item, dict):
+                continue
+            login = item.get("login")
+            if isinstance(login, str) and login:
+                logins.append(login)
+        link_header = headers.get("Link") if headers else None
+        next_url = _next_page_link(link_header)
+        if next_url:
+            next_url = _assert_same_host(next_url, api_url)
+            if next_url in seen_next:
+                return logins
+            seen_next.add(next_url)
+            url = next_url
+            continue
+        if link_header or len(batch) < per_page:
+            return logins
+        url = page_url(page + 1)
+    raise ValueError(
+        f"{resource_label}: too many entries to enumerate "
+        f"(hit the {max_pages}-page cap)"
+    )
 
 
-def read_roster_usernames(path: pathlib.Path) -> list[str]:
-    """Usernames from students.csv. Rejects a renamed/short required header
-    so a hand-edit can't silently drop students (mirrors collect_scores.py's
-    read_students_csv); skips empty/malformed usernames with a warning."""
-    try:
-        with path.open(newline="", encoding="utf-8-sig") as fh:
-            reader = csv.DictReader(fh)
-            if reader.fieldnames is None:
-                raise RegradeInputError(f"{path.parent.name}/students.csv is empty")
-            header = tuple(reader.fieldnames)
-            if header[: len(ROSTER_REQUIRED_COLUMNS)] != ROSTER_REQUIRED_COLUMNS:
-                raise RegradeInputError(
-                    f"{path.parent.name}/students.csv header = {header}, want it to "
-                    f"start with {ROSTER_REQUIRED_COLUMNS} (hand-edited?)"
-                )
-            usernames: list[str] = []
-            for row in reader:
-                username = (row.get("username") or "").strip()
-                if not username:
-                    continue
-                if _USERNAME_BAD_CHARS.search(username):
-                    emit_warning(
-                        f"{path.parent.name}: students.csv row with malformed username "
-                        f"{username!r}; skipping that student"
-                    )
-                    continue
-                usernames.append(username)
-            return usernames
-    except OSError as exc:
-        raise RegradeInputError(f"read {path}: {exc}") from exc
+def _next_page_link(link_header: str | None) -> str | None:
+    """The `rel="next"` URL from a GitHub `Link` header, or None. Mirrors
+    collect_scores.py's _next_page_link."""
+    if not link_header:
+        return None
+    m = re.search(r'<([^>]+)>\s*;\s*[^,]*rel="next"', link_header)
+    return m.group(1) if m else None
+
+
+def _assert_same_host(next_url: str, api_url: str) -> str:
+    """Return next_url only if its scheme+host match api_url's; else raise
+    ValueError. The pagination loop attaches the bearer token to whatever URL it
+    follows, so a malicious `Link: rel="next"` pointing off-host would pivot the
+    token. Mirrors collect_scores.py's _assert_same_host."""
+    api = urllib.parse.urlsplit(api_url)
+    nxt = urllib.parse.urlsplit(next_url)
+    if (nxt.scheme, nxt.netloc) != (api.scheme, api.netloc):
+        raise ValueError(
+            f"pagination Link points off-host "
+            f"({nxt.scheme}://{nxt.netloc} != {api.scheme}://{api.netloc}); "
+            f"refusing to send the service token to a different host"
+        )
+    return next_url
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
@@ -639,6 +768,52 @@ def _http_request(
                 fp=None,
             ) from exc
     raise RuntimeError(f"_http_request called with _retries={_retries}")
+
+
+def _http_get_with_headers(
+    url: str, token: str, *, accept: str, _retries: int = 3
+) -> tuple[bytes, Any]:
+    """GET `url` with bearer auth; return (body, response headers). Same retry /
+    synthetic-599 semantics as _http_request. Headers are returned so paginated
+    callers can follow GitHub's `Link: rel="next"` rather than guessing the next
+    page (mirrors collect_scores.py's _http_get_with_headers)."""
+    for attempt in range(_retries):
+        req = urllib.request.Request(
+            url,
+            method="GET",
+            headers={
+                "Accept": accept,
+                "Authorization": f"Bearer {token}",
+                "User-Agent": "classroom50-regrade",
+                "X-GitHub-Api-Version": "2022-11-28",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                return resp.read(), resp.headers
+        except urllib.error.HTTPError as exc:
+            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
+                retry_after = exc.headers.get("Retry-After") if exc.headers else None
+                delay = (
+                    min(int(retry_after), 30)
+                    if (retry_after or "").isdigit()
+                    else 2**attempt
+                )
+                time.sleep(delay)
+                continue
+            raise
+        except (urllib.error.URLError, TimeoutError, OSError) as exc:
+            if attempt < _retries - 1:
+                time.sleep(2**attempt)
+                continue
+            raise urllib.error.HTTPError(
+                url=url,
+                code=599,
+                msg=f"network error: {exc}",
+                hdrs=None,  # type: ignore[arg-type]
+                fp=None,
+            ) from exc
+    raise RuntimeError(f"_http_get_with_headers called with _retries={_retries}")
 
 
 def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:

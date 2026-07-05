@@ -410,10 +410,10 @@ def test_main_logs_incremental_progress(monkeypatch, capsys):
     assert out.count("progress 3/3") == 1
 
 
-# Roster / manifest loader ----------------------------------------------------
+# Team / manifest loader ------------------------------------------------------
 
 
-def _write_classroom(tmp_path: pathlib.Path, *, slug="hello", header=None, rows=("alice", "bob")):
+def _write_classroom(tmp_path: pathlib.Path, *, slug="hello", team=None):
     cdir = tmp_path / "cs50"
     cdir.mkdir()
     (cdir / "assignments.json").write_text(
@@ -424,70 +424,105 @@ def _write_classroom(tmp_path: pathlib.Path, *, slug="hello", header=None, rows=
             }
         )
     )
-    header = header or ",".join(rr.ROSTER_REQUIRED_COLUMNS)
-    lines = [header] + [f"{u},,,,,," for u in rows]
-    (cdir / "students.csv").write_text("\n".join(lines) + "\n")
+    meta = {"schema": rr.CLASSROOM_SCHEMA_V1, "short_name": "cs50"}
+    if team is not None:
+        meta["team"] = team
+    (cdir / "classroom.json").write_text(json.dumps(meta))
     return cdir
 
 
-def test_load_roster_returns_usernames(tmp_path):
+def test_load_roster_returns_team_members(monkeypatch, tmp_path):
     cdir = _write_classroom(tmp_path)
-    assert rr.load_roster(cdir, "hello") == ["alice", "bob"]
+    monkeypatch.setattr(rr, "list_team_member_logins", lambda *a, **k: ["alice", "bob"])
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice", "bob"]
 
 
-def test_load_roster_rejects_unregistered_assignment(tmp_path):
+def test_load_roster_uses_persisted_team_slug(monkeypatch, tmp_path):
+    # classroom.json's team.slug is authoritative (GitHub may re-slug); the team
+    # read must target it, not the derived classroom50-<short>.
+    cdir = _write_classroom(tmp_path, team={"slug": "classroom50-cs-1", "id": 7})
+    seen = {}
+
+    def fake_members(api_url, org, team_slug, token):
+        seen["team_slug"] = team_slug
+        return ["alice"]
+
+    monkeypatch.setattr(rr, "list_team_member_logins", fake_members)
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice"]
+    assert seen["team_slug"] == "classroom50-cs-1"
+
+
+def test_load_roster_derives_team_slug_without_team_block(monkeypatch, tmp_path):
+    cdir = _write_classroom(tmp_path)  # no team block
+    seen = {}
+
+    def fake_members(api_url, org, team_slug, token):
+        seen["team_slug"] = team_slug
+        return []
+
+    monkeypatch.setattr(rr, "list_team_member_logins", fake_members)
+    rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
+    assert seen["team_slug"] == "classroom50-cs50"
+
+
+def test_load_roster_dedupes_case_insensitively(monkeypatch, tmp_path):
+    cdir = _write_classroom(tmp_path)
+    monkeypatch.setattr(
+        rr, "list_team_member_logins", lambda *a, **k: ["Alice", "alice", "BOB"]
+    )
+    # First-seen casing wins; the case-insensitive duplicate is dropped.
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["Alice", "BOB"]
+
+
+def test_load_roster_skips_malformed_login(monkeypatch, tmp_path):
+    cdir = _write_classroom(tmp_path)
+    monkeypatch.setattr(
+        rr, "list_team_member_logins", lambda *a, **k: ["alice", "bad/name", "bob"]
+    )
+    # A malformed login is skipped with a warning; valid members survive.
+    assert rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok") == ["alice", "bob"]
+
+
+def test_load_roster_propagates_team_http_error(monkeypatch, tmp_path):
+    # A team-listing HTTP error is NOT swallowed — it propagates so main() can
+    # classify hard (auth/network) vs. transient.
+    cdir = _write_classroom(tmp_path)
+
+    def boom(*a, **k):
+        raise _http_error(403)
+
+    monkeypatch.setattr(rr, "list_team_member_logins", boom)
+    with pytest.raises(urllib.error.HTTPError):
+        rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
+
+
+def test_load_roster_rejects_unregistered_assignment(monkeypatch, tmp_path):
     cdir = _write_classroom(tmp_path, slug="hello")
+    monkeypatch.setattr(
+        rr, "list_team_member_logins", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
     with pytest.raises(rr.RegradeInputError, match="not registered"):
-        rr.load_roster(cdir, "nope")
-
-
-def test_load_roster_rejects_renamed_header(tmp_path):
-    cdir = _write_classroom(tmp_path, header="user,first_name,last_name,email,section,github_id")
-    with pytest.raises(rr.RegradeInputError, match="want it to"):
-        rr.load_roster(cdir, "hello")
+        rr.load_roster(cdir, "nope", "https://api", "cs50org", "tok")
 
 
 def test_load_roster_missing_classroom(tmp_path):
     with pytest.raises(rr.RegradeInputError, match="not found"):
-        rr.load_roster(tmp_path / "missing", "hello")
+        rr.load_roster(tmp_path / "missing", "hello", "https://api", "cs50org", "tok")
 
 
 def test_load_roster_bad_schema(tmp_path):
     cdir = tmp_path / "cs50"
     cdir.mkdir()
     (cdir / "assignments.json").write_text(json.dumps({"schema": "wrong", "assignments": []}))
-    (cdir / "students.csv").write_text(",".join(rr.ROSTER_REQUIRED_COLUMNS) + "\n")
     with pytest.raises(rr.RegradeInputError, match="schema"):
-        rr.load_roster(cdir, "hello")
-
-
-def test_load_roster_skips_malformed_username(tmp_path):
-    cdir = _write_classroom(tmp_path, rows=("alice", "bad/name", "bob"))
-    # The malformed username is skipped with a warning; valid rows survive.
-    assert rr.load_roster(cdir, "hello") == ["alice", "bob"]
-
-
-def test_load_roster_empty_csv(tmp_path):
-    cdir = tmp_path / "cs50"
-    cdir.mkdir()
-    (cdir / "assignments.json").write_text(
-        json.dumps(
-            {
-                "schema": rr.ASSIGNMENTS_SCHEMA_V1,
-                "assignments": [{"slug": "hello", "name": "hello", "mode": "individual", "autograder": "default"}],
-            }
-        )
-    )
-    (cdir / "students.csv").write_text("")  # no header row
-    with pytest.raises(rr.RegradeInputError, match="empty"):
-        rr.load_roster(cdir, "hello")
+        rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
 
 
 def test_load_roster_missing_assignments_json(tmp_path):
     cdir = tmp_path / "cs50"
     cdir.mkdir()
     with pytest.raises(rr.RegradeInputError, match="assignments.json not found"):
-        rr.load_roster(cdir, "hello")
+        rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
 
 
 def test_load_roster_unparseable_assignments_json(tmp_path):
@@ -495,22 +530,60 @@ def test_load_roster_unparseable_assignments_json(tmp_path):
     cdir.mkdir()
     (cdir / "assignments.json").write_text("{not json")
     with pytest.raises(rr.RegradeInputError, match="assignments.json"):
-        rr.load_roster(cdir, "hello")
+        rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
 
 
-def test_load_roster_missing_students_csv(tmp_path):
-    cdir = tmp_path / "cs50"
-    cdir.mkdir()
-    (cdir / "assignments.json").write_text(
-        json.dumps(
-            {
-                "schema": rr.ASSIGNMENTS_SCHEMA_V1,
-                "assignments": [{"slug": "hello", "name": "hello", "mode": "individual", "autograder": "default"}],
-            }
-        )
+def test_load_roster_unparseable_classroom_json(monkeypatch, tmp_path):
+    cdir = _write_classroom(tmp_path)
+    (cdir / "classroom.json").write_text("{not json")
+    monkeypatch.setattr(
+        rr, "list_team_member_logins", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
     )
-    with pytest.raises(rr.RegradeInputError, match="students.csv not found"):
-        rr.load_roster(cdir, "hello")
+    with pytest.raises(rr.RegradeInputError, match="classroom.json"):
+        rr.load_roster(cdir, "hello", "https://api", "cs50org", "tok")
+
+
+# resolve_team_slug / list_team_member_logins --------------------------------
+
+
+def test_resolve_team_slug_prefers_persisted():
+    assert rr.resolve_team_slug({"team": {"slug": "classroom50-cs-1"}}, "cs") == "classroom50-cs-1"
+
+
+def test_resolve_team_slug_derives_when_absent():
+    assert rr.resolve_team_slug({}, "cs-principles") == "classroom50-cs-principles"
+    assert rr.resolve_team_slug({"team": {"id": 7}}, "cs") == "classroom50-cs"
+    assert rr.resolve_team_slug({"team": {"slug": "  "}}, "cs") == "classroom50-cs"
+
+
+def test_list_team_member_logins_paginates(monkeypatch):
+    # Two pages via a Link: rel="next" header, then a header-less short page.
+    pages = {
+        "https://api/orgs/cs50org/teams/classroom50-cs50/members?per_page=100&page=1": (
+            json.dumps([{"login": "alice"}, {"login": "bob"}]).encode("utf-8"),
+            {"Link": '<https://api/orgs/cs50org/teams/classroom50-cs50/members?per_page=100&page=2>; rel="next"'},
+        ),
+        "https://api/orgs/cs50org/teams/classroom50-cs50/members?per_page=100&page=2": (
+            json.dumps([{"login": "carol"}]).encode("utf-8"),
+            {},
+        ),
+    }
+
+    def fake_get(url, token, *, accept, _retries=3):
+        return pages[url]
+
+    monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
+    got = rr.list_team_member_logins("https://api", "cs50org", "classroom50-cs50", "tok")
+    assert got == ["alice", "bob", "carol"]
+
+
+def test_list_team_member_logins_propagates_404(monkeypatch):
+    def fake_get(url, token, *, accept, _retries=3):
+        raise _http_error(404)
+
+    monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
+    with pytest.raises(urllib.error.HTTPError):
+        rr.list_team_member_logins("https://api", "cs50org", "missing-team", "tok")
 
 
 # Helpers ---------------------------------------------------------------------

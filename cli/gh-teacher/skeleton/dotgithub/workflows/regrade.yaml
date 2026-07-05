@@ -80,13 +80,14 @@ jobs:
 
       - name: Regrade (re-run student autograde workflows)
         env:
-          # Fine-grained PAT scoped to BOTH `Contents: Read and write` and
-          # `Actions: Read and write` on the <classroom>-* student repos.
-          # Re-running a student repo's latest autograde run (the regrade
-          # path) needs Actions: write; pushing a submit/* tag for a
-          # never-graded repo (the first-grade fallback) needs Contents:
-          # write. Shared with collect-scores.yaml (which only reads
-          # Contents). Rotated via `gh teacher rotate-service-token <org>`.
+          # Fine-grained PAT scoped to `Contents: Read and write`,
+          # `Actions: Read and write` on the <classroom>-* student repos, AND
+          # Organization -> Members: Read. Re-running a student repo's latest
+          # autograde run (the regrade path) needs Actions: write; pushing a
+          # submit/* tag for a never-graded repo (the first-grade fallback)
+          # needs Contents: write; listing the classroom team (regrade is
+          # team-driven, mirroring collect) needs Members: Read. Shared with
+          # collect-scores.yaml. Rotated via `gh teacher rotate-service-token <org>`.
           CLASSROOM50_SERVICE_TOKEN: ${{ secrets.CLASSROOM50_SERVICE_TOKEN }}
           CLASSROOM_FILTER: ${{ github.event.inputs.classroom }}
           ASSIGNMENT_FILTER: ${{ github.event.inputs.assignment }}
