@@ -383,11 +383,7 @@ const RosterBulkActionsBar = ({
                         count: invitableSelected,
                       })
                 }
-                onClick={() =>
-                  idlessInviteCount > 0
-                    ? setConfirmingInvite(true)
-                    : void runInvite()
-                }
+                onClick={() => setConfirmingInvite(true)}
               >
                 <Send aria-hidden="true" className="size-4" />
                 {t("students.bulk.invite")}
@@ -476,9 +472,15 @@ const RosterBulkActionsBar = ({
         title={t("students.bulk.confirmInviteTitle", {
           count: invitableSelected,
         })}
-        description={t("students.bulk.confirmInviteBody", {
-          count: idlessInviteCount,
-        })}
+        description={t(
+          idlessInviteCount > 0
+            ? "students.bulk.confirmInviteBody"
+            : "students.bulk.confirmInviteBodyPlain",
+          {
+            count:
+              idlessInviteCount > 0 ? idlessInviteCount : invitableSelected,
+          },
+        )}
         confirmLabel={t("students.bulk.invite")}
         onConfirm={async () => {
           setConfirmingInvite(false)

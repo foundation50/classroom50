@@ -189,6 +189,8 @@ const BulkActionsBar = ({
   const [error, setError] = useState<string | null>(null)
   // Gates the destructive bulk remove behind a confirmation step.
   const [confirmingRemove, setConfirmingRemove] = useState(false)
+  // Gates the bulk add (org invite + classroom enroll) behind a confirmation.
+  const [confirmingAdd, setConfirmingAdd] = useState(false)
 
   const hasSelection = selectedRows.length > 0
 
@@ -338,7 +340,7 @@ const BulkActionsBar = ({
                 title={t("orgMembers.bulk.addToClassroom", {
                   classroom: effectiveClassroom,
                 })}
-                onClick={() => void run("add")}
+                onClick={() => setConfirmingAdd(true)}
               >
                 <Plus aria-hidden="true" className="size-4" />
                 {t("orgMembers.bulk.add")}
@@ -395,6 +397,26 @@ const BulkActionsBar = ({
           setTimeout(() => void run("remove"), 0)
         }}
         onClose={() => setConfirmingRemove(false)}
+      />
+
+      <ConfirmModal
+        open={confirmingAdd}
+        dangerous={false}
+        needsConfirm={false}
+        title={t("orgMembers.bulk.confirmAddTitle", {
+          count: selectedRows.length,
+          classroom: effectiveClassroom,
+        })}
+        description={t("orgMembers.bulk.confirmAddBody", {
+          count: selectedRows.length,
+          classroom: effectiveClassroom,
+        })}
+        confirmLabel={t("orgMembers.bulk.add")}
+        onConfirm={async () => {
+          setConfirmingAdd(false)
+          setTimeout(() => void run("add"), 0)
+        }}
+        onClose={() => setConfirmingAdd(false)}
       />
 
       <dialog

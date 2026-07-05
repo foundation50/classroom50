@@ -48,6 +48,7 @@ const MemberDetailModal = ({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const [confirming, setConfirming] = useState(false)
+  const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [working, setWorking] = useState(false)
   const [inviting, setInviting] = useState(false)
 
@@ -64,6 +65,7 @@ const MemberDetailModal = ({
   const handleClose = () => {
     if (working) return
     setConfirming(false)
+    setConfirmingInvite(false)
     setInviting(false)
     onClose()
   }
@@ -86,6 +88,7 @@ const MemberDetailModal = ({
       await runInviteMember(client, org, row, notify, onInvited, t)
     } finally {
       setInviting(false)
+      setConfirmingInvite(false)
     }
   }
 
@@ -242,23 +245,50 @@ const MemberDetailModal = ({
                   type="button"
                   className="btn btn-primary btn-sm mt-3"
                   disabled={inviting}
-                  onClick={() => void handleInvite()}
+                  hidden={confirmingInvite}
+                  onClick={() => setConfirmingInvite(true)}
                 >
-                  {inviting ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-xs"
-                        aria-hidden="true"
-                      />
-                      {t("orgMembers.inviting")}
-                    </>
-                  ) : (
-                    <>
-                      <UserPlus aria-hidden="true" className="size-4" />
-                      {t("orgMembers.inviteToOrg")}
-                    </>
-                  )}
+                  <UserPlus aria-hidden="true" className="size-4" />
+                  {t("orgMembers.inviteToOrg")}
                 </button>
+                {confirmingInvite ? (
+                  <div className="mt-3 flex flex-col gap-3 border-t border-warning/30 pt-3">
+                    <p className="text-base-content/80">
+                      {t("orgMembers.confirmInviteBody", { label, org })}
+                    </p>
+                    <div className="flex justify-end gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        disabled={inviting}
+                        onClick={() => setConfirmingInvite(false)}
+                      >
+                        {t("common.cancel")}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={inviting}
+                        onClick={() => void handleInvite()}
+                      >
+                        {inviting ? (
+                          <>
+                            <span
+                              className="loading loading-spinner loading-xs"
+                              aria-hidden="true"
+                            />
+                            {t("orgMembers.inviting")}
+                          </>
+                        ) : (
+                          <>
+                            <UserPlus aria-hidden="true" className="size-4" />
+                            {t("orgMembers.inviteToOrg")}
+                          </>
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">

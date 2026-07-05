@@ -64,6 +64,7 @@ const RosterMemberModal = ({
   const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
+  const [confirmingResend, setConfirmingResend] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
   const [working, setWorking] = useState(false)
   const [resending, setResending] = useState(false)
@@ -92,6 +93,7 @@ const RosterMemberModal = ({
     if (busy) return
     setConfirmingUnenroll(false)
     setConfirmingInvite(false)
+    setConfirmingResend(false)
     setEditingProfile(false)
     onClose()
   }
@@ -191,6 +193,7 @@ const RosterMemberModal = ({
       )
     } finally {
       setResending(false)
+      setConfirmingResend(false)
     }
   }
 
@@ -287,21 +290,14 @@ const RosterMemberModal = ({
                 </button>
               ) : null}
 
-              {canResend ? (
+              {canResend && !confirmingResend ? (
                 <button
                   type="button"
                   className="btn btn-sm"
-                  disabled={resending || working}
-                  onClick={() => void handleResend()}
+                  disabled={busy}
+                  onClick={() => setConfirmingResend(true)}
                 >
-                  {resending ? (
-                    <span
-                      className="loading loading-spinner loading-xs"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    <Send aria-hidden="true" className="size-4" />
-                  )}
+                  <Send aria-hidden="true" className="size-4" />
                   {t("students.resend")}
                 </button>
               ) : null}
@@ -321,7 +317,9 @@ const RosterMemberModal = ({
           </div>
 
           {/* Inline confirmations for the enrollment actions above. */}
-          {(canInvite && confirmingInvite) || confirmingUnenroll ? (
+          {(canInvite && confirmingInvite) ||
+          (canResend && confirmingResend) ||
+          confirmingUnenroll ? (
             <section className="flex flex-col gap-3">
               {canInvite && confirmingInvite ? (
                 <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
@@ -363,6 +361,48 @@ const RosterMemberModal = ({
                         <>
                           <Send aria-hidden="true" className="size-4" />
                           {t("students.sendInvite")}
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {canResend && confirmingResend ? (
+                <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
+                  <p className="text-base-content/80">
+                    {t("students.confirmResendBody", {
+                      label: row.username || row.email,
+                      org,
+                    })}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={resending}
+                      onClick={() => setConfirmingResend(false)}
+                    >
+                      {t("common.cancel")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={resending}
+                      onClick={() => void handleResend()}
+                    >
+                      {resending ? (
+                        <>
+                          <span
+                            className="loading loading-spinner loading-xs"
+                            aria-hidden="true"
+                          />
+                          {t("common.working")}
+                        </>
+                      ) : (
+                        <>
+                          <Send aria-hidden="true" className="size-4" />
+                          {t("students.resend")}
                         </>
                       )}
                     </button>
