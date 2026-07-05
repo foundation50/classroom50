@@ -26,7 +26,7 @@ grade jobs).
 
 Team-driven (mirroring collect_scores.py): the (student, assignment) pairs come
 from the classroom GitHub team x `<classroom>/assignments.json`. The classroom
-team is the source of truth for enrollment; `students.csv` is not read. A single
+team is the source of truth for enrollment. A single
 `OWNER_FILTER` narrows to one repo (the per-row "Regrade" web action); empty
 means the whole assignment.
 
@@ -525,8 +525,7 @@ def load_roster(
     Validates the assignments.json schema and that the target slug is
     registered (so a typo'd slug fails loudly rather than tagging nothing), then
     enumerates the classroom GitHub team — the source of truth for enrollment.
-    Mirrors collect_scores.py's team-driven username source; students.csv is not
-    read. Config problems raise RegradeInputError; a team-listing HTTP error
+    Config problems raise RegradeInputError; a team-listing HTTP error
     propagates so main() can classify it (hard auth/network vs. transient).
     """
     if not classroom_dir.is_dir():
@@ -557,9 +556,8 @@ def load_roster(
             f"{classroom_dir.name}/assignments.json"
         )
 
-    # The classroom GitHub team drives enrollment (not students.csv). Read
-    # classroom.json for the authoritative team.slug (GitHub may re-slug on a
-    # name collision), else fall back to the derived slug.
+    # Resolve the classroom team slug: classroom.json's authoritative team.slug
+    # (GitHub may re-slug on a name collision), else the derived slug.
     classroom_meta: dict[str, Any] = {}
     classroom_path = classroom_dir / "classroom.json"
     if classroom_path.is_file():

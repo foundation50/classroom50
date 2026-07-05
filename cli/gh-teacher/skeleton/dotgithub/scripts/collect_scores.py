@@ -89,10 +89,9 @@ ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "sect
 
 # The exact on-disk students.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
-# STUDENT_CSV_FIELDS header — a three-way lockstep. Collection is team-driven
-# and no longer reads students.csv, but this constant remains the Python leg of
-# that header lockstep (the Go download-metadata join and the web writer still
-# share it), pinned by test_full_roster_header_matches_go_constant.
+# STUDENT_CSV_FIELDS header — a three-way lockstep. Retained as the Python leg
+# of that lockstep (the Go download-metadata join and the web writer share it),
+# pinned by test_full_roster_header_matches_go_constant.
 FULL_ROSTER_HEADER = ",".join(ROSTER_REQUIRED_COLUMNS)
 
 
