@@ -28,7 +28,7 @@ import {
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
 import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
-import { isSameGitHubUser } from "@/util/students"
+import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { prefixCommit } from "@/util/commit"
@@ -173,10 +173,14 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   // MIDDLE cell was dropped is positionally indistinguishable from a dropped
   // trailing field, so it is unavoidably read as the latter; nothing in the row
   // data can disambiguate the two.)
-  const shortRowsWithinTolerance = tooFewFieldsAreTrailingOnly(
-    csv,
-    parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
-  )
+  // Only re-parse (tooFewFieldsAreTrailingOnly runs a second full parse) when a
+  // TooFewFields error is actually present — the flag is never read otherwise.
+  const shortRowsWithinTolerance =
+    parsed.errors.some((error) => error.code === "TooFewFields") &&
+    tooFewFieldsAreTrailingOnly(
+      csv,
+      parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
+    )
 
   const fatalErrors = parsed.errors.filter(
     (error) =>
@@ -1075,10 +1079,9 @@ export async function inviteRosterStudents(
     }
     try {
       // Prefer the stored id; otherwise resolve the current account by login.
-      let inviteeId = Number(target.github_id)
-      if (!Number.isFinite(inviteeId) || inviteeId <= 0) {
-        inviteeId = (await getUser(client, username)).id
-      }
+      const inviteeId =
+        parseGitHubId(target.github_id ?? "") ??
+        (await getUser(client, username)).id
       const result = await ensureOrgMembership(client, {
         org,
         username,

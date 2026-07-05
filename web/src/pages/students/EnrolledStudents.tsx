@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react"
 
-import { nameFromParts, initialsFromParts } from "@/util/students"
+import { nameFromParts } from "@/util/students"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -38,7 +38,7 @@ import {
   toggleRow,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
-import { rosterRowToMemberRow } from "@/util/memberRow"
+import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import RosterBulkActionsBar, {
   type AddStudentActions,
@@ -353,10 +353,7 @@ const EnrolledStudents = ({
     const member = rosterRowToMemberRow(row)
     const displayName = member.name
     const displayHandle = row.username || row.email
-    const displayInitials =
-      initialsFromParts(row.first_name, row.last_name) ||
-      (row.username || row.email)[0]?.toUpperCase() ||
-      "?"
+    const displayInitials = rosterRowInitials(row)
     const selfRow = isSelf(row)
 
     return (

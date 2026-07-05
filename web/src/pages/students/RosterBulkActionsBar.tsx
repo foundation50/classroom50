@@ -14,6 +14,7 @@ import {
   inviteRosterStudents,
   type InviteRosterStudentsResult,
 } from "@/api/mutations/students"
+import { parseGitHubId } from "@/util/students"
 import {
   BulkResultSection,
   type BulkPhase,
@@ -219,8 +220,8 @@ const RosterBulkActionsBar = ({
     // Pending rows: cancel + re-send the existing invite (resendOrgInvitation).
     for (const row of pendingSelected) {
       const label = row.username || row.email
-      const inviteeId = Number(row.github_id)
-      if (!Number.isFinite(inviteeId) || inviteeId <= 0 || !row.username) {
+      const inviteeId = parseGitHubId(row.github_id)
+      if (inviteeId === null || !row.username) {
         skipped.push({
           key: row.key,
           label,

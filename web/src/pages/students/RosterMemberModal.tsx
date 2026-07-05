@@ -15,11 +15,14 @@ import Avatar from "@/components/avatar"
 import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { unenrollStudent } from "@/api/mutations/students"
-import { inviteRosterStudents } from "@/api/mutations/students"
-import type { StudentCsvRow } from "@/api/mutations/students"
+import {
+  inviteRosterStudents,
+  unenrollStudent,
+  type StudentCsvRow,
+} from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
-import { nameFromParts, initialsFromParts } from "@/util/students"
+import { nameFromParts, parseGitHubId } from "@/util/students"
+import { rosterRowInitials } from "@/util/memberRow"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
@@ -107,10 +110,7 @@ const RosterMemberModal = ({
   const canEdit = row.state !== "pending"
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
-  const displayInitials =
-    initialsFromParts(row.first_name, row.last_name) ||
-    (row.username || row.email)[0]?.toUpperCase() ||
-    "?"
+  const displayInitials = rosterRowInitials(row)
   const canResend = row.state === "pending" && Boolean(row.github_id)
   // A not_in_org row is on the roster (by username) but not in the org — offer a
   // fresh org invite (id derived from username when the CSV has no github_id).
@@ -165,8 +165,8 @@ const RosterMemberModal = ({
 
   const handleResend = async () => {
     if (resending) return
-    const inviteeId = Number(row.github_id)
-    if (!Number.isFinite(inviteeId) || inviteeId <= 0 || !row.username) {
+    const inviteeId = parseGitHubId(row.github_id)
+    if (inviteeId === null || !row.username) {
       onError(
         row.key,
         t("students.resendMissingId", { username: row.username || row.email }),
