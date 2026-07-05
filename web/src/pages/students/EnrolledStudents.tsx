@@ -4,48 +4,54 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
-  Pencil,
   RefreshCw,
+  Search,
   Send,
-  Trash,
-  UserRoundX,
 } from "lucide-react"
 
 import { nameFromParts, initialsFromParts } from "@/util/students"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
-import { ConfirmModal } from "@/components/modals"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   syncRosterFromTeam,
-  unenrollStudent,
   reconcileTeamFromOrgMembers,
 } from "@/api/mutations/students"
-import type { UnenrollStudentInput } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useGitHubViewer } from "@/hooks/github/hooks"
 import {
   githubKeys,
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
 } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
-import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
+import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 import { studentKey, toStudent } from "@/util/roster"
-import EditStudent from "@/pages/students/EditStudent"
+import { isSameGitHubUser } from "@/util/students"
+import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
+import {
+  resolveSelectedRows,
+  selectableRows,
+  selectAllState,
+  toggleRow,
+  toggleSelectAll,
+} from "@/pages/orgMembers/selection"
+import { rosterRowToMemberRow } from "@/util/memberRow"
+import RosterMemberModal from "@/pages/students/RosterMemberModal"
+import RosterBulkActionsBar from "@/pages/students/RosterBulkActionsBar"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants, enterExit } from "@/lib/motion"
-import { EnterDiv } from "@/lib/motionComponents"
-import { useEffect, useId, useMemo, useRef, useState } from "react"
+import { ClickableRow } from "@/lib/motionComponents"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 // Group rows by `section`, sorted by name with the unlabeled ("No section")
-// bucket last. Generic over any row with a `section` field, so it serves both
-// the CSV Student shape and the team-driven TeamRosterRow.
+// bucket last. Generic over any row with a `section` field.
 const NO_SECTION = "No section"
 export function groupStudentsBySection<T extends { section?: string }>(
   students: T[],
@@ -66,211 +72,8 @@ export function groupStudentsBySection<T extends { section?: string }>(
     .map(([section, group]) => ({ section, students: group }))
 }
 
-const EditStudentButton = ({
-  org,
-  classroom,
-  student,
-  onSaved,
-}: {
-  org: string
-  classroom: string
-  student: Student
-  onSaved: (updated: StudentCsvRow) => void
-}) => {
-  const [open, setOpen] = useState(false)
-  const { t } = useTranslation()
-  const label = student.username || student.email
-
-  return (
-    <>
-      <button
-        type="button"
-        onClick={() => setOpen(true)}
-        className="btn btn-ghost btn-square"
-        aria-label={t("students.editStudentAria", { label })}
-        title={t("students.editStudentTitle")}
-      >
-        <Pencil aria-hidden="true" className="size-4" />
-      </button>
-
-      <EditStudent
-        org={org}
-        classroom={classroom}
-        student={student}
-        open={open}
-        onClose={() => setOpen(false)}
-        onSaved={(updated) => {
-          onSaved(updated)
-          setOpen(false)
-        }}
-      />
-    </>
-  )
-}
-
-const UnenrollStudentButton = ({
-  org,
-  classroom,
-  student,
-  isMember,
-  isSelf = false,
-  onRemoveStudent,
-}: {
-  org: string
-  classroom: string
-  student: Student
-  isMember: boolean
-  isSelf?: boolean
-  onRemoveStudent: (username: string, teamWarning?: string) => void
-}) => {
-  const client = useGitHubClient()
-  const { t } = useTranslation()
-  const unenrollStudentMutation = useMutation({
-    mutationFn: (input: UnenrollStudentInput) => unenrollStudent(client, input),
-  })
-  const [open, setOpen] = useState(false)
-  const label = student.username || student.email
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
-
-  const closeDialog = () => {
-    if (submitting) return
-    setOpen(false)
-    setError(null)
-  }
-
-  const handleConfirm = async () => {
-    if (submitting) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const result = await unenrollStudentMutation.mutateAsync({
-        org,
-        classroom,
-        student,
-      })
-      onRemoveStudent(student.username || student.email, result.teamWarning)
-      setOpen(false)
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("students.somethingWentWrong"),
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <>
-      <button
-        onClick={() => setOpen(true)}
-        disabled={unenrollStudentMutation.isPending}
-        className="btn btn-ghost btn-square text-error"
-        aria-label={t("students.unenrollStudentAria", { label })}
-      >
-        <Trash aria-hidden="true" />
-      </button>
-
-      <dialog
-        ref={dialogRef}
-        className="modal"
-        aria-labelledby={titleId}
-        onClose={closeDialog}
-        onCancel={(event) => {
-          if (submitting) {
-            event.preventDefault()
-            return
-          }
-          closeDialog()
-        }}
-      >
-        <div className="modal-box max-w-lg">
-          <h3 id={titleId} className="text-lg font-bold">
-            {t("students.unenrollTitle")}
-          </h3>
-
-          <div className="mt-2 text-sm leading-6 text-base-content/70">
-            {t("students.unenrollBodyPrefix")}{" "}
-            <span className="font-semibold text-base-content">{label}</span>{" "}
-            {t("students.unenrollBodyFrom")}{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            {t("students.unenrollBodySuffix", { classroom })}
-          </div>
-
-          {isMember && isSelf ? (
-            <div className="mt-4 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t("students.unenrollSelfPrefix")}{" "}
-              <span className="font-semibold">{org}</span>{" "}
-              {t("students.unenrollSelfSuffix")}
-            </div>
-          ) : null}
-
-          {isMember && !isSelf ? (
-            <p className="mt-3 text-sm text-base-content/70">
-              {t("students.unenrollMemberPrefix")}{" "}
-              <span className="font-semibold">{org}</span>{" "}
-              {t("students.unenrollMemberSuffix")}
-            </p>
-          ) : null}
-
-          {error ? (
-            <div className="alert alert-error alert-soft mt-4 text-sm">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="modal-action">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={submitting}
-              onClick={closeDialog}
-            >
-              {t("students.keepStudent")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-error"
-              disabled={submitting}
-              onClick={() => void handleConfirm()}
-            >
-              {submitting ? (
-                <>
-                  <span
-                    className="loading loading-spinner loading-sm"
-                    aria-hidden="true"
-                  />
-                  {t("common.working")}
-                </>
-              ) : (
-                t("students.unenrollStudent")
-              )}
-            </button>
-          </div>
-        </div>
-
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" disabled={submitting} onClick={closeDialog}>
-            {t("common.close")}
-          </button>
-        </form>
-      </dialog>
-    </>
-  )
-}
-
-// Native GitHub org-invite link. This is how most students join: they accept
-// the org invite directly on GitHub. Behind an expandable toggle; same org-wide
-// URL for everyone.
+// Native GitHub org-invite link, behind an expandable toggle; same org-wide URL
+// for everyone.
 const InviteLink = ({
   org,
   expanded,
@@ -338,10 +141,7 @@ const InviteLink = ({
   )
 }
 
-// Classroom-wide /onboard link. A secondary/courtesy path (most students join
-// by accepting the GitHub org invite directly): opening it accepts any pending
-// org invite and verifies membership. Same URL for everyone, so no per-student
-// token.
+// Classroom-wide /onboard link. Same URL for everyone, no per-student token.
 const OnboardingLink = ({
   org,
   classroom,
@@ -390,6 +190,9 @@ const OnboardingLink = ({
   )
 }
 
+// Status filter values for the unified list.
+type StatusFilter = "all" | TeamRosterRowState
+
 const EnrolledStudents = ({
   students = [],
   org,
@@ -403,16 +206,19 @@ const EnrolledStudents = ({
   const queryClient = useQueryClient()
   const { t } = useTranslation()
   const { notify } = useToast()
+  const { data: viewer } = useGitHubViewer()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
   const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
 
-  // Keyed by username/email so a clean action can't clobber another's warning.
+  // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
   const [showGithubInvite, setShowGithubInvite] = useState(false)
   const [groupBySection, setGroupBySection] = useState(false)
-  const [driftExpanded, setDriftExpanded] = useState(false)
-  const [confirmResendAllOpen, setConfirmResendAllOpen] = useState(false)
-  const [resendingKeys, setResendingKeys] = useState<Set<string>>(new Set())
+  const [query, setQuery] = useState("")
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [selectedKey, setSelectedKey] = useState<string | null>(null)
+  const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  const [resendingAll, setResendingAll] = useState(false)
 
   const {
     rows,
@@ -426,10 +232,6 @@ const EnrolledStudents = ({
     notInOrgUsernames,
   } = useTeamRoster(org, classroom, students)
 
-  const enrolled = useMemo(
-    () => rows.filter((r) => r.state === "enrolled"),
-    [rows],
-  )
   const pending = useMemo(
     () => rows.filter((r) => r.state === "pending"),
     [rows],
@@ -437,15 +239,6 @@ const EnrolledStudents = ({
   const notInOrg = useMemo(
     () => rows.filter((r) => r.state === "not_in_org"),
     [rows],
-  )
-
-  const hasSections = useMemo(
-    () => enrolled.some((r) => r.section.trim()),
-    [enrolled],
-  )
-  const enrolledBySection = useMemo(
-    () => groupStudentsBySection(enrolled),
-    [enrolled],
   )
 
   const setWarning = (key: string, message: string) =>
@@ -460,9 +253,74 @@ const EnrolledStudents = ({
   const invalidateInviteQueries = () =>
     invalidateInviteQueriesForOrg(queryClient, org)
 
-  // Explicit teacher-triggered backfill: append missing team members into
-  // students.csv as metadata (Section 5). Not automatic — the team-driven view
-  // renders fine without it; this only persists optional metadata.
+  // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
+  // yourself), mirroring Org Members' self-exclusion.
+  const isSelf = (row: TeamRosterRow) =>
+    isSameGitHubUser(viewer ?? null, {
+      github_id: row.github_id,
+      username: row.username,
+    })
+  const isSelectable = (row: TeamRosterRow) => !isSelf(row)
+
+  // Text search over username/name/email + the status filter.
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    return rows.filter((row) => {
+      if (statusFilter !== "all" && row.state !== statusFilter) return false
+      if (!q) return true
+      const name = nameFromParts(row.first_name, row.last_name)
+      return [row.username, name, row.email].some((field) =>
+        field.toLowerCase().includes(q),
+      )
+    })
+  }, [rows, query, statusFilter])
+
+  const hasSectionsInFiltered = useMemo(
+    () => filtered.some((r) => r.section.trim()),
+    [filtered],
+  )
+  const filteredBySection = useMemo(
+    () => groupStudentsBySection(filtered),
+    [filtered],
+  )
+
+  const selected = useMemo(
+    () => rows.find((row) => row.key === selectedKey) ?? null,
+    [rows, selectedKey],
+  )
+
+  const selectedRows = useMemo(
+    () => resolveSelectedRows(rows, selectedKeys, isSelectable),
+    // isSelectable depends on viewer; recompute when it changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rows, selectedKeys, viewer],
+  )
+  const selectableFiltered = useMemo(
+    () => selectableRows(filtered, isSelectable),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [filtered, viewer],
+  )
+  const { allSelected, someSelected } = selectAllState(
+    selectableFiltered,
+    selectedKeys,
+  )
+  const handleToggleRow = (key: string) =>
+    setSelectedKeys((prev) => toggleRow(prev, key))
+  const handleToggleSelectAll = () =>
+    setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
+
+  // Status-filter options; hide "Pending" when invites are owner-only and this
+  // viewer can't read them (avoids a dead, always-empty filter).
+  const statusOptions: { value: StatusFilter; label: string }[] = [
+    { value: "all", label: t("students.filterAll") },
+    { value: "enrolled", label: t("students.filterEnrolled") },
+    ...(pendingHidden
+      ? []
+      : [{ value: "pending" as const, label: t("students.filterPending") }]),
+    { value: "not_in_org", label: t("students.filterNotInOrg") },
+  ]
+
+  // Explicit teacher-triggered CSV backfill (also auto-run on open).
   const syncMutation = useMutation({
     mutationFn: () => syncRosterFromTeam(client, { org, classroom }),
     onSuccess: (result) => {
@@ -473,9 +331,6 @@ const EnrolledStudents = ({
           ? t("students.syncUpToDate")
           : t("students.syncAdded", { count: result.addedUsernames.length }),
       })
-      // CSV changed; invalidate the roster (csv-file) query so a refetch picks
-      // up the appended metadata rows. Uses the same key useGetStudents reads (a
-      // bare prefix wouldn't match).
       void queryClient.invalidateQueries({
         queryKey: githubKeys.csvFile(
           org,
@@ -492,56 +347,33 @@ const EnrolledStudents = ({
     },
   })
 
-  // Auto-sync on open: when team members lack a students.csv metadata row
-  // (csvMissingCount > 0), append them automatically so the teacher needn't
-  // press "Sync roster" for the common case. Reaching this component implies
-  // config-repo write (RequireTeacher staff-gates the page).
-  //
-  // Fire once per drift episode: the ref latches after triggering so a re-render
-  // (or the post-sync CSV refetch briefly showing >0) can't re-fire it, and it
-  // re-arms only once count returns to 0. A failed auto-sync toasts (onError)
-  // and, staying latched, does NOT retry in a loop — the teacher retries via the
-  // now-enabled button.
+  // Auto-sync on open: append team members lacking a CSV row (fire once per
+  // drift episode; re-arm when count returns to 0).
   const autoSyncedRef = useRef(false)
   useEffect(() => {
     if (isLoading || isError) return
     if (csvMissingCount === 0) {
-      autoSyncedRef.current = false // back in sync — re-arm for future drift.
+      autoSyncedRef.current = false
       return
     }
     if (autoSyncedRef.current || syncMutation.isPending) return
     autoSyncedRef.current = true
     syncMutation.mutate()
-    // syncMutation identity is stable (useMutation); the ref + count/loading
-    // deps gate re-firing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csvMissingCount, isLoading, isError])
 
-  // Auto-reconcile on open: a rostered student who joined the ORG (native invite
-  // / SSO) but was never added to the classroom team renders as `not_in_org`.
-  // Auto-reconcile simply tries to team-add every `not_in_org` username the
-  // teacher put in students.csv (the teacher owns the CSV's accuracy); the
-  // mutation team-adds the ones that are active org members and skips the rest,
-  // which stay `not_in_org` and are highlighted below for invite/removal. The
-  // team stays the enrollment source of truth; this touches neither org
-  // membership nor the CSV.
-  //
-  // Latched exactly like auto-sync: fire once per drift episode, re-arm only
-  // when the not_in_org set empties. A failed add toasts once and, staying
-  // latched, does not retry in a loop.
+  // Auto-reconcile on open: team-add rostered not_in_org usernames that are in
+  // fact active org members (native invite / SSO).
   const reconcileMutation = useMutation({
     mutationFn: (usernames: string[]) =>
       reconcileTeamFromOrgMembers(client, { org, classroom, usernames }),
     onSuccess: (result) => {
       if (result.added.length > 0) {
-        // Team membership changed; refresh the enrolled roster.
         invalidateTeamRoster()
         notify({
           tone: "success",
           durationMs: 5000,
-          message: t("students.reconcileAdded", {
-            count: result.added.length,
-          }),
+          message: t("students.reconcileAdded", { count: result.added.length }),
         })
       }
       if (result.failed.length > 0) {
@@ -573,9 +405,6 @@ const EnrolledStudents = ({
     if (autoReconciledRef.current || reconcileMutation.isPending) return
     autoReconciledRef.current = true
     reconcileMutation.mutate(notInOrgUsernames)
-    // reconcileMutation identity is stable; the ref + count/loading deps gate
-    // re-firing. notInOrgCount (a number) is the stable dep — notInOrgUsernames
-    // itself is read inside the effect for the payload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notInOrgCount, isLoading, isError])
 
@@ -597,66 +426,48 @@ const EnrolledStudents = ({
     return result.state
   }
 
-  const handleResend = async (row: TeamRosterRow) => {
-    setResendingKeys((prev) => new Set(prev).add(row.key))
-    dismissWarning(row.key)
-    try {
-      await resendForRow(row)
-      invalidateInviteQueries()
-    } catch (err) {
-      setWarning(
-        row.key,
-        t("students.resendFailed", {
-          username: row.username || row.email,
-          error: getErrorMessage(err),
-        }),
-      )
-    } finally {
-      setResendingKeys((prev) => {
-        const next = new Set(prev)
-        next.delete(row.key)
-        return next
-      })
-    }
-  }
-
+  // One-click "resend all pending" from the Invite card — operates over ALL
+  // pending rows regardless of the current filter/selection.
   const handleResendAll = async () => {
+    setResendingAll(true)
     let resent = 0
     let skipped = 0
     const failures: string[] = []
     let rateLimited = false
-    for (const row of pending) {
-      try {
-        const outcome = await resendForRow(row)
-        if (outcome === "invited") resent++
-        else skipped++
-      } catch (err) {
-        failures.push(row.username || row.email)
-        if (err instanceof GitHubAPIError && err.isRateLimited) {
-          rateLimited = true
-          break
+    try {
+      for (const row of pending) {
+        try {
+          const outcome = await resendForRow(row)
+          if (outcome === "invited") resent++
+          else skipped++
+        } catch (err) {
+          failures.push(row.username || row.email)
+          if (err instanceof GitHubAPIError && err.isRateLimited) {
+            rateLimited = true
+            break
+          }
         }
       }
-    }
-    invalidateInviteQueries()
-    const key = "__resend_all__"
-    if (rateLimited) {
-      setWarning(key, t("students.resendAllRateLimitedShort", { resent }))
-    } else if (failures.length > 0) {
-      setWarning(
-        key,
-        t("students.resendAllPartialShort", {
-          resent,
-          failed: failures.length,
-          failedList: failures.join(", "),
-        }),
-      )
-    } else if (resent === 0 && skipped > 0) {
-      // Nothing was re-sent (e.g. every row lacked a resolvable invite id).
-      // Don't report an unqualified success.
-      setWarning(key, t("students.resendAllNothing", { count: skipped }))
-    } else {
-      setWarning(key, t("students.resendAllSuccess", { count: resent }))
+      invalidateInviteQueries()
+      const key = "__resend_all__"
+      if (rateLimited) {
+        setWarning(key, t("students.resendAllRateLimitedShort", { resent }))
+      } else if (failures.length > 0) {
+        setWarning(
+          key,
+          t("students.resendAllPartialShort", {
+            resent,
+            failed: failures.length,
+            failedList: failures.join(", "),
+          }),
+        )
+      } else if (resent === 0 && skipped > 0) {
+        setWarning(key, t("students.resendAllNothing", { count: skipped }))
+      } else {
+        setWarning(key, t("students.resendAllSuccess", { count: resent }))
+      }
+    } finally {
+      setResendingAll(false)
     }
   }
 
@@ -665,120 +476,108 @@ const EnrolledStudents = ({
       const next = current.map((s) =>
         studentKey(s) === rowKey ? toStudent(updated) : s,
       )
-      // A member with no prior CSV row (blank metadata) has no row to replace;
-      // append the new one so the edit sticks optimistically.
       const exists = current.some((s) => studentKey(s) === rowKey)
       return exists ? next : [...next, toStudent(updated)]
     })
     invalidateInviteQueries()
   }
 
+  const onRowUnenrolled = (rowKey: string, teamWarning?: string) => {
+    if (teamWarning) setWarning(rowKey, teamWarning)
+    updateRosterCache((current) =>
+      current.filter((s) => studentKey(s) !== rowKey),
+    )
+    setSelectedKeys((prev) => {
+      const nextSet = new Set(prev)
+      nextSet.delete(rowKey)
+      return nextSet
+    })
+    invalidateInviteQueries()
+    invalidateTeamRoster()
+  }
+
+  // After a bulk run, clear the selection and refresh the caches the run
+  // touched (roster team membership + pending invites).
+  const onBulkDone = (action: "unenroll" | "resend") => {
+    setSelectedKeys(new Set())
+    invalidateInviteQueries()
+    if (action === "unenroll") invalidateTeamRoster()
+  }
+
   const renderRow = (row: TeamRosterRow) => {
-    const student = rowToStudent(row)
-    const displayName =
-      nameFromParts(row.first_name, row.last_name) || row.username || row.email
+    const member = rosterRowToMemberRow(row)
+    const displayName = member.name
     const displayHandle = row.username || row.email
     const displayInitials =
       initialsFromParts(row.first_name, row.last_name) ||
       (row.username || row.email)[0]?.toUpperCase() ||
       "?"
-    const isResending = resendingKeys.has(row.key)
-    const canResend = row.state === "pending" && Boolean(row.github_id)
+    const selfRow = isSelf(row)
 
     return (
-      <motion.li
+      <ClickableRow
         key={row.key}
-        layout
-        variants={enterExit}
-        initial="initial"
-        animate="animate"
-        exit="exit"
-        className="flex items-center justify-between gap-4 px-6 py-4"
+        className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
+        role="button"
+        tabIndex={0}
+        onClick={() => setSelectedKey(row.key)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault()
+            setSelectedKey(row.key)
+          }
+        }}
       >
+        <input
+          type="checkbox"
+          className="checkbox checkbox-sm shrink-0"
+          aria-label={
+            selfRow
+              ? t("students.bulk.selfNotSelectable")
+              : t("students.bulk.selectRow", { label: displayHandle })
+          }
+          disabled={selfRow}
+          title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
+          checked={selectedKeys.has(row.key)}
+          onClick={(e) => e.stopPropagation()}
+          onChange={() => handleToggleRow(row.key)}
+        />
         <div className="min-w-0 flex-1">
           <Avatar
             name={displayName}
             github={displayHandle}
-            subtitle={displayHandle ? `@${displayHandle}` : undefined}
             initials={displayInitials}
+            subtitle={<GitHubIdentity row={member} />}
           />
         </div>
-
         <div className="flex shrink-0 items-center gap-2">
           {row.section.trim() ? (
             <span className="badge badge-sm badge-ghost shrink-0">
               {row.section.trim()}
             </span>
           ) : null}
-
           {row.state === "pending" ? (
             <span className="badge badge-sm badge-warning badge-soft shrink-0">
               {t("students.statusPending")}
             </span>
           ) : null}
-
           {row.state === "not_in_org" ? (
             <span className="badge badge-sm badge-ghost badge-soft shrink-0">
               {t("students.statusNotInOrg")}
             </span>
           ) : null}
-
-          {canResend ? (
-            <button
-              type="button"
-              className="btn btn-xs"
-              disabled={isResending}
-              aria-label={t("students.resendInviteAria", {
-                username: row.username,
-              })}
-              onClick={() => void handleResend(row)}
-            >
-              {isResending ? (
-                <span
-                  className="loading loading-spinner loading-xs"
-                  aria-hidden="true"
-                />
-              ) : (
-                t("students.resend")
-              )}
-            </button>
-          ) : null}
-
-          {row.state === "pending" ? null : (
-            <EditStudentButton
-              org={org}
-              classroom={classroom}
-              student={student}
-              onSaved={(updated) => onRowMetadataSaved(row.key, updated)}
-            />
-          )}
-
-          <UnenrollStudentButton
-            org={org}
-            classroom={classroom}
-            student={student}
-            isMember={row.state === "enrolled"}
-            onRemoveStudent={(_username, warning) => {
-              if (warning) setWarning(row.key, warning)
-              // Drop the CSV metadata row so nothing lingers as
-              // not_in_org/pending, then refresh the enrolled list (unenroll
-              // removed them from the classroom team).
-              updateRosterCache((current) =>
-                current.filter((s) => studentKey(s) !== row.key),
-              )
-              invalidateInviteQueries()
-              invalidateTeamRoster()
-            }}
+          <ChevronRight
+            aria-hidden="true"
+            className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
           />
         </div>
-      </motion.li>
+      </ClickableRow>
     )
   }
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Warnings / action results at the top. Rendered only when present so an
-          empty container doesn't add a phantom gap. */}
+      {/* Warnings / action results. */}
       {Object.keys(warnings).length > 0 ? (
         <div className="flex w-full flex-col gap-2">
           <AnimatePresence initial={false}>
@@ -807,72 +606,79 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Data-drift banner: roster rows (with a username) not in the org and
-          with no pending invite. Also shown below as a distinct section; this
-          just surfaces the count + disclosure. */}
+      {/* Count-only drift banner: clicking "Review" filters the list to
+          not_in_org rather than expanding an inline list. */}
       {!isLoading && !isError && notInOrg.length > 0 ? (
         <div
           role="alert"
-          className="alert alert-warning alert-soft flex-col items-start"
+          className="alert alert-warning alert-soft flex items-center justify-between gap-3"
         >
-          <div className="flex w-full items-center justify-between gap-3">
-            <span className="flex items-center gap-2 text-sm">
-              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
-              {t("students.driftBanner", { count: notInOrg.length })}
-            </span>
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs"
-              aria-expanded={driftExpanded}
-              onClick={() => setDriftExpanded((v) => !v)}
-            >
-              {driftExpanded
-                ? t("students.driftHide")
-                : t("students.driftShow")}
-            </button>
-          </div>
-          {driftExpanded ? (
-            <ul className="mt-2 w-full list-disc pl-6 text-sm">
-              {notInOrg.map((row) => (
-                <li key={row.key}>
-                  {nameFromParts(row.first_name, row.last_name) ||
-                    row.username ||
-                    row.email}
-                  {row.username ? ` (@${row.username})` : ""}
-                </li>
-              ))}
-            </ul>
-          ) : null}
+          <span className="flex items-center gap-2 text-sm">
+            <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+            {t("students.driftBanner", { count: notInOrg.length })}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => {
+              setStatusFilter("not_in_org")
+            }}
+          >
+            {t("students.driftReview")}
+          </button>
         </div>
       ) : null}
 
       {/* Invite students card. */}
       <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
+        <div className="flex items-center justify-between gap-2 px-6 py-4 border-b border-base-300">
           <h2 className="text-lg font-semibold">
             {t("students.inviteStudents")}
           </h2>
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            disabled={syncMutation.isPending || csvMissingCount === 0}
-            onClick={() => syncMutation.mutate()}
-            title={
-              csvMissingCount === 0
-                ? t("students.syncInSyncTitle")
-                : t("students.syncRosterTitle")
-            }
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-            />
-            {syncMutation.isPending
-              ? t("students.syncing")
-              : csvMissingCount === 0
-                ? t("students.syncInSync")
-                : t("students.syncRosterCount", { count: csvMissingCount })}
-          </button>
+          <div className="flex items-center gap-2">
+            {!pendingHidden && counts.pending > 0 ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                disabled={resendingAll}
+                onClick={() => void handleResendAll()}
+                title={t("students.resendInvitesTitle", {
+                  count: counts.pending,
+                })}
+              >
+                {resendingAll ? (
+                  <span
+                    className="loading loading-spinner loading-xs"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <Send aria-hidden="true" className="size-4" />
+                )}
+                {t("students.resendInvites")}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              disabled={syncMutation.isPending || csvMissingCount === 0}
+              onClick={() => syncMutation.mutate()}
+              title={
+                csvMissingCount === 0
+                  ? t("students.syncInSyncTitle")
+                  : t("students.syncRosterTitle")
+              }
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+              />
+              {syncMutation.isPending
+                ? t("students.syncing")
+                : csvMissingCount === 0
+                  ? t("students.syncInSync")
+                  : t("students.syncRosterCount", { count: csvMissingCount })}
+            </button>
+          </div>
         </div>
         <OnboardingLink org={org} classroom={classroom} />
         <InviteLink
@@ -882,8 +688,56 @@ const EnrolledStudents = ({
         />
       </div>
 
-      {isLoading ? (
-        <div className="card card-border w-full bg-base-100 shadow-sm">
+      {/* Non-owner: pending invites are owner-only. */}
+      {!isLoading && !isError && pendingHidden ? (
+        <div role="alert" className="alert alert-info alert-soft">
+          <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
+        </div>
+      ) : null}
+
+      {/* Toolbar: search + status filter + group-by-section. */}
+      {!isLoading && !isError && !isEmpty ? (
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
+            <Search aria-hidden="true" className="size-4 opacity-50" />
+            <input
+              type="search"
+              className="grow"
+              placeholder={t("students.searchPlaceholder")}
+              aria-label={t("students.searchLabel")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </label>
+          <select
+            className="select select-bordered w-full sm:w-auto"
+            aria-label={t("students.filterByStatusLabel")}
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+          >
+            {statusOptions.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </select>
+          {hasSectionsInFiltered ? (
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/70">
+              <input
+                type="checkbox"
+                className="toggle toggle-sm"
+                checked={groupBySection}
+                onChange={(e) => setGroupBySection(e.target.checked)}
+              />
+              {t("students.groupBySection")}
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* The list card. */}
+      <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
+        {isLoading ? (
           <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
             <span
               className="loading loading-spinner loading-md"
@@ -891,30 +745,26 @@ const EnrolledStudents = ({
             />
             <span className="text-sm">{t("students.loadingRoster")}</span>
           </div>
-        </div>
-      ) : null}
-
-      {isError ? (
-        <div role="alert" className="alert alert-error alert-soft">
-          <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
-          <span className="text-sm">{t("students.rosterLoadError")}</span>
-          <button
-            type="button"
-            className="btn btn-sm btn-ghost"
-            onClick={() =>
-              void queryClient.invalidateQueries({
-                queryKey: githubKeys.teamMembers(org, teamSlug),
-              })
-            }
-          >
-            <RefreshCw aria-hidden="true" className="size-4" />
-            {t("students.rosterRetry")}
-          </button>
-        </div>
-      ) : null}
-
-      {isEmpty ? (
-        <div className="card card-border w-full bg-base-100 shadow-sm">
+        ) : isError ? (
+          <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+            <span className="flex items-center gap-2 text-sm text-error">
+              <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+              {t("students.rosterLoadError")}
+            </span>
+            <button
+              type="button"
+              className="btn btn-sm btn-ghost"
+              onClick={() =>
+                void queryClient.invalidateQueries({
+                  queryKey: githubKeys.teamMembers(org, teamSlug),
+                })
+              }
+            >
+              <RefreshCw aria-hidden="true" className="size-4" />
+              {t("students.rosterRetry")}
+            </button>
+          </div>
+        ) : isEmpty ? (
           <div className="px-6 py-12 text-center">
             <h3 className="text-base font-semibold">
               {t("students.emptyTitle")}
@@ -923,123 +773,33 @@ const EnrolledStudents = ({
               {t("students.emptyBody")}
             </p>
           </div>
-        </div>
-      ) : null}
-
-      {/* Pending invites. */}
-      <AnimatePresence initial={false}>
-        {!isLoading && !isError && pending.length > 0 ? (
-          <motion.div
-            key="pending"
-            layout
-            variants={enterExit}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="card card-border w-full overflow-hidden bg-base-100 shadow-sm"
-          >
-            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-base-300">
-              <div className="flex flex-col">
-                <h2 className="text-lg font-semibold">
-                  {t("students.pendingHeading")}
-                </h2>
-                <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.pendingSubtitle")}
-                </span>
+        ) : (
+          <>
+            <RosterBulkActionsBar
+              org={org}
+              classroom={classroom}
+              client={client}
+              selectedRows={selectedRows}
+              totalCount={filtered.length}
+              allSelected={allSelected}
+              someSelected={someSelected}
+              onToggleSelectAll={handleToggleSelectAll}
+              onClearSelection={() => setSelectedKeys(new Set())}
+              onDone={onBulkDone}
+            />
+            {filtered.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-base-content/70">
+                {query.trim()
+                  ? t("students.noMatch")
+                  : t("students.noneWithStatus", {
+                      status:
+                        statusOptions.find((o) => o.value === statusFilter)
+                          ?.label ?? statusFilter,
+                    })}
               </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-ghost"
-                  onClick={() => setConfirmResendAllOpen(true)}
-                >
-                  <Send aria-hidden="true" className="size-4" />
-                  {t("students.resendInvites")}
-                </button>
-                <div className="badge badge-warning badge-soft text-base">
-                  {counts.pending}
-                </div>
-              </div>
-            </div>
-            <ul className="divide-y divide-base-300">
-              <AnimatePresence initial={false}>
-                {pending.map((row) => renderRow(row))}
-              </AnimatePresence>
-            </ul>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      {/* Non-owner: pending invites are owner-only. */}
-      {!isLoading && !isError && pendingHidden ? (
-        <div role="alert" className="alert alert-info alert-soft">
-          <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
-        </div>
-      ) : null}
-
-      {/* On the roster but not in the organization (visible, distinct state). */}
-      <AnimatePresence initial={false}>
-        {!isLoading && !isError && notInOrg.length > 0 ? (
-          <motion.div
-            key="not-in-org"
-            layout
-            variants={enterExit}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="card card-border w-full overflow-hidden border-warning/30 bg-warning/5 shadow-sm"
-          >
-            <div className="flex items-center justify-between gap-3 px-6 py-4 border-b border-warning/20">
-              <div className="flex flex-col">
-                <h2 className="flex items-center gap-2 text-lg font-semibold">
-                  <UserRoundX aria-hidden="true" className="size-5" />
-                  {t("students.notInOrgHeading")}
-                </h2>
-                <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.notInOrgSubtitle")}
-                </span>
-              </div>
-              <div className="badge badge-ghost badge-soft text-base">
-                {counts.not_in_org}
-              </div>
-            </div>
-            <ul className="divide-y divide-base-300 bg-base-100">
-              <AnimatePresence initial={false}>
-                {notInOrg.map((row) => renderRow(row))}
-              </AnimatePresence>
-            </ul>
-          </motion.div>
-        ) : null}
-      </AnimatePresence>
-
-      {/* Enrolled (team members) — reviewed last. */}
-      {!isLoading && !isError ? (
-        <EnterDiv className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
-          <div className="flex items-center justify-between px-6 py-4 border-b border-base-300">
-            <h2 className="text-lg font-semibold">
-              {t("students.enrolledHeading")}
-            </h2>
-            <div className="flex items-center gap-3">
-              {hasSections && enrolled.length > 0 && (
-                <label className="flex cursor-pointer items-center gap-2 text-sm text-base-content/70">
-                  <input
-                    type="checkbox"
-                    className="toggle toggle-sm"
-                    checked={groupBySection}
-                    onChange={(e) => setGroupBySection(e.target.checked)}
-                  />
-                  {t("students.groupBySection")}
-                </label>
-              )}
-              <div className="badge badge-primary badge-soft text-base">
-                {counts.enrolled}
-              </div>
-            </div>
-          </div>
-          {enrolled.length > 0 ? (
-            groupBySection && hasSections ? (
+            ) : groupBySection && hasSectionsInFiltered ? (
               <div className="divide-y divide-base-300">
-                {enrolledBySection.map(({ section, students: group }) => (
+                {filteredBySection.map(({ section, students: group }) => (
                   <div key={section}>
                     <div className="flex items-center justify-between bg-base-200/60 px-6 py-2">
                       <h3 className="text-sm font-semibold text-base-content/70">
@@ -1051,59 +811,47 @@ const EnrolledStudents = ({
                         {group.length}
                       </span>
                     </div>
-                    <ul className="divide-y divide-base-300">
-                      <AnimatePresence initial={false}>
-                        {group.map((row) => renderRow(row))}
-                      </AnimatePresence>
-                    </ul>
+                    <motion.ul
+                      className="divide-y divide-base-300"
+                      variants={enterExit}
+                      initial="initial"
+                      animate="animate"
+                    >
+                      {group.map((row) => renderRow(row))}
+                    </motion.ul>
                   </div>
                 ))}
               </div>
             ) : (
-              <ul className="divide-y divide-base-300">
-                <AnimatePresence initial={false}>
-                  {enrolled.map((row) => renderRow(row))}
-                </AnimatePresence>
-              </ul>
-            )
-          ) : (
-            <div className="px-6 py-10 text-center text-sm text-base-content/70">
-              {t("students.noneEnrolled")}
-            </div>
-          )}
-        </EnterDiv>
-      ) : null}
-
-      <ConfirmModal
-        open={confirmResendAllOpen}
-        title={t("students.resendAllTitle")}
-        description={
-          <>
-            {t("students.resendAllBodyPrefix")}{" "}
-            <span className="font-semibold text-base-content">
-              {t("students.resendAllBodyEmphasis")}
-            </span>
-            {t("students.resendAllBodyMiddle")}{" "}
-            <span className="font-semibold text-base-content">{org}</span> (
-            <span className="font-semibold text-base-content">
-              {pending.length}
-            </span>{" "}
-            {t("students.resendAllBodyStudents", { count: pending.length })})
-            {t("students.resendAllBodySuffix")}
+              <motion.ul
+                className="divide-y divide-base-300"
+                variants={enterExit}
+                initial="initial"
+                animate="animate"
+              >
+                {filtered.map((row) => renderRow(row))}
+              </motion.ul>
+            )}
           </>
+        )}
+      </div>
+
+      <RosterMemberModal
+        open={Boolean(selected)}
+        org={org}
+        classroom={classroom}
+        row={selected}
+        onClose={() => setSelectedKey(null)}
+        onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
+        onUnenrolled={(rowKey, teamWarning) =>
+          onRowUnenrolled(rowKey, teamWarning)
         }
-        confirmText="resend"
-        confirmLabel={t("students.resendInvites")}
-        cancelLabel={t("common.cancel")}
-        dangerous={false}
-        needsConfirm={false}
-        onConfirm={async () => {
-          await handleResendAll()
-        }}
-        onClose={() => setConfirmResendAllOpen(false)}
+        onResent={() => invalidateInviteQueries()}
+        onError={(rowKey, message) => setWarning(rowKey, message)}
       />
     </div>
   )
 }
 
 export default EnrolledStudents
+
