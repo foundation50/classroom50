@@ -2,7 +2,10 @@ import { ExternalLink } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import Avatar from "@/components/avatar"
-import { GitHubIdentity, initialsFor } from "@/pages/orgMembers/memberPresentation"
+import {
+  GitHubIdentity,
+  initialsFor,
+} from "@/pages/orgMembers/memberPresentation"
 import type { MemberListRow } from "@/util/memberRow"
 
 // The identity header shared by the Org Members detail modal and the classroom
