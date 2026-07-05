@@ -99,6 +99,7 @@ const EnrolledStudents = ({
   const [groupBySection, setGroupBySection] = useState(false)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [sectionFilter, setSectionFilter] = useState<string>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // Session-only banner dismissal — a page refresh re-derives roster state and
@@ -144,18 +145,48 @@ const EnrolledStudents = ({
     })
   const isSelectable = (row: TeamRosterRow) => !isSelf(row)
 
-  // Text search over username/name/email + the status filter.
+  // Distinct sections present across all rows (status-independent so switching
+  // status never empties the section dropdown), sorted with "No section" last.
+  // Only offered when at least one row carries a real section label.
+  const sectionOptions = useMemo(() => {
+    const labels = new Set<string>()
+    let hasUnsectioned = false
+    for (const row of rows) {
+      const label = row.section.trim()
+      if (label) labels.add(label)
+      else hasUnsectioned = true
+    }
+    if (labels.size === 0) return []
+    const sorted = Array.from(labels).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true }),
+    )
+    return hasUnsectioned ? [...sorted, NO_SECTION] : sorted
+  }, [rows])
+
+  // A previously-selected section can vanish (roster edit / unenroll); treat a
+  // stale selection as "all" rather than filtering on a section that no longer
+  // exists. Derived (not synced via effect) so it never lags a row change.
+  const effectiveSection =
+    sectionFilter !== "all" && sectionOptions.includes(sectionFilter)
+      ? sectionFilter
+      : "all"
+
+  // Text search over username/name/email + the status and section filters.
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase()
     return rows.filter((row) => {
       if (statusFilter !== "all" && row.state !== statusFilter) return false
+      if (effectiveSection !== "all") {
+        const section = row.section.trim() || NO_SECTION
+        if (section !== effectiveSection) return false
+      }
       if (!q) return true
       const name = nameFromParts(row.first_name, row.last_name)
       return [row.username, name, row.email].some((field) =>
         field.toLowerCase().includes(q),
       )
     })
-  }, [rows, query, statusFilter])
+  }, [rows, query, statusFilter, effectiveSection])
 
   const hasSectionsInFiltered = useMemo(
     () => filtered.some((r) => r.section.trim()),
@@ -554,6 +585,21 @@ const EnrolledStudents = ({
               </option>
             ))}
           </select>
+          {sectionOptions.length > 0 ? (
+            <select
+              className="select select-bordered w-full sm:w-auto"
+              aria-label={t("students.filterBySectionLabel")}
+              value={effectiveSection}
+              onChange={(e) => setSectionFilter(e.target.value)}
+            >
+              <option value="all">{t("students.filterAllSections")}</option>
+              {sectionOptions.map((section) => (
+                <option key={section} value={section}>
+                  {section === NO_SECTION ? t("students.noSection") : section}
+                </option>
+              ))}
+            </select>
+          ) : null}
           {syncMutation.isPending || csvMissingCount > 0 ? (
             <button
               type="button"
@@ -668,11 +714,18 @@ const EnrolledStudents = ({
               <div className="px-6 py-10 text-center text-sm text-base-content/70">
                 {query.trim()
                   ? t("students.noMatch")
-                  : t("students.noneWithStatus", {
-                      status:
-                        statusOptions.find((o) => o.value === statusFilter)
-                          ?.label ?? statusFilter,
-                    })}
+                  : effectiveSection !== "all" && statusFilter === "all"
+                    ? t("students.noneInSection", {
+                        section:
+                          effectiveSection === NO_SECTION
+                            ? t("students.noSection")
+                            : effectiveSection,
+                      })
+                    : t("students.noneWithStatus", {
+                        status:
+                          statusOptions.find((o) => o.value === statusFilter)
+                            ?.label ?? statusFilter,
+                      })}
               </div>
             ) : groupBySection && hasSectionsInFiltered ? (
               <div className="divide-y divide-base-300">
