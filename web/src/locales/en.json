@@ -1092,10 +1092,10 @@
     "modeIndividual": "Individual Assignment",
     "modeGroup": "Group Assignment",
     "due": "Due {{date}}",
+    "pastDue": "Past due {{date}}",
     "noDueDate": "No due date",
-    "alreadyAcceptedHeading": "You've already accepted this assignment. Open your repository to keep working on it.",
+    "alreadyAcceptedHeading": "You've already accepted this assignment.",
     "acceptHeading": "Accept this assignment to get your own copy of the starter code repository.",
-    "pastDueWarning": "This assignment is past due. You can still accept it, but check with your instructor about late submissions.",
     "repoAlreadyExists": "Repository already exists as:",
     "repoWillBeCreated": "Repository will be created as:",
     "errorTitle": "Could not accept assignment",
@@ -1105,8 +1105,9 @@
     "acceptedTitle": "Assignment accepted",
     "repositoryLabel": "Repository:",
     "openRepository": "Open Repository",
+    "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",
-    "acceptButton": "Accept Assignment & Create Repository",
+    "acceptButton": "Accept Assignment",
     "notFound": {
       "badge": "Assignment unavailable",
       "title": "Assignment not found",
@@ -1130,7 +1131,8 @@
       "error": "Setup failed — review the steps",
       "complete": "Setup complete",
       "running": "Setting up your repository…",
-      "pending": "Setup progress"
+      "pending": "Setup progress",
+      "count": "{{completed}} of {{total}} steps complete"
     },
     "repair": {
       "havingTrouble": "Having trouble?",
