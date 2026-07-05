@@ -1,6 +1,6 @@
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
-import { memberIdSet, rosterClaimSet, studentKey } from "@/util/identity"
+import { memberIdSet, studentKey } from "@/util/identity"
 
 // Per-classroom enrollment state for an aggregated member, mirroring
 // buildTeamRoster so the two views agree:
@@ -209,47 +209,4 @@ export function aggregateOrgMembers(
   })
 
   return rows
-}
-
-// A candidate GitHub account for a teacher to manually match to an email-only
-// roster row that joined the org directly (no recoverable identity on the row).
-// github_id is the immutable bind key; login/name/avatar are display.
-export type MatchCandidate = {
-  github_id: string
-  login: string
-  name: string
-  avatar_url: string
-}
-
-// Live org/team members NOT already claimed by any roster row in this classroom
-// — the tightest set for the manual-match picker. "Claimed" = their id or login
-// appears on a row (by github_id or username), so a teacher only sees accounts
-// not yet bound to a student. Pure for testing without react-query.
-//
-// Accepts the minimal member shape it reads so callers needn't fabricate a full
-// GitHubUser.
-export type MatchMember = Pick<
-  GitHubUser,
-  "id" | "login" | "name" | "avatar_url"
->
-
-export function unmatchedTeamMembers(
-  members: MatchMember[],
-  students: Student[],
-): MatchCandidate[] {
-  const { ids: claimedIds, logins: claimedLogins } = rosterClaimSet(students)
-
-  return members
-    .filter(
-      (member) =>
-        !claimedIds.has(String(member.id)) &&
-        !claimedLogins.has(member.login.toLowerCase()),
-    )
-    .map((member) => ({
-      github_id: String(member.id),
-      login: member.login,
-      name: member.name ?? "",
-      avatar_url: member.avatar_url,
-    }))
-    .sort((a, b) => a.login.localeCompare(b.login))
 }

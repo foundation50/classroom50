@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  aggregateOrgMembers,
-  unmatchedTeamMembers,
-  type ClassroomRoster,
-} from "./orgMembers"
+import { aggregateOrgMembers, type ClassroomRoster } from "./orgMembers"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
@@ -163,47 +159,6 @@ describe("aggregateOrgMembers", () => {
       ],
     )
     expect(rows[0].classification).toBe("on-roster-not-member")
-  })
-})
-
-describe("unmatchedTeamMembers — manual-match candidate set", () => {
-  it("excludes members already claimed by a roster row (by github_id or login)", () => {
-    const members = [
-      member(42, "alice"),
-      member(43, "bob"),
-      member(44, "carol"),
-    ]
-    const students = [
-      student({ username: "alice", github_id: "42" }), // claimed by id
-      student({ username: "bob", github_id: "" }), // claimed by login only
-    ]
-    const candidates = unmatchedTeamMembers(members, students)
-    expect(candidates.map((c) => c.login)).toEqual(["carol"])
-    expect(candidates[0]).toMatchObject({ github_id: "44", login: "carol" })
-  })
-
-  it("matches login case-insensitively", () => {
-    const candidates = unmatchedTeamMembers(
-      [member(50, "Dana")],
-      [student({ username: "dana" })],
-    )
-    expect(candidates).toHaveLength(0)
-  })
-
-  it("returns all members sorted by login when nothing is claimed", () => {
-    const candidates = unmatchedTeamMembers(
-      [member(2, "zoe"), member(1, "amy")],
-      [],
-    )
-    expect(candidates.map((c) => c.login)).toEqual(["amy", "zoe"])
-  })
-
-  it("ignores roster rows that carry no identity (email-only)", () => {
-    const candidates = unmatchedTeamMembers(
-      [member(42, "alice")],
-      [student({ email: "alice@x.edu" })],
-    )
-    expect(candidates.map((c) => c.login)).toEqual(["alice"])
   })
 })
 

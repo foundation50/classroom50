@@ -18,22 +18,13 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "./classrooms"
-import {
-  getRawFile,
-  getUser,
-  getUserById,
-  listClassroomDirs,
-  listTeamMembers,
-  REPO_READ_CONCURRENCY,
-} from "@/hooks/github/queries"
+import { getRawFile, getUser, listTeamMembers } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { isSameGitHubUser } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { prefixCommit } from "@/util/commit"
-import { normalizeEmail } from "@/util/orgMembership"
-import { mapWithConcurrency } from "@/util/concurrency"
 import { type Student } from "@/types/classroom"
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug
@@ -305,395 +296,82 @@ type AddEmailInviteToClassroomInput = {
   org: string
   classroom: string
   email: string
-  first_name?: string
-  last_name?: string
-  section?: string
 }
 
-// Email-first writer: no GitHub username/id yet, row keyed on the invited
-// email, stays "invited" until the student self-reports and the teacher
-// reconciles. Dedupes on email (case-insensitive).
-export async function addEmailInviteToClassroom(
+export type InviteByEmailResult = {
+  // Set when the invite couldn't be sent as intended (non-fatal, surfaced to
+  // the teacher). Undefined on a clean invite.
+  inviteWarning?: string
+}
+
+// Send a GitHub org invite for an email, attaching the classroom team so the
+// student lands in it on acceptance. Writes NOTHING to students.csv: the team
+// is the source of truth for enrollment, and an email carries no reliable
+// GitHub identity (it changes to a login only once accepted). The invite shows
+// up in the roster's `pending` section via the org pending-invitations list; to
+// capture name/section metadata, add the student by GitHub username or upload a
+// roster CSV once they've joined. If the classroom team can't be resolved, the
+// invite is BLOCKED (throws) rather than sent team-less — see below.
+export async function inviteByEmail(
   client: GitHubClient,
   input: AddEmailInviteToClassroomInput,
-): Promise<AddStudentToClassroomResult> {
+): Promise<InviteByEmailResult> {
+  const { org, classroom } = input
   const normalizedEmail = input.email.trim()
-
   if (!normalizedEmail) {
     throw new Error("Email is required")
   }
 
-  await assertClassroomNotArchived(client, input.org, input.classroom)
+  await assertClassroomNotArchived(client, org, classroom)
 
-  const ref = await getBranchRef(client, input.org)
-  const commit = await getCommit(client, input.org, ref.object.sha)
-
-  const studentsFilePath = `${input.classroom}/students.csv`
-
-  const currentCsv = await getRawFile(client, {
-    org: input.org,
-    path: studentsFilePath,
-    ref: ref.object.sha,
-  })
-
-  const currentStudents = parseStudentsCsv(currentCsv)
-
-  const emailKey = normalizedEmail.toLowerCase()
-  const alreadyExists = currentStudents.some(
-    (student) => student.email.toLowerCase() === emailKey,
-  )
-
-  if (alreadyExists) {
-    throw new Error(`Student already exists: ${normalizedEmail}`)
-  }
-
-  const student: StudentCsvRow = normalizeStudentRow({
-    username: "",
-    first_name: input.first_name?.trim() ?? "",
-    last_name: input.last_name?.trim() ?? "",
-    email: normalizedEmail,
-    section: input.section?.trim() ?? "",
-    github_id: "",
-  })
-
-  const nextStudents = [...currentStudents, student]
-  const nextCsv = stringifyStudentsCsv(nextStudents)
-
-  const tree = await createGitTree(client, {
-    org: input.org,
-    base_tree: commit.tree.sha,
-    tree: [
-      {
-        path: studentsFilePath,
-        mode: "100644",
-        type: "blob",
-        content: nextCsv,
-      },
-    ],
-  })
-
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: prefixCommit(
-      `Invite student by email: ${input.classroom}/${normalizedEmail}`,
-    ),
-    tree_sha: tree.sha,
-    parents: [ref.object.sha],
-  })
-
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
-
-  return {
-    previousCommitSha: ref.object.sha,
-    baseTreeSha: commit.tree.sha,
-    newTreeSha: tree.sha,
-    newCommitSha: newCommit.sha,
-    updatedRef,
-    student,
-  }
-}
-
-export async function addEmailInviteToClassroomWithConflictRetry(
-  client: GitHubClient,
-  input: AddEmailInviteToClassroomInput,
-) {
-  return withGitConflictRetry(() => addEmailInviteToClassroom(client, input))
-}
-
-// Resolve a bare email to a GitHub github_id by scanning the org's OTHER
-// classroom rosters (GitHub has no email->user lookup). Returns the immutable id
-// (callers derive the current login — stored usernames go stale). 2+ DISTINCT
-// ids for one email -> "ambiguous" (never guess); no match -> null. `ref` pins
-// all reads to one commit.
-async function resolveStudentIdentityByEmail(
-  client: GitHubClient,
-  org: string,
-  email: string,
-  excludeClassroom: string,
-  ref: string,
-): Promise<
-  | {
-      status: "resolved"
-      github_id: string
-      first_name: string
-      last_name: string
-    }
-  | { status: "ambiguous" }
-  | null
-> {
-  const targetEmail = normalizeEmail(email)
-
-  let dirs
-  try {
-    dirs = await listClassroomDirs(client, org, ref)
-  } catch {
-    return null
-  }
-  const otherClassrooms = dirs
-    .map((d) => d.name)
-    .filter((name) => name && name !== excludeClassroom)
-
-  const matches = await mapWithConcurrency(
-    otherClassrooms,
-    REPO_READ_CONCURRENCY,
-    async (classroom) => {
-      let csv: string
-      try {
-        csv = await getRawFile(client, {
-          org,
-          path: `${classroom}/students.csv`,
-          ref,
-        })
-      } catch {
-        return [] // no roster / unreadable — skip
-      }
-      const rows = parseStudentsCsv(csv)
-      // Match an email-first row on its raw email (case-insensitive), restricted
-      // to rows with a real github_id so the result keys on the immutable id.
-      return rows
-        .filter(
-          (row) =>
-            Boolean(row.github_id.trim()) &&
-            normalizeEmail(row.email) === targetEmail,
-        )
-        .map((row) => ({
-          github_id: row.github_id.trim(),
-          first_name: row.first_name,
-          last_name: row.last_name,
-        }))
-    },
-  )
-
-  const hits = matches.flat()
-  const distinctIds = new Set(hits.map((h) => h.github_id))
-  if (distinctIds.size === 0) return null
-  if (distinctIds.size > 1) return { status: "ambiguous" }
-  const first = hits[0]
-  return {
-    status: "resolved",
-    github_id: first.github_id,
-    first_name: first.first_name,
-    last_name: first.last_name,
-  }
-}
-
-// Enroll an email-only row (matched by email, since it has no username yet),
-// backfilling the resolved identity. Used on the already-member 422 path.
-async function enrollEmailRowWithResolvedIdentity(
-  client: GitHubClient,
-  input: {
-    org: string
-    classroom: string
-    email: string
-    username: string
-    github_id: string
-    first_name?: string
-    last_name?: string
-  },
-) {
-  return withGitConflictRetry(async () => {
-    const { org, classroom } = input
-    const ref = await getBranchRef(client, org)
-    const commit = await getCommit(client, org, ref.object.sha)
-    const studentsFilePath = `${classroom}/students.csv`
-    const currentCsv = await getRawFile(client, {
-      org,
-      path: studentsFilePath,
-      ref: ref.object.sha,
-    })
-    const currentStudents = parseStudentsCsv(currentCsv)
-
-    const emailKey = input.email.trim().toLowerCase()
-    const nextStudents = currentStudents.map((row) =>
-      row.email.toLowerCase() === emailKey && !row.username
-        ? normalizeStudentRow({
-            ...row,
-            username: input.username,
-            github_id: input.github_id,
-            // Backfill name only where the teacher left it blank (teacher wins);
-            // section is not synced — it's classroom-specific.
-            first_name: row.first_name?.trim() || (input.first_name ?? ""),
-            last_name: row.last_name?.trim() || (input.last_name ?? ""),
-          })
-        : row,
-    )
-    const nextCsv = stringifyStudentsCsv(nextStudents)
-    await commitStudentsCsv(client, {
-      org,
-      classroom,
-      baseTreeSha: commit.tree.sha,
-      parentSha: ref.object.sha,
-      content: nextCsv,
-      message: prefixCommit(
-        `Enroll already-member student: ${classroom}/${input.username}`,
-      ),
-    })
-  })
-}
-
-// Commit a new students.csv content in one tree+commit+ref update.
-async function commitStudentsCsv(
-  client: GitHubClient,
-  input: {
-    org: string
-    classroom: string
-    baseTreeSha: string
-    parentSha: string
-    content: string
-    message: string
-  },
-) {
-  const tree = await createGitTree(client, {
-    org: input.org,
-    base_tree: input.baseTreeSha,
-    tree: [
-      {
-        path: `${input.classroom}/students.csv`,
-        mode: "100644",
-        type: "blob",
-        content: input.content,
-      },
-    ],
-  })
-  const newCommit = await createGitCommit(client, {
-    org: input.org,
-    message: input.message,
-    tree_sha: tree.sha,
-    parents: [input.parentSha],
-  })
-  await updateRef(client, input.org, newCommit.sha)
-}
-
-export type InviteStudentByEmailResult = AddStudentToClassroomResult & {
-  // Set when the row committed but the org email-invite failed (non-fatal).
-  inviteWarning?: string
-}
-
-// Commit the email-only roster row first (authoritative), then best-effort fire
-// the org email-invite. A failed invite is non-fatal — the row already landed.
-export async function inviteStudentByEmail(
-  client: GitHubClient,
-  input: AddEmailInviteToClassroomInput,
-): Promise<InviteStudentByEmailResult> {
-  const result = await addEmailInviteToClassroomWithConflictRetry(client, input)
-
-  // Attach the classroom team to the invite so the student lands in it on
-  // acceptance. If the team id can't be attached — the resolve threw, or the
-  // classroom has no persisted team block — we still send the invite (the row
-  // landed and a team-less org member is recoverable), but we MUST warn: the
-  // reconcile path that used to re-add such a student was removed with the
-  // self-report subsystem, and grade collection is now team-driven — a student
-  // who accepts a team-less invite becomes an org member absent from the team,
-  // rendering as an `unprovisioned` drift row, silently uncollected until the
-  // teacher runs "Sync roster" or "Match account".
+  // Resolve the classroom team id up front: in a team-authoritative model, an
+  // invite that can't carry the team is broken — the accepted student would land
+  // in the org with no team and (since we write no CSV row) no roster row,
+  // silently uncollected. So if we can't resolve the team (missing team block OR
+  // a transient read failure), block the invite rather than send a half-working
+  // one. `resolveClassroomTeam` returns id: undefined for a classroom with no
+  // team block without throwing; a read failure throws — treat both as "no team".
   let teamId: number | undefined
   try {
-    teamId = (await resolveClassroomTeam(client, input.org, input.classroom)).id
+    teamId = (await resolveClassroomTeam(client, org, classroom)).id
   } catch {
     teamId = undefined
   }
-  const teamAttached = Boolean(teamId)
+  if (!teamId) {
+    throw new Error(
+      `Couldn't resolve the classroom team for ${classroom}, so no invite was ` +
+        `sent. Make sure the classroom's GitHub team exists (re-run classroom ` +
+        `setup if needed), then try again.`,
+    )
+  }
 
   try {
     await createOrgInvitation(client, {
-      org: input.org,
-      email: result.student.email,
-      team_ids: teamId ? [teamId] : undefined,
+      org,
+      email: normalizedEmail,
+      team_ids: [teamId],
     })
-    if (!teamAttached) {
-      return {
-        ...result,
-        inviteWarning:
-          `${result.student.email} was invited to ${input.org}, but the classroom ` +
-          `team couldn't be attached, so the invite was sent without it. Once they ` +
-          `accept, run "Sync roster" to add them to the team — otherwise they ` +
-          `won't be included in grade collection.`,
-      }
-    }
   } catch (err) {
-    // A 422 means the email already belongs to a member (or is already invited).
-    // GitHub gives no identity for the email, so resolve it from the teacher's
-    // other rosters: enroll directly if found + active, else drop the stub.
+    // A 422 means the email already belongs to a member or is already invited.
+    // There's no reliable identity to persist, so just tell the teacher to add
+    // them by username (which resolves the immutable github_id).
     if (err instanceof GitHubAPIError && err.status === 422) {
-      const resolved = await resolveStudentIdentityByEmail(
-        client,
-        input.org,
-        result.student.email,
-        input.classroom,
-        result.previousCommitSha,
-      ).catch(() => null)
-
-      // Derive the current login from the id (stored usernames go stale), then
-      // re-check active membership before binding. Ambiguous (2+ ids) is treated
-      // like unidentifiable — keep the stub for the teacher's manual match.
-      const resolvedLogin =
-        resolved?.status === "resolved"
-          ? await getUserById(client, resolved.github_id)
-              .then((u) => u.login)
-              .catch(() => "")
-          : ""
-      const stillActive =
-        Boolean(resolvedLogin) &&
-        (await isActiveMember(client, input.org, resolvedLogin))
-
-      if (resolved?.status === "resolved" && resolvedLogin && stillActive) {
-        try {
-          await enrollEmailRowWithResolvedIdentity(client, {
-            org: input.org,
-            classroom: input.classroom,
-            email: result.student.email,
-            username: resolvedLogin,
-            github_id: resolved.github_id,
-            first_name: resolved.first_name,
-            last_name: resolved.last_name,
-          })
-          return {
-            ...result,
-            student: {
-              ...result.student,
-              username: resolvedLogin,
-              github_id: resolved.github_id,
-              first_name:
-                result.student.first_name?.trim() || resolved.first_name || "",
-              last_name:
-                result.student.last_name?.trim() || resolved.last_name || "",
-            },
-          }
-        } catch (enrollErr) {
-          console.error(
-            "resolved already-member but enroll write failed:",
-            enrollErr,
-          )
-          // Fall through to the generic warning below (row stays as a stub).
-        }
-      } else if (!resolved || resolved.status === "ambiguous") {
-        // Member but unidentifiable from any roster (no match, or an ambiguous
-        // email mapping to multiple students). Keep the invited email row: the
-        // student is in the org, but the email->login link is unrecoverable
-        // post-accept, so the teacher must complete the match by hand ("Match
-        // account") or delete the row. Reconcile surfaces it as needsMatch.
-        return {
-          ...result,
-          inviteWarning:
-            `${result.student.email} already belongs to a member of the ${input.org} ` +
-            `organization, so no invite was sent. They were kept on this classroom's ` +
-            `roster as a pending match — use "Match account" to link their GitHub ` +
-            `account, or remove the row if you can't identify them.`,
-        }
+      return {
+        inviteWarning:
+          `${normalizedEmail} already belongs to a member of the ${org} ` +
+          `organization (or is already invited), so no new invite was sent. ` +
+          `If they should be on this classroom, add them by GitHub username.`,
       }
     }
-
-    console.error("org email invite failed (row committed):", err)
-    const detail = getErrorMessage(err)
+    console.error("org email invite failed:", err)
     return {
-      ...result,
       inviteWarning:
-        `${result.student.email} was added to the roster, but sending their ` +
-        `organization invite failed (${detail}); re-send it from the roster.`,
+        `Sending the organization invite to ${normalizedEmail} failed ` +
+        `(${getErrorMessage(err)}); try again.`,
     }
   }
 
-  return result
+  return {}
 }
 
 type AddStudentToClassroomInput = {
@@ -789,160 +467,10 @@ export async function enrollStudentInClassroom(
     ...result,
     // Whether the student is now an active org member (team-added directly, no
     // invite). The roster view seeds the team-members cache when true to avoid
-    // an "unprovisioned" flash; false = the normal invited path.
+    // a "not in org" flash; false = the normal invited path.
     enrolled: alreadyMember,
     teamWarning: warnings.length > 0 ? warnings.join(" ") : undefined,
   }
-}
-
-export type MatchStudentToAccountInput = {
-  org: string
-  classroom: string
-  // The email-only row's email (its only identifier).
-  email: string
-  // The GitHub account the teacher picked for this row.
-  username: string
-  github_id: string
-}
-
-// Teacher-initiated manual match for an email-invited row whose student joined
-// the org directly and whose identity GitHub no longer exposes (the email->login
-// link is dropped once an invite is accepted). The teacher picks which org/team
-// member owns the email; this writes that identity onto the email-keyed row and
-// enrolls it. Re-verifies the chosen account is an ACTIVE member before binding
-// (the active-membership trust model used across the enroll paths, #65/#50), so
-// a wrong/stale pick can't bind a non-member.
-async function matchStudentToAccount(
-  client: GitHubClient,
-  input: MatchStudentToAccountInput,
-) {
-  const { org, classroom } = input
-  await assertClassroomNotArchived(client, org, classroom)
-
-  const normalizedUsername = input.username.trim()
-  const normalizedEmail = input.email.trim()
-  if (!normalizedUsername) {
-    throw new Error("A GitHub account is required to complete the match.")
-  }
-  if (!normalizedEmail) {
-    throw new Error("The roster row has no email to match against.")
-  }
-
-  // Authoritative member re-check — only an active member can be bound.
-  const state = await getOrgMembershipState(client, org, normalizedUsername)
-  if (state !== "active") {
-    throw new Error(
-      `${normalizedUsername} is not an active member of the ${org} organization, so they can't be matched.`,
-    )
-  }
-
-  const ref = await getBranchRef(client, org)
-  const commit = await getCommit(client, org, ref.object.sha)
-  const studentsFilePath = `${classroom}/students.csv`
-  const currentStudents = parseStudentsCsv(
-    await getRawFile(client, {
-      org,
-      path: studentsFilePath,
-      ref: ref.object.sha,
-    }),
-  )
-
-  const emailKey = normalizeEmail(normalizedEmail)
-  // Target the email-only row (no username yet) — the same predicate the
-  // email-resolution path uses, so we never re-key a row that already has an
-  // identity.
-  const isTarget = (row: StudentCsvRow) =>
-    normalizeEmail(row.email) === emailKey && !row.username.trim()
-  const target = currentStudents.find(isTarget)
-  if (!target) {
-    throw new Error(
-      `No unmatched roster row found for ${normalizedEmail}; it may already be matched.`,
-    )
-  }
-
-  // Reject if the picked account is already bound to a DIFFERENT row (by
-  // immutable github_id or, for a pre-id row, by login). Without this, matching
-  // two email rows to the same account — or a stale candidate list re-picking an
-  // account another match just claimed — writes one github_id onto two rows,
-  // which the roster view masks (dedupe by studentKey) while the CSV stays
-  // permanently double-bound. Runs on the freshly-read roster so it composes
-  // with a concurrent match under withGitConflictRetry.
-  const pickedId = input.github_id.trim()
-  const pickedLogin = normalizedUsername.toLowerCase()
-  const alreadyClaimed = currentStudents.some(
-    (row) =>
-      !isTarget(row) &&
-      ((Boolean(pickedId) && row.github_id.trim() === pickedId) ||
-        (Boolean(pickedLogin) &&
-          row.username.trim().toLowerCase() === pickedLogin)),
-  )
-  if (alreadyClaimed) {
-    throw new Error(
-      `${normalizedUsername} is already matched to another student on this roster; refresh and pick a different account.`,
-    )
-  }
-
-  const matchedRow = normalizeStudentRow({
-    ...target,
-    username: normalizedUsername,
-    github_id: input.github_id.trim(),
-  })
-  const nextStudents = currentStudents.map((row) =>
-    isTarget(row) ? matchedRow : row,
-  )
-
-  await commitStudentsCsv(client, {
-    org,
-    classroom,
-    baseTreeSha: commit.tree.sha,
-    parentSha: ref.object.sha,
-    content: stringifyStudentsCsv(nextStudents),
-    message: prefixCommit(
-      `Match student to account: ${classroom}/${normalizedUsername}`,
-    ),
-  })
-
-  return { alreadyEnrolled: false, student: matchedRow }
-}
-
-export async function matchStudentToAccountWithConflictRetry(
-  client: GitHubClient,
-  input: MatchStudentToAccountInput,
-) {
-  const result = await withGitConflictRetry(() =>
-    matchStudentToAccount(client, input),
-  )
-
-  // Best-effort: ensure the matched member is on the classroom team. Non-fatal.
-  let teamWarning: string | undefined
-  try {
-    const team = await resolveClassroomTeam(client, input.org, input.classroom)
-    if (team.slug) {
-      const added = await tryAddUserToTeam(
-        client,
-        {
-          org: input.org,
-          teamSlug: team.slug,
-          username: result.student.username,
-        },
-        "match account",
-      )
-      if (!added.ok) {
-        teamWarning =
-          `${result.student.username} was matched, but adding them to the ` +
-          `classroom team failed; they won't have read on private templates until ` +
-          `it's retried.`
-      }
-    }
-  } catch (err) {
-    console.error("team resolve failed (match account):", err)
-    teamWarning =
-      `${result.student.username} was matched, but adding them to the ` +
-      `classroom team failed; they won't have read on private templates until ` +
-      `it's retried.`
-  }
-
-  return { ...result, teamWarning }
 }
 
 type BulkImportProgress = {
@@ -950,10 +478,25 @@ type BulkImportProgress = {
   total: number
   message: string
 }
+
+// A parsed roster-upload row. Only username is required; the rest is optional
+// metadata. github_id is intentionally NOT taken from the file — it's re-derived
+// from GitHub so the stored id is always authoritative.
+export type ImportRosterRow = {
+  username: string
+  first_name?: string
+  last_name?: string
+  email?: string
+  section?: string
+}
+
 export type AddStudentsToClassroomInput = {
   org: string
   classroom: string
-  usernames: string[]
+  // Full metadata rows (preferred). When omitted, `usernames` is used as
+  // username-only rows. Exactly one should be provided.
+  rows?: ImportRosterRow[]
+  usernames?: string[]
   onProgress?: (progress: BulkImportProgress) => void
 }
 
@@ -979,16 +522,23 @@ export async function addStudentsToClassroom(
   client: GitHubClient,
   input: AddStudentsToClassroomInput,
 ): Promise<AddStudentsToClassroomResult> {
-  const normalizedUsernames = Array.from(
+  // Unify rows/usernames into metadata rows, deduped by lowercased username
+  // (first occurrence wins, so its metadata is kept).
+  const rawRows: ImportRosterRow[] =
+    input.rows ?? (input.usernames ?? []).map((username) => ({ username }))
+  const normalizedRows = Array.from(
     new Map(
-      input.usernames
-        .map((username) => normalizeGithubUsername(username))
-        .filter(Boolean)
-        .map((username) => [username.toLowerCase(), username]),
+      rawRows
+        .map((row) => ({
+          ...row,
+          username: normalizeGithubUsername(row.username),
+        }))
+        .filter((row) => row.username)
+        .map((row) => [row.username.toLowerCase(), row]),
     ).values(),
   )
 
-  if (normalizedUsernames.length === 0) {
+  if (normalizedRows.length === 0) {
     throw new Error("At least one GitHub username is required")
   }
 
@@ -996,7 +546,7 @@ export async function addStudentsToClassroom(
 
   input.onProgress?.({
     processed: 0,
-    total: normalizedUsernames.length,
+    total: normalizedRows.length,
     message: "Reading current students.csv...",
   })
 
@@ -1026,10 +576,11 @@ export async function addStudentsToClassroom(
 
   let processed = 0
 
-  for (const username of normalizedUsernames) {
+  for (const row of normalizedRows) {
+    const username = row.username
     input.onProgress?.({
       processed,
-      total: normalizedUsernames.length,
+      total: normalizedRows.length,
       message: `Checking ${username}...`,
     })
 
@@ -1044,6 +595,8 @@ export async function addStudentsToClassroom(
       continue
     }
 
+    // Dedupe by login (pre-resolution). Dedupe by github_id happens after the
+    // GitHub lookup, since the file may store a stale/renamed login.
     if (existingUsernameKeys.has(username.toLowerCase())) {
       skippedStudents.push({
         username,
@@ -1069,16 +622,18 @@ export async function addStudentsToClassroom(
         continue
       }
 
+      // Metadata: prefer the uploaded row, fall back to the GitHub profile.
       const nameParts = splitName(githubUser.name)
-
-      const studentEmail = githubUser.email ?? ""
+      const first_name = row.first_name?.trim() || nameParts.first_name
+      const last_name = row.last_name?.trim() || nameParts.last_name
+      const email = row.email?.trim() || githubUser.email || ""
 
       const student = normalizeStudentRow({
         username: githubUser.login,
-        first_name: nameParts.first_name,
-        last_name: nameParts.last_name,
-        email: studentEmail,
-        section: "",
+        first_name,
+        last_name,
+        email,
+        section: row.section?.trim() ?? "",
         github_id: String(githubUser.id),
       })
 
@@ -1098,8 +653,8 @@ export async function addStudentsToClassroom(
 
     input.onProgress?.({
       processed,
-      total: normalizedUsernames.length,
-      message: `Checked ${processed} of ${normalizedUsernames.length} usernames...`,
+      total: normalizedRows.length,
+      message: `Checked ${processed} of ${normalizedRows.length} usernames...`,
     })
   }
 
@@ -1109,7 +664,7 @@ export async function addStudentsToClassroom(
 
   input.onProgress?.({
     processed,
-    total: normalizedUsernames.length,
+    total: normalizedRows.length,
     message: "Writing students.csv...",
   })
 
@@ -1143,8 +698,8 @@ export async function addStudentsToClassroom(
   const updatedRef = await updateRef(client, input.org, newCommit.sha)
 
   input.onProgress?.({
-    processed: normalizedUsernames.length,
-    total: normalizedUsernames.length,
+    processed: normalizedRows.length,
+    total: normalizedRows.length,
     message: "students.csv updated.",
   })
 
@@ -1174,9 +729,11 @@ export type SyncRosterFromTeamResult = {
 }
 
 // Backfill students.csv from the classroom team: ensure every active team
-// member has a metadata row (keyed by github_id), appended in ONE commit. The
-// team is the source of truth for enrollment; this only persists optional
-// display metadata. Never removes rows (CSV-only rows are drift, not deletions).
+// member has an IDENTITY row (username + github_id), appended in ONE commit. The
+// team is the source of truth for enrollment; the CSV holds only teacher-
+// supplied metadata, so this writes identity only and never fabricates
+// name/email/section from the GitHub profile — the teacher fills those in.
+// Never removes rows (CSV-only rows are drift, not deletions).
 //
 // The diff is recomputed INSIDE the retried closure (re-reading both team and
 // CSV each attempt) so a 409 retry or concurrent edit can't reintroduce or
@@ -1235,17 +792,20 @@ export async function syncRosterFromTeam(
       return { addedUsernames: [], noop: true }
     }
 
-    const addedRows = missing.map((m) => {
-      const nameParts = splitName(m.name)
-      return normalizeStudentRow({
+    // Identity-only rows: username + github_id. Name/email/section are left
+    // blank for the teacher to provide (via Edit or a roster upload). The team
+    // decides enrollment; the CSV holds only teacher-supplied metadata, so we
+    // never fabricate profile fields from the GitHub account here.
+    const addedRows = missing.map((m) =>
+      normalizeStudentRow({
         username: m.login,
-        first_name: nameParts.first_name,
-        last_name: nameParts.last_name,
-        email: m.email ?? "",
+        first_name: "",
+        last_name: "",
+        email: "",
         section: "",
         github_id: String(m.id),
-      })
-    })
+      }),
+    )
 
     const nextCsv = stringifyStudentsCsv([...currentStudents, ...addedRows])
 
@@ -1352,6 +912,10 @@ export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
     status: "added" | "failed"
     message?: string
   }[]
+  // Added to students.csv but NOT an active org member and not a pending invite
+  // — on the roster, not in the organization. Surfaced so the teacher can chase
+  // an invite; the team-driven roster shows them as `not_in_org`.
+  notInOrg: string[]
 }
 
 export type BulkImportResult = {
@@ -1366,6 +930,7 @@ export type BulkImportResult = {
     status: "added" | "failed"
     message?: string
   }[]
+  notInOrg?: string[]
 }
 export async function bulkEnrollStudentsInClassroom(
   client: GitHubClient,
@@ -1375,7 +940,7 @@ export async function bulkEnrollStudentsInClassroom(
 
   await assertClassroomNotArchived(client, bulkInput.org, bulkInput.classroom)
 
-  const total = bulkInput.usernames.length
+  const total = (bulkInput.rows ?? bulkInput.usernames ?? []).length
 
   onProgress?.({
     processed: 0,
@@ -1405,6 +970,7 @@ export async function bulkEnrollStudentsInClassroom(
   }
 
   const teamResults: BulkImportResult["teamResults"] = []
+  const notInOrg: string[] = []
 
   for (let i = 0; i < addResult.addedStudents.length; i++) {
     const student = addResult.addedStudents[i]
@@ -1412,8 +978,22 @@ export async function bulkEnrollStudentsInClassroom(
     onProgress?.({
       processed: i,
       total: addResult.addedStudents.length,
-      message: `Adding ${student.username} to classroom team...`,
+      message: `Verifying ${student.username} in the organization...`,
     })
+
+    // Verify by team membership through org membership: only an active org
+    // member is team-added (the trust model used across the enroll paths). A
+    // non-member is recorded as not_in_org (needs an invite) rather than a team
+    // failure — they aren't in the org to add yet.
+    if (!(await isActiveMember(client, bulkInput.org, student.username))) {
+      notInOrg.push(student.username)
+      onProgress?.({
+        processed: i + 1,
+        total: addResult.addedStudents.length,
+        message: `Processed ${i + 1} of ${addResult.addedStudents.length}...`,
+      })
+      continue
+    }
 
     if (teamSlug === undefined) {
       teamResults.push({
@@ -1464,6 +1044,7 @@ export async function bulkEnrollStudentsInClassroom(
   return {
     ...addResult,
     teamResults,
+    notInOrg,
   }
 }
 
@@ -1471,30 +1052,16 @@ export async function bulkEnrollStudentsInClassroom(
 // authority for matching a removal target to a roster row, shared by
 // unenrollStudent and bulkUnenrollStudents so the two can't drift.
 //
-// Precedence mirrors enrollment identity: when the target carries a username or
-// github_id, match on those only (never email — a shared email must not widen
-// the match). Email is a fallback ONLY for an email-only target (no username,
-// no github_id), and then matches ONLY an email-only row (itself unclaimed).
-// Without that guard, batch-removing one email-only invite would drop every
-// other row sharing the email, silently unenrolling an unselected student.
+// Identity is username/github_id only: every roster row now carries a GitHub
+// identity, so email is never a match key (a shared email must not widen the
+// match, and there are no username-less rows to target by email).
 export function matchesRosterRow(row: StudentCsvRow, target: Student): boolean {
   const username = target.username?.trim()
   const githubId = target.github_id?.trim()
-  if (username || githubId) {
-    return (
-      (Boolean(username) &&
-        row.username.toLowerCase() === username!.toLowerCase()) ||
-      (Boolean(githubId) &&
-        Boolean(row.github_id) &&
-        row.github_id === githubId)
-    )
-  }
-  const email = target.email?.trim()
   return (
-    Boolean(email) &&
-    !row.username.trim() &&
-    !row.github_id.trim() &&
-    row.email.toLowerCase() === email!.toLowerCase()
+    (Boolean(username) &&
+      row.username.toLowerCase() === username!.toLowerCase()) ||
+    (Boolean(githubId) && Boolean(row.github_id) && row.github_id === githubId)
   )
 }
 
@@ -1909,20 +1476,9 @@ export async function updateStudent(
   const existing = currentStudents[targetIndex]
 
   const nextEmail = patch.email.trim()
-  const emailChanged = nextEmail.toLowerCase() !== existing.email.toLowerCase()
 
-  // An email-only row (no username, no github_id) is identified solely by its
-  // email — its studentKey, both here and in the UI's optimistic cache. Editing
-  // the email would re-key it (or, if cleared, drop it: stringifyStudentsCsv
-  // discards keyless rows, silently deleting the student). Refuse any email
-  // change on such a row; the teacher should unenroll instead.
-  if (emailChanged && !existing.username && !existing.github_id) {
-    throw new Error(
-      "Can't change the email for this student: they have no GitHub username " +
-        "or id, so their email is their only identifier. Unenroll and re-add " +
-        "them to change it.",
-    )
-  }
+  // Every roster row now carries a GitHub identity, so its email is metadata
+  // and freely editable — the row is keyed by github_id/username, never email.
 
   // Guard against editing an email into one already held by ANOTHER row
   // (case-insensitive). The target row matching its own current email is fine.

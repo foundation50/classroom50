@@ -19,7 +19,6 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   syncRosterFromTeam,
   unenrollStudent,
-  matchStudentToAccountWithConflictRetry,
   reconcileTeamFromOrgMembers,
 } from "@/api/mutations/students"
 import type { UnenrollStudentInput } from "@/api/mutations/students"
@@ -35,11 +34,9 @@ import {
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
-import { unmatchedTeamMembers, type MatchCandidate } from "@/util/orgMembers"
 import { studentKey, toStudent } from "@/util/roster"
 import EditStudent from "@/pages/students/EditStudent"
 import type { StudentCsvRow } from "@/api/mutations/students"
-import { Link2 } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants, enterExit } from "@/lib/motion"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -393,256 +390,6 @@ const OnboardingLink = ({
   )
 }
 
-// Manual-match affordance for an email-invited row whose student joined the org
-// directly (GitHub drops the email->login link once an invite is accepted). The
-// teacher picks which unmatched team member owns the email; matchStudentToAccount
-// re-verifies the pick is an active member before binding. Kept because email
-// invites remain supported.
-const MatchAccountButton = ({
-  org,
-  classroom,
-  student,
-  candidates,
-  onMatched,
-}: {
-  org: string
-  classroom: string
-  student: Student
-  candidates: MatchCandidate[]
-  onMatched: (student: Student, teamWarning?: string) => void
-}) => {
-  const client = useGitHubClient()
-  const { t } = useTranslation()
-  const [open, setOpen] = useState(false)
-  const [selected, setSelected] = useState<string | null>(null)
-  const [filter, setFilter] = useState("")
-  const [submitting, setSubmitting] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const titleId = useId()
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open])
-
-  const close = () => {
-    if (submitting) return
-    setOpen(false)
-    setError(null)
-    setSelected(null)
-    setFilter("")
-  }
-
-  const filtered = useMemo(() => {
-    const q = filter.trim().toLowerCase()
-    if (!q) return candidates
-    return candidates.filter(
-      (c) =>
-        c.login.toLowerCase().includes(q) || c.name.toLowerCase().includes(q),
-    )
-  }, [candidates, filter])
-
-  const selectedCandidate = useMemo(
-    () => candidates.find((c) => c.github_id === selected) ?? null,
-    [candidates, selected],
-  )
-
-  const handleConfirm = async () => {
-    if (submitting || !selected) return
-    const pick = candidates.find((c) => c.github_id === selected)
-    if (!pick) return
-    setSubmitting(true)
-    setError(null)
-    try {
-      const result = await matchStudentToAccountWithConflictRetry(client, {
-        org,
-        classroom,
-        email: student.email,
-        username: pick.login,
-        github_id: pick.github_id,
-      })
-      onMatched(toStudent(result.student), result.teamWarning)
-      setOpen(false)
-      setSelected(null)
-      setFilter("")
-    } catch (err) {
-      setError(
-        err instanceof Error ? err.message : t("students.somethingWentWrong"),
-      )
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  return (
-    <>
-      <button
-        type="button"
-        className="btn btn-xs btn-primary"
-        aria-label={t("students.matchAccountAria", { email: student.email })}
-        title={t("students.matchAccountTitle")}
-        onClick={() => setOpen(true)}
-      >
-        <Link2 aria-hidden="true" className="size-3.5" />
-        {t("students.matchAccount")}
-      </button>
-
-      <dialog
-        ref={dialogRef}
-        className="modal"
-        aria-labelledby={titleId}
-        onClose={close}
-        onCancel={(event) => {
-          if (submitting) {
-            event.preventDefault()
-            return
-          }
-          close()
-        }}
-      >
-        <div className="modal-box max-w-lg">
-          <h3 id={titleId} className="text-lg font-bold">
-            {t("students.matchTitle")}
-          </h3>
-          <p className="mt-2 text-sm leading-6 text-base-content/70">
-            <span className="font-semibold text-base-content">
-              {student.email}
-            </span>{" "}
-            {t("students.matchBodyPrefix")}{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            {t("students.matchBodySuffix")}
-          </p>
-
-          {candidates.length === 0 ? (
-            <div className="mt-4 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
-              {t("students.matchNoCandidates")}
-            </div>
-          ) : (
-            <>
-              <input
-                type="text"
-                value={filter}
-                placeholder={t("students.matchFilterPlaceholder")}
-                aria-label={t("students.matchFilterAria")}
-                className="input input-sm input-bordered mt-4 w-full"
-                onChange={(e) => setFilter(e.target.value)}
-                disabled={submitting}
-              />
-              <ul className="menu mt-2 max-h-64 w-full flex-nowrap overflow-y-auto rounded-box border border-base-300 p-1">
-                {filtered.length === 0 ? (
-                  <li className="px-3 py-2 text-sm text-base-content/70">
-                    {t("students.matchNoResults", { filter })}
-                  </li>
-                ) : (
-                  filtered.map((c) => {
-                    const isSelected = selected === c.github_id
-                    return (
-                      <li key={c.github_id}>
-                        <button
-                          type="button"
-                          className={`flex items-center justify-between gap-2${
-                            isSelected
-                              ? " active ring-2 ring-primary ring-inset"
-                              : ""
-                          }`}
-                          aria-pressed={isSelected}
-                          onClick={() => setSelected(c.github_id)}
-                          disabled={submitting}
-                        >
-                          <Avatar
-                            name={c.name || c.login}
-                            github={c.login}
-                            subtitle={`@${c.login}`}
-                            initials={
-                              (c.name || c.login)[0]?.toUpperCase() ?? "?"
-                            }
-                          />
-                          {isSelected ? (
-                            <Check
-                              aria-hidden="true"
-                              className="size-4 shrink-0 text-primary"
-                            />
-                          ) : null}
-                        </button>
-                      </li>
-                    )
-                  })
-                )}
-              </ul>
-
-              {selectedCandidate ? (
-                <div className="mt-3 flex items-center gap-2 rounded-box border border-primary/30 bg-primary/5 px-3 py-2 text-sm">
-                  <Check
-                    aria-hidden="true"
-                    className="size-4 shrink-0 text-primary"
-                  />
-                  <span className="text-base-content/80">
-                    {t("students.matchSelectedPrefix")}{" "}
-                    <span className="font-semibold text-base-content">
-                      {selectedCandidate.name || selectedCandidate.login}
-                    </span>{" "}
-                    <span className="text-base-content/70">
-                      (@{selectedCandidate.login})
-                    </span>
-                  </span>
-                </div>
-              ) : (
-                <p className="mt-3 text-sm text-base-content/70">
-                  {t("students.matchSelectHint")}
-                </p>
-              )}
-            </>
-          )}
-
-          {error ? (
-            <div className="alert alert-error alert-soft mt-4 text-sm">
-              {error}
-            </div>
-          ) : null}
-
-          <div className="modal-action">
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={close}
-              disabled={submitting}
-            >
-              {t("common.cancel")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={submitting || !selected}
-              onClick={() => void handleConfirm()}
-            >
-              {submitting ? (
-                <span
-                  className="loading loading-spinner loading-sm"
-                  aria-hidden="true"
-                />
-              ) : selectedCandidate ? (
-                t("students.confirmMatchWith", {
-                  login: selectedCandidate.login,
-                })
-              ) : (
-                t("students.confirmMatch")
-              )}
-            </button>
-          </div>
-        </div>
-        <form method="dialog" className="modal-backdrop">
-          <button type="button" onClick={close} aria-label={t("common.close")}>
-            {t("common.close")}
-          </button>
-        </form>
-      </dialog>
-    </>
-  )
-}
-
 const EnrolledStudents = ({
   students = [],
   org,
@@ -687,8 +434,8 @@ const EnrolledStudents = ({
     () => rows.filter((r) => r.state === "pending"),
     [rows],
   )
-  const unprovisioned = useMemo(
-    () => rows.filter((r) => r.state === "unprovisioned"),
+  const notInOrg = useMemo(
+    () => rows.filter((r) => r.state === "not_in_org"),
     [rows],
   )
 
@@ -699,22 +446,6 @@ const EnrolledStudents = ({
   const enrolledBySection = useMemo(
     () => groupStudentsBySection(enrolled),
     [enrolled],
-  )
-
-  // Match-account candidates: org members not already bound to any roster row.
-  const memberUsers = useMemo(
-    () =>
-      enrolled.map((r) => ({
-        id: Number(r.github_id),
-        login: r.username,
-        name: `${r.first_name} ${r.last_name}`.trim() || null,
-        avatar_url: r.avatar_url,
-      })),
-    [enrolled],
-  )
-  const matchCandidates = useMemo(
-    () => unmatchedTeamMembers(memberUsers, students),
-    [memberUsers, students],
   )
 
   const setWarning = (key: string, message: string) =>
@@ -787,7 +518,7 @@ const EnrolledStudents = ({
   }, [csvMissingCount, isLoading, isError])
 
   // Auto-reconcile on open: a rostered student who joined the ORG (native invite
-  // / SSO) but was never added to the classroom team renders as `unprovisioned`,
+  // / SSO) but was never added to the classroom team renders as `not_in_org`,
   // even though they're a full member. The team stays the enrollment source of
   // truth — this just closes that gap by team-adding those confirmed members so
   // they flip to `enrolled`. reconcileTeamFromOrgMembers re-verifies each is
@@ -949,8 +680,6 @@ const EnrolledStudents = ({
       "?"
     const isResending = resendingKeys.has(row.key)
     const canResend = row.state === "pending" && Boolean(row.github_id)
-    const isEmailOnlyPending =
-      row.state === "pending" && !row.github_id && Boolean(row.email)
 
     return (
       <motion.li
@@ -984,9 +713,9 @@ const EnrolledStudents = ({
             </span>
           ) : null}
 
-          {row.state === "unprovisioned" ? (
+          {row.state === "not_in_org" ? (
             <span className="badge badge-sm badge-ghost badge-soft shrink-0">
-              {t("students.statusUnprovisioned")}
+              {t("students.statusNotInOrg")}
             </span>
           ) : null}
 
@@ -1011,48 +740,14 @@ const EnrolledStudents = ({
             </button>
           ) : null}
 
-          {isEmailOnlyPending ? (
-            <MatchAccountButton
+          {row.state === "pending" ? null : (
+            <EditStudentButton
               org={org}
               classroom={classroom}
               student={student}
-              candidates={matchCandidates}
-              onMatched={(matched, warning) => {
-                if (warning) setWarning(row.key, warning)
-                updateRosterCache((current) =>
-                  current.map((s) =>
-                    studentKey(s) === row.key
-                      ? {
-                          ...s,
-                          username: matched.username,
-                          github_id: matched.github_id,
-                        }
-                      : s,
-                  ),
-                )
-                invalidateInviteQueries()
-                // Match binds an active member; refresh the enrolled list.
-                invalidateTeamRoster()
-                notify({
-                  tone: warning ? "warning" : "success",
-                  durationMs: 6000,
-                  message: warning
-                    ? warning
-                    : t("students.matchedToast", {
-                        email: row.email,
-                        username: matched.username,
-                      }),
-                })
-              }}
+              onSaved={(updated) => onRowMetadataSaved(row.key, updated)}
             />
-          ) : null}
-
-          <EditStudentButton
-            org={org}
-            classroom={classroom}
-            student={student}
-            onSaved={(updated) => onRowMetadataSaved(row.key, updated)}
-          />
+          )}
 
           <UnenrollStudentButton
             org={org}
@@ -1062,7 +757,7 @@ const EnrolledStudents = ({
             onRemoveStudent={(_username, warning) => {
               if (warning) setWarning(row.key, warning)
               // Drop the CSV metadata row so nothing lingers as
-              // unprovisioned/pending, then refresh the enrolled list (unenroll
+              // not_in_org/pending, then refresh the enrolled list (unenroll
               // removed them from the classroom team).
               updateRosterCache((current) =>
                 current.filter((s) => studentKey(s) !== row.key),
@@ -1108,10 +803,10 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Data-drift banner: CSV-only rows with no team member / pending invite.
-          Also shown below as a distinct "not yet provisioned" section; this just
-          surfaces the count + disclosure. */}
-      {!isLoading && !isError && unprovisioned.length > 0 ? (
+      {/* Data-drift banner: roster rows (with a username) not in the org and
+          with no pending invite. Also shown below as a distinct section; this
+          just surfaces the count + disclosure. */}
+      {!isLoading && !isError && notInOrg.length > 0 ? (
         <div
           role="alert"
           className="alert alert-warning alert-soft flex-col items-start"
@@ -1119,7 +814,7 @@ const EnrolledStudents = ({
           <div className="flex w-full items-center justify-between gap-3">
             <span className="flex items-center gap-2 text-sm">
               <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
-              {t("students.driftBanner", { count: unprovisioned.length })}
+              {t("students.driftBanner", { count: notInOrg.length })}
             </span>
             <button
               type="button"
@@ -1134,7 +829,7 @@ const EnrolledStudents = ({
           </div>
           {driftExpanded ? (
             <ul className="mt-2 w-full list-disc pl-6 text-sm">
-              {unprovisioned.map((row) => (
+              {notInOrg.map((row) => (
                 <li key={row.key}>
                   {nameFromParts(row.first_name, row.last_name) ||
                     row.username ||
@@ -1278,11 +973,11 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Not-yet-provisioned (visible, distinct state). */}
+      {/* On the roster but not in the organization (visible, distinct state). */}
       <AnimatePresence initial={false}>
-        {!isLoading && !isError && unprovisioned.length > 0 ? (
+        {!isLoading && !isError && notInOrg.length > 0 ? (
           <motion.div
-            key="unprovisioned"
+            key="not-in-org"
             layout
             variants={enterExit}
             initial="initial"
@@ -1294,19 +989,19 @@ const EnrolledStudents = ({
               <div className="flex flex-col">
                 <h2 className="flex items-center gap-2 text-lg font-semibold">
                   <UserRoundX aria-hidden="true" className="size-5" />
-                  {t("students.unprovisionedHeading")}
+                  {t("students.notInOrgHeading")}
                 </h2>
                 <span className="mt-0.5 text-sm text-base-content/70">
-                  {t("students.unprovisionedSubtitle")}
+                  {t("students.notInOrgSubtitle")}
                 </span>
               </div>
               <div className="badge badge-ghost badge-soft text-base">
-                {counts.unprovisioned}
+                {counts.not_in_org}
               </div>
             </div>
             <ul className="divide-y divide-base-300 bg-base-100">
               <AnimatePresence initial={false}>
-                {unprovisioned.map((row) => renderRow(row))}
+                {notInOrg.map((row) => renderRow(row))}
               </AnimatePresence>
             </ul>
           </motion.div>

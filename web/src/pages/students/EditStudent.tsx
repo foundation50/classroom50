@@ -31,9 +31,8 @@ type EditStudentFormValues = {
 }
 
 // Edit modal for a roster row's teacher-facing fields. Identity (username,
-// github_id, email) is read-only until the student is enrolled — it's bound by
-// membership, not the teacher — while name and section stay editable. Once
-// enrolled, the email becomes editable too.
+// github_id) is read-only — it's bound by membership, not the teacher — while
+// name, section, and email are freely editable metadata.
 const EditStudent = ({
   org,
   classroom,
@@ -50,10 +49,6 @@ const EditStudent = ({
   const [error, setError] = useState<string | null>(null)
 
   const displayHandle = student.username || student.email
-  // An email-only row (no username, no github_id) is keyed by its email, so it
-  // can't change here without re-keying the row. A github-identified row's email
-  // is just metadata and is freely editable.
-  const emailLocked = !student.username && !student.github_id
 
   const defaults = useCallback(
     (): EditStudentFormValues => ({
@@ -215,9 +210,6 @@ const EditStudent = ({
 
             <form.Field name="email">
               {(field) => {
-                const emailHelp = emailLocked
-                  ? t("students.emailHelpNoIdentity")
-                  : null
                 return (
                   <div>
                     <div className="flex items-center">
@@ -239,7 +231,6 @@ const EditStudent = ({
                         }
                         className="input w-full"
                         value={field.state.value}
-                        disabled={emailLocked}
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
@@ -253,11 +244,6 @@ const EditStudent = ({
                         {String(field.state.meta.errors[0] ?? "")}
                       </p>
                     )}
-                    {emailHelp ? (
-                      <p className="mt-1 text-xs text-base-content/70">
-                        {emailHelp}
-                      </p>
-                    ) : null}
                   </div>
                 )
               }}

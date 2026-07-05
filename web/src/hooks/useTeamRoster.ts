@@ -41,13 +41,13 @@ export type UseTeamRosterResult = {
   teamSlug: string
   // Count of team members with no students.csv row — the exact set "Sync roster"
   // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
-  // can sync (auto-synced on open). Opposite direction from `unprovisioned` (on
+  // can sync (auto-synced on open). Opposite direction from `not_in_org` (on
   // CSV, not on team), which sync can't fix.
   csvMissingCount: number
   // Rostered students who are active org members but absent from the classroom
   // team — the exact set auto-reconcile team-adds so they flip from
-  // `unprovisioned` to `enrolled`. They joined the ORG but were never put on the
-  // team (native invite / SSO), so unlike plain `unprovisioned` this IS fixable
+  // `not_in_org` to `enrolled`. They joined the ORG but were never put on the
+  // team (native invite / SSO), so unlike plain `not_in_org` this IS fixable
   // from the roster without touching org membership.
   orgMembersMissingFromTeam: { id: number; login: string }[]
   // Re-run the team-member fetch so an error surface can offer a retry without a
@@ -172,7 +172,7 @@ export type OptimisticMember = {
 // Optimistically add a just-enrolled member to the team-members cache, then
 // invalidate to reconcile. Enrolling an already-active org member team-adds them
 // with no pending invite, so without the seed buildTeamRoster flashes the row as
-// "unprovisioned" until the refetch lands. Dedup by id; the refetch replaces the
+// "not_in_org" until the refetch lands. Dedup by id; the refetch replaces the
 // stub (or drops it if the add didn't land). No-ops a blank/invalid id.
 export function useSeedTeamMember(
   org: string,

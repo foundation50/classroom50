@@ -175,7 +175,7 @@ describe("resolveEmptyRosterWarning", () => {
   })
 
   it("passes hasRosterRows through unchanged (rows exist even when enrolled is 0)", () => {
-    // e.g. zero CSV rows but >0 pending email-only invites -> hasRosterRows true.
+    // e.g. zero enrolled team members but >0 pending org invites -> rows exist.
     expect(
       resolveEmptyRosterWarning({ ...base, hasRosterRows: true }),
     ).toMatchObject({ show: true, hasRosterRows: true })

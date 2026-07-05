@@ -8,24 +8,29 @@ import { rosterClaimSet } from "@/util/identity"
 // (name/section/email). The CSV never decides enrollment — it can be absent or
 // partial and the roster still renders.
 //
-// Row states:
-//  - enrolled:      an active classroom-team / org member.
-//  - pending:       a pending org invitation (no active membership yet).
-//  - unprovisioned: on students.csv but NOT a member and NOT a pending invite
-//                   (e.g. not yet IdP/SSO-provisioned). Kept VISIBLE as a
-//                   distinct state so a trusted rostered student never silently
-//                   disappears.
+// Every students.csv row now carries a GitHub identity (username, ideally with
+// github_id). Legacy username-less rows (e.g. old email-only invite stubs) are
+// IGNORED for classification; their name/section is only borrowed to enrich a
+// username/id row that shares the same email (the one legacy merge we keep).
 //
-// "drift" is folded into `unprovisioned`; its count drives the banner.
+// Row states:
+//  - enrolled:   an active classroom-team / org member.
+//  - pending:    a pending org invitation (no active membership yet).
+//  - not_in_org: a CSV row WITH a GitHub username that is neither a team/org
+//                member nor a pending invite — on the roster but not in the
+//                organization. Always tied to a username so it persists
+//                reliably. Kept VISIBLE so a rostered student is never lost.
+//
+// "drift" is folded into `not_in_org`; its count drives the banner.
 
-export type TeamRosterRowState = "enrolled" | "pending" | "unprovisioned"
+export type TeamRosterRowState = "enrolled" | "pending" | "not_in_org"
 
 export type TeamRosterRow = {
   // Stable identity for React keys and joins: github_id || login || email.
   // Mirrors studentKey.
   key: string
   state: TeamRosterRowState
-  // GitHub identity when known. Empty for an email-only invite or CSV row.
+  // GitHub identity when known. Empty only for an email-only pending invite.
   username: string
   github_id: string
   // Display metadata joined from students.csv (blank when absent).
@@ -76,10 +81,16 @@ export function csvForMember(
   )
 }
 
-const metadataFrom = (student: Student | undefined) => ({
-  first_name: student?.first_name?.trim() ?? "",
-  last_name: student?.last_name?.trim() ?? "",
-  section: student?.section?.trim() ?? "",
+// Metadata for a row, merging the row's own CSV student with an optional legacy
+// (email-only) fallback per field: the row's own value wins; a blank field
+// borrows from the legacy row. email is always the row's own (never borrowed).
+const metadataFrom = (
+  student: Student | undefined,
+  legacy?: Student | undefined,
+) => ({
+  first_name: (student?.first_name?.trim() || legacy?.first_name?.trim()) ?? "",
+  last_name: (student?.last_name?.trim() || legacy?.last_name?.trim()) ?? "",
+  section: (student?.section?.trim() || legacy?.section?.trim()) ?? "",
   email: student?.email?.trim() ?? "",
 })
 
@@ -94,12 +105,30 @@ export type BuildTeamRosterInput = {
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
-// already a member -> pending; CSV rows with no member/invite -> unprovisioned.
+// already a member -> pending; CSV rows WITH a username that are neither ->
+// not_in_org. Username-less CSV rows (legacy email-only stubs) never produce a
+// row; their name/section is merged into a username/id row sharing their email.
 // Never duplicates a person (a member on the CSV appears once; a username-invite
 // that is also a member is credited as the member).
 export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   const { members, invitations = [], students } = input
   const csv = indexCsv(students)
+
+  // Legacy username-less rows indexed by email, to enrich a real (username or
+  // id-carrying) row that shares the email. This is the ONLY use of email-only
+  // rows — they never render on their own.
+  const legacyByEmail = new Map<string, Student>()
+  for (const s of students) {
+    const hasIdentity = Boolean(s.github_id?.trim() || s.username?.trim())
+    const email = s.email?.trim().toLowerCase()
+    if (!hasIdentity && email && !legacyByEmail.has(email)) {
+      legacyByEmail.set(email, s)
+    }
+  }
+
+  // A legacy email-only row (name/section donor) for a given email, if any.
+  const legacyFor = (email: string | undefined): Student | undefined =>
+    email ? legacyByEmail.get(email.toLowerCase()) : undefined
 
   const rows: TeamRosterRow[] = []
   // Track emitted identities so invites/CSV don't double up.
@@ -112,8 +141,8 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     const login = member.login.toLowerCase()
     seenIds.add(id)
     seenLogins.add(login)
-    const student = csvForMember(csv, member)
-    const email = student?.email?.trim().toLowerCase()
+    const own = csvForMember(csv, member)
+    const email = own?.email?.trim().toLowerCase()
     if (email) seenEmails.add(email)
     rows.push({
       key: id,
@@ -121,7 +150,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       username: member.login,
       github_id: id,
       avatar_url: member.avatar_url,
-      ...metadataFrom(student),
+      ...metadataFrom(own, legacyFor(email)),
     })
   }
 
@@ -135,7 +164,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     if (loginKey && seenLogins.has(loginKey)) continue
 
     // Join CSV metadata by login first, then email.
-    const student =
+    const own =
       (loginKey ? csv.byLogin.get(loginKey) : undefined) ??
       (emailKey ? csv.byEmail.get(emailKey) : undefined)
 
@@ -145,10 +174,12 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       key: login || email || String(invite.id),
       state: "pending",
       username: login,
-      github_id: student?.github_id?.trim() ?? "",
+      github_id: own?.github_id?.trim() ?? "",
       avatar_url: "",
       invitation_id: invite.id,
-      ...metadataFrom(student),
+      ...metadataFrom(own, legacyFor(emailKey || own?.email)),
+      // Prefer the row's own email; fall back to the invite's target email.
+      email: own?.email?.trim() || email,
     })
   }
 
@@ -156,21 +187,23 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     const id = student.github_id?.trim() ?? ""
     const login = student.username?.trim().toLowerCase() ?? ""
     const email = student.email?.trim().toLowerCase() ?? ""
+    // A row must carry a GitHub identity to appear on its own. Legacy
+    // username-less rows are ignored here (only used to enrich by email above).
+    if (!id && !login) continue
     // Already an enrolled member or a pending invite?
     if (id && seenIds.has(id)) continue
     if (login && seenLogins.has(login)) continue
-    if (email && seenEmails.has(email)) continue
     // Mark seen so duplicate CSV rows for the same person don't both emit.
     if (id) seenIds.add(id)
     if (login) seenLogins.add(login)
     if (email) seenEmails.add(email)
     rows.push({
-      key: student.github_id || student.username || student.email,
-      state: "unprovisioned",
+      key: student.github_id || student.username,
+      state: "not_in_org",
       username: student.username?.trim() ?? "",
       github_id: id,
       avatar_url: "",
-      ...metadataFrom(student),
+      ...metadataFrom(student, legacyFor(email)),
     })
   }
 
@@ -184,12 +217,12 @@ function sortName(row: TeamRosterRow): string {
   return (name || row.username || row.email).toLowerCase()
 }
 
-// Enrolled first, then pending, then unprovisioned; alphabetical within each.
+// Enrolled first, then pending, then not_in_org; alphabetical within each.
 function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
   const order: Record<TeamRosterRowState, number> = {
     enrolled: 0,
     pending: 1,
-    unprovisioned: 2,
+    not_in_org: 2,
   }
   return rows.sort((a, b) => {
     const byState = order[a.state] - order[b.state]
@@ -222,7 +255,7 @@ export function countByState(
       acc[row.state] += 1
       return acc
     },
-    { enrolled: 0, pending: 0, unprovisioned: 0 } as Record<
+    { enrolled: 0, pending: 0, not_in_org: 0 } as Record<
       TeamRosterRowState,
       number
     >,
@@ -254,10 +287,10 @@ export function teamMembersMissingFromCsv(
 
 // The opposite reconcile direction from teamMembersMissingFromCsv: rostered
 // students who are ACTIVE org members but were never added to the classroom
-// team. They render as `unprovisioned` (on students.csv, not on the team, not a
-// pending invite) yet are fully in the org, so the team-driven roster can — and
-// should — auto-add them to the team, promoting them to `enrolled` without the
-// teacher touching org membership.
+// team. They render as `not_in_org` (on students.csv with a username, not on the
+// team, not a pending invite) yet are fully in the org, so the team-driven
+// roster can — and should — auto-add them to the team, promoting them to
+// `enrolled` without the teacher touching org membership.
 //
 // Input is the already-computed roster (so the CSV↔team↔invite classification
 // isn't re-derived here) intersected with the org member list by github_id, then
@@ -268,14 +301,14 @@ export function orgMembersMissingFromTeam(
   rows: TeamRosterRow[],
   orgMembers: GitHubUser[],
 ): { id: number; login: string }[] {
-  const unprovisioned = rows.filter((r) => r.state === "unprovisioned")
-  if (unprovisioned.length === 0) return []
+  const notInOrg = rows.filter((r) => r.state === "not_in_org")
+  if (notInOrg.length === 0) return []
 
   const claimedIds = new Set(
-    unprovisioned.map((r) => r.github_id.trim()).filter(Boolean),
+    notInOrg.map((r) => r.github_id.trim()).filter(Boolean),
   )
   const claimedLogins = new Set(
-    unprovisioned.map((r) => r.username.trim().toLowerCase()).filter(Boolean),
+    notInOrg.map((r) => r.username.trim().toLowerCase()).filter(Boolean),
   )
 
   const out: { id: number; login: string }[] = []

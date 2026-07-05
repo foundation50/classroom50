@@ -3,10 +3,12 @@ import Papa from "papaparse"
 
 import {
   enrollStudentInClassroom,
-  inviteStudentByEmail,
-  matchStudentToAccountWithConflictRetry,
+  inviteByEmail,
   unenrollStudent,
   bulkUnenrollStudents,
+  bulkEnrollStudentsInClassroom,
+  reconcileTeamFromOrgMembers,
+  syncRosterFromTeam,
   updateStudent,
   updateStudentWithConflictRetry,
   STUDENT_CSV_FIELDS,
@@ -165,7 +167,7 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
   })
 })
 
-describe("inviteStudentByEmail — already-member email resolution (email path)", () => {
+describe("inviteByEmail — org invite only, no CSV write", () => {
   const apiError422 = () =>
     new GitHubAPIError({
       status: 422,
@@ -182,54 +184,23 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
       },
     })
 
-  // Fake client over a mutable multi-classroom roster map. inviteSucceeds=false
-  // makes POST /invitations 422 (the already-member signal).
+  // inviteSucceeds=false makes POST /invitations 422 (the already-member
+  // signal). Records whether any git tree write (a CSV commit) happened so we
+  // can assert email invites never touch students.csv.
   const makeEmailClient = (opts: {
-    rosters: Record<string, string>
     inviteSucceeds: boolean
-    membershipState?: "active" | "pending" | null
-    // github_id -> current login (GET /user/{id}); the 422 already-member path
-    // derives the fresh login from the resolved id before binding.
-    usersById?: Record<string, string>
-    // Omit the persisted classroom-team block so the invite can't attach a team,
-    // exercising the team-less-invite warning path.
     noTeamBlock?: boolean
   }) => {
-    const rosters = { ...opts.rosters }
-    const membershipState = opts.membershipState ?? "active"
-    const usersById = opts.usersById ?? {}
-
-    const csvFileResponse = (csv: string) => ({
-      type: "file" as const,
-      encoding: "base64" as const,
-      content: Buffer.from(csv, "utf-8").toString("base64"),
-    })
-
-    const classroomOf = (path: string) => {
-      const m = path.match(/\/contents\/([^/]+)\/students\.csv/)
-      return m ? decodeURIComponent(m[1]) : null
+    const state = {
+      csvWritten: false,
+      inviteAttempted: false,
+      inviteBody: null as unknown,
     }
 
-    // Track which classroom's csv the last git tree write targeted.
-    let pendingWriteClassroom: string | null = null
-
     const requestRaw = vi.fn().mockImplementation((path: string) => {
-      if (/\/contents\/(\?|$)/.test(path) || path.endsWith("/contents/")) {
-        // listClassroomDirs: repo-root contents as a dir listing.
-        const dirs = Object.keys(rosters).map((name) => ({
-          type: "dir",
-          name,
-          path: name,
-        }))
-        return Promise.resolve(JSON.stringify(dirs))
-      }
       if (path.includes("classroom.json")) {
-        // Include a persisted team block by default so the happy path attaches
-        // it; opts.noTeamBlock omits it to exercise the team-less-invite warning.
         const meta: Record<string, unknown> = { short_name: "x" }
-        if (!opts.noTeamBlock) {
-          meta.team = { slug: "classroom50-x", id: 4242 }
-        }
+        if (!opts.noTeamBlock) meta.team = { slug: "classroom50-x", id: 4242 }
         return Promise.resolve(JSON.stringify(meta))
       }
       return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
@@ -237,203 +208,80 @@ describe("inviteStudentByEmail — already-member email resolution (email path)"
 
     const request = vi
       .fn()
-      .mockImplementation(
-        (path: string, options?: { method?: string; body?: unknown }) => {
-          if (path.includes("/contents/") && path.includes("students.csv")) {
-            const cls = classroomOf(path)
-            const csv = (cls && rosters[cls]) ?? HEADER
-            return Promise.resolve(csvFileResponse(csv))
-          }
-          if (path.includes("/memberships/") && !path.includes("/teams/")) {
-            if (membershipState === null) {
-              return Promise.reject(new Error("404"))
-            }
-            return Promise.resolve({ state: membershipState })
-          }
-          const userByIdMatch = path.match(/\/user\/(\d+)$/)
-          if (userByIdMatch) {
-            const login = usersById[userByIdMatch[1]]
-            if (!login) return Promise.reject(new Error("404 no such user"))
-            return Promise.resolve({ login, id: Number(userByIdMatch[1]) })
-          }
-          if (path.includes("/git/ref/")) {
-            return Promise.resolve({ object: { sha: "base-sha" } })
-          }
-          if (path.includes("/git/commits/")) {
-            return Promise.resolve({ tree: { sha: "base-tree-sha" } })
-          }
-          if (path.endsWith("/git/trees")) {
-            const tree = (
-              options?.body as { tree?: { path: string; content?: string }[] }
-            )?.tree
-            const csvEntry = tree?.find((t) => t.path.includes("students.csv"))
-            if (csvEntry) {
-              const m = csvEntry.path.match(/^([^/]+)\/students\.csv/)
-              pendingWriteClassroom = m ? m[1] : null
-              if (pendingWriteClassroom && csvEntry.content != null) {
-                rosters[pendingWriteClassroom] = csvEntry.content
-              }
-            }
-            return Promise.resolve({ sha: "tree-sha" })
-          }
-          if (path.endsWith("/git/commits")) {
-            return Promise.resolve({ sha: "new-commit-sha" })
-          }
-          if (path.endsWith("/git/refs/heads/main")) {
+      .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (path.endsWith("/git/trees")) {
+          state.csvWritten = true
+          return Promise.resolve({ sha: "tree-sha" })
+        }
+        if (path.endsWith("/invitations")) {
+          state.inviteAttempted = true
+          if (opts.inviteSucceeds) {
+            state.inviteBody = options?.body
             return Promise.resolve({})
           }
-          if (path.endsWith("/invitations")) {
-            if (opts.inviteSucceeds) return Promise.resolve({})
-            return Promise.reject(apiError422())
-          }
-          if (path.includes("/teams/")) {
-            return Promise.resolve({ state: "active" })
-          }
-          return Promise.reject(new Error(`unexpected request: ${path}`))
-        },
-      )
+          return Promise.reject(apiError422())
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
 
     return {
       client: { request, requestRaw } as unknown as GitHubClient,
-      rosters,
+      state,
     }
   }
 
-  const enrolledRowFor = async (
-    email: string,
-    username: string,
-    id: string,
-    firstName = "",
-    lastName = "",
-  ) => {
-    return `${username},${firstName},${lastName},${email},sec-other,${id}\n`
-  }
+  it("sends the org invite (with team) and writes NO students.csv row", async () => {
+    const { client, state } = makeEmailClient({ inviteSucceeds: true })
 
-  it("invite succeeds for a new email -> row is written", async () => {
-    const { client, rosters } = makeEmailClient({
-      rosters: { cs101: HEADER },
-      inviteSucceeds: true,
-    })
-
-    const result = await inviteStudentByEmail(client, {
+    const result = await inviteByEmail(client, {
       org: "acme",
       classroom: "cs101",
       email: "new@x.edu",
     })
 
     expect(result.inviteWarning).toBeUndefined()
-    const rows = rowsFromCsv(rosters.cs101)
-    expect(rows.find((r) => r.email === "new@x.edu")).toBeTruthy()
+    expect(state.csvWritten).toBe(false)
+    // The classroom team id is attached so acceptance activates team membership.
+    expect(state.inviteBody).toMatchObject({
+      email: "new@x.edu",
+      team_ids: [4242],
+    })
   })
 
-  it("warns when the classroom team can't be attached (team-less invite risk)", async () => {
-    // With no persisted team block, the invite goes out team-less. That must
-    // warn: with the onboarding reconcile path removed and collection now
-    // team-driven, a student who accepts a team-less invite is uncollected until
-    // the teacher runs Sync roster. The invite MUST still be sent.
-    const { client, rosters } = makeEmailClient({
-      rosters: { cs101: HEADER },
+  it("blocks the invite (throws) when the classroom team can't be resolved", async () => {
+    // Team-authoritative model: an invite that can't carry the team is broken
+    // (accepted student would be an org member with no team and no CSV row,
+    // silently uncollected), so we send nothing and fail loudly instead.
+    const { client, state } = makeEmailClient({
       inviteSucceeds: true,
       noTeamBlock: true,
     })
 
-    const result = await inviteStudentByEmail(client, {
-      org: "acme",
-      classroom: "cs101",
-      email: "noteam@x.edu",
-    })
+    await expect(
+      inviteByEmail(client, {
+        org: "acme",
+        classroom: "cs101",
+        email: "noteam@x.edu",
+      }),
+    ).rejects.toThrow(/couldn't resolve the classroom team/i)
 
-    expect(result.inviteWarning).toMatch(/team couldn't be attached/i)
-    expect(result.inviteWarning).toMatch(/sync roster/i)
-    // The row still committed and the student was still invited.
-    expect(
-      rowsFromCsv(rosters.cs101).find((r) => r.email === "noteam@x.edu"),
-    ).toBeTruthy()
+    // Nothing was sent and nothing was written.
+    expect(state.inviteAttempted).toBe(false)
+    expect(state.csvWritten).toBe(false)
   })
 
-  it("does not warn when the team attaches cleanly", async () => {
-    const { client } = makeEmailClient({
-      rosters: { cs101: HEADER },
-      inviteSucceeds: true,
-    })
-    const result = await inviteStudentByEmail(client, {
+  it("422 already-member -> warns to add by username, writes no row", async () => {
+    const { client, state } = makeEmailClient({ inviteSucceeds: false })
+
+    const result = await inviteByEmail(client, {
       org: "acme",
       classroom: "cs101",
-      email: "hasteam@x.edu",
-    })
-    expect(result.inviteWarning).toBeUndefined()
-  })
-
-  it("422 + email enrolled in another classroom -> enrolled here, name backfilled, section not copied", async () => {
-    const otherRoster =
-      HEADER +
-      (await enrolledRowFor("dup@x.edu", "carol-old", "77", "Carol", "Diaz"))
-    const { client, rosters } = makeEmailClient({
-      rosters: { cs101: HEADER, cs202: otherRoster },
-      inviteSucceeds: false, // already a member -> 422
-      membershipState: "active",
-      // Stored username "carol-old" is stale; the id derives the current login.
-      usersById: { "77": "carol" },
-    })
-
-    const result = await inviteStudentByEmail(client, {
-      org: "acme",
-      classroom: "cs101",
-      email: "dup@x.edu",
-    })
-
-    const rows = rowsFromCsv(rosters.cs101)
-    const row = rows.find((r) => r.email === "dup@x.edu")
-    // Fresh login derived from id 77, not the stale stored "carol-old".
-    expect(row?.username).toBe("carol")
-    expect(row?.github_id).toBe("77")
-    expect(row?.first_name).toBe("Carol")
-    expect(row?.last_name).toBe("Diaz")
-    expect(row?.section ?? "").not.toBe("sec-other")
-    expect(result.student.username).toBe("carol")
-  })
-
-  it("teacher-entered name wins over the other classroom's name on backfill", async () => {
-    const otherRoster =
-      HEADER + (await enrolledRowFor("dup2@x.edu", "dave", "88", "Old", "Name"))
-    const { client, rosters } = makeEmailClient({
-      rosters: { cs101: HEADER, cs202: otherRoster },
-      inviteSucceeds: false,
-      membershipState: "active",
-    })
-
-    await inviteStudentByEmail(client, {
-      org: "acme",
-      classroom: "cs101",
-      email: "dup2@x.edu",
-      first_name: "Teacher",
-      last_name: "Typed",
-    })
-
-    const row = rowsFromCsv(rosters.cs101).find((r) => r.email === "dup2@x.edu")
-    expect(row?.first_name).toBe("Teacher")
-    expect(row?.last_name).toBe("Typed")
-  })
-
-  it("422 + email NOT in any other roster -> row PERSISTS for manual matching + warning", async () => {
-    const { client, rosters } = makeEmailClient({
-      rosters: { cs101: HEADER, cs202: HEADER },
-      inviteSucceeds: false, // already a member -> 422
-    })
-
-    const result = await inviteStudentByEmail(client, {
-      org: "acme",
-      classroom: "cs101",
-      email: "ghost@x.edu",
+      email: "member@x.edu",
     })
 
     expect(result.inviteWarning).toMatch(/already belongs to a member/i)
-    expect(result.inviteWarning).toMatch(/match account|remove the row/i)
-    // The invited email row is KEPT so the teacher can match or delete it.
-    const rows = rowsFromCsv(rosters.cs101)
-    const ghost = rows.find((r) => r.email === "ghost@x.edu")
-    expect(ghost).toBeTruthy()
-    expect(ghost?.username).toBe("")
+    expect(result.inviteWarning).toMatch(/by github username/i)
+    expect(state.csvWritten).toBe(false)
   })
 })
 
@@ -466,29 +314,6 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     // identity preserved verbatim
     expect(alice?.username).toBe("alice")
     expect(alice?.github_id).toBe("42")
-  })
-
-  it("matches an email-only row by its email key", async () => {
-    const { client, committed } = makeClient({ startingCsv: HEADER + bobRow })
-
-    await updateStudent(client, {
-      org: "acme",
-      classroom: "cs101",
-      key: "bob@x.edu",
-      patch: {
-        first_name: "Bobby",
-        last_name: "Brown",
-        email: "bob@x.edu",
-        section: "Lab A",
-      },
-    })
-
-    const bob = rowsFromCsv(committed.content!).find(
-      (r) => r.email === "bob@x.edu",
-    )
-    expect(bob?.first_name).toBe("Bobby")
-    expect(bob?.last_name).toBe("Brown")
-    expect(bob?.section).toBe("Lab A")
   })
 
   it("throws and does not write when no row matches the key", async () => {
@@ -579,37 +404,6 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
         patch: { first_name: "X", last_name: "Y", email: "", section: "" },
       }),
     ).rejects.toThrow(/archived/i)
-    expect(committed.content).toBeNull()
-  })
-
-  it("rejects changing the email of an email-only row (re-keys/drops it)", async () => {
-    const { client, committed } = makeClient({ startingCsv: HEADER + bobRow })
-
-    // Clearing it (would drop the keyless row from the roster on write).
-    await expect(
-      updateStudent(client, {
-        org: "acme",
-        classroom: "cs101",
-        key: "bob@x.edu",
-        patch: { first_name: "Bob", last_name: "B", email: "   ", section: "" },
-      }),
-    ).rejects.toThrow(/only identifier|unenroll/i)
-    expect(committed.content).toBeNull()
-
-    // Changing it to a different address (would re-key the row).
-    await expect(
-      updateStudent(client, {
-        org: "acme",
-        classroom: "cs101",
-        key: "bob@x.edu",
-        patch: {
-          first_name: "Bob",
-          last_name: "B",
-          email: "bob.new@x.edu",
-          section: "",
-        },
-      }),
-    ).rejects.toThrow(/only identifier|unenroll/i)
     expect(committed.content).toBeNull()
   })
 
@@ -1101,130 +895,6 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
   })
 })
 
-describe("matchStudentToAccountWithConflictRetry — teacher manual match (email path)", () => {
-  const makeMatchClient = (opts: {
-    startingCsv: string
-    membershipState?: "active" | "pending" | null
-  }) => {
-    const committed: { content: string | null } = { content: null }
-    const membershipState =
-      "membershipState" in opts ? opts.membershipState : "active"
-
-    const requestRaw = vi.fn().mockImplementation((path: string) => {
-      if (path.includes("/contents/") && path.includes("classroom.json")) {
-        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
-      }
-      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
-    })
-
-    const request = vi
-      .fn()
-      .mockImplementation((path: string, options?: { body?: unknown }) => {
-        if (path.includes("/contents/") && path.includes("students.csv")) {
-          const csv = committed.content ?? opts.startingCsv
-          return Promise.resolve({
-            type: "file",
-            encoding: "base64",
-            content: Buffer.from(csv, "utf-8").toString("base64"),
-          })
-        }
-        if (path.includes("/memberships/") && !path.includes("/teams/")) {
-          if (membershipState === null)
-            return Promise.reject(new Error("404 not a member"))
-          return Promise.resolve({ state: membershipState })
-        }
-        if (path.includes("/teams/")) {
-          return Promise.resolve({ slug: "classroom50-cs101", id: 7 })
-        }
-        if (path.includes("/git/ref/")) {
-          return Promise.resolve({ object: { sha: "base-sha" } })
-        }
-        if (path.includes("/git/commits/")) {
-          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
-        }
-        if (path.endsWith("/git/trees")) {
-          const tree = (
-            options?.body as { tree?: { path: string; content?: string }[] }
-          )?.tree
-          const entry = tree?.find((t) => t.path.includes("students.csv"))
-          if (entry?.content) committed.content = entry.content
-          return Promise.resolve({ sha: "tree-sha" })
-        }
-        if (path.endsWith("/git/commits")) {
-          return Promise.resolve({ sha: "new-commit-sha" })
-        }
-        if (path.endsWith("/git/refs/heads/main")) {
-          return Promise.resolve({})
-        }
-        return Promise.reject(new Error(`unexpected request: ${path}`))
-      })
-
-    return {
-      client: { request, requestRaw } as unknown as GitHubClient,
-      committed,
-    }
-  }
-
-  const emailOnlyRow = ",,,frank@x.edu,,\n"
-
-  it("writes the picked identity onto the email-only row for an active member", async () => {
-    const { client, committed } = makeMatchClient({
-      startingCsv: HEADER + emailOnlyRow,
-      membershipState: "active",
-    })
-
-    const result = await matchStudentToAccountWithConflictRetry(client, {
-      org: "acme",
-      classroom: "cs101",
-      email: "frank@x.edu",
-      username: "frankgh",
-      github_id: "66",
-    })
-
-    expect(result.alreadyEnrolled).toBe(false)
-    const frank = rowsFromCsv(committed.content!).find(
-      (r) => r.email === "frank@x.edu",
-    )
-    expect(frank?.username).toBe("frankgh")
-    expect(frank?.github_id).toBe("66")
-  })
-
-  it("refuses to match a non-active account (guard throws, no write)", async () => {
-    const { client, committed } = makeMatchClient({
-      startingCsv: HEADER + emailOnlyRow,
-      membershipState: null,
-    })
-
-    await expect(
-      matchStudentToAccountWithConflictRetry(client, {
-        org: "acme",
-        classroom: "cs101",
-        email: "frank@x.edu",
-        username: "frankgh",
-        github_id: "66",
-      }),
-    ).rejects.toThrow(/not an active member/i)
-    expect(committed.content).toBeNull()
-  })
-
-  it("throws when no unmatched row exists for the email", async () => {
-    const { client } = makeMatchClient({
-      startingCsv: HEADER,
-      membershipState: "active",
-    })
-
-    await expect(
-      matchStudentToAccountWithConflictRetry(client, {
-        org: "acme",
-        classroom: "cs101",
-        email: "ghost@x.edu",
-        username: "ghostgh",
-        github_id: "0",
-      }),
-    ).rejects.toThrow(/no unmatched roster row/i)
-  })
-})
-
 describe("bulkUnenrollStudents — single-commit batch removal", () => {
   const rosterWith = (usernames: string[]) =>
     HEADER +
@@ -1304,17 +974,11 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(committed.content).toBeNull()
   })
 
-  it("email-only target drops ONLY an email-only row, never a same-email identified sibling", async () => {
-    // Regression: an email-only removal target (no username, no github_id) must
-    // match only an unclaimed email-only row. Two rows share sam@x.edu — one a
-    // fully-identified enrolled student, the other an unclaimed email invite.
-    // Removing the email-only target must not silently unenroll the sibling.
-    const startingCsv =
-      HEADER +
-      // Identified sibling (must survive): username + github_id, same email.
-      "sam,,,sam@x.edu,,100\n" +
-      // Email-only invite (the actual target): no username, no github_id.
-      ",,,sam@x.edu,,\n"
+  it("an email-only target matches nothing (identity is username/github_id only)", async () => {
+    // Every roster row now carries a GitHub identity, so removal targets match
+    // by username/github_id only. An email-only target (no username, no id)
+    // matches no row — it can't silently unenroll a same-email sibling.
+    const startingCsv = HEADER + "sam,,,sam@x.edu,,100\n"
     const { client, committed } = makeClient({ startingCsv })
 
     const result = await bulkUnenrollStudents(client, {
@@ -1332,11 +996,273 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
       ],
     })
 
-    const survivors = rowsFromCsv(committed.content ?? HEADER)
-    // The identified sibling survives; only the email-only row was dropped.
-    expect(survivors).toHaveLength(1)
-    expect(survivors[0]).toMatchObject({ username: "sam", github_id: "100" })
-    expect(result.removed).toHaveLength(1)
-    expect(result.notFound).toHaveLength(0)
+    // Nothing matched: the identified row survives, target reported notFound.
+    expect(committed.content).toBeNull()
+    expect(result.removed).toHaveLength(0)
+    expect(result.notFound).toHaveLength(1)
+  })
+})
+
+// A fake client over multiple GitHub users, per-user org membership, and the
+// classroom team. Drives bulkEnrollStudentsInClassroom / reconcileTeamFromOrgMembers
+// / syncRosterFromTeam end to end (CSV read+commit, /users/{login}, membership
+// GET, team-add PUT, team-members list). `users` maps login -> id/name/email;
+// `members` is the set of ACTIVE org-member logins (case-insensitive); `teamHas`
+// seeds the team-member list syncRosterFromTeam reads.
+const makeTeamClient = (opts: {
+  startingCsv: string
+  users: Record<
+    string,
+    { id: number; name?: string | null; email?: string | null }
+  >
+  members?: string[]
+  teamHas?: { login: string; id: number; name?: string | null }[]
+}) => {
+  const committed: { content: string | null } = { content: null }
+  const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
+  const teamAdds: string[] = []
+
+  const requestRaw = vi.fn().mockImplementation((path: string) => {
+    if (path.includes("/contents/") && path.includes("classroom.json")) {
+      return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+    }
+    return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+  })
+
+  const request = vi
+    .fn()
+    .mockImplementation((path: string, options?: { method?: string }) => {
+      if (path.includes("/contents/") && path.includes("students.csv")) {
+        const csv = committed.content ?? opts.startingCsv
+        return Promise.resolve({
+          type: "file",
+          encoding: "base64",
+          content: Buffer.from(csv, "utf-8").toString("base64"),
+        })
+      }
+      if (path.startsWith("/users/")) {
+        const login = decodeURIComponent(path.slice("/users/".length))
+        const u = opts.users[login]
+        if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
+        return Promise.resolve({ login, name: null, email: null, ...u })
+      }
+      // Team-add: PUT .../teams/{slug}/memberships/{login}
+      if (path.includes("/teams/") && path.includes("/memberships/")) {
+        const login = decodeURIComponent(path.split("/memberships/")[1])
+        teamAdds.push(login)
+        return Promise.resolve({ state: "active" })
+      }
+      // Team members list (syncRosterFromTeam): GET .../teams/{slug}/members
+      // (checked AFTER /memberships/ since "/members" is a substring of it).
+      if (path.includes("/teams/") && path.includes("/members")) {
+        const members = (opts.teamHas ?? []).map((m) => ({
+          login: m.login,
+          id: m.id,
+          name: m.name ?? null,
+        }))
+        return Promise.resolve(members)
+      }
+      // Org membership state: GET /orgs/{org}/memberships/{login}
+      if (path.includes("/memberships/") && !path.includes("/teams/")) {
+        const login = decodeURIComponent(path.split("/memberships/")[1])
+        if (memberSet.has(login.toLowerCase())) {
+          return Promise.resolve({ state: "active" })
+        }
+        return Promise.reject(new Error("404 not a member"))
+      }
+      if (path.includes("/git/ref/")) {
+        return Promise.resolve({ object: { sha: "base-sha" } })
+      }
+      if (path.includes("/git/commits/")) {
+        return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+      }
+      if (path.endsWith("/git/trees")) {
+        const tree = (
+          options as { body?: { tree?: { path: string; content?: string }[] } }
+        )?.body?.tree
+        const entry = tree?.find((t) => t.path.includes("students.csv"))
+        if (entry?.content != null) committed.content = entry.content
+        return Promise.resolve({ sha: "tree-sha" })
+      }
+      if (path.endsWith("/git/commits")) {
+        return Promise.resolve({ sha: "new-commit-sha" })
+      }
+      if (path.endsWith("/git/refs/heads/main")) {
+        return Promise.resolve({})
+      }
+      return Promise.reject(new Error(`unexpected request: ${path}`))
+    })
+
+  return {
+    client: { request, requestRaw } as unknown as GitHubClient,
+    committed,
+    teamAdds,
+  }
+}
+
+describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-members", () => {
+  it("adds active org members to the team and flags non-members as notInOrg", async () => {
+    const { client, committed, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: {
+        ada: { id: 101, name: "Ada Lovelace" },
+        bob: { id: 202, name: "Bob Bopson" },
+      },
+      members: ["ada"], // ada is a live org member; bob is not
+    })
+
+    const result = await bulkEnrollStudentsInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      usernames: ["ada", "bob"],
+    })
+
+    // Both rows are written to students.csv (roster is authoritative metadata)...
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows.map((r) => r.username).sort()).toEqual(["ada", "bob"])
+    expect(rows.find((r) => r.username === "ada")?.github_id).toBe("101")
+    // ...but only the active member is team-added; the non-member is flagged.
+    expect(teamAdds).toEqual(["ada"])
+    expect(result.notInOrg).toEqual(["bob"])
+    expect(result.teamResults).toEqual([{ username: "ada", status: "added" }])
+  })
+
+  it("dedupes an incoming username against an existing row by github_id, not stale login", async () => {
+    // The CSV already has ada under a stale login; re-importing her current
+    // login must be skipped as a github_id duplicate, not written twice.
+    const startingCsv = HEADER + "ada-old,,,,,101\n"
+    const { client, committed } = makeTeamClient({
+      startingCsv,
+      users: { ada: { id: 101 } },
+      members: ["ada"],
+    })
+
+    await expect(
+      bulkEnrollStudentsInClassroom(client, {
+        org: "acme",
+        classroom: "cs101",
+        usernames: ["ada"],
+      }),
+    ).rejects.toThrow(/No new students to add/i)
+
+    // No commit: the CSV is unchanged (github_id 101 already present).
+    expect(committed.content).toBeNull()
+  })
+
+  it("writes full metadata from uploaded rows, GitHub profile only as fallback", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER,
+      users: { cara: { id: 303, name: "Profile Name" } },
+      members: ["cara"],
+    })
+
+    await bulkEnrollStudentsInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      rows: [
+        {
+          username: "cara",
+          first_name: "Cara",
+          last_name: "Reyes",
+          email: "cara@uni.edu",
+          section: "Lab 2",
+        },
+      ],
+    })
+
+    const cara = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "cara",
+    )
+    expect(cara).toMatchObject({
+      first_name: "Cara",
+      last_name: "Reyes",
+      email: "cara@uni.edu",
+      section: "Lab 2",
+      github_id: "303",
+    })
+  })
+})
+
+describe("reconcileTeamFromOrgMembers — re-verified, best-effort team-add", () => {
+  it("adds only members still active, isolating a stale non-member", async () => {
+    const { client, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: { ada: { id: 101 }, gone: { id: 999 } },
+      members: ["ada"], // "gone" is no longer active
+    })
+
+    const result = await reconcileTeamFromOrgMembers(client, {
+      org: "acme",
+      classroom: "cs101",
+      members: [
+        { id: 101, login: "ada" },
+        { id: 999, login: "gone" },
+      ],
+    })
+
+    expect(result.added).toEqual(["ada"])
+    expect(teamAdds).toEqual(["ada"])
+    expect(result.failed.map((f) => f.login)).toEqual(["gone"])
+  })
+
+  it("short-circuits with no members", async () => {
+    const { client, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: {},
+    })
+    const result = await reconcileTeamFromOrgMembers(client, {
+      org: "acme",
+      classroom: "cs101",
+      members: [],
+    })
+    expect(result).toEqual({ added: [], failed: [] })
+    expect(teamAdds).toEqual([])
+  })
+})
+
+describe("syncRosterFromTeam — identity-only backfill", () => {
+  it("appends an identity-only row (username + github_id, blank metadata)", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER,
+      users: {},
+      // Team member carries a profile name/email, but sync must NOT fabricate
+      // them into the CSV — identity only.
+      teamHas: [{ login: "grace", id: 707, name: "Grace Hopper" }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.noop).toBe(false)
+    expect(result.addedUsernames).toEqual(["grace"])
+    const grace = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "grace",
+    )
+    expect(grace).toMatchObject({
+      username: "grace",
+      github_id: "707",
+      first_name: "",
+      last_name: "",
+      email: "",
+      section: "",
+    })
+  })
+
+  it("is a noop when every team member already has a CSV row", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "grace,,,,,707\n",
+      users: {},
+      teamHas: [{ login: "grace", id: 707 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.noop).toBe(true)
+    expect(committed.content).toBeNull()
   })
 })

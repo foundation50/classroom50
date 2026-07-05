@@ -12,7 +12,7 @@ import {
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
 import { enrollStudentInClassroom } from "@/hooks/github/mutations"
-import { inviteStudentByEmail } from "@/api/mutations/students"
+import { inviteByEmail } from "@/api/mutations/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { isValidEmail } from "@/util/orgMembership"
 import { splitName, toStudent } from "@/util/roster"
@@ -63,11 +63,12 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
           section: section || undefined,
         })
         return {
+          kind: "username" as const,
           label: username,
           warning: result?.teamWarning ?? "",
           student: toStudent(result.student),
           // Already-active member: team-added directly (no invite), so seed the
-          // members cache to avoid an "unprovisioned" flash.
+          // members cache to avoid a "not in org" flash.
           enrolledMember: result.enrolled
             ? {
                 id: Number(result.student.github_id),
@@ -77,43 +78,47 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
         }
       }
 
-      // Email-only -> email invite carrying the classroom team, so the student
-      // lands in the team on accept.
-      const result = await inviteStudentByEmail(githubClient, {
+      // Email-only -> a pure GitHub org invite (carrying the classroom team) and
+      // NO students.csv write: the team is the enrollment source of truth and an
+      // email carries no reliable identity. The invite surfaces in the roster's
+      // "pending" section via the org pending-invitations list; name/section are
+      // captured later by adding the student by username or uploading a roster.
+      const result = await inviteByEmail(githubClient, {
         org,
         classroom,
         email,
-        first_name,
-        last_name,
-        section: section || undefined,
       })
       return {
+        kind: "email" as const,
         label: email,
         warning: result?.inviteWarning ?? "",
-        student: toStudent(result.student),
-        enrolledMember: null,
       }
     },
-    onSuccess: ({
-      label,
-      warning: warningMessage,
-      student,
-      enrolledMember,
-    }) => {
-      setWarning(warningMessage)
+    onSuccess: (result) => {
+      setWarning(result.warning)
       // Clear the form so the next student starts clean and a stray re-click
       // can't resubmit into a duplicate error.
-      setSuccess(t("students.added", { label }))
+      setSuccess(
+        result.kind === "email"
+          ? t("students.invited", { label: result.label })
+          : t("students.added", { label: result.label }),
+      )
       form.reset()
-      // Show the new row immediately (see useUpdateRosterCache).
-      updateRosterCache((current) => [...current, student])
       invalidateInviteQueries(queryClient, org)
-      // Enrolled member -> seed the team-members cache so the row shows enrolled
-      // at once; the invited path already shows a pending invite, so just
-      // invalidate.
-      if (enrolledMember) {
-        seedTeamMember(enrolledMember)
+      if (result.kind === "username") {
+        // Show the new row immediately (see useUpdateRosterCache).
+        updateRosterCache((current) => [...current, result.student])
+        // Enrolled member -> seed the team-members cache so the row shows
+        // enrolled at once; the invited path already shows a pending invite, so
+        // just invalidate.
+        if (result.enrolledMember) {
+          seedTeamMember(result.enrolledMember)
+        } else {
+          invalidateTeamRoster()
+        }
       } else {
+        // Email invite writes no CSV row; just refresh so the new pending
+        // org-invitation shows in the roster.
         invalidateTeamRoster()
       }
     },
