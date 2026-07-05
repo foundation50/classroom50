@@ -134,7 +134,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // Track emitted identities so invites/CSV don't double up.
   const seenIds = new Set<string>()
   const seenLogins = new Set<string>()
-  const seenEmails = new Set<string>()
 
   for (const member of members) {
     const id = String(member.id)
@@ -143,7 +142,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     seenLogins.add(login)
     const own = csvForMember(csv, member)
     const email = own?.email?.trim().toLowerCase()
-    if (email) seenEmails.add(email)
     rows.push({
       key: id,
       state: "enrolled",
@@ -169,7 +167,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       (emailKey ? csv.byEmail.get(emailKey) : undefined)
 
     if (loginKey) seenLogins.add(loginKey)
-    if (emailKey) seenEmails.add(emailKey)
     rows.push({
       key: login || email || String(invite.id),
       state: "pending",
@@ -196,7 +193,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     // Mark seen so duplicate CSV rows for the same person don't both emit.
     if (id) seenIds.add(id)
     if (login) seenLogins.add(login)
-    if (email) seenEmails.add(email)
     rows.push({
       key: student.github_id || student.username,
       state: "not_in_org",

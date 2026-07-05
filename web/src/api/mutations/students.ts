@@ -23,12 +23,14 @@ import {
   getUser,
   listTeamMembers,
   sleep,
+  REPO_READ_CONCURRENCY,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
 import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { isSameGitHubUser } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { prefixCommit } from "@/util/commit"
 import { type Student } from "@/types/classroom"
 
@@ -912,13 +914,25 @@ export async function reconcileTeamFromOrgMembers(
 
   const teamSlug = await resolveClassroomTeamSlug(client, org, classroom)
 
-  for (const username of usernames) {
-    const login = username.trim()
-    if (!login) continue
-    // Only team-add active org members. A rostered non-member isn't a failure —
-    // they simply aren't in the org yet, so they stay `not_in_org` and the
-    // roster highlights them for the teacher to invite or remove.
-    if (!(await isActiveMember(client, org, login))) {
+  // Check active org membership for all candidates concurrently (bounded) — each
+  // is an independent GET, and on a roster open with N drifted rows a serial
+  // scan is up to N blocking round-trips. A throw still rejects the whole run
+  // (Promise.all semantics), matching the prior serial loop.
+  const logins = usernames.map((u) => u.trim()).filter(Boolean)
+  const memberships = await mapWithConcurrency(
+    logins,
+    REPO_READ_CONCURRENCY,
+    async (login) => ({
+      login,
+      active: await isActiveMember(client, org, login),
+    }),
+  )
+
+  // Only team-add active org members. A rostered non-member isn't a failure —
+  // they simply aren't in the org yet, so they stay `not_in_org` and the roster
+  // highlights them for the teacher to invite or remove.
+  for (const { login, active } of memberships) {
+    if (!active) {
       skipped.push(login)
       continue
     }

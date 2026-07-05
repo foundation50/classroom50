@@ -8,6 +8,7 @@ import type { GitHubClient } from "@/hooks/github/client"
 import {
   isLikelyGithubUsername,
   normalizeGithubUsername,
+  splitName,
   type BulkImportResult,
   type ImportRosterRow,
 } from "@/api/mutations/students"
@@ -48,11 +49,11 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
   if (hasUsernameColumn) {
     for (const raw of parsed.data) {
       // Support either split first/last name columns or a single "name".
-      const split = (raw.name ?? "").trim().split(/\s+/).filter(Boolean)
+      const fromName = splitName(raw.name ?? null)
       push({
         username: raw.username ?? "",
-        first_name: (raw.first_name ?? split.at(0) ?? "").trim(),
-        last_name: (raw.last_name ?? split.slice(1).join(" ")).trim(),
+        first_name: (raw.first_name ?? fromName.first_name).trim(),
+        last_name: (raw.last_name ?? fromName.last_name).trim(),
         email: (raw.email ?? "").trim(),
         section: (raw.section ?? "").trim(),
       })
