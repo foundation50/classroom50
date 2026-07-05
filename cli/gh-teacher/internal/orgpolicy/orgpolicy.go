@@ -246,6 +246,8 @@ func fieldMatches(live, desired any) bool {
 }
 
 // ManualStep is one API-less org setting the teacher must apply by hand.
+// JSON tags carry no omitempty so it serializes stably in init's and audit's
+// --json reports.
 type ManualStep struct {
 	Setting string `json:"setting"`
 	URL     string `json:"url"`
