@@ -264,7 +264,7 @@ func TestFetchAssignmentEntry_404Surfaces_PagesGuidance(t *testing.T) {
 }
 
 // fetchOneTestEntry serves `body` at /cs-principles/assignments.json
-// and runs fetchAssignmentEntry against it.
+// and runs fetchEntryFromURL against it.
 func fetchOneTestEntry(t *testing.T, body, slug string) (Entry, func()) {
 	t.Helper()
 	server, cleanup := newPagesServer(t, body, http.StatusOK)
