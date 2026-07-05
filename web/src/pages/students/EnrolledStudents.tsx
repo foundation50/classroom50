@@ -1,9 +1,6 @@
 import {
   AlertTriangle,
-  Check,
-  ChevronDown,
   ChevronRight,
-  Copy,
   RefreshCw,
   Search,
   Send,
@@ -17,10 +14,8 @@ import {
   syncRosterFromTeam,
   reconcileTeamFromOrgMembers,
 } from "@/api/mutations/students"
-import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
 import {
@@ -72,124 +67,6 @@ export function groupStudentsBySection<T extends { section?: string }>(
     .map(([section, group]) => ({ section, students: group }))
 }
 
-// Native GitHub org-invite link, behind an expandable toggle; same org-wide URL
-// for everyone.
-const InviteLink = ({
-  org,
-  expanded,
-  onToggle,
-}: {
-  org: string
-  expanded: boolean
-  onToggle: () => void
-}) => {
-  const inviteUrl = `https://github.com/orgs/${org}/invitation`
-  const { copied, copy } = useCopyToClipboard(inviteUrl)
-  const { t } = useTranslation()
-
-  return (
-    <div className="border-b border-base-300 bg-base-200/40 px-6 py-2">
-      <button
-        type="button"
-        className="flex w-full items-center gap-1 text-xs font-medium text-base-content/70 hover:text-base-content"
-        onClick={onToggle}
-        aria-expanded={expanded}
-      >
-        {expanded ? (
-          <ChevronDown aria-hidden="true" className="size-3.5" />
-        ) : (
-          <ChevronRight aria-hidden="true" className="size-3.5" />
-        )}
-        {t("students.nativeInviteToggle")}
-      </button>
-      {expanded ? (
-        <div className="mt-2 flex flex-col gap-1">
-          <span className="text-xs text-base-content/70">
-            {t("students.nativeInviteHint")}
-          </span>
-          <div className="join w-full">
-            <input
-              type="text"
-              readOnly
-              value={inviteUrl}
-              aria-label={t("students.studentInviteLinkAria")}
-              onFocus={(event) => event.currentTarget.select()}
-              className="input input-sm input-bordered join-item w-full font-mono text-xs"
-            />
-            <button
-              type="button"
-              className="btn btn-sm join-item"
-              onClick={() => void copy()}
-              aria-label={t("students.copyInviteLinkAria")}
-            >
-              {copied ? (
-                <>
-                  <Check aria-hidden="true" className="size-4 text-success" />
-                  {t("students.copied")}
-                </>
-              ) : (
-                <>
-                  <Copy aria-hidden="true" className="size-4" />
-                  {t("students.copy")}
-                </>
-              )}
-            </button>
-          </div>
-        </div>
-      ) : null}
-    </div>
-  )
-}
-
-// Classroom-wide /onboard link. Same URL for everyone, no per-student token.
-const OnboardingLink = ({
-  org,
-  classroom,
-}: {
-  org: string
-  classroom: string
-}) => {
-  const onboardUrl = `${window.location.origin}/${org}/${classroom}/onboard`
-  const { copied, copy } = useCopyToClipboard(onboardUrl)
-  const { t } = useTranslation()
-
-  return (
-    <div className="flex flex-col gap-1 px-6 py-3 border-b border-base-300 bg-base-200/40">
-      <span className="text-xs font-medium text-base-content/70">
-        {t("students.onboardingLinkHint")}
-      </span>
-      <div className="join w-full">
-        <input
-          type="text"
-          readOnly
-          value={onboardUrl}
-          aria-label={t("students.onboardingLinkAria")}
-          onFocus={(event) => event.currentTarget.select()}
-          className="input input-sm input-bordered join-item w-full font-mono text-xs"
-        />
-        <button
-          type="button"
-          className="btn btn-sm join-item"
-          onClick={() => void copy()}
-          aria-label={t("students.copyOnboardingLinkAria")}
-        >
-          {copied ? (
-            <>
-              <Check aria-hidden="true" className="size-4 text-success" />
-              {t("students.copied")}
-            </>
-          ) : (
-            <>
-              <Copy aria-hidden="true" className="size-4" />
-              {t("students.copy")}
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  )
-}
-
 // Status filter values for the unified list.
 type StatusFilter = "all" | TeamRosterRowState
 
@@ -212,13 +89,11 @@ const EnrolledStudents = ({
 
   // Keyed by row.key so a clean action can't clobber another's warning.
   const [warnings, setWarnings] = useState<Record<string, string>>({})
-  const [showGithubInvite, setShowGithubInvite] = useState(false)
   const [groupBySection, setGroupBySection] = useState(false)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
-  const [resendingAll, setResendingAll] = useState(false)
 
   const {
     rows,
@@ -232,10 +107,6 @@ const EnrolledStudents = ({
     notInOrgUsernames,
   } = useTeamRoster(org, classroom, students)
 
-  const pending = useMemo(
-    () => rows.filter((r) => r.state === "pending"),
-    [rows],
-  )
   const notInOrg = useMemo(
     () => rows.filter((r) => r.state === "not_in_org"),
     [rows],
@@ -408,69 +279,6 @@ const EnrolledStudents = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notInOrgCount, isLoading, isError])
 
-  const resendForRow = async (row: TeamRosterRow) => {
-    const inviteeId = Number(row.github_id)
-    if (!Number.isFinite(inviteeId) || inviteeId <= 0 || !row.username) {
-      setWarning(
-        row.key,
-        t("students.resendMissingId", { username: row.username || row.email }),
-      )
-      return "skipped" as const
-    }
-    const result = await resendOrgInvitation(client, {
-      org,
-      username: row.username,
-      inviteeId,
-      invitationId: row.invitation_id,
-    })
-    return result.state
-  }
-
-  // One-click "resend all pending" from the Invite card — operates over ALL
-  // pending rows regardless of the current filter/selection.
-  const handleResendAll = async () => {
-    setResendingAll(true)
-    let resent = 0
-    let skipped = 0
-    const failures: string[] = []
-    let rateLimited = false
-    try {
-      for (const row of pending) {
-        try {
-          const outcome = await resendForRow(row)
-          if (outcome === "invited") resent++
-          else skipped++
-        } catch (err) {
-          failures.push(row.username || row.email)
-          if (err instanceof GitHubAPIError && err.isRateLimited) {
-            rateLimited = true
-            break
-          }
-        }
-      }
-      invalidateInviteQueries()
-      const key = "__resend_all__"
-      if (rateLimited) {
-        setWarning(key, t("students.resendAllRateLimitedShort", { resent }))
-      } else if (failures.length > 0) {
-        setWarning(
-          key,
-          t("students.resendAllPartialShort", {
-            resent,
-            failed: failures.length,
-            failedList: failures.join(", "),
-          }),
-        )
-      } else if (resent === 0 && skipped > 0) {
-        setWarning(key, t("students.resendAllNothing", { count: skipped }))
-      } else {
-        setWarning(key, t("students.resendAllSuccess", { count: resent }))
-      }
-    } finally {
-      setResendingAll(false)
-    }
-  }
-
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
       const next = current.map((s) =>
@@ -629,64 +437,26 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Invite students card. */}
-      <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
-        <div className="flex items-center justify-between gap-2 px-6 py-4 border-b border-base-300">
-          <h2 className="text-lg font-semibold">
-            {t("students.inviteStudents")}
-          </h2>
-          <div className="flex items-center gap-2">
-            {!pendingHidden && counts.pending > 0 ? (
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                disabled={resendingAll}
-                onClick={() => void handleResendAll()}
-                title={t("students.resendInvitesTitle", {
-                  count: counts.pending,
-                })}
-              >
-                {resendingAll ? (
-                  <span
-                    className="loading loading-spinner loading-xs"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <Send aria-hidden="true" className="size-4" />
-                )}
-                {t("students.resendInvites")}
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost"
-              disabled={syncMutation.isPending || csvMissingCount === 0}
-              onClick={() => syncMutation.mutate()}
-              title={
-                csvMissingCount === 0
-                  ? t("students.syncInSyncTitle")
-                  : t("students.syncRosterTitle")
-              }
-            >
-              <RefreshCw
-                aria-hidden="true"
-                className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-              />
-              {syncMutation.isPending
-                ? t("students.syncing")
-                : csvMissingCount === 0
-                  ? t("students.syncInSync")
-                  : t("students.syncRosterCount", { count: csvMissingCount })}
-            </button>
-          </div>
+      {/* Pending-invites banner: clicking "Review" filters to pending so the
+          teacher can select rows and bulk-resend (cancel + re-send). */}
+      {!isLoading && !isError && !pendingHidden && counts.pending > 0 ? (
+        <div
+          role="alert"
+          className="alert alert-info alert-soft flex items-center justify-between gap-3"
+        >
+          <span className="flex items-center gap-2 text-sm">
+            <Send aria-hidden="true" className="size-4 shrink-0" />
+            {t("students.pendingBanner", { count: counts.pending })}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs"
+            onClick={() => setStatusFilter("pending")}
+          >
+            {t("students.pendingReview")}
+          </button>
         </div>
-        <OnboardingLink org={org} classroom={classroom} />
-        <InviteLink
-          org={org}
-          expanded={showGithubInvite}
-          onToggle={() => setShowGithubInvite((prev) => !prev)}
-        />
-      </div>
+      ) : null}
 
       {/* Non-owner: pending invites are owner-only. */}
       {!isLoading && !isError && pendingHidden ? (
@@ -695,7 +465,8 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Toolbar: search + status filter + group-by-section. */}
+      {/* Toolbar: search + status filter + group-by-section, with Sync pinned
+          to the far right. */}
       {!isLoading && !isError && !isEmpty ? (
         <div className="flex flex-wrap items-center gap-3">
           <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
@@ -732,6 +503,27 @@ const EnrolledStudents = ({
               {t("students.groupBySection")}
             </label>
           ) : null}
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-square"
+            disabled={syncMutation.isPending || csvMissingCount === 0}
+            onClick={() => syncMutation.mutate()}
+            aria-label={
+              csvMissingCount === 0
+                ? t("students.syncInSyncTitle")
+                : t("students.syncRosterTitle")
+            }
+            title={
+              csvMissingCount === 0
+                ? t("students.syncInSyncTitle")
+                : t("students.syncRosterTitle")
+            }
+          >
+            <RefreshCw
+              aria-hidden="true"
+              className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+            />
+          </button>
         </div>
       ) : null}
 

@@ -1,8 +1,8 @@
-import { Mail, UserRound, Users } from "lucide-react"
+import { Mail, UserRound, Users, X } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
@@ -18,9 +18,10 @@ import { isValidEmail } from "@/util/orgMembership"
 import { splitName, toStudent } from "@/util/roster"
 
 type AddStudentProps = {
-  className?: string
   org: string
   classroom: string
+  open: boolean
+  onClose: () => void
 }
 
 type AddStudentFormValues = {
@@ -30,10 +31,11 @@ type AddStudentFormValues = {
   section: string
 }
 
-// Single add/invite form. A username enrolls via GitHub (resolve, add to team,
+// Add-one-student modal. A username enrolls via GitHub (resolve, add to team,
 // send org invite) and stores the email; email-only sends an email invite.
-// Either way the student joins the classroom team on accepting the invite.
-const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
+// Either way the student joins the classroom team on accepting the invite. The
+// form collects every students.csv field (name, username, email, section).
+const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const queryClient = useQueryClient()
   const githubClient = useGitHubClient()
@@ -41,6 +43,8 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
   const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
   const seedTeamMember = useSeedTeamMember(org, classroom)
   const { t } = useTranslation()
+  const dialogRef = useRef<HTMLDialogElement | null>(null)
+  const titleId = useId()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -158,170 +162,234 @@ const AddStudent = ({ className = "", org, classroom }: AddStudentProps) => {
     },
   })
 
-  return (
-    <div className={`card card-border bg-base-100 shadow-sm ${className}`}>
-      <form
-        onSubmit={(e) => {
-          e.preventDefault()
-          e.stopPropagation()
-          form.handleSubmit()
-        }}
-      >
-        <div className="card-body">
-          <p className="font-bold mb-2">{t("students.addTitle")}</p>
-          <p className="text-xs text-base-content/70 mb-2">
-            {t("students.addHint")}
-          </p>
+  const submitting = form.state.isSubmitting
 
+  // Drive the native dialog from `open`; reset transient state on open.
+  useEffect(() => {
+    const dialog = dialogRef.current
+    if (!dialog) return
+    if (open && !dialog.open) {
+      setWarning("")
+      setSuccess("")
+      form.reset()
+      dialog.showModal()
+    }
+    if (!open && dialog.open) dialog.close()
+  }, [open, form])
+
+  const closeDialog = () => {
+    if (submitting) return
+    onClose()
+  }
+
+  return (
+    <dialog
+      ref={dialogRef}
+      className="modal"
+      aria-labelledby={titleId}
+      onCancel={(event) => {
+        if (submitting) {
+          event.preventDefault()
+          return
+        }
+        closeDialog()
+      }}
+    >
+      <div className="modal-box max-w-lg">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 id={titleId} className="text-lg font-bold">
+              {t("students.addTitle")}
+            </h3>
+            <p className="mt-1 text-sm text-base-content/70">
+              {t("students.addHint")}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm btn-square"
+            aria-label={t("common.close")}
+            disabled={submitting}
+            onClick={closeDialog}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+
+        <form
+          onSubmit={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            form.handleSubmit()
+          }}
+        >
           {warning && (
-            <div className="alert alert-warning alert-soft mb-2 text-sm">
+            <div className="alert alert-warning alert-soft mt-4 text-sm">
               {warning}
             </div>
           )}
 
           {success && (
-            <div className="alert alert-success alert-soft mb-2 text-sm">
+            <div className="alert alert-success alert-soft mt-4 text-sm">
               {success}
             </div>
           )}
 
-          <form.Field name="name">
-            {(field) => (
-              <div className="flex mb-2 items-center">
-                <UserRound
-                  className="mr-2 text-base-content/70"
-                  aria-hidden="true"
-                />
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  placeholder={t("students.namePlaceholder")}
-                  aria-label={t("students.namePlaceholder")}
-                  className="input w-full"
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </div>
-            )}
-          </form.Field>
-
-          <form.Field name="username">
-            {(field) => (
-              <div className="mb-2">
-                <div className="flex items-center">
-                  <GitHub
-                    className="size-6 mr-2 text-base-content/30 opacity-25"
+          <div className="mt-4 flex flex-col gap-3">
+            <form.Field name="name">
+              {(field) => (
+                <label className="input input-bordered flex w-full items-center gap-2">
+                  <UserRound
+                    className="size-4 text-base-content/50"
                     aria-hidden="true"
                   />
                   <input
                     id={field.name}
                     name={field.name}
                     type="text"
-                    placeholder={t("students.usernamePlaceholder")}
-                    aria-label={t("students.usernameAria")}
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                    className="input w-full"
+                    className="grow"
+                    placeholder={t("students.namePlaceholder")}
+                    aria-label={t("students.namePlaceholder")}
+                    value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
-                </div>
-                {field.state.meta.errors.length > 0 && (
-                  <p
-                    id={`${field.name}-error`}
-                    className="text-error text-sm mt-1"
-                    role="alert"
-                  >
-                    {String(field.state.meta.errors[0] ?? "")}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
+                </label>
+              )}
+            </form.Field>
 
-          <form.Field name="email">
-            {(field) => (
-              <div className="mb-4">
-                <div className="flex items-center">
-                  <Mail
-                    className="size-6 mr-2 text-base-content/70"
+            <form.Field name="username">
+              {(field) => (
+                <div>
+                  <label className="input input-bordered flex w-full items-center gap-2">
+                    <GitHub className="size-4 opacity-40" aria-hidden="true" />
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="text"
+                      className="grow"
+                      placeholder={t("students.usernamePlaceholder")}
+                      aria-label={t("students.usernameAria")}
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      aria-describedby={
+                        field.state.meta.errors.length > 0
+                          ? `${field.name}-error`
+                          : undefined
+                      }
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </label>
+                  {field.state.meta.errors.length > 0 && (
+                    <p
+                      id={`${field.name}-error`}
+                      className="text-error text-sm mt-1"
+                      role="alert"
+                    >
+                      {String(field.state.meta.errors[0] ?? "")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="email">
+              {(field) => (
+                <div>
+                  <label className="input input-bordered flex w-full items-center gap-2">
+                    <Mail
+                      className="size-4 text-base-content/50"
+                      aria-hidden="true"
+                    />
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="email"
+                      className="grow"
+                      placeholder={t("students.emailPlaceholder")}
+                      aria-label={t("students.emailAria")}
+                      aria-invalid={field.state.meta.errors.length > 0}
+                      aria-describedby={
+                        field.state.meta.errors.length > 0
+                          ? `${field.name}-error`
+                          : undefined
+                      }
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  </label>
+                  {field.state.meta.errors.length > 0 && (
+                    <p
+                      id={`${field.name}-error`}
+                      className="text-error text-sm mt-1"
+                      role="alert"
+                    >
+                      {String(field.state.meta.errors[0] ?? "")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+
+            <form.Field name="section">
+              {(field) => (
+                <label className="input input-bordered flex w-full items-center gap-2">
+                  <Users
+                    className="size-4 text-base-content/50"
                     aria-hidden="true"
                   />
                   <input
                     id={field.name}
                     name={field.name}
-                    type="email"
-                    placeholder={t("students.emailPlaceholder")}
-                    aria-label={t("students.emailAria")}
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                    className="input w-full"
+                    type="text"
+                    className="grow"
+                    placeholder={t("students.sectionPlaceholder")}
+                    aria-label={t("students.sectionAria")}
+                    value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
-                </div>
-                {field.state.meta.errors.length > 0 && (
-                  <p
-                    id={`${field.name}-error`}
-                    className="text-error text-sm mt-1"
-                    role="alert"
-                  >
-                    {String(field.state.meta.errors[0] ?? "")}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
+                </label>
+              )}
+            </form.Field>
+          </div>
 
-          <form.Field name="section">
-            {(field) => (
-              <div className="flex mb-4 items-center">
-                <Users
-                  className="mr-2 text-base-content/70"
-                  aria-hidden="true"
-                />
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  placeholder={t("students.sectionPlaceholder")}
-                  aria-label={t("students.sectionAria")}
-                  className="input w-full"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </div>
-            )}
-          </form.Field>
+          <div className="modal-action">
+            <button
+              type="button"
+              className="btn btn-ghost"
+              disabled={submitting}
+              onClick={closeDialog}
+            >
+              {t("common.close")}
+            </button>
+            <form.Subscribe
+              selector={(state) => [state.canSubmit, state.isSubmitting]}
+            >
+              {([canSubmit, isSubmitting]) => (
+                <button
+                  type="submit"
+                  disabled={!canSubmit || isSubmitting || !team}
+                  className="btn btn-primary"
+                >
+                  {!isSubmitting
+                    ? t("students.addButton")
+                    : t("students.submitting")}
+                </button>
+              )}
+            </form.Subscribe>
+          </div>
+        </form>
+      </div>
 
-          <form.Subscribe
-            selector={(state) => [state.canSubmit, state.isSubmitting]}
-          >
-            {([canSubmit, isSubmitting]) => (
-              <button
-                type="submit"
-                disabled={!canSubmit || isSubmitting || !team}
-                className="btn btn-primary w-full"
-              >
-                {!isSubmitting
-                  ? t("students.addButton")
-                  : t("students.submitting")}
-              </button>
-            )}
-          </form.Subscribe>
-        </div>
+      <form method="dialog" className="modal-backdrop">
+        <button type="button" disabled={submitting} onClick={closeDialog}>
+          {t("common.close")}
+        </button>
       </form>
-    </div>
+    </dialog>
   )
 }
 

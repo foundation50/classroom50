@@ -1,4 +1,4 @@
-import { HardDriveUpload, X } from "lucide-react"
+import { X } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -72,6 +72,10 @@ type UploadRosterProps = {
   classroom: string
   client: GitHubClient
   onSuccess?: (result: BulkImportResult) => void
+  // When true, immediately prompt for a file (header-icon entry point). The
+  // component has no visible trigger of its own in this mode.
+  open?: boolean
+  onOpenChange?: (open: boolean) => void
 }
 type ImportPhase = "idle" | "preview" | "importing" | "complete" | "error"
 type ImportProgress = {
@@ -118,6 +122,8 @@ const UploadRoster = ({
   classroom,
   client,
   onSuccess,
+  open,
+  onOpenChange,
 }: UploadRosterProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const dialogRef = useRef<HTMLDialogElement | null>(null)
@@ -162,6 +168,19 @@ const UploadRoster = ({
       fileInputRef.current.value = ""
     }
   }
+
+  // Header-icon entry point: when opened externally and idle, prompt for a file
+  // right away (there's no visible trigger card in this mode). Edge-triggered —
+  // we fire the native picker and immediately clear `open`, since the dialog's
+  // own phase state drives everything from here.
+  const prevOpenRef = useRef(false)
+  useEffect(() => {
+    if (open && !prevOpenRef.current && phase === "idle") {
+      fileInputRef.current?.click()
+      onOpenChange?.(false)
+    }
+    prevOpenRef.current = Boolean(open)
+  }, [open, phase, onOpenChange])
 
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -230,30 +249,13 @@ const UploadRoster = ({
 
   return (
     <>
-      <div className="card card-border bg-base-100 shadow-sm">
-        <div className="card-body">
-          <p className="font-bold">{t("students.uploadRosterTitle")}</p>
-          <span>{t("students.uploadRosterHint")}</span>
-          <input
-            ref={fileInputRef}
-            type="file"
-            className="hidden"
-            accept=".txt,.csv,text/plain,text/csv"
-            onChange={handleFileChange}
-          />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="btn"
-          >
-            <HardDriveUpload aria-hidden="true" />
-            {t("students.chooseFile")}
-          </button>
-          <p className="text-center text-base-content/70 text-sm">
-            {t("students.supportedFormats")}
-          </p>
-        </div>
-      </div>
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        accept=".txt,.csv,text/plain,text/csv"
+        onChange={handleFileChange}
+      />
 
       <dialog
         ref={dialogRef}
