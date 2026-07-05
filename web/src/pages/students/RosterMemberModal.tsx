@@ -180,12 +180,12 @@ const RosterMemberModal = ({
               </span>
             ) : null}
             {row.state === "not_in_org" ? (
-              <span className="badge badge-sm badge-ghost badge-soft">
+              <span className="badge badge-sm badge-error badge-soft">
                 {t("students.statusNotInOrg")}
               </span>
             ) : null}
             {row.section.trim() ? (
-              <span className="badge badge-sm badge-ghost">
+              <span className="badge badge-sm badge-info badge-soft">
                 {row.section.trim()}
               </span>
             ) : null}

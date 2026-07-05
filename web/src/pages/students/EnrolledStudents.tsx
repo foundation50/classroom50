@@ -360,7 +360,7 @@ const EnrolledStudents = ({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {row.section.trim() ? (
-            <span className="badge badge-sm badge-ghost shrink-0">
+            <span className="badge badge-sm badge-info badge-soft shrink-0">
               {row.section.trim()}
             </span>
           ) : null}
@@ -370,7 +370,7 @@ const EnrolledStudents = ({
             </span>
           ) : null}
           {row.state === "not_in_org" ? (
-            <span className="badge badge-sm badge-ghost badge-soft shrink-0">
+            <span className="badge badge-sm badge-error badge-soft shrink-0">
               {t("students.statusNotInOrg")}
             </span>
           ) : null}
