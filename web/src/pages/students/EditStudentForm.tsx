@@ -37,6 +37,7 @@ const EditStudentForm = ({
   onCancel,
   onSaved,
   onSubmittingChange,
+  showGitHubPanel = true,
 }: {
   org: string
   classroom: string
@@ -46,6 +47,9 @@ const EditStudentForm = ({
   onSaved: (updated: StudentCsvRow) => void
   // Lets a parent dialog block close (Escape/backdrop) while a save is running.
   onSubmittingChange?: (submitting: boolean) => void
+  // The read-only "GitHub: @username" panel. Hidden when a parent already shows
+  // the GitHub identity elsewhere (e.g. the roster detail modal's header).
+  showGitHubPanel?: boolean
 }) => {
   const client = useGitHubClient()
   const runSave = useSafeSubmit()
@@ -234,7 +238,7 @@ const EditStudentForm = ({
           )}
         </form.Field>
 
-        {student.username ? (
+        {showGitHubPanel && student.username ? (
           <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/70">
             <GitHub aria-hidden="true" className="size-5 opacity-40" />
             <span>
