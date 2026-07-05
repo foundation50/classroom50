@@ -734,30 +734,6 @@ const AcceptAssignmentPage = () => {
               </div>
             )}
 
-            {acceptMutation.data && (
-              <div className="alert alert-success items-start">
-                <div className="min-w-0">
-                  <div className="font-bold">
-                    {acceptMutation.data.status === "already-accepted"
-                      ? t("accept.alreadyAcceptedTitle")
-                      : t("accept.acceptedTitle")}
-                  </div>
-
-                  <div className="mt-1">
-                    {t("accept.repositoryLabel")}{" "}
-                    <a
-                      className="link font-mono"
-                      href={acceptMutation.data.repo.html_url}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      {acceptMutation.data.repo.full_name}
-                    </a>
-                  </div>
-                </div>
-              </div>
-            )}
-
             {(acceptMutation.data || repoExistsAlready) && (
               <a
                 className="btn btn-primary w-full text-xl p-6"
