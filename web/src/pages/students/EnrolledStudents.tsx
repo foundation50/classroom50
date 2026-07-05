@@ -849,7 +849,10 @@ const EnrolledStudents = ({
         onUnenrolled={(rowKey, teamWarning) =>
           onRowUnenrolled(rowKey, teamWarning)
         }
-        onResent={() => invalidateInviteQueries()}
+        onResent={(rowKey) => {
+          dismissWarning(rowKey)
+          invalidateInviteQueries()
+        }}
         onError={(rowKey, message) => setWarning(rowKey, message)}
       />
     </div>
