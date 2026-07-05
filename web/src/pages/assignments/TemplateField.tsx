@@ -231,32 +231,21 @@ const TemplateVerificationNote = ({
 
     case "private-fork": {
       const view = templateForkNoteView(verification)
-      const label = verification.parent
-        ? verification.parentInOrg
-          ? t("assignments.template.privateForkInOrg_1", {
-              owner: verification.owner,
-              repo: verification.repo,
-              parent: verification.parent,
-            })
-          : t("assignments.template.privateForkCrossOrg_1", {
-              owner: verification.owner,
-              repo: verification.repo,
-              parent: verification.parent,
-            })
-        : t("assignments.template.privateForkNoParent_1", {
-            owner: verification.owner,
-            repo: verification.repo,
-          })
+      // labelKey/tone/suffixKey all come from templateForkNoteView (single
+      // source of truth, tested). All three label keys take the same
+      // interpolation set; t() ignores `parent` for the no-parent key.
+      const label = t(view.labelKey, {
+        owner: verification.owner,
+        repo: verification.repo,
+        parent: verification.parent,
+      })
       // In-org parent is usually reachable (advisory, amber); a cross-org or
-      // unknown parent is likely to fail at generate (error, red). Tone + suffix
-      // key come from templateForkNoteView (single source of truth, tested).
-      return view.tone === "warning" ? (
-        <Note tone="warning" icon={Info}>
-          {label} <Code>{verification.branch}</Code>
-          {t(view.suffixKey)}
-        </Note>
-      ) : (
-        <Note tone="error" icon={AlertTriangle}>
+      // unknown parent is likely to fail at generate (error, red).
+      return (
+        <Note
+          tone={view.tone}
+          icon={view.tone === "warning" ? Info : AlertTriangle}
+        >
           {label} <Code>{verification.branch}</Code>
           {t(view.suffixKey)}
         </Note>
