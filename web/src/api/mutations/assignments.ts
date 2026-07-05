@@ -1309,6 +1309,10 @@ export function buildReusedEntry(
   if (!entry.template) delete entry.template
   if (!entry.due_meta) delete entry.due_meta
   if (entry.runtime && !entry.runtime.container) delete entry.runtime.container
+  // apt can't coexist with a container (the image owns its packages — the CLI
+  // rejects the pair), so a container source self-heals by dropping apt on
+  // reuse, matching the edit path rather than laundering an invalid combo.
+  if (entry.runtime?.container) delete entry.runtime.apt
   if (entry.runtime && !entry.runtime.apt) delete entry.runtime.apt
   if (!entry.runtime) delete entry.runtime
   if (!entry.allowed_files) delete entry.allowed_files

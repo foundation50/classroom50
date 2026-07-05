@@ -366,7 +366,12 @@ export const assignmentToFormValues = (
     runtime_node: assignment.runtime?.node ?? "",
     runtime_java: assignment.runtime?.java ?? "",
     runtime_go: assignment.runtime?.go ?? "",
-    runtime_apt: aptPackagesToText(assignment.runtime?.apt),
+    // apt is hosted-only; a stored container block hides the apt field and the
+    // submit path clears it, so blank it on read too — otherwise a legacy
+    // container+apt entry would hold apt live-but-hidden and silently drop it.
+    runtime_apt: assignment.runtime?.container
+      ? ""
+      : aptPackagesToText(assignment.runtime?.apt),
     setup_command: setupCommand,
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
     pass_threshold: assignment.pass_threshold ?? DEFAULT_PASS_THRESHOLD,

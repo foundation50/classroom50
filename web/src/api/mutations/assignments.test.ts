@@ -201,6 +201,21 @@ describe("buildReusedEntry", () => {
     entry.runtime?.apt?.push("extra")
     expect(source.runtime?.apt).toHaveLength(2)
   })
+
+  it("self-heals a container+apt source by dropping apt (mirrors the edit path)", () => {
+    // A legacy source illegally carrying both container and apt would produce an
+    // assignments.json the CLI rejects; reuse drops apt so the copy is valid.
+    const source = {
+      slug: "c",
+      name: "Container + apt",
+      mode: "individual",
+      autograder: "default",
+      runtime: { container: { image: "ubuntu:24.04" }, apt: ["cmake"] },
+    } as unknown as Assignment
+    const entry = buildReusedEntry(source, { slug: "c2", name: "Copy" })
+    expect(entry.runtime).toEqual({ container: { image: "ubuntu:24.04" } })
+    expect("apt" in (entry.runtime ?? {})).toBe(false)
+  })
 })
 
 describe("preserveUnmanagedAssignmentKeys", () => {
