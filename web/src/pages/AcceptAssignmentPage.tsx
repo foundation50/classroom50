@@ -91,9 +91,8 @@ const AcceptCard = ({ children }: { children: React.ReactNode }) => {
   )
 }
 
-// Full-height shell: fixed navbar row, then a flex-grow region that centers its
-// child on both axes. Every accept render branch wraps its card in this so the
-// content sits in the middle of the viewport regardless of card height.
+// Every accept render branch wraps its content in this so the card stays
+// centered in the viewport regardless of its height.
 const AcceptLayout = ({ children }: { children: React.ReactNode }) => {
   return (
     <div className="flex min-h-screen flex-col bg-base-100">
@@ -315,7 +314,8 @@ const CircularProgress = ({
   const circumference = 2 * Math.PI * radius
   const isComplete = status === "complete"
   // Fill the ring completely once done so the checkmark sits inside a full ring.
-  const fraction = isComplete ? 1 : total > 0 ? completed / total : 0
+  const ratio = total > 0 ? completed / total : 0
+  const fraction = isComplete ? 1 : ratio
   const strokeClass =
     status === "error"
       ? "text-error"
@@ -379,10 +379,12 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
   const allDone = completed === ACCEPT_STEP_ORDER.length
   // Between steps, the finishing step is already "complete" while the next
   // hasn't emitted "running" yet — a momentary gap where no step is running.
-  // Treat that in-flight gap as running so the header indicator doesn't flicker
-  // back to the pending state on every step boundary.
+  // Treat that gap as running so the header doesn't flicker back to pending on
+  // every step boundary. Excludes the all-done case so "in flight" stays true
+  // to its name rather than relying on the consuming ternary's ordering.
   const inFlight =
-    stepStates.some((s) => s.status === "running") || completed > 0
+    stepStates.some((s) => s.status === "running") ||
+    (completed > 0 && !allDone)
 
   // Start collapsed (header summary + count is enough); let the student expand
   // detail on demand. Force open on error so a failure is never hidden; an
@@ -747,38 +749,40 @@ const AcceptAssignmentPage = () => {
             )}
 
             <AnimatePresence initial={false}>
-              {(acceptMutation.data || repoExistsAlready) && !repairOpen && (
-                <motion.div
-                  key="post-accept-actions"
-                  variants={collapseVariants}
-                  initial="initial"
-                  animate="animate"
-                  exit="exit"
-                  className="flex flex-col gap-4 overflow-hidden"
-                >
-                  <a
-                    className="btn btn-primary w-full text-lg p-5"
-                    href={
-                      acceptMutation?.data?.repo.html_url ||
-                      `https://www.github.com/${org}/${checkedRepo?.name}`
-                    }
-                    target="_blank"
-                    rel="noreferrer"
+              {(acceptMutation.data || repoExistsAlready) &&
+                !acceptMutation.isPending &&
+                !repairOpen && (
+                  <motion.div
+                    key="post-accept-actions"
+                    variants={collapseVariants}
+                    initial="initial"
+                    animate="animate"
+                    exit="exit"
+                    className="flex flex-col gap-4 overflow-hidden"
                   >
-                    {t("accept.openRepository")}
-                  </a>
-
-                  {org && classroom && (
-                    <Link
-                      to="/$org/$classroom"
-                      params={{ org, classroom }}
-                      className="btn btn-outline w-full text-lg p-5"
+                    <a
+                      className="btn btn-primary w-full text-lg p-5"
+                      href={
+                        acceptMutation?.data?.repo.html_url ||
+                        `https://www.github.com/${org}/${checkedRepo?.name}`
+                      }
+                      target="_blank"
+                      rel="noreferrer"
                     >
-                      {t("accept.goToClassroom")}
-                    </Link>
-                  )}
-                </motion.div>
-              )}
+                      {t("accept.openRepository")}
+                    </a>
+
+                    {org && classroom && (
+                      <Link
+                        to="/$org/$classroom"
+                        params={{ org, classroom }}
+                        className="btn btn-outline w-full text-lg p-5"
+                      >
+                        {t("accept.goToClassroom")}
+                      </Link>
+                    )}
+                  </motion.div>
+                )}
             </AnimatePresence>
 
             {assignmentData?.mode === "group" &&
