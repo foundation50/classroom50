@@ -1,24 +1,16 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
-import {
-  AlertTriangle,
-  ChevronRight,
-  ExternalLink,
-  UserPlus,
-  X,
-} from "lucide-react"
+import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 
-import Avatar from "@/components/avatar"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { removeMemberFromOrg } from "@/pages/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
-  GitHubIdentity,
-  initialsFor,
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
+import MemberDetailHeader from "@/components/memberList/MemberDetailHeader"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
 // Centered modal showing one org member's details: identity, classification,
@@ -168,12 +160,7 @@ const MemberDetailModal = ({
         </div>
 
         <div className="flex flex-col gap-4 px-6 py-5">
-          <Avatar
-            name={row.name || label}
-            github={row.username}
-            initials={initialsFor(row)}
-            subtitle={<GitHubIdentity row={row} />}
-          />
+          <MemberDetailHeader row={row} org={org} />
 
           <div className="flex flex-wrap items-center gap-2">
             <ClassificationBadge row={row} isOwner={isOwner} />
@@ -181,18 +168,6 @@ const MemberDetailModal = ({
               <span className="text-sm text-base-content/70">{row.email}</span>
             ) : null}
           </div>
-
-          <a
-            href={`https://github.com/orgs/${org}/people${
-              row.username ? `?query=${encodeURIComponent(row.username)}` : ""
-            }`}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex w-fit items-center gap-1 text-sm text-primary hover:underline"
-          >
-            <ExternalLink aria-hidden="true" className="size-3.5" />
-            {t("orgMembers.manageOnGitHub")}
-          </a>
 
           <div>
             <h3 className="mb-2 text-sm font-semibold">
