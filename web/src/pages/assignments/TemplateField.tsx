@@ -23,6 +23,10 @@ import {
   type StringField,
 } from "./formFieldHelpers"
 import { InlineNote, InlineCode as Code } from "@/components/InlineNote"
+import {
+  templateForkNoteView,
+  templateRestrictedNoteView,
+} from "./templateNoteView"
 
 // Advisory, non-blocking pre-flight for the Template Repository field: checks
 // the OAuth token can reach the typed repo and annotates the field without
@@ -226,6 +230,7 @@ const TemplateVerificationNote = ({
       )
 
     case "private-fork": {
+      const view = templateForkNoteView(verification)
       const label = verification.parent
         ? verification.parentInOrg
           ? t("assignments.template.privateForkInOrg_1", {
@@ -243,16 +248,17 @@ const TemplateVerificationNote = ({
             repo: verification.repo,
           })
       // In-org parent is usually reachable (advisory, amber); a cross-org or
-      // unknown parent is likely to fail at generate (error, red).
-      return verification.parentInOrg ? (
+      // unknown parent is likely to fail at generate (error, red). Tone + suffix
+      // key come from templateForkNoteView (single source of truth, tested).
+      return view.tone === "warning" ? (
         <Note tone="warning" icon={Info}>
           {label} <Code>{verification.branch}</Code>
-          {t("assignments.template.privateForkInOrg_2")}
+          {t(view.suffixKey)}
         </Note>
       ) : (
         <Note tone="error" icon={AlertTriangle}>
           {label} <Code>{verification.branch}</Code>
-          {t("assignments.template.privateForkCrossOrg_2")}
+          {t(view.suffixKey)}
         </Note>
       )
     }
@@ -292,15 +298,10 @@ const TemplateVerificationNote = ({
           icon={AlertTriangle}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          {verification.scopeGap
-            ? t("assignments.template.restrictedScope", {
-                owner: verification.owner,
-                repo: verification.repo,
-              })
-            : t("assignments.template.restricted", {
-                owner: verification.owner,
-                repo: verification.repo,
-              })}
+          {t(templateRestrictedNoteView(verification).messageKey, {
+            owner: verification.owner,
+            repo: verification.repo,
+          })}
           <span className="mt-1 block text-xs text-base-content/70">
             {t("assignments.template.githubSaid", {
               status: verification.httpStatus,

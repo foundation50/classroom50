@@ -271,6 +271,51 @@ export type TemplateAccessVerification =
       parentInOrg: boolean
     }
 
+// Classify a repo as a risky private fork for template use. `generate` copies
+// the fork's tree but can be blocked (403/404) when GitHub can't reach the
+// fork's private upstream parent — common when the parent lives in another org.
+// A public parent (or a non-fork / non-private repo) generates fine, so
+// `isRiskyPrivateFork` is only true when the repo is a private fork whose parent
+// is private or of unknown visibility. `parentInOrg` splits the two risky cases:
+// an in-org private parent (reachable, usually fine) vs. a cross-org or unknown
+// parent (likely to fail at generate). An absent/malformed parent fails closed
+// to the higher-risk cross-org case (`parentInOrg: false`). Single source of
+// truth for the pre-flight verdict (verifyTemplateAccess), the create/edit block
+// (resolveTemplate), and the reuse re-check (copyAssignmentToClassroom).
+function classifyPrivateFork(
+  repo: GitHubRepo,
+  org: string,
+): { isRiskyPrivateFork: boolean; parent?: string; parentInOrg: boolean } {
+  if (!(repo.fork && repo.private && repo.parent?.private !== false)) {
+    return { isRiskyPrivateFork: false, parentInOrg: false }
+  }
+  const parentOwner = repo.parent?.full_name?.split("/")[0]
+  const parentInOrg =
+    parentOwner !== undefined && parentOwner.toLowerCase() === org.toLowerCase()
+  return {
+    isRiskyPrivateFork: true,
+    parent: repo.parent?.full_name,
+    parentInOrg,
+  }
+}
+
+// The hard-block error thrown at create/edit/reuse for a cross-org (or
+// unknown-parent) private fork. `parent` is the upstream's full_name when
+// GitHub reported it. Shared so every write path emits identical guidance.
+function crossOrgPrivateForkError(
+  owner: string,
+  repo: string,
+  org: string,
+  parent: string | undefined,
+): Error {
+  const parentDesc = parent
+    ? `a private fork of ${parent} in another org`
+    : `a private fork of a private upstream`
+  return new Error(
+    `Template "${owner}/${repo}" is ${parentDesc} — copying it would fail because the private upstream isn't accessible to Classroom 50. Create a fresh (non-fork) template repo in ${org} and copy the fork's contents into it, then reference that.`,
+  )
+}
+
 export async function verifyTemplateAccess(
   client: GitHubClient,
   org: string,
@@ -359,20 +404,15 @@ export async function verifyTemplateAccess(
   // parent — common when the parent lives in another org. Warn before create so
   // the teacher isn't surprised at accept. A public parent generates fine, so
   // only warn when the parent is private (or its visibility is unknown).
-  if (repo.fork && repo.private && repo.parent?.private !== false) {
-    // The parent's owner decides risk: an in-org private parent is usually
-    // reachable (Classroom 50 has org access), a cross-org one usually is not.
-    const parentOwner = repo.parent?.full_name.split("/")[0]
-    const parentInOrg =
-      parentOwner !== undefined &&
-      parentOwner.toLowerCase() === org.toLowerCase()
+  const fork = classifyPrivateFork(repo, org)
+  if (fork.isRiskyPrivateFork) {
     return {
       kind: "private-fork",
       owner: parsed.owner,
       repo: parsed.repo,
       branch,
-      parent: repo.parent?.full_name,
-      parentInOrg,
+      parent: fork.parent,
+      parentInOrg: fork.parentInOrg,
     }
   }
 
@@ -430,19 +470,9 @@ export async function resolveTemplate(
   // upstream, which Classroom 50 can't access across orgs, so accept would fail.
   // In-org private forks are allowed (the upstream is reachable). Mirrors the
   // red "private-fork" pre-flight verdict. A public parent generates fine.
-  if (repo.fork && repo.private && repo.parent?.private !== false) {
-    const parentOwner = repo.parent?.full_name.split("/")[0]
-    const parentInOrg =
-      parentOwner !== undefined &&
-      parentOwner.toLowerCase() === org.toLowerCase()
-    if (!parentInOrg) {
-      const parentDesc = repo.parent?.full_name
-        ? `a private fork of ${repo.parent.full_name} in another org`
-        : `a private fork of a private upstream`
-      throw new Error(
-        `Template "${parsed.owner}/${parsed.repo}" is ${parentDesc} — copying it would fail because the private upstream isn't accessible to Classroom 50. Create a fresh (non-fork) template repo in ${org} and copy the fork's contents into it, then reference that.`,
-      )
-    }
+  const fork = classifyPrivateFork(repo, org)
+  if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
+    throw crossOrgPrivateForkError(parsed.owner, parsed.repo, org, fork.parent)
   }
 
   return {
@@ -668,11 +698,21 @@ async function buildAssignmentEntry(
   let needsTeamGrant = false
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
-    const resolved = templateRefUnchanged(parsedTemplate, existingTemplate)
-      ? { template: existingTemplate!, needsTeamGrant: false }
-      : await resolveTemplate(client, input.org, parsedTemplate)
-    template = resolved.template
-    needsTeamGrant = resolved.needsTeamGrant
+    if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
+      // The ref is unchanged, so the team was already granted at create time —
+      // no re-grant needed (needsTeamGrant stays false). But the stored ref may
+      // point at a template that has since become unreliable (e.g. a fork whose
+      // upstream went private, or a repo created before the fork guard shipped),
+      // so still re-validate it live via resolveTemplate — which now runs the
+      // cross-org private-fork guard — and fail closed before any commit rather
+      // than trusting the stored block blindly.
+      await resolveTemplate(client, input.org, parsedTemplate)
+      template = existingTemplate!
+    } else {
+      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
+      template = resolved.template
+      needsTeamGrant = resolved.needsTeamGrant
+    }
   }
 
   // Must match classroom50/assignments/v1 exactly — the CLI rejects unknown
@@ -1305,6 +1345,19 @@ export async function copyAssignmentToClassroom(
         )
       }
       needsTeamGrant = true
+    }
+    // Same cross-org private-fork guard as resolveTemplate (create/edit): a
+    // private fork whose private upstream lives in another org can't be reached
+    // by generate, so accept would fail. Enforce it here so reuse can't smuggle
+    // in a template that create/edit would have rejected.
+    const fork = classifyPrivateFork(repo, org)
+    if (fork.isRiskyPrivateFork && !fork.parentInOrg) {
+      throw crossOrgPrivateForkError(
+        entry.template.owner,
+        entry.template.repo,
+        org,
+        fork.parent,
+      )
     }
   }
 

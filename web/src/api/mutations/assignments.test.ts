@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import {
   buildReusedEntry,
+  copyAssignmentToClassroom,
   editAssignment,
   nextAvailableSlug,
   preserveUnmanagedAssignmentKeys,
@@ -398,6 +399,159 @@ describe("editAssignment (preserved-entry integration)", () => {
     // Cleared managed key is not resurrected from the stale existing entry.
     expect(edited.due).toBeUndefined()
   })
+
+  it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
+    // An assignment whose stored template is an in-org private fork of a
+    // private cross-org upstream (created before the fork guard shipped, or a
+    // parent that went private after create). Editing WITHOUT changing the ref
+    // must still trip the fork guard rather than trusting the stored block.
+    const forkEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: true,
+      template: { owner: ORG, repo: "hw1-fork", branch: "main" },
+    }
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [forkEntry],
+    }
+    const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+
+    const request = vi.fn(async (url: string) => {
+      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+      if (url.includes("/contents/cs50/assignments.json")) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: b64(JSON.stringify(assignmentsFile)),
+        }
+      }
+      // getRepo for the re-validated unchanged ref: an in-org private fork of a
+      // private upstream in ANOTHER org.
+      if (url.includes(`/repos/${ORG}/hw1-fork`)) {
+        return {
+          name: "hw1-fork",
+          full_name: `${ORG}/hw1-fork`,
+          private: true,
+          is_template: true,
+          fork: true,
+          parent: { full_name: "other-org/secret-upstream", private: true },
+          default_branch: "main",
+        }
+      }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    const requestRaw = vi.fn(async () => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: "classroom.json",
+        message: "Not Found",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      })
+    })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    await expect(
+      // Same ref as stored (bare repo -> owner defaults to org, branch omitted
+      // -> unchanged), so the unchanged-ref short-circuit is exercised.
+      editAssignment(
+        client,
+        editInput({ slug: SLUG, template_repo: "hw1-fork" }),
+      ),
+    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+  })
+})
+
+describe("copyAssignmentToClassroom (reuse fork guard)", () => {
+  const ORG = "acme"
+  const emptyRateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+
+  // A client that answers the three pre-commit reads copyAssignmentToClassroom
+  // runs in parallel (archive guard via requestRaw 404, getRepo, getBranchRef).
+  // The fork guard throws before any commit, so no write routes are needed.
+  function makeClient(repo: unknown): GitHubClient {
+    const request = vi.fn(async (url: string) => {
+      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/repos/")) return repo
+      throw new Error(`unexpected request: ${url}`)
+    })
+    const requestRaw = vi.fn(async () => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: "classroom.json",
+        message: "Not Found",
+        body: null,
+        rateLimit: emptyRateLimit,
+      })
+    })
+    return { request, requestRaw } as unknown as GitHubClient
+  }
+
+  const forkSource: Assignment = {
+    slug: "hw1",
+    name: "Homework 1",
+    mode: "individual",
+    autograder: "default",
+    feedback_pr: true,
+    template: { owner: ORG, repo: "hw1-fork", branch: "main" },
+  }
+
+  it("blocks reusing a cross-org private fork (parity with resolveTemplate)", async () => {
+    const client = makeClient({
+      name: "hw1-fork",
+      full_name: `${ORG}/hw1-fork`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/secret-upstream", private: true },
+      default_branch: "main",
+    })
+
+    await expect(
+      copyAssignmentToClassroom(client, {
+        org: ORG,
+        source: forkSource,
+        targetClassroom: "cs51",
+      }),
+    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+  })
+
+  it("blocks reusing a private fork with an unknown (absent) parent", async () => {
+    const client = makeClient({
+      name: "hw1-fork",
+      full_name: `${ORG}/hw1-fork`,
+      private: true,
+      is_template: true,
+      fork: true,
+      default_branch: "main",
+    })
+
+    await expect(
+      copyAssignmentToClassroom(client, {
+        org: ORG,
+        source: forkSource,
+        targetClassroom: "cs51",
+      }),
+    ).rejects.toThrow(/private upstream isn't accessible/)
+  })
 })
 
 describe("verifyTemplateAccess", () => {
@@ -647,6 +801,30 @@ describe("verifyTemplateAccess", () => {
     // Reference points at another org, so the private-out-of-org guard must fire
     // before the private-fork branch.
     const result = await verifyTemplateAccess(client, ORG, "other-org/tmpl")
+
+    expect(result.kind).toBe("private-out-of-org")
+  })
+
+  it("classifies a teacher's own-account private fork as private-out-of-org (not private-fork / not ok-verify)", async () => {
+    // Own-account (owner != org) private repo hits the private-out-of-org guard
+    // before the fork branch and before ok-verify, locking the three-way parity
+    // between verify, resolve, and accept for own-account private forks.
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: "teacher/tmpl",
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/secret-upstream", private: true },
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(
+      client,
+      ORG,
+      "teacher/tmpl",
+      "teacher",
+    )
 
     expect(result.kind).toBe("private-out-of-org")
   })

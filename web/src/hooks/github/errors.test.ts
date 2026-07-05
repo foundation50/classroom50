@@ -182,6 +182,15 @@ describe("isScopeGap", () => {
     ).toBe(false)
   })
 
+  it("is false when the token holds exactly one of several accepted scopes (any-one-of satisfies)", () => {
+    // Pins the required.some() 'any one accepted scope satisfies' semantics: the
+    // endpoint accepts repo OR read:org, the token holds only read:org -> no gap.
+    expect(
+      scopeError({ accepted: "repo, read:org", granted: "read:org" })
+        .isScopeGap,
+    ).toBe(false)
+  })
+
   it("is false when either scope header is absent (cannot prove a gap — fail closed)", () => {
     expect(scopeError({ accepted: "repo", granted: null }).isScopeGap).toBe(
       false,
