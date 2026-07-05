@@ -170,6 +170,9 @@ const useGetScores = (
       `${classroom ?? ""}/scores.json`,
     ),
     select: normalizeScores,
+    // Submissions land continuously; keep scores fresh so a tab refocus
+    // refetches rather than serving a 10-min-stale count.
+    staleTime: 20 * 1000,
   })
 }
 

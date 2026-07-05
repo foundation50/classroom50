@@ -93,7 +93,7 @@ const useAssignmentForm = (
       template_repo: defaultValues?.template_repo || "",
       due_date:
         utcIsoToDatetimeLocalValue(defaultValues?.due_date) ||
-        toDatetimeLocalValue(new Date()),
+        toDatetimeLocalValue(sevenDaysFromNow()),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       runs_on: defaultValues?.runs_on || "",
@@ -425,6 +425,14 @@ const toDatetimeLocalValue = (date: Date) => {
   const minutes = pad(date.getMinutes())
 
   return `${year}-${month}-${day}T${hours}:${minutes}`
+}
+
+// Create-mode default: a week out gives students a sensible runway and avoids
+// the form defaulting to an already-overdue "now".
+const sevenDaysFromNow = () => {
+  const date = new Date()
+  date.setDate(date.getDate() + 7)
+  return date
 }
 
 const utcIsoToDatetimeLocalValue = (value?: string) => {

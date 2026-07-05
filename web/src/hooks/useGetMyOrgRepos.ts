@@ -8,7 +8,9 @@ const useGetOrgRepos = (org: string) => {
   return useQuery({
     queryKey: ["orgs", org, "repos"],
     queryFn: () => getOrgRepos(client, org),
-    staleTime: 10 * 60 * 1000,
+    // Drives the "Accepted" count from repo existence; keep it fresh so a tab
+    // refocus reflects newly accepted assignments instead of a 10-min cache.
+    staleTime: 20 * 1000,
   })
 }
 

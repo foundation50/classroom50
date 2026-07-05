@@ -9,9 +9,10 @@ import {
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
 
-// Reuse an assignment FROM another classroom INTO the current one — the "pull"
+// Reuse an assignment FROM any classroom INTO the current one — the "pull"
 // counterpart to the per-row "push" reuse on the assignments table. Opened from
-// the "New assignment" split button. v1 is in-org only: sources are siblings
+// the "New assignment" split button. The source may be the current classroom
+// too (a quick way to duplicate). v1 is in-org only: sources are classrooms
 // under classroom50/, never a different org.
 export const ReuseFromClassroomModal = ({
   org,
@@ -27,11 +28,9 @@ export const ReuseFromClassroomModal = ({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
 
-  // Sibling classrooms only — can't pull from the one you're already in.
-  const sources = useMemo(
-    () => classes.filter((c) => c.name !== classroom),
-    [classes, classroom],
-  )
+  // Any classroom in the org, including the current one — reusing within the
+  // same classroom is a valid way to duplicate an assignment.
+  const sources = useMemo(() => classes, [classes])
 
   const [sourceClassroom, setSourceClassroom] = useState("")
   const [sourceSlug, setSourceSlug] = useState("")
@@ -127,7 +126,12 @@ export const ReuseFromClassroomModal = ({
               </option>
               {sources.map((c) => (
                 <option key={c.name} value={c.name}>
-                  {c.name}
+                  {c.name === classroom
+                    ? t(
+                        "components.modals.reuseFromClassroom.thisClassroomOption",
+                        { classroom: c.name },
+                      )
+                    : c.name}
                 </option>
               ))}
             </select>

@@ -35,6 +35,15 @@ const formatDateTime = (datetime: string) =>
     timeStyle: "short",
   })
 
+// Secondary avatar line: the GitHub login plus the section (e.g.
+// "octocat · Period 3"), dropping whichever piece is missing. The login is
+// omitted when `name` is empty — Avatar's primary line already falls back to
+// the login there, so repeating it in the subtitle would duplicate it.
+const identitySubtitle = (name?: string, login?: string, section?: string) => {
+  const showLogin = name?.trim() ? login?.trim() : undefined
+  return [showLogin, section?.trim()].filter(Boolean).join(" · ") || undefined
+}
+
 // Badge color from the assignment's pass threshold: green at/above the bar, red
 // below, neutral when ungraded (max 0) or no threshold (`null`).
 const scoreToBadgeType = (
@@ -599,7 +608,11 @@ const SubmissionsTable = ({
                             name={getName(usernames[0], students)}
                             initials={getInitials(usernames[0], students)}
                             github={usernames[0]}
-                            subtitle={getSection(usernames[0], students)}
+                            subtitle={identitySubtitle(
+                              getName(usernames[0], students),
+                              usernames[0],
+                              getSection(usernames[0], students),
+                            )}
                             onClick={() => setProfileUsername(usernames[0])}
                           />
                         )}
@@ -753,7 +766,11 @@ const SubmissionsTable = ({
                     name={getName(student.username, students)}
                     initials={getInitials(student.username, students)}
                     github={student.username || student.email}
-                    subtitle={student.section?.trim() || undefined}
+                    subtitle={identitySubtitle(
+                      getName(student.username, students),
+                      student.username,
+                      student.section,
+                    )}
                     onClick={
                       student.username
                         ? () => setProfileUsername(student.username)

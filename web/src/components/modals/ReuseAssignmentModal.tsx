@@ -10,10 +10,11 @@ import {
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
 
-// Reuse ("Duplicate") an assignment into another classroom in the same org —
-// our equivalent of GitHub Classroom's "Reuse assignment". v1 is in-org only:
-// the target picker lists sibling classrooms under classroom50/, never a
-// different org (a private template can only be team-granted within its org).
+// Reuse ("Duplicate") an assignment into any classroom in the same org —
+// our equivalent of GitHub Classroom's "Reuse assignment", including into the
+// assignment's own classroom. v1 is in-org only: the target picker lists
+// classrooms under classroom50/, never a different org (a private template can
+// only be team-granted within its org).
 export const ReuseAssignmentModal = ({
   org,
   classroom,
@@ -21,6 +22,7 @@ export const ReuseAssignmentModal = ({
   onClose,
 }: {
   org: string
+  // The assignment's own classroom — labeled "(this classroom)" in the picker.
   classroom: string
   assignment: Assignment
   onClose: () => void
@@ -29,11 +31,9 @@ export const ReuseAssignmentModal = ({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const { t } = useTranslation()
 
-  // Sibling classrooms only — can't reuse into the assignment's own classroom.
-  const targets = useMemo(
-    () => classes.filter((c) => c.name !== classroom),
-    [classes, classroom],
-  )
+  // Any classroom in the org, including this assignment's own — reusing into
+  // the same classroom is a valid way to duplicate an assignment.
+  const targets = useMemo(() => classes, [classes])
 
   const [targetClassroom, setTargetClassroom] = useState("")
 
@@ -107,7 +107,14 @@ export const ReuseAssignmentModal = ({
               </option>
               {targets.map((c) => (
                 <option key={c.name} value={c.name}>
-                  {c.name}
+                  {c.name === classroom
+                    ? t(
+                        "components.modals.reuseAssignment.thisClassroomOption",
+                        {
+                          classroom: c.name,
+                        },
+                      )
+                    : c.name}
                 </option>
               ))}
             </select>
