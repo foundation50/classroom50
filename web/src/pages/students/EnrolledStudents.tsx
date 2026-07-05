@@ -545,27 +545,21 @@ const EnrolledStudents = ({
               {t("students.groupBySection")}
             </label>
           ) : null}
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm btn-square"
-            disabled={syncMutation.isPending || csvMissingCount === 0}
-            onClick={() => syncMutation.mutate()}
-            aria-label={
-              csvMissingCount === 0
-                ? t("students.syncInSyncTitle")
-                : t("students.syncRosterTitle")
-            }
-            title={
-              csvMissingCount === 0
-                ? t("students.syncInSyncTitle")
-                : t("students.syncRosterTitle")
-            }
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
-            />
-          </button>
+          {syncMutation.isPending || csvMissingCount > 0 ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm btn-square"
+              disabled={syncMutation.isPending}
+              onClick={() => syncMutation.mutate()}
+              aria-label={t("students.syncRosterTitle")}
+              title={t("students.syncRosterTitle")}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
+              />
+            </button>
+          ) : null}
         </div>
       ) : null}
 
