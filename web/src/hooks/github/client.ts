@@ -1,5 +1,11 @@
 import { GitHubAPIError, readGitHubRateLimitHeaders } from "./errors"
 
+// Bound every request so a half-open GitHub connection can't pin a poll or
+// mutation forever (React Query imposes no request timeout; the banner uses
+// retry:false). Wider than the 5s github.io probes since these are authed API
+// calls.
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15000
+
 export type GitHubClient = {
   request: <T = unknown>(
     path: string,
@@ -15,6 +21,9 @@ export type GitHubRequestOptions = {
   accept?: string
   signal?: AbortSignal
   headers?: Record<string, string>
+  // Composed with `signal`; defaults to DEFAULT_REQUEST_TIMEOUT_MS. Pass a
+  // larger value for a legitimately long call, or `0` to opt out.
+  timeoutMs?: number
 }
 
 // A per-response signal about the token's live state, reported to the provider
@@ -51,12 +60,22 @@ export function createGitHubClient(args: {
       headers["Content-Type"] = "application/json"
     }
 
+    // Abort on whichever fires first: the caller's signal or the timeout. A
+    // timeout surfaces as a rejected fetch, handled like any other rejection.
+    const timeoutMs = options.timeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS
+    const timeoutSignal =
+      timeoutMs > 0 ? AbortSignal.timeout(timeoutMs) : undefined
+    const signal =
+      options.signal && timeoutSignal
+        ? AbortSignal.any([options.signal, timeoutSignal])
+        : (options.signal ?? timeoutSignal)
+
     const res = await fetch(url, {
       method: options.method ?? "GET",
       headers,
       body:
         options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal: options.signal,
+      signal,
       cache: options.method === "GET" ? "no-store" : undefined,
     })
 
