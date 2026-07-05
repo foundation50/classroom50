@@ -12,20 +12,18 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/ghui"
 )
 
-// UI renders the human channel. Styling (ANSI color + box-drawing) is
-// gated on color, which degrades to plain ASCII on non-TTYs and when
-// NO_COLOR / CLASSROOM50_NO_COLOR is set. The "Warning: " prefix is
-// preserved in both modes because existing tests and downstream readers
-// key on it.
+// UI renders the human channel. Styling (ANSI color + box-drawing) is gated on
+// color, which degrades to plain ASCII on non-TTYs and when NO_COLOR /
+// CLASSROOM50_NO_COLOR is set. The "Warning: " prefix survives both modes
+// because tests and downstream readers key on it.
 type UI struct {
 	w     io.Writer
 	color bool
 	tty   bool
 }
 
-// Minimal SGR codes. Hand-rolled rather than pulling in a color library
-// (muesli/termenv is only an indirect dep) — the renderer needs three
-// colors and bold, nothing more.
+// Minimal SGR codes. Hand-rolled rather than pulling in a color library — the
+// renderer needs three colors and bold, nothing more.
 const (
 	ansiReset  = "\x1b[0m"
 	ansiBold   = "\x1b[1m"
@@ -35,43 +33,35 @@ const (
 	ansiDim    = "\x1b[2m"
 )
 
-// summaryWrapWidth is the soft wrap width for long warning/summary
-// bodies so a 600-char read-back warning doesn't render as one
-// unreadable line (the Team-plan run that motivated this).
+// summaryWrapWidth is the soft-wrap width for long warning/summary bodies so a
+// 600-char read-back warning doesn't render as one unreadable line.
 const summaryWrapWidth = 76
 
-// New builds a UI writing to w, auto-detecting color: w must be a TTY
-// (we check stderr, the writer the human channel uses) and neither
-// NO_COLOR nor CLASSROOM50_NO_COLOR may be set. Callers that write
-// somewhere other than os.Stderr (tests, captured buffers) get
-// color=false, which is the safe default.
+// New builds a UI writing to w, auto-detecting color: w must be a TTY and
+// neither NO_COLOR nor CLASSROOM50_NO_COLOR set. Non-stderr callers (tests,
+// buffers) get color=false.
 func New(w io.Writer) *UI {
 	return &UI{w: w, color: detectColor(w), tty: detectTTY(w)}
 }
 
-// NewForced builds a UI with an explicit color setting, for
-// deterministic tests that must exercise the colored or plain renderer
-// regardless of where the test's output happens to go. tty follows color
-// (forced-color callers are exercising the interactive renderer).
+// NewForced builds a UI with an explicit color setting for deterministic tests.
+// tty follows color.
 func NewForced(w io.Writer, color bool) *UI {
 	return &UI{w: w, color: color, tty: color}
 }
 
-// detectTTY reports whether w is an interactive terminal, via the shared
-// ghui.IsStderrTTY. Kept separate from color so NO_COLOR still allows
-// in-place progress on a real terminal.
+// detectTTY reports whether w is an interactive terminal. Kept separate from
+// color so NO_COLOR still allows in-place progress on a real terminal.
 func detectTTY(w io.Writer) bool {
 	return ghui.IsStderrTTY(w)
 }
 
-// detectColor reports whether to emit color, via the shared ghui.UseColor
-// (so the policy stays identical across both CLIs and the spinner).
+// detectColor reports whether to emit color, via shared ghui.UseColor.
 func detectColor(w io.Writer) bool {
 	return ghui.UseColor(w)
 }
 
-// paint wraps s in an SGR code when color is on; otherwise returns s
-// unchanged.
+// paint wraps s in an SGR code when color is on; else returns s unchanged.
 func (u *UI) paint(code, s string) string {
 	if !u.color {
 		return s
@@ -79,25 +69,20 @@ func (u *UI) paint(code, s string) string {
 	return code + s + ansiReset
 }
 
-// Step prints a `[n/total] label` phase header. On a color TTY the
-// counter is dimmed and the label bold; plain otherwise.
+// Step prints a `[n/total] label` phase header (dimmed counter, bold label).
 func (u *UI) Step(n, total int, label string) {
 	counter := fmt.Sprintf("[%d/%d]", n, total)
 	_, _ = fmt.Fprintf(u.w, "%s %s\n", u.paint(ansiDim, counter), u.paint(ansiBold, label))
 }
 
-// Section prints an un-numbered phase header (e.g. "Preflight checks"),
-// bold on a color TTY. Used for phases that aren't part of the numbered
-// step sequence.
+// Section prints an un-numbered phase header, bold on a color TTY.
 func (u *UI) Section(label string) {
 	_, _ = fmt.Fprintf(u.w, "%s\n", u.paint(ansiBold, label))
 }
 
-// Progress renders a single self-rewriting status line on a TTY. Call
-// Update for each step (it rewrites the same line via carriage return),
-// then Done to finalize. On a non-TTY it's a no-op (callers fall back to
-// stable per-line output), so the machine-stable channel never sees
-// cursor-control escapes.
+// Progress renders a single self-rewriting status line on a TTY (Update per
+// step, then Done). No-op on a non-TTY, so the machine-stable channel never
+// sees cursor-control escapes.
 type Progress struct {
 	u     *UI
 	total int
@@ -108,20 +93,17 @@ func (u *UI) NewProgress(total int) *Progress {
 	return &Progress{u: u, total: total}
 }
 
-// Spinner returns a live single-line spinner for a long-running step,
-// backed by the shared ghui spinner so both CLIs animate identically.
+// Spinner returns a live single-line spinner backed by the shared ghui spinner.
 func (u *UI) Spinner(message string) *ghui.Spinner {
 	return ghui.NewSpinner(u.w, message)
 }
 
-// Active reports whether the progress line actually renders (TTY only).
-// Callers use this to decide whether to suppress the verbose per-step
-// output that would otherwise scroll the progress line away.
+// Active reports whether the progress line actually renders (TTY only). Callers
+// use it to suppress verbose per-step output that would scroll it away.
 func (p *Progress) Active() bool { return p.u.tty }
 
-// Update rewrites the in-place line to "[n/total] label". \r returns to
-// column 0 and \x1b[K clears to end of line so a shorter label can't
-// leave trailing characters from a longer previous one.
+// Update rewrites the in-place line to "[n/total] label". \r + \x1b[K clear to
+// end of line so a shorter label leaves no trailing chars.
 func (p *Progress) Update(n int, label string) {
 	if !p.u.tty {
 		return
@@ -131,8 +113,8 @@ func (p *Progress) Update(n int, label string) {
 	_, _ = fmt.Fprintf(p.u.w, "\r\x1b[K%s %s", p.u.paint(ansiDim, counter), label)
 }
 
-// Done finalizes the progress line as "[total/total] Done" and moves to
-// the next line so subsequent output (the summary) starts cleanly.
+// Done finalizes the progress line as "[total/total] Done" and moves to the
+// next line so subsequent output starts cleanly.
 func (p *Progress) Done() {
 	if !p.u.tty || !p.shown {
 		return
@@ -141,9 +123,8 @@ func (p *Progress) Done() {
 	_, _ = fmt.Fprintf(p.u.w, "\r\x1b[K%s %s\n", p.u.paint(ansiDim, counter), p.u.paint(ansiGreen, "Done"))
 }
 
-// Abort clears the in-place line without the "Done" marker, for the
-// error path so a failure message isn't appended to a half-written
-// progress line.
+// Abort clears the in-place line without the "Done" marker, so a failure
+// message isn't appended to a half-written progress line.
 func (p *Progress) Abort() {
 	if !p.u.tty || !p.shown {
 		return
@@ -151,9 +132,7 @@ func (p *Progress) Abort() {
 	_, _ = fmt.Fprint(p.u.w, "\r\x1b[K")
 }
 
-// Ok prints a success line: "✓ <msg>" on a color TTY, "[ok] <msg>"
-// plain. Used for per-step confirmations on the human channel (the
-// machine-stable stdout lines are emitted separately).
+// Ok prints a success line: "✓ <msg>" on a color TTY, "[ok] <msg>" plain.
 func (u *UI) Ok(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	if u.color {
@@ -164,17 +143,15 @@ func (u *UI) Ok(format string, a ...any) {
 }
 
 // Warn prints a warning. It ALWAYS contains the literal "Warning: " so
-// existing substring assertions and downstream log scrapers keep
-// working; on a color TTY it's additionally prefixed with a yellow ⚠
-// and the leading "Warning:" is yellowed. Long bodies are soft-wrapped
-// (continuation lines indented) so a single huge warning stays readable.
+// substring assertions and log scrapers keep working; on a color TTY it adds a
+// yellow ⚠ and yellows the leading "Warning:". Long bodies are soft-wrapped.
 func (u *UI) Warn(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	body := "Warning: " + msg
 	wrapped := softWrap(body, summaryWrapWidth, "  ")
 	if u.color {
-		// Color only the first line's "Warning:" token; the wrap keeps
-		// the rest plain so multi-line bodies don't smear escape codes.
+		// Color only the first line's "Warning:" so multi-line bodies don't
+		// smear escape codes.
 		wrapped = strings.Replace(wrapped, "Warning:", u.paint(ansiYellow, "Warning:"), 1)
 		_, _ = fmt.Fprintf(u.w, "%s %s\n", u.paint(ansiYellow, "\u26a0"), wrapped)
 		return
@@ -182,9 +159,8 @@ func (u *UI) Warn(format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "%s\n", wrapped)
 }
 
-// Heading prints a section heading on the human channel — bold on a
-// color TTY, an ASCII-underlined label plain. A blank line precedes it
-// so sections are visually separated.
+// Heading prints a section heading (bold on a color TTY), preceded by a blank
+// line for separation.
 func (u *UI) Heading(label string) {
 	if u.color {
 		_, _ = fmt.Fprintf(u.w, "\n%s\n", u.paint(ansiBold, label))
@@ -193,9 +169,8 @@ func (u *UI) Heading(label string) {
 	_, _ = fmt.Fprintf(u.w, "\n%s\n", label)
 }
 
-// Result prints the one-line outcome banner that opens the final report:
-// a ✓ / ⚠ / ✗ glyph (green/yellow/red on a color TTY, ASCII tag plain)
-// plus the message.
+// Result prints the one-line outcome banner opening the final report: a ✓/⚠/✗
+// glyph (or ASCII tag plain) plus the message.
 func (u *UI) Result(status Status, format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	if !u.color {
@@ -211,24 +186,20 @@ func (u *UI) Result(status Status, format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "%s %s\n", glyph, u.paint(ansiBold, msg))
 }
 
-// Numbered prints an ordinal list item ("  1. <msg>") under a report
-// heading, with a hanging wrap aligned under the text. Used for a list
-// of manual steps that are NOT checkboxes — e.g. settings GitHub exposes
-// no API to read, so they're an instruction list to eyeball, not state
-// the CLI tracks.
+// Numbered prints an ordinal list item ("  1. <msg>") with a hanging wrap. Used
+// for manual steps that are NOT checkboxes (e.g. API-less settings to eyeball,
+// not state the CLI tracks).
 func (u *UI) Numbered(n int, format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	prefix := fmt.Sprintf("%d. ", n)
-	// Indent continuation lines past the "  N. " prefix so wrapped text
-	// lines up under the item body, not the number.
+	// Indent continuation lines past the "  N. " prefix so wrapped text lines
+	// up under the body.
 	hang := strings.Repeat(" ", 2+len(prefix))
 	_, _ = fmt.Fprintf(u.w, "  %s%s\n", prefix, softWrap(msg, summaryWrapWidth, hang))
 }
 
-// OkItem prints a checked-off list item under a report heading: "  ✓
-// <msg>" on a color TTY, "  [x] <msg>" plain. The two-space indent and
-// hanging wrap match Checkbox() so a mixed list of done (✓) and to-do
-// ([ ]) items lines up under the same heading.
+// OkItem prints a checked-off list item: "  ✓ <msg>" / "  [x] <msg>". Indent
+// and hanging wrap match Checkbox() so mixed done/to-do lists line up.
 func (u *UI) OkItem(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	if u.color {
@@ -238,16 +209,15 @@ func (u *UI) OkItem(format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "  [x] %s\n", softWrap(msg, summaryWrapWidth, "      "))
 }
 
-// Checkbox prints an actionable to-do item as an unchecked box. The body
-// is soft-wrapped with a hanging indent so a long instruction stays
-// readable and lined up under the text (not the box).
+// Checkbox prints an actionable to-do item as an unchecked box, soft-wrapped
+// with a hanging indent so a long instruction lines up under the text.
 func (u *UI) Checkbox(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	_, _ = fmt.Fprintf(u.w, "  [ ] %s\n", softWrap(msg, summaryWrapWidth, "      "))
 }
 
-// Detail prints an indented, dimmed continuation line (e.g. a URL under
-// a checklist). Dimmed on a color TTY, plain otherwise.
+// Detail prints an indented, dimmed continuation line (e.g. a URL under a
+// checklist).
 func (u *UI) Detail(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	_, _ = fmt.Fprintf(u.w, "  %s\n", u.paint(ansiDim, msg))
@@ -273,8 +243,8 @@ func (u *UI) Blank() {
 	_, _ = fmt.Fprintln(u.w)
 }
 
-// softWrap wraps s to width columns on spaces, indenting continuation
-// lines with indent. Words longer than width are left intact (URLs).
+// softWrap wraps s to width columns on spaces, indenting continuation lines.
+// Words longer than width are left intact (URLs).
 func softWrap(s string, width int, indent string) string {
 	words := strings.Fields(s)
 	if len(words) == 0 {
@@ -301,9 +271,8 @@ func softWrap(s string, width int, indent string) string {
 	return b.String()
 }
 
-// displayLen approximates the printed width of s as its rune count,
-// ignoring ANSI escape sequences. Good enough for layout of the ASCII +
-// occasional emoji content the renderer emits.
+// displayLen approximates the printed width of s as its rune count, ignoring
+// ANSI escapes.
 func displayLen(s string) int {
 	n := 0
 	inEscape := false

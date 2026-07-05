@@ -1,10 +1,10 @@
-// Package assignments owns the read side of the published classroom
-// manifest: the token-less GitHub Pages fetch of `assignments.json` and
-// the autograder workflow shim, plus the typed manifest shapes the
-// student CLI consumes. The Pages site is public by design, so this
-// package uses a plain net/http client (no go-gh, no token) and depends
-// only on the shared contract package + stdlib. Consumed by accept (entry
-// + autograder fetch) and invite (entry, for the group-size cap).
+// Package assignments owns the read side of the published classroom manifest:
+// the token-less GitHub Pages fetch of `assignments.json` and the autograder
+// workflow shim, plus the typed manifest shapes the student CLI consumes. The
+// Pages site is public by design, so this uses a plain net/http client (no
+// go-gh, no token) and depends only on the shared contract package + stdlib.
+// Consumed by accept (entry + autograder fetch) and invite (entry, for the
+// group-size cap).
 package assignments
 
 import (
@@ -22,19 +22,19 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
-// configRepoName: the fixed per-org classroom config repo created by
-// `gh teacher init`. Hardcoded so the Pages URL builder stays aligned
-// with the teacher CLI. Single-sourced in the shared contract package.
+// configRepoName is the fixed per-org classroom config repo created by
+// `gh teacher init`. Hardcoded so the Pages URL builder stays aligned with the
+// teacher CLI. Single-sourced in the shared contract package.
 const configRepoName = contract.ConfigRepoName
 
-// PagesFetchTimeout bounds Pages GETs. Without it, http.Client would hang
-// indefinitely on a slow CDN. Exported so callers that run their own
-// context-bounded work (e.g. invite's group-size check) can match it.
+// PagesFetchTimeout bounds Pages GETs; without it http.Client would hang on a
+// slow CDN. Exported so callers running their own context-bounded work (e.g.
+// invite's group-size check) can match it.
 const PagesFetchTimeout = 15 * time.Second
 
-// Entry mirrors `gh teacher assignment add`'s on-disk shape. Only the
-// fields the student CLI needs are typed; unrecognized fields decode
-// silently so future shape additions work without a flag day.
+// Entry mirrors `gh teacher assignment add`'s on-disk shape. Only the fields
+// the student CLI needs are typed; unrecognized fields decode silently so
+// future shape additions work without a flag day.
 type Entry struct {
 	Slug         string       `json:"slug"`
 	Name         string       `json:"name"`
@@ -66,25 +66,25 @@ func (e Entry) HasTemplate() bool {
 		e.Template.Owner != "" && e.Template.Repo != "" && e.Template.Branch != ""
 }
 
-// TemplateRef: assignment starter-code source. All three fields are
-// populated by `gh teacher assignment add` when a template is supplied;
-// a template-less assignment omits the block entirely (Template is nil).
+// TemplateRef is the assignment's starter-code source. All three fields are
+// populated by `gh teacher assignment add` when a template is supplied; a
+// template-less assignment omits the block (Template is nil).
 type TemplateRef struct {
 	Owner  string `json:"owner"`
 	Repo   string `json:"repo"`
 	Branch string `json:"branch"`
 }
 
-// assignmentsFile: top-level shape of assignments.json. Schema is checked
-// first so a future v2 file surfaces "this CLI handles only v1" rather
+// assignmentsFile is the top-level shape of assignments.json. Schema is
+// checked first so a future v2 file surfaces "this CLI handles only v1" rather
 // than silently dropping unknown entries.
 type assignmentsFile struct {
 	Schema      string  `json:"schema"`
 	Assignments []Entry `json:"assignments"`
 }
 
-// assignmentsSchemaV1: the only sentinel this CLI accepts. Single-sourced
-// in the shared contract package.
+// assignmentsSchemaV1 is the only sentinel this CLI accepts. Single-sourced in
+// the shared contract package.
 const assignmentsSchemaV1 = contract.AssignmentsSchemaV1
 
 // classroomPathSegment returns the per-classroom Pages path prefix:
@@ -97,29 +97,28 @@ func classroomPathSegment(classroom, secret string) string {
 	return classroom + "/" + secret
 }
 
-// pagesAssignmentsURL: Pages URL for a classroom's assignments.json, served
-// under `<org>.github.io/classroom50/` per publish-pages.yaml. secret-aware.
+// pagesAssignmentsURL builds the Pages URL for a classroom's
+// assignments.json, served under `<org>.github.io/classroom50/` per
+// publish-pages.yaml. Secret-aware.
 func pagesAssignmentsURL(org, classroom, secret string) string {
 	return fmt.Sprintf("https://%s.github.io/%s/%s/assignments.json", org, configRepoName, classroomPathSegment(classroom, secret))
 }
 
-// pagesAutograderURL: Pages URL for a classroom's autograder workflow.
-// Mirrors publish-pages.yaml's allow-list pattern (secret-aware).
+// pagesAutograderURL builds the Pages URL for a classroom's autograder
+// workflow. Mirrors publish-pages.yaml's allow-list pattern (secret-aware).
 func pagesAutograderURL(org, classroom, secret, name string) string {
 	return fmt.Sprintf("https://%s.github.io/%s/%s/autograders/%s.yaml", org, configRepoName, classroomPathSegment(classroom, secret), name)
 }
 
-// FetchEntry: find the entry by slug from the Pages `assignments.json`.
-// No auth — the Pages site is public by design. secret is the optional
-// capability-URL segment (empty for an unprotected classroom). Thin
-// wrapper around fetchEntryFromURL so tests can inject an httptest URL.
+// FetchEntry finds the entry by slug in the Pages `assignments.json`. No auth
+// — the Pages site is public. secret is the optional capability-URL segment
+// (empty for an unprotected classroom). Thin wrapper around fetchEntryFromURL
+// so tests can inject an httptest URL.
 func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) (Entry, error) {
 	entry, err := fetchEntryFromURL(ctx, pagesAssignmentsURL(org, classroom, secret), assignment)
 	if nf := new(NotFoundError); errors.As(err, &nf) {
-		// Fill the org/classroom hints — the inner function can't
-		// include them in its
-		// "ask your instructor to run `gh teacher assignment add ...`"
-		// message.
+		// Fill the org/classroom hints the inner function can't include in
+		// its "run `gh teacher assignment add ...`" message.
 		nf.Org = org
 		nf.Classroom = classroom
 		return entry, nf
@@ -127,7 +126,7 @@ func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) 
 	// A whole-manifest 404 on a protected classroom is usually a wrong or
 	// missing --key (the manifest lives at <classroom>/<secret>/), not a Pages
 	// problem. The inner 404 can't tell; augment it here where the key is in
-	// scope so the student debugs the key.
+	// scope.
 	if errors.Is(err, errManifestNotFound) {
 		if secret != "" {
 			return entry, fmt.Errorf("%w; the access key (--key) may be wrong — double-check the key your instructor gave you", err)
@@ -137,9 +136,9 @@ func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) 
 	return entry, err
 }
 
-// fetchEntryFromURL is the HTTP-bearing core. Returns actionable messages
-// for network failures, 404, and schema mismatches; a missing slug
-// returns a typed NotFoundError. Mode rejection happens at the call site.
+// fetchEntryFromURL is the HTTP-bearing core. Returns actionable messages for
+// network failures, 404, and schema mismatches; a missing slug returns a typed
+// NotFoundError. Mode rejection happens at the call site.
 func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -191,8 +190,8 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 // key-aware hint. Matched via errors.Is.
 var errManifestNotFound = errors.New("assignments manifest not found (404)")
 
-// NotFoundError: Pages fetch succeeded but the requested slug isn't in
-// the manifest. Typed so callers can branch without matching error text.
+// NotFoundError means the Pages fetch succeeded but the requested slug isn't
+// in the manifest. Typed so callers can branch without matching error text.
 type NotFoundError struct {
 	Org        string
 	Classroom  string
@@ -215,30 +214,27 @@ func IsNotFound(err error) bool {
 	return errors.As(err, &nf)
 }
 
-// AutogradeWorkflow is the result of a Pages autograder fetch. Content is
-// the raw workflow shim body dropped at
-// `.github/workflows/autograde.yaml`. The shim is intentionally stable —
-// it `uses:` the reusable autograde-runner workflow in the config repo,
-// which fetches the runner-side bootstrap (runner.py) and the autograder
-// fresh on every submission, so a stale shim still grades against the
-// latest teacher-side logic.
+// AutogradeWorkflow is the result of a Pages autograder fetch. Content is the
+// raw workflow shim body dropped at `.github/workflows/autograde.yaml`. The
+// shim is intentionally stable — it `uses:` the reusable autograde-runner
+// workflow in the config repo, which fetches the runner-side bootstrap
+// (runner.py) and the autograder fresh on every submission, so a stale shim
+// still grades against the latest teacher-side logic.
 type AutogradeWorkflow struct {
 	Content string
 }
 
-// FetchAutograderWorkflow fetches `<classroom>/autograders/<name>.yaml`
-// from Pages. Unauth — the publish-pages allow-list keeps the directory
-// public. Thin wrapper around fetchAutograderWorkflowFromURL for
-// testability.
+// FetchAutograderWorkflow fetches `<classroom>/autograders/<name>.yaml` from
+// Pages. Unauth — the publish-pages allow-list keeps the directory public.
+// Thin wrapper around fetchAutograderWorkflowFromURL for testability.
 func FetchAutograderWorkflow(ctx context.Context, org, classroom, secret, name string) (AutogradeWorkflow, error) {
 	return fetchAutograderWorkflowFromURL(ctx, pagesAutograderURL(org, classroom, secret, name), name)
 }
 
-// fetchAutograderWorkflowFromURL is the HTTP-bearing core. Actionable
-// shapes: 404 → "not published yet", network/unexpected status →
-// wrapped, empty body → "deployment still in flight, retry". YAML is
-// validated before returning so malformed bodies fail at fetch time
-// instead of inside Actions logs.
+// fetchAutograderWorkflowFromURL is the HTTP-bearing core. Actionable shapes:
+// 404 → "not published yet", network/unexpected status → wrapped, empty body →
+// "deployment still in flight, retry". YAML is validated before returning so
+// malformed bodies fail at fetch time instead of inside Actions logs.
 func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (AutogradeWorkflow, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, rawURL, nil)
 	if err != nil {
@@ -268,10 +264,10 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 		return AutogradeWorkflow{}, fmt.Errorf("GET %s: empty body — the Pages deployment may still be in flight; retry in a minute", rawURL)
 	}
 
-	// Decode into `any` to validate YAML well-formedness without
-	// imposing schema on the workflow body. Teachers can write any shape
-	// that satisfies the autograder contract (submit-tag trigger,
-	// `result.json` release asset, `classroom50/autograde` commit status).
+	// Decode into `any` to validate YAML well-formedness without imposing
+	// schema on the workflow body. Teachers can write any shape that
+	// satisfies the autograder contract (submit-tag trigger, `result.json`
+	// release asset, `classroom50/autograde` commit status).
 	var sink any
 	if err := yaml.Unmarshal(body, &sink); err != nil {
 		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your instructor to check the file in the config repo: %w", name, rawURL, err)

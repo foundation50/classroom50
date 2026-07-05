@@ -11,25 +11,22 @@ import (
 
 // Declarative tests: a teacher attaches small io/run/python tests to an
 // assignment in assignments.json instead of writing an autograder.py.
-// publish-pages materializes them into the Pages bundle; runner.py grades
-// them with a built-in interpreter. This file is the write/parse-time
-// validator (runtime.go's counterpart for the runtime block); the runner
-// re-validates at grade time since assignments.json is hand-editable.
+// publish-pages materializes them; runner.py grades them. This file is the
+// write/parse-time validator; the runner re-validates at grade time since
+// assignments.json is hand-editable.
 //
-// `run`/`setup` are deliberately NOT injection-checked: they are
-// teacher-authored shell by design (like an autograder.py), travel to the
-// grade job as bundle data — never interpolated into workflow YAML — and
-// students can't edit assignments.json. See wiki/Autograders.md.
+// `run`/`setup` are deliberately NOT injection-checked: they're teacher-authored
+// shell by design, travel to the grade job as bundle data (never interpolated
+// into workflow YAML), and students can't edit assignments.json.
 
-// TestSpec is one declarative test, of one of three types:
+// TestSpec is one declarative test of one of three types:
 //
-//   - "io": feed Input (or InputFile) on stdin, compare stdout against
-//     Expected (or ExpectedFile) per Comparison.
+//   - "io": feed Input (or InputFile) on stdin, compare stdout to Expected
+//     (or ExpectedFile) per Comparison.
 //   - "run": pass iff the exit code matches ExitCode (default 0).
 //   - "python": run pytest; points split across discovered cases.
 //
-// Points has no omitempty so a 0-point informational test reads
-// explicitly; io-only fields and ExitCode omit when unset.
+// Points has no omitempty so a 0-point informational test reads explicitly.
 type TestSpec struct {
 	Name         string `json:"name"`
 	Type         string `json:"type"`
@@ -51,25 +48,23 @@ const (
 	testTypePython = "python"
 )
 
-// testTypes is the canonical allow-list, sorted alphabetically so error
-// messages stay stable.
+// testTypes is the allow-list, sorted so error messages stay stable.
 var testTypes = []string{testTypeIO, testTypePython, testTypeRun}
 
-// Comparison modes for io tests, matching GitHub Classroom's
-// Included / Exact / Regex. `regex` is evaluated by Python's `re` engine
-// at grade time, not Go's RE2 — see the note in validateIOFields.
+// Comparison modes for io tests (GitHub Classroom's Included/Exact/Regex).
+// `regex` is evaluated by Python's `re` at grade time, not Go's RE2 — see
+// validateIOFields.
 const (
 	comparisonIncluded = "included"
 	comparisonExact    = "exact"
 	comparisonRegex    = "regex"
 )
 
-// comparisonModes is the canonical allow-list, sorted alphabetically.
+// comparisonModes is the allow-list, sorted.
 var comparisonModes = []string{comparisonExact, comparisonIncluded, comparisonRegex}
 
 // Bounds: generous for real assignments, tight enough that a hand-edited
-// assignments.json can't wedge the gradebook or blow past the
-// contents-API size ceiling (LargeAssignmentsWarnBytes).
+// assignments.json can't wedge the gradebook or blow the contents-API ceiling.
 const (
 	maxTestsPerAssignment = 100
 	minTimeoutSeconds     = 1
@@ -98,10 +93,9 @@ func isValidComparison(s string) bool {
 	return false
 }
 
-// ValidateTests checks an assignment's test list on both the write path
-// (ValidateAssignmentEntry) and parse path (ValidateExistingEntry):
-// count cap, per-spec validation, and unique names (a test's name is its
-// identity in result.json and the release body).
+// ValidateTests checks an assignment's test list on both paths: count cap,
+// per-spec validation, and unique names (a name is its identity in result.json
+// and the release body).
 func ValidateTests(tests []TestSpec) error {
 	if len(tests) > maxTestsPerAssignment {
 		return fmt.Errorf("too many tests: %d exceeds the per-assignment cap of %d", len(tests), maxTestsPerAssignment)
@@ -119,9 +113,9 @@ func ValidateTests(tests []TestSpec) error {
 	return nil
 }
 
-// ValidateTestSpec checks one test. Field applicability is strict
-// (io-only fields rejected on run/python tests, exit-code only on run)
-// so a mistyped spec fails loudly instead of being silently ignored.
+// ValidateTestSpec checks one test. Field applicability is strict (io-only
+// fields rejected on run/python, exit-code only on run) so a mistyped spec
+// fails loudly.
 func ValidateTestSpec(t TestSpec) error {
 	if t.Name == "" {
 		return errors.New("name must not be empty")
@@ -164,18 +158,16 @@ func validateIOFields(t TestSpec) error {
 		return errors.New("expected and expected-file are mutually exclusive")
 	}
 	// `included`/`regex` against an empty expected match everything (a
-	// silently-always-passing test), so reject at write time. `exact` is
-	// exempt: empty legitimately means "expect empty output".
+	// silently-always-passing test), so reject. `exact` is exempt: empty
+	// legitimately means "expect empty output".
 	if t.Comparison != comparisonExact && t.Expected == "" && t.ExpectedFile == "" {
 		return fmt.Errorf("an io test with comparison %q needs a non-empty expected or expected-file (an empty expected matches everything)", t.Comparison)
 	}
 	if t.ExitCode != nil {
 		return errors.New(`exit-code is not valid for an io test (use type "run")`)
 	}
-	// `regex` is intentionally NOT compile-checked here: the grader uses
-	// Python's `re`, which accepts constructs RE2 rejects (lookaround,
-	// backreferences). A bad pattern surfaces at grade time as a failing
-	// test with a clear message.
+	// `regex` is NOT compile-checked here: the grader uses Python's `re`, which
+	// accepts constructs RE2 rejects. A bad pattern surfaces at grade time.
 	return nil
 }
 
@@ -215,17 +207,14 @@ func validateNoControlChars(s, label string) error {
 	return nil
 }
 
-// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): a
-// bare JSON array of test specs, the same shape as the `tests` field in
-// assignments.json. Empty path -> (nil, nil) ("flag omitted"). Mirrors
-// ParseRuntimeFile, including DisallowUnknownFields so a typo'd key
-// fails loudly instead of being silently dropped.
+// ParseTestsFile loads and validates `--tests <path>` (`-` = stdin): a bare
+// JSON array of test specs. Empty path → (nil, nil). DisallowUnknownFields so a
+// typo'd key fails loudly.
 func ParseTestsFile(path string) ([]TestSpec, error) {
 	return parseTestsFileFrom(path, os.Stdin)
 }
 
-// parseTestsFileFrom is the testable seam for ParseTestsFile (injectable
-// stdin for the `-` path).
+// parseTestsFileFrom is the testable seam for ParseTestsFile.
 func parseTestsFileFrom(path string, stdin io.Reader) ([]TestSpec, error) {
 	if path == "" {
 		return nil, nil
@@ -286,9 +275,8 @@ func RemoveTest(tests []TestSpec, name string) ([]TestSpec, bool) {
 	return tests, false
 }
 
-// PerAssignmentAutograderPath is the config-repo path of a slug's
-// hand-written entrypoint, probed by the tests-vs-autograder.py
-// conflict check.
+// PerAssignmentAutograderPath is the config-repo path of a slug's hand-written
+// entrypoint, probed by the tests-vs-autograder.py conflict check.
 func PerAssignmentAutograderPath(classroom, slug string) string {
 	return classroom + "/autograders/" + slug + "/autograder.py"
 }

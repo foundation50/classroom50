@@ -57,8 +57,8 @@ func TestDisallowed_SharedFixtureParity(t *testing.T) {
 }
 
 func TestDisallowed_Allowlist(t *testing.T) {
-	// `*` ignores everything, `!hello.py` re-includes it: only hello.py
-	// is allowed, the rest are disallowed.
+	// `*` ignores everything, `!hello.py` re-includes it: only hello.py is
+	// allowed, the rest disallowed.
 	paths := []string{"hello.py", "main.c", "sub/foo.txt"}
 	got, err := Disallowed([]string{"*", "!hello.py"}, paths)
 	if err != nil {
@@ -117,9 +117,9 @@ func keys(m map[string]bool) []string {
 	return out
 }
 
-// TestDisallowed_IgnoresAmbientGitConfig proves the matcher ignores the
-// host's global gitignore: patterns not matching `app.log` keep it
-// allowed even when a global excludesFile would ignore `*.log`.
+// TestDisallowed_IgnoresAmbientGitConfig proves the matcher ignores the host's
+// global gitignore: patterns not matching `app.log` keep it allowed even when
+// a global excludesFile would ignore `*.log`.
 func TestDisallowed_IgnoresAmbientGitConfig(t *testing.T) {
 	home := t.TempDir()
 	globalIgnore := filepath.Join(home, "globalignore")

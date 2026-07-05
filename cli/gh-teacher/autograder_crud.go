@@ -20,11 +20,9 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// requireClassroomExists errors unless <classroom>/classroom.json is
-// present in <org>/classroom50 at `branch`. Shared by the autograder
-// read/write commands so a typo'd classroom name surfaces as a clear
-// "run classroom add" error instead of an empty listing or a phantom
-// directory. Mirrors set-default's original inline guard.
+// requireClassroomExists errors unless <classroom>/classroom.json is present at
+// `branch`. Shared by the autograder commands so a typo surfaces as a clear
+// "run classroom add" error instead of an empty listing or phantom directory.
 func requireClassroomExists(client githubapi.Client, org, classroom, branch string) error {
 	marker := classroom + "/classroom.json"
 	exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, marker, branch)
@@ -38,10 +36,9 @@ func requireClassroomExists(client githubapi.Client, org, classroom, branch stri
 	return nil
 }
 
-// gitBlobSHA computes the git blob object id for `content` -- the same
-// 40-hex SHA-1 the contents/trees API reports for a file -- so
-// `autograder show --json` can surface it without a second API call.
-// Formula: sha1("blob <bytelen>\x00" + content).
+// gitBlobSHA computes the git blob object id for `content` — the same 40-hex
+// SHA-1 the contents/trees API reports — so `autograder show --json` can
+// surface it without a second API call. Formula: sha1("blob <len>\x00" + content).
 func gitBlobSHA(content []byte) string {
 	h := sha1.New()
 	_, _ = fmt.Fprintf(h, "blob %d\x00", len(content))
@@ -51,9 +48,8 @@ func gitBlobSHA(content []byte) string {
 
 // ---- autograder show -------------------------------------------------
 
-// autograderShowMeta is the `--json` view for `autograder show`: the
-// metadata a script or agent needs to decide what (if anything) is
-// installed without parsing the file body.
+// autograderShowMeta is the `--json` view for `autograder show`: the metadata a
+// script needs to decide what's installed without parsing the body.
 type autograderShowMeta struct {
 	Path   string `json:"path"`
 	Exists bool   `json:"exists"`
@@ -105,9 +101,9 @@ func autograderShowCmd() *cobra.Command {
 	return cmd
 }
 
-// runAutograderShow reads <classroom>/autograder.py and renders it as
-// either the raw body (default) or a metadata object (--json). A
-// missing file is a clean exit-0 "none" state, not an error.
+// runAutograderShow reads <classroom>/autograder.py and renders it as the raw
+// body (default) or a metadata object (--json). A missing file is a clean
+// exit-0 "none" state.
 func runAutograderShow(client githubapi.Client, out, errOut io.Writer, org, classroom string, asJSON, quiet bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -157,18 +153,16 @@ func runAutograderShow(client githubapi.Client, out, errOut io.Writer, org, clas
 	return nil
 }
 
-// bytesEqualStub reports whether content is byte-for-byte the shipped
-// diagnostic stub (what set-default writes with no --from).
+// bytesEqualStub reports whether content is byte-for-byte the shipped stub.
 func bytesEqualStub(content []byte) bool {
 	return string(content) == string(diagnosticStub)
 }
 
 // ---- autograder list -------------------------------------------------
 
-// autograderListEntry is one immediate child of <classroom>/autograders/.
-// Kind is "named-shim" for a `<name>.yaml` workflow shim (referenced by
-// `assignment add --autograder <name>`) or "per-assignment" for a
-// `<slug>/` override bundle (auto-applied to the matching assignment).
+// autograderListEntry is one immediate child of <classroom>/autograders/. Kind
+// is "named-shim" for a `<name>.yaml` shim or "per-assignment" for a `<slug>/`
+// override bundle.
 type autograderListEntry struct {
 	Name string `json:"name"`
 	Kind string `json:"kind"`
@@ -226,8 +220,8 @@ func autograderListCmd() *cobra.Command {
 }
 
 // runAutograderList enumerates the immediate children of
-// <classroom>/autograders/ in one contents-API call. A missing
-// autograders/ directory (404) is a clean empty listing, not an error.
+// <classroom>/autograders/ in one contents-API call. A missing directory (404)
+// is a clean empty listing.
 func runAutograderList(client githubapi.Client, out, errOut io.Writer, org, classroom string, asJSON, quiet bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -259,8 +253,8 @@ func runAutograderList(client githubapi.Client, out, errOut io.Writer, org, clas
 					Kind: autograderKindNamedShim,
 					Path: dirPath + "/" + e.Name,
 				})
-				// Any other file (e.g. a stray README) is not an autograder
-				// artifact and is skipped.
+				// Any other file (e.g. a stray README) isn't an autograder
+				// artifact; skip.
 			}
 		}
 	}
@@ -350,8 +344,8 @@ func autograderRemoveCmd() *cobra.Command {
 }
 
 // removeClassroomDefaultAutograder deletes <classroom>/autograder.py via
-// configwrite.CommitTreeChange. Existence is re-probed inside the build callback so
-// a concurrent delete collapses to a clean no-op rather than an error.
+// CommitTreeChange. Existence is re-probed inside the build callback so a
+// concurrent delete collapses to a no-op.
 func removeClassroomDefaultAutograder(client githubapi.Client, in io.Reader, out, errOut io.Writer, org, classroom string, skipConfirm bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -363,8 +357,7 @@ func removeClassroomDefaultAutograder(client githubapi.Client, in io.Reader, out
 
 	repoPath := classroom + "/" + classroomAutograderFilename
 
-	// Preflight so a no-default classroom short-circuits before the
-	// confirmation prompt. The authoritative check happens in build.
+	// Preflight so a no-default classroom short-circuits before the prompt.
 	exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, repoPath, branch)
 	if err != nil {
 		return err
@@ -409,9 +402,8 @@ func removeClassroomDefaultAutograder(client githubapi.Client, in io.Reader, out
 	return nil
 }
 
-// confirmAutograderRemove prompts on errOut and reads one line from in.
-// Only an explicit y/yes proceeds; mismatch returns (false, nil), a read
-// error (other than EOF) propagates. Mirrors confirmSkeletonRefresh.
+// confirmAutograderRemove prompts on errOut and reads one line. Only y/yes
+// proceeds; a read error (other than EOF) propagates.
 func confirmAutograderRemove(in io.Reader, errOut io.Writer, classroom string) (bool, error) {
 	_, _ = fmt.Fprintf(errOut, "Remove the default autograder.py for %s? Assignments without a per-assignment override will grade as a vacuous pass until you set a new one. [y/N]: ", classroom)
 	line, err := bufio.NewReader(in).ReadString('\n')

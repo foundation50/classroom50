@@ -20,13 +20,12 @@ const classroomAPIPerPage = 100
 // never returns an empty page can't pin migrate in a loop.
 const classroomMigrateSourcePagesMax = 100
 
-// allDigits classifies --source values: digits → classroom ID,
-// otherwise org login.
+// allDigits classifies --source: digits → classroom ID, else org login.
 var allDigits = regexp.MustCompile(`^\d+$`)
 
-// classroomListItem is one row of `GET /classrooms`. The listing
-// does NOT carry `organization`, so org-by-source resolution needs
-// a follow-up `GET /classrooms/{id}` per row.
+// classroomListItem is one row of `GET /classrooms`. The listing lacks
+// `organization`, so org-by-source resolution needs a follow-up
+// `GET /classrooms/{id}` per row.
 type classroomListItem struct {
 	ID       int64  `json:"id"`
 	Name     string `json:"name"`
@@ -53,10 +52,9 @@ type classroomDetailOrganization struct {
 	AvatarURL string  `json:"avatar_url"`
 }
 
-// classroomAssignmentListItem is one row of
-// `GET /classrooms/{id}/assignments`. The listing does NOT carry
-// `starter_code_repository`; that requires a per-row
-// `GET /assignments/{id}`.
+// classroomAssignmentListItem is one row of `GET /classrooms/{id}/assignments`.
+// The listing lacks `starter_code_repository`; that needs `GET
+// /assignments/{id}`.
 type classroomAssignmentListItem struct {
 	ID    int64  `json:"id"`
 	Title string `json:"title"`
@@ -64,10 +62,8 @@ type classroomAssignmentListItem struct {
 	Type  string `json:"type"`
 }
 
-// classroomAssignmentDetail is `GET /assignments/{id}`. Deadline
-// stays *string because the API returns JSON null when unset;
-// distinguishing null from "" matters (the latter would silently
-// land as Go's zero-value).
+// classroomAssignmentDetail is `GET /assignments/{id}`. Deadline stays *string
+// because the API returns null when unset; null vs "" matters.
 type classroomAssignmentDetail struct {
 	ID              int64                     `json:"id"`
 	PublicRepo      bool                      `json:"public_repo"`
@@ -81,8 +77,8 @@ type classroomAssignmentDetail struct {
 	Classroom       classroomListItem         `json:"classroom"`
 }
 
-// classroomStarterCodeRepo carries only the source-starter fields
-// migrate consumes — target template ref + migrated_from.starter_repo.
+// classroomStarterCodeRepo carries only the source-starter fields migrate
+// consumes.
 type classroomStarterCodeRepo struct {
 	ID            int64  `json:"id"`
 	Name          string `json:"name"`
@@ -91,8 +87,7 @@ type classroomStarterCodeRepo struct {
 	DefaultBranch string `json:"default_branch"`
 }
 
-// getClassroom calls `GET /classrooms/{id}`; 404 → an actionable
-// error pointing the teacher at `gh classroom list`.
+// getClassroom calls `GET /classrooms/{id}`; 404 → an actionable error.
 func getClassroom(client githubapi.Client, id int64) (classroomDetail, error) {
 	path := fmt.Sprintf("classrooms/%d", id)
 	var out classroomDetail
@@ -137,13 +132,11 @@ func getClassroomAssignment(client githubapi.Client, assignmentID int64) (classr
 	return out, nil
 }
 
-// resolveSource maps a --source value to a single classroom:
-// all-digits → GET /classrooms/{id} directly (archived resolves
-// with a stderr warning); otherwise → list classrooms, filter by
-// organization.login (case-insensitive), skip archived unless
-// includeArchived. Multi-match enumerates with IDs and asks for
-// re-run with --source <id>. The org-login path exists because
-// GitHub Classroom is 1:1 with orgs.
+// resolveSource maps a --source value to a single classroom: all-digits → GET
+// /classrooms/{id} (archived resolves with a warning); else list classrooms and
+// filter by organization.login (case-insensitive), skipping archived unless
+// includeArchived. Multi-match enumerates IDs and asks for --source <id>. The
+// org-login path exists because GitHub Classroom is 1:1 with orgs.
 func resolveSource(client githubapi.Client, errOut io.Writer, source string, includeArchived bool) (classroomDetail, error) {
 	source = strings.TrimSpace(source)
 	if source == "" {
@@ -181,8 +174,8 @@ func resolveSource(client githubapi.Client, errOut io.Writer, source string, inc
 		}
 		detail, err := getClassroom(client, row.ID)
 		if err != nil {
-			// A stale listing row or mid-loop access loss
-			// shouldn't kill the whole resolution.
+			// A stale listing row or mid-loop access loss shouldn't kill the
+			// whole resolution.
 			_, _ = fmt.Fprintf(errOut, "Warning: skipping classroom %d (%q) during org resolution: %v\n", row.ID, row.Name, err)
 			continue
 		}

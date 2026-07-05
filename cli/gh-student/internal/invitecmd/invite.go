@@ -1,9 +1,8 @@
 // Package invitecmd implements `gh student invite <org>/<repo> <username>`:
-// add a push collaborator, and (when run from inside a group repo) enforce
-// the assignment's advisory max-group-size cap. It is an extracted command
-// package; only NewCmd is exported. Consumes the internal/* seams
-// (githubapi, assignments, classroomcfg, localgit, reponame) + contract,
-// never package main.
+// add a push collaborator, and (when run from inside a group repo) enforce the
+// assignment's advisory max-group-size cap. Extracted command package; only
+// NewCmd is exported. Consumes the internal/* seams (githubapi, assignments,
+// classroomcfg, localgit, reponame) + contract, never main.
 package invitecmd
 
 import (
@@ -67,11 +66,11 @@ func NewCmd() *cobra.Command {
 
 			out := cmd.OutOrStdout()
 
-			// Enforce max_group_size when invite is run from inside the
-			// group repo (the founder's working tree carries the
-			// .classroom50.yaml that identifies the assignment). Failing
-			// to resolve the group context is non-fatal — a TA invite or
-			// an invite run outside a repo just adds the collaborator.
+			// Enforce max_group_size when invite runs from inside the group
+			// repo (the founder's tree carries the .classroom50.yaml that
+			// identifies the assignment). Failing to resolve the group context
+			// is non-fatal — a TA invite or an invite run outside a repo just
+			// adds the collaborator.
 			if err := enforceGroupSize(cmd, client, org, repo, username); err != nil {
 				return err
 			}
@@ -84,35 +83,29 @@ func NewCmd() *cobra.Command {
 }
 
 // enforceGroupSize applies the assignment's max_group_size cap before an
-// invite when (and only when) invite is run from inside the *target*
-// group-assignment repo. It reads the local .classroom50.yaml to identify
-// the classroom + assignment, fetches the published assignment entry, and
-// — if the assignment is `mode: group` — refuses to add `invitee` past the
-// cap.
+// invite when (and only when) invite runs from inside the *target*
+// group-assignment repo. It reads the local .classroom50.yaml to identify the
+// classroom + assignment, fetches the published entry, and — if the assignment
+// is `mode: group` — refuses to add `invitee` past the cap.
 //
-// TRUST MODEL — this is an ADVISORY guardrail, not a security control:
-//   - The cap VALUE is trusted: max_group_size is read from the teacher's
-//     published Pages assignments.json (assignments.FetchEntry), never from
-//     the student-writable .classroom50.yaml.
-//   - The assignment POINTER is NOT trusted: .classroom50.yaml lives in the
-//     student's repo, so a student could edit `classroom`/`assignment` to
-//     point at a more permissive entry (or an individual assignment) and
-//     dodge the check. That's acceptable because invite-time enforcement is
-//     inherently bypassable anyway (a founder can add a collaborator via the
-//     GitHub UI, or simply not run the CLI). The real attribution boundary
-//     is collection-time: collect-scores intersects collaborators with the
-//     teacher's roster, and the teacher can review each repo's collaborators.
-//     This check just keeps an honest founder from accidentally overfilling.
+// TRUST MODEL — advisory guardrail, not a security control:
+//   - The cap VALUE is trusted: max_group_size comes from the teacher's
+//     published Pages assignments.json, never from the student-writable
+//     .classroom50.yaml.
+//   - The assignment POINTER is NOT trusted: a student could edit
+//     `classroom`/`assignment` in .classroom50.yaml to point at a more
+//     permissive (or individual) entry and dodge the check. That's acceptable
+//     because invite-time enforcement is bypassable anyway (add via the GitHub
+//     UI, or don't run the CLI). The real attribution boundary is
+//     collection-time: collect-scores intersects collaborators with the
+//     teacher's roster. This just keeps an honest founder from overfilling.
 //
-// It is deliberately best-effort on *context*: not being inside a repo, a
-// missing/unreadable .classroom50.yaml, a config that describes a DIFFERENT
-// repo than the invite target, or a non-group assignment all mean "no group
-// cap applies" and invite proceeds as a plain push-invite (this keeps TA
-// invites, cross-repo invites, and individual-assignment invites working). A
-// transient failure to read the published entry warns but does not block —
-// the guardrail is advisory, so an infrastructure blip must not stop an
-// honest invite. Only a genuine "group is full" decision (or an API error
-// while counting members of the matched repo) blocks the invite.
+// Deliberately best-effort on *context*: not in a repo, a missing/unreadable
+// .classroom50.yaml, a config describing a DIFFERENT repo than the target, or
+// a non-group assignment all mean "no cap applies" and invite proceeds as a
+// plain push-invite (keeps TA, cross-repo, and individual invites working). A
+// transient failure to read the published entry warns but doesn't block. Only
+// a genuine "group is full" (or an API error counting members) blocks.
 func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, invitee string) error {
 	root, inside, err := localgit.CurrentGitRoot()
 	if err != nil || !inside {
@@ -123,11 +116,11 @@ func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, in
 		return nil // no/!readable .classroom50.yaml → not a classroom repo
 	}
 
-	// Only enforce when the local config provably describes the invite
-	// TARGET: the target repo must be the founder's own group repo for this
-	// assignment (`<classroom>-<assignment>-<owner>`). A founder standing in
-	// repo A while inviting into repo B would otherwise have A's cap applied
-	// to B — so require the repo-name prefix match and take the owner from it.
+	// Only enforce when the local config provably describes the invite TARGET:
+	// the target repo must be the founder's own group repo for this assignment
+	// (`<classroom>-<assignment>-<owner>`). A founder standing in repo A while
+	// inviting into repo B would otherwise have A's cap applied to B — so
+	// require the repo-name prefix match and take the owner from it.
 	owner := groupRepoOwner(repo, cfg)
 	if owner == "" {
 		return nil // target repo isn't this assignment's group repo → skip
@@ -135,10 +128,10 @@ func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, in
 
 	entry, err := assignments.FetchEntry(cmd.Context(), org, cfg.Classroom, cfg.Secret, cfg.Assignment)
 	if err != nil {
-		// The local config points at an assignment we can't resolve. If it's
-		// genuinely not published, that's a "not a group repo we can check"
-		// case — skip silently. Any other (transient/network) failure warns
-		// but still proceeds: the advisory cap must not block on a blip.
+		// Config points at an unresolvable assignment. If it's genuinely not
+		// published, that's a "not a group repo we can check" case — skip
+		// silently. Any other (transient/network) failure warns but proceeds:
+		// the advisory cap must not block on a blip.
 		var nf *assignments.NotFoundError
 		if !errors.As(err, &nf) {
 			_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
@@ -151,25 +144,23 @@ func enforceGroupSize(cmd *cobra.Command, client githubapi.Client, org, repo, in
 		return nil // individual assignment → no cap
 	}
 
-	// Bound the collaborator count with the same deadline budget the
-	// Pages fetch uses — go-gh's REST client has no default HTTP timeout,
-	// so an unbounded count could otherwise hang the invite.
+	// Bound the collaborator count with the same deadline the Pages fetch uses
+	// — go-gh's REST client has no default HTTP timeout, so an unbounded count
+	// could hang the invite.
 	ctx, cancel := context.WithTimeout(cmd.Context(), assignments.PagesFetchTimeout)
 	defer cancel()
 	return checkGroupSizeBeforeInvite(ctx, client, org, repo, owner, invitee, entry.MaxGroupSize)
 }
 
-// groupRepoOwner returns the founder login for a group repo, or "" when
-// `repo` is not this assignment's group repo. The repo is named
-// `<classroom>-<assignment>-<owner>` (all lowercased), so the owner is the
-// suffix after the `<classroom>-<assignment>-` prefix. A "" return is the
-// signal enforceGroupSize uses to skip the cap entirely (the invite target
-// isn't the founder's group repo for the local config's assignment), so the
-// member count is only ever taken with a real, matched owner.
+// groupRepoOwner returns the founder login for a group repo, or "" when `repo`
+// isn't this assignment's group repo. The repo is named
+// `<classroom>-<assignment>-<owner>` (lowercased), so the owner is the suffix
+// after the prefix. A "" return signals enforceGroupSize to skip the cap (the
+// target isn't the founder's group repo for the local config's assignment), so
+// the member count is only ever taken with a real, matched owner.
 //
-// The prefix is derived from reponame.Prefix — the same source
-// reponame.Name builds from — so this consumer can never drift from
-// the producer's `<classroom>-<assignment>-<owner>` shape.
+// The prefix comes from reponame.Prefix — the same source reponame.Name builds
+// from — so this consumer can't drift from the producer's shape.
 func groupRepoOwner(repo string, cfg *classroomcfg.Config) string {
 	prefix := reponame.Prefix(cfg.Classroom, cfg.Assignment)
 	lower := strings.ToLower(repo)

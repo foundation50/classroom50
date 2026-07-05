@@ -1,7 +1,6 @@
-// Package localgit holds small helpers that inspect the caller's local
-// git working tree (not the GitHub API). Extracted so the accept/submit/
-// invite commands can share them without the helpers living in a command
-// file.
+// Package localgit holds small helpers that inspect the caller's local git
+// working tree (not the GitHub API). Extracted so the accept/submit/invite
+// commands can share them without living in a command file.
 package localgit
 
 import (
@@ -11,10 +10,10 @@ import (
 	"strings"
 )
 
-// CurrentGitRoot returns the toplevel of the git repo the process is run
-// from, and whether the cwd is inside a git tree at all. Used to warn
-// against nested clones. A non-git cwd is ("", false, nil); git-not-found
-// (or another exec failure) propagates as an error.
+// CurrentGitRoot returns the toplevel of the git repo the process runs from,
+// and whether cwd is inside a git tree at all. Used to warn against nested
+// clones. A non-git cwd is ("", false, nil); git-not-found (or another exec
+// failure) propagates as an error.
 func CurrentGitRoot() (string, bool, error) {
 	cmd := exec.Command("git", "rev-parse", "--show-toplevel")
 

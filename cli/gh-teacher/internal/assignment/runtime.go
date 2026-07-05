@@ -11,65 +11,46 @@ import (
 	"strings"
 )
 
-// RunsOnLabelPattern and the *Pattern regexes below are exported only
-// for the autograde-runner regex-parity test (init_skeleton_test.go's
-// TestRegexParity_GoVsInlinePython), which asserts these literals match
-// the inline-Python validator in autograde-runner.yaml. Production
-// callers must NOT match these directly — go through ValidateRuntime /
-// ValidateContainer, which are the trust boundary.
+// RunsOnLabelPattern and the *Pattern regexes below are exported only for the
+// regex-parity test (init_skeleton_test.go), which asserts they match the
+// inline-Python validator in autograde-runner.yaml. Production callers must NOT
+// match these directly — go through ValidateRuntime / ValidateContainer, the
+// trust boundary.
 //
-// RunsOnLabelPattern bounds each `runtime.runs-on` label. It mirrors
-// GitHub Actions' `runs-on`: any hosted label OR any custom/self-hosted
-// label. There is deliberately NO value allow-list — the teacher owns
-// the label, as in a hand-written workflow. The pattern is purely an
-// anti-injection gate: the label flows verbatim into the workflow's
-// `runs-on:`, so whitespace, quotes, and shell/YAML metacharacters are
-// rejected (alphanumerics plus `-_.`, leading alnum, length-capped).
+// RunsOnLabelPattern bounds each `runtime.runs-on` label. No value allow-list —
+// the teacher owns the label; the pattern is purely an anti-injection gate
+// (alphanumerics plus `-_.`, leading alnum, length-capped) since the label
+// flows verbatim into the workflow's `runs-on:`.
 var RunsOnLabelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// LanguageVersionPattern: shared shape for python/node/java/go
-// version fields. Permissive enough for `3.12`, `20`, `1.23.4`,
-// `21-ea`, `latest`; strict enough that nothing the field's value
-// might do can shell-escape into the workflow YAML.
+// LanguageVersionPattern: shared shape for python/node/java/go versions.
+// Permissive (`3.12`, `20`, `1.23.4`, `latest`) but injection-safe.
 var LanguageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,32}$`)
 
-// AptPackagePattern matches Debian/Ubuntu source-package naming
-// (lowercase letters/digits, `.+-`, leading alnum). Each entry in
-// `runtime.apt` is checked individually; the validated list flows
-// into `apt-get install` unquoted, so this is a hard correctness
-// gate.
+// AptPackagePattern matches Debian/Ubuntu package naming. Each `runtime.apt`
+// entry flows into `apt-get install` unquoted, so this is a hard gate.
 var AptPackagePattern = regexp.MustCompile(`^[a-z0-9][a-z0-9.+-]{0,63}$`)
 
-// ContainerImagePattern is intentionally permissive — the image
-// reference grammar is wide (registries, ports, digests, multi-arch
-// suffixes). The check is anti-injection rather than syntactic
-// validation: reject whitespace, quotes, backticks, `$`, `;`, `&`,
-// `|`, control chars. The image flows into a YAML string; GitHub
-// Actions parses the rest.
+// ContainerImagePattern is intentionally permissive (the image-ref grammar is
+// wide); the check is anti-injection, not syntactic — reject whitespace,
+// quotes, backticks, `$`, `;`, `&`, `|`, control chars. Actions parses the rest.
 var ContainerImagePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$`)
 
-// ContainerUserPattern accepts what `docker run --user` accepts:
-// "root", "0", "0:0", "1000:1000", "appuser", "appuser:appgroup".
-// The value flows into `container.options: --user <value>` in the
-// emitted workflow YAML, so it has to be tight enough that nothing
-// can shell-escape into adjacent docker options.
+// ContainerUserPattern accepts what `docker run --user` accepts ("root", "0",
+// "1000:1000", "appuser:appgroup"). It flows into `container.options: --user
+// <value>`, so it must be tight enough that nothing escapes into adjacent
+// options.
 var ContainerUserPattern = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$`)
 
-// ParseRuntimeFile loads `--runtime <path>` and validates it. The
-// path can be a filesystem path, or `-` to read from stdin (handy
-// for one-shot agent invocations: `gh teacher assignment add ...
-// --runtime - <<<'{"container":{"image":"..."}}'`). Empty path → no
-// runtime override (entry.Runtime stays nil and the runner uses its
-// built-in defaults). DisallowUnknownFields so a typo'd key
-// (`run-on:` for `runs-on:`) fails loudly rather than silently
-// falling through to defaults.
+// ParseRuntimeFile loads `--runtime <path>` (or `-` for stdin) and validates
+// it. Empty path → no override (Runtime stays nil, runner uses defaults).
+// DisallowUnknownFields so a typo'd key fails loudly.
 func ParseRuntimeFile(path string) (*RuntimeRef, error) {
 	return parseRuntimeFileFrom(path, os.Stdin)
 }
 
-// parseRuntimeFileFrom is the testable seam for ParseRuntimeFile.
-// Pass the reader the caller would have wired into stdin so unit
-// tests can exercise the `-` path without manipulating os.Stdin.
+// parseRuntimeFileFrom is the testable seam for ParseRuntimeFile (injectable
+// stdin for the `-` path).
 func parseRuntimeFileFrom(path string, stdin io.Reader) (*RuntimeRef, error) {
 	if path == "" {
 		return nil, nil
@@ -107,20 +88,17 @@ func parseRuntimeFileFrom(path string, stdin io.Reader) (*RuntimeRef, error) {
 	return &r, nil
 }
 
-// ValidateRuntime is the structural bar for RuntimeRef. Same checks
-// run on the write path (ParseRuntimeFile) and the parse path
-// (ValidateAssignmentEntry / ValidateExistingEntry) so a hand-edited
-// assignments.json can't smuggle a value the CLI would have
-// rejected at write time.
+// ValidateRuntime is the structural bar for RuntimeRef, run on both the write
+// and parse paths so a hand-edited assignments.json can't smuggle a value the
+// CLI would reject at write time.
 func ValidateRuntime(r RuntimeRef) error {
 	if err := ValidateRunsOn(r.RunsOn); err != nil {
 		return err
 	}
 	if r.Container != nil {
-		// GitHub-hosted containers run on Ubuntu only, so reject a
-		// recognized macOS/Windows hosted label up front; a custom /
-		// self-hosted label passes (the teacher owns OS matching). Apt
-		// is forbidden — the image owns its packages.
+		// GitHub-hosted containers run on Ubuntu only, so reject a recognized
+		// macOS/Windows hosted label (a custom label passes — the teacher owns
+		// OS matching). Apt is forbidden — the image owns its packages.
 		for _, label := range r.RunsOn {
 			if isNonUbuntuHostedLabel(label) {
 				return fmt.Errorf("runtime.runs-on %q invalid with container: GitHub Actions runs containers on Ubuntu hosts only", label)
@@ -156,11 +134,9 @@ func ValidateRuntime(r RuntimeRef) error {
 	return nil
 }
 
-// ValidateRunsOn injection-checks each label and caps the count. An
-// empty RunsOn is valid here — it means runs-on was omitted, which the
-// runner defaults to ubuntu-latest; the degenerate "" and [] forms are
-// rejected earlier by RunsOn.UnmarshalJSON. Blank labels are rejected
-// by RunsOnLabelPattern. No value allow-list (see RunsOnLabelPattern).
+// ValidateRunsOn injection-checks each label and caps the count. An empty
+// RunsOn is valid (omitted → runner defaults to ubuntu-latest); the degenerate
+// "" and [] forms are rejected earlier by RunsOn.UnmarshalJSON.
 func ValidateRunsOn(r RunsOn) error {
 	if len(r) == 0 {
 		return nil
@@ -176,19 +152,16 @@ func ValidateRunsOn(r RunsOn) error {
 	return nil
 }
 
-// isNonUbuntuHostedLabel reports whether label is a recognized
-// GitHub-hosted macOS/Windows label — the only labels we know won't run
-// a Linux container. Custom/self-hosted labels are unknown, so they
-// pass (the teacher owns OS matching).
+// isNonUbuntuHostedLabel reports whether label is a recognized GitHub-hosted
+// macOS/Windows label — the only labels we know won't run a Linux container.
+// Custom/self-hosted labels are unknown, so they pass.
 func isNonUbuntuHostedLabel(label string) bool {
 	return strings.HasPrefix(label, "macos-") || strings.HasPrefix(label, "windows-")
 }
 
-// ValidateContainer enforces image-string sanity and the `user`
-// shortcut. Image is regex-checked against a permissive but
-// injection-safe character set; user must match `docker run --user`
-// grammar. Only publicly-pullable images are supported (see
-// ContainerSpec).
+// ValidateContainer enforces image-string sanity and the `user` shortcut.
+// Image is regex-checked (permissive but injection-safe); user must match
+// `docker run --user` grammar. Only publicly-pullable images are supported.
 func ValidateContainer(c ContainerSpec) error {
 	if c.Image == "" {
 		return errors.New("runtime.container.image must not be empty")

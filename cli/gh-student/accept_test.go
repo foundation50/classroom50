@@ -11,9 +11,9 @@ import (
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
-// TestCheckAcceptableMode pins the lifted accept seam: group is now
-// accepted (previously rejected), individual and empty are accepted, and
-// only an unrecognized mode errors.
+// TestCheckAcceptableMode pins the lifted accept seam: group is now accepted
+// (previously rejected), individual and empty are accepted, and only an
+// unrecognized mode errors.
 func TestCheckAcceptableMode(t *testing.T) {
 	cases := []struct {
 		mode    string
@@ -38,11 +38,11 @@ func TestCheckAcceptableMode(t *testing.T) {
 	}
 }
 
-// TestInviteUserAsAdmin pins the founder-admin grant: accept must
-// keep the student as an `admin` collaborator (not the old `maintain`),
-// because only an admin can manage collaborators for the founder-driven
-// group-invite flow. A regression to a weaker permission silently breaks
-// `gh student invite`, so assert the exact PUT path and request body.
+// TestInviteUserAsAdmin pins the founder-admin grant: accept must keep the
+// student as an `admin` collaborator (not the old `maintain`), because only an
+// admin can manage collaborators for the founder-driven group-invite flow. A
+// regression to a weaker permission silently breaks `gh student invite`, so
+// assert the exact PUT path and request body.
 func TestInviteUserAsAdmin(t *testing.T) {
 	const (
 		org      = "cs50"

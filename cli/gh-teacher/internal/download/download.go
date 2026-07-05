@@ -1,14 +1,9 @@
-// Package download implements the `gh teacher download` command: cloning
-// every student submission repo for an assignment under <org>/classroom50
-// (roster-driven by default, or --by-pattern), refreshing each repo's
+// Package download implements the `gh teacher download` command: cloning every
+// student submission repo for an assignment under <org>/classroom50
+// (roster-driven or --by-pattern), refreshing each repo's
 // result.json/results.json from its submit-tag releases, and writing a
-// scores.csv summary. It is an extracted command package (mirrors the
-// other internal/<command> packages): only NewCmd is exported; the
-// run* orchestration, the release-asset fetcher, and the scores.csv
-// writer are package-private. It is a read-only consumer of the config
-// repo. It depends only on the internal/* substrate seams (assignment,
-// configrepo, githubapi, orgrepos, scores, cliutil) plus the shared
-// contract package, never on package main.
+// scores.csv summary. Read-only consumer of the config repo; only NewCmd is
+// exported.
 package download
 
 import (
@@ -41,40 +36,36 @@ import (
 // dirTimestampFormat: filesystem-safe and lexicographically sortable.
 const dirTimestampFormat = "2006_01_02_T_15_04_05"
 
-// Cross-binary contract with collect_scores.py and
-// autograde-runner.yaml (which creates the submit-tag releases):
-// asset name, submit-tag prefix, and per-asset size cap. Keep aligned
-// with `RESULT_ASSET_NAME`, `SUBMIT_TAG_PREFIX`, and `MAX_RESULT_BYTES`
-// in skeleton/dotgithub/scripts/collect_scores.py.
+// Cross-binary contract with collect_scores.py and autograde-runner.yaml
+// (which creates the submit-tag releases): asset name, submit-tag prefix,
+// per-asset size cap. Keep aligned with RESULT_ASSET_NAME, SUBMIT_TAG_PREFIX,
+// and MAX_RESULT_BYTES in collect_scores.py.
 const (
 	resultAssetName = "result.json"
 	submitTagPrefix = "submit/"
 	maxResultBytes  = 10 * 1024 * 1024
 )
 
-// resultsAssetName: the per-repo history file written alongside the
-// clone. Holds every submit-tag submission's result.json (newest
-// first), not just the latest — `result.json` keeps the single
-// latest payload for back-compat.
+// resultsAssetName: the per-repo history file written alongside the clone.
+// Holds every submit-tag submission's result.json (newest first);
+// result.json keeps the single latest payload for back-compat.
 const resultsAssetName = "results.json"
 
-// allReleasesPerPage / allReleasesPagesMax bound the full
-// releases walk used to collect every submission. 100×100 = 10k
-// releases per repo — far beyond any plausible push history;
-// exhausting the cap errors loudly rather than silently dropping
-// older submissions.
+// allReleasesPerPage / allReleasesPagesMax bound the full releases walk.
+// 100×100 = 10k releases per repo — far beyond any push history; exhausting
+// the cap errors loudly rather than silently dropping older submissions.
 const (
 	allReleasesPerPage  = 100
 	allReleasesPagesMax = 100
 )
 
-// assetDownloadTimeout caps the asset GET. Long enough for a slow
-// CDN; short enough that a hang doesn't wedge the whole download.
+// assetDownloadTimeout caps the asset GET: long enough for a slow CDN, short
+// enough that a hang doesn't wedge the download.
 const assetDownloadTimeout = 30 * time.Second
 
 // scoresCSVHeader: stable column order. `late` and `override` are tri-state
-// ("true" / "false" / "") so spreadsheet readers can distinguish
-// an explicit flag from a non-submission or older score row.
+// ("true"/"false"/"") so readers can distinguish an explicit flag from a
+// non-submission or older row.
 var scoresCSVHeader = []string{
 	"username",
 	"first_name",
@@ -153,10 +144,9 @@ func NewCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			errOut := cmd.ErrOrStderr()
 
-			// verbose is registered as a persistent flag on the root
-			// command (main.go); read it here and thread it down rather
-			// than reaching for a package global, so this command package
-			// has no dependency on package main.
+			// verbose is a persistent flag on the root command (main.go); read
+			// it here and thread it down rather than reaching for a package
+			// global, so this package has no dependency on package main.
 			verbose, _ := cmd.Flags().GetBool("verbose")
 
 			if byPattern {
@@ -172,11 +162,10 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// downloadByRoster: roster × assignment Cartesian, clone the
-// existing repos, refresh each repo's result.json from the latest
-// submit-tag release, write a scores.csv summary at the dir root.
-// Roster entries without a repo on the org are reported as missing
-// — not a hard failure.
+// downloadByRoster: roster × assignment Cartesian, clone the existing repos,
+// refresh each repo's result.json from the latest submit-tag release, write a
+// scores.csv summary at the dir root. Roster entries without a repo are
+// reported as missing — not a hard failure.
 func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -200,9 +189,8 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 	}
 	credited := creditedUsernames(scores, assignment)
 
-	// Team-driven username source: the classroom GitHub team is authoritative
-	// for who is enrolled. Resolve the slug the same way the web view and the
-	// Python collector do (classroom.json team.slug, fallback classroom50-<c>).
+	// The classroom GitHub team is authoritative for enrollment. Resolve the
+	// slug the same way the web view and Python collector do.
 	teamSlug, err := configrepo.ResolveClassroomTeamSlug(client, org, classroom, branch)
 	if err != nil {
 		return err
@@ -219,9 +207,9 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return nil
 	}
 
-	// students.csv is optional display metadata now — a missing/unreadable CSV
-	// yields blank metadata, never a skipped student. Load best-effort and index
-	// by github_id then login for the scores.csv join.
+	// students.csv is optional display metadata: a missing/unreadable CSV
+	// yields blank metadata, never a skipped student. Best-effort, indexed by
+	// login for the scores.csv join.
 	metaByLogin := loadRosterMetadata(client, org, classroom, branch, errOut)
 
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -274,16 +262,15 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		if !exists {
 			if isGroup {
 				if _, ok := credited[strings.ToLower(username)]; ok {
-					// Joined a teammate's repo: owns no derived repo,
-					// but already credited via the owner's fanned-out
-					// scores.json row. Expected — not a miss.
+					// Joined a teammate's repo: owns no derived repo but is
+					// already credited via the owner's fanned-out row.
 					if verbose && !quiet {
 						_, _ = fmt.Fprintf(out, "Credited via group repo: %s (no own repo)\n", username)
 					}
 					continue
 				}
-				// Group assignment, no own repo, and not credited in
-				// scores.json — a genuine non-participant. Still report.
+				// Group assignment, no own repo, not credited — a genuine
+				// non-participant. Still report.
 				if !quiet {
 					_, _ = fmt.Fprintf(out, "Missing: %s (group assignment — no own repo and not yet credited via a teammate)\n", username)
 				}
@@ -347,10 +334,9 @@ type RosterMeta struct {
 }
 
 // loadRosterMetadata reads students.csv best-effort and indexes it by
-// lowercased login for the scores.csv metadata join. A missing/unreadable CSV
-// is NOT fatal (the team drives enrollment; the CSV is only metadata) — it
-// warns and returns an empty map so every team member still gets a row, just
-// with blank name/section/email.
+// lowercased login for the scores.csv join. A missing/unreadable CSV is NOT
+// fatal (the team drives enrollment) — it warns and returns an empty map so
+// every team member still gets a row with blank name/section/email.
 func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, errOut io.Writer) map[string]RosterMeta {
 	rows, err := configrepo.LoadRoster(client, org, classroom, branch)
 	if err != nil {
@@ -373,13 +359,12 @@ func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, 
 	return byLogin
 }
 
-// downloadByPattern: page through <org>'s repos and clone every
-// one whose name starts with <classroom>-<assignment>-. Skips the
-// roster lookup, result.json refresh, and scores.csv summary —
-// those all depend on the config repo being bootstrapped.
+// downloadByPattern: page through <org>'s repos and clone every one whose
+// name starts with <classroom>-<assignment>-. Skips the roster lookup,
+// result.json refresh, and scores.csv summary (all depend on the config repo).
 func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
-	// Deterministic head of assignmentRepoName — cross-binary
-	// contract with cli/gh-student/accept.go.
+	// Deterministic head of assignmentRepoName — cross-binary contract with
+	// cli/gh-student/accept.go.
 	prefix := strings.ToLower(classroom) + "-" + strings.ToLower(assignment) + "-"
 
 	repos, err := orgrepos.ListNames(client, org)
@@ -437,17 +422,15 @@ func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, clas
 	return nil
 }
 
-// assignmentRegistered: case-insensitive slug membership check. The
-// slug flows into repo names lowercased, so a mixed-case argument
-// still matches.
-// assignmentsPath returns the config-repo-relative assignments.json
-// path, wrapping the seam helper so call sites inside functions that
-// shadow the `assignment` package (with an `assignment` slug param) can
-// still reach it.
+// assignmentsPath returns the config-repo-relative assignments.json path,
+// wrapping the seam helper so call sites that shadow the `assignment` package
+// (with an `assignment` slug param) can still reach it.
 func assignmentsPath(classroom string) string {
 	return assignment.AssignmentsFilePath(classroom)
 }
 
+// assignmentRegistered: case-insensitive slug membership check. The slug flows
+// into repo names lowercased, so a mixed-case argument still matches.
 func assignmentRegistered(assignments assignment.AssignmentsJSON, slug string) bool {
 	for _, entry := range assignments.Assignments {
 		if strings.EqualFold(entry.Slug, slug) {
@@ -457,11 +440,10 @@ func assignmentRegistered(assignments assignment.AssignmentsJSON, slug string) b
 	return false
 }
 
-// assignmentIsGroup reports whether the registered assignment slug is a
-// group assignment. For a group assignment only the first accepter owns
-// a derived repo (`<classroom>-<assignment>-<owner>`); teammates join
-// that repo, so their own derived repo legitimately doesn't exist and a
-// 404 on it is not a "missing submission".
+// assignmentIsGroup reports whether the assignment slug is a group assignment.
+// For a group assignment only the first accepter owns a derived repo;
+// teammates join it, so their own derived repo legitimately doesn't exist and a
+// 404 on it isn't a "missing submission".
 func assignmentIsGroup(assignments assignment.AssignmentsJSON, slug string) bool {
 	for _, entry := range assignments.Assignments {
 		if strings.EqualFold(entry.Slug, slug) {
@@ -471,11 +453,10 @@ func assignmentIsGroup(assignments assignment.AssignmentsJSON, slug string) bool
 	return false
 }
 
-// assignmentRepoName: canonical lowercased
-// <classroom>-<assignment>-<username> repo name. Cross-binary
-// contract — mirrors reponame.Name in cli/gh-student/internal/reponame.
-// The two modules don't share symbols (separate go.mod); the formula's
-// shape IS the contract.
+// assignmentRepoName: canonical lowercased <classroom>-<assignment>-<username>
+// repo name. Cross-binary contract — mirrors reponame.Name in
+// cli/gh-student/internal/reponame. The two modules share no symbols; the
+// formula's shape IS the contract.
 func assignmentRepoName(classroom, assignment, username string) string {
 	return fmt.Sprintf("%s-%s-%s",
 		strings.ToLower(classroom),
@@ -497,9 +478,9 @@ func targetExists(path string) (bool, error) {
 	return false, err
 }
 
-// repoExistsOnOrg returns true iff GET /repos/{org}/{repo} returns
-// 200. 404 → false. Other errors propagate so a network or auth
-// failure doesn't get silently treated as "student didn't accept".
+// repoExistsOnOrg returns true iff GET /repos/{org}/{repo} returns 200. 404 →
+// false. Other errors propagate so a network/auth failure isn't silently
+// treated as "student didn't accept".
 func repoExistsOnOrg(client githubapi.Client, org, repo string) (bool, error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(repo))
 	if err := client.Get(path, nil); err != nil {
@@ -511,9 +492,8 @@ func repoExistsOnOrg(client githubapi.Client, org, repo string) (bool, error) {
 	return true, nil
 }
 
-// loadScores reads scores.json at `ref`. Absent file → empty
-// (non-nil) container so a fresh classroom still produces a
-// roster-shaped scores.csv with every row blank.
+// loadScores reads scores.json at `ref`. Absent file → empty (non-nil)
+// container so a fresh classroom still produces a roster-shaped scores.csv.
 func loadScores(client githubapi.Client, org, classroom, ref string) (scoresschema.File, error) {
 	path := scoresFilePath(classroom)
 	data, ok, err := configrepo.ReadFileContents(client, org, configrepo.ConfigRepoName, path, ref)
@@ -535,12 +515,11 @@ func scoresFilePath(classroom string) string {
 	return classroom + "/scores.json"
 }
 
-// parseScores enforces the schema sentinel before trusting any other
-// field, then decodes the root `assignments` map. Only the canonical
-// object shape is accepted; legacy shapes are not migrated (backward
-// compatibility is intentionally dropped), so a non-canonical file errors
-// loudly. Entries stay as map[string]any -- download reads only a handful
-// of well-known keys (owner, member_usernames, submissions).
+// parseScores enforces the schema sentinel before trusting other fields, then
+// decodes the root `assignments` map. Only the canonical object shape is
+// accepted (legacy shapes are not migrated), so a non-canonical file errors
+// loudly. Entries stay map[string]any — download reads only a few well-known
+// keys.
 func parseScores(data []byte) (scoresschema.File, error) {
 	if len(bytes.TrimSpace(data)) == 0 {
 		return scoresschema.File{Schema: scoresschema.SchemaV1, Assignments: map[string]scoresschema.AssignmentBucket{}}, nil
@@ -563,11 +542,9 @@ func parseScores(data []byte) (scoresschema.File, error) {
 }
 
 // decodeAssignments decodes the root `assignments` field as the canonical
-// slug-keyed map of `{type, entries}` buckets. Only an object (or
-// null/absent → empty) is accepted; legacy shapes are NOT migrated —
-// backward compatibility with pre-canonical scores.json is intentionally
-// dropped, so a non-canonical file errors loudly. Mirrors
-// normalize_assignments in collect_scores.py.
+// slug-keyed map of `{type, entries}` buckets. Only an object (or null/absent →
+// empty) is accepted; legacy shapes are NOT migrated, so a non-canonical file
+// errors loudly. Mirrors normalize_assignments in collect_scores.py.
 func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentBucket, error) {
 	trimmed := bytes.TrimSpace(raw)
 	if len(trimmed) == 0 || string(trimmed) == "null" {
@@ -583,10 +560,9 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 	if m == nil {
 		m = map[string]scoresschema.AssignmentBucket{}
 	}
-	// Validate each bucket's `type` so the Go reader rejects the same
-	// non-canonical shapes Python's normalize_assignments does (parity):
-	// a bucket must declare type "individual" or "group". (A bucket whose
-	// `entries` isn't a JSON array already fails the Unmarshal above.)
+	// Validate each bucket's `type` for parity with Python's
+	// normalize_assignments: it must be "individual" or "group". (A
+	// non-array `entries` already fails the Unmarshal above.)
 	for slug, bucket := range m {
 		if bucket.Type != "individual" && bucket.Type != "group" {
 			return nil, fmt.Errorf("assignments[%q].type must be \"individual\" or \"group\", got %q", slug, bucket.Type)
@@ -595,18 +571,14 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 	return m, nil
 }
 
-// writeScoresCSV writes a per-assignment summary. One CSV line per
-// submission, grouped by roster entry in roster order: a student who
-// pushed N times contributes N lines (newest first, matching the
-// stored submissions order); a non-submitter contributes a single
-// blank line so teachers see the whole class at a glance. Per-test
-// breakdowns are intentionally omitted — that detail lives in the
-// per-repo result.json / results.json.
+// writeScoresCSV writes a per-assignment summary. One CSV line per submission,
+// grouped by roster entry in roster order: a student with N pushes contributes
+// N lines (newest first); a non-submitter contributes one blank line. Per-test
+// breakdowns live in the per-repo result.json / results.json.
 func writeScoresCSV(path string, scores scoresschema.File, assignment string, teamLogins []string, metaByLogin map[string]RosterMeta) error {
 	entries := entriesForAssignment(scores, assignment)
-	// Map each credited student (lowercased) -> their gradebook entry.
-	// Group entries credit every member in member_usernames; individual
-	// entries credit the sole owner.
+	// Map each credited student (lowercased) → gradebook entry. Group entries
+	// credit every member_usernames; individual entries credit the owner.
 	byStudent := make(map[string]map[string]any, len(entries))
 	for _, entry := range entries {
 		for _, u := range entryCreditedUsernames(entry) {
@@ -634,16 +606,13 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, te
 	return os.WriteFile(path, buf.Bytes(), 0o644)
 }
 
-// scoresCSVRows renders the CSV lines for one team student. A nil
-// `entry` (non-submitter) yields a single blank-scored line. Otherwise it
-// yields one line per submission in the entry's `submissions` list
-// (newest first), each carrying that submission's score columns; the
-// entry-level `override` flag is repeated on every line. An entry with no
-// usable `submissions` list still yields one blank-scored line so the
-// student isn't dropped from the summary. `meta` is the best-effort
-// students.csv join (blank when the CSV is absent/partial).
+// scoresCSVRows renders the CSV lines for one team student. A nil `entry`
+// (non-submitter) yields one blank-scored line. Otherwise one line per
+// submission (newest first), each with its score columns; the entry-level
+// `override` flag repeats on every line. An entry with no usable submissions
+// still yields one blank line. `meta` is the best-effort students.csv join.
 func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]string {
-	// Display metadata is teacher/student-controllable free text, so guard it
+	// Display metadata is teacher/student-controllable free text: guard it
 	// against spreadsheet formula injection like the other string cells.
 	firstName := csvSafeCell(meta.FirstName)
 	lastName := csvSafeCell(meta.LastName)
@@ -662,14 +631,12 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 	}
 	out := make([][]string, 0, len(subs))
 	for _, sub := range subs {
-		// Student-controllable string cells are run through csvSafeCell to
-		// neutralize spreadsheet formula injection — a student owns their
-		// repo and can publish a result.json with e.g. review="=HYPERLINK(..)".
-		// encoding/csv quotes structural chars but does NOT defang a leading
-		// =,+,-,@. score/max-score are typed numbers (never injectable), but
-		// `late` and `override` go through stringifyOverride, which passes a
-		// hand-edited STRING through verbatim — so they're guarded too (a
-		// no-due assignment never overwrites a student-supplied `late`).
+		// Student-controllable string cells go through csvSafeCell to defang
+		// spreadsheet formula injection (a student owns their repo and can
+		// publish review="=HYPERLINK(..)"). encoding/csv quotes structural
+		// chars but not a leading =,+,-,@. score/max-score are typed numbers,
+		// but `late`/`override` pass a hand-edited STRING verbatim via
+		// stringifyOverride, so they're guarded too.
 		out = append(out, metaCells(
 			stringifyNumber(sub["score"]),
 			stringifyNumber(sub["max-score"]),
@@ -684,16 +651,12 @@ func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]s
 	return out
 }
 
-// csvSafeCell neutralizes CSV formula injection. A spreadsheet (Excel,
-// Sheets, LibreOffice) evaluates a cell whose first character is one of
-// = + - @ (or a leading tab / carriage return) as a formula. Several
-// scores.csv columns carry student-controlled strings (a student owns
-// their assignment repo and publishes the graded result.json), so a
-// crafted value like "=HYPERLINK(\"http://evil\",\"click\")" would execute
-// when the teacher opens the sheet. Go's encoding/csv quotes structural
-// characters (comma, quote, newline) but does nothing about formulas, so
-// we prefix a single quote to any at-risk cell. An empty cell is left
-// untouched so blank columns stay blank.
+// csvSafeCell neutralizes CSV formula injection. A spreadsheet evaluates a cell
+// whose first char is = + - @ (or a leading tab/CR) as a formula. Several
+// scores.csv columns carry student-controlled strings (a student owns their
+// repo and publishes result.json), so a crafted "=HYPERLINK(...)" would execute
+// on open. encoding/csv quotes structural chars but not formulas, so we prefix
+// a single quote to any at-risk cell. Empty cells stay blank.
 func csvSafeCell(s string) string {
 	if s == "" {
 		return s
@@ -705,10 +668,9 @@ func csvSafeCell(s string) string {
 	return s
 }
 
-// submittedByUsername returns the pusher login from a submission
-// record's `submitted_by` block, or "" when absent/malformed. For a
-// group submission the entry's `member_usernames` lists everyone
-// credited, but this column shows who actually pushed each submission.
+// submittedByUsername returns the pusher login from a submission's
+// `submitted_by` block, or "" when absent/malformed. For a group submission
+// `member_usernames` lists everyone credited; this column shows who pushed.
 func submittedByUsername(sub map[string]any) string {
 	by, ok := sub["submitted_by"].(map[string]any)
 	if !ok {
@@ -717,10 +679,9 @@ func submittedByUsername(sub map[string]any) string {
 	return stringifyString(by["username"])
 }
 
-// submissionRecords returns an entry's `submissions` history as a slice
-// of maps (newest first). Tolerant of a hand-edited file: a missing
-// or non-array `submissions`, or non-object entries, yield an empty
-// slice / are skipped rather than erroring.
+// submissionRecords returns an entry's `submissions` history (newest first).
+// Tolerant of a hand-edited file: a missing/non-array `submissions` or
+// non-object entries yield an empty slice / are skipped rather than erroring.
 func submissionRecords(entry map[string]any) []map[string]any {
 	raw, _ := entry["submissions"].([]any)
 	out := make([]map[string]any, 0, len(raw))
@@ -732,10 +693,9 @@ func submissionRecords(entry map[string]any) []map[string]any {
 	return out
 }
 
-// entriesForAssignment returns the entries for an assignment's bucket.
-// The lookup is case-insensitive -- `assignment add` lowercases slugs on
-// write and the CLI lowercases its argument, but a hand-edited scores.json
-// key might not match exactly.
+// entriesForAssignment returns the entries for an assignment's bucket. The
+// lookup is case-insensitive since a hand-edited scores.json key might not
+// match the lowercased slug exactly.
 func entriesForAssignment(scores scoresschema.File, assignment string) []map[string]any {
 	if bucket, ok := scores.Assignments[assignment]; ok {
 		return bucket.Entries
@@ -748,10 +708,9 @@ func entriesForAssignment(scores scoresschema.File, assignment string) []map[str
 	return nil
 }
 
-// creditedUsernames returns the lowercased set of usernames that already
-// have a gradebook entry for the assignment in scores.json. Used so a
-// group teammate who was fanned a score (but owns no derived repo) is not
-// mistaken for a non-participant.
+// creditedUsernames returns the lowercased set of usernames that already have a
+// gradebook entry for the assignment, so a group teammate who was fanned a
+// score (but owns no derived repo) isn't mistaken for a non-participant.
 func creditedUsernames(scores scoresschema.File, assignment string) map[string]struct{} {
 	out := make(map[string]struct{})
 	for _, entry := range entriesForAssignment(scores, assignment) {
@@ -762,9 +721,9 @@ func creditedUsernames(scores scoresschema.File, assignment string) map[string]s
 	return out
 }
 
-// entryCreditedUsernames returns every student credited by a gradebook
-// entry: a group entry's `member_usernames`, or — when that's absent
-// (an individual entry) — the sole `owner`.
+// entryCreditedUsernames returns every student credited by a gradebook entry:
+// a group entry's `member_usernames`, or — when absent (individual) — the sole
+// `owner`.
 func entryCreditedUsernames(entry map[string]any) []string {
 	if raw, ok := entry["member_usernames"].([]any); ok {
 		out := make([]string, 0, len(raw))
@@ -783,9 +742,8 @@ func entryCreditedUsernames(entry map[string]any) []string {
 	return nil
 }
 
-// stringifyNumber: integer string for whole numbers, decimal
-// otherwise. "" for nil/non-numeric so an absent or hand-typed
-// entry round-trips cleanly into the CSV.
+// stringifyNumber: integer string for whole numbers, decimal otherwise. "" for
+// nil/non-numeric so an absent or hand-typed entry round-trips into the CSV.
 func stringifyNumber(v any) string {
 	switch x := v.(type) {
 	case float64:
@@ -809,10 +767,9 @@ func stringifyString(v any) string {
 	return ""
 }
 
-// stringifyOverride collapses bool/null/missing into "true" /
-// "false" / "". A hand-edited string passes through so a teacher
-// extending the schema (e.g. `"override": "verified"`) stays
-// readable in the CSV.
+// stringifyOverride collapses bool/null/missing into "true"/"false"/"". A
+// hand-edited string passes through so a teacher extending the schema (e.g.
+// `"override": "verified"`) stays readable in the CSV.
 func stringifyOverride(v any) string {
 	switch x := v.(type) {
 	case bool:
@@ -826,25 +783,18 @@ func stringifyOverride(v any) string {
 	return ""
 }
 
-// refreshResultJSON writes the per-repo submission artifacts from the
-// repo's submit-tag releases. It writes two files into <target>:
+// refreshResultJSON writes the per-repo submission artifacts from the repo's
+// submit-tag releases into <target>:
 //
-//   - results.json: a JSON array of every submit-tag submission
-//     (newest first), each element {"submission_tag": <tag>,
-//     "result": <result.json payload, or null when the release had no
-//     result.json asset>}. This is the "collect all submissions"
-//     artifact.
-//   - result.json: the latest submission's result.json payload (the
-//     historical single-latest behavior, preserved for back-compat
-//     with anything reading <repo>/result.json directly).
+//   - results.json: a JSON array of every submit-tag submission (newest
+//     first), each {"submission_tag": <tag>, "result": <payload, or null when
+//     the release had no result.json asset>}.
+//   - result.json: the latest submission's payload (single-latest back-compat).
 //
-// Silent no-op for: no releases, or no submit-tag release at all.
-// Network/5xx/decode failures propagate so the caller can warn.
-//
-// Token and apiBase are resolved once in downloadByRoster — passing
-// them in avoids per-row keyring/env lookups, and apiBase lets
-// rewriteAssetURL retarget the asset host on GHES or test setups
-// where the asset URL doesn't match the configured API.
+// Silent no-op for no releases / no submit-tag release. Network/5xx/decode
+// failures propagate so the caller can warn. Token and apiBase are resolved
+// once in downloadByRoster; apiBase lets rewriteAssetURL retarget the asset
+// host on GHES / test setups.
 func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, target string) error {
 	releases, err := listAllSubmitReleases(client, org, repo)
 	if err != nil {
@@ -854,8 +804,8 @@ func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, targe
 		return nil
 	}
 
-	// Releases come back newest-first from the API; preserve that
-	// order so results.json[0] is the most recent submission.
+	// API returns releases newest-first; preserve that so results.json[0] is
+	// the most recent submission.
 	history := make([]submissionRecord, 0, len(releases))
 	for _, rel := range releases {
 		assetURL, err := selectResultAsset(rel)
@@ -884,8 +834,8 @@ func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, targe
 		return err
 	}
 
-	// Back-compat: keep <repo>/result.json pointed at the latest
-	// submission's payload (the first history entry with an asset).
+	// Back-compat: point <repo>/result.json at the latest submission's payload
+	// (first history entry with an asset).
 	for _, rec := range history {
 		if len(rec.Result) > 0 {
 			return os.WriteFile(filepath.Join(target, resultAssetName), rec.Result, 0o644)
@@ -894,18 +844,16 @@ func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, targe
 	return nil
 }
 
-// submissionRecord is one entry in <repo>/results.json: a submit-tag
-// release and its result.json payload (null when the release carried
-// no result.json asset). Result is held as RawMessage so the original
-// bytes round-trip verbatim — download never needs to inspect them.
+// submissionRecord is one entry in <repo>/results.json: a submit-tag release
+// and its result.json payload (null when the release carried no asset). Result
+// is RawMessage so the bytes round-trip verbatim.
 type submissionRecord struct {
 	SubmissionTag string          `json:"submission_tag"`
 	Result        json.RawMessage `json:"result"`
 }
 
-// release / releaseAsset: only the fields download consumes. Other
-// keys (name, body, etc.) are intentionally absent so a malformed
-// release doesn't fail decode for a key we don't use.
+// release / releaseAsset: only the fields download consumes. Other keys are
+// absent so a malformed release doesn't fail decode for a key we don't use.
 type release struct {
 	TagName string         `json:"tag_name"`
 	Assets  []releaseAsset `json:"assets"`
@@ -916,20 +864,18 @@ type releaseAsset struct {
 	URL  string `json:"url"`
 }
 
-// listAllSubmitReleases returns every submit-tag release for a repo,
-// newest first, walking the full /releases pagination. This is the
-// "collect all submissions" walk: a student who pushed N times has N
-// submit-tag releases, and all N are returned. Non-submit releases
-// (e.g. a student's hand-created tag) are filtered out. Mirrors
-// `all_submit_releases` in collect_scores.py.
+// listAllSubmitReleases returns every submit-tag release for a repo, newest
+// first, walking the full /releases pagination. Non-submit releases (e.g. a
+// student's hand-created tag) are filtered out. Mirrors all_submit_releases in
+// collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
 	all, err := githubapi.PaginateAll[release](client, allReleasesPerPage, allReleasesPagesMax,
 		func(page int) string {
 			return fmt.Sprintf("repos/%s/%s/releases?per_page=%d&page=%d",
 				url.PathEscape(owner), url.PathEscape(repo), allReleasesPerPage, page)
 		}, func(path string, err error) error {
-			// A repo with no releases (or not accepted yet) 404s; treat
-			// it as "no submissions" rather than a hard failure.
+			// A repo with no releases (or not accepted yet) 404s; treat as "no
+			// submissions" rather than a hard failure.
 			if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
 				return errNoReleases
 			}
@@ -950,15 +896,13 @@ func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]relea
 	return submits, nil
 }
 
-// errNoReleases signals a 404 on the releases walk (no releases yet
-// or repo not accepted) so listAllSubmitReleases can map it to an
-// empty result instead of a hard error.
+// errNoReleases signals a 404 on the releases walk so listAllSubmitReleases can
+// map it to an empty result instead of a hard error.
 var errNoReleases = errors.New("no releases")
 
-// selectResultAsset returns the result.json asset URL. Empty when
-// absent; error when the release carries more than one. Matches
-// collect_scores.py's ambiguity rejection — the library uploads
-// with --clobber, so normal releases have exactly one.
+// selectResultAsset returns the result.json asset URL. Empty when absent; error
+// when the release carries more than one (matches collect_scores.py's ambiguity
+// rejection — uploads use --clobber, so normal releases have exactly one).
 func selectResultAsset(rel release) (string, error) {
 	var matches []string
 	for _, a := range rel.Assets {
@@ -976,9 +920,9 @@ func selectResultAsset(rel release) (string, error) {
 	}
 }
 
-// apiBaseURL returns the REST base URL for `host`, matching go-gh's
-// internal routing. github.com → https://api.github.com; everything
-// else assumed to be GHES at https://<host>/api/v3.
+// apiBaseURL returns the REST base URL for `host`, matching go-gh's routing.
+// github.com → https://api.github.com; everything else assumed GHES at
+// https://<host>/api/v3.
 func apiBaseURL(host string) string {
 	host = strings.TrimSpace(host)
 	if host == "" || host == "github.com" {
@@ -987,14 +931,11 @@ func apiBaseURL(host string) string {
 	return "https://" + host + "/api/v3"
 }
 
-// rewriteAssetURL retargets an asset URL to the configured API
-// host. GitHub's release JSON returns asset URLs on api.github.com
-// even when the client is talking to a GHES box or a test server,
-// so swap scheme+host (preserving any /api/v3 path prefix on the
-// target) before downloading. Relative or otherwise-malformed
-// inputs are returned unchanged so the caller still sees the
-// original — defensive fallback for fixtures that don't include a
-// host. Mirrors `rewrite_asset_url` in collect_scores.py.
+// rewriteAssetURL retargets an asset URL to the configured API host. GitHub's
+// release JSON returns asset URLs on api.github.com even against a GHES box or
+// test server, so swap scheme+host (preserving any /api/v3 prefix) before
+// downloading. Relative/malformed inputs are returned unchanged. Mirrors
+// rewrite_asset_url in collect_scores.py.
 func rewriteAssetURL(assetURL, apiBase string) string {
 	parsedAsset, err := url.Parse(assetURL)
 	if err != nil || parsedAsset.Scheme == "" || parsedAsset.Host == "" {
@@ -1022,12 +963,10 @@ func rewriteAssetURL(assetURL, apiBase string) string {
 	return out.String()
 }
 
-// downloadAssetBytes fetches the asset body. The release-asset
-// endpoint 302s to a signed storage URL when called with
-// Accept: application/octet-stream. Go's stdlib strips
-// Authorization on cross-host redirects; the explicit CheckRedirect
-// is belt-and-suspenders defense, mirroring
-// collect_scores.py's `_AuthStrippingRedirect`.
+// downloadAssetBytes fetches the asset body. The release-asset endpoint 302s to
+// a signed storage URL under Accept: application/octet-stream. Go strips
+// Authorization on cross-host redirects; the explicit CheckRedirect is
+// belt-and-suspenders, mirroring collect_scores.py's _AuthStrippingRedirect.
 func downloadAssetBytes(token, assetURL string) ([]byte, error) {
 	if token == "" {
 		return nil, errors.New("no GitHub token available — run `gh auth login` or `gh teacher login`")
@@ -1067,24 +1006,19 @@ func downloadAssetBytes(token, assetURL string) ([]byte, error) {
 	return body, nil
 }
 
-// stderrTailCap bounds non-verbose stderr capture; the error lives
-// at the tail.
+// stderrTailCap bounds non-verbose stderr capture; the error lives at the tail.
 const stderrTailCap = 8 * 1024
 
-// cloneWithProgress clones one repo, rendering progress on the human
-// channel. Interactive: a spinner (a single large repo can take many
-// seconds). Non-TTY / --quiet: the historical stable stdout lines
-// ("Cloning X... Done"), unchanged for piped/CI readers. Verbose: streams
-// git's output with per-line "Cloning X" / "X: done".
-//
-// Returns the clone error (nil on success) so the caller records the
-// failure and continues.
+// cloneWithProgress clones one repo, rendering progress on the human channel.
+// Interactive: a spinner. Non-TTY / --quiet: stable stdout lines ("Cloning
+// X... Done") for piped/CI readers. Verbose: streams git's output. Returns the
+// clone error so the caller records the failure and continues.
 func cloneWithProgress(out, errOut io.Writer, org, repo, target string, quiet, verbose bool) error {
 	sp := ghui.NewSpinner(errOut, "Cloning "+repo)
 	interactive := sp.Active() && !quiet && !verbose
 
-	// Skip the stdout lines when animating — the spinner shows the same
-	// thing on stderr, and both would duplicate on a shared terminal.
+	// Skip the stdout lines when animating — the spinner shows the same on
+	// stderr, and both would duplicate on a shared terminal.
 	if !quiet && !interactive {
 		if verbose {
 			_, _ = fmt.Fprintf(out, "Cloning %s\n", repo)
@@ -1121,10 +1055,9 @@ func cloneWithProgress(out, errOut io.Writer, org, repo, target string, quiet, v
 	return nil
 }
 
-// cloneOrgRepo shells out to `gh repo clone`. Verbose streams git's
-// output; otherwise stdout is discarded and the tail of stderr is
-// captured so failures carry git's diagnostic, not just
-// "exit status 1".
+// cloneOrgRepo shells out to `gh repo clone`. Verbose streams git's output;
+// otherwise stdout is discarded and the stderr tail is captured so failures
+// carry git's diagnostic, not just "exit status 1".
 func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbose bool) error {
 	args := []string{"repo", "clone", fmt.Sprintf("%s/%s", org, repo), target}
 	if quiet {
@@ -1154,8 +1087,8 @@ func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbos
 	return nil
 }
 
-// tailWriter retains only the last `cap` bytes written, to bound
-// memory when capturing chatty stderr.
+// tailWriter retains only the last `cap` bytes written, bounding memory when
+// capturing chatty stderr.
 type tailWriter struct {
 	buf []byte
 	cap int

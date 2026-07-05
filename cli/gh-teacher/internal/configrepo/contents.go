@@ -1,11 +1,7 @@
-// Package configrepo is the read substrate for the per-org
-// <org>/classroom50 config repository: the contents/tree read helpers,
-// the classroom-metadata and roster record types, and the cross-domain
-// team service. It is consumed by nearly every command package. The
-// write helpers (CommitTree/CommitTreeChange + the workflow-scope
-// classifier they inject) live in internal/configwrite, the write-side
-// sibling of this package; the two are kept separate so neither imports
-// the other.
+// Package configrepo is the read substrate for the per-org <org>/classroom50
+// config repo: contents/tree read helpers, the classroom-metadata and roster
+// record types, and the team service. The write helpers live in
+// internal/configwrite; neither imports the other.
 package configrepo
 
 import (
@@ -24,10 +20,8 @@ import (
 // Thin alias for the shared contract constant — the single source of truth.
 const ConfigRepoName = contract.ConfigRepoName
 
-// ContentEntry is one immediate child returned by the GitHub contents
-// API when the requested path is a directory. Type is "file" or "dir"
-// (the API also emits "symlink"/"submodule", which classroom code
-// ignores).
+// ContentEntry is one immediate child from the contents API for a directory.
+// Type is "file" or "dir" (symlink/submodule are ignored).
 type ContentEntry struct {
 	Name string `json:"name"`
 	Path string `json:"path"`
@@ -85,12 +79,9 @@ func ContentsExists(client githubapi.Client, owner, repo, path, ref string) (boo
 	return true, nil
 }
 
-// ListDirContents lists the immediate children of directory path at ref
-// via GET /repos/{owner}/{repo}/contents/{path}. An empty path lists the
-// repo root. Returns (nil, false, nil) when the path doesn't exist (404).
-// The contents API returns a JSON array for a directory; callers must
-// only pass directory paths (a file path returns a JSON object and fails
-// to decode).
+// ListDirContents lists the immediate children of directory path at ref. Empty
+// path lists the repo root. (nil, false, nil) on 404. Callers must pass only
+// directory paths (a file path returns a JSON object and fails to decode).
 func ListDirContents(client githubapi.Client, owner, repo, path, ref string) ([]ContentEntry, bool, error) {
 	apiPath := contentsAPIPath(owner, repo, path, ref)
 	var entries []ContentEntry

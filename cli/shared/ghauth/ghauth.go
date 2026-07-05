@@ -1,10 +1,9 @@
 // Package ghauth holds the auth scaffolding shared by the gh-teacher and
 // gh-student CLIs: resolving an authenticated go-gh REST client (auto-running
-// `gh auth login` when no token is present), the interactive-TTY guard, and
-// the `gh auth login` shell-out used by both the auto-login path and the
-// explicit `login` command. The two CLIs differ only in their required OAuth
-// scopes and their command name ("gh teacher" vs "gh student"), which are
-// passed in via Options.
+// `gh auth login` when no token is present), the interactive-TTY guard, and the
+// `gh auth login` shell-out used by both the auto-login path and the explicit
+// `login` command. The two CLIs differ only in required OAuth scopes and
+// command name ("gh teacher" vs "gh student"), passed in via Options.
 package ghauth
 
 import (
@@ -41,7 +40,7 @@ func defaultHost() string {
 
 // RequireClient returns an authenticated REST client, auto-running
 // `gh auth login` (with opts.RequiredScopes) when no token is set for the
-// default host so the cryptic "token not found" failure becomes a guided
+// default host, turning the cryptic "token not found" failure into a guided
 // login. Non-interactive shells get a clear error instead.
 func RequireClient(out, errOut writer, opts Options) (*api.RESTClient, error) {
 	host := defaultHost()

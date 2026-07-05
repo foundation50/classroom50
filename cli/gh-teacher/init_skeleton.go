@@ -27,8 +27,8 @@ import (
 var skeletonFS embed.FS
 
 // skeletonProbePath detects "already committed" on re-runs.
-// publish-pages.yaml is unique to the config repo; README.md isn't
-// reliable because auto_init creates one.
+// publish-pages.yaml is unique to the config repo; README.md isn't reliable
+// (auto_init creates one).
 const skeletonProbePath = ".github/workflows/publish-pages.yaml"
 
 // defaultBranchPlaceholder is substituted at commit time so
@@ -77,28 +77,23 @@ func skeletonFiles(defaultBranch string) (map[string]string, error) {
 // skeletonCommitMessage is the single bootstrap commit's message.
 var skeletonCommitMessage = contract.PrefixCommit("Bootstrap classroom50 config repo (gh teacher init)")
 
-// skeletonCommitAttempts: read-parent + build-tree retries, at 200ms x
-// 2^n backoff (~3s), to ride out a fresh repo's git-data lag.
+// skeletonCommitAttempts: read-parent + build-tree retries at 200ms×2^n backoff
+// (~3s) to ride out a fresh repo's git-data lag.
 const skeletonCommitAttempts = 5
 
-// errRefNotReady: refAndTree returned 200 but an empty SHA -- the ref
-// isn't readable yet and the Tree API would 404 on the blank
-// base_tree. Retryable.
+// errRefNotReady: refAndTree returned 200 but an empty SHA — the ref isn't
+// readable yet and the Tree API would 404 on the blank base_tree. Retryable.
 var errRefNotReady = errors.New("branch ref not fully propagated")
 
-// commitSkeleton lands the embedded skeleton on defaultBranch in one
-// Tree commit. When the probe file shows a skeleton already landed, it
-// refreshes stale files instead (diff embedded vs repo, confirm, commit
-// only the changed paths) so re-running init picks up skeleton updates
-// — e.g. an org bootstrapped before declarative tests gains
-// materialize_tests.py and the updated runner/workflows.
+// commitSkeleton lands the embedded skeleton on defaultBranch in one Tree
+// commit. When the probe shows a skeleton already landed, it refreshes stale
+// files instead (diff, confirm, commit changed paths) so re-running init picks
+// up skeleton updates.
 //
-// A just-created repo (auto_init, or one a prior run made seconds ago
-// then 422'd on) serves the git-data APIs before its ref propagates:
-// reads 404, the Tree write 409s "Git Repository is empty". So wait
-// for the branch tip to settle, then retry the read+build for any lag
-// that slips through. Both run on every path -- "already exists" is
-// often a seconds-old repo.
+// A just-created repo serves the git-data APIs before its ref propagates (reads
+// 404, the Tree write 409s "Git Repository is empty"), so wait for the tip to
+// settle then retry. Both run on every path — "already exists" is often a
+// seconds-old repo.
 func commitSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer, owner, repo, defaultBranch string, assumeYes bool) error {
 	files, err := skeletonFiles(defaultBranch)
 	if err != nil {
@@ -113,15 +108,14 @@ func commitSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer
 		return refreshSkeleton(client, in, out, errOut, owner, repo, defaultBranch, files, assumeYes)
 	}
 
-	// Let auto_init's commit propagate first. Best-effort: the retry
-	// below still covers a ref slow past the poll budget.
+	// Let auto_init's commit propagate first. Best-effort: the retry still
+	// covers a ref slow past the poll budget.
 	if err := githubapi.WaitForStableBranch(client, owner, repo, defaultBranch); err != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: %s slow to propagate (%v); proceeding with retries\n",
 			owner, repo, defaultBranch, err)
 	}
 
-	// Blobs are content-addressed, so upload once; a retry below
-	// reuses these SHAs.
+	// Blobs are content-addressed, so upload once; a retry reuses these SHAs.
 	entries, err := githubapi.UploadBlobs(client, owner, repo, files)
 	if err != nil {
 		return err
@@ -135,12 +129,10 @@ func commitSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer
 	return nil
 }
 
-// refreshSkeleton brings an already-bootstrapped config repo's skeleton
-// up to date: diff the embedded files against the repo, confirm with
-// the teacher (skeleton files are documented as user-editable, so an
-// overwrite resets local customizations), then commit only the stale
-// paths through the optimistic-rebase loop. Declining is not an error
-// — init continues with the rest of its steps.
+// refreshSkeleton brings an already-bootstrapped config repo's skeleton up to
+// date: diff embedded vs repo, confirm (skeleton files are user-editable, so an
+// overwrite resets customizations), then commit only the stale paths. Declining
+// is not an error.
 func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Writer, owner, repo, branch string, files map[string]string, assumeYes bool) error {
 	stale, err := diffSkeleton(client, owner, repo, branch, files)
 	if err != nil {
@@ -166,10 +158,9 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		}
 	}
 
-	// Re-diff inside the build closure so a rebase retry sees each
-	// attempt's parent state and never re-commits an already-current
-	// file. refreshed resets per attempt so the post-commit message
-	// reports what actually landed, not the pre-confirmation diff.
+	// Re-diff inside the build closure so a rebase retry sees each attempt's
+	// parent and never re-commits a current file. refreshed resets per attempt
+	// so the message reports what actually landed.
 	var refreshed int
 	build := func(parentSHA string) (map[string]string, error) {
 		refreshed = 0
@@ -189,8 +180,8 @@ func refreshSkeleton(client githubapi.Client, in io.Reader, out, errOut io.Write
 		return err
 	}
 	if commitSHA == "" {
-		// A concurrent writer refreshed the same files between the
-		// initial diff and the commit attempt; nothing left to land.
+		// A concurrent writer refreshed the same files between the diff and
+		// the commit; nothing left to land.
 		_, _ = fmt.Fprintf(out, "%s/%s: skeleton already refreshed by a concurrent writer, nothing to commit\n", owner, repo)
 		return nil
 	}
@@ -227,11 +218,9 @@ func confirmSkeletonRefresh(in io.Reader, errOut io.Writer) (bool, error) {
 	return answer == "y" || answer == "yes", nil
 }
 
-// skeletonFreshRepoRetry configures the shared fresh-repo-retry loop for the
-// skeleton commit: ride out a fresh repo's git-data lag (404 reads, 409 "Git
-// Repository is empty" writes, or an empty parent SHA), but treat a
-// missing-`workflow`-scope 404 as terminal. createTree's base_tree must
-// resolve, so the retry wraps the write, not just the ref read.
+// skeletonFreshRepoRetry configures the shared fresh-repo-retry loop: ride out
+// a fresh repo's git-data lag but treat a missing-`workflow`-scope 404 as
+// terminal. createTree's base_tree must resolve, so the retry wraps the write.
 func skeletonFreshRepoRetry() gittree.FreshRepoRetry {
 	return gittree.FreshRepoRetry{
 		Attempts: skeletonCommitAttempts,
@@ -246,9 +235,8 @@ func skeletonFreshRepoRetry() gittree.FreshRepoRetry {
 	}
 }
 
-// isSkeletonRetryable: the transient fresh-repo conditions worth a
-// retry -- 404 (reads), 409 "Git Repository is empty" (writes), or an
-// empty parent SHA (errRefNotReady).
+// isSkeletonRetryable: transient fresh-repo conditions worth a retry — 404
+// (reads), 409 "Git Repository is empty" (writes), or an empty parent SHA.
 func isSkeletonRetryable(err error) bool {
 	if errors.Is(err, configwrite.ErrMissingWorkflowScope) {
 		return false

@@ -20,10 +20,9 @@ const migrateSourceGitHubClassroom = "github_classroom"
 // a hyphen before the runs-of-hyphens collapse.
 var shortNameDeriveReplace = regexp.MustCompile(`[^a-z0-9]+`)
 
-// deriveShortName slugifies a free-form classroom name into a value
-// that passes shortNamePattern: lowercase → replace non-alnum with
-// `-` → collapse runs → trim → truncate to 39 chars → validate. On
-// validation failure returns an actionable error asking for an
+// deriveShortName slugifies a free-form classroom name into a value that passes
+// ShortNamePattern (lowercase → replace non-alnum with `-` → collapse → trim →
+// truncate to 39 → validate). On failure returns an error asking for an
 // explicit --short-name.
 func deriveShortName(raw string) (string, error) {
 	lowered := strings.ToLower(strings.TrimSpace(raw))
@@ -54,11 +53,9 @@ func classroomMigratedFromFromDetail(detail classroomDetail, migratedAt time.Tim
 	}
 }
 
-// assignmentToEntry maps a source assignment + a resolved target
-// template ref into the on-disk assignment.AssignmentEntry. targetTemplate is
-// the post-copy template repo in the target org; the source
-// `starter_code_repository` lives in migrated_from.starter_repo.
-// Errors on shapes that produce an invalid on-disk entry.
+// assignmentToEntry maps a source assignment + resolved target template ref
+// into the on-disk AssignmentEntry. targetTemplate is the post-copy repo; the
+// source starter lives in migrated_from.starter_repo. Errors on invalid shapes.
 func assignmentToEntry(
 	detail classroomAssignmentDetail,
 	classroomID int64,
@@ -75,18 +72,15 @@ func assignmentToEntry(
 		return assignment.AssignmentEntry{}, fmt.Errorf("source assignment %d (%q) has unknown type %q (must be one of %v)", detail.ID, detail.Slug, detail.Type, assignment.AssignmentModes)
 	}
 
-	// Deadline is nullable in source; a non-null value is dropped
-	// unless it parses as an RFC 3339 timestamp WITH an offset --
-	// `due` is advisory and shouldn't abort the migration, and a
-	// zone-less source value has no knowable zone to normalize from,
-	// so guessing UTC would silently shift the deadline. A valid
-	// deadline is normalized to a UTC instant, with the verbatim
-	// source value preserved in due_meta for the audit trail.
+	// Deadline is nullable in source; a non-null value is dropped unless it
+	// parses as RFC 3339 WITH an offset — `due` is advisory, and a zone-less
+	// value has no knowable zone (guessing UTC would shift the deadline). A
+	// valid deadline normalizes to UTC, with the source value kept in due_meta.
 	due := ""
 	var dueProvenance *assignment.DueMeta
 	if detail.Deadline != nil {
-		// loc is unused for an offset-bearing value; the hadOffset
-		// guard below rejects the zone-less case outright.
+		// loc is unused for an offset-bearing value; the hadOffset guard
+		// rejects the zone-less case.
 		if t, hadOffset, err := assignment.ParseDueTime(*detail.Deadline, time.UTC); err == nil && hadOffset {
 			due = t.UTC().Format(time.RFC3339)
 			dueProvenance = assignment.NewDueMeta(*detail.Deadline, t, assignment.DueSourceMigrated)
@@ -104,11 +98,9 @@ func assignmentToEntry(
 		mig.StarterRepo = detail.StarterCodeRepo.FullName
 	}
 
-	// Group assignments must carry a usable max_group_size. Use the
-	// source classroom's max_teams when it reports a sane value (>= 2);
-	// otherwise fall back to the cap so a migration never fails on a
-	// missing/odd source value — the teacher can tighten it later via
-	// `gh teacher assignment add --mode group --max-group-size`.
+	// Group assignments need a usable max_group_size. Use the source's
+	// max_teams when sane (2..cap); else fall back to the cap so migration
+	// never fails on a missing/odd value (the teacher can tighten it later).
 	maxGroupSize := 0
 	if detail.Type == assignment.ModeGroup {
 		if detail.MaxTeams != nil && *detail.MaxTeams >= 2 && *detail.MaxTeams <= assignment.MaxGroupSizeCap {

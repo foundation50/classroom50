@@ -233,9 +233,9 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 	})
 }
 
-// repoFileExists underpins the self-healing branch (probe
-// .classroom50.yaml on an already-existing repo) and the post-provision
-// verification. 200 -> true, 404 -> false, other statuses -> error.
+// repoFileExists underpins the self-healing branch (probe .classroom50.yaml on
+// an already-existing repo) and the post-provision verification. 200 → true,
+// 404 → false, other statuses → error.
 func TestRepoFileExists(t *testing.T) {
 	cases := []struct {
 		name    string
@@ -279,12 +279,11 @@ func TestRepoFileExists(t *testing.T) {
 }
 
 // verifyProvisioned passes when the accept marker (.classroom50.yaml) is
-// readable. DropFiles lands it and the autograde workflow in one atomic
-// Tree commit, so the marker's presence implies the workflow's; checking
-// the marker alone is the contract. The read-back polls through the
-// contents API's post-commit consistency lag, so a marker that is missing
-// on the first read but present on a retry succeeds; a persistently
-// missing marker fails with an actionable re-run hint.
+// readable. DropFiles lands it and the autograde workflow in one atomic Tree
+// commit, so the marker's presence implies the workflow's. The read-back polls
+// through the contents API's post-commit consistency lag: a marker missing on
+// the first read but present on a retry succeeds; a persistently missing one
+// fails with an actionable re-run hint.
 func TestVerifyProvisioned(t *testing.T) {
 	const repo = "cs-principles-hello-alice"
 
@@ -343,14 +342,12 @@ func TestVerifyProvisioned(t *testing.T) {
 	})
 }
 
-// TestAcceptIntoRepo_SelfHealFork is the end-to-end test of accept's
-// headline self-healing behavior — the fork the code review flagged as
-// uncovered. It exercises acceptIntoRepo (the post-create tail of
-// acceptAssignment, split out so it can be driven without the up-front
-// Pages fetch) against an httptest GitHub server, asserting both
-// branches: an already-provisioned repo is left untouched, and a
-// half-provisioned one is repaired by re-running the idempotent
-// provisioning.
+// TestAcceptIntoRepo_SelfHealFork is the end-to-end test of accept's headline
+// self-healing behavior. It drives acceptIntoRepo (the post-create tail of
+// acceptAssignment, split out so it runs without the up-front Pages fetch)
+// against an httptest GitHub server, asserting both branches: an
+// already-provisioned repo is left untouched, and a half-provisioned one is
+// repaired by re-running the idempotent provisioning.
 func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 	const (
 		org      = "o"
@@ -482,8 +479,7 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 			t.Errorf("heal path must re-provision (collaboratorPut=%v treeWrite=%v refPatched=%v)", collaboratorPut, treeWrite, refPatched)
 		}
 		// The marker is probed for the fork decision (1) and again by the
-		// post-provision verifyProvisioned (>=1), so it must be read more
-		// than once.
+		// post-provision verifyProvisioned (>=1), so it must be read >1 time.
 		if markerReads < 2 {
 			t.Errorf("expected the marker to be re-read after provisioning, got %d read(s)", markerReads)
 		}

@@ -9,8 +9,8 @@ import (
 )
 
 // newTestRESTClient wires a real go-gh client at the test server, as the
-// githubapi.Client seam. Thin shim over githubtest.NewTestClient so the
-// existing package-main test call sites stay unchanged.
+// githubapi.Client seam. Thin shim over githubtest.NewTestClient so existing
+// package-main call sites stay unchanged.
 func newTestRESTClient(t *testing.T, server *httptest.Server) githubapi.Client {
 	t.Helper()
 	return githubtest.NewTestClient(t, server)

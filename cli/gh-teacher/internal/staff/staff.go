@@ -1,12 +1,8 @@
 // Package staff implements the `gh teacher staff` command: managing the
-// per-classroom staff teams (instructor, ta) that back the web GUI's
-// in-app roles. Membership lives entirely in the GitHub teams
-// (`classroom50-<classroom>-{instructor,ta}`), not in students.csv, so a
-// classroom's staff is the same whether managed from the CLI or the web.
-// It is an extracted command package (mirrors internal/roster): only
-// NewCmd is exported; the subcommand factories and run* orchestration are
-// package-private. It depends only on the internal/* substrate seams
-// (configrepo, membership, validate, githubapi), never on package main.
+// per-classroom staff teams (instructor, ta) that back the web GUI's in-app
+// roles. Membership lives in the GitHub teams (`classroom50-<classroom>-{...}`),
+// not students.csv, so staff is identical from CLI or web. Only NewCmd is
+// exported.
 package staff
 
 import (
@@ -50,8 +46,8 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// parseRole maps the --role flag to a StaffRole, defaulting to
-// instructor. Accepts "instructor" or "ta" (case-insensitive).
+// parseRole maps --role to a StaffRole (default instructor). Accepts
+// "instructor" or "ta" (case-insensitive).
 func parseRole(role string) (configrepo.StaffRole, error) {
 	switch strings.ToLower(strings.TrimSpace(role)) {
 	case "", "instructor":
@@ -147,18 +143,15 @@ func staffRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-// runStaffAdd resolves the staff team from classroom.json (authoritative
-// slug — never re-derived) and adds the canonical-login user to it. The
-// team must already exist (created by `classroom add`); a classroom with
-// no `teams` block yields an actionable error rather than a silent
-// re-derive against a guessed slug.
+// runStaffAdd resolves the staff team from classroom.json and adds the
+// canonical-login user. If the `teams` block is missing/partial, it self-heals
+// (create/adopt the team, grant config-repo write, record the ref).
 func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
 	}
-	// Resolve the canonical login (a rename-safe, case-corrected form)
-	// and confirm the user exists before touching the team.
+	// Resolve the canonical login and confirm the user exists first.
 	login, _, err := membership.LookupUser(client, username)
 	if err != nil {
 		return err
@@ -168,13 +161,10 @@ func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom,
 		return err
 	}
 	if !ok {
-		// Self-heal a missing/partial `teams` block rather than dead-ending:
-		// ensure (adopt-or-create) the staff team, grant it config-repo
-		// write, and persist its ref into classroom.json, then proceed.
-		// This makes `staff add` idempotent for classrooms created before
-		// the staff-teams feature or left with a partial `teams` block,
-		// instead of pointing the user at `classroom add` (which refuses
-		// to overwrite an existing classroom and can't repair it).
+		// Self-heal a missing/partial `teams` block: ensure the team, grant
+		// config-repo write, persist its ref, then proceed. Makes `staff add`
+		// idempotent for pre-feature classrooms rather than dead-ending at
+		// `classroom add` (which can't repair an existing classroom).
 		team, err = ensureStaffTeamRecorded(client, out, org, classroom, branch, role)
 		if err != nil {
 			return err
@@ -187,12 +177,10 @@ func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom,
 	return nil
 }
 
-// ensureStaffTeamRecorded adopts-or-creates the classroom's staff team
-// for `role`, grants it config-repo write, and records its ref under
-// classroom.json `teams.<role>` in one commit. It first confirms the
-// classroom exists (so a typo'd classroom doesn't mint a stray team) and
-// is a no-op-safe read-modify-write: an already-recorded ref short-
-// circuits without a commit. Returns the resolved team ref.
+// ensureStaffTeamRecorded adopts-or-creates the classroom's staff team for
+// `role`, grants it config-repo write, and records its ref under
+// classroom.json `teams.<role>` in one commit. Confirms the classroom exists
+// first (so a typo doesn't mint a stray team); no-op-safe if already recorded.
 func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classroom, branch string, role configrepo.StaffRole) (configrepo.TeamRef, error) {
 	if _, ok, err := configrepo.LoadClassroom(client, org, classroom, branch); err != nil {
 		return configrepo.TeamRef{}, err
@@ -207,8 +195,8 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 	if _, err := configrepo.GrantTeamRepoWrite(client, org, team.Slug, org, configrepo.ConfigRepoName); err != nil {
 		return configrepo.TeamRef{}, fmt.Errorf("grant %s staff team write on %s: %w", role, configrepo.ConfigRepoName, err)
 	}
-	// Persist the ref so future resolves (and the classroom-remove /
-	// teardown sweeps) find it. RMW classroom.json in one commit.
+	// Persist the ref so future resolves and the delete/teardown sweeps find
+	// it. RMW classroom.json in one commit.
 	path := configrepo.ClassroomFilePath(classroom)
 	message := contract.PrefixCommit(fmt.Sprintf("Record %s staff team for %s (gh teacher staff add)", role, classroom))
 	build := func(parentSHA string) (map[string]string, error) {
@@ -249,9 +237,8 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 	return team, nil
 }
 
-// runStaffRemove resolves the staff team from classroom.json and removes
-// the user. Idempotent — a non-member (or an already-gone team) is a
-// clean no-op.
+// runStaffRemove resolves the staff team and removes the user. Idempotent — a
+// non-member or already-gone team is a no-op.
 func runStaffRemove(client githubapi.Client, out io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {

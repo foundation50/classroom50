@@ -31,10 +31,9 @@ func TestHasTemplate(t *testing.T) {
 }
 
 func TestPagesAssignmentsURL(t *testing.T) {
-	// Public contract: publish-pages publishes
-	// `<classroom>/assignments.json` at
-	// `https://<org>.github.io/classroom50/...`. A typo here would
-	// 404 every accept.
+	// Public contract: publish-pages publishes `<classroom>/assignments.json`
+	// at `https://<org>.github.io/classroom50/...`. A typo here 404s every
+	// accept.
 	got := pagesAssignmentsURL("cs50-fall-2026", "cs-principles", "")
 	want := "https://cs50-fall-2026.github.io/classroom50/cs-principles/assignments.json"
 	if got != want {
@@ -43,9 +42,9 @@ func TestPagesAssignmentsURL(t *testing.T) {
 }
 
 func TestPagesAssignmentsURL_WithSecret(t *testing.T) {
-	// A protected classroom inserts the capability-URL segment between
-	// the classroom and the resource. Must match publish-pages.yaml and
-	// runner.py's layout exactly or a protected accept 404s.
+	// A protected classroom inserts the capability-URL segment between the
+	// classroom and the resource. Must match publish-pages.yaml and runner.py
+	// exactly or a protected accept 404s.
 	got := pagesAssignmentsURL("cs50-fall-2026", "cs-principles", "abc123")
 	want := "https://cs50-fall-2026.github.io/classroom50/cs-principles/abc123/assignments.json"
 	if got != want {
@@ -63,8 +62,7 @@ func TestPagesAutograderURL(t *testing.T) {
 }
 
 func TestAssignmentEntryResolveAutograder(t *testing.T) {
-	// Empty Autograder resolves to "default"; explicit values
-	// round-trip verbatim.
+	// Empty Autograder resolves to "default"; explicit values round-trip.
 	cases := []struct {
 		in   Entry
 		want string
@@ -82,8 +80,8 @@ func TestAssignmentEntryResolveAutograder(t *testing.T) {
 }
 
 func TestFetchAutograderWorkflow_HappyPath(t *testing.T) {
-	// Fetched bytes round-trip verbatim into the student repo so
-	// the shim's commit-time content matches Pages' published copy.
+	// Fetched bytes round-trip verbatim into the student repo so the shim's
+	// commit-time content matches Pages' published copy.
 	body := "name: Autograde\n" +
 		"on:\n" +
 		"  push:\n" +
@@ -110,8 +108,8 @@ func TestFetchAutograderWorkflow_HappyPath(t *testing.T) {
 }
 
 func TestFetchAutograderWorkflow_404SurfacesActionableGuidance(t *testing.T) {
-	// 404 is the most likely failure (Pages not deployed yet or
-	// file deleted). Error must name the autograder, URL, and fix.
+	// 404 is the most likely failure (Pages not deployed yet or file deleted).
+	// Error must name the autograder, URL, and fix.
 	server, cleanup := newAutograderServer(t, "not found", http.StatusNotFound)
 	defer cleanup()
 
@@ -127,9 +125,8 @@ func TestFetchAutograderWorkflow_404SurfacesActionableGuidance(t *testing.T) {
 }
 
 func TestFetchAutograderWorkflow_RejectsMalformedYAML(t *testing.T) {
-	// Malformed YAML must fail at fetch time, before landing in
-	// the student repo. Error is the signal the student forwards
-	// to the instructor.
+	// Malformed YAML must fail at fetch time, before landing in the student
+	// repo. The error is the signal the student forwards to the instructor.
 	server, cleanup := newAutograderServer(t, "name: Autograde\non: { invalid: [\n", http.StatusOK)
 	defer cleanup()
 
@@ -146,8 +143,8 @@ func TestFetchAutograderWorkflow_RejectsMalformedYAML(t *testing.T) {
 }
 
 func TestFetchAutograderWorkflow_RejectsEmptyBody(t *testing.T) {
-	// Pages occasionally serves a stub during deployment.
-	// Empty body → "retry" rather than empty workflow on disk.
+	// Pages occasionally serves a stub during deployment. Empty body →
+	// "retry" rather than an empty workflow on disk.
 	server, cleanup := newAutograderServer(t, "   \n   \n", http.StatusOK)
 	defer cleanup()
 
@@ -160,8 +157,7 @@ func TestFetchAutograderWorkflow_RejectsEmptyBody(t *testing.T) {
 	}
 }
 
-// newAutograderServer: same pattern as newPagesServer below,
-// mounted at the autograders path.
+// newAutograderServer mirrors newPagesServer, mounted at the autograders path.
 func newAutograderServer(t *testing.T, body string, status int) (*httptest.Server, func()) {
 	t.Helper()
 	mux := http.NewServeMux()
@@ -246,8 +242,8 @@ func TestFetchAssignmentEntry_ReturnsTypedNotFound(t *testing.T) {
 }
 
 func TestFetchAssignmentEntry_404Surfaces_PagesGuidance(t *testing.T) {
-	// 404 → publish-pages hasn't run or the classroom arg is
-	// typo'd. Error must give the student something to ask for.
+	// 404 → publish-pages hasn't run or the classroom arg is typo'd. Error
+	// must give the student something to ask for.
 	server, cleanup := newPagesServer(t, "not found", http.StatusNotFound)
 	defer cleanup()
 

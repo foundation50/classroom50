@@ -5,16 +5,15 @@ import (
 	"testing"
 )
 
-// TestContractLiterals is a change-detector: it pins each cross-binary constant
-// to its exact wire value. These literals must stay byte-identical to the
-// Python scripts (runner.py, collect_scores.py, materialize_tests.py) and the
-// JSON Schemas under schemas/, which assert their own copies independently.
-// There is no compile-time link across languages, so an accidental edit here
-// (a typo, or a unilateral v1->v2 bump) would otherwise compile and pass every
-// other Go test while silently breaking outcome-equivalence with the GUI,
-// the Python autograde/collect pipeline, and already-bootstrapped repos. If a
-// value genuinely changes, update this test AND every cross-language copy in
-// lockstep.
+// TestContractLiterals is a change-detector pinning each cross-binary constant
+// to its exact wire value. These must stay byte-identical to the Python scripts
+// (runner.py, collect_scores.py, materialize_tests.py) and the JSON Schemas
+// under schemas/, which assert their own copies. With no compile-time link
+// across languages, an accidental edit here (a typo, a unilateral v1->v2 bump)
+// would compile and pass every other Go test while silently breaking
+// outcome-equivalence with the GUI, the Python autograde/collect pipeline, and
+// already-bootstrapped repos. On a genuine change, update this test AND every
+// cross-language copy in lockstep.
 func TestContractLiterals(t *testing.T) {
 	cases := []struct {
 		name string
@@ -49,11 +48,11 @@ func TestContractLiterals(t *testing.T) {
 	}
 }
 
-// TestRequiredOAuthScopes pins the unified CLI scope set (issue #246): both the
-// gh-teacher and gh-student binaries request exactly these, and delete_repo
-// stays out of the default set (opt-in for teardown). The exact list is the
-// behavior oracle for the login command and the teacher preflight; a change
-// here must move in lockstep with those and the wiki scope tables.
+// TestRequiredOAuthScopes pins the unified CLI scope set (issue #246): both
+// binaries request exactly these, and delete_repo stays out (opt-in for
+// teardown). This list is the behavior oracle for the login command and the
+// teacher preflight; changes must move in lockstep with those and the wiki
+// scope tables.
 func TestRequiredOAuthScopes(t *testing.T) {
 	want := []string{"admin:org", "read:org", "repo", "workflow"}
 	got := RequiredOAuthScopes()

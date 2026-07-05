@@ -11,10 +11,10 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
-// TestNextPageLink pins the Link-header `rel="next"` parser both Go CLIs
-// rely on. The regex is the single authoritative next-page extractor, so
-// these edge cases guard against silent drift breaking pagination in both
-// binaries with the rest of the suite still green.
+// TestNextPageLink pins the Link-header `rel="next"` parser both Go CLIs rely
+// on. This regex is the single next-page extractor, so these edge cases guard
+// against silent drift breaking pagination in both binaries while the rest of
+// the suite stays green.
 func TestNextPageLink(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -47,9 +47,9 @@ func TestNextPageLink(t *testing.T) {
 	}
 }
 
-// TestNextPage pins the shared termination decision both Go walks use, so
-// the error-prone "follow next / stop / synthesize" predicate can't drift
-// between paginateAll and the student collaborator walk.
+// TestNextPage pins the shared termination decision both Go walks use, so the
+// "follow next / stop / synthesize" predicate can't drift between paginateAll
+// and the student collaborator walk.
 func TestNextPage(t *testing.T) {
 	const perPage = 100
 	t.Run("follows rel=next regardless of page length", func(t *testing.T) {
@@ -79,8 +79,8 @@ func TestNextPage(t *testing.T) {
 }
 
 func TestDecodeContentsBase64(t *testing.T) {
-	// The contents API wraps base64 at column 60 with embedded newlines;
-	// the std decoder rejects those, so the helper must strip them first.
+	// The contents API wraps base64 at column 60 with embedded newlines, which
+	// the std decoder rejects, so the helper must strip them first.
 	t.Run("strips embedded newlines", func(t *testing.T) {
 		// "hello world" repeated, encoded then line-wrapped.
 		wrapped := "aGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gd29ybGQgaGVsbG8gd29y\nbGQ="
@@ -155,8 +155,8 @@ func TestCurrentUser(t *testing.T) {
 }
 
 func TestSetCollaborator(t *testing.T) {
-	// 201 means an invitation was created; 204 means added directly. The
-	// helper surfaces both verbatim and rejects anything else.
+	// 201 = invitation created; 204 = added directly. The helper surfaces both
+	// verbatim and rejects anything else.
 	cases := []struct {
 		name    string
 		status  int
@@ -199,9 +199,9 @@ func TestSetCollaborator(t *testing.T) {
 	}
 }
 
-// TestWaitForStableBranch pins the post-create branch-stabilization poll
-// the accept flow relies on: a branch that reports the same non-empty SHA
-// on two consecutive reads resolves without error.
+// TestWaitForStableBranch pins the post-create branch-stabilization poll the
+// accept flow relies on: a branch reporting the same non-empty SHA on two
+// consecutive reads resolves without error.
 func TestWaitForStableBranch(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/repos/o/r/branches/main", func(w http.ResponseWriter, r *http.Request) {

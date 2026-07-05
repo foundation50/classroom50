@@ -21,16 +21,14 @@ import (
 )
 
 // assignmentReuseCmd copies an assignment record from one classroom's
-// assignments.json into another's in the SAME org, changing only
-// slug/name. Mirrors classroom50-web's reuse: the record is
-// copied verbatim through the typed AssignmentEntry (every v1 field
-// round-trips), and unknown/future top-level fields survive via
-// AssignmentEntry.Extra.
+// assignments.json into another's in the SAME org, changing only slug/name.
+// The record is copied verbatim through the typed AssignmentEntry, and
+// unknown/future top-level fields survive via Extra.
 //
-// In-org only (v1): a private template can only be team-granted within its
-// own org, so cross-org reuse of a private template is out of scope. The
-// only network re-derivation is re-applying the private in-org template
-// team grant for the TARGET classroom (the same grant `assignment add` does).
+// In-org only (v1): a private template can only be team-granted within its own
+// org, so cross-org reuse of a private template is out of scope. The only
+// network re-derivation is re-applying the private in-org template team grant
+// for the TARGET classroom.
 func assignmentReuseCmd() *cobra.Command {
 	var (
 		from    string
@@ -129,9 +127,8 @@ func assignmentReuseCmd() *cobra.Command {
 	return cmd
 }
 
-// reuseAssignmentParams carries the inputs to runAssignmentReuse. The
-// *WasSet flags distinguish "flag omitted (use source / auto-suffix)"
-// from an explicit value, mirroring how add treats pointer fields.
+// reuseAssignmentParams carries runAssignmentReuse's inputs. The *WasSet flags
+// distinguish "flag omitted (use source / auto-suffix)" from an explicit value.
 type reuseAssignmentParams struct {
 	Org          string
 	From         string
@@ -144,9 +141,8 @@ type reuseAssignmentParams struct {
 	AsJSON       bool
 }
 
-// reuseResult is the --json shape: the resolved copy a script/agent needs
-// to act on. `slug` is the FINAL slug (after any auto-suffix), which is the
-// reason --json exists — an auto-suffixed slug isn't knowable in advance.
+// reuseResult is the --json shape. `slug` is the FINAL slug (after any
+// auto-suffix), which is why --json exists — the suffix isn't knowable ahead.
 type reuseResult struct {
 	Org          string                  `json:"org"`
 	Classroom    string                  `json:"classroom"`
@@ -156,12 +152,10 @@ type reuseResult struct {
 	Template     *assignment.TemplateRef `json:"template,omitempty"`
 }
 
-// runAssignmentReuse reads the source entry and upserts a copy into the
-// target classroom inside one configwrite.CommitTree build callback, so
-// the source read, the collision check, and the target write all see the
-// same parent SHA (a concurrent edit loses cleanly on retry). The
-// private-in-org template team grant for the TARGET classroom runs after
-// the commit, mirroring runAssignmentAdd.
+// runAssignmentReuse reads the source entry and upserts a copy into the target
+// classroom inside one build callback, so the source read, collision check, and
+// target write all see the same parent SHA. The private-in-org template grant
+// for the TARGET runs after the commit, mirroring runAssignmentAdd.
 func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseAssignmentParams) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, p.Org)
 	if err != nil {
@@ -189,8 +183,7 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 			return nil, fmt.Errorf("assignment %q not found in source classroom %q (%s/%s/%s) — run `gh teacher assignment list %s %s` to see available slugs",
 				p.SourceSlug, p.Org, configrepo.ConfigRepoName, p.From, assignmentsFilePath(p.From), p.Org, p.From)
 		}
-		// Copy verbatim through the typed entry (every v1 field
-		// round-trips); only slug/name are overridable.
+		// Copy verbatim through the typed entry; only slug/name are overridable.
 		copied = srcFile.Assignments[idx]
 
 		dstFile, err := loadAssignments(client, p.Org, p.To, parentSHA)
@@ -199,9 +192,8 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		}
 
 		// Resolve the target slug: an explicit --slug must not collide
-		// (case-insensitive); otherwise auto-suffix off the source slug.
-		// autoSuffixed is reset each attempt because build re-runs on a
-		// rebase retry.
+		// (case-insensitive); else auto-suffix off the source slug. Reset each
+		// attempt since build re-runs on a rebase retry.
 		autoSuffixed = false
 		if p.SlugWasSet {
 			if assignment.SlugExistsFold(dstFile.Assignments, p.SlugOverride) {
@@ -239,9 +231,8 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		return err
 	}
 
-	// The copy has landed. Emit the machine-readable result (when --json)
-	// or the human summary on stdout; advisory notes always go to stderr so
-	// stdout stays a clean single value for scripted callers.
+	// Emit the machine-readable result (--json) or human summary on stdout;
+	// advisory notes go to stderr so stdout stays a clean single value.
 	if p.AsJSON {
 		data, err := output.JSONPretty(reuseResult{
 			Org:          p.Org,
@@ -267,9 +258,8 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		_, _ = fmt.Fprintf(errOut, "Note: slug %q already existed in %q, so the copy was named %q.\n", p.SourceSlug, p.To, finalSlug)
 	}
 
-	// Re-apply the target classroom's private in-org template team grant
-	// (the same grant `assignment add` performs). In --json mode the
-	// grant's "granted" line goes to stderr so stdout stays parseable.
+	// Re-apply the target classroom's private in-org template team grant. In
+	// --json mode the "granted" line goes to stderr so stdout stays parseable.
 	grantOut := out
 	if p.AsJSON {
 		grantOut = errOut
@@ -282,11 +272,10 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 	return nil
 }
 
-// grantReusedTemplateAccess re-applies the TARGET classroom team's read
-// grant on a reused assignment's private, org-owned template. Public,
-// absent, and out-of-org templates are no-ops (out-of-org with a warning —
-// it can't be granted in-org-only v1). A 404 (template gone/invisible) is
-// surfaced as a warning since the copy already landed.
+// grantReusedTemplateAccess re-applies the TARGET classroom team's read grant
+// on a reused assignment's private, org-owned template. Public/absent/out-of-org
+// templates are no-ops (out-of-org with a warning). A 404 is a warning since
+// the copy already landed.
 func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, slug string, tmpl *assignment.TemplateRef) error {
 	if tmpl == nil {
 		return nil
@@ -311,20 +300,18 @@ func grantReusedTemplateAccess(client githubapi.Client, out, errOut io.Writer, o
 	return grantClassroomTeamTemplateRead(client, out, org, classroom, branch, slug, tmpl.Owner, tmpl.Repo, grantContext{verb: "reused", classroomNoun: "target classroom"})
 }
 
-// grantContext carries the per-caller wording for
-// grantClassroomTeamTemplateRead's error messages, so `assignment add` and
-// `assignment reuse` share the grant core while keeping distinct phrasing.
+// grantContext carries per-caller wording for grantClassroomTeamTemplateRead's
+// errors, so add and reuse share the grant core with distinct phrasing.
 type grantContext struct {
 	verb          string // past-tense action: "committed" / "reused"
 	classroomNoun string // "classroom" / "target classroom"
-	rerunHint     string // optional clause appended to the no-team error, e.g. ", then re-run `gh teacher assignment add`"
+	rerunHint     string // optional clause appended to the no-team error
 }
 
-// grantClassroomTeamTemplateRead resolves the classroom's persisted team
-// and grants it read on a private, org-owned template (idempotent via
-// GrantTeamRepoRead). Shared by `assignment add` and `assignment reuse`;
-// the caller decides WHEN to call it and supplies the wording. A classroom
-// with no team yields an actionable error, not a 404 on a guessed slug.
+// grantClassroomTeamTemplateRead resolves the classroom's persisted team and
+// grants it read on a private, org-owned template (idempotent). Shared by add
+// and reuse; the caller decides WHEN and supplies the wording. A classroom with
+// no team yields an actionable error, not a 404 on a guessed slug.
 func grantClassroomTeamTemplateRead(client githubapi.Client, out io.Writer, org, classroom, branch, slug, tmplOwner, tmplRepo string, ctx grantContext) error {
 	team, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 	if err != nil {
@@ -344,9 +331,9 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out io.Writer, org,
 	return nil
 }
 
-// templateVisibility probes a template repo for the reuse grant
-// decision: returns (private, visible, err). A 404 is the "not visible"
-// case (visible=false, err=nil); other transport errors propagate.
+// templateVisibility probes a template repo for the reuse grant decision:
+// returns (private, visible, err). A 404 is the "not visible" case; other
+// transport errors propagate.
 func templateVisibility(client githubapi.Client, owner, repo string) (private bool, visible bool, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
 	var resp struct {

@@ -17,11 +17,10 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// assignmentTestCmd is the `gh teacher assignment test` command group:
-// add / list / remove declarative tests on an assignment's `tests` block
-// in assignments.json (graded by runner.py's built-in interpreter, no
-// autograder.py needed). Mutually exclusive with a hand-written
-// per-assignment autograder.py — see ensureNoPerAssignmentAutograder.
+// assignmentTestCmd is the `gh teacher assignment test` command group: add /
+// list / remove declarative tests on an assignment's `tests` block (graded by
+// runner.py, no autograder.py needed). Mutually exclusive with a per-assignment
+// autograder.py — see ensureNoPerAssignmentAutograder.
 func assignmentTestCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "test",
@@ -146,10 +145,9 @@ func assignmentTestAddCmd() *cobra.Command {
 	return cmd
 }
 
-// runAssignmentTestAdd upserts one test into an existing assignment
-// entry. The conflict check and entry lookup run inside the configwrite.CommitTree
-// build closure against each attempt's parent SHA, so concurrent edits
-// rebase cleanly. assignment.ValidateAssignmentEntry re-runs in the closure to
+// runAssignmentTestAdd upserts one test into an existing entry. The conflict
+// check and lookup run inside the build closure against each attempt's parent
+// SHA, so concurrent edits rebase cleanly. ValidateAssignmentEntry re-runs to
 // enforce the count cap + name uniqueness against the merged array.
 func runAssignmentTestAdd(client githubapi.Client, out io.Writer, org, classroom, slug string, spec assignment.TestSpec) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
@@ -329,9 +327,8 @@ func runAssignmentTestRemove(client githubapi.Client, out io.Writer, org, classr
 		return err
 	}
 
-	// removed resets at the top of build so a rebase retry never reports
-	// stale state. Missing assignment = hard error; missing test name =
-	// idempotent no-op (nil map -> no commit).
+	// removed resets at the top of build so a retry never reports stale state.
+	// Missing assignment = hard error; missing test = idempotent no-op.
 	var removed bool
 	build := func(parentSHA string) (map[string]string, error) {
 		removed = false
@@ -348,7 +345,7 @@ func runAssignmentTestRemove(client githubapi.Client, out io.Writer, org, classr
 		next, ok := assignment.RemoveTest(entry.Tests, testName)
 		removed = ok
 		if !ok {
-			return nil, nil // test already absent: no-op, no empty commit
+			return nil, nil // test already absent: no-op
 		}
 		entry.Tests = next
 		if err := assignment.ValidateAssignmentEntry(entry); err != nil {
@@ -376,15 +373,14 @@ func runAssignmentTestRemove(client githubapi.Client, out io.Writer, org, classr
 	return nil
 }
 
-// materializeScriptPath is the skeleton script publish-pages runs to
-// translate `tests` blocks into bundled tests.json files.
+// materializeScriptPath is the skeleton script publish-pages runs to translate
+// `tests` blocks into bundled tests.json files.
 const materializeScriptPath = ".github/scripts/materialize_tests.py"
 
-// ensureDeclarativeTestsSupported rejects writing declarative tests when
-// the config repo's skeleton predates materialize_tests.py. Without it,
-// the tests would land in assignments.json but never reach the Pages
-// bundle, and every submission would silently fall back (classroom
-// default or vacuous pass) while looking graded.
+// ensureDeclarativeTestsSupported rejects writing declarative tests when the
+// skeleton predates materialize_tests.py. Without it, tests would land in
+// assignments.json but never reach the Pages bundle, so submissions silently
+// fall back while looking graded.
 func ensureDeclarativeTestsSupported(client githubapi.Client, org, ref string) error {
 	exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, materializeScriptPath, ref)
 	if err != nil {
@@ -397,11 +393,9 @@ func ensureDeclarativeTestsSupported(client githubapi.Client, org, ref string) e
 	return nil
 }
 
-// ensureNoPerAssignmentAutograder rejects writing declarative tests for
-// a slug that already has a hand-written autograder.py in the config
-// repo: the runner prefers autograder.py, so the tests would silently
-// never run. Probed against `ref` so a caller inside a configwrite.CommitTree build
-// closure sees the same parent state as the rest of its read.
+// ensureNoPerAssignmentAutograder rejects writing declarative tests for a slug
+// that already has a hand-written autograder.py: the runner prefers
+// autograder.py, so the tests would silently never run. Probed against `ref`.
 func ensureNoPerAssignmentAutograder(client githubapi.Client, org, classroom, slug, ref string) error {
 	path := assignment.PerAssignmentAutograderPath(classroom, slug)
 	exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, path, ref)

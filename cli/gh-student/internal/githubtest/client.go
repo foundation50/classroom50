@@ -11,10 +11,10 @@ import (
 	"github.com/foundation50/gh-student/internal/githubapi"
 )
 
-// hostRewriteTransport redirects every request to a single test server
-// while preserving the path so the handler can dispatch on it. This is
-// the seam go-gh's docs recommend for tests (ClientOptions.Transport
-// "should be reserved for testing").
+// hostRewriteTransport redirects every request to a single test server while
+// preserving the path so the handler can dispatch on it. This is the seam
+// go-gh's docs recommend for tests (ClientOptions.Transport "should be
+// reserved for testing").
 type hostRewriteTransport struct {
 	target *url.URL
 }
@@ -25,15 +25,15 @@ func (h *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-// NewTestClient wires a real go-gh client at the given test server,
-// returned as the githubapi.Client seam. AuthToken must be non-empty so
-// go-gh's header-injection layer leaves Authorization alone.
+// NewTestClient wires a real go-gh client at the given test server, returned as
+// the githubapi.Client seam. AuthToken must be non-empty so go-gh's
+// header-injection layer leaves Authorization alone.
 //
 // This is the shared white-box test helper for gh-student: domain tests
 // construct a Client here instead of reaching into the concrete go-gh
-// constructor, so the go-gh dependency stays confined to githubapi and
-// this package. Mirrors cli/gh-teacher/internal/githubtest (the two CLIs
-// are separate Go modules, so the helper can't be shared).
+// constructor, so the go-gh dependency stays confined to githubapi and this
+// package. Mirrors cli/gh-teacher/internal/githubtest (separate Go modules, so
+// the helper can't be shared).
 func NewTestClient(t *testing.T, server *httptest.Server) githubapi.Client {
 	t.Helper()
 	u, err := url.Parse(server.URL)

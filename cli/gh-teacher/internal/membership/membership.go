@@ -1,26 +1,14 @@
-// Package membership is the org-membership service for gh-teacher: the
-// GitHub org-level invite / user-lookup / membership-state primitives and
-// the 403-classification family shared by the invite, roster, and member
-// commands. It depends on the GitHub transport only through
-// internal/githubapi (never go-gh/v2/pkg/api directly).
+// Package membership is the org-membership service for gh-teacher: GitHub
+// org-level invite / user-lookup / membership-state primitives and the
+// 403-classification family shared by the invite, roster, and member commands.
+// Talks to GitHub only through internal/githubapi.
 //
-// Boundary vs internal/configrepo (the membership rule): if an operation
-// is keyed by or reads config-repo data (classroom.json, the roster
-// file), it lives in configrepo — that is "membership as a side-effect of
-// classroom config," e.g. AddTeamMembership/RemoveTeamMembership, which
-// act on the classroom team slug recorded in classroom.json. If it is
-// pure GitHub org-membership independent of any stored config — inviting a
-// user to the org, looking a user up, reading their org membership state —
-// it lives here. LookupUser/InviteOrgByID/MembershipState are
-// config-independent, so they belong to membership; the classroom-team
-// grants stay in configrepo.
+// Boundary vs internal/configrepo: config-repo-keyed membership (team grants
+// via the slug in classroom.json) lives in configrepo; pure org membership
+// independent of stored config (invite/lookup/state) lives here.
 //
-// This package is a deliberate primitives surface, not a fused service
-// object: the three consuming commands each need a different subset (invite
-// uses LookupUser+InviteOrgByID; member uses only the forbidden classifier;
-// roster composes the ensure-membership flow via inviteIfNotMember in
-// internal/roster), so the primitives are exported individually
-// rather than hidden behind a single operation.
+// A primitives surface, not a fused service object: each consuming command
+// needs a different subset, so the primitives are exported individually.
 package membership
 
 import (
@@ -36,10 +24,9 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// InviteOrgByID posts an org invitation by the invitee's numeric id
-// (callers that already have the id save the GET /users/{username}
-// lookup). `username` is still required so ClassifyOrgInviteError can
-// produce "already a member" / "pending invite" messages.
+// InviteOrgByID posts an org invitation by the invitee's numeric id (callers
+// with the id save the lookup). `username` is still needed so
+// ClassifyOrgInviteError can produce "already a member"/"pending" messages.
 func InviteOrgByID(client githubapi.Client, org, username string, userID int64, role string) error {
 	body, err := json.Marshal(map[string]any{
 		"invitee_id": userID,
@@ -55,9 +42,7 @@ func InviteOrgByID(client githubapi.Client, org, username string, userID int64, 
 	return nil
 }
 
-// LookupUser → (canonical login, immutable numeric ID). Roster
-// commands keep both; inviteToOrg uses only the ID. 404 →
-// "GitHub user not found".
+// LookupUser → (canonical login, immutable numeric ID). 404 → "user not found".
 func LookupUser(client githubapi.Client, username string) (login string, userID int64, err error) {
 	path := fmt.Sprintf("users/%s", url.PathEscape(username))
 	var user struct {
@@ -127,13 +112,10 @@ func ClassifyOrgInviteError(client githubapi.Client, org, username, path string,
 	return fmt.Errorf("POST %s: %w", path, err)
 }
 
-// OrgForbiddenKind classifies a 403 from an org/repo endpoint by what
-// the X-OAuth-Scopes header reveals, so callers can phrase their own
-// message without each re-inspecting the header. OrgForbiddenScopeMissing
-// means a classic PAT/OAuth token that lacks admin:org; OrgForbiddenNotAdmin
-// means the token has the scope but the caller isn't an org admin;
-// OrgForbiddenGeneric covers the absent-header case (e.g. a fine-grained
-// PAT, which doesn't emit X-OAuth-Scopes).
+// OrgForbiddenKind classifies a 403 by what X-OAuth-Scopes reveals, so callers
+// phrase their own message without re-inspecting the header. ScopeMissing: a
+// classic token lacking admin:org; NotAdmin: has the scope but isn't an admin;
+// Generic: absent header (e.g. a fine-grained PAT).
 type OrgForbiddenKind int
 
 const (
@@ -142,10 +124,9 @@ const (
 	OrgForbiddenNotAdmin
 )
 
-// ClassifyOrgForbidden inspects an *githubapi.HTTPError's X-OAuth-Scopes
-// header. Shared by ClassifyOrgInviteError (POST) and the member-read
-// classifier (GET) so the admin:org scope-vs-admin distinction stays
-// identical across the invite and read paths.
+// ClassifyOrgForbidden inspects an HTTPError's X-OAuth-Scopes. Shared by the
+// invite (POST) and member-read (GET) paths so the scope-vs-admin distinction
+// stays identical.
 func ClassifyOrgForbidden(httpErr *githubapi.HTTPError) OrgForbiddenKind {
 	scopes := httpErr.Headers.Get("X-OAuth-Scopes")
 	switch {

@@ -28,10 +28,8 @@ func tokenLacksWorkflowScope(err error) bool {
 }
 
 // ClassifyWorkflowScope404 maps a Tree-write 404 to ErrMissingWorkflowScope
-// when the token's X-OAuth-Scopes header shows the `workflow` scope is absent.
-// A 404 without that signal is fresh-repo lag, so it returns nil (leave the
-// original error intact). Wired into the shared CreateTree/CommitWithRebase
-// paths as their classify404 hook.
+// when X-OAuth-Scopes shows `workflow` absent. A 404 without that signal is
+// fresh-repo lag, so it returns nil. Wired into the shared paths as classify404.
 func ClassifyWorkflowScope404(err error) error {
 	if tokenLacksWorkflowScope(err) {
 		return ErrMissingWorkflowScope

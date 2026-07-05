@@ -1,9 +1,8 @@
 // Package submitcmd implements `gh student submit`: snapshot the current
-// branch and push it as a new commit on the assignment repo's main, so
-// the autograde workflow tags and grades the submission. It is an
-// extracted command package; only NewCmd is exported. Consumes the
-// internal/* seams (githubapi, classroomcfg, identity, localgit) + the
-// shared ghutil helper, never package main.
+// branch and push it as a new commit on the assignment repo's main, so the
+// autograde workflow tags and grades the submission. Extracted command
+// package; only NewCmd is exported. Consumes the internal/* seams (githubapi,
+// classroomcfg, identity, localgit) + the shared ghutil helper, never main.
 package submitcmd
 
 import (
@@ -169,11 +168,10 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		u.Detail("No template source recorded; skipping instructor .gitignore/.github refresh")
 	}
 
-	// The push (clone history + commit + push) is the slowest step, so
-	// drive a spinner. Non-verbose: discard git's stdout and buffer its
-	// stderr, surfacing the tail only on failure, so its "Cloning into…"
-	// chatter doesn't scroll the spinner away. Verbose: stream git
-	// directly so its own progress shows.
+	// The push (clone history + commit + push) is the slowest step, so drive a
+	// spinner. Non-verbose: discard git's stdout and buffer its stderr,
+	// surfacing the tail only on failure, so its "Cloning into…" chatter
+	// doesn't scroll the spinner away. Verbose: stream git directly.
 	const pushMsg = "Submitting"
 	var (
 		pushOut, pushErr = out, errOut
@@ -212,9 +210,9 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		sp.Stop("Submission pushed")
 	}
 
-	// Confirmation on stdout: the assignment's full name (falls back to
-	// the slug — see resolveAssignmentName) and the local submission time,
-	// then a link to the submitted commit.
+	// Confirmation on stdout: the assignment's full name (falls back to the
+	// slug — see resolveAssignmentName), the local submission time, then a
+	// link to the submitted commit.
 	displayName := resolveAssignmentName(ctx, repoOwner, config.Classroom, config.Secret, config.Assignment)
 	localTime := time.Now().Local().Format("2006-01-02 15:04:05 MST")
 	_, _ = fmt.Fprintf(out, "Submitted assignment %q at %s\n", displayName, localTime)
@@ -247,10 +245,10 @@ func fetchAllowedFiles(ctx context.Context, org string, config *classroomcfg.Con
 	return entry.AllowedFiles
 }
 
-// resolveAssignmentName returns the assignment's full name from the
-// published manifest, falling back to the slug on any error/timeout. The
-// fetch is bounded (assignmentNameTimeout) and runs after the push has
-// already succeeded, so submit never fails — or stalls — over cosmetics.
+// resolveAssignmentName returns the assignment's full name from the published
+// manifest, falling back to the slug on any error/timeout. The fetch is
+// bounded (assignmentNameTimeout) and runs after the push succeeded, so submit
+// never fails — or stalls — over cosmetics.
 func resolveAssignmentName(ctx context.Context, org, classroom, secret, slug string) string {
 	ctx, cancel := context.WithTimeout(ctx, assignmentNameTimeout)
 	defer cancel()
@@ -368,10 +366,9 @@ func fetchRepoPath(
 	}
 }
 
-// parseGitHubRemote: extract (owner, repo) from a GitHub remote
-// URL. Accepts SSH (`git@github.com:owner/repo[.git]`), HTTPS
-// (`https://github.com/owner/repo[.git]`), and
-// `ssh://git@github.com/...` shapes.
+// parseGitHubRemote extracts (owner, repo) from a GitHub remote URL. Accepts
+// SSH (`git@github.com:owner/repo[.git]`), HTTPS
+// (`https://github.com/owner/repo[.git]`), and `ssh://git@github.com/...`.
 func parseGitHubRemote(remoteURL string) (owner, repo string, err error) {
 	remoteURL = strings.TrimSpace(remoteURL)
 	remoteURL = strings.TrimSuffix(remoteURL, ".git")
@@ -404,10 +401,9 @@ func splitOwnerRepo(s string) (owner, repo string) {
 	return parts[0], parts[1]
 }
 
-// commitWorkTreeOnRemoteBranch clones origin into a temporary bare
-// repo, stages workTree onto `branch`, commits with `identity`, and
-// pushes. Returns the new commit SHA (informational; the runner
-// workflow does the auto-tagging on its end).
+// commitWorkTreeOnRemoteBranch clones origin into a temporary bare repo,
+// stages workTree onto `branch`, commits with `identity`, and pushes. Returns
+// the new commit SHA (informational; the runner workflow auto-tags on its end).
 func commitWorkTreeOnRemoteBranch(gitDir string, workTree string, remoteURL string, branch string, message string, identity identitypkg.GitIdentity, out io.Writer, errOut io.Writer) (string, error) {
 	if err := runCmd(out, errOut, "", "git", "clone", "--bare", remoteURL, gitDir); err != nil {
 		return "", fmt.Errorf("clone remote history: %w", err)
@@ -441,8 +437,7 @@ func commitWorkTreeOnRemoteBranch(gitDir string, workTree string, remoteURL stri
 		return "", fmt.Errorf("push submission: %w", err)
 	}
 
-	// Resolve HEAD post-push so callers can log the SHA the runner
-	// workflow will tag.
+	// Resolve HEAD post-push so callers can log the SHA the runner will tag.
 	sha, err := gitOutputWithGitDir(gitDir, "rev-parse", "HEAD")
 	if err != nil {
 		return "", fmt.Errorf("resolve submission SHA: %w", err)
@@ -450,9 +445,9 @@ func commitWorkTreeOnRemoteBranch(gitDir string, workTree string, remoteURL stri
 	return strings.TrimSpace(sha), nil
 }
 
-// gitOutputWithGitDir runs `git --git-dir=<gitDir> <args>`.
-// Separate from gitOutput because rev-parsing the submitted commit
-// runs against the bare clone (no work tree).
+// gitOutputWithGitDir runs `git --git-dir=<gitDir> <args>`. Separate from
+// gitOutput because rev-parsing the submitted commit runs against the bare
+// clone (no work tree).
 func gitOutputWithGitDir(gitDir string, args ...string) (string, error) {
 	fullArgs := append([]string{"--git-dir", gitDir}, args...)
 	cmd := exec.Command("git", fullArgs...)
@@ -578,16 +573,15 @@ func copySubmittableFiles(srcRoot string, dstRoot string, allowedFiles []string,
 }
 
 // isControlPath reports whether rel is a control file always submitted
-// regardless of allowed_files. Lockstep with runner.py's
-// _is_control_path / ALLOWED_FILES_KEEP_*: the .classroom50.yaml marker,
-// the .github/ shim, the .git metadata dir, and the runner outputs
-// (result.json, release-body.md). Both sides are pinned by the shared
-// fixture cli/shared/testdata/control_path_cases.json.
+// regardless of allowed_files. Lockstep with runner.py's _is_control_path /
+// ALLOWED_FILES_KEEP_*: the .classroom50.yaml marker, the .github/ shim, the
+// .git metadata dir, and the runner outputs (result.json, release-body.md).
+// Both sides are pinned by cli/shared/testdata/control_path_cases.json.
 //
-// `.git` is included for literal parity with the Python keep-set even
-// though copySubmittableFiles already strips it upstream — keeping the two
+// `.git` is included for literal parity with the Python keep-set even though
+// copySubmittableFiles already strips it upstream — keeping the two
 // classifiers identical means the lockstep holds without relying on that
-// external precondition.
+// precondition.
 func isControlPath(rel string) bool {
 	switch rel {
 	case classroomcfg.MetadataPath, contract.ResultFilename, contract.ReleaseBodyFilename:
@@ -600,7 +594,7 @@ func isControlPath(rel string) bool {
 
 // lastNonEmptyLine returns the last non-empty trimmed line of s, used to
 // surface git's actionable error (e.g. `fatal: ...`) when its stderr was
-// captured to a buffer rather than streamed.
+// buffered rather than streamed.
 func lastNonEmptyLine(s string) string {
 	lines := strings.Split(s, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {

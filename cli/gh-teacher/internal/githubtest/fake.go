@@ -10,24 +10,15 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
-// Fake is an in-memory githubapi.Client for tests that want to exercise
-// domain logic without an httptest server. Each verb dispatches to an
-// optional func field; an unset field returns a "no handler" error so a
-// test only wires the verbs it exercises.
-//
-// Fake satisfies githubapi.Client. For tests that must exercise real
-// transport behavior (Link-header pagination, status decoding), use
-// NewTestClient with an httptest.Server instead.
+// Fake is an in-memory githubapi.Client for tests exercising domain logic
+// without an httptest server. Each verb dispatches to an optional func field;
+// an unset field returns a "no handler" error.
 //
 // WARNING: Do NOT pass a Fake into the shared-module wrappers in
-// internal/githubapi (CommitWithRebase, CommitWithFreshRepoRetry,
-// UploadBlobs, SetCollaborator, WaitForStableBranch, CurrentUser) or any
-// domain function that reaches them (e.g. commitTree, the skeleton-commit
-// path, whoami). Those wrappers type-assert the Client back to the
-// concrete go-gh *api.RESTClient and PANIC on anything else. Test those
-// paths with NewTestClient (a real client over an httptest.Server); the
-// Fake is only for the transport-verb surface (Get/Post/Request and the
-// generic PaginateAll/GetPage built on them).
+// internal/githubapi (CommitWithRebase, UploadBlobs, etc.) or any function
+// reaching them — they type-assert back to the concrete go-gh *api.RESTClient
+// and PANIC otherwise. Use NewTestClient (a real client over httptest.Server)
+// for those; the Fake is only for the transport-verb surface.
 type Fake struct {
 	GetFunc     func(path string, resp interface{}) error
 	PostFunc    func(path string, body io.Reader, resp interface{}) error
@@ -57,9 +48,9 @@ func (f *Fake) Request(method, path string, body io.Reader) (*http.Response, err
 	return f.RequestFunc(method, path, body)
 }
 
-// JSONResponse builds an *http.Response with a JSON-encoded body and the
-// given status and headers — a convenience for RequestFunc handlers that
-// need to drive pagination (the Link header) or status branching.
+// JSONResponse builds an *http.Response with a JSON body and the given status
+// and headers — a convenience for RequestFunc handlers driving pagination or
+// status branching.
 func JSONResponse(status int, body interface{}, header http.Header) (*http.Response, error) {
 	buf, err := json.Marshal(body)
 	if err != nil {

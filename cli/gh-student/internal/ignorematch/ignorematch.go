@@ -1,7 +1,7 @@
-// Package ignorematch classifies repository paths against an ordered
-// list of .gitignore-style patterns (the assignment's allowed_files),
-// delegating to `git check-ignore` so negation, ordering, and directory
-// rules match .gitignore exactly.
+// Package ignorematch classifies repository paths against an ordered list of
+// .gitignore-style patterns (the assignment's allowed_files), delegating to
+// `git check-ignore` so negation, ordering, and directory rules match
+// .gitignore exactly.
 //
 // allowed_files is an allowlist in gitignore syntax: `*` then `!hello.py`
 // allows only hello.py. A path is ALLOWED when git would NOT ignore it.
@@ -23,10 +23,9 @@ import (
 // `gh student submit` hot path; the caller degrades safely on error.
 const gitTimeout = 30 * time.Second
 
-// Disallowed returns the subset of paths the patterns do NOT allow (the
-// paths git would ignore under an allowlist built from patterns). Empty
-// patterns or paths returns an empty set. Paths are forward-slash
-// relative, as git emits them.
+// Disallowed returns the subset of paths the patterns do NOT allow (the paths
+// git would ignore under an allowlist built from patterns). Empty patterns or
+// paths returns an empty set. Paths are forward-slash relative, as git emits.
 func Disallowed(patterns []string, paths []string) (map[string]bool, error) {
 	disallowed := make(map[string]bool)
 	if len(patterns) == 0 || len(paths) == 0 {
@@ -40,8 +39,8 @@ func Disallowed(patterns []string, paths []string) (map[string]bool, error) {
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// check-ignore needs a repo context even with --no-index, so use a
-	// throwaway repo whose .gitignore is the pattern list, isolated from
-	// the host's git config (see isolatedGitEnv). Mirrors runner.py.
+	// throwaway repo whose .gitignore is the pattern list, isolated from the
+	// host's git config (see isolatedGitEnv). Mirrors runner.py.
 	gitEnv := isolatedGitEnv()
 	initCtx, cancelInit := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancelInit()
@@ -86,9 +85,8 @@ func Disallowed(patterns []string, paths []string) (map[string]bool, error) {
 }
 
 // isolatedGitEnv neutralizes git's system/global config so the matcher
-// classifies identically regardless of the user's global gitignore.
-// Paired with `-c core.excludesFile`. Mirrors runner.py's
-// _isolated_git_env.
+// classifies identically regardless of the user's global gitignore. Paired
+// with `-c core.excludesFile`. Mirrors runner.py's _isolated_git_env.
 func isolatedGitEnv() []string {
 	return append(os.Environ(),
 		"GIT_CONFIG_NOSYSTEM=1",

@@ -21,26 +21,21 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// classroomAutograderFilename: file name written under <classroom>/.
-// Mirrored across:
-//   - publish-pages.yaml's per-classroom publish step (`<classroom>/autograder.py`
-//     → `_site/<classroom>/autograder.py`)
-//   - skeleton/dotgithub/scripts/runner.py's classroom_default_autograder_url
+// classroomAutograderFilename: file written under <classroom>/. Mirrored in
+// publish-pages.yaml and runner.py's classroom_default_autograder_url.
 const classroomAutograderFilename = "autograder.py"
 
-// diagnosticStub is the autograder.py written to <classroom>/autograder.py
-// when `gh teacher autograder set-default` is invoked without --from.
-// Echoes runner-supplied env vars, writes a vacuous-pass result.json,
-// and exits 0 — useful for verifying the pipeline before authoring
-// real grading logic.
+// diagnosticStub is written to <classroom>/autograder.py when `autograder
+// set-default` runs without --from. Echoes runner env vars, writes a
+// vacuous-pass result.json, exits 0 — for verifying the pipeline before real
+// grading logic.
 //
 //go:embed embed/autograder.py
 var diagnosticStub []byte
 
-// autograderCmd: top-level group for managing classroom default
-// autograders. Per-assignment autograders are NOT managed here —
-// they live as files at `<classroom>/autograders/<slug>/autograder.py`
-// and are committed via ordinary git tooling.
+// autograderCmd: top-level group for classroom default autograders.
+// Per-assignment autograders live as files at
+// `<classroom>/autograders/<slug>/autograder.py` and are managed via git.
 func autograderCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "autograder",
@@ -69,14 +64,9 @@ func autograderCmd() *cobra.Command {
 	return cmd
 }
 
-// autograderSetDefaultCmd: replace `<classroom>/autograder.py` in
-// `<org>/classroom50` with the contents of `--from <path>` (or
-// stdin via `--from -`). When `--from` is omitted, writes the
-// shipped diagnostic stub — useful for verifying the runner
-// pipeline before authoring real grading logic. Single Tree commit
-// through configwrite.CommitTree so concurrent edits don't silently lose each
-// other's work. No-ops when the proposed body matches the on-disk
-// body byte-for-byte.
+// autograderSetDefaultCmd: replace `<classroom>/autograder.py` with `--from
+// <path>` (or stdin via `--from -`). When --from is omitted, writes the
+// diagnostic stub. Single Tree commit; no-ops when the body is unchanged.
 func autograderSetDefaultCmd() *cobra.Command {
 	var fromPath string
 	cmd := &cobra.Command{
@@ -124,13 +114,10 @@ func autograderSetDefaultCmd() *cobra.Command {
 	return cmd
 }
 
-// readAutograderSource loads the proposed body. Empty `path` returns
-// the embedded diagnostic stub (unconditionally non-empty by build).
-// `-` reads from stdin (the cobra command's wired-in reader, so tests
-// can hand it a buffer). Any other value is a filesystem path. Empty
-// content from --from path/stdin is rejected — committing an empty
-// autograder.py would silently disable grading for every assignment
-// in the classroom.
+// readAutograderSource loads the proposed body. Empty `path` returns the
+// embedded stub; `-` reads stdin; any other value is a filesystem path. Empty
+// content from --from is rejected — an empty autograder.py would silently
+// disable grading for every assignment.
 func readAutograderSource(path string, stdin io.Reader) (content []byte, label string, err error) {
 	if path == "" {
 		return diagnosticStub, "<diagnostic stub>", nil
@@ -151,21 +138,18 @@ func readAutograderSource(path string, stdin io.Reader) (content []byte, label s
 	return content, label, nil
 }
 
-// setClassroomDefaultAutograder lands `content` as
-// `<classroom>/autograder.py` on `<org>/classroom50`'s default
-// branch. Validates the classroom exists in the config repo before
-// writing — prevents typos creating phantom-classroom files. Skips
-// the commit when the existing file is already byte-for-byte equal.
+// setClassroomDefaultAutograder lands `content` as `<classroom>/autograder.py`.
+// Validates the classroom exists before writing (prevents typos creating
+// phantom files). Skips the commit when the file is already byte-equal.
 func setClassroomDefaultAutograder(client githubapi.Client, out, errOut io.Writer, org, classroom, label string, content []byte) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
 	}
 
-	// Validate the classroom is registered before writing — `set-default`
-	// against a typo'd classroom name would otherwise silently create a
-	// phantom directory containing only autograder.py, which then never
-	// gets graded because no assignments are registered there.
+	// Validate the classroom is registered before writing — else a typo'd name
+	// silently creates a phantom dir with only autograder.py that never grades
+	// (no assignments registered there).
 	if err := requireClassroomExists(client, org, classroom, branch); err != nil {
 		return err
 	}
@@ -177,7 +161,7 @@ func setClassroomDefaultAutograder(client githubapi.Client, out, errOut io.Write
 			return nil, err
 		}
 		if existing != nil && bytes.Equal(existing, content) {
-			return nil, nil // no-op: identical to what's already in the repo
+			return nil, nil // no-op: identical to the repo
 		}
 		return map[string]string{repoPath: string(content)}, nil
 	}
@@ -198,13 +182,10 @@ func setClassroomDefaultAutograder(client githubapi.Client, out, errOut io.Write
 	return nil
 }
 
-// fetchFileContent returns the raw bytes of `path` at `ref`. 404 →
-// (nil, nil) so the caller can treat "doesn't exist yet" the same as
-// "different from proposed". Other errors propagate.
-//
-// The contents API returns the body base64-encoded for files up to
-// ~1 MB; autograder.py is well under that ceiling. Files >100 MB
-// would need the git-blobs API, but that's out of scope.
+// fetchFileContent returns the raw bytes of `path` at `ref`. 404 → (nil, nil)
+// so the caller treats "doesn't exist yet" like "different from proposed".
+// Other errors propagate. The contents API base64-encodes files up to ~1 MB;
+// autograder.py is well under that.
 func fetchFileContent(client githubapi.Client, owner, repo, path, ref string) ([]byte, error) {
 	segs := strings.Split(path, "/")
 	for i := range segs {
@@ -227,8 +208,7 @@ func fetchFileContent(client githubapi.Client, owner, repo, path, ref string) ([
 	if body.Encoding != "base64" {
 		return nil, fmt.Errorf("GET %s: unexpected encoding %q (want base64)", apiPath, body.Encoding)
 	}
-	// GitHub wraps base64 at 76 chars per RFC 4648 §3.2; strip
-	// whitespace before decoding.
+	// GitHub wraps base64 at 76 chars; strip whitespace before decoding.
 	clean := strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
 			return -1

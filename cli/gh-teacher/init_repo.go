@@ -16,8 +16,8 @@ import (
 	"github.com/foundation50/gh-teacher/internal/orgpolicy"
 )
 
-// plansThatSupportPrivatePages: GitHub plan slugs that allow Pages
-// from a private source repo.
+// plansThatSupportPrivatePages: GitHub plan slugs that allow Pages from a
+// private source repo.
 var plansThatSupportPrivatePages = map[string]bool{
 	"team":          true,
 	"business":      true,
@@ -26,17 +26,12 @@ var plansThatSupportPrivatePages = map[string]bool{
 }
 
 // applyOrgMemberDefaults applies the policies in one combined PATCH
-// /orgs/{org}. On 403/422 (one plan-gated field fails the whole
-// PATCH) it falls back to one PATCH per policy, warning only for the
-// fields GitHub rejects. init completes either way.
+// /orgs/{org}. On 403/422 (one plan-gated field sinks the whole PATCH) it
+// falls back to one PATCH per policy. init completes either way.
 //
-// Returns complete=true only when every *critical* lockdown field
-// landed — the fields that defang the founder-admin grant org-wide.
-// A combined-PATCH success applies all fields atomically, so
-// it's always complete; the per-field fallback computes completeness
-// from which critical fields the org rejected. init surfaces an
-// explicit "lockdown INCOMPLETE" warning when complete=false so a
-// half-locked org never hides behind a clean success line.
+// complete=true only when every *critical* lockdown field landed (the fields
+// that defang the founder-admin grant org-wide). init warns "lockdown
+// INCOMPLETE" when complete=false so a half-locked org isn't hidden.
 func applyOrgMemberDefaults(client githubapi.Client, out, errOut io.Writer, org, plan string) (complete bool, unenforced []unenforcedSetting, err error) {
 	settings := orgpolicy.MemberDefaultSettings(plan)
 	combined := make(map[string]any, len(settings))
@@ -51,8 +46,8 @@ func applyOrgMemberDefaults(client githubapi.Client, out, errOut io.Writer, org,
 	resp, err := client.Request(http.MethodPatch, path, bytes.NewReader(body))
 	if err != nil {
 		// A secondary-rate-limit 403 must not drop into the per-field
-		// fallback — that fires one more PATCH per policy and amplifies
-		// the throttle. Surface it as a transient error so a re-run retries.
+		// fallback — that fires one more PATCH per policy and amplifies the
+		// throttle. Surface it as transient so a re-run retries.
 		if isSecondaryRateLimit(err) {
 			return false, nil, fmt.Errorf("PATCH %s: secondary rate limit (retry shortly): %w", path, err)
 		}
@@ -63,26 +58,21 @@ func applyOrgMemberDefaults(client githubapi.Client, out, errOut io.Writer, org,
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
-	// go-gh returns non-2xx as err (handled above); this only
-	// catches a stray non-200 2xx.
+	// go-gh returns non-2xx as err (handled above); this catches a stray 2xx.
 	if resp.StatusCode != http.StatusOK {
 		return false, nil, fmt.Errorf("PATCH %s: unexpected status %d", path, resp.StatusCode)
 	}
 	_, _ = fmt.Fprintf(out, "%s: org member defaults locked down (%s)\n", org, orgMemberDefaultsSummary(plan))
-	// A 200 is not proof the values stuck: enterprise-owned orgs accept
-	// the PATCH but silently keep enterprise-pinned fields at their
-	// policy value (e.g. members_can_invite_outside_collaborators). Read
-	// the org back and confirm the fields actually changed — the only
-	// way to catch a silent no-op, and the authoritative residual state.
+	// A 200 isn't proof the values stuck: enterprise-owned orgs accept the
+	// PATCH but silently keep enterprise-pinned fields. Read the org back to
+	// catch a silent no-op — the authoritative residual state.
 	ok, unenforced := verifyOrgDefaults(client, errOut, org, plan)
 	return ok, unenforced, nil
 }
 
 // unenforcedSetting is one org member-privilege policy whose live value
-// (read back from the org) does not match what init wants. It carries
-// the exact GitHub-UI instruction (manualFix) so init can render a
-// single, actionable "fix these by hand" checklist instead of a wall of
-// per-attempt warnings.
+// doesn't match what init wants. It carries the exact GitHub-UI instruction
+// (manualFix) so init can render one actionable "fix by hand" checklist.
 type unenforcedSetting struct {
 	field     string
 	manualFix string
@@ -93,15 +83,12 @@ type unenforcedSetting struct {
 // internal/orgpolicy (the shared policy/classification seam consumed by
 // both init's verifyOrgDefaults and audit's buildAuditReport).
 
-// verifyOrgDefaults reads the org back and returns every member-default
-// policy whose live value still doesn't match what init wants —
-// regardless of whether the earlier PATCH was rejected (422) or silently
-// ignored (200-but-unchanged). This single read-back is the authoritative
-// source of truth: it reflects what the teacher would actually see in the
-// settings UI, so init reports the real residual state rather than
-// replaying what it *tried* to do. ok is true when nothing critical is
-// unenforced. A read failure returns ok=true with a single warning (the
-// writes reported success; don't manufacture a false checklist).
+// verifyOrgDefaults reads the org back and returns every member-default policy
+// whose live value still doesn't match — whether the PATCH was rejected (422)
+// or silently ignored (200-but-unchanged). This read-back is the authoritative
+// source of truth (what the teacher sees in the settings UI). ok is true when
+// nothing critical is unenforced. A read failure returns ok=true with one
+// warning (the writes reported success; don't manufacture a false checklist).
 func verifyOrgDefaults(client githubapi.Client, errOut io.Writer, org, plan string) (ok bool, unenforced []unenforcedSetting) {
 	path := fmt.Sprintf("orgs/%s", url.PathEscape(org))
 	var live map[string]any
@@ -121,18 +108,15 @@ func verifyOrgDefaults(client githubapi.Client, errOut io.Writer, org, plan stri
 	return !criticalMissed, unenforced
 }
 
-// unenforcedCause renders the plan-appropriate one-line explanation for
-// why init couldn't apply some member-privilege settings.
+// unenforcedCause renders the plan-appropriate one-line reason init couldn't
+// apply some member-privilege settings.
 //
-// On Team/Free plans (the common case for teachers) GitHub doesn't expose
-// these member-privilege toggles via the org API, so init can't set them —
-// the teacher just applies them by hand. We deliberately do NOT suggest
-// "upgrade to Enterprise Cloud": the audience is overwhelmingly Team-plan
-// teachers who can't realistically switch plans, so that advice is noise.
-// (On Enterprise Cloud the same fields are settable via the API unless an
-// enterprise owner has pinned them at the enterprise layer, in which case
-// only an enterprise owner can change them.) An enterprise org therefore
-// gets a different message; an unknown plan gets a neutral note.
+// On Team/Free plans (the common teacher case) GitHub doesn't expose these
+// toggles via the org API, so the teacher applies them by hand. We
+// deliberately do NOT suggest "upgrade to Enterprise Cloud" — most teachers
+// can't switch plans, so that advice is noise. On Enterprise Cloud the fields
+// are API-settable unless an enterprise owner pinned them (only they can
+// change those). An unknown plan gets a neutral note.
 func unenforcedCause(plan string) string {
 	switch plan {
 	case "enterprise":
@@ -144,14 +128,11 @@ func unenforcedCause(plan string) string {
 	}
 }
 
-// isSecondaryRateLimit reports whether err is GitHub's secondary
-// rate-limit response. GitHub surfaces it as a 403 (occasionally 429)
-// whose message mentions a secondary rate limit / abuse detection —
-// distinct from a plan-gated field rejection, which is also a 403 but
-// means the field can't be set on this plan. Distinguishing them
-// matters: a plan-gated 403 warns "set it manually" (correct), whereas
-// a rate-limit 403 must be treated as transient (retry), not as a field
-// the teacher should go toggle by hand.
+// isSecondaryRateLimit reports whether err is GitHub's secondary rate-limit
+// response (403, occasionally 429, mentioning "secondary rate limit"/"abuse").
+// Distinct from a plan-gated field rejection (also 403): a plan-gated 403 warns
+// "set it manually", but a rate-limit 403 is transient (retry), not a field to
+// toggle by hand.
 func isSecondaryRateLimit(err error) bool {
 	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
 	if !ok {
@@ -165,10 +146,8 @@ func isSecondaryRateLimit(err error) bool {
 }
 
 // orgMemberDefaultsSummary renders the applied policies straight from
-// orgpolicy.MemberDefaultSettings(plan) so the combined-PATCH success
-// line can't drift from the canonical slice (it previously hand-listed the
-// policies in prose and silently fell out of sync). Reports the policy
-// count and joins each setting's `desc`.
+// orgpolicy.MemberDefaultSettings(plan) so the success line can't drift from
+// the canonical slice. Reports the count and joins each setting's `desc`.
 func orgMemberDefaultsSummary(plan string) string {
 	settings := orgpolicy.MemberDefaultSettings(plan)
 	descs := make([]string, 0, len(settings))
@@ -178,15 +157,12 @@ func orgMemberDefaultsSummary(plan string) string {
 	return fmt.Sprintf("%d policies: %s", len(settings), strings.Join(descs, "; "))
 }
 
-// applyOrgMemberDefaultsPerField is the 403/422 fallback: one PATCH
-// per policy so one plan-gated field can't sink the others. It does NOT
-// warn per rejection — the authoritative residual state comes from the
-// single read-back at the end (verifyOrgDefaults), which reflects what
-// the teacher would actually see in the settings UI regardless of which
-// PATCHes were rejected vs. silently ignored. A transient (non-403/422)
-// error mid-loop still aborts init, but first reports which policies were
-// already applied and which were never attempted — the org is left
-// partially mutated and the teacher needs to know exactly where.
+// applyOrgMemberDefaultsPerField is the 403/422 fallback: one PATCH per policy
+// so one plan-gated field can't sink the others. It does NOT warn per rejection
+// — the authoritative residual state comes from the read-back at the end
+// (verifyOrgDefaults). A transient (non-403/422) error mid-loop aborts init but
+// first reports which policies landed and which were never attempted, since the
+// org is left partially mutated.
 func applyOrgMemberDefaultsPerField(client githubapi.Client, out, errOut io.Writer, org, plan string) (complete bool, unenforced []unenforcedSetting, err error) {
 	path := fmt.Sprintf("orgs/%s", url.PathEscape(org))
 	settingsURL := fmt.Sprintf("https://github.com/organizations/%s/settings/member_privileges", org)
@@ -199,23 +175,21 @@ func applyOrgMemberDefaultsPerField(client githubapi.Client, out, errOut io.Writ
 		}
 		resp, reqErr := client.Request(http.MethodPatch, path, bytes.NewReader(body))
 		if reqErr != nil {
-			// A secondary-rate-limit 403 is NOT a plan-gated field
-			// rejection: retrying per-field amplifies the throttle.
-			// Treat it like any other transient error — report the
-			// partial state and abort so a re-run can finish cleanly.
+			// A secondary-rate-limit 403 isn't a plan-gated rejection:
+			// retrying per-field amplifies the throttle. Report partial state
+			// and abort so a re-run can finish cleanly.
 			if isSecondaryRateLimit(reqErr) {
 				reportPartialMemberDefaults(errOut, org, settings, applied, i, settingsURL)
 				return false, nil, fmt.Errorf("PATCH %s: secondary rate limit: %w", path, reqErr)
 			}
 			if cliutil.IsHTTPStatus(reqErr, http.StatusForbidden) || cliutil.IsHTTPStatus(reqErr, http.StatusUnprocessableEntity) {
-				// Plan-gated rejection: don't warn here. The read-back
-				// below reports the true residual state as one checklist.
+				// Plan-gated: don't warn here; the read-back reports the true
+				// residual state as one checklist.
 				continue
 			}
-			// Transient/unexpected error (429/5xx/network): the org is
-			// now partially mutated. Report what landed and what was
-			// never attempted before aborting, so the teacher can finish
-			// the lockdown manually or re-run from a known state.
+			// Transient/unexpected (429/5xx/network): the org is partially
+			// mutated. Report what landed and what wasn't attempted, so the
+			// teacher can finish manually or re-run from a known state.
 			reportPartialMemberDefaults(errOut, org, settings, applied, i, settingsURL)
 			return false, nil, fmt.Errorf("PATCH %s: %w", path, reqErr)
 		}
@@ -230,19 +204,16 @@ func applyOrgMemberDefaultsPerField(client githubapi.Client, out, errOut io.Writ
 	if len(applied) > 0 {
 		_, _ = fmt.Fprintf(out, "%s: org member defaults set (%s)\n", org, strings.Join(applied, ", "))
 	}
-	// The read-back is the single source of truth for what didn't land —
-	// covering both 422 rejections and 200-but-silently-ignored fields —
-	// so init can render one actionable checklist instead of per-field
-	// warnings.
+	// The read-back is the single source of truth for what didn't land (both
+	// 422 rejections and 200-but-silently-ignored fields), so init renders one
+	// checklist instead of per-field warnings.
 	ok, unenforced := verifyOrgDefaults(client, errOut, org, plan)
 	return ok, unenforced, nil
 }
 
 // reportPartialMemberDefaults warns that a transient error left the org
-// member-privilege lockdown half-applied, naming the policies that
-// landed and the ones at index failedIdx onward that were never
-// attempted — so a teacher (or a script parsing stderr) can reconcile
-// manually or re-run init rather than assuming a clean failure.
+// lockdown half-applied, naming the policies that landed and those at failedIdx
+// onward that weren't attempted, so a teacher can reconcile or re-run.
 func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpolicy.MemberDefaultSetting, applied []string, failedIdx int, settingsURL string) {
 	notAttempted := make([]string, 0, len(settings)-failedIdx)
 	for _, s := range settings[failedIdx:] {
@@ -257,17 +228,16 @@ func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpol
 		org, appliedList, strings.Join(notAttempted, ", "), settingsURL)
 }
 
-// orgActionsPermissions is the subset of GET
-// /orgs/{org}/actions/permissions that we read.
+// orgActionsPermissions is the subset of GET /orgs/{org}/actions/permissions
+// that we read.
 type orgActionsPermissions struct {
 	EnabledRepositories string `json:"enabled_repositories"`
 }
 
-// ensureOrgActionsEnabled turns Actions on for the org when it's off
-// org-wide ("none" -> PUT "all"); Classroom50's workflows run as
-// Actions and never run otherwise. "all" -> noop; "selected"/unknown
-// -> warn. Read failures and a rejected enable (403/409/422, usually
-// enterprise-locked) warn and continue so init still finishes.
+// ensureOrgActionsEnabled turns Actions on for the org when it's off org-wide
+// ("none" → PUT "all"); Classroom50's workflows never run otherwise. "all" →
+// noop; "selected"/unknown → warn. Read failures and a rejected enable
+// (403/409/422, usually enterprise-locked) warn and continue.
 func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org string) error {
 	path := fmt.Sprintf("orgs/%s/actions/permissions", url.PathEscape(org))
 
@@ -287,9 +257,9 @@ func ensureOrgActionsEnabled(client githubapi.Client, out, errOut io.Writer, org
 			org, org)
 		return nil
 	case "none":
-		// Off org-wide -- enable it below.
+		// Off org-wide — enable below.
 	default:
-		// Empty or unknown value: warn, don't touch the policy.
+		// Empty/unknown: warn, don't touch the policy.
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: unexpected Actions enabled_repositories value %q; leaving it unchanged — verify GitHub Actions is enabled for the org at https://github.com/organizations/%s/settings/actions, or Classroom50's workflows may not run.\n",
 			org, perms.EnabledRepositories, org)
 		return nil
@@ -328,28 +298,22 @@ type orgWorkflowPermissions struct {
 	CanApprovePullRequestReviews bool   `json:"can_approve_pull_request_reviews"`
 }
 
-// ensureOrgCanCreatePRs turns on the org-level "Allow GitHub Actions to
-// create and approve pull requests" setting. The opt-in Feedback PR
-// is opened by each student repo's autograde workflow using
-// GITHUB_TOKEN; even with `pull-requests: write`, GitHub rejects the
-// creation unless can_approve_pull_request_reviews is enabled -- and it
-// defaults off. Student repos inherit this from the org at creation
-// time, and a `maintain` collaborator can't set it per-repo, so the org
-// is the only place to enable it. Preserves default_workflow_permissions
-// (only the PR toggle is ours to change). 403/409 (enterprise-locked) ->
-// warn and continue, matching ensureOrgActionsEnabled.
+// ensureOrgCanCreatePRs turns on the org-level "Allow GitHub Actions to create
+// and approve pull requests". The opt-in Feedback PR is opened by each student
+// repo's workflow using GITHUB_TOKEN; even with `pull-requests: write`, GitHub
+// rejects the creation unless can_approve_pull_request_reviews is on (defaults
+// off). Student repos inherit this from the org, and a `maintain` collaborator
+// can't set it per-repo, so the org is the only lever. Preserves
+// default_workflow_permissions. 403/409 (enterprise-locked) → warn and
+// continue.
 //
-// Trade-off (no narrower lever): GitHub's single org field couples
-// "create" and "approve" -- there is no create-only toggle, so enabling
-// it also lets Actions *approve* PRs org-wide. This is safe for the
-// Classroom50 model as shipped: the config repo's default branch has no
-// required-review gate (applyBranchProtection sets
-// required_pull_request_reviews=null), and student assignment repos have
-// none either, so a self-approval grants no merge a student couldn't
-// already perform. The residual is that if a teacher *later* adds a
-// required-review rule to a repo in this org, a student-controlled
-// workflow token could satisfy it via self-approval -- documented in the
-// wiki so that choice is made knowingly.
+// Trade-off: GitHub's single field couples "create" and "approve" — no
+// create-only toggle, so this also lets Actions *approve* PRs org-wide. Safe as
+// shipped: neither the config repo's default branch nor student repos have a
+// required-review gate, so a self-approval grants no merge a student couldn't
+// already do. Residual: if a teacher later adds a required-review rule, a
+// student-controlled token could satisfy it via self-approval (documented in
+// the wiki).
 func ensureOrgCanCreatePRs(client githubapi.Client, out, errOut io.Writer, org string) (bool, error) {
 	path := fmt.Sprintf("orgs/%s/actions/permissions/workflow", url.PathEscape(org))
 
@@ -394,11 +358,10 @@ type repoActionsPermissions struct {
 	Enabled bool `json:"enabled"`
 }
 
-// ensureRepoActionsEnabled turns Actions back on for a single repo when
-// it's been disabled at the repo level (`enabled` false -> PUT true),
-// independent of the org-wide setting. A read failure or a rejected
-// enable (403/409/422, usually an org/enterprise policy) warns and
-// continues, matching init's warn-and-carry-on convention.
+// ensureRepoActionsEnabled turns Actions back on for a single repo disabled at
+// the repo level (`enabled` false → PUT true), independent of the org setting.
+// A read failure or rejected enable (403/409/422, usually org/enterprise
+// policy) warns and continues.
 func ensureRepoActionsEnabled(client githubapi.Client, out, errOut io.Writer, owner, repo string) error {
 	path := fmt.Sprintf("repos/%s/%s/actions/permissions", url.PathEscape(owner), url.PathEscape(repo))
 
@@ -439,14 +402,12 @@ func ensureRepoActionsEnabled(client githubapi.Client, out, errOut io.Writer, ow
 	return nil
 }
 
-// checkOrgPlan was removed: the org plan is read once in preflight
-// (checkOrgAccess + planCheck) and its advisory surfaced there, so init
-// no longer makes a second GET /orgs/{org} for the same warning.
+// checkOrgPlan was removed: the org plan is read once in preflight and its
+// advisory surfaced there, so init no longer makes a second GET /orgs/{org}.
 
-// ensureConfigRepo returns the classroom50 repo for <org>, creating
-// it if absent. 422 → name is taken; fall back to GET so init
-// re-runs succeed. default_branch flows through so an org policy
-// rename doesn't break the bootstrap.
+// ensureConfigRepo returns the classroom50 repo for <org>, creating it if
+// absent. 422 → name taken; fall back to GET so re-runs succeed.
+// default_branch flows through so an org policy rename doesn't break bootstrap.
 func ensureConfigRepo(client githubapi.Client, org string) (repo configrepo.ConfigRepo, created bool, err error) {
 	body, err := json.Marshal(struct {
 		Name     string `json:"name"`
@@ -475,15 +436,11 @@ func ensureConfigRepo(client githubapi.Client, org string) (repo configrepo.Conf
 	return repo, true, nil
 }
 
-// enablePages turns on Actions-built Pages and sets the site
-// visibility to public — the student CLIs fetch `assignments.json`
-// unauthenticated (plus a non-default `--autograder` shim YAML when
-// one is registered); the runner workflow fetches `assignments.json`,
-// `runner.py`, the per-classroom `<classroom>/autograder.py` (when
-// set), and per-assignment bundles.
-// 409 on create → "already enabled";
-// visibility PUT fires either way so re-runs reconcile a
-// previously-private site. Success lines land on `out`; the
+// enablePages turns on Actions-built Pages and sets the site public — the
+// student CLIs and the runner workflow fetch assignments.json, runner.py, the
+// per-classroom autograder.py, and per-assignment bundles unauthenticated.
+// 409 on create → "already enabled"; the visibility PUT fires either way so
+// re-runs reconcile a previously-private site. Success on `out`; the
 // visibility step warns to `errOut` if the API rejects it.
 func enablePages(client githubapi.Client, out, errOut io.Writer, owner, repo string) error {
 	body, err := json.Marshal(struct {
@@ -504,27 +461,22 @@ func enablePages(client githubapi.Client, out, errOut io.Writer, owner, repo str
 	return setPagesPublic(client, out, errOut, owner, repo)
 }
 
-// isPrivatePagesUnsupported reports whether err is the HTTP 400
-// GitHub returns when the org's plan has no Pages visibility control
-// at all: "Private pages is not enabled for this repository. All
-// Pages will be public." Visibility control is an Enterprise Cloud
-// feature — on every other plan (including Team, the free educator
-// tier) sites are unconditionally public, which is exactly the state
-// init wants, so this response is a success, not a warning.
+// isPrivatePagesUnsupported reports whether err is the HTTP 400 GitHub returns
+// when the plan has no Pages visibility control: "Private pages is not enabled
+// for this repository. All Pages will be public." Visibility control is
+// Enterprise-Cloud-only; every other plan is unconditionally public — exactly
+// what init wants, so this is a success, not a warning.
 func isPrivatePagesUnsupported(err error) bool {
 	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
 	return ok && httpErr.StatusCode == http.StatusBadRequest &&
 		strings.Contains(httpErr.Message, "Private pages is not enabled")
 }
 
-// setPagesPublic PUTs `{"public": true}` to /pages. The field
-// isn't in the public OpenAPI body schema but the endpoint
-// accepts it — same field the UI's Visibility radio drives. 204
-// → success on `out`; the plan-without-visibility-control 400
-// (see isPrivatePagesUnsupported) is also success — the site is
-// already public by plan default; any other status emits a
-// `Warning:` to `errOut` and returns nil so a quirky org policy
-// doesn't fail the whole init.
+// setPagesPublic PUTs `{"public": true}` to /pages. The field isn't in the
+// public OpenAPI body schema but the endpoint accepts it (same field the UI's
+// Visibility radio drives). 204 → success; the no-visibility-control 400 (see
+// isPrivatePagesUnsupported) is also success; any other status warns to
+// `errOut` and returns nil so a quirky org policy doesn't fail init.
 func setPagesPublic(client githubapi.Client, out, errOut io.Writer, owner, repo string) error {
 	body, err := json.Marshal(struct {
 		Public bool `json:"public"`
@@ -551,11 +503,10 @@ func setPagesPublic(client githubapi.Client, out, errOut io.Writer, owner, repo 
 			owner, repo, resp.StatusCode, owner, repo)
 		return nil
 	}
-	// A 204 doesn't prove the value stuck: `public` is an
-	// undocumented body field and an org/enterprise policy could pin
-	// visibility. Read it back and confirm — warn-only (non-blocking),
-	// and a read failure is silent (the PUT reported success; don't
-	// invent a false alarm), mirroring the org-lockdown read-back.
+	// A 204 doesn't prove the value stuck: `public` is undocumented and an
+	// org/enterprise policy could pin visibility. Read it back — warn-only,
+	// and a read failure is silent (the PUT reported success), mirroring the
+	// org-lockdown read-back.
 	if public, known := readPagesPublic(client, owner, repo); known && !public {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s/%s: set Pages visibility to public but a read-back shows it still private — likely pinned by an org or enterprise policy. Students fetch assignments.json unauthenticated, so a private Pages site breaks `gh student accept`. Set it manually at https://github.com/%s/%s/settings/pages → Visibility.\n",
 			owner, repo, owner, repo)
@@ -565,9 +516,9 @@ func setPagesPublic(client githubapi.Client, out, errOut io.Writer, owner, repo 
 	return nil
 }
 
-// readPagesPublic GETs the repo Pages config and returns whether the
-// site is public. known=false on any read failure so the caller treats
-// an unverifiable read-back as non-blocking (no false alarm).
+// readPagesPublic GETs the repo Pages config and returns whether the site is
+// public. known=false on any read failure so the caller treats an unverifiable
+// read-back as non-blocking.
 func readPagesPublic(client githubapi.Client, owner, repo string) (public, known bool) {
 	path := fmt.Sprintf("repos/%s/%s/pages", url.PathEscape(owner), url.PathEscape(repo))
 	var resp struct {
@@ -579,16 +530,14 @@ func readPagesPublic(client githubapi.Client, owner, repo string) (public, known
 	return resp.Public, true
 }
 
-// applyBranchProtection sets minimal protection on the default
-// branch: no force-pushes, no deletions. PR-required is deliberately
-// off — collect-scores.yaml and the CLI Tree-API writes both target
-// the default branch directly, and a PR requirement would block
-// both. Force-push + delete blocking bounds the blast radius of an
-// account compromise.
+// applyBranchProtection sets minimal protection on the default branch: no
+// force-pushes, no deletions. PR-required is deliberately off —
+// collect-scores.yaml and the CLI Tree-API writes both target the default
+// branch directly and would be blocked. Force-push + delete blocking bounds the
+// blast radius of an account compromise.
 func applyBranchProtection(client githubapi.Client, out io.Writer, owner, repo, branch string) error {
-	// Classic branch protection requires the four null fields to
-	// be present (not omitted); a JSON literal is simpler than
-	// juggling pointer types.
+	// Classic branch protection requires the four null fields present (not
+	// omitted); a JSON literal beats juggling pointer types.
 	body := []byte(`{
   "required_status_checks": null,
   "enforce_admins": false,
@@ -612,14 +561,13 @@ func applyBranchProtection(client githubapi.Client, out io.Writer, owner, repo, 
 	return nil
 }
 
-// feedbackBaseBranch is the frozen PR base the Feedback PR feature
-// pins at each student repo's baseline commit. Kept in
-// lockstep with the autograde-runner workflow's BASE_BRANCH.
+// feedbackBaseBranch is the frozen PR base the Feedback PR feature pins at each
+// student repo's baseline commit. Kept in lockstep with the autograde-runner
+// workflow's BASE_BRANCH.
 const feedbackBaseBranch = "feedback"
 
 // Stable ruleset names so re-running init is idempotent —
-// ensureClassroomRulesets reconciles an existing ruleset (matched by
-// name) in place rather than creating a duplicate.
+// ensureClassroomRulesets reconciles an existing ruleset (by name) in place.
 const (
 	rulesetNameSubmissionHistory = "classroom50-protect-submission-history"
 	rulesetNameFeedbackBase      = "classroom50-feedback-base-lock"
@@ -641,18 +589,18 @@ type rulesetConditions struct {
 	RepositoryName refPatternCondition `json:"repository_name"`
 }
 
-// refPatternCondition is GitHub's include/exclude shape, reused for
-// both ref_name and repository_name. "~ALL" (repos) and
-// "~DEFAULT_BRANCH" (refs) are the documented wildcards.
+// refPatternCondition is GitHub's include/exclude shape, reused for ref_name
+// and repository_name. "~ALL" (repos) and "~DEFAULT_BRANCH" (refs) are the
+// documented wildcards.
 type refPatternCondition struct {
 	Include []string `json:"include"`
 	Exclude []string `json:"exclude"`
 }
 
 // rulesetBypassActor lets an actor skip the rules. OrganizationAdmin
-// (actor_id 1) is the org-owner role — the teacher — so they can merge
-// the Feedback PR (the grading-done signal) and force-push/delete in a
-// pinch while students (maintain, no bypass) cannot.
+// (actor_id 1) is the org-owner role — the teacher — so they can merge the
+// Feedback PR and force-push/delete in a pinch while students (maintain, no
+// bypass) cannot.
 type rulesetBypassActor struct {
 	ActorID    int    `json:"actor_id"`
 	ActorType  string `json:"actor_type"`
@@ -663,30 +611,23 @@ type rulesetRule struct {
 	Type string `json:"type"`
 }
 
-// ensureClassroomRulesets installs two org-level branch rulesets that
-// auto-cover every current and future repo in the org (the student
-// assignment repos), powering the Feedback PR feature:
+// ensureClassroomRulesets installs two org-level branch rulesets covering
+// every current and future repo (the student assignment repos), powering the
+// Feedback PR feature:
 //
-//  1. submission history — on `main`: block force-push + deletion so a
-//     student can't rewrite or erase their submission history; normal
-//     fast-forward submits still go through, so the teacher always sees
-//     the full version history.
-//  2. feedback-base lock — on the `feedback` branch: restrict
-//     updates + block deletion so students (maintain collaborators)
-//     can't merge or move the frozen PR base. Branch *creation* is left
-//     allowed so the autograde runner's GITHUB_TOKEN can create the
-//     branch once; org admins bypass, so the teacher can merge the PR.
+//  1. submission history — on the default branch: block force-push + deletion
+//     so a student can't rewrite/erase submission history; normal
+//     fast-forward submits still go through.
+//  2. feedback-base lock — on the `feedback` branch: restrict updates + block
+//     deletion so students (maintain) can't merge or move the frozen PR base.
+//     Branch *creation* stays allowed so the runner's GITHUB_TOKEN can create
+//     it once; org admins bypass, so the teacher can merge the PR.
 //
-// Org-level rulesets need an org-admin token — gh teacher authenticates
-// as the org owner — whereas the workflow GITHUB_TOKEN has no
-// administration scope, which is why this lives here, not in the
-// runner. Idempotent **and reconciling**: a ruleset that already exists
-// (by name) is updated in place to the current definition, so re-running
-// init repairs a stale ruleset left by an older CLI (e.g. one targeting
-// the wrong branch pattern) rather than skipping it. Warn-and-continue
-// on any failure (a plan without org rulesets, or a policy lock) so a
-// quirky org doesn't fail the whole init — mirrors the other org-setup
-// helpers.
+// Org-level rulesets need an org-admin token (gh teacher authenticates as org
+// owner) — the workflow GITHUB_TOKEN has no administration scope, which is why
+// this lives here, not in the runner. Idempotent AND reconciling: an existing
+// ruleset (by name) is PUT to the current definition, repairing a stale one
+// from an older CLI. Warn-and-continue on any failure.
 func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org string) (bool, error) {
 	existing, err := listOrgRulesets(client, org)
 	if err != nil {
@@ -705,10 +646,9 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 			Enforcement: "active",
 			Conditions: rulesetConditions{
 				// ~DEFAULT_BRANCH follows each repo's actual default branch
-				// rather than hardcoding `main`, so the protection still
-				// covers repos whose default branch was renamed by org
-				// policy — and matches the branch the Feedback PR opens
-				// against (the runner resolves defaultBranchRef.name).
+				// (not hardcoded `main`) so it still covers repos renamed by
+				// org policy — and matches the branch the Feedback PR opens
+				// against.
 				RefName:        refPatternCondition{Include: []string{"~DEFAULT_BRANCH"}, Exclude: []string{}},
 				RepositoryName: allRepos,
 			},
@@ -727,8 +667,8 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 			},
 			BypassActors: adminBypass,
 			// `update` restricts pushes/merges to bypass actors (only the
-			// teacher merges); `deletion` blocks delete. Creation is left
-			// allowed so the runner can land the branch once.
+			// teacher); `deletion` blocks delete. Creation stays allowed so
+			// the runner can land the branch once.
 			Rules: []rulesetRule{{Type: "update"}, {Type: "deletion"}},
 		},
 	}
@@ -736,9 +676,8 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 	allReady := true
 	for _, rs := range rulesets {
 		if id, ok := existing[rs.Name]; ok {
-			// Reconcile: PUT the current definition over the existing
-			// ruleset so a re-run picks up a changed branch pattern/rules
-			// (e.g. an older CLI's stale ruleset) instead of skipping it.
+			// Reconcile: PUT the current definition so a re-run picks up a
+			// changed branch pattern/rules instead of skipping it.
 			if err := updateOrgRuleset(client, org, id, rs); err != nil {
 				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not update org ruleset %q (%v); review it at https://github.com/organizations/%s/settings/rules — a stale ruleset may %s.\n",
 					org, rs.Name, err, org, rulesetMissDescription(rs.Name))
@@ -760,10 +699,9 @@ func ensureClassroomRulesets(client githubapi.Client, out, errOut io.Writer, org
 }
 
 // listOrgRulesets returns existing org rulesets as a name->ID map so
-// ensureClassroomRulesets can decide between creating (POST) a new
-// ruleset and updating (PUT by ID) an existing one to reconcile drift.
-// Paginated so an org with many rulesets doesn't hide the Classroom 50
-// entries (which would make the reconcile re-POST and 422).
+// ensureClassroomRulesets can choose POST (new) vs PUT-by-ID (reconcile).
+// Paginated so a large org doesn't hide the Classroom 50 entries (which would
+// make the reconcile re-POST and 422).
 func listOrgRulesets(client githubapi.Client, org string) (map[string]int64, error) {
 	type orgRuleset struct {
 		ID   int64  `json:"id"`
@@ -796,10 +734,9 @@ func createOrgRuleset(client githubapi.Client, org string, body orgRulesetBody) 
 	return nil
 }
 
-// updateOrgRuleset PUTs the full definition over an existing ruleset by
-// ID, so re-running init reconciles a stale ruleset (e.g. one created by
-// an older CLI that targeted the wrong branch pattern) to the current
-// definition rather than leaving it as-is.
+// updateOrgRuleset PUTs the full definition over an existing ruleset by ID, so
+// a re-run reconciles a stale ruleset (e.g. an older CLI's wrong branch
+// pattern) to the current definition.
 func updateOrgRuleset(client githubapi.Client, org string, id int64, body orgRulesetBody) error {
 	payload, err := json.Marshal(body)
 	if err != nil {
@@ -818,9 +755,8 @@ func updateOrgRuleset(client githubapi.Client, org string, id int64, body orgRul
 	return nil
 }
 
-// rulesetMissDescription explains, per ruleset, what a teacher loses if
-// it couldn't be created — surfaced in the warning so the manual-fix
-// hint is actionable.
+// rulesetMissDescription explains, per ruleset, what a teacher loses if it
+// couldn't be created — surfaced in the warning so the fix hint is actionable.
 func rulesetMissDescription(name string) string {
 	switch name {
 	case rulesetNameSubmissionHistory:
@@ -832,12 +768,11 @@ func rulesetMissDescription(name string) string {
 	}
 }
 
-// setWorkflowPermissions raises the default GITHUB_TOKEN to write.
-// Each skeleton workflow already declares its own permissions; this
-// catches any teacher-added workflow that doesn't. (GitHub's
-// new-repo default flipped to read-only in 2023.) 409 → org enforces
-// a unified policy; reportOrgWorkflowPermissions logs the effective
-// setting and continues.
+// setWorkflowPermissions raises the default GITHUB_TOKEN to write. Skeleton
+// workflows declare their own permissions; this catches any teacher-added
+// workflow that doesn't. (GitHub's new-repo default flipped to read-only in
+// 2023.) 409 → org enforces a unified policy; reportOrgWorkflowPermissions
+// logs the effective setting and continues.
 func setWorkflowPermissions(client githubapi.Client, out io.Writer, owner, repo string) error {
 	body, err := json.Marshal(struct {
 		DefaultWorkflowPermissions   string `json:"default_workflow_permissions"`
@@ -867,10 +802,9 @@ func setWorkflowPermissions(client githubapi.Client, out io.Writer, owner, repo 
 	return nil
 }
 
-// reportOrgWorkflowPermissions logs the effective setting (the org
-// value under enforced policy). Always returns nil — a `read`
-// default doesn't break the bootstrap because skeleton workflows
-// declare their own permissions.
+// reportOrgWorkflowPermissions logs the effective setting (the org value under
+// enforced policy). Always returns nil — a `read` default doesn't break
+// bootstrap because skeleton workflows declare their own permissions.
 func reportOrgWorkflowPermissions(client githubapi.Client, out io.Writer, owner, repo string) error {
 	path := fmt.Sprintf("repos/%s/%s/actions/permissions/workflow",
 		url.PathEscape(owner), url.PathEscape(repo))
@@ -890,20 +824,15 @@ func reportOrgWorkflowPermissions(client githubapi.Client, out io.Writer, owner,
 	return nil
 }
 
-// enableReusableWorkflowAccess opens this private repo's workflows
-// to other repos in the same organization. The per-classroom
-// autograder shim that lands in every student repo references the
-// `autograde-runner.yaml` reusable workflow via
-// `uses: <org>/classroom50/.github/workflows/autograde-runner.yaml@main`;
-// without this access toggle, the student repo's GitHub Token gets
-// a 403 trying to resolve that `uses:` line.
+// enableReusableWorkflowAccess opens this private repo's workflows to other
+// repos in the org. The per-classroom autograder shim in every student repo
+// references the `autograde-runner.yaml` reusable workflow via `uses:
+// <org>/classroom50/...@main`; without this toggle the student repo's token
+// gets a 403 resolving that `uses:` line.
 //
-// PUT /repos/{owner}/{repo}/actions/permissions/access with
-// `access_level: organization` is the per-repo lever; idempotent —
-// safe to re-run. 403/409 (org-enforced policy) is treated as a
-// warning to errOut, since some orgs lock this at the enterprise
-// layer and the teacher's recourse is a settings change rather
-// than a CLI fix.
+// PUT .../actions/permissions/access with `access_level: organization` is the
+// per-repo lever; idempotent. 403/409 (org-enforced) → warn to errOut, since
+// some orgs lock this at the enterprise layer.
 func enableReusableWorkflowAccess(client githubapi.Client, out, errOut io.Writer, owner, repo string) error {
 	body, err := json.Marshal(struct {
 		AccessLevel string `json:"access_level"`

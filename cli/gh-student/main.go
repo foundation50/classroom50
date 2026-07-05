@@ -14,8 +14,7 @@ import (
 	"github.com/foundation50/gh-student/internal/submitcmd"
 )
 
-// Build metadata, injected by the release workflow via
-// -ldflags "-X main.version=… -X main.commit=… -X main.date=…". Defaults
+// Build metadata, injected by the release workflow via -ldflags. Defaults
 // identify a local (non-release) build.
 var (
 	version = "dev"
@@ -42,9 +41,9 @@ func main() {
 	root.AddCommand(invitecmd.NewCmd())
 	root.AddCommand(submitcmd.NewCmd())
 
-	// Signal-aware root context: subcommands see cmd.Context()
-	// cancel on Ctrl-C / SIGTERM so in-flight HTTP (notably the
-	// Pages fetches in accept and invite) unwinds promptly.
+	// Signal-aware root context: subcommands see cmd.Context() cancel on
+	// Ctrl-C / SIGTERM so in-flight HTTP (the Pages fetches in accept and
+	// invite) unwinds promptly.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -53,8 +52,8 @@ func main() {
 	}
 }
 
-// versionString renders cobra's --version line. A release build shows the
-// injected tag, short commit, and build date; a local build stays terse ("dev").
+// versionString renders cobra's --version line: a release build shows the
+// injected tag, short commit, and build date; a local build stays "dev".
 func versionString() string {
 	if commit == "none" && date == "unknown" {
 		return version

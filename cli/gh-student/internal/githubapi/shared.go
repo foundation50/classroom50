@@ -7,12 +7,11 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/gittree"
 )
 
-// rest recovers the concrete *api.RESTClient backing a Client. Every
-// Client in this binary is the go-gh client returned by RequireAuthClient
-// / NewClient (or the test fake in internal/githubtest, which embeds one),
-// so the assertion holds. It panics otherwise — a programming error, since
-// the shared-module helpers below genuinely require the concrete type and
-// no other implementation can satisfy them.
+// rest recovers the concrete *api.RESTClient backing a Client. Every Client in
+// this binary is the go-gh client from RequireAuthClient / NewClient (or the
+// test fake in internal/githubtest, which embeds one), so the assertion holds.
+// It panics otherwise — a programming error, since the shared-module helpers
+// below require the concrete type and no other impl can satisfy them.
 func rest(c Client) *api.RESTClient {
 	rc, ok := c.(*api.RESTClient)
 	if !ok {

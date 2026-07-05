@@ -1,13 +1,13 @@
 // Package gittree holds the git Tree-commit plumbing shared by the gh-teacher
 // and gh-student CLIs: upload blobs, build a tree over a base_tree, create a
-// commit, and move a ref. Both modules had byte-near-identical copies of these
-// primitives; this package is the single source.
+// commit, move a ref. Both modules had byte-near-identical copies; this is the
+// single source.
 //
-// Two retry policies sit on top of the plumbing, because the two callers face
-// different hazards:
+// Two retry policies sit on top, because the two callers face different
+// hazards:
 //
-//   - CommitWithRebase — optimistic-update with non-fast-forward retry, for
-//     writes to a repo that may have *concurrent writers* (the teacher's
+//   - CommitWithRebase — optimistic update with non-fast-forward retry, for
+//     writes to a repo with *concurrent writers* (the teacher's
 //     <org>/classroom50 config repo).
 //   - CommitWithFreshRepoRetry — retry the tree+commit build against a
 //     *freshly-created* repo whose ref/git-data APIs briefly 404/409 until they
@@ -40,13 +40,13 @@ import (
 // descendant of the current branch tip. CommitWithRebase retries on it.
 var ErrNonFastForward = errors.New("non-fast-forward ref update")
 
-// rebaseAttempts: 5 attempts at 200ms × 2^n backoff (~6.2s total) — absorbs
-// concurrent CLI invocations, fails fast on a wedged repo.
+// rebaseAttempts: 5 tries at 200ms × 2^n backoff (~6.2s) — absorbs concurrent
+// CLI invocations, fails fast on a wedged repo.
 const rebaseAttempts = 5
 
 // TreeEntry is one entry in a git Tree create request. SHA is a pointer so a
 // nil value marshals to `"sha":null`, which the Trees API treats as "remove
-// this path from base_tree" — see DeletionEntries. Upserts carry a non-nil blob
+// this path from base_tree" (see DeletionEntries). Upserts carry a non-nil blob
 // SHA from UploadBlobs.
 type TreeEntry struct {
 	Path string  `json:"path"`
@@ -57,7 +57,7 @@ type TreeEntry struct {
 
 // Change describes the mutations for a single commit: Upserts (path -> new
 // content) are created or overwritten; Deletes (repo-root-relative paths) are
-// removed from the tree. An empty change (no upserts, no deletes) is a no-op.
+// removed from the tree. An empty change is a no-op.
 type Change struct {
 	Upserts map[string]string
 	Deletes []string
@@ -67,9 +67,9 @@ func (c Change) isEmpty() bool {
 	return len(c.Upserts) == 0 && len(c.Deletes) == 0
 }
 
-// RefAndTree returns (parentCommitSHA, parentTreeSHA) for branch.
-// parentTreeSHA becomes the new tree's `base_tree` so unchanged paths inherit
-// without re-uploading.
+// RefAndTree returns (parentCommitSHA, parentTreeSHA) for branch. parentTreeSHA
+// becomes the new tree's `base_tree` so unchanged paths inherit without
+// re-uploading.
 func RefAndTree(client *api.RESTClient, owner, repo, branch string) (commitSHA, treeSHA string, err error) {
 	refPath := fmt.Sprintf("repos/%s/%s/git/refs/heads/%s",
 		url.PathEscape(owner), url.PathEscape(repo), url.PathEscape(branch))
@@ -96,7 +96,7 @@ func RefAndTree(client *api.RESTClient, owner, repo, branch string) (commitSHA, 
 }
 
 // UploadBlobs creates one blob per file and returns the tree entries. Always
-// base64-encoded; simpler than per-file encoding detection with negligible
+// base64-encoded; simpler than per-file encoding detection, with negligible
 // overhead.
 func UploadBlobs(client *api.RESTClient, owner, repo string, files map[string]string) ([]TreeEntry, error) {
 	paths := make([]string, 0, len(files))
@@ -136,9 +136,9 @@ func UploadBlobs(client *api.RESTClient, owner, repo string, files map[string]st
 }
 
 // DeletionEntries builds tree entries that remove `paths` from base_tree. A nil
-// SHA marshals to `"sha":null`, which the git Trees API treats as a deletion.
-// Paths are sorted for a deterministic payload. Git prunes any trees left empty
-// by the deletions, so only blob paths need listing.
+// SHA marshals to `"sha":null`, which the Trees API treats as a deletion. Paths
+// are sorted for a deterministic payload. Git prunes trees left empty by the
+// deletions, so only blob paths need listing.
 func DeletionEntries(paths []string) []TreeEntry {
 	if len(paths) == 0 {
 		return nil
@@ -152,11 +152,11 @@ func DeletionEntries(paths []string) []TreeEntry {
 	return entries
 }
 
-// CreateTree posts a tree over baseTreeSHA. classify404, if non-nil, is given
-// the raw error when the POST returns 404 and may return a terminal error to
-// surface instead (the teacher uses this to distinguish a missing-`workflow`-
-// scope 404 from fresh-repo lag). Returning nil from classify404 (or passing a
-// nil func) leaves the original error intact.
+// CreateTree posts a tree over baseTreeSHA. classify404, if non-nil, receives
+// the raw error on a 404 POST and may return a terminal error to surface
+// instead (the teacher uses this to tell a missing-`workflow`-scope 404 from
+// fresh-repo lag). Returning nil (or a nil func) leaves the original error
+// intact.
 func CreateTree(client *api.RESTClient, owner, repo, baseTreeSHA string, entries []TreeEntry, classify404 func(error) error) (string, error) {
 	body, err := json.Marshal(struct {
 		BaseTree string      `json:"base_tree"`
@@ -208,8 +208,8 @@ func CreateCommit(client *api.RESTClient, owner, repo, treeSHA, parentSHA, messa
 }
 
 // UpdateRef force-moves branch to commitSHA via a plain PATCH (error on any
-// non-200). Use this when there are no concurrent writers; for the contended
-// case use CommitWithRebase, which routes through PatchRef.
+// non-200). Use when there are no concurrent writers; for the contended case
+// use CommitWithRebase, which routes through PatchRef.
 func UpdateRef(client *api.RESTClient, owner, repo, branch, commitSHA string) error {
 	body, err := json.Marshal(struct {
 		SHA string `json:"sha"`
@@ -231,10 +231,10 @@ func UpdateRef(client *api.RESTClient, owner, repo, branch, commitSHA string) er
 	return nil
 }
 
-// PatchRef returns ErrNonFastForward on race so CommitWithRebase can
-// distinguish "retry" from "real failure". 422 alone isn't enough (GitHub also
-// uses it for permission failures and malformed refs); matching on the message
-// text keeps retries from papering over real failures.
+// PatchRef returns ErrNonFastForward on a race so CommitWithRebase can tell
+// "retry" from "real failure". 422 alone isn't enough (GitHub also uses it for
+// permission failures and malformed refs); matching the message text keeps
+// retries from papering over real failures.
 func PatchRef(client *api.RESTClient, owner, repo, branch, commitSHA string) error {
 	body, err := json.Marshal(struct {
 		SHA string `json:"sha"`
@@ -271,9 +271,9 @@ func isNonFastForwardMessage(message string) bool {
 
 // CommitWithRebase is the optimistic-update-with-rebase helper for writes to a
 // repo that may have concurrent writers. build is invoked per attempt with the
-// parent commit SHA so it sees the current state of every path it intends to
-// upsert or delete. classify404 is forwarded to CreateTree (pass nil if the
-// caller has no 404 specialization).
+// parent commit SHA so it sees the current state of every path it upserts or
+// deletes. classify404 is forwarded to CreateTree (nil if the caller has no 404
+// specialization).
 //
 // Return shape:
 //   - ("<sha>", nil) — commit landed.
@@ -325,8 +325,8 @@ func CommitWithRebase(
 			return "", err
 		}
 
-		// Concurrent writer won; back off before retrying. Skip the sleep
-		// after the final attempt — it would just delay the error.
+		// Concurrent writer won; back off before retrying. Skip the sleep after
+		// the final attempt — it would just delay the error.
 		if attempt < rebaseAttempts-1 {
 			time.Sleep(ghutil.BackoffDelay(attempt))
 		}
@@ -340,9 +340,9 @@ func CommitWithRebase(
 type FreshRepoRetry struct {
 	// Attempts is the number of read-parent + build-tree tries.
 	Attempts int
-	// ValidateParent, if non-nil, inspects the parent SHAs returned by
-	// RefAndTree before the tree build; returning a (retryable) error here lets
-	// the loop ride out a ref that reads 200 with an empty SHA. Optional.
+	// ValidateParent, if non-nil, inspects the parent SHAs from RefAndTree
+	// before the tree build; a (retryable) error here lets the loop ride out a
+	// ref that reads 200 with an empty SHA. Optional.
 	ValidateParent func(parentSHA, parentTreeSHA string) error
 	// Classify404 is forwarded to CreateTree (e.g. the teacher's
 	// missing-workflow-scope terminal mapping). Optional.
@@ -356,11 +356,11 @@ type FreshRepoRetry struct {
 // CommitWithFreshRepoRetry builds the tree+commit for `entries` over `branch`'s
 // current tip and force-moves the ref, retrying the read+build (not the ref
 // move) while the repo's git-data APIs lag. Blobs are content-addressed, so the
-// caller uploads them once (via UploadBlobs) and passes the resulting entries;
-// a retry reuses the same SHAs.
+// caller uploads them once (via UploadBlobs) and passes the entries; a retry
+// reuses the same SHAs.
 //
-// Returns the landed commit SHA. There is no no-op case: callers pass a
-// non-empty entry set.
+// Returns the landed commit SHA. No no-op case: callers pass a non-empty entry
+// set.
 func CommitWithFreshRepoRetry(
 	client *api.RESTClient,
 	owner, repo, branch, message string,

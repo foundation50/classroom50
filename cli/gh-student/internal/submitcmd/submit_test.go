@@ -13,8 +13,8 @@ func TestParseGitHubRemote(t *testing.T) {
 		wantRepo  string
 		wantErr   bool
 	}{
-		// `gh repo clone` defaults to SSH, but students that have
-		// switched gh to https-only show the alternate form.
+		// `gh repo clone` defaults to SSH; students who switched gh to
+		// https-only show the alternate form.
 		{"SSH with .git", "git@github.com:cs50-fall-2026/cs-principles-hello-alice.git", "cs50-fall-2026", "cs-principles-hello-alice", false},
 		{"SSH without .git", "git@github.com:cs50-fall-2026/cs-principles-hello-alice", "cs50-fall-2026", "cs-principles-hello-alice", false},
 		{"HTTPS with .git", "https://github.com/cs50-fall-2026/cs-principles-hello-alice.git", "cs50-fall-2026", "cs-principles-hello-alice", false},
@@ -23,8 +23,8 @@ func TestParseGitHubRemote(t *testing.T) {
 		{"with extra path", "https://github.com/cs50-fall-2026/cs-principles-hello-alice/something", "cs50-fall-2026", "cs-principles-hello-alice", false},
 		{"surrounding whitespace", "  git@github.com:cs50-fall-2026/cs-principles-hello-alice.git\n", "cs50-fall-2026", "cs-principles-hello-alice", false},
 
-		// Reject shapes — a clear error beats a malformed URL that
-		// 404s downstream.
+		// Reject shapes — a clear error beats a malformed URL that 404s
+		// downstream.
 		{"non-GitHub remote", "git@gitlab.com:foo/bar.git", "", "", true},
 		{"missing repo", "git@github.com:cs50-fall-2026/", "", "", true},
 		{"missing owner", "https://github.com//cs-principles-hello-alice.git", "", "", true},
@@ -52,9 +52,9 @@ func TestParseGitHubRemote(t *testing.T) {
 }
 
 func TestParseGitHubRemote_ErrorMentionsShape(t *testing.T) {
-	// A non-GitHub remote should surface an error the student can
-	// understand. The error text shapes the troubleshooting path
-	// (clone via gh, not bare git remote).
+	// A non-GitHub remote should surface an error the student can understand.
+	// The error text shapes the troubleshooting path (clone via gh, not bare
+	// git remote).
 	_, _, err := parseGitHubRemote("git@gitlab.com:foo/bar.git")
 	if err == nil {
 		t.Fatalf("expected error for gitlab.com remote")

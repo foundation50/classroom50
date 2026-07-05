@@ -15,21 +15,14 @@ import (
 
 // provisionServiceToken handles the service-token step of init with a
 // minimal-prompt UX:
-//   - env var set: validate it, store it, and note that it was used.
-//   - secret already exists (re-run) and no env var: skip — the token is
-//     already configured; tell the teacher how to replace it.
-//   - first-time, no env var: prompt, validate (BLOCKING — a bad token
-//     stops init rather than silently breaking collect-scores later),
-//     then store.
+//   - env var set: validate, store, note it was used.
+//   - secret exists (re-run) and no env var: skip; tell the teacher how to
+//     replace it.
+//   - first-time, no env var: prompt, validate (BLOCKING), store.
 //
-// Every non-prompt path prints a concise note of what the CLI did, so a
-// teacher re-running init understands why they weren't asked for a token.
-// secretExists is the result preflight already fetched, so the re-run
-// path doesn't repeat the secret GET.
-//
-// This is the init orchestration step (it writes *initSummary), so it
-// stays in package main; the reusable provisioning/validation/read
-// primitives live in internal/servicetoken.
+// Every non-prompt path prints a note so a re-run explains why no token was
+// asked for. secretExists is what preflight already fetched. Stays in package
+// main because it writes *initSummary.
 func provisionServiceToken(cmd *cobra.Command, client githubapi.Client, summary *initSummary, org string, secretExists bool) error {
 	errOut := cmd.ErrOrStderr()
 

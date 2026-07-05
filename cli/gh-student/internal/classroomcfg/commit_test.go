@@ -11,11 +11,11 @@ import (
 	"github.com/foundation50/gh-student/internal/githubtest"
 )
 
-// TestCommitFiles_RetriesOnFreshRepoLag pins the behavioral change introduced
-// when CommitFiles moved onto the shared fresh-repo-retry loop: a just-templated
+// TestCommitFiles_RetriesOnFreshRepoLag pins the behavioral change when
+// CommitFiles moved onto the shared fresh-repo-retry loop: a just-templated
 // student repo whose first Tree write 409s "Git Repository is empty" must be
 // retried, not surfaced as a failure. Before the refactor CommitFiles did a
-// single attempt and would have errored here.
+// single attempt and would have errored.
 func TestCommitFiles_RetriesOnFreshRepoLag(t *testing.T) {
 	var (
 		mu          sync.Mutex
@@ -86,8 +86,8 @@ func TestCommitFiles_RetriesOnFreshRepoLag(t *testing.T) {
 	}
 }
 
-// TestCommitFiles_EmptyIsNoop pins that an empty file set short-circuits before
-// any API call.
+// TestCommitFiles_EmptyIsNoop pins that an empty file set short-circuits
+// before any API call.
 func TestCommitFiles_EmptyIsNoop(t *testing.T) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {

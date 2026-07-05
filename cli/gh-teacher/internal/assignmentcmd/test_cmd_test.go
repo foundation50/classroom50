@@ -16,15 +16,14 @@ import (
 )
 
 // testCmdFixture wires the GitHub API surface the `assignment test`
-// subcommands touch: branch resolution, the assignments.json read, the
-// per-assignment autograder.py conflict probe, and the commitTree write
-// endpoints. The captured fields record what (if anything) was committed.
+// subcommands touch (branch resolve, assignments.json read, the
+// autograder.py conflict probe, the commitTree write endpoints). Captured
+// fields record what was committed.
 type testCmdFixture struct {
 	mu sync.Mutex
-	// committed is the decoded blob content uploaded via git/blobs
-	// (the proposed assignments.json), nil if no blob was uploaded.
+	// committed is the decoded blob uploaded via git/blobs, nil if none.
 	committed []byte
-	// treePath is the path of the single entry in the proposed tree.
+	// treePath is the path of the single tree entry.
 	treePath string
 	// refPatched reports whether the branch ref was advanced.
 	refPatched bool
@@ -123,9 +122,9 @@ func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists boo
 	return server, fix
 }
 
-// helloAssignments returns an assignments.json body with one valid
-// "hello" entry carrying the given tests array (raw JSON, e.g. `[]` or
-// a populated array). Shape matches what assignment.EncodeAssignments writes.
+// helloAssignments returns an assignments.json body with one valid "hello"
+// entry carrying the given tests array (raw JSON, e.g. `[]` or a populated
+// array).
 func helloAssignments(testsJSON string) string {
 	tests := ""
 	if testsJSON != "" {
@@ -146,10 +145,8 @@ func helloAssignments(testsJSON string) string {
 }`
 }
 
-// helloAddParams returns a baseline addAssignmentParams matching the
-// `hello` fixture (individual mode, default autograder, hello-template).
-// Tests override only the fields they exercise, so call sites stay
-// field-named and order-independent.
+// helloAddParams returns a baseline addAssignmentParams matching the `hello`
+// fixture. Tests override only the fields they exercise.
 func helloAddParams() addAssignmentParams {
 	return addAssignmentParams{
 		Org:        "o",
@@ -363,9 +360,8 @@ func TestRunAssignmentAdd_AllowedFilesPersists(t *testing.T) {
 }
 
 // TestRunAssignmentAdd_TemplateLessPersists drives the headline feature:
-// `assignment add` with no --template (tmpl == nil). It must skip the
-// template-repo probe, commit an entry with a nil Template, and print
-// "no template".
+// `assignment add` with no --template (tmpl == nil) skips the template probe,
+// commits a nil Template, and prints "no template".
 func TestRunAssignmentAdd_TemplateLessPersists(t *testing.T) {
 	server, fix := newTestCmdServer(t, helloAssignments(""), false)
 	client := githubtest.NewTestClient(t, server)
@@ -638,11 +634,9 @@ func TestRunAssignmentAdd_RefusesArchivedTarget(t *testing.T) {
 }
 
 // TestRunAssignmentAdd_PreservesUnknownEntryField pins the "tolerate AND
-// preserve" rule on the add round-trip: an unknown top-level entry key (one a
-// newer binary or the web GUI wrote before this CLI models it) must survive a
-// re-run of `assignment add`, which rebuilds the entry from flags. Without the
-// Extra carry-forward the wholesale-replace upsert would silently drop it —
-// the exact silent-data-loss the cross-binary forward-compat contract forbids.
+// preserve" rule: an unknown top-level entry key (written by a newer binary/GUI)
+// must survive a re-run of `assignment add`, which rebuilds the entry from
+// flags. Without the Extra carry-forward the upsert would silently drop it.
 func TestRunAssignmentAdd_PreservesUnknownEntryField(t *testing.T) {
 	seeded := `{
   "schema": "classroom50/assignments/v1",

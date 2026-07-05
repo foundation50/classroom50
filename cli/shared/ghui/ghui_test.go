@@ -6,8 +6,8 @@ import (
 	"testing"
 )
 
-// A spinner writing to a plain buffer (not os.Stderr) must take the
-// non-TTY path: no ANSI escapes, no carriage returns, just stable lines.
+// A spinner writing to a plain buffer (not os.Stderr) must take the non-TTY
+// path: no ANSI escapes, no carriage returns, just stable lines.
 func TestSpinner_NonTTY_PlainLines(t *testing.T) {
 	var buf bytes.Buffer
 	s := NewSpinner(&buf, "Waiting for repo")
@@ -44,8 +44,8 @@ func TestSpinner_NonTTY_Fail(t *testing.T) {
 	}
 }
 
-// Calling a finalizer twice must be a safe no-op (no double close panic,
-// no duplicate output).
+// Calling a finalizer twice must be a safe no-op (no double-close panic, no
+// duplicate output).
 func TestSpinner_DoubleStopIsSafe(t *testing.T) {
 	var buf bytes.Buffer
 	s := NewSpinner(&buf, "Step")
@@ -59,8 +59,8 @@ func TestSpinner_DoubleStopIsSafe(t *testing.T) {
 	}
 }
 
-// Finalizing without Start must not panic or emit an outcome (nothing
-// was ever started).
+// Finalizing without Start must not panic or emit an outcome (nothing was ever
+// started).
 func TestSpinner_FinishWithoutStart(t *testing.T) {
 	var buf bytes.Buffer
 	s := NewSpinner(&buf, "Step")
@@ -70,11 +70,10 @@ func TestSpinner_FinishWithoutStart(t *testing.T) {
 	}
 }
 
-// render() is the TTY draw path. It can't be reached through Start on a
-// buffer (which is non-TTY), so exercise it directly to lock the frame
-// shape: a carriage return + clear-to-EOL, the current frame glyph, and
-// the message. This guards the in-place rewrite contract independently
-// of whether a real terminal is attached.
+// render() is the TTY draw path. It can't be reached through Start on a buffer
+// (non-TTY), so exercise it directly to lock the frame shape: carriage return +
+// clear-to-EOL, the current frame glyph, and the message. Guards the in-place
+// rewrite contract independently of whether a real terminal is attached.
 func TestSpinner_RenderFrameShape(t *testing.T) {
 	var buf bytes.Buffer
 	s := NewSpinner(&buf, "Cloning hello")

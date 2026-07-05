@@ -7,8 +7,8 @@ import (
 )
 
 // TestDeletionEntriesMarshalNullSHA pins the wire contract the Trees API
-// depends on: a deletion entry must serialize `"sha":null`, while an upsert
-// entry serializes a string SHA.
+// depends on: a deletion entry serializes `"sha":null`, an upsert entry a
+// string SHA.
 func TestDeletionEntriesMarshalNullSHA(t *testing.T) {
 	entries := DeletionEntries([]string{"b/2.txt", "a/1.txt"})
 	if len(entries) != 2 {

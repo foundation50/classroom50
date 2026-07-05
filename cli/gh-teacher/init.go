@@ -94,18 +94,16 @@ func initCmd() *cobra.Command {
 			out := cmd.OutOrStdout()
 			errOut := cmd.ErrOrStderr()
 
-			// --json implies --quiet so stdout stays a single
-			// machine-readable object and no human chatter interleaves.
+			// --json implies --quiet so stdout stays a single machine-readable
+			// object with no interleaved chatter.
 			if asJSON {
 				quiet = true
 			}
 			u := ui.New(errOut)
 
-			// Preflight: read-only checks before any mutation. A hard
-			// failure (missing scope, org not found, not an owner, no
-			// token + no prompt) stops here so init never leaves a
-			// half-configured org. Plan is read once and reused by the
-			// lockdown read-back's plan-aware warning.
+			// Preflight: read-only checks before any mutation. A hard failure
+			// stops here so init never leaves a half-configured org. Plan is
+			// read once and reused by the lockdown read-back's warning.
 			tok := currentTokenSource()
 			pre := runPreflight(client, org, tok)
 			renderPreflight(u, pre, quiet)
@@ -137,14 +135,11 @@ func initCmd() *cobra.Command {
 			prog := u.NewProgress(total)
 			interactive := prog.Active()
 
-			// On an interactive terminal, fold the per-step output into one
-			// self-rewriting progress line ([1/12] → [12/12] Done): route
-			// the helpers' stdout (success lines) to a discard and their
-			// stderr (warnings) to a buffer that's replayed once the
-			// progress line is finalized, so nothing scrolls the line away.
-			// On a non-TTY / piped / --quiet / --json run, keep the stable
-			// per-line output (stepOut = real stdout, stepErr = real stderr)
-			// so machine consumers and logs are unchanged.
+			// On an interactive terminal, fold per-step output into one
+			// self-rewriting progress line: route helpers' stdout to discard
+			// and stderr to a buffer replayed after the line finalizes, so
+			// nothing scrolls it away. On a non-TTY/piped/--quiet/--json run,
+			// keep stable per-line output.
 			stepOut, stepErr := out, errOut
 			var capturedErr bytes.Buffer
 			if interactive {
@@ -163,21 +158,16 @@ func initCmd() *cobra.Command {
 					u.Step(stepNum, total, label)
 				}
 			}
-			// flushStepWarnings replays any warnings the helpers buffered
-			// during the interactive progress phase (rare edge-case
-			// Warning: lines), after the progress line is done.
+			// flushStepWarnings replays warnings the helpers buffered during the
+			// interactive progress phase, after the line is done.
 			flushStepWarnings := func() {
 				if interactive && capturedErr.Len() > 0 {
 					_, _ = io.Copy(errOut, &capturedErr)
 				}
 			}
 
-			// (The org plan was already checked read-only in preflight —
-			// pre.Plan — and its advisory is surfaced there, so init no
-			// longer re-fetches /orgs/{org} for a second plan warning.)
-
-			// Tighten org-level member defaults before any repos
-			// land so the classroom starts in a known-safe state.
+			// Tighten org-level member defaults before any repos land so the
+			// classroom starts in a known-safe state.
 			step(initStepLabels[0])
 			lockdownComplete, unenforced, err := applyOrgMemberDefaults(client, stepOut, stepErr, org, pre.Plan)
 			if err != nil {
@@ -185,31 +175,25 @@ func initCmd() *cobra.Command {
 				return err
 			}
 			summary.LockdownComplete = lockdownComplete
-			// Build one consolidated, verified checklist of the settings
-			// init couldn't apply (whether plan-gated 422 or silently
-			// ignored) from the authoritative read-back. Each carries the
-			// exact GitHub-UI instruction, so the teacher gets a single
-			// "do this by hand" list instead of three overlapping warnings.
+			// Build one consolidated, verified checklist of the settings init
+			// couldn't apply (plan-gated 422 or silently ignored) from the
+			// read-back, each with its GitHub-UI instruction.
 			settingsURL := fmt.Sprintf("https://github.com/organizations/%s/settings/member_privileges", org)
 			for _, item := range unenforced {
 				summary.LockdownManualSteps = append(summary.LockdownManualSteps, orgpolicy.ManualStep{Setting: item.manualFix, URL: settingsURL})
 			}
 			if !lockdownComplete {
-				// The org-level locks are what defang the repo-admin that
-				// `gh student accept` grants each founder. Record the
-				// warning; the actionable checklist is rendered at the end
-				// (with the summary) so it isn't lost above the progress
-				// line.
+				// The org-level locks defang the repo-admin `student accept`
+				// grants each founder. Record the warning; the checklist is
+				// rendered at the end so it isn't lost above the progress line.
 				summary.addWarning("%s: org member-privilege lockdown INCOMPLETE — %d setting(s) need to be set by hand at %s (see the summary checklist). Until then, the repo-admin that `gh student accept` grants founders is not fully defanged org-wide.", org, len(unenforced), settingsURL)
 			}
 
-			// On Team/Free, "private repos only" doesn't exist: GitHub
-			// couples public+private repo creation into one switch, and the
-			// student flow REQUIRES private creation, so init can't lock
-			// public creation off (the field is enterpriseOnly and filtered
-			// out). Note it so a clean "lockdown complete" banner isn't read
-			// as "members can't create public repos" — they still can on
-			// these plans.
+			// On Team/Free, "private repos only" doesn't exist: GitHub couples
+			// public+private creation into one switch and the student flow
+			// needs private, so init can't lock public off (the field is
+			// enterpriseOnly, filtered out). Note it so a clean banner isn't
+			// read as "members can't create public repos".
 			if pre.Plan != "enterprise" {
 				planName := pre.Plan
 				if planName == "" {
@@ -218,8 +202,8 @@ func initCmd() *cobra.Command {
 				summary.addNote("Member public-repo creation stays enabled on the %s plan: GitHub couples public+private repo creation into one control and the student flow needs private creation, so \"private repos only\" (an Enterprise Cloud capability) can't be applied here.", planName)
 			}
 
-			// Enable Actions before any repo/Pages/workflow setup --
-			// the classroom workflows all depend on it.
+			// Enable Actions before any repo/Pages/workflow setup — the
+			// classroom workflows all depend on it.
 			step(initStepLabels[1])
 			if err := ensureOrgActionsEnabled(client, stepOut, stepErr, org); err != nil {
 				prog.Abort()
@@ -227,10 +211,9 @@ func initCmd() *cobra.Command {
 			}
 
 			// Allow Actions' GITHUB_TOKEN to open the opt-in Feedback PR.
-			// Org-level so student repos inherit it at
-			// creation; a maintain student can't set it per-repo. Even
-			// with pull-requests: write, PR creation is rejected unless
-			// this org toggle is on, and it defaults off.
+			// Org-level so student repos inherit it; a maintain student can't
+			// set it per-repo. Even with pull-requests: write, PR creation is
+			// rejected unless this org toggle is on, and it defaults off.
 			step(initStepLabels[2])
 			prCreateReady, err := ensureOrgCanCreatePRs(client, stepOut, stepErr, org)
 			if err != nil {
@@ -238,11 +221,9 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
-			// Install the org-level rulesets that protect submission
-			// history and lock the Feedback PR base. Org-
-			// level so they auto-cover every current/future student
-			// repo; warn-and-continue if the org's plan/policy blocks
-			// them.
+			// Install the org-level rulesets protecting submission history and
+			// the Feedback PR base. Org-level so they auto-cover every
+			// current/future student repo; warn-and-continue if blocked.
 			step(initStepLabels[3])
 			rulesetsReady, err := ensureClassroomRulesets(client, stepOut, stepErr, org)
 			if err != nil {
@@ -250,8 +231,8 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
-			// Default branch comes from the create/fetch response —
-			// org policy can rename it.
+			// Default branch comes from the create/fetch response (org policy
+			// can rename it).
 			step(initStepLabels[4])
 			repo, created, err := ensureConfigRepo(client, org)
 			if err != nil {
@@ -269,8 +250,8 @@ func initCmd() *cobra.Command {
 				branch = "main"
 			}
 
-			// Re-enable repo-level Actions before the skeleton push
-			// so the workflows' first run isn't blocked.
+			// Re-enable repo-level Actions before the skeleton push so the
+			// workflows' first run isn't blocked.
 			step(initStepLabels[5])
 			if err := ensureRepoActionsEnabled(client, stepOut, stepErr, org, configrepo.ConfigRepoName); err != nil {
 				prog.Abort()
@@ -279,10 +260,8 @@ func initCmd() *cobra.Command {
 
 			step(initStepLabels[6])
 			// commitSkeleton may prompt (skeleton-refresh confirmation) on
-			// stderr and read stdin. A prompt must be visible and not
-			// buffered behind the progress line, so clear the in-place line
-			// first and give it the REAL stderr (its rare warnings show
-			// too); its success chatter still goes to the discarded stepOut.
+			// stderr and read stdin, so clear the in-place line first and give
+			// it the REAL stderr; success chatter still goes to discard.
 			if interactive {
 				prog.Abort()
 			}
@@ -312,9 +291,9 @@ func initCmd() *cobra.Command {
 			}
 
 			step(initStepLabels[11])
-			// The service-token prompt (when needed) must not be hidden
-			// behind the progress line: finalize progress and flush any
-			// buffered warnings before any prompt/notice.
+			// The service-token prompt (when needed) must not hide behind the
+			// progress line: finalize progress and flush buffered warnings
+			// first.
 			prog.Done()
 			flushStepWarnings()
 			if err := provisionServiceToken(cmd, client, summary, org, pre.SecretExists); err != nil {
@@ -335,17 +314,14 @@ func initCmd() *cobra.Command {
 					org, strings.Join(missing, " and "), org)
 			}
 
-			// Pages takes a few seconds after the first publish-pages
-			// run before the URL serves.
+			// Pages takes a few seconds after the first publish-pages run
+			// before the URL serves.
 			summary.PagesURL = fmt.Sprintf("https://%s.github.io/%s/", org, configrepo.ConfigRepoName)
 			summary.finalize()
 
-			// Render the canonical summary: JSON to stdout (the only
-			// machine surface), or the human report to stderr. The human
-			// report (banner + setup status + one action checklist + next
-			// step) conveys everything the recorded warnings say, so we
-			// don't separately replay summary.Warnings to the terminal —
-			// they remain in --json for machine consumers.
+			// Render the canonical summary: JSON to stdout, or the human report
+			// to stderr. The human report conveys everything the warnings say,
+			// so we don't separately replay summary.Warnings to the terminal.
 			if asJSON {
 				return summary.renderJSON(out)
 			}

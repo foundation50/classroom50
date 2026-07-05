@@ -1,16 +1,8 @@
 // Package classroom implements the `gh teacher classroom` command group:
 // managing classroom directories inside the <org>/classroom50 config repo
-// (add/list/edit/remove) plus the `classroom migrate` subcommand that
-// imports an existing GitHub Classroom into the config repo. It is an
-// extracted command package (mirrors internal/auth, internal/remove,
-// internal/roster, internal/member, internal/invite, and
-// internal/teardown): only NewCmd is exported; the subcommand factories,
-// run* orchestration, the classroomScaffold writer, and the migrate
-// plumbing are package-private. The four-file config-repo scaffold lands
-// through the race-safe internal/configwrite seam. It depends only on the
-// internal/* substrate seams (assignment, configrepo, configwrite,
-// githubapi, output, scores, validate, cliutil) plus the shared contract
-// package, never on package main.
+// (add/list/edit/remove) plus `classroom migrate` (imports an existing GitHub
+// Classroom). Only NewCmd is exported. The four-file scaffold lands through the
+// race-safe internal/configwrite seam.
 package classroom
 
 import (
@@ -33,12 +25,10 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// Schema sentinels for the scaffolded files. Schema-aware readers MUST
-// branch on this field first so newer files don't crash older readers.
-// assignmentsSchemaV1 is single-sourced in the shared contract package
-// (it's the one shared Go<->Go); the classroom sentinel is
-// teacher-written only. The scores.json sentinel lives in
-// internal/scores (scores.SchemaV1) since the download command shares it.
+// Schema sentinels for the scaffolded files; schema-aware readers MUST branch
+// on this field first. assignmentsSchemaV1 is single-sourced in the shared
+// contract; the classroom sentinel is teacher-written only. The scores.json
+// sentinel lives in internal/scores (shared with download).
 const (
 	classroomSchemaV1   = "classroom50/classroom/v1"
 	assignmentsSchemaV1 = contract.AssignmentsSchemaV1
@@ -47,12 +37,9 @@ const (
 // studentsCSVHeader derives from configrepo.RosterColumns so they can't drift.
 var studentsCSVHeader = strings.Join(configrepo.RosterColumns, ",") + "\n"
 
-// defaultAutograderName is the sentinel meaning "use the universal
-// default autograder". Single-sourced from the shared contract package;
-// the migrate path stamps it onto imported assignments that don't name
-// their own autograder. (The internal/autograder seam keeps its own
-// package-private copy; both are single-sourced from the same contract
-// constant.)
+// defaultAutograderName is the "use the universal default autograder"
+// sentinel, single-sourced from the shared contract; the migrate path stamps
+// it onto imported assignments that don't name their own autograder.
 const defaultAutograderName = contract.DefaultAutograderName
 
 func NewCmd() *cobra.Command {
@@ -157,15 +144,11 @@ func classroomAddCmd() *cobra.Command {
 	return cmd
 }
 
-// resolveClassroomSecret turns the --unlisted / --key flags into the key
-// string to persist (empty = a normal, guessable-URL classroom). Precedence:
-//   - an explicit --key value is validated and used verbatim (opt-in);
-//   - --unlisted with no --key generates a candidate and prompts the teacher
-//     to accept it or type their own;
-//   - neither set -> empty (guessable URL, today's behavior).
-//
-// The prompt reads one line from `in`; an empty line (just Enter) accepts
-// the generated candidate, any other line is validated as a custom key.
+// resolveClassroomSecret turns --unlisted / --key into the key to persist
+// (empty = normal guessable-URL classroom). Precedence: an explicit --key is
+// validated and used (opt-in); --unlisted with no --key generates a candidate
+// and prompts; neither → empty. The prompt reads one line from `in`; an empty
+// line accepts the candidate.
 func resolveClassroomSecret(in io.Reader, errOut io.Writer, unlisted bool, keySet bool, key string) (string, error) {
 	if keySet {
 		if err := configrepo.ValidateSecret(key); err != nil {
@@ -197,24 +180,19 @@ func resolveClassroomSecret(in io.Reader, errOut io.Writer, unlisted bool, keySe
 	return entered, nil
 }
 
-// addClassroom writes the four-file scaffold in one Tree commit
-// through configwrite.CommitTree so concurrent writers don't lose each other's
-// work. The existence probe runs inside the build callback so a
-// same-classroom race surfaces as "already exists" rather than
-// silently clobbering the winner.
+// addClassroom writes the four-file scaffold in one Tree commit via
+// configwrite.CommitTree. The existence probe runs inside the build callback so
+// a same-classroom race surfaces as "already exists" rather than clobbering.
 func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName, name, term, secret string) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
 	}
 
-	// Preflight the existence check BEFORE any GitHub side effects
-	// (team creation, config-repo grants, maintainer membership). The
-	// authoritative race guard still runs inside the build callback
-	// against the rebased parent, but doing a cheap up-front probe means
-	// the common "already exists" case fails fast with zero orphaned
-	// teams/grants — closing the window where a refused add would still
-	// have created write-granted staff teams no classroom.json records.
+	// Cheap up-front existence probe BEFORE any GitHub side effects (team
+	// creation, grants, membership). The authoritative race guard still runs
+	// in the build callback, but this fails the common "already exists" case
+	// fast with zero orphaned teams/grants.
 	if exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, shortName, branch); err != nil {
 		return err
 	} else if exists {
@@ -223,19 +201,17 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 			org, configrepo.ConfigRepoName, branch, shortName)
 	}
 
-	// Create (or adopt) the per-classroom GitHub team before scaffolding
-	// so its id/slug can be recorded in classroom.json. The team is what
-	// later lets rostered students read private, org-owned assignment
-	// templates.
+	// Create (or adopt) the per-classroom team before scaffolding so its
+	// id/slug can be recorded in classroom.json. This team later lets rostered
+	// students read private org-owned templates.
 	team, err := configrepo.EnsureClassroomTeam(client, org, shortName)
 	if err != nil {
 		return fmt.Errorf("create classroom team: %w", err)
 	}
 
-	// Create (or adopt) the per-classroom staff teams (instructor, ta),
-	// grant each write on the config repo, and seed the acting teacher as
-	// instructor maintainer, mirroring the web GUI so a CLI-created
-	// classroom carries the same role teams the web expects.
+	// Create (or adopt) the staff teams (instructor, ta), grant each write on
+	// the config repo, and seed the acting teacher as instructor maintainer,
+	// mirroring the web.
 	staffTeams, err := seedStaffTeams(client, errOut, org, shortName)
 	if err != nil {
 		return err
@@ -247,9 +223,8 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	}
 
 	build := func(parentSHA string) (map[string]string, error) {
-		// contentsExists also catches partial-state classrooms (e.g.
-		// a teacher renamed classroom.json but left other files);
-		// the directory probe is 404 only when nothing exists there.
+		// Authoritative race guard; also catches partial-state classrooms
+		// (the dir probe is 404 only when nothing exists there).
 		exists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, shortName, parentSHA)
 		if err != nil {
 			return nil, err
@@ -267,8 +242,7 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 		return err
 	}
 
-	// stdout: one parseable confirmation line. stderr: advisory
-	// "View at" + "Next:" hints.
+	// stdout: parseable confirmation lines. stderr: advisory hints.
 	_, _ = fmt.Fprintf(out, "%s/%s: added classroom %s (%d files)\n", org, configrepo.ConfigRepoName, shortName, len(files))
 	_, _ = fmt.Fprintf(out, "%s: classroom team %s ready\n", org, team.Slug)
 	if staffTeams != nil && staffTeams.Instructor != nil && staffTeams.TA != nil {
@@ -282,13 +256,11 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	return nil
 }
 
-// seedStaffTeams creates (or adopts) the classroom's instructor + ta
-// teams, grants each write on the config repo, and adds the acting
-// teacher as instructor maintainer — the create-time staff-team setup
-// shared by `classroom add` and `classroom migrate` (mirrors the web's
-// single ensureStaffTeams). The maintainer add is best-effort: a
-// CurrentUser or membership failure warns to errOut but does not fail
-// the classroom creation, since the teacher can self-add via the web.
+// seedStaffTeams creates (or adopts) the instructor + ta teams, grants each
+// write on the config repo, and adds the acting teacher as instructor
+// maintainer — shared by `classroom add` and `classroom migrate`. The
+// maintainer add is best-effort: a CurrentUser/membership failure warns but
+// doesn't fail creation (the teacher can self-add via the web).
 func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, error) {
 	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName)
 	if err != nil {
@@ -299,9 +271,7 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 	}
 	login, _, uerr := githubapi.CurrentUser(client)
 	if uerr != nil || login == "" {
-		// Surface the skip so a silent CurrentUser failure isn't
-		// invisible — the teacher isn't seeded and should know to
-		// self-add.
+		// Surface the skip so a silent CurrentUser failure isn't invisible.
 		_, _ = fmt.Fprintf(errOut, "Warning: created the instructor team but couldn't resolve your GitHub login to add you (%v); add yourself at https://github.com/orgs/%s/teams/%s.\n",
 			uerr, org, staffTeams.Instructor.Slug)
 		return staffTeams, nil
@@ -313,11 +283,9 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 	return staffTeams, nil
 }
 
-// classroomSummary is the per-classroom view emitted by
-// `classroom list --json`: the human-relevant subset of
-// classroom.json. Active mirrors the classroom/v1 lifecycle flag
-// (omitted when active/absent, false when archived) so a JSON consumer
-// sees the same archived/active state the web does.
+// classroomSummary is the per-classroom view for `classroom list --json`: the
+// human-relevant subset of classroom.json. Active mirrors the lifecycle flag
+// (omitted when active/absent, false when archived).
 type classroomSummary struct {
 	ShortName string              `json:"short_name"`
 	Name      string              `json:"name"`
@@ -373,8 +341,8 @@ func classroomListCmd() *cobra.Command {
 }
 
 // runClassroomList: one branch resolve, one root listing, then one
-// classroom.json read per directory to recover name/term/active. No
-// commit. Archived classrooms (active:false) are dropped unless `all`.
+// classroom.json read per directory. No commit. Archived classrooms
+// (active:false) are dropped unless `all`.
 func runClassroomList(client githubapi.Client, out, errOut io.Writer, org string, asJSON, quiet, all bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -434,8 +402,7 @@ func runClassroomList(client githubapi.Client, out, errOut io.Writer, org string
 	return nil
 }
 
-// summarizeClassroomList: one-line stderr summary shaped
-// `<org>/<repo>: <message>` to match other list commands.
+// summarizeClassroomList: one-line stderr summary `<org>/<repo>: <message>`.
 func summarizeClassroomList(org string, count int) string {
 	path := fmt.Sprintf("%s/%s", org, configrepo.ConfigRepoName)
 	switch count {
@@ -491,11 +458,9 @@ func classroomEditCmd() *cobra.Command {
 }
 
 // commitClassroomMutation is the shared read-modify-write skeleton for the
-// classroom.json mutators (edit, archive/unarchive): it reads the file
-// inside the build callback (consistent across rebase attempts), applies
-// `mutate`, and re-commits, short-circuiting to a no-op when the body is
-// unchanged. The caller owns all output; this returns only the no-op flag
-// and the resolved branch (for the caller's "View at" line).
+// classroom.json mutators (edit, archive/unarchive): reads the file inside the
+// build callback, applies `mutate`, re-commits, short-circuiting to a no-op
+// when the body is unchanged. The caller owns all output.
 func commitClassroomMutation(client githubapi.Client, org, shortName, message string, mutate func(*configrepo.ClassroomJSON)) (noop bool, branch string, err error) {
 	branch, err = configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -533,9 +498,8 @@ func commitClassroomMutation(client githubapi.Client, org, shortName, message st
 	return noop, branch, nil
 }
 
-// editClassroom applies only the changed display name/term to
-// classroom.json. A proposed body identical to the on-disk one
-// short-circuits to a no-op.
+// editClassroom applies the changed display name/term to classroom.json. An
+// unchanged body short-circuits to a no-op.
 func editClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName string, setName bool, name string, setTerm bool, term string) error {
 	message := contract.PrefixCommit(fmt.Sprintf("Edit %s classroom (gh teacher classroom edit)", shortName))
 	noop, branch, err := commitClassroomMutation(client, org, shortName, message, func(c *configrepo.ClassroomJSON) {
@@ -558,11 +522,10 @@ func editClassroom(client githubapi.Client, out, errOut io.Writer, org, shortNam
 	return nil
 }
 
-// classroomArchiveCmd / classroomUnarchiveCmd toggle the classroom/v1
-// `active` flag (archive => active:false; unarchive => drop the field, so
-// absent = active per the web's contract). Two verbs rather than an
-// `--active` flag on `edit` so the intent is obvious in shell history and
-// `edit`'s "at least one of --name/--term" contract stays unchanged.
+// classroomArchiveCmd / classroomUnarchiveCmd toggle the `active` flag (archive
+// → active:false; unarchive → drop the field, so absent = active). Two verbs
+// rather than an `--active` flag on `edit` so the intent is obvious and edit's
+// "at least one of --name/--term" contract stays unchanged.
 func classroomArchiveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "archive <org> <short-name>",
@@ -624,8 +587,8 @@ func classroomUnarchiveCmd() *cobra.Command {
 	return cmd
 }
 
-// parseOrgShortNameArgs is the shared <org> <short-name> validation for
-// the classroom subcommands that take exactly that pair.
+// parseOrgShortNameArgs is the shared <org> <short-name> validation for the
+// classroom subcommands that take that pair.
 func parseOrgShortNameArgs(args []string) (org, shortName string, err error) {
 	org = strings.TrimSpace(args[0])
 	shortName = strings.TrimSpace(args[1])
@@ -641,9 +604,8 @@ func parseOrgShortNameArgs(args []string) (org, shortName string, err error) {
 	return org, shortName, nil
 }
 
-// setClassroomActive flips the `active` flag on classroom.json: true clears
-// the field (absent = active), false stamps `active: false`. A no-op when
-// unchanged, so re-archiving / re-activating is harmless.
+// setClassroomActive flips the `active` flag: true clears the field (absent =
+// active), false stamps `active: false`. No-op when unchanged.
 func setClassroomActive(client githubapi.Client, out, errOut io.Writer, org, shortName string, active bool) error {
 	verb, verbCap := "archive", "Archive"
 	if active {
@@ -712,10 +674,9 @@ func classroomRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-// removeClassroom deletes the whole <short-name>/ subtree in one
-// commit via configwrite.CommitTreeChange. The subtree's blob paths are
-// enumerated inside the build callback so the deletion set stays
-// consistent with the parent it commits against.
+// removeClassroom deletes the whole <short-name>/ subtree in one commit via
+// configwrite.CommitTreeChange. The subtree's blob paths are enumerated inside
+// the build callback so the deletion set stays consistent with its parent.
 func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Writer, org, shortName string, skipConfirm bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -739,12 +700,10 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	}
 
 	// Resolve the team refs BEFORE the commit deletes classroom.json.
-	// deleteClassroomTeam deletes by the persisted (authoritative) slug
-	// and verifies the id matches, so a re-slugged team is still removed
-	// and an unrelated team that merely occupies the slug is never
-	// touched. A classroom with no team block yields an empty ref
-	// (no-op delete). The staff teams (instructor, ta) are swept the same
-	// way, mirroring the web's classroom-delete team sweep.
+	// DeleteClassroomTeam deletes by the persisted slug and verifies the id,
+	// so a re-slugged team is still removed and an unrelated occupant never
+	// touched. No team block → empty ref (no-op). Staff teams swept the same
+	// way, mirroring the web.
 	var team configrepo.TeamRef
 	if t, ok, terr := configrepo.ResolveClassroomTeam(client, org, shortName, branch); terr != nil {
 		return terr
@@ -782,9 +741,9 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	}
 	_, _ = fmt.Fprintf(out, "%s/%s: removed classroom %s (%d files)\n", org, configrepo.ConfigRepoName, shortName, deleted)
 
-	// Delete the per-classroom team (idempotent; 404 = already gone).
-	// The team's repo grants + memberships go with it. A delete failure
-	// is surfaced but doesn't undo the config removal.
+	// Delete the per-classroom team (idempotent; 404 = gone). Its grants +
+	// memberships go with it. A delete failure is surfaced but doesn't undo
+	// the config removal.
 	if team.Slug != "" {
 		if err := configrepo.DeleteClassroomTeam(client, org, team); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: removed the classroom config but could not delete its team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",
@@ -793,9 +752,8 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 		}
 		_, _ = fmt.Fprintf(out, "%s: deleted classroom team %s\n", org, team.Slug)
 	}
-	// Sweep the staff teams too (idempotent; 404 = already gone). A
-	// failure on one is surfaced but doesn't undo the config removal or
-	// block the others.
+	// Sweep the staff teams too (idempotent; 404 = gone). A failure on one is
+	// surfaced but doesn't undo the config removal or block the others.
 	for _, st := range staffTeams {
 		if err := configrepo.DeleteClassroomTeam(client, org, st); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: removed the classroom config but could not delete its staff team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",
@@ -807,10 +765,9 @@ func removeClassroom(client githubapi.Client, in io.Reader, out, errOut io.Write
 	return nil
 }
 
-// confirmClassroomRemove prompts on `out` and reads one line from
-// `in`. Returns nil iff the trimmed line equals the short-name; any
-// other input (mismatch, EOF, read error) aborts. Single read — no
-// retry (mirrors internal/teardown's confirmTeardown).
+// confirmClassroomRemove prompts on `out` and reads one line from `in`. Returns
+// nil iff the trimmed line equals the short-name; any other input (mismatch,
+// EOF, error) aborts. Single read, no retry.
 func confirmClassroomRemove(in io.Reader, out io.Writer, shortName string) error {
 	_, _ = fmt.Fprintf(out, "This will delete classroom %q and all its files. Type the short-name (%s) to confirm: ", shortName, shortName)
 	line, err := bufio.NewReader(in).ReadString('\n')
@@ -823,13 +780,10 @@ func confirmClassroomRemove(in io.Reader, out io.Writer, shortName string) error
 	return nil
 }
 
-// classroomScaffold returns destination-path → content for the
-// four-file scaffold. A nil `entries` is normalized to an empty
-// slice so assignments.json marshals as `[]` (not the `null` Go
-// would otherwise produce). `entries` populates assignments.json
-// through assignment.EncodeAssignments (same normalization as
-// `gh teacher assignment add`); `migration` populates the optional
-// `migrated_from` block on classroom.json.
+// classroomScaffold returns destination-path → content for the four-file
+// scaffold. A nil `entries` normalizes to an empty slice so assignments.json
+// marshals as `[]`. `migration` populates classroom.json's optional
+// `migrated_from` block.
 func classroomScaffold(org, shortName, name, term, secret string, entries []assignment.AssignmentEntry, migration *configrepo.MigratedFromRef, team *configrepo.TeamRef, staffTeams *configrepo.StaffTeamsRef) (map[string]string, error) {
 	classroom := configrepo.ClassroomJSON{
 		Schema:       classroomSchemaV1,

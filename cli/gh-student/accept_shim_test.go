@@ -6,15 +6,13 @@ import (
 )
 
 func TestRenderEmbeddedShim(t *testing.T) {
-	// The embedded shim is the universal one-body-fits-all that
-	// gh student accept drops into every student repo. {{ORG}} is
-	// the only piece of per-classroom customization; everything
-	// else is fixed.
+	// The embedded shim is the universal one-body-fits-all that gh student
+	// accept drops into every student repo. {{ORG}} is the only per-classroom
+	// customization; everything else is fixed.
 	got := renderEmbeddedShim("cs50-fall-2026")
 
-	// Trigger contract: branch pushes auto-grade; manual submit/*
-	// tag pushes still work (the runner detects which trigger
-	// fired and either creates the tag or reuses it).
+	// Trigger contract: branch pushes auto-grade; manual submit/* tag pushes
+	// still work (the runner detects which fired and creates or reuses the tag).
 	for _, want := range []string{
 		"branches: [main]",
 		`tags: ["submit/*"]`,
@@ -24,10 +22,9 @@ func TestRenderEmbeddedShim(t *testing.T) {
 		}
 	}
 
-	// Org-substituted reusable-workflow `uses:` line. Quoted in
-	// the embed so the unsubstituted placeholder doesn't trip
-	// YAML's flow-mapping parser; the quotes survive substitution
-	// and remain valid in Actions `uses:`.
+	// Org-substituted reusable-workflow `uses:` line. Quoted in the embed so
+	// the unsubstituted placeholder doesn't trip YAML's flow-mapping parser;
+	// the quotes survive substitution and stay valid in Actions `uses:`.
 	wantUses := `uses: "cs50-fall-2026/classroom50/.github/workflows/autograde-runner.yaml@main"`
 	if !strings.Contains(got, wantUses) {
 		t.Errorf("embedded shim missing %q\nfull:\n%s", wantUses, got)
@@ -38,18 +35,18 @@ func TestRenderEmbeddedShim(t *testing.T) {
 		t.Errorf("embedded shim still contains unsubstituted {{ORG}}:\n%s", got)
 	}
 
-	// Caller's job-level permissions must include both writes the
-	// runner downstream-steps need.
+	// Caller's job-level permissions must include both writes the runner's
+	// downstream steps need.
 	for _, perm := range []string{"contents: write", "statuses: write"} {
 		if !strings.Contains(got, perm) {
 			t.Errorf("embedded shim missing required permission %q\nfull:\n%s", perm, got)
 		}
 	}
 
-	// Shim must NOT contain any of the bootstrap / status / release
-	// logic — those live in autograde-runner.yaml. A regression that
-	// re-inlines them would put substantive logic in every student's
-	// repo, which is what this whole architecture exists to avoid.
+	// Shim must NOT contain any bootstrap / status / release logic — that
+	// lives in autograde-runner.yaml. A regression that re-inlines it would
+	// put substantive logic in every student repo, which this architecture
+	// exists to avoid.
 	for _, mustNotContain := range []string{
 		"PAGES_BASE_URL",
 		"shell: python3",
@@ -66,10 +63,9 @@ func TestRenderEmbeddedShim(t *testing.T) {
 }
 
 func TestRenderEmbeddedShim_OrgSubstitution(t *testing.T) {
-	// `{{ORG}}` substitution is the only piece of per-classroom
-	// customization in the shim — exercise across hyphenated and
-	// plain shapes to confirm ReplaceAll isn't matching anything
-	// else.
+	// `{{ORG}}` substitution is the only per-classroom customization in the
+	// shim — exercise hyphenated and plain shapes to confirm ReplaceAll isn't
+	// matching anything else.
 	for _, org := range []string{"cs50-fall-2026", "foundation50", "very-long-org-name-2026"} {
 		t.Run(org, func(t *testing.T) {
 			got := renderEmbeddedShim(org)

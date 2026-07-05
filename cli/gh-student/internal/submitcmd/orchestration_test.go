@@ -14,10 +14,10 @@ import (
 )
 
 func TestFetchRepoPath(t *testing.T) {
-	// A repo with a top-level file and a one-level subdirectory, served via
-	// the contents API: a directory listing is a JSON array; a file is a
-	// JSON object with base64 content. fetchRepoPath must recurse and write
-	// every file under dstRoot preserving paths.
+	// A repo with a top-level file and a one-level subdirectory served via the
+	// contents API: a directory listing is a JSON array; a file is a JSON
+	// object with base64 content. fetchRepoPath must recurse and write every
+	// file under dstRoot preserving paths.
 	b64 := func(s string) string { return base64.StdEncoding.EncodeToString([]byte(s)) }
 
 	mux := http.NewServeMux()

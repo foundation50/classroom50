@@ -9,46 +9,33 @@ import (
 	"github.com/foundation50/gh-teacher/internal/ui"
 )
 
-// initSummary is the canonical record of what `gh teacher init` did. It
-// is the single source of truth behind all three renderers (human box,
-// plain, and --json), so the agent-readable JSON and the teacher-facing
-// summary can never drift. JSON tags follow the repo convention: no
-// omitempty (stable consumer contract) and slices always initialized so
-// they serialize as [] not null.
+// initSummary is the canonical record of what `gh teacher init` did, the single
+// source of truth behind all three renderers (human box, plain, --json) so they
+// can't drift. JSON tags follow the repo convention: no omitempty, slices
+// always initialized (serialize as [] not null).
 type initSummary struct {
 	Org    string `json:"org"`
 	DryRun bool   `json:"dry_run"`
-	// Ready is the overall go/no-go: no preflight failure, the org
-	// member-privilege lockdown invariant holds, and no fatal step. Feedback-PR readiness
-	// is reported separately (a not-ready Feedback PR doesn't make the
-	// classroom unusable, just degrades one feature).
+	// Ready is the overall go/no-go: no preflight failure, lockdown invariant
+	// holds, no fatal step. Feedback-PR readiness is reported separately.
 	Ready            bool        `json:"ready"`
 	Plan             string      `json:"plan"`
 	ConfigRepo       repoSummary `json:"config_repo"`
 	PagesURL         string      `json:"pages_url"`
 	LockdownComplete bool        `json:"lockdown_complete"`
-	// LockdownManualSteps lists the member-privilege settings init could
-	// not apply via the API (plan-gated or enterprise-pinned), each with
-	// the exact GitHub-UI instruction to set it by hand. Derived from the
-	// authoritative read-back, so it reflects the real residual state.
+	// LockdownManualSteps lists the settings init couldn't apply via the API,
+	// each with its GitHub-UI instruction. Derived from the read-back.
 	LockdownManualSteps []orgpolicy.ManualStep `json:"lockdown_manual_steps"`
 	FeedbackPRReady     bool                   `json:"feedback_pr_ready"`
-	// ServiceToken describes how the CLASSROOM50_SERVICE_TOKEN ended up
-	// configured this run ("configured from CLASSROOM50_SERVICE_TOKEN",
-	// "already configured", or "configured (prompted)") so a re-run is
-	// self-explanatory and an agent can confirm the token was handled.
+	// ServiceToken describes how the token ended up configured this run, so a
+	// re-run is self-explanatory.
 	ServiceToken string `json:"service_token"`
-	// ManualHardeningRequired is the set of org member-privilege settings
-	// GitHub exposes no REST API for, so init can neither set nor detect
-	// them. Surfaced as structured data (not just stderr prose) so an
-	// orchestrating agent can branch on "manual steps pending".
+	// ManualHardeningRequired: org settings with no REST API. Surfaced as
+	// structured data so an agent can branch on "manual steps pending".
 	ManualHardeningRequired []orgpolicy.ManualStep `json:"manual_hardening_required"`
-	// Notes are plan- or policy-specific informational caveats that are
-	// NOT action items — e.g. on Team/Free, member public-repo creation
-	// can't be locked off (it's coupled to the private-repo creation the
-	// student flow requires), so "lockdown complete" doesn't mean public
-	// creation is disabled. Surfaced so the teacher (and an agent) isn't
-	// misled by a clean "complete" banner.
+	// Notes are plan/policy caveats that are NOT action items — e.g. on
+	// Team/Free, public-repo creation can't be locked off, so "lockdown
+	// complete" doesn't mean public creation is disabled.
 	Notes     []string         `json:"notes"`
 	Preflight []preflightCheck `json:"preflight"`
 	Warnings  []string         `json:"warnings"`
@@ -60,12 +47,8 @@ type repoSummary struct {
 	Created bool   `json:"created"`
 }
 
-// manualStep moved to internal/orgpolicy (orgpolicy.ManualStep); it's
-// shared by init's summary rendering and audit's unreadable list.
-
-// newInitSummary returns a summary with all slices initialized (so JSON
-// emits [] not null) and the static manual-hardening checklist
-// pre-populated for the given org.
+// newInitSummary returns a summary with all slices initialized (JSON emits []
+// not null) and the manual-hardening checklist pre-populated.
 func newInitSummary(org string) *initSummary {
 	return &initSummary{
 		Org:                     org,
@@ -77,38 +60,27 @@ func newInitSummary(org string) *initSummary {
 	}
 }
 
-// addWarning records a warning in the summary. The same text is also
-// emitted inline at the moment it happens (for context); the summary's
-// copy is the authoritative recap and powers the JSON `warnings` array
-// and the human warning count.
+// addWarning records a warning in the summary. It powers the JSON `warnings`
+// array and the human warning count.
 func (s *initSummary) addWarning(format string, a ...any) {
 	s.Warnings = append(s.Warnings, fmt.Sprintf(format, a...))
 }
 
-// addNote records an informational, non-action caveat (see the Notes
-// field). Unlike addWarning it does not imply something went wrong — it
-// clarifies a plan/policy limitation so a clean banner isn't misread.
+// addNote records an informational, non-action caveat (see Notes). Unlike
+// addWarning it doesn't imply something went wrong.
 func (s *initSummary) addNote(format string, a ...any) {
 	s.Notes = append(s.Notes, fmt.Sprintf(format, a...))
 }
 
-// manualHardeningSteps moved to internal/orgpolicy
-// (orgpolicy.ManualHardeningSteps): the canonical API-less hardening
-// checklist, single-sourced so init's reminder and audit's unreadable
-// list can't drift.
-
-// finalize computes the overall Ready flag from the recorded state. Ready
-// means: not a dry run, the lockdown invariant holds, and a config repo
-// landed. FeedbackPRReady is intentionally NOT part of Ready (a degraded
-// Feedback PR doesn't block running a classroom).
+// finalize computes Ready: not a dry run, lockdown invariant holds, config repo
+// landed. FeedbackPRReady is intentionally NOT part of Ready.
 func (s *initSummary) finalize() {
 	s.Ready = !s.DryRun && s.LockdownComplete && s.ConfigRepo.URL != ""
 }
 
-// renderJSON writes the summary as a single indented JSON object to w
-// (stdout). This is the only thing on stdout under --json. HTML escaping
-// is disabled so `>` in setting descriptions stays readable (this is CLI
-// output, not embedded in HTML).
+// renderJSON writes the summary as a single indented JSON object to stdout
+// (the only thing on stdout under --json). HTML escaping is off so `>` stays
+// readable.
 func (s *initSummary) renderJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
@@ -116,16 +88,12 @@ func (s *initSummary) renderJSON(w io.Writer) error {
 	return enc.Encode(s)
 }
 
-// renderHuman writes the end-of-run report to the human channel
-// (stderr): a one-line outcome banner, a terse setup summary, a single
-// consolidated "action required" checklist (the API-less hardening steps
-// plus any lockdown settings the plan/policy wouldn't let init apply),
-// and a prominent next command. No box — long URLs and instructions
-// would overflow it; a flat checklist is easier to scan and act on.
+// renderHuman writes the end-of-run report to stderr: an outcome banner, a
+// terse setup summary, one consolidated "action required" checklist, and the
+// next command. No box — long URLs would overflow it.
 func (s *initSummary) renderHuman(u *ui.UI) {
-	// 1. Outcome banner. A leading blank line separates the report from
-	// the progress line / step output above it (we don't hard-clear the
-	// terminal — that would wipe the teacher's scrollback).
+	// 1. Outcome banner, preceded by a blank line to separate it from the
+	// progress output above (we don't hard-clear the terminal).
 	u.Blank()
 	switch {
 	case s.Ready:
@@ -165,17 +133,14 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 		}
 	}
 
-	// 3. One consolidated manual-action checklist. The lockdown steps
-	// (settings init couldn't apply on this plan/policy) and the
-	// always-API-less hardening steps both live on the same org
-	// member-privileges page, so merge them into one checklist the
-	// teacher works top-to-bottom.
+	// 3. One consolidated manual-action checklist: the lockdown steps init
+	// couldn't apply and the always-API-less hardening steps both live on the
+	// org member-privileges page, so merge them.
 	settingsURL := manualSettingsURL(s)
 	manual := s.manualActions()
 	if len(manual) > 0 {
 		u.Heading("Action required — set these by hand (org owner)")
-		// When the lockdown is incomplete, lead with the plan-aware
-		// reason so the teacher understands why init couldn't do it.
+		// When incomplete, lead with the plan-aware reason.
 		if !s.LockdownComplete {
 			u.Detail("%s", unenforcedCause(s.Plan))
 		}
@@ -192,9 +157,9 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 	u.Next(fmt.Sprintf("gh teacher classroom add %s <short-name>", s.Org))
 }
 
-// manualActions merges the unenforced lockdown steps (only present when
-// the lockdown is incomplete) with the always-manual hardening steps
-// into one ordered checklist of GitHub-UI instructions.
+// manualActions merges the unenforced lockdown steps (present only when the
+// lockdown is incomplete) with the always-manual hardening steps into one
+// ordered checklist.
 func (s *initSummary) manualActions() []string {
 	var out []string
 	if !s.LockdownComplete {
@@ -208,8 +173,8 @@ func (s *initSummary) manualActions() []string {
 	return out
 }
 
-// manualSettingsURL returns the org member-privileges settings page URL
-// shared by every manual step (they all live on the same page).
+// manualSettingsURL returns the org member-privileges page URL shared by every
+// manual step.
 func manualSettingsURL(s *initSummary) string {
 	if len(s.LockdownManualSteps) > 0 {
 		return s.LockdownManualSteps[0].URL

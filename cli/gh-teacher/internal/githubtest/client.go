@@ -25,14 +25,10 @@ func (h *hostRewriteTransport) RoundTrip(req *http.Request) (*http.Response, err
 	return http.DefaultTransport.RoundTrip(req)
 }
 
-// NewTestClient wires a real go-gh client at the given test server,
-// returned as the githubapi.Client seam. AuthToken must be non-empty so
-// go-gh's header-injection layer leaves Authorization alone.
-//
-// This is the shared white-box test helper for gh-teacher: domain tests
-// construct a Client here instead of reaching into the concrete go-gh
-// constructor, so the go-gh dependency stays confined to githubapi and
-// this package.
+// NewTestClient wires a real go-gh client at the given test server, returned as
+// the githubapi.Client seam. AuthToken must be non-empty so go-gh leaves
+// Authorization alone. The shared white-box helper that keeps the go-gh
+// dependency confined to githubapi and this package.
 func NewTestClient(t *testing.T, server *httptest.Server) githubapi.Client {
 	t.Helper()
 	u, err := url.Parse(server.URL)

@@ -7,11 +7,10 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
-// LoadAssignments reads and parses a classroom's assignments.json from
-// the config repo at `ref`. Mirrors LoadRoster / LoadClassroom: the
-// read substrate lives here, the typed shape + parse/validate logic
-// lives in internal/assignment. A missing file is surfaced as an
-// actionable error (it should exist once `classroom add` has run).
+// LoadAssignments reads and parses a classroom's assignments.json at `ref`.
+// Mirrors LoadRoster/LoadClassroom: the read substrate lives here, the typed
+// shape + parse logic in internal/assignment. A missing file is an actionable
+// error.
 func LoadAssignments(client githubapi.Client, org, classroom, ref string) (assignment.AssignmentsJSON, error) {
 	path := assignment.AssignmentsFilePath(classroom)
 	data, ok, err := ReadFileContents(client, org, ConfigRepoName, path, ref)

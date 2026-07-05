@@ -7,10 +7,9 @@ import (
 	"os/signal"
 	"syscall"
 
-	// Embed the IANA tz database so LoadLocation (due-date timezone
-	// detection in internal/assignmentcmd) works on hosts without system
-	// zoneinfo -- otherwise a named $TZ silently falls back to
-	// time.Local and deadlines normalize to the wrong instant.
+	// Embed the IANA tz database so LoadLocation (due-date timezone detection)
+	// works on hosts without system zoneinfo — else a named $TZ silently falls
+	// back to time.Local and deadlines normalize to the wrong instant.
 	_ "time/tzdata"
 
 	"github.com/spf13/cobra"
@@ -67,8 +66,8 @@ func main() {
 	root.AddCommand(download.NewCmd())
 	root.AddCommand(teardown.NewCmd())
 
-	// Signal-aware root context: subcommands see cmd.Context()
-	// cancel on Ctrl-C / SIGTERM so in-flight HTTP unwinds.
+	// Signal-aware root context: subcommands see cmd.Context() cancel on
+	// Ctrl-C / SIGTERM so in-flight HTTP unwinds.
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 

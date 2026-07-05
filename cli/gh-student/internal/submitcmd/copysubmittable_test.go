@@ -141,9 +141,9 @@ func TestCopySubmittableFiles_ControlFilesKeptEvenUnderStarIgnore(t *testing.T) 
 }
 
 func TestFetchAllowedFiles_FetchFailureReturnsNil(t *testing.T) {
-	// The best-effort guarantee: a manifest fetch failure must never
-	// block submission — fetchAllowedFiles returns nil (submit all files)
-	// because the runner enforces the allowlist authoritatively.
+	// Best-effort guarantee: a manifest fetch failure must never block
+	// submission — fetchAllowedFiles returns nil (submit all) since the
+	// runner enforces the allowlist authoritatively.
 	orig := fetchEntryFn
 	t.Cleanup(func() { fetchEntryFn = orig })
 	fetchEntryFn = func(ctx context.Context, org, classroom, secret, assignment string) (assignments.Entry, error) {
@@ -177,9 +177,9 @@ func TestFetchAllowedFiles_SuccessReturnsPatterns(t *testing.T) {
 // (also consumed by the Python runner.py test) relative to this package.
 const sharedControlPathCasesPath = "../../../shared/testdata/control_path_cases.json"
 
-// TestIsControlPath_SharedFixtureParity runs the shared golden cases so the
-// Go isControlPath and the Python _is_control_path force-keep sets stay in
-// lockstep, the same way the matcher fixture pins the two matchers.
+// TestIsControlPath_SharedFixtureParity runs the shared golden cases so the Go
+// isControlPath and the Python _is_control_path force-keep sets stay in
+// lockstep, like the matcher fixture pins the two matchers.
 func TestIsControlPath_SharedFixtureParity(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Clean(sharedControlPathCasesPath))
 	if err != nil {

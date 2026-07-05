@@ -1,13 +1,6 @@
-// Package teardown implements the `gh teacher teardown` command:
-// deleting every repository in a Classroom 50 org once the org is
-// confirmed to carry the <org>/classroom50 marker repo, for resetting a
-// development org between iterations. It is an extracted command package
-// (mirrors internal/auth, internal/remove, internal/roster,
-// internal/member, and internal/invite): only NewCmd is exported; the
-// run* orchestration, the typed-confirmation prompt, and the
-// delete/order helpers are package-private. It depends only on the
-// internal/* substrate seams (cliutil, configrepo, githubapi, orgrepos),
-// never on package main.
+// Package teardown implements the `gh teacher teardown` command: deleting every
+// repo in a Classroom 50 org (confirmed by the <org>/classroom50 marker) to
+// reset a development org between iterations. Only NewCmd is exported.
 package teardown
 
 import (
@@ -28,10 +21,8 @@ import (
 	"github.com/foundation50/gh-teacher/internal/orgrepos"
 )
 
-// NewCmd implements `gh teacher teardown <org>`: deletes every
-// repo in an org once the org is confirmed to be a Classroom 50
-// setup. Intended for development scenarios where a clean reset is
-// useful between runs.
+// NewCmd implements `gh teacher teardown <org>`: deletes every repo in an org
+// once it's confirmed a Classroom 50 setup. For development resets.
 func NewCmd() *cobra.Command {
 	var skipConfirm bool
 
@@ -73,16 +64,13 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// runTeardown enforces the precondition (classroom50 marker exists),
-// prints the deletion plan, gets confirmation, then deletes every
-// repo in the org. classroom50 is removed last so a failure leaves
-// the precondition marker intact for a safe re-run.
+// runTeardown enforces the precondition (classroom50 marker exists), prints the
+// deletion plan, gets confirmation, then deletes every repo. classroom50 is
+// removed last so a failure leaves the marker intact for a safe re-run.
 //
-// We deliberately don't preflight the `delete_repo` OAuth scope —
-// teachers who haven't opted into that scope (via
-// `gh teacher login -s delete_repo`) get a 403 on the first DELETE
-// with an actionable hint, which is the safer default for users
-// who don't realize a destructive command is about to run.
+// We deliberately don't preflight the `delete_repo` OAuth scope — a teacher who
+// hasn't opted in gets a 403 on the first DELETE with an actionable hint, the
+// safer default before a destructive command runs.
 func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, org string, skipConfirm bool) error {
 	if err := requireConfigRepo(client, org); err != nil {
 		return err
@@ -93,18 +81,15 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		return err
 	}
 	if len(repos) == 0 {
-		// Vacuous case — should be impossible (we just verified
-		// classroom50 exists) but bail gracefully if the org was
-		// emptied mid-run.
+		// Should be impossible (classroom50 just verified) but bail
+		// gracefully if the org was emptied mid-run.
 		_, _ = fmt.Fprintf(out, "%s: nothing to delete (org appears empty)\n", org)
 		return nil
 	}
 
-	// Collect the per-classroom team refs (students + staff) BEFORE the
-	// repo deletions remove the config repo that records them, so we can
-	// sweep the teams afterward (deleting repos does not delete teams).
-	// Best-effort: a read failure here shouldn't block the destructive
-	// repo teardown the teacher asked for.
+	// Snapshot the classroom team refs (students + staff) BEFORE the repo
+	// deletions remove the config repo that records them, so we can sweep the
+	// teams afterward. Best-effort: a read failure shouldn't block teardown.
 	teams := collectClassroomTeams(client, org, errOut)
 
 	_, _ = fmt.Fprintf(out, "Found %d repo(s) in %s:\n", len(repos), org)
@@ -119,10 +104,8 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		}
 	}
 
-	// classroom50 last — see the function doc. The per-DELETE loop is the
-	// long-running phase; drive a spinner. When animating, suppress the
-	// per-repo "deleted:" stdout lines (the summary below is always
-	// printed regardless).
+	// classroom50 last (see the function doc). The per-DELETE loop is the
+	// long phase; drive a spinner and suppress per-repo stdout when animating.
 	ordered := orderRepoDeletions(repos)
 	deleted, failed, markerPreserved := 0, 0, false
 	sp := ghui.NewSpinner(errOut, fmt.Sprintf("Deleting %d repo(s) in %s", len(ordered), org))
@@ -130,11 +113,9 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	if animate {
 		sp.Start()
 	}
-	// The ticker goroutine rewrites the live line on errOut every frame,
-	// so writing per-repo skipped/failed lines to errOut mid-loop would
-	// be clobbered by the next \r — erasing the failure list. Buffer them
-	// while animating and flush after the spinner finalizes; on a non-TTY
-	// (no ticker) write immediately.
+	// The ticker rewrites the live line every frame, so per-repo lines written
+	// to errOut mid-loop would be clobbered. Buffer them while animating and
+	// flush after the spinner finalizes; write immediately on a non-TTY.
 	var deferredDetail []string
 	emitDetail := func(format string, a ...any) {
 		line := fmt.Sprintf(format, a...)
@@ -148,9 +129,8 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		if animate {
 			sp.Update(fmt.Sprintf("Deleting repos in %s (%d/%d)", org, i+1, len(ordered)))
 		}
-		// Preserve the marker repo when any earlier delete
-		// failed — re-running teardown still passes
-		// requireConfigRepo and can retry the survivors.
+		// Preserve the marker when any earlier delete failed — a re-run still
+		// passes requireConfigRepo and can retry the survivors.
 		if name == configrepo.ConfigRepoName && failed > 0 {
 			markerPreserved = true
 			emitDetail("  skipped: %s/%s preserved so a re-run can retry the failed deletions above\n", org, name)
@@ -172,7 +152,7 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 		} else {
 			sp.Stop(fmt.Sprintf("Deleted %d repo(s)", deleted))
 		}
-		// Ticker stopped — safe to flush the buffered detail lines now.
+		// Ticker stopped — safe to flush buffered detail lines now.
 		for _, line := range deferredDetail {
 			_, _ = fmt.Fprint(errOut, line)
 		}
@@ -184,14 +164,11 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	}
 	_, _ = fmt.Fprintln(out, summary+".")
 
-	// Sweep the classroom teams collected before deletion. This runs even
-	// when the marker repo was preserved after a partial repo-delete
-	// failure: the team refs were snapshotted up-front from the (still
-	// intact) classroom.json, DeleteClassroomTeam is idempotent (404 =
-	// already gone), and the deletes are independent of any surviving
-	// repos — so a re-run that re-reads the same refs harmlessly no-ops.
-	// Sweeping now avoids stranding write-granted staff teams when a
-	// stuck repo means a clean re-run never happens.
+	// Sweep the classroom teams snapshotted before deletion. Runs even when the
+	// marker was preserved: the refs were captured up-front, DeleteClassroomTeam
+	// is idempotent, and a re-run harmlessly no-ops. Sweeping now avoids
+	// stranding write-granted staff teams when a stuck repo blocks a clean
+	// re-run.
 	for _, t := range teams {
 		if err := configrepo.DeleteClassroomTeam(client, org, t); err != nil {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not delete classroom team %q (%v); delete it by hand at https://github.com/orgs/%s/teams if it lingers.\n",
@@ -207,12 +184,9 @@ func runTeardown(client githubapi.Client, in io.Reader, out, errOut io.Writer, o
 	return nil
 }
 
-// collectClassroomTeams reads every classroom.json in the config repo
-// and returns the team refs to sweep on teardown: each classroom's
-// students team plus its staff teams (instructor, ta). Best-effort — a
-// read failure is warned and skipped rather than aborting the teardown,
-// since the destructive repo deletions are the primary action. Refs are
-// deduped by slug (a hand-edited config could repeat one).
+// collectClassroomTeams reads every classroom.json and returns the team refs to
+// sweep on teardown (each classroom's student team plus staff teams).
+// Best-effort — a read failure is warned and skipped. Deduped by slug.
 func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer) []configrepo.TeamRef {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -227,10 +201,8 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 	bySlug := map[string]configrepo.TeamRef{}
 	add := func(t *configrepo.TeamRef) {
 		// Filter through the same fail-closed predicate the delete uses
-		// (mirrors the web's teardown, which .filter()s refs through
-		// isDeletableClassroomTeamRef before the bulk delete). A ref
-		// missing a positive id or the classroom50- prefix never enters
-		// the sweep set, defense-in-depth on top of DeleteClassroomTeam.
+		// (mirrors the web). A ref missing a positive id or the classroom50-
+		// prefix never enters the sweep set.
 		if t != nil && configrepo.IsDeletableClassroomTeamRef(*t) {
 			bySlug[t.Slug] = *t
 		}
@@ -256,9 +228,8 @@ func collectClassroomTeams(client githubapi.Client, org string, errOut io.Writer
 	return teams
 }
 
-// requireConfigRepo confirms <org>/classroom50 exists. 404 is the
-// "not a Classroom 50 org" guard — teardown refuses to touch orgs
-// that don't carry the marker. Other errors propagate.
+// requireConfigRepo confirms <org>/classroom50 exists. 404 is the "not a
+// Classroom 50 org" guard; other errors propagate.
 func requireConfigRepo(client githubapi.Client, org string) error {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), configrepo.ConfigRepoName)
 	if err := client.Get(path, nil); err != nil {
@@ -271,11 +242,9 @@ func requireConfigRepo(client githubapi.Client, org string) error {
 	return nil
 }
 
-// orderRepoDeletions returns the input slice with classroom50 moved
-// to the last position (if present). Preserves order otherwise.
-// Deleting the marker last means an interrupted run leaves
-// classroom50 behind, so re-running teardown still passes the
-// requireConfigRepo guard.
+// orderRepoDeletions moves classroom50 to last (if present), preserving order
+// otherwise, so an interrupted run leaves the marker behind and a re-run still
+// passes requireConfigRepo.
 func orderRepoDeletions(repos []string) []string {
 	out := make([]string, 0, len(repos))
 	var hasMarker bool
@@ -292,10 +261,8 @@ func orderRepoDeletions(repos []string) []string {
 	return out
 }
 
-// deleteRepo calls DELETE /repos/{owner}/{repo}. 403 → token is
-// missing the `delete_repo` scope; surface an actionable hint.
-// 204 is the success status; anything else propagates with the
-// raw HTTP code so a transient infra error is visible.
+// deleteRepo calls DELETE /repos/{owner}/{repo}. 403 → missing `delete_repo`
+// scope (actionable hint). 204 is success; anything else propagates the code.
 func deleteRepo(client githubapi.Client, owner, repo string) error {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
 	resp, err := client.Request(http.MethodDelete, path, nil)
@@ -313,10 +280,8 @@ func deleteRepo(client githubapi.Client, owner, repo string) error {
 	return nil
 }
 
-// confirmTeardown prompts on `out` and reads one line from `in`.
-// Returns nil iff the trimmed line equals the org name; any other
-// input (mismatch, EOF, read error) aborts with a typed error so
-// the caller can short-circuit cleanly. Single read — no retry.
+// confirmTeardown prompts on `out` and reads one line from `in`. Returns nil iff
+// the trimmed line equals the org name; any other input aborts. Single read.
 func confirmTeardown(in io.Reader, out io.Writer, org string) error {
 	_, _ = fmt.Fprintf(out, "This will DELETE every repo above. Type the org name (%s) to confirm: ", org)
 	reader := bufio.NewReader(in)

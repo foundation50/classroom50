@@ -1,15 +1,7 @@
-// Package assignmentcmd implements the `gh teacher assignment` command
-// group: add / list / remove assignment entries in a classroom's
-// assignments.json, plus the `assignment test` subgroup for declarative
-// test specs. It is an extracted command package (mirrors internal/audit,
-// internal/teardown, internal/download): only NewCmd is exported; the
-// per-subcommand orchestration, template/due-date parsing, and the
-// configwrite build callbacks are package-private. It is distinct from
-// internal/assignment, the pure data layer it consumes for parsing and
-// validating the manifest. Depends on the internal/* substrate seams
-// (assignment data layer, autograder, cliutil, configrepo, configwrite,
-// githubapi, output, validate) plus the shared contract package, never
-// on package main.
+// Package assignmentcmd implements the `gh teacher assignment` command group:
+// add / reuse / list / remove entries in a classroom's assignments.json, plus
+// the `assignment test` subgroup for declarative test specs. Only NewCmd is
+// exported. Distinct from internal/assignment, the pure data layer it consumes.
 package assignmentcmd
 
 import (
@@ -65,10 +57,9 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// assignmentAddCmd: `--mode` accepts `individual` (default) or
-// `group`. Group mode requires `--max-group-size` (>= 2); the size is
-// enforced within the CLI when students join a group repo (direct
-// GitHub-UI invites can bypass it — a documented limitation).
+// assignmentAddCmd: `--mode` accepts `individual` (default) or `group`. Group
+// mode requires `--max-group-size` (>= 2), enforced within the CLI when
+// students join (direct GitHub-UI invites can bypass it — documented).
 func assignmentAddCmd() *cobra.Command {
 	var (
 		name          string
@@ -169,9 +160,9 @@ func assignmentAddCmd() *cobra.Command {
 			if autograderVal == "" {
 				autograderVal = contract.DefaultAutograderName
 			}
-			// pass_threshold is opt-in: only set the pointer when the flag was
-			// passed, so an omitted flag leaves it nil (feature off) while an
-			// explicit --pass-threshold 0 is a real 0% threshold.
+			// pass_threshold is opt-in: set the pointer only when the flag was
+			// passed, so an omitted flag stays nil (off) while an explicit
+			// --pass-threshold 0 is a real 0% threshold.
 			passThresholdPtr := passThresholdFromFlag(cmd.Flags().Changed("pass-threshold"), passThreshold)
 			if err := autograderseam.ValidateName(autograderVal); err != nil {
 				return err
@@ -181,9 +172,8 @@ func assignmentAddCmd() *cobra.Command {
 				return err
 			}
 			// --template is optional. When omitted, the assignment has no
-			// starter repo and `gh student accept` creates an empty repo
-			// carrying only the autograder shim. When present, parse +
-			// (later) validate it.
+			// starter repo and `student accept` creates an empty shim-only
+			// repo. When present, parse + (later) validate it.
 			var tmplArg *templateArg
 			if templateVal != "" {
 				parsed, err := parseTemplateRef(templateVal)
@@ -242,9 +232,9 @@ func assignmentAddCmd() *cobra.Command {
 	return cmd
 }
 
-// assignmentRemoveCmd is idempotent (missing slug exits 0) and
-// leaves existing student repos untouched — only future
-// `gh student accept` calls stop finding the slug.
+// assignmentRemoveCmd is idempotent (missing slug exits 0) and leaves existing
+// student repos untouched — only future `student accept` calls stop finding the
+// slug.
 func assignmentRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <org> <classroom> <slug>",
@@ -282,9 +272,8 @@ func assignmentRemoveCmd() *cobra.Command {
 	return cmd
 }
 
-// assignmentListCmd: read-only. stdout = one slug per line by
-// default; `--json` emits the full entries array; `-q` suppresses
-// the stderr summary so capturing scripts see only stdout.
+// assignmentListCmd: read-only. stdout = one slug per line by default; `--json`
+// emits the full entries array; `-q` suppresses the stderr summary.
 func assignmentListCmd() *cobra.Command {
 	var (
 		asJSON bool
@@ -335,9 +324,8 @@ func assignmentListCmd() *cobra.Command {
 	return cmd
 }
 
-// runAssignmentList: one branch resolve, one file read, no commit.
-// Missing assignments.json points the teacher at
-// `gh teacher classroom add`.
+// runAssignmentList: one branch resolve, one file read, no commit. Missing
+// assignments.json points the teacher at `classroom add`.
 func runAssignmentList(client githubapi.Client, out, errOut io.Writer, org, classroom string, asJSON, quiet bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -366,11 +354,10 @@ func runAssignmentList(client githubapi.Client, out, errOut io.Writer, org, clas
 	return nil
 }
 
-// formatAssignmentListJSON marshals the bare entries array (no
-// `{schema, assignments}` envelope) with on-disk pretty-print +
-// trailing newline so terminal output and `jq` pipes match. Empty
-// Autograder normalizes to "default" so consumers can index
-// without nil guards.
+// formatAssignmentListJSON marshals the bare entries array (no envelope) with
+// on-disk pretty-print + trailing newline so terminal and `jq` output match.
+// Empty Autograder normalizes to "default" so consumers can index without nil
+// guards.
 func formatAssignmentListJSON(entries []assignment.AssignmentEntry) ([]byte, error) {
 	if entries == nil {
 		entries = []assignment.AssignmentEntry{}
@@ -397,25 +384,15 @@ func summarizeAssignmentList(org, classroom string, count int) string {
 	}
 }
 
-// assignmentsFilePath: on-repo path to a classroom's assignments.json
-// (matches rosterFilePath's role for students.csv).
+// assignmentsFilePath: on-repo path to a classroom's assignments.json.
 func assignmentsFilePath(classroom string) string {
 	return assignment.AssignmentsFilePath(classroom)
 }
 
-// runAssignmentAdd validates template visibility and entry shape
-// before entering the configwrite.CommitTree loop so a bad input never produces
-// a partial-state commit. The autograder existence probe runs inside
-// the build callback against each attempt's parent SHA: a concurrent
-// delete of the referenced autograder loses cleanly on retry rather
-// than landing a dangling reference. Same-slug races are
-// last-writer-wins; both commits stay in history for `git revert`.
-// validateModeAndSizeFlags normalizes/validates the --mode and
-// --max-group-size flag pair for `assignment add`. Returns the resolved
-// mode. Group mode requires --max-group-size (>= 2, within the cap);
-// individual mode must not set it (sizeProvided guards the explicit
-// case). Extracted as a pure function so the flag contract is
-// unit-testable without executing the full command.
+// validateModeAndSizeFlags normalizes/validates the --mode and --max-group-size
+// pair for `assignment add`. Group mode requires --max-group-size (2..cap);
+// individual mode must not set it. Extracted as a pure function so the flag
+// contract is unit-testable.
 func validateModeAndSizeFlags(mode string, maxGroupSize int, sizeProvided bool) (string, error) {
 	modeVal := strings.TrimSpace(mode)
 	if modeVal == "" {
@@ -440,9 +417,9 @@ func validateModeAndSizeFlags(mode string, maxGroupSize int, sizeProvided bool) 
 	return modeVal, nil
 }
 
-// passThresholdFromFlag maps the --pass-threshold flag to the optional
-// *int the entry stores: an omitted flag stays nil (off), while an explicit
-// --pass-threshold 0 is a non-nil *int(0) — a real 0% bar distinct from off.
+// passThresholdFromFlag maps --pass-threshold to the optional *int: an omitted
+// flag stays nil (off); an explicit --pass-threshold 0 is *int(0), a real 0%
+// bar distinct from off.
 func passThresholdFromFlag(changed bool, value int) *int {
 	if !changed {
 		return nil
@@ -451,11 +428,10 @@ func passThresholdFromFlag(changed bool, value int) *int {
 	return &v
 }
 
-// addAssignmentParams carries the inputs to runAssignmentAdd as named
-// fields rather than a long positional list. Several fields share types
-// (multiple strings, pointers, slices), so positional passing made arg
-// transposition a compile-clean footgun; field names make call sites
-// order-independent and self-documenting.
+// addAssignmentParams carries runAssignmentAdd's inputs as named fields. Many
+// share types (strings, pointers, slices), so positional passing made arg
+// transposition a compile-clean footgun; field names keep call sites
+// order-independent.
 type addAssignmentParams struct {
 	Org           string
 	Classroom     string
@@ -475,6 +451,11 @@ type addAssignmentParams struct {
 	PassThreshold *int
 }
 
+// runAssignmentAdd validates template visibility and entry shape before the
+// configwrite.CommitTree loop so a bad input never produces a partial-state
+// commit. The autograder existence probe runs inside the build callback against
+// each attempt's parent SHA, so a concurrent delete loses cleanly on retry.
+// Same-slug races are last-writer-wins.
 func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssignmentParams) error {
 	org, classroom, slug := p.Org, p.Classroom, p.Slug
 	name, description := p.Name, p.Description
@@ -489,8 +470,8 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	}
 
 	// Template is optional. When present, validate it and decide the
-	// private-access grant; when absent, the assignment is template-less
-	// and `gh student accept` will create an empty shim-only repo.
+	// private-access grant; when absent, `student accept` creates an empty
+	// shim-only repo.
 	var (
 		resolved        *assignment.TemplateRef
 		templatePrivate bool
@@ -504,9 +485,8 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		templatePrivate = private
 
 		// Private-template access matrix: a private template outside the org
-		// can't be shared with the
-		// classroom team, so students could never generate from it — reject
-		// up front rather than letting every `gh student accept` 404 later.
+		// can't be shared with the classroom team, so reject up front rather
+		// than letting every `student accept` 404 later.
 		inOrg = templateInOrg(ref.Owner, org)
 		if templatePrivate && !inOrg {
 			return fmt.Errorf("template `%s/%s` is private and outside the org %s — students can't be granted access to it, so `gh student accept` would fail. Copy it into %s and reference the copy, or make the template public",
@@ -548,17 +528,15 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedTemplate = nil
 		droppedAllowedCnt = 0
 		droppedPassThreshold = nil
-		// Refuse on an archived classroom (active:false), mirroring the
-		// web's "archived blocks new assignments" rule. Checked at
-		// parentSHA so a concurrent unarchive is observed on retry.
+		// Refuse on an archived classroom (active:false), mirroring the web.
+		// Checked at parentSHA so a concurrent unarchive is observed on retry.
 		if err := ensureClassroomActive(client, org, classroom, parentSHA); err != nil {
 			return nil, err
 		}
-		// Verify the autograder shim exists at parent SHA before
-		// writing — otherwise the assignment lands successfully and
-		// every student's accept 404s on the Pages fetch later. The
-		// default autograder is embedded in gh-student and has no
-		// on-disk counterpart, so skip the probe in that case.
+		// Verify the autograder shim exists at parent SHA before writing —
+		// else the assignment lands and every accept 404s on the Pages fetch.
+		// The default autograder is embedded in gh-student (no on-disk
+		// counterpart), so skip the probe there.
 		if entry.Autograder != contract.DefaultAutograderName {
 			exists, err := autograderseam.Exists(client, org, configrepo.ConfigRepoName, classroom, entry.Autograder, parentSHA)
 			if err != nil {
@@ -571,11 +549,11 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			}
 		}
 
-		// Declarative tests and a hand-written per-assignment autograder.py
-		// are mutually exclusive (the runner prefers autograder.py, so the
-		// tests would silently never run). Probed at parentSHA so a
-		// concurrent autograder.py add loses cleanly on retry. The skeleton
-		// probe catches config repos that predate materialize_tests.py.
+		// Declarative tests and a per-assignment autograder.py are mutually
+		// exclusive (the runner prefers autograder.py, so the tests would
+		// silently never run). Probed at parentSHA so a concurrent
+		// autograder.py add loses cleanly on retry. The skeleton probe catches
+		// config repos predating materialize_tests.py.
 		if len(entry.Tests) > 0 {
 			if err := ensureDeclarativeTestsSupported(client, org, parentSHA); err != nil {
 				return nil, err
@@ -589,48 +567,36 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		if err != nil {
 			return nil, err
 		}
-		// One lookup of the entry this upsert replaces (if any), shared by
-		// the wholesale-replace footgun checks below and the Extra
-		// carry-forward (file.Assignments isn't mutated until UpsertAssignment).
+		// One lookup of the entry this upsert replaces, shared by the
+		// wholesale-replace footgun checks and the Extra carry-forward.
 		prevIdx, hasPrev := assignment.FindAssignment(file.Assignments, slug)
-		// Upsert replaces the whole entry, so re-running add without
-		// --tests drops tests authored via `assignment test add`. Count
-		// them here for the post-commit warning. nil means the flag was
-		// omitted; an explicit empty array (`--tests` with `[]`) is a
-		// deliberate clear and shouldn't warn.
+		// Upsert replaces the whole entry, so re-running add without --tests
+		// drops tests authored via `assignment test add`. Count them for the
+		// warning. nil = flag omitted; an explicit `[]` is a deliberate clear.
 		if hasPrev && entry.Tests == nil {
 			droppedTests = len(file.Assignments[prevIdx].Tests)
 		}
-		// Same wholesale-replace footgun for the template: re-running add
-		// without --template on a previously-templated assignment would
-		// silently drop its starter-repo binding. Detect it for a loud
-		// post-commit warning (the upsert still applies — consistent with
-		// every other field — but the teacher should know).
+		// Same footgun for the template: re-running add without --template on
+		// a templated assignment silently drops its starter-repo binding.
 		if hasPrev && entry.Template == nil && file.Assignments[prevIdx].Template != nil {
 			droppedTemplate = file.Assignments[prevIdx].Template
 		}
-		// Wholesale-replace footgun (as with tests/template): re-running
-		// add without --allowed-files drops a prior allowlist. The flag is a
-		// repeatable StringArrayVar, so via the CLI the value is either nil
-		// (flag omitted -> warn) or a non-empty list; ValidateAllowedFiles
-		// rejects an empty/whitespace pattern, so `--allowed-files ''` never
-		// yields a silent clear. A non-nil empty slice (the programmatic /
-		// non-CLI clear path) is treated as deliberate and does not warn.
+		// Same footgun for allowed_files: re-running without --allowed-files
+		// drops a prior allowlist. Via the CLI the value is nil (omitted →
+		// warn) or non-empty; a non-nil empty slice (programmatic clear) is
+		// deliberate and doesn't warn.
 		if hasPrev && entry.AllowedFiles == nil {
 			droppedAllowedCnt = len(file.Assignments[prevIdx].AllowedFiles)
 		}
-		// Wholesale-replace footgun (as with tests/template/allowed_files),
-		// sharper here because pass_threshold is usually authored by the
-		// gradebook GUI, not the CLI: re-adding without --pass-threshold
-		// silently clears it. nil = flag omitted (warn); an explicit 0 is a
-		// non-nil pointer (a real 0% bar) and not a drop.
+		// Same footgun for pass_threshold, sharper because it's usually
+		// authored by the gradebook GUI. nil = omitted (warn); an explicit 0
+		// is a non-nil pointer (real 0% bar), not a drop.
 		if hasPrev && entry.PassThreshold == nil && file.Assignments[prevIdx].PassThreshold != nil {
 			droppedPassThreshold = file.Assignments[prevIdx].PassThreshold
 		}
 		// Carry forward the existing entry's Extra (unknown/future keys):
-		// `entry` is rebuilt from CLI flags and carries none, so without
-		// this the wholesale-replace upsert would drop them. (reuse instead
-		// preserves Extra by copying the whole source entry.)
+		// `entry` is rebuilt from CLI flags and carries none, so without this
+		// the wholesale-replace upsert would drop them.
 		if hasPrev {
 			entry.Extra = file.Assignments[prevIdx].Extra
 		}
@@ -645,9 +611,8 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		if err != nil {
 			return nil, err
 		}
-		// Captured by the closure so the post-commit warning can
-		// see the final size that actually landed (after any
-		// rebase retries).
+		// Captured by the closure so the post-commit warning sees the final
+		// size that landed (after any rebase retries).
 		lastEncodedSize = len(data)
 		return map[string]string{assignmentsFilePath(classroom): string(data)}, nil
 	}
@@ -666,12 +631,8 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		templateDesc, entry.Autograder)
 
 	// In-org private template: grant the classroom team read so rostered
-	// students can generate from it (public templates need no grant; the
-	// out-of-org private case was already rejected above). Idempotent —
-	// skips the PUT when the team already has access. The team slug is
-	// read from classroom.json (authoritative); a classroom with no team
-	// (pre-feature) gets an actionable message rather than a 404 against
-	// a guessed slug.
+	// students can generate from it. Idempotent. The team slug comes from
+	// classroom.json; a classroom with no team gets an actionable message.
 	if resolved != nil && templatePrivate && inOrg {
 		if err := grantClassroomTeamTemplateRead(client, out, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
@@ -699,11 +660,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			"Warning: replacing %q dropped its pass_threshold (%d%%) — `assignment add` rewrites the whole entry, and you re-ran it without --pass-threshold. The passing bar (often set in the gradebook GUI) is now off. Pass --pass-threshold %d to keep it.\n",
 			slug, *droppedPassThreshold, *droppedPassThreshold)
 	}
-	// Heads-up if the encoded file is approaching the GitHub
-	// contents-API behavior change (~1 MiB encoded → encoding:"none",
-	// which would wedge future reads/writes). Diagnostic only;
-	// no behavioral effect. See assignment.LargeAssignmentsWarnBytes in
-	// internal/assignment/assignments_json.go for the rationale.
+	// Heads-up if the encoded file nears GitHub's ~1 MiB contents-API limit
+	// (past which encoding flips to "none", wedging future reads/writes).
+	// Diagnostic only. See assignment.LargeAssignmentsWarnBytes.
 	if lastEncodedSize > assignment.LargeAssignmentsWarnBytes {
 		_, _ = fmt.Fprintf(errOut,
 			"Warning: %s/%s/%s is %d bytes — approaching GitHub's ~1 MiB contents-API ceiling. Past that, the API returns encoding:\"none\" and future `gh teacher assignment add/remove` calls will fail to read the file. Consider splitting the classroom or shrinking per-entry fields.\n",
@@ -728,8 +687,8 @@ func runAssignmentRemove(client githubapi.Client, out io.Writer, org, classroom,
 		next, ok := assignment.RemoveAssignment(file.Assignments, slug)
 		removed = ok
 		if !ok {
-			// configwrite.CommitTree treats nil-or-empty as a no-op so a missing
-			// slug doesn't produce an empty commit.
+			// configwrite.CommitTree treats nil-or-empty as a no-op so a
+			// missing slug doesn't produce an empty commit.
 			return nil, nil
 		}
 		file.Assignments = next
@@ -756,18 +715,16 @@ func runAssignmentRemove(client githubapi.Client, out io.Writer, org, classroom,
 }
 
 // loadAssignments reads assignments.json at `ref` (commit SHA for
-// rebase-consistent reads inside configwrite.CommitTree, branch name for the
-// read-only list path — the contents API accepts both). Missing
-// file → points the teacher at `gh teacher classroom add`.
+// rebase-consistent reads inside CommitTree, or a branch name for the read-only
+// list path). Missing file → points the teacher at `classroom add`.
 func loadAssignments(client githubapi.Client, org, classroom, ref string) (assignment.AssignmentsJSON, error) {
 	return configrepo.LoadAssignments(client, org, classroom, ref)
 }
 
-// ensureClassroomActive refuses a write (add / reuse) into an archived
-// classroom (classroom.json `active: false`), mirroring the web. Read at
-// `ref` inside the build callback so a concurrent archive/unarchive is
-// observed consistently. A missing/legacy classroom.json reads as active,
-// so this never blocks legacy classrooms.
+// ensureClassroomActive refuses a write into an archived classroom
+// (classroom.json `active: false`), mirroring the web. Read at `ref` inside the
+// build callback so a concurrent archive/unarchive is observed consistently. A
+// missing/legacy classroom.json reads as active.
 func ensureClassroomActive(client githubapi.Client, org, classroom, ref string) error {
 	c, ok, err := configrepo.LoadClassroom(client, org, classroom, ref)
 	if err != nil {
@@ -780,10 +737,9 @@ func ensureClassroomActive(client githubapi.Client, org, classroom, ref string) 
 	return nil
 }
 
-// templateArg is the parsed `--template` flag. Branch is empty if
-// the teacher omits `@branch`; validateTemplateRepo then fills it
-// from the template's `default_branch`. Kept distinct from
-// assignment.TemplateRef because on-disk Branch must be populated.
+// templateArg is the parsed `--template` flag. Branch is empty if `@branch` is
+// omitted; validateTemplateRepo then fills it from default_branch. Kept
+// distinct from assignment.TemplateRef because on-disk Branch must be populated.
 type templateArg struct {
 	Owner  string
 	Repo   string
@@ -814,13 +770,11 @@ func parseTemplateRef(raw string) (templateArg, error) {
 	}, nil
 }
 
-// normalizeDueDate turns a --due value into the stored UTC instant
-// plus its provenance (due_meta). Empty -> ("", nil, nil); --due is
-// optional. A value carrying an offset is converted to UTC; a
-// zone-less value is interpreted in the machine's local timezone
-// (auto-detected), then converted to UTC. The teacher's original
-// input and the applied offset/zone are preserved in due_meta so a
-// wrong-zone deadline stays auditable.
+// normalizeDueDate turns a --due value into the stored UTC instant plus its
+// provenance (due_meta). Empty → ("", nil, nil). A value with an offset is
+// converted to UTC; a zone-less value is interpreted in the machine's local
+// zone, then converted. The original input and applied offset/zone are kept in
+// due_meta so a wrong-zone deadline stays auditable.
 func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 	if raw == "" {
 		return "", nil, nil
@@ -831,10 +785,8 @@ func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 		return "", nil, fmt.Errorf("invalid --due: %w", err)
 	}
 	if !hadOffset && locErr != nil {
-		// The value is zone-less, so the result depends entirely on
-		// the local zone -- but $TZ was set to something we couldn't
-		// resolve. Fail loudly rather than silently normalizing in a
-		// fallback zone and storing the wrong instant.
+		// Zone-less value depends entirely on the local zone, but $TZ was
+		// unresolvable. Fail loudly rather than storing the wrong instant.
 		return "", nil, fmt.Errorf(
 			"invalid --due: %q has no timezone offset and the local timezone "+
 				"could not be resolved (%v); pass an explicit offset like -04:00", raw, locErr)
@@ -847,13 +799,10 @@ func normalizeDueDate(raw string) (string, *assignment.DueMeta, error) {
 	return t.UTC().Format(time.RFC3339), meta, nil
 }
 
-// localDueLocation resolves the machine's local timezone for
-// interpreting a zone-less --due. $TZ is preferred when set: it names
-// an IANA zone (e.g. "America/New_York") that round-trips a readable
-// name into due_meta.zone. When $TZ is set but unresolvable, return
-// the error (alongside time.Local) so the caller can refuse to guess
-// for a zone-less value; an empty $TZ falls back to time.Local with no
-// error (that's the legitimate auto-detect path).
+// localDueLocation resolves the machine's local timezone for a zone-less --due.
+// $TZ is preferred (its IANA name round-trips into due_meta.zone). When $TZ is
+// set but unresolvable, return the error (with time.Local) so the caller
+// refuses to guess; an empty $TZ falls back to time.Local with no error.
 func localDueLocation() (*time.Location, error) {
 	if tz := strings.TrimSpace(os.Getenv("TZ")); tz != "" {
 		loc, err := time.LoadLocation(tz)
@@ -865,11 +814,10 @@ func localDueLocation() (*time.Location, error) {
 	return time.Local, nil
 }
 
-// dueZoneName is the best-effort human-readable zone recorded in
-// due_meta when the offset was auto-detected. A named location (from
-// $TZ or a test injection) reports its IANA name; time.Local reports
-// "Local", so fall back to the abbreviation at that instant (e.g.
-// "EDT"). due_meta.offset is always exact regardless.
+// dueZoneName is the best-effort human-readable zone recorded in due_meta when
+// the offset was auto-detected. A named location reports its IANA name;
+// time.Local reports "Local", so fall back to the abbreviation at that instant
+// (e.g. "EDT"). due_meta.offset is always exact regardless.
 func dueZoneName(loc *time.Location, t time.Time) string {
 	if name := loc.String(); name != "" && name != "Local" {
 		return name
@@ -878,14 +826,11 @@ func dueZoneName(loc *time.Location, t time.Time) string {
 	return abbr
 }
 
-// validateTemplateRepo checks <owner>/<repo> exists and is a
-// template repo, then resolves missing @branch to default_branch so
-// on-disk Branch is always populated. Also returns whether the
-// template is private, so assignment add can decide whether the
-// classroom team needs a read grant (in-org private) or the
-// assignment must be rejected (out-of-org private). Post-HTTP
-// decisions live in resolveTemplateBranch so the decision table is
-// unit-testable without an httptest scaffold.
+// validateTemplateRepo checks <owner>/<repo> exists and is a template repo,
+// then resolves a missing @branch to default_branch. Also returns whether the
+// template is private, so add can decide the classroom-team read grant (in-org
+// private) or rejection (out-of-org private). Post-HTTP decisions live in
+// resolveTemplateBranch so they're unit-testable without httptest.
 func validateTemplateRepo(client githubapi.Client, t templateArg) (ref assignment.TemplateRef, private bool, err error) {
 	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(t.Owner), url.PathEscape(t.Repo))
 	var resp struct {
@@ -908,9 +853,8 @@ func validateTemplateRepo(client githubapi.Client, t templateArg) (ref assignmen
 }
 
 // templateInOrg reports whether the template repo is owned by <org>
-// (case-insensitive, matching GitHub's login semantics). An in-org
-// private template can be shared with the classroom team; an
-// out-of-org private one cannot, so assignment add rejects it.
+// (case-insensitive). An in-org private template can be shared with the
+// classroom team; an out-of-org private one can't, so add rejects it.
 func templateInOrg(templateOwner, org string) bool {
 	return strings.EqualFold(templateOwner, org)
 }
@@ -927,8 +871,8 @@ func resolveTemplateBranch(t templateArg, isTemplate bool, defaultBranch string)
 		branch = defaultBranch
 	}
 	if branch == "" {
-		// Defensive: a fresh repo can return empty default_branch,
-		// and an empty Branch on disk would trip `gh student accept`.
+		// Defensive: a fresh repo can return empty default_branch, and an
+		// empty on-disk Branch would trip `student accept`.
 		return assignment.TemplateRef{}, fmt.Errorf("template `%s/%s` has no default branch — pass --template %s/%s@<branch> explicitly", t.Owner, t.Repo, t.Owner, t.Repo)
 	}
 	return assignment.TemplateRef{Owner: t.Owner, Repo: t.Repo, Branch: branch}, nil

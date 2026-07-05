@@ -1,8 +1,8 @@
 // Package ghutil holds small, proven-duplicated helpers for talking to the
-// GitHub API via go-gh, shared by the gh-teacher and gh-student CLIs. It is
-// deliberately NOT a client wrapper — go-gh's *api.RESTClient already is the
-// standardization. This package only collects the few primitives both modules
-// had copied: HTTP-status classification and the retry backoff schedule.
+// GitHub API via go-gh, shared by the gh-teacher and gh-student CLIs. Not a
+// client wrapper — go-gh's *api.RESTClient already is that; this only collects
+// the primitives both modules had copied: HTTP-status classification and the
+// retry backoff schedule.
 package ghutil
 
 import (
@@ -21,20 +21,17 @@ import (
 	"github.com/cli/go-gh/v2/pkg/api"
 )
 
-// linkNextRe extracts the `rel="next"` target from a GitHub `Link`
-// response header, e.g.
+// linkNextRe extracts the `rel="next"` target from a GitHub `Link` header, e.g.
 //
 //	<https://api.github.com/...&page=2>; rel="next", <...>; rel="last"
 //
-// GitHub's pagination guidance is to follow this URL rather than to
-// synthesize page numbers, because page size and the presence of a next
-// page are the server's to decide.
+// GitHub's guidance is to follow this URL rather than synthesize page numbers:
+// page size and whether a next page exists are the server's to decide.
 var linkNextRe = regexp.MustCompile(`<([^>]+)>\s*;\s*[^,]*rel="next"`)
 
-// NextPageLink returns the `rel="next"` URL from a Link response header,
-// or "" when there is no next page (or no Link header at all). Shared by
-// both CLIs' paginated walks so they follow GitHub's authoritative
-// pagination contract identically.
+// NextPageLink returns the `rel="next"` URL from a Link header, or "" when
+// there is no next page (or no Link header). Shared by both CLIs' paginated
+// walks so they follow GitHub's pagination contract identically.
 func NextPageLink(header string) string {
 	if header == "" {
 		return ""
@@ -46,20 +43,19 @@ func NextPageLink(header string) string {
 	return m[1]
 }
 
-// NextPage centralizes the page-walk termination decision both Go CLIs
-// rely on, so the error-prone predicate isn't re-implemented (and prone
-// to drift) at each call site. Given a response's Link header plus the
-// just-decoded batch length and the requested per-page size, it returns:
+// NextPage centralizes the page-walk termination decision both Go CLIs rely
+// on, so the error-prone predicate isn't re-implemented (and drifting) at each
+// call site. Given a response's Link header, the just-decoded batch length, and
+// the requested per-page size, it returns:
 //
-//   - (nextURL, false) — follow GitHub's authoritative `rel="next"` URL.
-//   - ("", true)       — stop: either the Link header is present without a
-//     `rel="next"` (this was the last page), or — with NO Link header (a
-//     test server / Link-less endpoint) — the page was short
-//     (len < perPage, including empty).
-//   - ("", false)      — no Link header AND a full page: the caller should
-//     synthesize the next page (e.g. pageURL(page+1)) and continue.
+//   - (nextURL, false) — follow GitHub's `rel="next"` URL.
+//   - ("", true)       — stop: Link header present without a `rel="next"` (last
+//     page), or NO Link header (test server / Link-less endpoint) with a short
+//     page (len < perPage, including empty).
+//   - ("", false)      — no Link header AND a full page: the caller synthesizes
+//     the next page (e.g. pageURL(page+1)) and continues.
 //
-// Callers own how they build a synthesized next page, so that URL is not
+// Callers own how they build a synthesized next page, so that URL isn't
 // returned here; only the decision is shared.
 func NextPage(linkHeader string, batchLen, perPage int) (nextURL string, stop bool) {
 	if next := NextPageLink(linkHeader); next != "" {
@@ -72,8 +68,8 @@ func NextPage(linkHeader string, batchLen, perPage int) (nextURL string, stop bo
 }
 
 // IsHTTPStatus reports whether err is a *api.HTTPError with the given status
-// code. Collapses the err -> *api.HTTPError -> StatusCode pattern used to
-// distinguish 404/409/422 from transport errors.
+// code, collapsing the err -> *api.HTTPError -> StatusCode pattern used to
+// tell 404/409/422 from transport errors.
 func IsHTTPStatus(err error, code int) bool {
 	httpErr, ok := errors.AsType[*api.HTTPError](err)
 	return ok && httpErr.StatusCode == code
@@ -91,10 +87,10 @@ func BackoffDelay(attempt int) time.Duration {
 	return time.Duration(200*(1<<attempt)) * time.Millisecond
 }
 
-// WaitForStableBranch polls until two consecutive reads agree on a
-// non-empty commit SHA (max 20 attempts, ~10s total). Required against a
-// freshly-created/templated branch — the contents/git-data APIs briefly
-// 409 with "Git Repository is empty" until the ref propagates.
+// WaitForStableBranch polls until two consecutive reads agree on a non-empty
+// commit SHA (max 20 attempts, ~10s). Needed against a freshly created/templated
+// branch — the contents/git-data APIs briefly 409 "Git Repository is empty"
+// until the ref propagates.
 func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) error {
 	path := fmt.Sprintf(
 		"repos/%s/%s/branches/%s",
@@ -110,14 +106,12 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 			} `json:"commit"`
 		}
 		if err := client.Get(path, &resp); err != nil {
-			// Transient error; reset the baseline.
-			lastSHA = ""
+			lastSHA = "" // transient error; reset the baseline
 			time.Sleep(time.Duration(250*(i+1)) * time.Millisecond)
 			continue
 		}
 		if resp.Commit.SHA == "" {
-			// No commit reported yet; reset the baseline.
-			lastSHA = ""
+			lastSHA = "" // no commit yet; reset the baseline
 			time.Sleep(500 * time.Millisecond)
 			continue
 		}
@@ -131,7 +125,7 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 }
 
 // CurrentUser returns the authenticated user's login and immutable numeric ID
-// via GET /user. Callers that only need the login can ignore the id (e.g.
+// via GET /user. Callers needing only the login can ignore the id (e.g.
 // whoami); gh-student's identity.Fetch uses both to build the noreply email.
 func CurrentUser(client *api.RESTClient) (login string, id int64, err error) {
 	var user struct {
@@ -145,9 +139,9 @@ func CurrentUser(client *api.RESTClient) (login string, id int64, err error) {
 }
 
 // SetCollaborator PUTs username as a collaborator on owner/repo with the given
-// permission and returns the HTTP status code (201 when an invitation was
-// created and awaits acceptance, 204 when the user was added directly). Callers
-// format their own messages off the status; an unexpected status is an error.
+// permission and returns the HTTP status (201 = invitation created and awaiting
+// acceptance, 204 = added directly). Callers format their own messages off the
+// status; an unexpected status is an error.
 func SetCollaborator(client *api.RESTClient, owner, repo, username, permission string) (int, error) {
 	body, err := json.Marshal(map[string]string{"permission": permission})
 	if err != nil {
@@ -168,8 +162,8 @@ func SetCollaborator(client *api.RESTClient, owner, repo, username, permission s
 }
 
 // DecodeContentsBase64 decodes the base64 envelope the GitHub contents/git-data
-// APIs return. They wrap the payload at column 60, and Go's std decoder rejects
-// embedded newlines, so strip them first.
+// APIs return. They wrap at column 60 and Go's std decoder rejects embedded
+// newlines, so strip them first.
 func DecodeContentsBase64(content string) ([]byte, error) {
 	return base64.StdEncoding.DecodeString(strings.ReplaceAll(content, "\n", ""))
 }

@@ -16,13 +16,9 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// rosterListEntry is the `--json` view of one students.csv row. Field
-// names mirror the CSV column headers (configrepo.RosterColumns) so the JSON and
-// the on-disk file speak the same vocabulary. github_id is always
-// present; it is 0 for an unresolved row (a 5-column hand-import row
-// before the CLI resolves the GitHub-authoritative id) -- consumers
-// branch on `github_id == 0`, not on key presence (no omitempty, to
-// match the no-omitempty convention of the other --json record types).
+// rosterListEntry is the `--json` view of one students.csv row. Field names
+// mirror the CSV columns. github_id is always present; 0 for an unresolved row
+// — consumers branch on `github_id == 0`, not key presence.
 type rosterListEntry struct {
 	Username  string `json:"username"`
 	FirstName string `json:"first_name"`
@@ -97,9 +93,8 @@ func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroo
 	if asJSON {
 		entries := make([]rosterListEntry, 0, len(rows))
 		for _, r := range rows {
-			// Only the canonical fields are part of the documented
-			// `roster list --json` contract; the preserved extra
-			// columns (r.Extra) are internal round-trip state, not output.
+			// Only canonical fields are part of the `roster list --json`
+			// contract; r.Extra is internal round-trip state, not output.
 			entries = append(entries, rosterListEntry{
 				Username:  r.Username,
 				FirstName: r.FirstName,
@@ -157,9 +152,8 @@ func dashIfEmpty(s string) string {
 	return s
 }
 
-// summarizeRosterList: one-line stderr summary shaped
-// `<org>/<repo>/<classroom>/students.csv: <message>` to match the
-// other list commands.
+// summarizeRosterList: one-line stderr summary
+// `<org>/<repo>/<classroom>/students.csv: <message>`.
 func summarizeRosterList(org, classroom string, count int) string {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom))
 	if count == 0 {

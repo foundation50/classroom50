@@ -1,11 +1,6 @@
-// Package invite implements the `gh teacher invite` command: inviting a
-// GitHub user to an organization (as direct_member or admin) or to a
-// specific repository (with a permission level). It is an extracted
-// command package (mirrors internal/auth, internal/remove,
-// internal/roster, and internal/member): only NewCmd is exported; the
-// validRepoPermission helper and the inviteToOrg/inviteToRepo
-// orchestration are package-private. It depends only on the internal/*
-// substrate seams (githubapi, membership), never on package main.
+// Package invite implements the `gh teacher invite` command: inviting a GitHub
+// user to an organization (direct_member or admin) or to a specific repository
+// (with a permission level). Only NewCmd is exported.
 package invite
 
 import (

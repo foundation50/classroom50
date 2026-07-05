@@ -1,12 +1,7 @@
-// Package member implements the `gh teacher member` command: read-only
-// views of actual GitHub membership (org members + pending invitations,
-// or repo collaborators) -- the counterpart to `gh teacher invite` /
-// `gh teacher remove`, used to reconcile the intended roster against
-// real membership. It is an extracted command package (mirrors
-// internal/auth, internal/remove, and internal/roster): only NewCmd is
-// exported; the subcommand factory and run* orchestration are
-// package-private. It depends only on the internal/* substrate seams
-// (githubapi, membership, output), never on package main.
+// Package member implements the `gh teacher member` command: read-only views of
+// actual GitHub membership (org members + pending invitations, or repo
+// collaborators) — the counterpart to `invite`/`remove`, used to reconcile the
+// intended roster against real membership. Only NewCmd is exported.
 package member
 
 import (
@@ -27,23 +22,18 @@ import (
 	"github.com/foundation50/gh-teacher/internal/output"
 )
 
-// memberAPIPerPage / memberPagesMax bound the paginated membership
-// walks, mirroring listClassrooms (migrate_source.go). 100 pages x 100
-// = 10k members/collaborators, far beyond any classroom org.
+// memberAPIPerPage / memberPagesMax bound the paginated membership walks.
+// 100×100 = 10k, far beyond any classroom org.
 const (
 	memberAPIPerPage = 100
 	memberPagesMax   = 100
 )
 
-// memberListEntry is one row of `member list` output. Kind separates
-// the membership surfaces an operator reconciles against the roster:
-// an active org member, a pending org invitation, or a repo
-// collaborator. Role carries the org role (admin/member, or
-// billing_manager for an org that uses it) or the repo permission
-// level (read/triage/write/maintain/admin); it may be empty for a repo
-// collaborator whose permission GitHub didn't report. github_id is 0
-// when the source endpoint doesn't report a numeric id (pending
-// invitations key on login/email, not id).
+// memberListEntry is one row of `member list` output. Kind separates the
+// surfaces reconciled against the roster (org member, pending invitation, repo
+// collaborator). Role is the org role or repo permission level; empty when
+// GitHub didn't report it. github_id is 0 for pending invitations (keyed on
+// login/email, not id).
 type memberListEntry struct {
 	Login    string `json:"login"`
 	Kind     string `json:"kind"`
@@ -128,9 +118,8 @@ func memberListCmd() *cobra.Command {
 }
 
 // runMemberListOrg lists active org members (with role) and pending
-// invitations. Active members come from two role-filtered walks
-// (admin vs member) since GET /orgs/{org}/members does not report a
-// per-member role inline. Read-only.
+// invitations. Active members come from two role-filtered walks since GET
+// /orgs/{org}/members doesn't report a per-member role inline. Read-only.
 func runMemberListOrg(client githubapi.Client, out, errOut io.Writer, org string, asJSON, quiet bool) error {
 	entries, err := collectOrgMembers(client, org)
 	if err != nil {
@@ -150,9 +139,8 @@ func runMemberListOrg(client githubapi.Client, out, errOut io.Writer, org string
 	return renderMemberList(out, errOut, org, entries, asJSON, quiet)
 }
 
-// collectOrgMembers walks GET /orgs/{org}/members for admins then all
-// members, labeling roles. The admin set drives the role; everyone
-// else is a plain member.
+// collectOrgMembers walks org members for admins then all, labeling roles. The
+// admin set drives the role; everyone else is a plain member.
 func collectOrgMembers(client githubapi.Client, org string) ([]memberListEntry, error) {
 	adminIDs := map[int64]bool{}
 	admins, err := paginateMembers(client, fmt.Sprintf("orgs/%s/members?role=admin", url.PathEscape(org)), org+" members")
@@ -182,10 +170,9 @@ func collectOrgMembers(client githubapi.Client, org string) ([]memberListEntry, 
 	return entries, nil
 }
 
-// collectOrgInvitations walks GET /orgs/{org}/invitations (pending).
-// A 403 (no admin:org scope) is surfaced as a clear error rather than
-// silently dropping the pending set, since "no pending invites" and
-// "can't read invites" are very different operator signals.
+// collectOrgInvitations walks pending org invitations. A 403 (no admin:org
+// scope) is a clear error rather than silently dropping the set, since "no
+// pending invites" and "can't read invites" are very different signals.
 func collectOrgInvitations(client githubapi.Client, org string) ([]memberListEntry, error) {
 	base := fmt.Sprintf("orgs/%s/invitations", url.PathEscape(org))
 	subject := fmt.Sprintf("%s pending invitations", org)
@@ -209,9 +196,9 @@ func collectOrgInvitations(client githubapi.Client, org string) ([]memberListEnt
 	return entries, nil
 }
 
-// normalizeInviteRole maps the invitations API's role names
-// (admin / direct_member / billing_manager) onto the same vocabulary
-// the members listing uses, so the two org surfaces read consistently.
+// normalizeInviteRole maps the invitations API's role names onto the same
+// vocabulary the members listing uses, so the two org surfaces read
+// consistently.
 func normalizeInviteRole(role string) string {
 	switch role {
 	case "direct_member":
@@ -241,7 +228,7 @@ func runMemberListRepo(client githubapi.Client, out, errOut io.Writer, owner, re
 		entries = append(entries, memberListEntry{
 			Login:    c.Login,
 			Kind:     memberKindCollaborator,
-			Role:     c.RoleName, // raw permission level; "" rendered as "(unknown)" only in the table
+			Role:     c.RoleName, // raw permission level; "" → "-" in the table
 			GitHubID: c.ID,
 		})
 	}
@@ -271,10 +258,8 @@ type repoCollaborator struct {
 	RoleName string `json:"role_name"`
 }
 
-// paginateMembers walks a members listing endpoint (page/per_page)
-// with the shared cap. `base` already carries any role filter; this
-// appends pagination params. `subject` is a human label for error
-// messages (e.g. "<org> members").
+// paginateMembers walks a members listing endpoint with the shared cap. `base`
+// already carries any role filter; `subject` is a human label for errors.
 func paginateMembers(client githubapi.Client, base, subject string) ([]memberAccount, error) {
 	sep := "?"
 	if strings.Contains(base, "?") {
@@ -289,10 +274,8 @@ func paginateMembers(client githubapi.Client, base, subject string) ([]memberAcc
 
 // classifyMembershipReadError maps the common failure statuses of the
 // read-only membership endpoints to actionable messages, mirroring
-// membership.ClassifyOrgInviteError's 403/404 handling so `member list`
-// and `invite` stay consistent. `subject` is a human label for the thing
-// being read (e.g. "cs50/members", "cs50 pending invitations").
-// Returns the original wrapped error for statuses it doesn't special-case.
+// ClassifyOrgInviteError's 403/404 handling. `subject` is a human label for the
+// thing being read. Other statuses return the wrapped error.
 func classifyMembershipReadError(path, subject string, err error) error {
 	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
 	if !ok {
@@ -343,7 +326,7 @@ func renderMemberList(out, errOut io.Writer, target string, entries []memberList
 		}
 		role := e.Role
 		if role == "" {
-			role = "-" // an empty permission level reads as "-" in the table
+			role = "-"
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", e.Login, e.Kind, role, githubID)
 	}
@@ -352,10 +335,8 @@ func renderMemberList(out, errOut io.Writer, target string, entries []memberList
 	return nil
 }
 
-// summarizeMemberList: one-line stderr summary shaped
-// `<target>: <message>`, matching the other list commands. A repo
-// target (owner/repo) reports collaborators; an org target reports
-// members + pending invitations.
+// summarizeMemberList: one-line stderr summary `<target>: <message>`. A repo
+// target reports collaborators; an org target reports members + pending.
 func summarizeMemberList(target string, entries []memberListEntry) string {
 	isRepo := strings.Contains(target, "/")
 	if len(entries) == 0 {

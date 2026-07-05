@@ -1,11 +1,7 @@
 // Package roster implements the `gh teacher roster` command: managing the
 // classroom roster in <org>/classroom50/<classroom>/students.csv (list, add,
-// remove, import), including resolving each student's GitHub id and inviting
-// them to the org. It is an extracted command package (mirrors internal/auth
-// and internal/remove): only NewCmd is exported; the subcommand factories and
-// run* orchestration are package-private. It depends only on the internal/*
-// substrate seams (configrepo, configwrite, membership, validate, output,
-// githubapi), never on package main.
+// update, remove, import), including resolving each student's GitHub id and
+// inviting them to the org. Only NewCmd is exported.
 package roster
 
 import (
@@ -266,12 +262,10 @@ func rosterImportCmd() *cobra.Command {
 	return cmd
 }
 
-// inviteIfNotMember invites <username> when not already active or
-// pending; returns the membership state at decision time. The
-// pre-resolved userID avoids redundant GET /users/{username} calls
-// during a bulk import. A 422 "already member/pending" from
-// membership.InviteOrgByID is recovered as success so a TOCTOU race
-// between pre-check and invite can't surface a spurious failure.
+// inviteIfNotMember invites <username> when not already active/pending, and
+// returns the membership state at decision time. The pre-resolved userID avoids
+// redundant lookups during a bulk import. A 422 "already member/pending" is
+// recovered as success so a TOCTOU race can't surface a spurious failure.
 func inviteIfNotMember(client githubapi.Client, org, username string, userID int64) (state string, err error) {
 	if s, ok := membership.MembershipState(client, org, username); ok {
 		switch s {
@@ -291,10 +285,9 @@ func inviteIfNotMember(client githubapi.Client, org, username string, userID int
 	return "invited", nil
 }
 
-// runRosterAdd commits the roster row first, then invites. If the
-// commit fails after an invite landed, the org would be ahead of the
-// roster with no clean recovery. This order leaves the roster ahead
-// of org membership, which a re-run reconciles.
+// runRosterAdd commits the roster row first, then invites. Committing first
+// leaves the roster ahead of org membership (a re-run reconciles), which is
+// safer than an invite landing before a failed commit.
 func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom, username, firstName, lastName, email, section string) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -356,12 +349,9 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 		_, _ = fmt.Fprintf(errOut, "Advise %s to sign in to https://github.com as %s, then visit https://github.com/%s to accept the invitation.\n", login, login, org)
 	}
 
-	// Add the student to the classroom team so they inherit read on the
-	// classroom's private, org-owned assignment templates. The PUT works
-	// for both an already-active member (active immediately) and a
-	// not-yet-member (pending until they accept the org invite), so one
-	// call covers both states. Idempotent. The team slug is read from
-	// classroom.json (authoritative — never re-derived).
+	// Add the student to the classroom team so they inherit read on private
+	// org-owned templates. The PUT covers both an active member (immediate) and
+	// a not-yet-member (pending). Idempotent. Slug from classroom.json.
 	team, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 	if err != nil {
 		return fmt.Errorf("roster row committed and org invite sent, but reading the classroom team failed: %w", err)
@@ -400,8 +390,7 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 				username, classroom, org, classroom, username)
 		}
 		if !changed {
-			// nil map → CommitTree skips the commit.
-			noChange = true
+			noChange = true // nil map → CommitTree skips the commit.
 			return nil, nil
 		}
 		data, err := configrepo.EncodeRoster(next)
@@ -441,9 +430,7 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 		next, ok := configrepo.RemoveRosterRow(rows, username)
 		removed = ok
 		if !ok {
-			// nil → configwrite.CommitTree skips the commit (no-op when the row
-			// was already absent).
-			return nil, nil
+			return nil, nil // nil → CommitTree skips the commit (already absent)
 		}
 		data, err := configrepo.EncodeRoster(next)
 		if err != nil {
@@ -460,10 +447,9 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 	if removed {
 		_, _ = fmt.Fprintf(out, "%s/%s/%s: removed %s (org membership unchanged)\n",
 			org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom), username)
-		// Symmetric with roster add: drop the student from the
-		// classroom team so they lose template read. Idempotent (404 =
-		// not a member / team gone). Org membership is untouched. The
-		// slug is read from classroom.json (authoritative).
+		// Symmetric with roster add: drop the student from the classroom team
+		// so they lose template read. Idempotent (404 = not a member/gone).
+		// Org membership untouched. Slug from classroom.json.
 		team, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 		if err != nil {
 			return fmt.Errorf("roster row removed, but reading the classroom team failed: %w", err)
@@ -474,8 +460,7 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 			}
 			_, _ = fmt.Fprintf(out, "%s: removed %s from classroom team %s\n", org, username, team.Slug)
 		}
-		// Org removal is a separate, deliberate step (no cascade); point
-		// the teacher at the command that does it.
+		// Org removal is a separate, deliberate step (no cascade).
 		_, _ = fmt.Fprintf(out, "  to also remove %s from the org: gh teacher remove %s %s\n",
 			username, org, username)
 	} else {
@@ -507,9 +492,9 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		return fmt.Errorf("%s: contains a header but no student rows", abs)
 	}
 
-	// Resolve every username up front so rebase retries don't repeat
-	// GitHub-API lookups — only the file write is retried. CSV line
-	// numbers are 1-based (header = line 1) to match parseImportCSV.
+	// Resolve every username up front so rebase retries don't repeat API
+	// lookups — only the file write is retried. CSV lines are 1-based (header =
+	// line 1) to match parseImportCSV.
 	resolved := make([]configrepo.RosterRow, 0, len(imported))
 	for i, row := range imported {
 		line := i + 2
@@ -526,8 +511,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 			GitHubID:  userID,
 		})
 	}
-	// Case-insensitive dedup within the batch; last occurrence wins
-	// (matching upsertRosterRow's semantics).
+	// Case-insensitive dedup within the batch; last occurrence wins.
 	resolved = configrepo.DedupeByUsername(resolved)
 
 	var (
@@ -539,8 +523,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		if err != nil {
 			return nil, err
 		}
-		// Reset counters per attempt — rebase may see different
-		// new/replaced splits each time.
+		// Reset counters per attempt — rebase may split new/replaced differently.
 		added, updated = 0, 0
 		for _, row := range resolved {
 			var replaced bool
@@ -566,9 +549,8 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 	_, _ = fmt.Fprintf(out, "%s/%s/%s: imported %d row(s) (%d new, %d updated)\n",
 		org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom), len(resolved), added, updated)
 
-	// Resolve the classroom team once (authoritative slug from
-	// classroom.json). A classroom with no team is a warn-and-skip for
-	// the membership step.
+	// Resolve the classroom team once (slug from classroom.json). No team →
+	// warn-and-skip the membership step.
 	team, teamOK, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 	if err != nil {
 		return fmt.Errorf("roster rows committed, but reading the classroom team failed: %w", err)
@@ -583,10 +565,9 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 	for _, row := range resolved {
 		state, err := inviteIfNotMember(client, org, row.Username, row.GitHubID)
 		if err != nil {
-			// Warn-and-continue (not hard-fail): the commit already
-			// landed and the per-student calls are idempotent, so a
-			// transient failure on one student must not strand the
-			// rest. Collect for a summary so nothing is silently lost.
+			// Warn-and-continue (not hard-fail): the commit already landed and
+			// the per-student calls are idempotent, so a transient failure on
+			// one student mustn't strand the rest.
 			failures = append(failures, fmt.Sprintf("%s (invite: %v)", row.Username, err))
 			continue
 		}
@@ -598,8 +579,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		case "invited":
 			invited++
 		}
-		// Add each student to the classroom team (idempotent; covers
-		// both active and pending members).
+		// Add each student to the classroom team (idempotent; active+pending).
 		if teamOK {
 			if err := configrepo.AddTeamMembership(client, org, team.Slug, row.Username); err != nil {
 				failures = append(failures, fmt.Sprintf("%s (team add: %v)", row.Username, err))

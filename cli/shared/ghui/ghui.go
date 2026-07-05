@@ -1,16 +1,16 @@
-// Package ghui holds the terminal-feedback primitives shared by the
-// gh-teacher and gh-student CLIs so both render long-running work the
-// same way: a self-rewriting spinner line on an interactive terminal,
-// stable one-shot lines everywhere else.
+// Package ghui holds the terminal-feedback primitives shared by the gh-teacher
+// and gh-student CLIs so both render long-running work the same way: a
+// self-rewriting spinner line on an interactive terminal, stable one-shot lines
+// everywhere else.
 //
-// Stdlib-only (plus the shared ghauth TTY guard) — no third-party
-// spinner dependency; the animation is a hand-rolled time.Ticker.
+// Stdlib-only (plus the shared ghauth TTY guard) — no third-party spinner; the
+// animation is a hand-rolled time.Ticker.
 //
-// Channel discipline (matching the rest of the CLIs): the spinner always
-// writes to the human channel (stderr) and animates only when stderr is
-// a TTY. On a non-TTY (pipe, redirect, CI) it falls back to plain
-// "<message>..." / "<message> done"/"failed" lines, so no cursor escapes
-// leak into captured output.
+// Channel discipline (matching the rest of the CLIs): the spinner always writes
+// to the human channel (stderr) and animates only when stderr is a TTY. On a
+// non-TTY (pipe, redirect, CI) it falls back to plain "<message>..." /
+// "<message> done"/"failed" lines, so no cursor escapes leak into captured
+// output.
 package ghui
 
 import (
@@ -23,8 +23,8 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/ghauth"
 )
 
-// spinnerFrames is a Braille-dot cycle — one cell wide so the in-place
-// rewrite never wraps.
+// spinnerFrames is a Braille-dot cycle — one cell wide so the in-place rewrite
+// never wraps.
 var spinnerFrames = []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
 
 // spinnerInterval is the frame cadence (~10fps).
@@ -37,13 +37,13 @@ const (
 	ansiDim   = "\x1b[2m"
 )
 
-// Spinner renders a single live status line for a long-running step.
-// Construct with NewSpinner, call Start once, optionally Update the
-// message, then exactly one of Stop / Fail to finalize.
+// Spinner renders a single live status line for a long-running step. Construct
+// with NewSpinner, call Start once, optionally Update the message, then exactly
+// one of Stop / Fail.
 //
-// The ticker goroutine and the caller race on the message and writer; a
-// mutex guards the shared fields and finish() joins the goroutine before
-// its final write.
+// The ticker goroutine and the caller race on the message and writer; a mutex
+// guards the shared fields and finish() joins the goroutine before its final
+// write.
 type Spinner struct {
 	w     io.Writer
 	tty   bool
@@ -59,10 +59,10 @@ type Spinner struct {
 	wg   sync.WaitGroup
 }
 
-// NewSpinner builds a spinner writing to w. Animation + color are gated
-// on w being os.Stderr AND a TTY (and color additionally on NO_COLOR /
-// CLASSROOM50_NO_COLOR being unset). Any other writer (captured buffer,
-// pipe, redirect) gets the plain non-TTY fallback.
+// NewSpinner builds a spinner writing to w. Animation + color are gated on w
+// being os.Stderr AND a TTY (color additionally on NO_COLOR /
+// CLASSROOM50_NO_COLOR being unset). Any other writer (captured buffer, pipe,
+// redirect) gets the plain non-TTY fallback.
 func NewSpinner(w io.Writer, message string) *Spinner {
 	return &Spinner{
 		w:     w,
@@ -73,17 +73,17 @@ func NewSpinner(w io.Writer, message string) *Spinner {
 	}
 }
 
-// IsStderrTTY reports whether w is the real stderr and a TTY — the
-// single source of the "interactive human channel?" check shared by ghui
-// and both CLIs' ui packages. Only stderr is eligible, so a UI renderer
-// can never write cursor escapes to a redirected stdout.
+// IsStderrTTY reports whether w is the real stderr and a TTY — the single
+// source of the "interactive human channel?" check shared by ghui and both
+// CLIs' ui packages. Only stderr is eligible, so a UI renderer can never write
+// cursor escapes to a redirected stdout.
 func IsStderrTTY(w io.Writer) bool {
 	return w == io.Writer(os.Stderr) && ghauth.IsCharDevice(os.Stderr)
 }
 
-// UseColor reports whether to emit SGR color to w: TTY-gated (via
-// IsStderrTTY), honoring NO_COLOR and CLASSROOM50_NO_COLOR. The single
-// source both CLIs' ui packages delegate to.
+// UseColor reports whether to emit SGR color to w: TTY-gated (via IsStderrTTY),
+// honoring NO_COLOR and CLASSROOM50_NO_COLOR. The single source both CLIs' ui
+// packages delegate to.
 func UseColor(w io.Writer) bool {
 	if os.Getenv("NO_COLOR") != "" || os.Getenv("CLASSROOM50_NO_COLOR") != "" {
 		return false
@@ -91,15 +91,14 @@ func UseColor(w io.Writer) bool {
 	return IsStderrTTY(w)
 }
 
-// Active reports whether the spinner animates (TTY). Callers use it to
-// decide whether to suppress per-substep lines that would otherwise
-// scroll the spinner away.
+// Active reports whether the spinner animates (TTY). Callers use it to decide
+// whether to suppress per-substep lines that would scroll the spinner away.
 func (s *Spinner) Active() bool { return s.tty }
 
-// Start begins the spinner. On a TTY it launches the ticker goroutine
-// that rewrites the line in place; on a non-TTY it prints one plain
-// "<message>..." line so a piped/CI run still shows the step beginning.
-// Calling Start more than once is a no-op.
+// Start begins the spinner. On a TTY it launches the ticker goroutine that
+// rewrites the line in place; on a non-TTY it prints one plain "<message>..."
+// line so a piped/CI run still shows the step beginning. A second Start is a
+// no-op.
 func (s *Spinner) Start() {
 	s.mu.Lock()
 	if s.started {
@@ -139,9 +138,8 @@ func (s *Spinner) run() {
 	}
 }
 
-// render draws the current frame + message, rewriting the line via
-// carriage return + clear-to-EOL so a shorter message leaves no trailing
-// characters.
+// render draws the current frame + message, rewriting the line via carriage
+// return + clear-to-EOL so a shorter message leaves no trailing characters.
 func (s *Spinner) render() {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -155,24 +153,23 @@ func (s *Spinner) render() {
 	_, _ = fmt.Fprintf(s.w, "\r\x1b[K%s %s", glyph, s.msg)
 }
 
-// Update changes the live message. A no-op on a non-TTY, so a polling
-// loop doesn't spam a line per attempt into a log.
+// Update changes the live message. A no-op on a non-TTY, so a polling loop
+// doesn't spam a line per attempt into a log.
 func (s *Spinner) Update(message string) {
 	s.mu.Lock()
 	s.msg = message
 	s.mu.Unlock()
 }
 
-// Stop finalizes the spinner as success. On a TTY it replaces the live
-// line with a green ✓ and the final message; on a non-TTY it prints a
-// plain "<message> done" line. Idempotent.
+// Stop finalizes the spinner as success: on a TTY a green ✓ replaces the live
+// line; on a non-TTY a plain "<message> done" line. Idempotent.
 func (s *Spinner) Stop(message string) {
 	s.finish(message, outcomeOK)
 }
 
-// Fail finalizes the spinner as failure: a red ✗ on a TTY, "<message>
-// failed" plain. Use on the error path so a half-drawn spinner line
-// isn't left dangling above an error message.
+// Fail finalizes the spinner as failure: a red ✗ on a TTY, "<message> failed"
+// plain. Use on the error path so a half-drawn spinner line isn't left dangling
+// above an error message.
 func (s *Spinner) Fail(message string) {
 	s.finish(message, outcomeFail)
 }
@@ -200,8 +197,8 @@ func (s *Spinner) finish(message string, oc outcome) {
 	final := s.msg
 	s.mu.Unlock()
 
-	// Stop the ticker goroutine and wait for it to exit before the final
-	// write, so the two don't race on s.w. No-op wait on a non-TTY.
+	// Stop the ticker goroutine and wait for it to exit before the final write,
+	// so the two don't race on s.w. No-op wait on a non-TTY.
 	close(s.stop)
 	s.wg.Wait()
 
@@ -223,8 +220,7 @@ func (s *Spinner) finish(message string, oc outcome) {
 	}
 }
 
-// paint wraps s in an SGR code when color is on; otherwise returns s
-// unchanged.
+// paint wraps s in an SGR code when color is on, else returns s unchanged.
 func paint(color bool, code, s string) string {
 	if !color {
 		return s

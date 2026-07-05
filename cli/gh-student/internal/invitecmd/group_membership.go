@@ -13,29 +13,26 @@ import (
 	"github.com/foundation50/gh-student/internal/githubapi"
 )
 
-// listGroupMemberLogins returns the logins of the student-level
-// collaborators on org/repo, walking pagination. The repo `owner` (the
-// founder) is always kept even though they are repo `admin` (the org
-// lockdown keeps the founder admin so they can manage collaborators). Every
-// *other* admin — the org owner and instructors, who are admins on every
-// repo, plus any admin-granted TA — is excluded so they don't consume
-// student slots against max_group_size (push collaborators count; the
-// founder and added teammates count, a non-founder admin does not).
+// listGroupMemberLogins returns the logins of student-level collaborators on
+// org/repo, walking pagination. The repo `owner` (founder) is always kept even
+// though they are repo `admin` (the org lockdown keeps them admin so they can
+// manage collaborators). Every *other* admin — org owner, instructors, any
+// admin-granted TA — is excluded so they don't consume student slots against
+// max_group_size (push collaborators count; the founder and added teammates
+// count, a non-founder admin does not).
 //
-// NOTE: this admin exclusion is for COUNTING toward max_group_size only —
-// it is a best-effort, advisory limit (a founder can bypass it via the
-// GitHub UI). It is deliberately NOT how a teammate is CREDITED a score:
-// crediting happens at collection time in collect_scores.py, which gates
-// on the teacher's roster (not on collaborator permission), so a rostered
-// teammate who happens to be a repo/org admin is still credited the shared
-// group score even though they don't count as a separate slot here. The
-// roster — available only to the teacher CLI — is the real attribution
-// boundary; the student CLI has no roster, so it counts by permission.
+// NOTE: this admin exclusion is for COUNTING toward max_group_size only — an
+// advisory limit (bypassable via the GitHub UI). It is deliberately NOT how a
+// teammate is CREDITED: crediting happens at collection time in
+// collect_scores.py, which gates on the teacher's roster (not on collaborator
+// permission), so a rostered teammate who is also a repo/org admin is still
+// credited the shared group score though they don't count as a slot here. The
+// roster — teacher-CLI only — is the real attribution boundary; the student
+// CLI has no roster, so it counts by permission.
 //
-// ctx bounds the enumeration. go-gh's default REST client has no HTTP
-// timeout, so without a deadline a stalled collaborators API would hang
-// the invite indefinitely — the caller passes a context.WithTimeout
-// matching the sibling Pages fetch's budget.
+// ctx bounds the enumeration: go-gh's default REST client has no HTTP timeout,
+// so without a deadline a stalled collaborators API would hang the invite. The
+// caller passes a context.WithTimeout matching the sibling Pages fetch budget.
 func listGroupMemberLogins(ctx context.Context, client githubapi.Client, org, repo, owner string) ([]string, error) {
 	const perPage = 100
 	const maxPages = 100
@@ -61,18 +58,18 @@ func listGroupMemberLogins(ctx context.Context, client githubapi.Client, org, re
 			return nil, fmt.Errorf("GET %s: decode body: %w", path, decodeErr)
 		}
 		for _, c := range batch {
-			// Exclude admins (org owners, instructors/TAs granted admin)
-			// so they don't count toward the student group limit — but
-			// keep the founder, who is admin on their own repo.
+			// Exclude admins (org owners, admin-granted instructors/TAs) so
+			// they don't count toward the student group limit — but keep the
+			// founder, who is admin on their own repo.
 			if strings.EqualFold(c.RoleName, "admin") && !strings.EqualFold(c.Login, owner) {
 				continue
 			}
 			logins = append(logins, c.Login)
 		}
-		// Shared termination decision (ghutil.NextPage) — identical to
-		// the teacher CLI's githubapi.PaginateAll: follow GitHub's authoritative
-		// `Link: rel="next"`, stop on a no-next Link / short no-Link page,
-		// else synthesize the next page.
+		// Shared termination decision (ghutil.NextPage), identical to the
+		// teacher CLI's githubapi.PaginateAll: follow GitHub's authoritative
+		// `Link: rel="next"`, stop on a no-next Link / short no-Link page, else
+		// synthesize the next page.
 		next, stop := ghutil.NextPage(linkHeader, len(batch), perPage)
 		if stop {
 			return logins, nil
@@ -87,11 +84,10 @@ func listGroupMemberLogins(ctx context.Context, client githubapi.Client, org, re
 	return nil, fmt.Errorf("repos/%s/%s/collaborators: too many collaborators to enumerate (hit the %d-page cap)", org, repo, maxPages)
 }
 
-// checkGroupSizeBeforeInvite enforces max_group_size for a group repo
-// before adding a new push collaborator. It counts the repo's current
-// student members (admins other than the founder excluded) and returns
-// an error when adding `invitee` would exceed `maxGroupSize`. An invitee
-// who is already a member is never blocked (re-inviting is a no-op).
+// checkGroupSizeBeforeInvite enforces max_group_size for a group repo before
+// adding a new push collaborator. It counts the repo's current student members
+// (non-founder admins excluded) and errors when adding `invitee` would exceed
+// `maxGroupSize`. An already-member invitee is never blocked (re-invite no-op).
 //
 // max <= 0 means no limit (defensive — group assignments always carry a
 // positive size). The founder (`owner`) counts toward the total.

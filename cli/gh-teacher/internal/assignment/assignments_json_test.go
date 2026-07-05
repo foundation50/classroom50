@@ -48,9 +48,8 @@ func TestParseAssignments_Canonical(t *testing.T) {
 }
 
 func TestParseAssignments_TemplateLess(t *testing.T) {
-	// An assignment with no template repo is valid: the `template`
-	// block is omitted entirely and parses to a nil Template. (At
-	// accept time gh-student creates an empty shim-only repo for it.)
+	// A template-less assignment omits the `template` block and parses to a
+	// nil Template (accept-time creates an empty shim-only repo).
 	in := []byte(`{
   "schema": "classroom50/assignments/v1",
   "assignments": [
@@ -1123,9 +1122,8 @@ func entriesWithSlugs(slugs ...string) []AssignmentEntry {
 }
 
 // TestParseAssignments_PreservesUnknownEntryField pins the "tolerate AND
-// preserve" rule: an unknown top-level entry key (e.g. one a newer binary
-// or the web GUI added) must NOT fail the parse and must round-trip
-// verbatim through a re-encode, so a read-modify-write here never drops it.
+// preserve" rule: an unknown top-level entry key must NOT fail the parse and
+// must round-trip verbatim through a re-encode.
 func TestParseAssignments_PreservesUnknownEntryField(t *testing.T) {
 	in := []byte(`{
   "schema": "classroom50/assignments/v1",
@@ -1229,10 +1227,8 @@ func TestNextAvailableSlug(t *testing.T) {
 	}
 }
 
-// TestNextAvailableSlug_OverflowsCap pins that an auto-suffix which would
-// exceed the 39-char slug cap returns an actionable error rather than a
-// too-long candidate (which a downstream validator would reject with a
-// generic pattern error).
+// TestNextAvailableSlug_OverflowsCap pins that an auto-suffix exceeding the
+// 39-char cap returns an actionable error rather than a too-long candidate.
 func TestNextAvailableSlug_OverflowsCap(t *testing.T) {
 	base := strings.Repeat("a", 39) // already at the cap; any "-N" overflows
 	entries := entriesWithSlugs(base)

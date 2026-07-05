@@ -1,10 +1,7 @@
-// Package orgrepos is the shared org-repository lister: a thin paginated
-// walk of GET /orgs/{org}/repos returning every repo name in the org.
-// It is a substrate seam (like internal/configrepo / internal/membership),
-// not a command package: ListNames is consumed by both the download
-// command (pattern mode) and the teardown command (wildcard nuke), each of
-// which maps/filters the unfiltered name list itself. It depends only on
-// the internal/githubapi seam, never on package main.
+// Package orgrepos is the shared org-repository lister: a paginated walk of GET
+// /orgs/{org}/repos returning every repo name. Consumed by download
+// (pattern mode) and teardown (wildcard nuke), each of which filters the list
+// itself.
 package orgrepos
 
 import (
@@ -14,18 +11,15 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
-// perPage / pagesMax bound the org-repos walk. 100×100 = 10k repos, far
-// above classroom scale; hitting the cap errors loudly rather than
-// silently under-reporting (a partial list would make teardown miss
-// repos or download skip submissions).
+// perPage / pagesMax bound the org-repos walk. 100×100 = 10k, far above
+// classroom scale; hitting the cap errors loudly rather than under-reporting.
 const (
 	perPage  = 100
 	pagesMax = 100
 )
 
-// ListNames returns every repo name in the org. Shared by download
-// (pattern mode) and teardown (wildcard nuke); both want the unfiltered
-// name list and map/filter it themselves.
+// ListNames returns every repo name in the org. Shared by download (pattern
+// mode) and teardown (wildcard nuke), which filter it themselves.
 func ListNames(client githubapi.Client, org string) ([]string, error) {
 	repos, err := githubapi.PaginateAll[struct {
 		Name string `json:"name"`

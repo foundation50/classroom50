@@ -1,13 +1,7 @@
-// Package audit implements the `gh teacher audit` command: a read-only
-// audit of an org's member-privilege lockdown. It re-reads the org and
-// reports, per setting, whether the least-privilege value `gh teacher
-// init` applies is actually in effect — the standalone confirmation
-// surface for the lockdown model. It is an extracted command package
-// (mirrors internal/teardown, internal/download, internal/invite): only
-// NewCmd is exported; the report type, classification, and the two
-// renderers are package-private. It depends on the internal/* substrate
-// seams (githubapi for the org reads, orgpolicy for the shared lockdown
-// model, ui for rendering), never on package main.
+// Package audit implements the `gh teacher audit` command: a read-only audit
+// of an org's member-privilege lockdown. It re-reads the org and reports, per
+// setting, whether the least-privilege value `init` applies is in effect. Only
+// NewCmd is exported.
 package audit
 
 import (
@@ -25,29 +19,20 @@ import (
 	"github.com/foundation50/gh-teacher/internal/ui"
 )
 
-// NewCmd implements `gh teacher audit <org>`: a read-only audit of the
-// org member-privilege lockdown. It re-reads the org and reports, per
-// setting, whether the least-privilege value `gh teacher init` applies is
-// actually in effect — the same authoritative read-back init uses,
-// exposed as a standalone command so a teacher can confirm a manual fix
-// landed without re-running the mutating init.
+// NewCmd implements `gh teacher audit <org>`: a read-only audit of the org
+// member-privilege lockdown, using the same authoritative read-back as init so
+// a teacher can confirm a manual fix landed without re-running the mutating
+// init.
 //
-// Two classes of setting are reported separately because GitHub exposes
-// them differently:
-//   - API-readable lockdown fields (PATCH /orgs/{org} fields): audit
-//     reads their live value and flags any that don't match.
-//   - The four web-UI-only hardening settings (app access requests,
-//     repo-admin GitHub App installs, Projects base permissions, branch
-//     renames): GitHub has no REST field to read them, so audit CANNOT
-//     confirm them. It lists them as "confirm by hand" rather than
-//     pretending they're fine.
+// Two setting classes are reported separately:
+//   - API-readable lockdown fields: audit reads the live value and flags any
+//     mismatch.
+//   - The four web-UI-only hardening settings: GitHub has no REST field, so
+//     audit lists them as "confirm by hand" rather than pretending they're OK.
 //
-// Exit status treats any drift as failing: non-zero when ANY API-readable
-// lockdown field is unenforced (critical or not), so the command is
-// scriptable (`gh teacher audit org && deploy`) and agrees with the web
-// GUI's verdict for the same org. The unreadable manual items do NOT fail
-// the command (they can't be read either way); they're always surfaced as
-// a reminder.
+// Exit is non-zero when ANY API-readable field is unenforced (scriptable,
+// agreeing with the web GUI's verdict). The unreadable manual items never fail
+// the command.
 func NewCmd() *cobra.Command {
 	var asJSON bool
 
@@ -86,23 +71,18 @@ func NewCmd() *cobra.Command {
 				return err
 			}
 
-			// Plan drives which fields are in scope (Team/Free don't expose
-			// the enterprise-only toggles, so they're not part of the audit).
-			// A failed plan lookup is non-fatal here: it yields an empty plan
-			// (audit then scopes to the non-enterprise set), and the
-			// authoritative org read in buildAuditReport is what sets ReadOK /
-			// the scriptable exit status if the org is truly unreadable.
+			// Plan drives which fields are in scope (Team/Free don't expose the
+			// enterprise-only toggles). A failed lookup is non-fatal: it
+			// yields an empty plan (non-enterprise scope), and the org read in
+			// buildAuditReport sets ReadOK / the exit status.
 			plan, _ := githubapi.OrgPlan(client, org)
 
 			report := buildAuditReport(client, org, plan)
 
-			// Render to the requested surface, then apply the SAME
-			// scriptable exit status on both paths: a non-zero exit when
-			// ANY API-readable field is unenforced (or the org couldn't
-			// be read). The --json branch previously returned right after
-			// rendering, so `gh teacher audit org --json && deploy` proceeded
-			// on an INCOMPLETE lockdown — the JSON's lockdown_complete:false
-			// was the only signal and the exit code lied.
+			// Render, then apply the SAME scriptable exit status on both paths
+			// (non-zero when any API-readable field is unenforced, or the org
+			// couldn't be read) so `audit --json && deploy` can't proceed on an
+			// incomplete lockdown.
 			if asJSON {
 				if err := report.renderJSON(cmd.OutOrStdout()); err != nil {
 					return err
@@ -121,31 +101,23 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// auditReport is the canonical record behind both renderers (human and
-// --json), mirroring initSummary's single-source-of-truth pattern so the
-// two surfaces can't drift.
+// auditReport is the canonical record behind both renderers, mirroring
+// initSummary's single-source-of-truth pattern so the two surfaces can't drift.
 type auditReport struct {
 	Org  string `json:"org"`
 	Plan string `json:"plan"`
-	// ReadOK is false when the org couldn't be read back at all (network
-	// / permission). In that case Enforced is empty and the API-readable
-	// audit is inconclusive — distinct from "read fine, all enforced".
+	// ReadOK is false when the org couldn't be read (network/permission); then
+	// Enforced is empty and the audit is inconclusive.
 	ReadOK bool `json:"read_ok"`
-	// LockdownComplete is true when NO API-readable field is unenforced
-	// (any drift, critical or not, fails). This matches the web GUI's
-	// audit verdict (src/orgPolicy/audit.ts deriveVerdict), which treats
-	// any drift as "Needs attention", so both tools agree on the same
-	// org state. The unreadable manual items don't affect it.
+	// LockdownComplete is true when NO API-readable field is unenforced (any
+	// drift fails), matching the web GUI's verdict. Manual items don't affect it.
 	LockdownComplete bool `json:"lockdown_complete"`
-	// Enforced lists the API-readable lockdown settings whose live value
-	// already matches the locked-down value.
-	Enforced []auditSetting `json:"enforced"`
-	// Unenforced lists the API-readable lockdown settings whose live
-	// value does NOT match, each with the GitHub-UI fix instruction.
+	// Enforced/Unenforced: API-readable lockdown settings whose live value
+	// matches / doesn't match (the latter each with a UI fix instruction).
+	Enforced   []auditSetting `json:"enforced"`
 	Unenforced []auditSetting `json:"unenforced"`
-	// ManualUnreadable lists the web-UI-only settings GitHub exposes no
-	// REST API to read; audit can't confirm them and asks the teacher to
-	// eyeball them.
+	// ManualUnreadable: web-UI-only settings with no REST field; audit can't
+	// confirm them and asks the teacher to eyeball them.
 	ManualUnreadable []orgpolicy.ManualStep `json:"manual_unreadable"`
 	// SettingsURL is the org member-privileges page every item lives on.
 	SettingsURL string `json:"settings_url"`
@@ -161,11 +133,9 @@ type auditSetting struct {
 	Fix string `json:"fix,omitempty"`
 }
 
-// buildAuditReport reads the org back and classifies every in-scope
-// member-default setting as enforced or unenforced, plus the always-
-// unreadable manual hardening items. A read failure yields ReadOK=false
-// with LockdownComplete=false (we can't prove the lockdown holds, so the
-// scriptable exit status is conservatively a failure).
+// buildAuditReport reads the org back and classifies every in-scope setting as
+// enforced/unenforced, plus the always-unreadable manual items. A read failure
+// yields ReadOK=false with LockdownComplete=false (conservatively a failure).
 func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 	settingsURL := fmt.Sprintf("https://github.com/organizations/%s/settings/member_privileges", org)
 	report := auditReport{
@@ -195,17 +165,15 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 		as.Fix = v.Setting.ManualFix
 		report.Unenforced = append(report.Unenforced, as)
 	}
-	// Any drift fails (match the web GUI's verdict). The per-setting
-	// Critical flag is still surfaced for ordering/labeling, but it no
-	// longer gates the verdict or the scriptable exit status.
+	// Any drift fails (match the web GUI). The per-setting Critical flag is
+	// still surfaced for ordering/labeling but no longer gates the verdict.
 	report.LockdownComplete = len(report.Unenforced) == 0
 	return report
 }
 
-// readOrgMemberSettings GETs the org and returns the raw field map used
-// to compare live values against the desired lockdown. Separated from
-// init's verifyOrgDefaults (which both reads and emits warnings) so audit
-// can do a clean read without init's side effects.
+// readOrgMemberSettings GETs the org and returns the raw field map. Separated
+// from init's verifyOrgDefaults (which also emits warnings) so audit reads
+// clean.
 func readOrgMemberSettings(client githubapi.Client, org string) (map[string]any, error) {
 	path := fmt.Sprintf("orgs/%s", url.PathEscape(org))
 	var live map[string]any
@@ -215,9 +183,8 @@ func readOrgMemberSettings(client githubapi.Client, org string) (map[string]any,
 	return live, nil
 }
 
-// renderJSON writes the report as one indented JSON object to w. HTML
-// escaping is off so `>` in fix instructions stays readable (matches
-// initSummary.renderJSON).
+// renderJSON writes the report as one indented JSON object. HTML escaping is
+// off so `>` in fix instructions stays readable.
 func (r *auditReport) renderJSON(w io.Writer) error {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
@@ -225,11 +192,10 @@ func (r *auditReport) renderJSON(w io.Writer) error {
 	return enc.Encode(r)
 }
 
-// renderHuman writes the audit to the human channel (stderr): an outcome
-// banner, the enforced settings (collapsed to a count + one ✓ line), an
-// "Action required" checklist for any unenforced API-readable settings,
-// and a separate "Confirm by hand" list for the web-UI-only settings
-// audit can't read.
+// renderHuman writes the audit to stderr: an outcome banner, enforced settings
+// (collapsed to ✓ lines), an "Action required" checklist for unenforced
+// API-readable settings, and a separate "Confirm by hand" list for the
+// web-UI-only settings audit can't read.
 func (r *auditReport) renderHuman(u *ui.UI) {
 	u.Blank()
 
@@ -268,11 +234,9 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 		u.Detail("at %s", r.SettingsURL)
 	}
 
-	// The four web-UI-only settings can't be read back, so audit can
-	// neither confirm nor deny them. Present them as an instruction list
-	// (not checkboxes — that would imply the CLI tracks their state):
-	// lead with "open the page and confirm", then a numbered list of the
-	// items to eyeball.
+	// The four web-UI-only settings can't be read back. Present them as an
+	// instruction list (not checkboxes, which would imply the CLI tracks their
+	// state): lead with "open and confirm", then the numbered items.
 	if len(r.ManualUnreadable) > 0 {
 		u.Heading("Confirm by hand (GitHub exposes no API to read these)")
 		u.Detail("Open %s and confirm each setting below:", r.ManualUnreadable[0].URL)

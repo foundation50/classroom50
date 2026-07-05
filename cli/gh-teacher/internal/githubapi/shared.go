@@ -10,12 +10,10 @@ import (
 	"github.com/foundation50/classroom50-cli-shared/gittree"
 )
 
-// rest recovers the concrete *api.RESTClient backing a Client. Every
-// Client in this binary is the go-gh client returned by RequireAuthClient
-// / DefaultClient / NewClient (or a test fake that embeds one), so the
-// assertion holds. It panics otherwise — a programming error, since the
-// shared-module helpers below genuinely require the concrete type and no
-// other implementation can satisfy them.
+// rest recovers the concrete *api.RESTClient backing a Client. Every Client in
+// this binary is the go-gh client (or a test fake embedding one), so the
+// assertion holds; it panics otherwise — a programming error, since the
+// shared-module helpers below require the concrete type.
 func rest(c Client) *api.RESTClient {
 	rc, ok := c.(*api.RESTClient)
 	if !ok {
@@ -29,15 +27,10 @@ func CurrentUser(c Client) (login string, id int64, err error) {
 	return ghutil.CurrentUser(rest(c))
 }
 
-// OrgPlan reads GET /orgs/{org} and returns the org's billing plan name
-// (e.g. "free"/"team"/"enterprise"). The plan name is empty when the
-// caller's token lacks billing visibility even on a successful read.
-// This is the plan lookup both init's preflight (checkOrgAccess) and the
-// audit command need to decide which member-privilege fields are in
-// scope; it lives here, with the other org reads, so the pure
-// internal/orgpolicy model seam stays stdlib-only. The error is returned
-// raw so callers can classify it (e.g. 404 → "org not found") with
-// cliutil.IsHTTPStatus.
+// OrgPlan reads GET /orgs/{org} and returns the billing plan name
+// ("free"/"team"/"enterprise"), empty when the token lacks billing visibility.
+// Lives here (with the other org reads) so the pure internal/orgpolicy seam
+// stays stdlib-only. The error is returned raw so callers can classify it.
 func OrgPlan(c Client, org string) (string, error) {
 	path := fmt.Sprintf("orgs/%s", url.PathEscape(org))
 	var resp struct {

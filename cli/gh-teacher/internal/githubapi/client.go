@@ -5,18 +5,13 @@ import (
 	"net/http"
 )
 
-// Client is the transport-verb seam over the GitHub REST API. It exposes
-// exactly the three verbs gh-teacher uses against go-gh's *api.RESTClient
-// — Get, Post, and the verb-agnostic Request (which carries PATCH / PUT /
-// DELETE and the Link-header-returning GET that pagination needs). It is
-// deliberately NOT a per-operation domain interface: domain shaping lives
-// in the service layer, not in this seam, which keeps the interface
-// narrow and avoids the god-interface a faithful per-endpoint mapping
-// would become.
+// Client is the transport-verb seam over the GitHub REST API, exposing the
+// three verbs gh-teacher uses: Get, Post, and the verb-agnostic Request (for
+// PATCH/PUT/DELETE and the Link-header GET pagination needs). Deliberately not
+// a per-operation domain interface — domain shaping lives in the service layer.
 //
-// The concrete implementation is go-gh's *api.RESTClient, which satisfies
-// this interface structurally — RequireAuthClient returns one. Tests use
-// the in-memory fake in internal/githubtest.
+// The concrete implementation is go-gh's *api.RESTClient (returned by
+// RequireAuthClient); tests use the in-memory fake in internal/githubtest.
 type Client interface {
 	// Get issues a GET and decodes the JSON body into resp (resp may be
 	// nil for existence-only checks).

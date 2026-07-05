@@ -16,11 +16,10 @@ import (
 )
 
 func TestRenderClassroomMetadata_Shape(t *testing.T) {
-	// `.classroom50.yaml` carries identity (classroom + assignment)
-	// plus a `source:` block (template repo). The runner derives
-	// the config-repo coordinates from the calling repo's org and
-	// the classroom slug at workflow time, so no `config:` block is
-	// written here.
+	// `.classroom50.yaml` carries identity (classroom + assignment) plus a
+	// `source:` block (template repo). The runner derives config-repo
+	// coordinates from the calling repo's org and the classroom slug at
+	// workflow time, so no `config:` block is written here.
 	cfg := Config{
 		Classroom:  "cs-principles",
 		Assignment: "hello",
@@ -35,8 +34,8 @@ func TestRenderClassroomMetadata_Shape(t *testing.T) {
 		t.Fatalf("Render: %v", err)
 	}
 
-	// String scalars must be double-quoted so YAML doesn't
-	// auto-type slugs like "yes" or "2026".
+	// String scalars must be double-quoted so YAML doesn't auto-type slugs
+	// like "yes" or "2026".
 	wantSubs := []string{
 		`classroom: "cs-principles"`,
 		`assignment: "hello"`,
@@ -57,8 +56,8 @@ func TestRenderClassroomMetadata_Shape(t *testing.T) {
 		}
 	}
 
-	// `config:` and `autograde:` blocks are dropped; the runner no
-	// longer reads them.
+	// `config:` and `autograde:` blocks are dropped; the runner no longer
+	// reads them.
 	for _, removed := range []string{"config:", "autograde:"} {
 		if strings.Contains(string(out), removed) {
 			t.Errorf("legacy key %q must not appear in rendered metadata, got:\n%s", removed, out)
@@ -77,8 +76,8 @@ func TestRenderClassroomMetadata_Shape(t *testing.T) {
 
 func TestRenderClassroomMetadata_TemplateLessOmitsSource(t *testing.T) {
 	// A template-less assignment carries no Source: the rendered
-	// `.classroom50.yaml` must omit the `source:` block entirely
-	// (the feature's on-disk shape), and round-trip back to nil Source.
+	// `.classroom50.yaml` must omit the `source:` block entirely and
+	// round-trip back to nil Source.
 	cfg := Config{Classroom: "cs-principles", Assignment: "solo"}
 	out, err := Render(cfg)
 	if err != nil {
@@ -97,9 +96,8 @@ func TestRenderClassroomMetadata_TemplateLessOmitsSource(t *testing.T) {
 }
 
 func TestRenderClassroomMetadata_PreservesNumericLookingSlugs(t *testing.T) {
-	// Pins double-quoting: a numeric-looking classroom slug must
-	// not encode as a YAML integer — downstream string compares
-	// against args would break.
+	// Pins double-quoting: a numeric-looking classroom slug must not encode as
+	// a YAML integer — downstream string compares against args would break.
 	cfg := Config{
 		Classroom:  "2026",
 		Assignment: "hello",

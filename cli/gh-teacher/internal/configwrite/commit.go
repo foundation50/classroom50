@@ -1,12 +1,8 @@
 // Package configwrite is the config-repo write substrate: the
-// optimistic-update-with-rebase Tree-commit helpers every teacher-side
-// mutation of <org>/classroom50 goes through, plus the workflow-scope
-// classifier wired into that rebase loop. It is the write-side sibling of
-// internal/configrepo (reads); neither imports the other.
-//
-// It reaches GitHub only through internal/githubapi (via
-// githubapi.CommitWithRebase) and depends otherwise only on internal/validate,
-// the shared gittree package, and stdlib — no package main, no go-gh.
+// optimistic-update-with-rebase Tree-commit helpers every teacher-side mutation
+// of <org>/classroom50 goes through, plus the workflow-scope classifier wired
+// into that loop. Write-side sibling of internal/configrepo (reads). Reaches
+// GitHub only through internal/githubapi.
 package configwrite
 
 import (
@@ -20,21 +16,18 @@ import (
 type CommitChange = gittree.Change
 
 // CommitTree is the optimistic-update-with-rebase helper for teacher-side
-// upserts to <org>/classroom50. It covers the common upsert-only case where
-// build returns a path -> content map; for commits that also delete files, use
-// CommitTreeChange directly. The createTree workflow-scope classifier is wired
-// in so a skeleton .github/workflows write without the `workflow` scope fails
-// fast (see ClassifyWorkflowScope404).
+// upserts. Covers the common upsert-only case (build returns a path → content
+// map); for commits that also delete, use CommitTreeChange. The workflow-scope
+// classifier is wired in so a `.github/workflows` write without the `workflow`
+// scope fails fast.
 //
 // Return shape:
 //   - ("<sha>", nil) — commit landed.
 //   - ("", nil)      — build returned an empty map; no-op.
-//   - ("", err)      — failure (build can signal one via (nil, err);
-//     (nil, nil) is success/no-op).
+//   - ("", err)      — failure.
 //
-// Callers commonly close over a per-attempt accumulator (e.g.
-// `var action string`). Reset such accumulators at the top of each build call
-// so a retry doesn't see stale state.
+// Callers that close over a per-attempt accumulator must reset it at the top of
+// each build call so a retry doesn't see stale state.
 func CommitTree(
 	client githubapi.Client,
 	owner, repo, branch, message string,

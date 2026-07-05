@@ -17,11 +17,9 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// classroomMigrateCmd implements `gh teacher classroom migrate`:
-// reads a GitHub Classroom source, copies each starter repo as a
-// fresh template in the target org, and commits the matching
-// classroom directory (classroom.json / assignments.json /
-// students.csv / scores.json) to <target>/classroom50.
+// classroomMigrateCmd implements `gh teacher classroom migrate`: reads a GitHub
+// Classroom source, copies each starter repo as a fresh template in the target
+// org, and commits the matching classroom directory to <target>/classroom50.
 func classroomMigrateCmd() *cobra.Command {
 	var (
 		source          string
@@ -109,8 +107,7 @@ func classroomMigrateCmd() *cobra.Command {
 	return cmd
 }
 
-// migrateOptions packages the CLI flags runMigrate consumes so
-// tests can call it directly without going through cobra.
+// migrateOptions packages runMigrate's flags so tests can call it directly.
 type migrateOptions struct {
 	Source          string
 	Target          string
@@ -149,8 +146,8 @@ func runMigrate(client githubapi.Client, out, errOut io.Writer, opts migrateOpti
 	return performMigration(client, out, errOut, plan, opts.TemplateSuffix)
 }
 
-// discoverMigration runs discovery: resolves --source, derives the
-// short-name, and fetches every assignment detail.
+// discoverMigration resolves --source, derives the short-name, and fetches
+// every assignment detail.
 func discoverMigration(client githubapi.Client, errOut io.Writer, opts migrateOptions) (migrationPlan, error) {
 	detail, err := resolveSource(client, errOut, opts.Source, opts.IncludeArchived)
 	if err != nil {
@@ -167,12 +164,10 @@ func discoverMigration(client githubapi.Client, errOut io.Writer, opts migrateOp
 	if err := validate.ShortName(shortNameVal, "short-name"); err != nil {
 		return migrationPlan{}, err
 	}
-	// A migrated classroom gets a GitHub team (classroom50-<short>);
-	// reject a short-name GitHub would slugify differently (consecutive
-	// or trailing hyphens) up front, before runTemplateCopy generates
-	// any repos — otherwise ensureClassroomTeam would hard-fail later
-	// and orphan the freshly-created templates. Auto-derived short-names
-	// are already canonical; this guards an explicit --short-name.
+	// A migrated classroom gets a team (classroom50-<short>); reject a
+	// short-name GitHub would slugify differently up front, before any repos
+	// are generated, so ensureClassroomTeam can't hard-fail later and orphan
+	// the templates. Auto-derived short-names are already canonical.
 	if !configrepo.CanonicalTeamSlugShortName(shortNameVal) {
 		return migrationPlan{}, fmt.Errorf("short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortNameVal)
 	}
@@ -192,20 +187,18 @@ func discoverMigration(client githubapi.Client, errOut io.Writer, opts migrateOp
 	}, nil
 }
 
-// performMigration runs template copy followed by a single Tree
-// commit on <target>/classroom50. Returns a non-nil error when any
-// assignment was skipped during template copy — best-effort: the
-// commit still lands with the successful entries, the non-zero
-// exit code signals partial completion.
+// performMigration runs template copy then a single Tree commit on
+// <target>/classroom50. Returns a non-nil error when any assignment was
+// skipped — best-effort: the commit lands with the successful entries and the
+// non-zero exit signals partial completion.
 func performMigration(client githubapi.Client, out, errOut io.Writer, plan migrationPlan, templateSuffix string) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, plan.TargetOrg)
 	if err != nil {
 		return err
 	}
 
-	// Fail fast on the common "already exists" case before any
-	// template repos get created. The configwrite.CommitTree build callback
-	// re-probes for race-safety against a concurrent writer.
+	// Fail fast on "already exists" before any template repos get created. The
+	// build callback re-probes for race-safety.
 	exists, err := configrepo.ContentsExists(client, plan.TargetOrg, configrepo.ConfigRepoName, plan.ShortName, branch)
 	if err != nil {
 		return err
@@ -224,16 +217,15 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	migration := classroomMigratedFromFromDetail(plan.Classroom, plan.MigratedAt)
 
 	// Create (or adopt) the per-classroom team so its ref lands in
-	// classroom.json, same as `gh teacher classroom add`.
+	// classroom.json, same as `classroom add`.
 	team, err := configrepo.EnsureClassroomTeam(client, plan.TargetOrg, plan.ShortName)
 	if err != nil {
 		return fmt.Errorf("create classroom team: %w", err)
 	}
 
-	// Preflight the existence check before seeding staff teams, so a
-	// classroom that already exists in the target fails fast without
-	// orphaning freshly-created write-granted staff teams. The in-build
-	// check below stays as the authoritative concurrent-writer guard.
+	// Re-probe existence before seeding staff teams so an already-existing
+	// classroom fails fast without orphaning write-granted staff teams. The
+	// in-build check is the authoritative concurrent-writer guard.
 	if exists, err := configrepo.ContentsExists(client, plan.TargetOrg, configrepo.ConfigRepoName, plan.ShortName, branch); err != nil {
 		return err
 	} else if exists {
@@ -241,10 +233,8 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 			plan.ShortName, plan.TargetOrg, configrepo.ConfigRepoName)
 	}
 
-	// Create (or adopt) the staff teams (instructor, ta) + config-repo
-	// write grant + instructor-maintainer seed, same as `gh teacher
-	// classroom add`, so a migrated classroom carries the role teams the
-	// web GUI expects.
+	// Create (or adopt) staff teams + config-repo write grant + instructor
+	// seed, same as `classroom add`.
 	staffTeams, err := seedStaffTeams(client, errOut, plan.TargetOrg, plan.ShortName)
 	if err != nil {
 		return err
@@ -259,9 +249,9 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 			return nil, fmt.Errorf("classroom %q appeared in %s/%s mid-commit (concurrent writer?)",
 				plan.ShortName, plan.TargetOrg, configrepo.ConfigRepoName)
 		}
-		// Migrated classrooms get a plain (guessable) URL — unlisted is an
-		// opt-in `classroom add --unlisted` concern and a bulk import can't
-		// block on its prompt, so pass an empty key.
+		// Migrated classrooms get a plain (guessable) URL — unlisted is a
+		// `classroom add --unlisted` opt-in and a bulk import can't block on
+		// its prompt, so pass an empty key.
 		return classroomScaffold(plan.TargetOrg, plan.ShortName, plan.Classroom.Name, plan.Term, "", entries, migration, &team, staffTeams)
 	}
 
@@ -274,14 +264,11 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 
 	printMigrationSummary(out, errOut, plan, resolved, entries, commitSHA, branch)
 
-	// Grant the classroom team read on any migrated template that is
-	// private. Migrated templates are copied into the target org, so a
-	// private one is the in-org-private case `assignment add` handles —
-	// without this grant, `gh student accept` would 404 generating from
-	// it (same fix, applied to the migrate path). Gate on the TARGET
-	// repo's actual visibility (correct for both Generated and Reused),
-	// use the team's authoritative slug, and track failures so the exit
-	// code reflects a template students can't yet accept.
+	// Grant the classroom team read on any private migrated template. A private
+	// template is the in-org-private case `assignment add` handles — without
+	// the grant, `student accept` 404s generating from it. Gate on the TARGET
+	// repo's visibility, use the team's authoritative slug, and track failures
+	// so the exit code reflects a template students can't yet accept.
 	var grantFailures int
 	for i := range resolved {
 		rt := resolved[i]
@@ -311,10 +298,9 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	return nil
 }
 
-// buildMigratedEntries materializes the assignment.AssignmentEntry slice for
-// the commit. A commit-time mapping failure (unreachable in normal
-// operation since copyOneTemplate pre-validates) is recorded as a
-// Skipped action so post-commit counts + exit code stay accurate.
+// buildMigratedEntries materializes the AssignmentEntry slice for the commit. A
+// commit-time mapping failure (unreachable in normal operation) is recorded as
+// a Skipped action so post-commit counts + exit code stay accurate.
 func buildMigratedEntries(errOut io.Writer, plan migrationPlan, resolved []resolvedTemplate) []assignment.AssignmentEntry {
 	out := make([]assignment.AssignmentEntry, 0, len(resolved))
 	for i := range resolved {
@@ -333,10 +319,9 @@ func buildMigratedEntries(errOut io.Writer, plan migrationPlan, resolved []resol
 	return out
 }
 
-// printMigrationSummary writes the parseable post-commit result to
-// stdout (one anchor line + per-file deltas) and follow-up advice
-// to stderr. All counts come from the committed entries so the
-// summary stays consistent with what landed on disk.
+// printMigrationSummary writes the parseable post-commit result to stdout (one
+// anchor line + per-file deltas) and follow-up advice to stderr. Counts come
+// from the committed entries.
 func printMigrationSummary(out, errOut io.Writer, plan migrationPlan, resolved []resolvedTemplate, entries []assignment.AssignmentEntry, commitSHA, branch string) {
 	generated, reused, skipped := countTemplateActions(resolved)
 	indiv, group := countEntriesByMode(entries)
@@ -367,8 +352,7 @@ func printMigrationSummary(out, errOut io.Writer, plan migrationPlan, resolved [
 }
 
 // printMigrationPlan writes the plan to stdout in source-API order
-// (deterministic so callers can pipe it). Stderr advisory output is
-// the caller's responsibility.
+// (deterministic so callers can pipe it).
 func printMigrationPlan(out io.Writer, plan migrationPlan) error {
 	indiv, group, other := plan.countsByMode()
 	noun := "assignment"

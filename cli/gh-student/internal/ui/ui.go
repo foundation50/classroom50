@@ -1,11 +1,11 @@
 // Package ui renders gh-student's human-facing output (warnings, verbose
-// detail, and the long-running spinner) to a single writer — always
-// stderr, so stdout stays machine-stable for scripts and greps.
+// detail, and the long-running spinner) to a single writer — always stderr, so
+// stdout stays machine-stable for scripts and greps.
 //
-// It mirrors gh-teacher's internal/ui tone and shares the ghui spinner +
+// Mirrors gh-teacher's internal/ui tone and shares the ghui spinner +
 // color/TTY policy so the two CLIs present a consistent experience: the
-// "Warning: " prefix is preserved in both color and plain modes, and
-// color is TTY-gated (honoring NO_COLOR / CLASSROOM50_NO_COLOR).
+// "Warning: " prefix is preserved in both color and plain modes, and color is
+// TTY-gated (honoring NO_COLOR / CLASSROOM50_NO_COLOR).
 package ui
 
 import (
@@ -28,14 +28,14 @@ type UI struct {
 }
 
 // New builds a UI writing to w, auto-detecting color via ghui.UseColor
-// (stderr-TTY-gated, honoring NO_COLOR / CLASSROOM50_NO_COLOR) so the
-// policy stays identical to the shared spinner and gh-teacher.
+// (stderr-TTY-gated, honoring NO_COLOR / CLASSROOM50_NO_COLOR) so the policy
+// stays identical to the shared spinner and gh-teacher.
 func New(w io.Writer) *UI {
 	return &UI{w: w, color: ghui.UseColor(w)}
 }
 
 // NewForced builds a UI with an explicit color setting, for deterministic
-// tests of either renderer.
+// tests.
 func NewForced(w io.Writer, color bool) *UI {
 	return &UI{w: w, color: color}
 }
@@ -47,17 +47,17 @@ func (u *UI) paint(code, s string) string {
 	return code + s + ansiReset
 }
 
-// Spinner returns a live single-line spinner for a long-running step,
-// writing to the human channel. Animates on a TTY; degrades to plain
-// lines otherwise. Backed by the shared ghui spinner so gh-student and
-// gh-teacher animate identically.
+// Spinner returns a live single-line spinner for a long-running step, writing
+// to the human channel. Animates on a TTY; degrades to plain lines otherwise.
+// Backed by the shared ghui spinner so gh-student and gh-teacher animate
+// identically.
 func (u *UI) Spinner(message string) *ghui.Spinner {
 	return ghui.NewSpinner(u.w, message)
 }
 
 // Warn prints a warning that ALWAYS contains the literal "Warning: " so
-// downstream log scrapers and existing assertions keep working; on a
-// color TTY it's additionally prefixed with a yellow ⚠.
+// downstream log scrapers and assertions keep working; on a color TTY it's
+// additionally prefixed with a yellow ⚠.
 func (u *UI) Warn(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
 	if u.color {
@@ -68,7 +68,7 @@ func (u *UI) Warn(format string, a ...any) {
 }
 
 // Detail prints a dimmed continuation line (dimmed on a color TTY, plain
-// otherwise) — used for verbose per-step operational detail.
+// otherwise) for verbose per-step operational detail.
 func (u *UI) Detail(format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "%s\n", u.paint(ansiDim, fmt.Sprintf(format, a...)))
 }

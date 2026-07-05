@@ -346,11 +346,9 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 	if gotBody["members_can_create_private_repositories"] != true {
 		t.Errorf("members_can_create_private_repositories = %v, want true", gotBody["members_can_create_private_repositories"])
 	}
-	// The master repo-creation switch must be sent true: on Team the
-	// granular private boolean is slaved to it, so omitting it leaves
-	// BOTH public and private OFF (members can create no repos), which
-	// breaks gh student accept. This is the fix for the "both unchecked
-	// after init" symptom.
+	// The master repo-creation switch must be sent true: on Team the granular
+	// private boolean is slaved to it, so omitting it leaves BOTH options OFF,
+	// breaking gh student accept.
 	if gotBody["members_can_create_repositories"] != true {
 		t.Errorf("members_can_create_repositories = %v, want true (master switch; without it Team leaves both repo-creation options off)", gotBody["members_can_create_repositories"])
 	}
@@ -371,11 +369,8 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 		}
 	}
 	// Enterprise-only fields must be OMITTED on a Team plan (Team doesn't
-	// expose these toggles — sending them is wasted and confusing).
-	// members_can_create_public_repositories=false is enterpriseOnly
-	// because "private repos only" exists only on Enterprise Cloud; on
-	// Team, public/private are coupled and the student flow needs private
-	// creation, so init can't lock public off and must not attempt it.
+	// expose them). members_can_create_public_repositories=false is
+	// enterpriseOnly because "private repos only" is Enterprise-Cloud-only.
 	for _, f := range []string{
 		"members_can_create_public_repositories",
 		"members_can_create_internal_repositories",
@@ -394,10 +389,9 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 			t.Errorf("combined PATCH field %s = %v (present=%v), want true", f, v, ok)
 		}
 	}
-	// The success line is derived from orgpolicy.MemberDefaultSettings(plan)
-	// (orgMemberDefaultsSummary), so assert every policy's desc appears
-	// — this is what catches a hand-written prose summary drifting out
-	// of sync with the canonical slice.
+	// The success line derives from orgpolicy.MemberDefaultSettings(plan), so
+	// assert every policy's desc appears — catches a prose summary drifting
+	// from the canonical slice.
 	for _, s := range orgpolicy.MemberDefaultSettings("team") {
 		if !strings.Contains(out.String(), s.Desc) {
 			t.Errorf("success line missing policy %q, got: %q", s.Desc, out.String())
@@ -412,12 +406,10 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 }
 
 func TestApplyOrgMemberDefaults_ForbiddenWarnsButSucceeds(t *testing.T) {
-	// 403 on the combined PATCH (e.g. an enterprise-locked org) falls
-	// back to per-field PATCHes. When every field is rejected, the
-	// function does NOT warn per-field — it returns the authoritative
-	// read-back list of everything still unenforced (each with its
-	// manual-fix instruction) so init can render one checklist. init
-	// must still finish (no error).
+	// 403 on the combined PATCH falls back to per-field PATCHes. When every
+	// field is rejected, the function does NOT warn per-field — it returns the
+	// read-back list of everything unenforced (each with its manual fix) so
+	// init renders one checklist. init still finishes (no error).
 	var (
 		mu        sync.Mutex
 		patchCall int
@@ -509,14 +501,10 @@ func TestApplyOrgMemberDefaults_TransportFailurePropagates(t *testing.T) {
 }
 
 func TestApplyOrgMemberDefaults_UnprocessableFallsBackPerField(t *testing.T) {
-	// A 422 on the combined PATCH (one plan-gated/pinned field) must fall
-	// back to per-field PATCHes so the settable policies still apply.
-	// The function no longer warns per-field; it returns the one
-	// still-unenforced setting (from the read-back) for init to render.
-	// Uses the enterprise plan so the public-repo lockdown field is in
-	// play — on Team it's filtered out (enterpriseOnly), since "private
-	// repos only" doesn't exist there. Mirrors an enterprise org where an
-	// enterprise owner has pinned members_can_create_public_repositories.
+	// A 422 on the combined PATCH (one plan-gated/pinned field) must fall back
+	// to per-field PATCHes so the settable policies still apply; it returns the
+	// still-unenforced setting for init to render. Uses enterprise so the
+	// public-repo field is in play (filtered out on Team).
 	const rejectedField = "members_can_create_public_repositories"
 	var (
 		mu     sync.Mutex

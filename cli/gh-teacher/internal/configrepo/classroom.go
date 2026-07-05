@@ -9,9 +9,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
 
-// ClassroomJSON is the typed shape of a classroom's classroom.json
-// metadata record. assignments.json's typed shape lives elsewhere (the
-// assignment domain). MigratedFrom omits cleanly when absent.
+// ClassroomJSON is the typed shape of a classroom's classroom.json metadata.
 type ClassroomJSON struct {
 	Schema    string `json:"schema"`
 	Name      string `json:"name"`
@@ -19,38 +17,28 @@ type ClassroomJSON struct {
 	Term      string `json:"term"`
 	Org       string `json:"org"`
 	// Secret is the optional capability-URL path segment. When set,
-	// publish-pages serves this classroom's resources under
-	// `<classroom>/<secret>/...` (every consumer inserts it); empty = the
-	// plain path. Opt-in per classroom, so omitted on unprotected classrooms.
+	// publish-pages serves resources under `<classroom>/<secret>/...`; empty =
+	// plain path. Opt-in, so omitted on unprotected classrooms.
 	Secret string `json:"secret,omitempty"`
-	// Team is the per-classroom GitHub team that grants rostered
-	// students read on private, org-owned assignment templates.
-	// Populated by `classroom add`; omitted on classrooms created
-	// before this feature.
+	// Team is the per-classroom team granting rostered students read on
+	// private org-owned templates. Omitted on pre-feature classrooms.
 	Team *TeamRef `json:"team,omitempty"`
-	// Per-classroom staff teams (instructor, ta) backing the web GUI's in-app
-	// roles. Web-authored; the CLI only tolerates and round-trips it. Omitted
-	// on classrooms created before the feature.
+	// Teams: per-classroom staff teams backing the web GUI's in-app roles.
+	// Web-authored; the CLI tolerates and round-trips it.
 	Teams *StaffTeamsRef `json:"teams,omitempty"`
-	// Active is the classroom/v1 lifecycle flag: `false` = archived,
-	// `true` or ABSENT = active. A *pointer so "archived" stays distinct
-	// from "legacy classroom that never wrote the key" (both nil/true =
-	// active), and omitempty so it's stamped only when a teacher toggles
-	// archive/unarchive. Mirrors the web's `active === false` archival check.
+	// Active is the lifecycle flag: false = archived, true or ABSENT = active.
+	// A pointer so "archived" stays distinct from "legacy that never wrote the
+	// key"; omitempty so it's stamped only on archive/unarchive.
 	Active       *bool            `json:"active,omitempty"`
 	MigratedFrom *MigratedFromRef `json:"migrated_from,omitempty"`
 
-	// Extra holds unknown top-level keys, re-emitted verbatim so the
-	// archive/unarchive/edit read-modify-write never drops a field a newer
-	// binary/web GUI added ("tolerate AND preserve", mirroring
-	// AssignmentEntry.Extra). Merged in/out by the custom (Un)MarshalJSON
-	// below, so it never appears as a literal "extra" key on the wire.
+	// Extra holds unknown top-level keys, re-emitted verbatim so
+	// archive/unarchive/edit never drop a field a newer binary/GUI added.
 	Extra map[string]json.RawMessage `json:"-"`
 }
 
-// knownClassroomKeys is the top-level classroom.json keys this binary
-// understands; any other key is diverted to Extra. Keep in lockstep with
-// the json tags on ClassroomJSON above.
+// knownClassroomKeys is the classroom.json keys this binary understands; any
+// other key is diverted to Extra. Keep in lockstep with ClassroomJSON's tags.
 var knownClassroomKeys = map[string]struct{}{
 	"schema": {}, "name": {}, "short_name": {}, "term": {}, "org": {},
 	"secret": {}, "team": {}, "teams": {}, "active": {}, "migrated_from": {},
@@ -92,9 +80,7 @@ func (c *ClassroomJSON) UnmarshalJSON(data []byte) error {
 }
 
 // MarshalJSON emits the known fields via the alias, then byte-splices any
-// sorted Extra keys in before the closing brace. The splice (vs a map
-// round-trip) preserves the known fields' struct order so adding Extra
-// doesn't reorder existing classroom.json on the next write.
+// sorted Extra keys before the closing brace, preserving struct order.
 func (c ClassroomJSON) MarshalJSON() ([]byte, error) {
 	type classroomAlias ClassroomJSON
 	known, err := json.Marshal(classroomAlias(c))
@@ -116,9 +102,8 @@ func (c ClassroomJSON) MarshalJSON() ([]byte, error) {
 	}
 	sort.Strings(keys) // deterministic output
 
-	// Splice the Extra members in before `known`'s closing brace. The alias
-	// always emits schema/name/short_name/term/org (no omitempty), so
-	// `known` is never "{}" and the leading comma is always correct.
+	// Splice Extra members before `known`'s closing brace. The alias always
+	// emits schema/name/short_name/term/org, so `known` is never "{}".
 	var buf bytes.Buffer
 	trimmed := bytes.TrimSpace(known)
 	buf.Write(trimmed[:len(trimmed)-1]) // everything up to the final '}'
@@ -143,9 +128,8 @@ func (c *ClassroomJSON) IsArchived() bool {
 	return c != nil && c.Active != nil && !*c.Active
 }
 
-// MigratedFromRef records where a classroom originated when it was
-// imported by `gh teacher classroom migrate`. Hand-authored classrooms
-// never carry this block.
+// MigratedFromRef records where a classroom originated when imported by
+// `classroom migrate`. Hand-authored classrooms never carry it.
 type MigratedFromRef struct {
 	Source           string `json:"source"`
 	ClassroomID      int64  `json:"classroom_id"`
