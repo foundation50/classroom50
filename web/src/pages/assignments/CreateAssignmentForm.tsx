@@ -24,6 +24,8 @@ import {
   isNonUbuntuHostedLabel,
   parseAptPackages,
   validateAptPackages,
+  validateContainerImage,
+  validateContainerUser,
   validateLanguageVersion,
 } from "@/util/runtime"
 import { TemplateField } from "./TemplateField"
@@ -238,6 +240,20 @@ const useAssignmentForm = (
                 label: badLabel,
               },
             )
+          }
+        }
+
+        // Container image/user shape, mirroring the CLI's ValidateContainer, so
+        // an injection-shaped value is caught inline before the write path
+        // (which enforces the same gate) rejects it.
+        if (value.runtime_env === "container") {
+          const imageError = validateContainerImage(value.container_image)
+          if (imageError) {
+            errors.container_image = imageError
+          }
+          const userError = validateContainerUser(value.container_user)
+          if (userError) {
+            errors.container_user = userError
           }
         }
 

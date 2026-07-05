@@ -7,6 +7,8 @@ import {
   isNonUbuntuHostedLabel,
   parseAptPackages,
   validateAptPackages,
+  validateContainerImage,
+  validateContainerUser,
   validateLanguageVersion,
 } from "./runtime"
 
@@ -73,6 +75,43 @@ describe("validateAptPackages", () => {
     expect(validateAptPackages(["CMake"])).toBeDefined()
     expect(validateAptPackages(["valid", "bad name"])).toBeDefined()
     expect(validateAptPackages(["$(x)"])).toBeDefined()
+  })
+})
+
+describe("validateContainerImage", () => {
+  it("accepts an empty value and valid public image references", () => {
+    expect(validateContainerImage("")).toBeUndefined()
+    expect(validateContainerImage("   ")).toBeUndefined()
+    for (const img of [
+      "gcc:13",
+      "ubuntu:24.04",
+      "ghcr.io/cs50/grading-env:1.2",
+      "node:22@sha256:abc",
+    ]) {
+      expect(validateContainerImage(img)).toBeUndefined()
+    }
+  })
+
+  it("rejects an image with whitespace or shell metacharacters", () => {
+    expect(validateContainerImage("ubuntu:24.04 rm -rf")).toBeDefined()
+    expect(validateContainerImage("ubuntu:24.04;rm")).toBeDefined()
+    expect(validateContainerImage("$(whoami)")).toBeDefined()
+    expect(validateContainerImage("1".repeat(257))).toBeDefined()
+  })
+})
+
+describe("validateContainerUser", () => {
+  it("accepts an empty value and valid docker --user values", () => {
+    expect(validateContainerUser("")).toBeUndefined()
+    for (const u of ["root", "0", "1000:1000", "appuser:appgroup"]) {
+      expect(validateContainerUser(u)).toBeUndefined()
+    }
+  })
+
+  it("rejects a user with whitespace, metacharacters, or a dangling colon", () => {
+    expect(validateContainerUser("root; rm")).toBeDefined()
+    expect(validateContainerUser("1000:")).toBeDefined()
+    expect(validateContainerUser("$(id)")).toBeDefined()
   })
 })
 

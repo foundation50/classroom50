@@ -17,13 +17,19 @@ import { buildDueFields } from "@/util/formatDate"
 import { studentRepoName } from "@/util/studentRepo"
 import { classroomPagesSegment } from "@/util/secret"
 import { prefixCommit } from "@/util/commit"
-import { parseRunnerLabels } from "@/util/runners"
+import {
+  parseRunnerLabels,
+  isRunnerLabelShapeValid,
+  MAX_RUNNER_LABELS,
+} from "@/util/runners"
 import {
   RUNTIME_LANGUAGES,
   type RuntimeLanguage,
   isNonUbuntuHostedLabel,
   parseAptPackages,
   validateAptPackages,
+  validateContainerImage,
+  validateContainerUser,
   validateLanguageVersion,
 } from "@/util/runtime"
 import { parseAllowedFiles, validateAllowedFiles } from "@/util/allowedFiles"
@@ -760,6 +766,22 @@ async function buildAssignmentEntry(
   const containerImage = input.container_image?.trim()
   const containerUser = input.container_user?.trim()
   const runtime: NonNullable<Assignment["runtime"]> = {}
+  // Shape-gate each runs-on label and cap the count, matching the CLI's
+  // ValidateRunsOn — the RunnerField UI check is advisory only, so this is the
+  // authoritative anti-injection gate before the label flows into `runs-on:`.
+  if (runnerLabels.length > MAX_RUNNER_LABELS) {
+    throw new Error(
+      `runtime.runs-on has ${runnerLabels.length} labels (max ${MAX_RUNNER_LABELS}).`,
+    )
+  }
+  const badRunnerLabel = runnerLabels.find(
+    (label) => !isRunnerLabelShapeValid(label),
+  )
+  if (badRunnerLabel) {
+    throw new Error(
+      `runtime.runs-on ${JSON.stringify(badRunnerLabel)} must be a GitHub runner label — letters, numbers, and . - _ only, no whitespace or metacharacters.`,
+    )
+  }
   if (runnerLabels.length === 1) {
     runtime["runs-on"] = runnerLabels[0]
   } else if (runnerLabels.length > 1) {
@@ -775,8 +797,18 @@ async function buildAssignmentEntry(
         `runtime.runs-on ${JSON.stringify(badLabel)} can't be combined with a Docker image — GitHub Actions runs containers on Ubuntu hosts only.`,
       )
     }
+    // Image/user flow into Actions' `container:` / `--user` — shape-gate them
+    // against the CLI's ValidateContainer so a bad value can't reach the file.
+    const imageError = validateContainerImage(containerImage)
+    if (imageError) {
+      throw new Error(`runtime.container.image: ${imageError}`)
+    }
     runtime.container = { image: containerImage }
     if (containerUser) {
+      const userError = validateContainerUser(containerUser)
+      if (userError) {
+        throw new Error(`runtime.container.user: ${userError}`)
+      }
       runtime.container.user = containerUser
     }
   }

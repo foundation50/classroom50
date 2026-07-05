@@ -58,7 +58,7 @@ export function isRunnerLabelShapeValid(label: string): boolean {
 }
 
 // The CLI rejects more than 10 labels.
-const MAX_RUNNER_LABELS = 10
+export const MAX_RUNNER_LABELS = 10
 
 export function isKnownHostedRunnerLabel(label: string): boolean {
   return KNOWN_HOSTED_RUNNER_SET.has(label.trim().toLowerCase())

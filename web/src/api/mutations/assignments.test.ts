@@ -554,6 +554,33 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/runtime\.python/i)
   })
 
+  it("rejects a container image with shell metacharacters before any write", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ container_image: "ubuntu:24.04;rm -rf /" }),
+      ),
+    ).rejects.toThrow(/runtime\.container\.image/i)
+  })
+
+  it("rejects a container user with a dangling colon before any write", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ container_image: "ubuntu:24.04", container_user: "1000:" }),
+      ),
+    ).rejects.toThrow(/runtime\.container\.user/i)
+  })
+
+  it("rejects an injection-shaped runs-on label before any write", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ runs_on: "a;b" })),
+    ).rejects.toThrow(/runtime\.runs-on/i)
+  })
+
   it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
     // An assignment whose stored template is an in-org private fork of a private
     // cross-org upstream (created before the fork guard shipped, or a parent

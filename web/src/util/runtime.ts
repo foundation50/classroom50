@@ -17,6 +17,13 @@ const LANGUAGE_VERSION_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/
 // Identical to the CLI's AptPackagePattern (lowercase Debian package name).
 const APT_PACKAGE_PATTERN = /^[a-z0-9][a-z0-9.+-]{0,63}$/
 
+// Identical to the CLI's ContainerImagePattern / ContainerUserPattern: permissive
+// but injection-safe. Image flows into Actions' `container:`; user flows into
+// `container.options: --user <value>`, so both are anti-injection gated.
+const CONTAINER_IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/
+const CONTAINER_USER_PATTERN =
+  /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$/
+
 // Human labels, an example version (placeholder), and a suggested-versions
 // menu for each toolchain. NOTE: a version string is itself the enable switch —
 // the autograde runner runs a language's setup-* action only when its field is
@@ -77,6 +84,28 @@ export function validateAptPackages(packages: string[]): string | undefined {
     if (!APT_PACKAGE_PATTERN.test(pkg)) {
       return `Invalid package "${pkg}" — lowercase Debian package name (a-z, 0-9, . + -).`
     }
+  }
+  return undefined
+}
+
+// Mirror the CLI's ValidateContainer image check. Returns an error message, or
+// undefined when valid. An empty value is valid (no image → not container mode).
+export function validateContainerImage(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (trimmed === "") return undefined
+  if (!CONTAINER_IMAGE_PATTERN.test(trimmed)) {
+    return "Use a public image reference (letters, numbers, and . _ : / @ + - only, e.g. ubuntu:24.04)."
+  }
+  return undefined
+}
+
+// Mirror the CLI's ValidateContainer user check. Returns an error message, or
+// undefined when valid. An empty value is valid (user omitted).
+export function validateContainerUser(value: string): string | undefined {
+  const trimmed = value.trim()
+  if (trimmed === "") return undefined
+  if (!CONTAINER_USER_PATTERN.test(trimmed)) {
+    return 'Use a `docker run --user` value (e.g. "root", "0", "1000:1000").'
   }
   return undefined
 }
