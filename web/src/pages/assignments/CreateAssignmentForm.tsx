@@ -6,7 +6,9 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
+  ChevronDown,
   HelpCircle,
   Loader2,
   ServerCog,
@@ -24,7 +26,6 @@ import {
   validateAllowedFiles,
 } from "@/util/allowedFiles"
 import {
-  containerRunnerWarning,
   isRunnerLabelShapeValid,
   verifyRunnerLabels,
   parseRunnerLabels,
@@ -58,6 +59,14 @@ import {
   PASS_THRESHOLD_MIN,
 } from "@/types/classroom"
 
+// Which runtime environment the Advanced Settings form is configuring. A UI-
+// only discriminator (not a wire field): "hosted" = a GitHub Actions runner
+// (runs-on + apt packages), "container" = a Docker image (image + user). The
+// two are mutually exclusive on the wire, so the form picks one and clears the
+// other's fields, making the runner's container-vs-(runs-on/apt) conflicts
+// unrepresentable rather than merely validated-against.
+export type RuntimeEnv = "hosted" | "container"
+
 export type CreateAssignmentFormValues = {
   name: string
   // URL/repo slug for the assignment (edited on create only).
@@ -68,6 +77,12 @@ export type CreateAssignmentFormValues = {
   due_date: string
   max_group_size: number
   feedback_pr: boolean
+  // UI-only: which runtime environment the teacher is configuring. Selects
+  // which fields render and get written; never sent to the wire. "hosted" uses
+  // a GitHub Actions runner (runs-on + apt); "container" grades inside a Docker
+  // image (image + user). Deriving the two apart in the UI structurally
+  // prevents the container-vs-(runs-on/apt) conflicts the runner rejects.
+  runtime_env: RuntimeEnv
   runs_on: string
   container_image: string
   container_user: string
@@ -111,6 +126,7 @@ const useAssignmentForm = (
         toDatetimeLocalValue(sevenDaysFromNow()),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
+      runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",
       container_user: defaultValues?.container_user || "",
@@ -206,19 +222,29 @@ const useAssignmentForm = (
             errors[`runtime_${language}`] = error
           }
         }
-        const aptPackages = parseAptPackages(value.runtime_apt)
-        const aptError = validateAptPackages(aptPackages)
-        if (aptError) {
-          errors.runtime_apt = aptError
-        } else if (aptPackages.length > 0 && value.container_image.trim()) {
-          // The image owns its packages; schema/CLI forbid apt with a container.
-          errors.runtime_apt = t("assignments.form.runtime.aptContainerError")
+        // apt only applies to the hosted runtime; container mode clears it on
+        // submit and hides the input, so only validate it there. The
+        // container-vs-apt conflict is now structurally impossible (the two
+        // live in different, mutually exclusive modes), so no cross-check.
+        if (value.runtime_env !== "container") {
+          const aptError = validateAptPackages(
+            parseAptPackages(value.runtime_apt),
+          )
+          if (aptError) {
+            errors.runtime_apt = aptError
+          }
         }
 
         return Object.keys(errors).length > 0 ? { fields: errors } : undefined
       },
     },
     onSubmit: async ({ value }) => {
+      // Clear the fields that don't belong to the selected runtime environment
+      // so a hidden, stale value from the other mode can't reach the wire —
+      // this is what makes the container-vs-(runs-on/apt) conflict
+      // unrepresentable, not just validated-against. Language versions apply to
+      // both modes (setup-* runs inside a container too), so they pass through.
+      const isContainer = value.runtime_env === "container"
       await onSubmit({
         name: value.name.trim(),
         slug: slugify(value.slug),
@@ -228,14 +254,15 @@ const useAssignmentForm = (
         due_date: value.due_date.trim(),
         max_group_size: value.max_group_size,
         feedback_pr: value.feedback_pr,
-        runs_on: value.runs_on.trim(),
-        container_image: value.container_image.trim(),
-        container_user: value.container_user.trim(),
+        runtime_env: value.runtime_env,
+        runs_on: isContainer ? "" : value.runs_on.trim(),
+        container_image: isContainer ? value.container_image.trim() : "",
+        container_user: isContainer ? value.container_user.trim() : "",
         runtime_python: value.runtime_python.trim(),
         runtime_node: value.runtime_node.trim(),
         runtime_java: value.runtime_java.trim(),
         runtime_go: value.runtime_go.trim(),
-        runtime_apt: value.runtime_apt.trim(),
+        runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
         setup_command: value.setup_command.trim(),
         allowed_files: value.allowed_files,
         pass_threshold_enabled: value.pass_threshold_enabled,
@@ -277,9 +304,12 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
   </form.Subscribe>
 )
 
-// A language toolchain version input (python/node/java/go). Free-form; the
-// placeholder is the runner's default when omitted. Advisory shape check
-// mirrors the CLI's LanguageVersionPattern.
+// A language toolchain version input (python/node/java/go). A themed combobox:
+// a text input with a chevron that opens a DaisyUI dropdown of the actively-
+// supported versions, but the input stays free-text so a teacher can type any
+// custom version. Empty = toolchain off (except Python, which the runner
+// defaults to 3.12). Advisory shape check mirrors the CLI's
+// LanguageVersionPattern.
 const LanguageVersionField = ({
   form,
   language,
@@ -294,6 +324,11 @@ const LanguageVersionField = ({
     <form.Field name={fieldName}>
       {(field) => {
         const error = field.state.meta.errors[0] as string | undefined
+        const current = field.state.value.trim()
+        // Close the focus-driven dropdown after a pick so it doesn't linger
+        // (DaisyUI dropdowns stay open while a descendant holds focus).
+        const closeDropdown = () =>
+          (document.activeElement as HTMLElement | null)?.blur()
         return (
           <div>
             <label
@@ -302,20 +337,62 @@ const LanguageVersionField = ({
             >
               {meta.label}
             </label>
-            <input
-              id={field.name}
-              name={field.name}
-              type="text"
-              autoComplete="off"
-              spellCheck={false}
-              className="input w-full max-w-xs"
-              placeholder={t("assignments.form.runtime.versionPlaceholder", {
-                version: meta.placeholder,
-              })}
-              value={field.state.value}
-              onBlur={normalizeOnBlur(field)}
-              onChange={(e) => field.handleChange(e.target.value)}
-            />
+            <div className="dropdown w-full max-w-xs">
+              <div className="join w-full">
+                <input
+                  id={field.name}
+                  name={field.name}
+                  type="text"
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="input join-item w-full"
+                  placeholder={t(
+                    "assignments.form.runtime.versionPlaceholder",
+                    { version: meta.placeholder },
+                  )}
+                  value={field.state.value}
+                  onBlur={normalizeOnBlur(field)}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+                <button
+                  type="button"
+                  tabIndex={0}
+                  className="btn btn-square join-item border-base-content/20"
+                  aria-label={t("assignments.form.runtime.versionMenu", {
+                    language: meta.label,
+                  })}
+                >
+                  <ChevronDown aria-hidden="true" className="size-4" />
+                </button>
+              </div>
+              <ul
+                tabIndex={0}
+                className="dropdown-content menu z-10 mt-1 w-full rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+              >
+                {meta.versions.map((version) => (
+                  <li key={version}>
+                    <button
+                      type="button"
+                      className={
+                        version === current ? "active font-semibold" : undefined
+                      }
+                      onClick={() => {
+                        field.handleChange(version)
+                        closeDropdown()
+                      }}
+                    >
+                      <Check
+                        aria-hidden="true"
+                        className={`size-4 ${
+                          version === current ? "" : "invisible"
+                        }`}
+                      />
+                      {version}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
             {error ? (
               <p
                 role="alert"
@@ -402,6 +479,124 @@ const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
         </p>
       )}
     </div>
+  )
+}
+
+// Container-runtime fields (Docker image + optional user). Rendered only in
+// container mode, so a container image can never coexist with runs-on/apt in
+// the UI — the conflict the runner rejects is unrepresentable here.
+const ContainerFields = ({ form }: { form: AssignmentForm }) => {
+  const { t } = useTranslation()
+  return (
+    <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+      <form.Field name="container_image">
+        {(field) => (
+          <div>
+            <label
+              htmlFor={field.name}
+              className="label block font-bold mb-1.5"
+            >
+              {t("assignments.form.dockerImage")}
+            </label>
+            <input
+              id={field.name}
+              name={field.name}
+              type="text"
+              className="input w-full max-w-xs"
+              placeholder={t("assignments.form.dockerImagePlaceholder")}
+              value={field.state.value}
+              onBlur={normalizeOnBlur(field)}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <p className="mt-1.5 text-sm text-base-content/70">
+              {t("assignments.form.dockerImageHelp")}
+            </p>
+          </div>
+        )}
+      </form.Field>
+
+      <form.Field name="container_user">
+        {(field) => (
+          <div>
+            <label htmlFor={field.name} className="block font-bold mb-1.5">
+              {t("assignments.form.containerUser")}
+            </label>
+            <input
+              id={field.name}
+              name={field.name}
+              type="text"
+              className="input w-full max-w-xs"
+              placeholder={t("assignments.form.containerUserPlaceholder")}
+              value={field.state.value}
+              onBlur={normalizeOnBlur(field)}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <p className="mt-1.5 text-sm text-base-content/70">
+              {t("assignments.form.containerUserHelp_prefix")} <code>root</code>
+              {t("assignments.form.containerUserHelp_suffix")}
+            </p>
+          </div>
+        )}
+      </form.Field>
+    </div>
+  )
+}
+
+// Extra apt packages input. Rendered only in hosted mode (a container image
+// owns its own packages), so apt-with-container can't be expressed.
+const AptField = ({ form }: { form: AssignmentForm }) => {
+  const { t } = useTranslation()
+  return (
+    <form.Field name="runtime_apt">
+      {(field) => {
+        const packages = parseAptPackages(field.state.value)
+        const error = field.state.meta.errors[0] as string | undefined
+        return (
+          <div className="mt-4">
+            <label
+              htmlFor={field.name}
+              className="label block font-bold mb-1.5"
+            >
+              {t("assignments.form.runtime.aptLabel")}
+            </label>
+            <input
+              id={field.name}
+              name={field.name}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              className="input w-full"
+              placeholder={t("assignments.form.runtime.aptPlaceholder")}
+              value={field.state.value}
+              onBlur={normalizeOnBlur(field, (value) =>
+                parseAptPackages(value).join(", "),
+              )}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            <p className="mt-1.5 text-sm text-base-content/70">
+              {t("assignments.form.runtime.aptHelp")}
+            </p>
+            {error ? (
+              <p
+                role="alert"
+                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+              >
+                <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                {error}
+              </p>
+            ) : (
+              packages.length > 0 && (
+                <p className="mt-1.5 text-xs text-base-content/70">
+                  {t("assignments.form.runtime.aptCount", {
+                    count: packages.length,
+                  })}
+                </p>
+              )
+            )}
+          </div>
+        )
+      }}
+    </form.Field>
   )
 }
 
@@ -576,6 +771,9 @@ export const assignmentToFormValues = (
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
+    // A stored container block means the assignment was configured in container
+    // mode; otherwise it's the hosted runner (the default).
+    runtime_env: assignment.runtime?.container ? "container" : "hosted",
     runs_on: parseRunnerLabels(assignment.runtime?.["runs-on"] ?? "").join(
       ", ",
     ),
@@ -926,101 +1124,65 @@ const CreateAssignmentForm = ({
                 {t("assignments.form.advancedHelp")}
               </p>
 
-              <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
-                <form.Field name="runs_on">
-                  {(field) => <RunnerField field={field} org={org} />}
-                </form.Field>
-
-                <form.Field name="container_image">
-                  {(field) => (
-                    <div>
+              <form.Field name="runtime_env">
+                {(field) => (
+                  <fieldset className="mb-4">
+                    <legend className="label font-bold mb-2">
+                      {t("assignments.form.runtime.envLegend")}
+                    </legend>
+                    <div className="flex flex-wrap gap-x-6 gap-y-2">
                       <label
-                        htmlFor={field.name}
-                        className="label block font-bold mb-1.5"
+                        htmlFor={`${field.name}-hosted`}
+                        className="label cursor-pointer gap-2 p-0"
                       >
-                        {t("assignments.form.dockerImage")}
+                        <input
+                          id={`${field.name}-hosted`}
+                          type="radio"
+                          className="radio"
+                          name={field.name}
+                          value="hosted"
+                          checked={field.state.value === "hosted"}
+                          onChange={() => field.handleChange("hosted")}
+                        />
+                        {t("assignments.form.runtime.envHosted")}
                       </label>
-                      <input
-                        id={field.name}
-                        name={field.name}
-                        type="text"
-                        className="input w-full max-w-xs"
-                        placeholder={t(
-                          "assignments.form.dockerImagePlaceholder",
-                        )}
-                        value={field.state.value}
-                        onBlur={normalizeOnBlur(field)}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                      <p className="mt-1.5 text-sm text-base-content/70">
-                        {t("assignments.form.dockerImageHelp")}
-                      </p>
+                      <label
+                        htmlFor={`${field.name}-container`}
+                        className="label cursor-pointer gap-2 p-0"
+                      >
+                        <input
+                          id={`${field.name}-container`}
+                          type="radio"
+                          className="radio"
+                          name={field.name}
+                          value="container"
+                          checked={field.state.value === "container"}
+                          onChange={() => field.handleChange("container")}
+                        />
+                        {t("assignments.form.runtime.envContainer")}
+                      </label>
                     </div>
-                  )}
-                </form.Field>
-
-                <form.Subscribe
-                  selector={(state) => state.values.container_image}
-                >
-                  {(containerImage) =>
-                    containerImage.trim() ? (
-                      <form.Field name="container_user">
-                        {(field) => (
-                          <div>
-                            <label
-                              htmlFor={field.name}
-                              className="block font-bold mb-1.5"
-                            >
-                              {t("assignments.form.containerUser")}
-                            </label>
-                            <input
-                              id={field.name}
-                              name={field.name}
-                              type="text"
-                              className="input w-full max-w-xs"
-                              placeholder={t(
-                                "assignments.form.containerUserPlaceholder",
-                              )}
-                              value={field.state.value}
-                              onBlur={normalizeOnBlur(field)}
-                              onChange={(e) =>
-                                field.handleChange(e.target.value)
-                              }
-                            />
-                            <p className="mt-1.5 text-sm text-base-content/70">
-                              {t("assignments.form.containerUserHelp_prefix")}{" "}
-                              <code>root</code>
-                              {t("assignments.form.containerUserHelp_suffix")}
-                            </p>
-                          </div>
-                        )}
-                      </form.Field>
-                    ) : null
-                  }
-                </form.Subscribe>
-              </div>
-
-              <form.Subscribe
-                selector={(state) => [
-                  state.values.runs_on,
-                  state.values.container_image,
-                ]}
-              >
-                {([runsOn, containerImage]) => {
-                  const warning = containerRunnerWarning(runsOn, containerImage)
-                  return warning ? (
-                    <p
-                      role="alert"
-                      className="mt-3 flex items-center gap-1.5 text-sm text-error"
-                    >
-                      <AlertTriangle
-                        aria-hidden="true"
-                        className="size-4 shrink-0"
-                      />
-                      {warning}
+                    <p className="mt-1.5 text-sm text-base-content/70">
+                      {field.state.value === "container"
+                        ? t("assignments.form.runtime.envContainerHelp")
+                        : t("assignments.form.runtime.envHostedHelp")}
                     </p>
-                  ) : null
-                }}
+                  </fieldset>
+                )}
+              </form.Field>
+
+              <form.Subscribe selector={(state) => state.values.runtime_env}>
+                {(runtimeEnv) =>
+                  runtimeEnv === "container" ? (
+                    <ContainerFields form={form} />
+                  ) : (
+                    <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                      <form.Field name="runs_on">
+                        {(field) => <RunnerField field={field} org={org} />}
+                      </form.Field>
+                    </div>
+                  )
+                }
               </form.Subscribe>
 
               <div className="mt-4">
@@ -1041,70 +1203,9 @@ const CreateAssignmentForm = ({
                 </div>
               </div>
 
-              <form.Subscribe
-                selector={(state) => state.values.container_image}
-              >
-                {(containerImage) =>
-                  containerImage.trim() ? null : (
-                    <form.Field name="runtime_apt">
-                      {(field) => {
-                        const packages = parseAptPackages(field.state.value)
-                        const error = field.state.meta.errors[0] as
-                          string | undefined
-                        return (
-                          <div className="mt-4">
-                            <label
-                              htmlFor={field.name}
-                              className="label block font-bold mb-1.5"
-                            >
-                              {t("assignments.form.runtime.aptLabel")}
-                            </label>
-                            <input
-                              id={field.name}
-                              name={field.name}
-                              type="text"
-                              autoComplete="off"
-                              spellCheck={false}
-                              className="input w-full"
-                              placeholder={t(
-                                "assignments.form.runtime.aptPlaceholder",
-                              )}
-                              value={field.state.value}
-                              onBlur={normalizeOnBlur(field, (value) =>
-                                parseAptPackages(value).join(", "),
-                              )}
-                              onChange={(e) =>
-                                field.handleChange(e.target.value)
-                              }
-                            />
-                            <p className="mt-1.5 text-sm text-base-content/70">
-                              {t("assignments.form.runtime.aptHelp")}
-                            </p>
-                            {error ? (
-                              <p
-                                role="alert"
-                                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
-                              >
-                                <AlertTriangle
-                                  aria-hidden="true"
-                                  className="size-4 shrink-0"
-                                />
-                                {error}
-                              </p>
-                            ) : (
-                              packages.length > 0 && (
-                                <p className="mt-1.5 text-xs text-base-content/70">
-                                  {t("assignments.form.runtime.aptCount", {
-                                    count: packages.length,
-                                  })}
-                                </p>
-                              )
-                            )}
-                          </div>
-                        )
-                      }}
-                    </form.Field>
-                  )
+              <form.Subscribe selector={(state) => state.values.runtime_env}>
+                {(runtimeEnv) =>
+                  runtimeEnv === "container" ? null : <AptField form={form} />
                 }
               </form.Subscribe>
 

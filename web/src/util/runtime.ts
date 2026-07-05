@@ -17,16 +17,35 @@ const LANGUAGE_VERSION_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/
 // Identical to the CLI's AptPackagePattern (lowercase Debian package name).
 const APT_PACKAGE_PATTERN = /^[a-z0-9][a-z0-9.+-]{0,63}$/
 
-// Human labels + placeholders for the version inputs (defaults the runner uses
-// when a field is omitted, so they double as sensible placeholders).
+// Human labels, an example version (placeholder), and a suggested-versions
+// menu for each toolchain. NOTE: a version string is itself the enable switch —
+// the autograde runner runs a language's setup-* action only when its field is
+// non-empty (leaving Node/Java/Go blank skips that toolchain). The one
+// exception is Python, which the runner defaults to 3.12 on the non-container
+// path. `versions` back the themed dropdown, but the input stays free-text, so
+// a teacher can still type any custom version the setup-* action accepts.
+//
+// Version menus list the currently actively-supported (non-EOL) releases as of
+// 2026-07, newest first. Sources: Python devguide, nodejs/Release, Adoptium
+// Temurin support, go.dev release policy. Verify periodically — support windows
+// move. Java lists LTS lines (classroom autograding wants LTS, not the
+// short-lived non-LTS feature releases).
 export const RUNTIME_LANGUAGE_META: Record<
   RuntimeLanguage,
-  { label: string; placeholder: string }
+  { label: string; placeholder: string; versions: string[] }
 > = {
-  python: { label: "Python", placeholder: "3.12" },
-  node: { label: "Node.js", placeholder: "20" },
-  java: { label: "Java", placeholder: "21" },
-  go: { label: "Go", placeholder: "1.23" },
+  python: {
+    label: "Python",
+    placeholder: "3.12",
+    versions: ["3.14", "3.13", "3.12", "3.11"],
+  },
+  node: { label: "Node.js", placeholder: "20", versions: ["26", "24", "22"] },
+  java: {
+    label: "Java",
+    placeholder: "21",
+    versions: ["25", "21", "17", "11"],
+  },
+  go: { label: "Go", placeholder: "1.23", versions: ["1.26", "1.25"] },
 }
 
 // Split apt packages on commas/whitespace; tolerates an array. Order preserved.

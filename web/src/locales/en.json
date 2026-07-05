@@ -552,15 +552,20 @@
         "cannotVerify": "Can't verify — used as entered."
       },
       "runtime": {
+        "envLegend": "Runtime environment",
+        "envHosted": "GitHub-hosted runner",
+        "envContainer": "Docker container",
+        "envHostedHelp": "Grade on a GitHub Actions runner. Add language versions and extra apt packages below.",
+        "envContainerHelp": "Grade inside a public Docker image (it owns the OS packages). Language versions still apply inside the container.",
         "languagesHeading": "Language versions",
-        "languagesHelp": "Pin a toolchain version the autograder provisions. Leave blank for the default.",
+        "languagesHelp": "Pick a version to install that toolchain (e.g. Node 24, Java 21) or type a custom one — a blank field skips it. Python defaults to 3.12 when left blank.",
         "versionPlaceholder": "e.g. {{version}}",
+        "versionMenu": "Choose a {{language}} version",
         "aptLabel": "Extra apt packages",
         "aptPlaceholder": "e.g. cmake, valgrind",
-        "aptHelp": "Ubuntu packages installed before grading, comma- or space-separated. Not available with a Docker image — install packages in the image instead.",
+        "aptHelp": "Ubuntu packages installed before grading, comma- or space-separated.",
         "aptCount_one": "{{count}} package",
-        "aptCount_other": "{{count}} packages",
-        "aptContainerError": "Extra apt packages can't be combined with a Docker image — install them in the image instead."
+        "aptCount_other": "{{count}} packages"
       },
       "validation": {
         "nameRequired": "Assignment name is required.",
