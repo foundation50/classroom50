@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Send, Trash, X } from "lucide-react"
+import { ExternalLink, Send, Trash, X } from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
 
@@ -28,6 +28,7 @@ const RosterMemberModal = ({
   open,
   org,
   classroom,
+  teamSlug,
   row,
   onClose,
   onSaved,
@@ -38,6 +39,9 @@ const RosterMemberModal = ({
   open: boolean
   org: string
   classroom: string
+  // Resolved classroom-team slug (from useTeamRoster) — shown as the student's
+  // GitHub team, with a link and membership state.
+  teamSlug: string
   // Nullable so the <dialog> can stay mounted across open/close.
   row: TeamRosterRow | null
   onClose: () => void
@@ -227,6 +231,37 @@ const RosterMemberModal = ({
                 {row.section.trim()}
               </span>
             ) : null}
+          </div>
+
+          {/* GitHub team the student belongs to (the classroom team). Redundant
+              with the enrolled state, but handy to see all their GitHub details
+              in one place. */}
+          <div className="rounded-box border border-base-300 bg-base-200/40 px-4 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col">
+                <span className="text-xs font-medium text-base-content/70">
+                  {t("students.classroomTeamLabel")}
+                </span>
+                <a
+                  href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex w-fit items-center gap-1 font-mono text-sm text-primary hover:underline"
+                >
+                  {teamSlug}
+                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                </a>
+              </div>
+              {row.state === "enrolled" ? (
+                <span className="badge badge-sm badge-success badge-soft shrink-0">
+                  {t("students.teamMember")}
+                </span>
+              ) : (
+                <span className="badge badge-sm badge-ghost shrink-0">
+                  {t("students.teamNotYet")}
+                </span>
+              )}
+            </div>
           </div>
 
           {canEdit ? (

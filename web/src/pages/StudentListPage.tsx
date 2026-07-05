@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { ExternalLink } from "lucide-react"
 
 import AddStudent from "@/pages/students/AddStudent"
 import Breadcrumb from "@/components/breadcrumb"
@@ -19,6 +20,7 @@ import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { toStudent } from "@/util/roster"
 import { useTranslation } from "react-i18next"
 
@@ -62,6 +64,15 @@ const StudentListContent = ({
             ? t("students.enrolledIn", { count: enrolledCount, className })
             : t("students.enrolledInLoading", { className })}
         </h3>
+        <a
+          href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
+        >
+          <ExternalLink aria-hidden="true" className="size-3.5" />
+          {t("students.viewCsvOnGitHub")}
+        </a>
       </div>
 
       <EnrolledStudents

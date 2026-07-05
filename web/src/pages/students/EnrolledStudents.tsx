@@ -6,6 +6,7 @@ import {
   Search,
   Send,
   Upload,
+  X,
 } from "lucide-react"
 
 import { nameFromParts, initialsFromParts } from "@/util/students"
@@ -100,6 +101,10 @@ const EnrolledStudents = ({
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // Session-only banner dismissal — a page refresh re-derives roster state and
+  // shows them again.
+  const [driftDismissed, setDriftDismissed] = useState(false)
+  const [pendingDismissed, setPendingDismissed] = useState(false)
 
   const {
     rows,
@@ -424,8 +429,9 @@ const EnrolledStudents = ({
       ) : null}
 
       {/* Count-only drift banner: clicking "Review" filters the list to
-          not_in_org rather than expanding an inline list. */}
-      {!isLoading && !isError && notInOrg.length > 0 ? (
+          not_in_org rather than expanding an inline list. Dismissable for the
+          session; a refresh re-derives and shows it again. */}
+      {!isLoading && !isError && !driftDismissed && notInOrg.length > 0 ? (
         <div
           role="alert"
           className="alert alert-warning alert-soft flex items-center justify-between gap-3"
@@ -434,21 +440,37 @@ const EnrolledStudents = ({
             <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
             {t("students.driftBanner", { count: notInOrg.length })}
           </span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            onClick={() => {
-              setStatusFilter("not_in_org")
-            }}
-          >
-            {t("students.driftReview")}
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => {
+                setStatusFilter("not_in_org")
+              }}
+            >
+              {t("students.driftReview")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs btn-square"
+              aria-label={t("students.dismiss")}
+              title={t("students.dismiss")}
+              onClick={() => setDriftDismissed(true)}
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
         </div>
       ) : null}
 
       {/* Pending-invites banner: clicking "Review" filters to pending so the
-          teacher can select rows and bulk-resend (cancel + re-send). */}
-      {!isLoading && !isError && !pendingHidden && counts.pending > 0 ? (
+          teacher can select rows and bulk-resend (cancel + re-send).
+          Dismissable for the session. */}
+      {!isLoading &&
+      !isError &&
+      !pendingHidden &&
+      !pendingDismissed &&
+      counts.pending > 0 ? (
         <div
           role="alert"
           className="alert alert-info alert-soft flex items-center justify-between gap-3"
@@ -457,13 +479,24 @@ const EnrolledStudents = ({
             <Send aria-hidden="true" className="size-4 shrink-0" />
             {t("students.pendingBanner", { count: counts.pending })}
           </span>
-          <button
-            type="button"
-            className="btn btn-ghost btn-xs"
-            onClick={() => setStatusFilter("pending")}
-          >
-            {t("students.pendingReview")}
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs"
+              onClick={() => setStatusFilter("pending")}
+            >
+              {t("students.pendingReview")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs btn-square"
+              aria-label={t("students.dismiss")}
+              title={t("students.dismiss")}
+              onClick={() => setPendingDismissed(true)}
+            >
+              <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
         </div>
       ) : null}
 
@@ -673,6 +706,7 @@ const EnrolledStudents = ({
         open={Boolean(selected)}
         org={org}
         classroom={classroom}
+        teamSlug={teamSlug}
         row={selected}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
