@@ -27,8 +27,9 @@ the gradebook still shows the PRE-regrade scores — there is an
 eventual-consistency window, by design (collecting here would race the
 still-running grade jobs).
 
-Roster-driven, mirroring `collect_scores.py`: the (student, assignment)
-pairs come from `<classroom>/students.csv` x `<classroom>/assignments.json`.
+Roster-driven (unlike collect_scores.py, which is team-driven): the
+(student, assignment) pairs come from `<classroom>/students.csv` x
+`<classroom>/assignments.json`.
 A single `OWNER_FILTER` narrows the fan-out to one repo (the per-row
 "Regrade" action in the web UI); empty means the whole assignment.
 
