@@ -1101,10 +1101,10 @@
     "errorTitle": "Could not accept assignment",
     "errorGeneric": "Something went wrong while accepting the assignment.",
     "errorRetryHint": "This is safe to retry — address anything noted above if you can, then use the button below. Some errors (rate limits, GitHub hiccups) just need a moment before retrying.",
-    "openRepository": "Open Repository",
+    "openRepository": "Open repository",
     "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",
-    "acceptButton": "Accept Assignment",
+    "acceptButton": "Accept assignment",
     "notFound": {
       "badge": "Assignment unavailable",
       "title": "Assignment not found",

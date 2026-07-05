@@ -5,7 +5,6 @@ import {
   GraduationCap,
   Languages,
   UserRound,
-  UsersRound,
 } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
@@ -772,6 +771,16 @@ const AcceptAssignmentPage = () => {
                       {t("accept.openRepository")}
                     </a>
 
+                    {assignmentData?.mode === "group" && (
+                      <button
+                        type="button"
+                        className="btn btn-outline w-full text-lg p-5"
+                        onClick={() => setCollaboratorsOpen(true)}
+                      >
+                        {t("accept.editCollaborators")}
+                      </button>
+                    )}
+
                     {org && classroom && (
                       <Link
                         to="/$org/$classroom"
@@ -784,18 +793,6 @@ const AcceptAssignmentPage = () => {
                   </motion.div>
                 )}
             </AnimatePresence>
-
-            {assignmentData?.mode === "group" &&
-              (acceptMutation.data || repoExistsAlready) && (
-                <button
-                  type="button"
-                  className="btn btn-outline w-full text-lg p-5"
-                  onClick={() => setCollaboratorsOpen(true)}
-                >
-                  <UsersRound aria-hidden="true" className="size-5" />
-                  {t("accept.editCollaborators")}
-                </button>
-              )}
 
             {!acceptMutation.data &&
               !repoExistsAlready &&
@@ -812,7 +809,7 @@ const AcceptAssignmentPage = () => {
                 </button>
               )}
 
-            {repoExistsAlready &&
+            {(repoExistsAlready || acceptMutation.isError) &&
               !acceptMutation.data &&
               !acceptMutation.isPending && (
                 <RepairToggle
