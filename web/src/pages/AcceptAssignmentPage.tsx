@@ -38,6 +38,8 @@ import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { LanguageDialog } from "@/components/LanguageDialog"
 import { EnterDiv } from "@/lib/motionComponents"
+import { collapseVariants } from "@/lib/motion"
+import { AnimatePresence, motion } from "motion/react"
 
 const initialsFor = (user: GitHubUser | null) => {
   const source = user?.name || user?.login || "?"
@@ -412,11 +414,6 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
         className="flex w-full items-center justify-between gap-3 p-4 text-left"
       >
         <span className="flex items-center gap-3">
-          {headerStatus !== "complete" && <StatusIcon status={headerStatus} />}
-          <span className="font-medium">{summary}</span>
-        </span>
-
-        <span className="flex items-center gap-2 text-sm text-base-content/70">
           <CircularProgress
             completed={completed}
             total={ACCEPT_STEP_ORDER.length}
@@ -426,13 +423,15 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
               total: ACCEPT_STEP_ORDER.length,
             })}
           />
-          <ChevronDown
-            aria-hidden="true"
-            className={`size-4 transition-transform ${
-              expanded ? "rotate-180" : ""
-            }`}
-          />
+          <span className="font-medium">{summary}</span>
         </span>
+
+        <ChevronDown
+          aria-hidden="true"
+          className={`size-4 shrink-0 text-base-content/70 transition-transform ${
+            expanded ? "rotate-180" : ""
+          }`}
+        />
       </button>
 
       {expanded && (
@@ -464,39 +463,51 @@ const fireConfetti = () => {
 
 // Collapsed-by-default repair section for an already-accepted repo. Tucks the
 // "Re-run setup" affordance behind a toggle so it doesn't compete with the
-// primary "Open Repository" action.
+// primary "Open Repository" action. Controlled so the parent can hide the
+// primary actions while it's open.
 const RepairToggle = ({
   disabled,
   onRerun,
+  open,
+  onToggle,
 }: {
   disabled: boolean
   onRerun: () => void
+  open: boolean
+  onToggle: (open: boolean) => void
 }) => {
   const { t } = useTranslation()
   return (
-    <details className="group rounded-xl border border-base-300 bg-base-200/40">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-medium">
+    <div className="rounded-xl border border-base-300 bg-base-200/40">
+      <button
+        type="button"
+        onClick={() => onToggle(!open)}
+        aria-expanded={open}
+        className="flex w-full cursor-pointer list-none items-center justify-between gap-3 p-4 text-sm font-medium"
+      >
         <span>{t("accept.repair.havingTrouble")}</span>
         <ChevronDown
           aria-hidden="true"
-          className="size-4 transition-transform group-open:rotate-180"
+          className={`size-4 transition-transform ${open ? "rotate-180" : ""}`}
         />
-      </summary>
+      </button>
 
-      <div className="border-t border-base-300 p-4">
-        <p className="text-sm text-base-content/70">
-          {t("accept.repair.hint")}
-        </p>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm mt-3 w-full"
-          disabled={disabled}
-          onClick={onRerun}
-        >
-          {t("accept.repair.rerun")}
-        </button>
-      </div>
-    </details>
+      {open && (
+        <div className="border-t border-base-300 p-4">
+          <p className="text-sm text-base-content/70">
+            {t("accept.repair.hint")}
+          </p>
+          <button
+            type="button"
+            className="btn btn-warning btn-sm mt-3 w-full"
+            disabled={disabled}
+            onClick={onRerun}
+          >
+            {t("accept.repair.rerun")}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -543,6 +554,7 @@ const AcceptAssignmentPage = () => {
 
   const [steps, setSteps] = useState<StepState>(initialStepState)
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
+  const [repairOpen, setRepairOpen] = useState(false)
   const runAccept = useSafeSubmit()
 
   // A pending invitee opened the accept link before becoming an active member.
@@ -734,29 +746,40 @@ const AcceptAssignmentPage = () => {
               </div>
             )}
 
-            {(acceptMutation.data || repoExistsAlready) && (
-              <a
-                className="btn btn-primary w-full text-xl p-6"
-                href={
-                  acceptMutation?.data?.repo.html_url ||
-                  `https://www.github.com/${org}/${checkedRepo?.name}`
-                }
-                target="_blank"
-                rel="noreferrer"
-              >
-                {t("accept.openRepository")}
-              </a>
-            )}
+            <AnimatePresence initial={false}>
+              {(acceptMutation.data || repoExistsAlready) && !repairOpen && (
+                <motion.div
+                  key="post-accept-actions"
+                  variants={collapseVariants}
+                  initial="initial"
+                  animate="animate"
+                  exit="exit"
+                  className="flex flex-col gap-4 overflow-hidden"
+                >
+                  <a
+                    className="btn btn-primary w-full text-lg p-5"
+                    href={
+                      acceptMutation?.data?.repo.html_url ||
+                      `https://www.github.com/${org}/${checkedRepo?.name}`
+                    }
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    {t("accept.openRepository")}
+                  </a>
 
-            {(acceptMutation.data || repoExistsAlready) && org && classroom && (
-              <Link
-                to="/$org/$classroom"
-                params={{ org, classroom }}
-                className="btn btn-outline w-full text-lg p-5"
-              >
-                {t("accept.goToClassroom")}
-              </Link>
-            )}
+                  {org && classroom && (
+                    <Link
+                      to="/$org/$classroom"
+                      params={{ org, classroom }}
+                      className="btn btn-outline w-full text-lg p-5"
+                    >
+                      {t("accept.goToClassroom")}
+                    </Link>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {assignmentData?.mode === "group" &&
               (acceptMutation.data || repoExistsAlready) && (
@@ -775,7 +798,7 @@ const AcceptAssignmentPage = () => {
               !acceptMutation.isPending && (
                 <button
                   type="button"
-                  className="btn btn-primary w-full text-xl p-6"
+                  className="btn btn-primary w-full text-lg p-5"
                   disabled={!username || acceptMutation.isPending}
                   onClick={() =>
                     void runAccept(() => acceptMutation.mutateAsync())
@@ -790,9 +813,12 @@ const AcceptAssignmentPage = () => {
               !acceptMutation.isPending && (
                 <RepairToggle
                   disabled={!username || acceptMutation.isPending}
-                  onRerun={() =>
+                  onRerun={() => {
+                    setRepairOpen(false)
                     void runAccept(() => acceptMutation.mutateAsync())
-                  }
+                  }}
+                  open={repairOpen}
+                  onToggle={setRepairOpen}
                 />
               )}
           </div>
