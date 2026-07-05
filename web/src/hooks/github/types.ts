@@ -68,6 +68,16 @@ export type GitHubRepo = {
   full_name: string
   private: boolean
   is_template?: boolean
+  // True when the repo is a fork. A fork's `generate` (template copy) can fail
+  // when its upstream/parent is private and inaccessible to the OAuth token, so
+  // the template pre-flight warns on a private fork.
+  fork?: boolean
+  // Present on a fork: the immediate parent repo it was forked from. Used to
+  // name the inaccessible upstream in the warning.
+  parent?: {
+    full_name: string
+    private: boolean
+  }
   default_branch: string
   visibility?: "public" | "private" | "internal"
   archived?: boolean

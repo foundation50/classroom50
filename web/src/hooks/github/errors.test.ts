@@ -144,3 +144,61 @@ describe("SAML SSO detection", () => {
     expect(parseSsoAuthorizationUrl("required; url=not-a-url")).toBeNull()
   })
 })
+
+describe("isScopeGap", () => {
+  const scopeError = (args: {
+    status?: number
+    accepted?: string | null
+    granted?: string | null
+  }) =>
+    new GitHubAPIError({
+      status: args.status ?? 403,
+      url: "https://api.github.com/x",
+      message: "Forbidden",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+      acceptedScopes: args.accepted ?? null,
+      oauthScopes: args.granted ?? null,
+    })
+
+  it("is true when the token holds none of the endpoint's accepted scopes", () => {
+    expect(
+      scopeError({ accepted: "repo, read:org", granted: "read:user" })
+        .isScopeGap,
+    ).toBe(true)
+  })
+
+  it("is false when the token holds an accepted scope (an org restriction, not a gap)", () => {
+    expect(
+      scopeError({ accepted: "repo", granted: "repo, read:org, workflow" })
+        .isScopeGap,
+    ).toBe(false)
+  })
+
+  it("is false when either scope header is absent (cannot prove a gap — fail closed)", () => {
+    expect(scopeError({ accepted: "repo", granted: null }).isScopeGap).toBe(
+      false,
+    )
+    expect(scopeError({ accepted: null, granted: "repo" }).isScopeGap).toBe(
+      false,
+    )
+  })
+
+  it("is false when the endpoint requires no scope (empty accepted set)", () => {
+    expect(scopeError({ accepted: "", granted: "" }).isScopeGap).toBe(false)
+  })
+
+  it("is false on non-403 statuses even with a scope mismatch", () => {
+    expect(
+      scopeError({ status: 404, accepted: "repo", granted: "read:user" })
+        .isScopeGap,
+    ).toBe(false)
+  })
+})

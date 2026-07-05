@@ -218,8 +218,21 @@ export type TemplateAccessVerification =
   // (e.g. a commitless template). resolveTemplate rejects this too.
   | { kind: "no-branch"; owner: string; repo: string }
   | { kind: "private-out-of-org"; owner: string; repo: string }
-  // Read denied (HTTP 403): the owning org likely restricts third-party apps.
-  | { kind: "restricted"; owner: string; repo: string; policyUrl: string }
+  // Read denied (HTTP 403): the owning org likely restricts third-party apps,
+  // OR the per-user OAuth-App grant for this org was never authorized, OR the
+  // token's scopes are stale. `message` carries GitHub's actual error text and
+  // `httpStatus` the status, so the note surfaces the real cause instead of a
+  // fixed assumption. `scopeGap` is true when GitHub reported required scopes
+  // (X-Accepted-OAuth-Scopes) the token appears to lack.
+  | {
+      kind: "restricted"
+      owner: string
+      repo: string
+      policyUrl: string
+      message: string
+      httpStatus: number
+      scopeGap: boolean
+    }
   // GitHub rate limit hit; the check is inconclusive and should be retried.
   | { kind: "rate-limited"; owner: string; repo: string }
   // Verification couldn't complete (network or unexpected error).
@@ -242,6 +255,20 @@ export type TemplateAccessVerification =
       branch: string
       visibility: "public" | "private"
       policyUrl: string
+    }
+  // A private fork used as a template. `generate` copies the fork's tree but can
+  // fail (403/404) when the fork's upstream parent is private and inaccessible
+  // to the OAuth token. `parentInOrg` distinguishes the two cases: a parent in
+  // the classroom org (Classroom 50 already has access — usually fine, advisory)
+  // vs. a cross-org private parent (likely to fail at generate — strongly
+  // discouraged). `parent` names the upstream when GitHub reported it.
+  | {
+      kind: "private-fork"
+      owner: string
+      repo: string
+      branch: string
+      parent?: string
+      parentInOrg: boolean
     }
 
 export async function verifyTemplateAccess(
@@ -277,6 +304,13 @@ export async function verifyTemplateAccess(
         owner: parsed.owner,
         repo: parsed.repo,
         policyUrl: githubOrgOAuthPolicyUrl(parsed.owner),
+        message: err.message,
+        httpStatus: err.status,
+        // A true scope gap is the token's granted scopes failing to satisfy the
+        // endpoint's required scopes — not the mere presence of the header, which
+        // GitHub sends on most 403s (an org restriction would otherwise be
+        // mislabeled as a scope problem). See GitHubAPIError.isScopeGap.
+        scopeGap: err.isScopeGap,
       }
     }
     return { kind: "unknown", owner: parsed.owner, repo: parsed.repo }
@@ -320,6 +354,28 @@ export async function verifyTemplateAccess(
     }
   }
 
+  // A private fork whose upstream parent is private: `generate` copies the
+  // fork's tree but can be blocked (403/404) when GitHub can't reach the private
+  // parent — common when the parent lives in another org. Warn before create so
+  // the teacher isn't surprised at accept. A public parent generates fine, so
+  // only warn when the parent is private (or its visibility is unknown).
+  if (repo.fork && repo.private && repo.parent?.private !== false) {
+    // The parent's owner decides risk: an in-org private parent is usually
+    // reachable (Classroom 50 has org access), a cross-org one usually is not.
+    const parentOwner = repo.parent?.full_name.split("/")[0]
+    const parentInOrg =
+      parentOwner !== undefined &&
+      parentOwner.toLowerCase() === org.toLowerCase()
+    return {
+      kind: "private-fork",
+      owner: parsed.owner,
+      repo: parsed.repo,
+      branch,
+      parent: repo.parent?.full_name,
+      parentInOrg,
+    }
+  }
+
   return {
     kind: "ok",
     owner: parsed.owner,
@@ -334,8 +390,8 @@ export async function verifyTemplateAccess(
 // repo, an omitted @branch falls back to its default, and an out-of-org private
 // template is rejected (students could never be granted access). Returns the
 // resolved block plus whether it's an in-org private template needing a team
-// read grant.
-async function resolveTemplate(
+// read grant. Exported for tests.
+export async function resolveTemplate(
   client: GitHubClient,
   org: string,
   parsed: ParsedTemplate,
@@ -367,6 +423,26 @@ async function resolveTemplate(
     throw new Error(
       `Template "${parsed.owner}/${parsed.repo}" is private and outside ${org} — students can't be granted access, so accept would fail. Copy it into ${org} and reference the copy, or make the template public.`,
     )
+  }
+
+  // Block a private fork whose upstream parent is private and cross-org (or of
+  // unknown visibility): GitHub's template generate reaches into the private
+  // upstream, which Classroom 50 can't access across orgs, so accept would fail.
+  // In-org private forks are allowed (the upstream is reachable). Mirrors the
+  // red "private-fork" pre-flight verdict. A public parent generates fine.
+  if (repo.fork && repo.private && repo.parent?.private !== false) {
+    const parentOwner = repo.parent?.full_name.split("/")[0]
+    const parentInOrg =
+      parentOwner !== undefined &&
+      parentOwner.toLowerCase() === org.toLowerCase()
+    if (!parentInOrg) {
+      const parentDesc = repo.parent?.full_name
+        ? `a private fork of ${repo.parent.full_name} in another org`
+        : `a private fork of a private upstream`
+      throw new Error(
+        `Template "${parsed.owner}/${parsed.repo}" is ${parentDesc} — copying it would fail because the private upstream isn't accessible to Classroom 50. Create a fresh (non-fork) template repo in ${org} and copy the fork's contents into it, then reference that.`,
+      )
+    }
   }
 
   return {
@@ -917,8 +993,18 @@ export async function createAssignmentRepo(params: {
       if (err.isForbidden || err.isNotFound) {
         const inOrg = templateOwner.toLowerCase() === owner.toLowerCase()
         throw inOrg
-          ? inOrgTemplateError(templateOwner, cleanTemplateRepo, err.status)
-          : outOfOrgTemplateError(templateOwner, cleanTemplateRepo, err.status)
+          ? inOrgTemplateError(
+              templateOwner,
+              cleanTemplateRepo,
+              err.status,
+              err.message,
+            )
+          : outOfOrgTemplateError(
+              templateOwner,
+              cleanTemplateRepo,
+              err.status,
+              err.message,
+            )
       }
 
       // Any other status is a real failure too — don't mask it with an empty

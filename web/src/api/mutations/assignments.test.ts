@@ -5,6 +5,8 @@ import {
   editAssignment,
   nextAvailableSlug,
   preserveUnmanagedAssignmentKeys,
+  resolveTemplate,
+  verifyTemplateAccess,
 } from "./assignments"
 import type { GitHubClient } from "@/hooks/github/client"
 import { GitHubAPIError } from "@/hooks/github/errors"
@@ -395,5 +397,336 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.name).toBe("Homework 1 (edited)")
     // Cleared managed key is not resurrected from the stale existing entry.
     expect(edited.due).toBeUndefined()
+  })
+})
+
+describe("verifyTemplateAccess", () => {
+  const ORG = "cs50"
+
+  const emptyRateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+
+  // A GitHubClient whose only method that matters here is `request`, which
+  // returns the given repo object or throws the given error for the repo read.
+  function clientReturning(result: unknown | (() => never)): GitHubClient {
+    const request = vi.fn(async () => {
+      if (typeof result === "function") {
+        ;(result as () => never)()
+      }
+      return result
+    })
+    return { request } as unknown as GitHubClient
+  }
+
+  function forbidden(
+    message: string,
+    scopes?: { accepted?: string; granted?: string },
+  ) {
+    return () => {
+      throw new GitHubAPIError({
+        status: 403,
+        url: `https://api.github.com/repos/${ORG}/tmpl`,
+        message,
+        body: { message },
+        rateLimit: emptyRateLimit,
+        acceptedScopes: scopes?.accepted ?? null,
+        oauthScopes: scopes?.granted ?? null,
+      })
+    }
+  }
+
+  it("returns ok for a public in-org template", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: true,
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("ok")
+    if (result.kind === "ok") {
+      expect(result.branch).toBe("main")
+      expect(result.inOrg).toBe(true)
+    }
+  })
+
+  it("returns not-template when is_template is false", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: false,
+      is_template: false,
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("not-template")
+  })
+
+  it("returns not-visible when the repo read 404s (getRepo -> null)", async () => {
+    const client = clientReturning(() => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: `https://api.github.com/repos/${ORG}/tmpl`,
+        message: "Not Found",
+        body: null,
+        rateLimit: emptyRateLimit,
+      })
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("not-visible")
+  })
+
+  it("carries GitHub's message and status on a plain 403 (restricted, no scope gap)", async () => {
+    const ghMessage =
+      "Although you appear to have the correct authorization credentials, the `cs50` organization has an IP allow list enabled"
+    const client = clientReturning(forbidden(ghMessage))
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("restricted")
+    if (result.kind === "restricted") {
+      expect(result.message).toBe(ghMessage)
+      expect(result.httpStatus).toBe(403)
+      expect(result.scopeGap).toBe(false)
+    }
+  })
+
+  it("flags scopeGap when the token's scopes don't satisfy the endpoint's required scopes", async () => {
+    const client = clientReturning(
+      // Endpoint requires repo/read:org; token holds neither -> real gap.
+      forbidden("Resource not accessible by integration", {
+        accepted: "repo, read:org",
+        granted: "read:user",
+      }),
+    )
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("restricted")
+    if (result.kind === "restricted") {
+      expect(result.scopeGap).toBe(true)
+    }
+  })
+
+  it("does NOT flag scopeGap for an org-restriction 403 that still carries X-Accepted-OAuth-Scopes the token satisfies", async () => {
+    const client = clientReturning(
+      // GitHub sends X-Accepted-OAuth-Scopes on most 403s; the token DOES hold
+      // an accepted scope, so this is an org restriction, not a scope gap.
+      forbidden(
+        "Although you appear to have the correct authorization credentials, the `cs50` organization has enabled OAuth App access restrictions",
+        { accepted: "repo", granted: "repo, read:org, workflow" },
+      ),
+    )
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("restricted")
+    if (result.kind === "restricted") {
+      expect(result.scopeGap).toBe(false)
+    }
+  })
+
+  it("returns rate-limited (not restricted) when a 403 is a rate limit", async () => {
+    const client = clientReturning(() => {
+      throw new GitHubAPIError({
+        status: 403,
+        url: `https://api.github.com/repos/${ORG}/tmpl`,
+        message: "API rate limit exceeded",
+        body: null,
+        rateLimit: { ...emptyRateLimit, remaining: 0 },
+      })
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("rate-limited")
+  })
+
+  it("warns private-fork (cross-org) for an in-org private fork of a private upstream in another org", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/secret-upstream", private: true },
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("private-fork")
+    if (result.kind === "private-fork") {
+      expect(result.parent).toBe("other-org/secret-upstream")
+      expect(result.parentInOrg).toBe(false)
+      expect(result.branch).toBe("main")
+    }
+  })
+
+  it("marks parentInOrg true when the private fork's upstream is in the classroom org", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: `${ORG}/upstream`, private: true },
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("private-fork")
+    if (result.kind === "private-fork") {
+      expect(result.parentInOrg).toBe(true)
+    }
+  })
+
+  it("stays ok for a private fork whose upstream parent is public", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/public-upstream", private: false },
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    // A public parent generates fine, so no fork warning.
+    expect(result.kind).toBe("ok")
+  })
+
+  it("warns private-fork with no named parent when GitHub omits the parent object", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      // parent omitted -> unknown upstream visibility, still warn (fail closed).
+      default_branch: "main",
+    })
+
+    const result = await verifyTemplateAccess(client, ORG, "tmpl")
+
+    expect(result.kind).toBe("private-fork")
+    if (result.kind === "private-fork") {
+      expect(result.parent).toBeUndefined()
+      // Unknown upstream is treated as the higher-risk cross-org case.
+      expect(result.parentInOrg).toBe(false)
+    }
+  })
+
+  it("short-circuits to private-out-of-org (not private-fork) for an out-of-org private fork", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: "other-org/tmpl",
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "third-org/secret-upstream", private: true },
+      default_branch: "main",
+    })
+
+    // Reference points at another org, so the private-out-of-org guard must fire
+    // before the private-fork branch.
+    const result = await verifyTemplateAccess(client, ORG, "other-org/tmpl")
+
+    expect(result.kind).toBe("private-out-of-org")
+  })
+})
+
+describe("resolveTemplate (create/edit blocking path)", () => {
+  const ORG = "cs50"
+  const ref = (owner: string, repo: string) => ({ owner, repo })
+
+  function clientReturning(result: unknown): GitHubClient {
+    const request = vi.fn(async () => result)
+    return { request } as unknown as GitHubClient
+  }
+
+  it("blocks a cross-org private fork (private upstream in another org)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/secret-upstream", private: true },
+      default_branch: "main",
+    })
+
+    await expect(
+      resolveTemplate(client, ORG, ref(ORG, "tmpl")),
+    ).rejects.toThrow(/other-org\/secret-upstream in another org/)
+  })
+
+  it("blocks a private fork with an unknown (absent) parent", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      default_branch: "main",
+    })
+
+    await expect(
+      resolveTemplate(client, ORG, ref(ORG, "tmpl")),
+    ).rejects.toThrow(/private upstream isn't accessible/)
+  })
+
+  it("allows an in-org private fork (upstream reachable in the same org)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: `${ORG}/upstream`, private: true },
+      default_branch: "main",
+    })
+
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template).toEqual({
+      owner: ORG,
+      repo: "tmpl",
+      branch: "main",
+    })
+    // In-org private template still needs the team read grant.
+    expect(result.needsTeamGrant).toBe(true)
+  })
+
+  it("allows a private fork of a public upstream (generate works)", async () => {
+    const client = clientReturning({
+      name: "tmpl",
+      full_name: `${ORG}/tmpl`,
+      private: true,
+      is_template: true,
+      fork: true,
+      parent: { full_name: "other-org/public-upstream", private: false },
+      default_branch: "main",
+    })
+
+    const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
+
+    expect(result.template?.repo).toBe("tmpl")
   })
 })

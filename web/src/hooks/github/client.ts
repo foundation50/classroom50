@@ -104,6 +104,8 @@ export function createGitHubClient(args: {
         body,
         rateLimit,
         ssoHeader: res.headers.get("x-github-sso"),
+        acceptedScopes: res.headers.get("x-accepted-oauth-scopes"),
+        oauthScopes: res.headers.get("x-oauth-scopes"),
       })
     }
 

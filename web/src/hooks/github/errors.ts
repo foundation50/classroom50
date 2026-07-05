@@ -17,6 +17,17 @@ export class GitHubAPIError extends Error {
   // live SAML SSO session for the org/enterprise. `null` when the header was
   // absent. See parseSsoAuthorizationUrl for extracting the authorization URL.
   ssoHeader: string | null
+  // Raw X-Accepted-OAuth-Scopes response header, when present. On a 403 caused
+  // by a scope gap, GitHub reports the scopes the endpoint *requires* here (vs
+  // X-OAuth-Scopes, the scopes the token actually has). `null` when absent.
+  // Used with `oauthScopes` to distinguish a real scope gap from an org
+  // restriction — presence alone is NOT a gap (GitHub sends this header on most
+  // responses); a gap is `acceptedScopes` not satisfied by `oauthScopes`.
+  acceptedScopes: string | null
+  // Raw X-OAuth-Scopes response header (the scopes the token actually holds),
+  // when present. `null` for a fine-grained PAT or when absent. Compared against
+  // `acceptedScopes` by `isScopeGap`.
+  oauthScopes: string | null
 
   constructor(args: {
     status: number
@@ -25,6 +36,8 @@ export class GitHubAPIError extends Error {
     body: unknown
     rateLimit: GitHubRateLimit
     ssoHeader?: string | null
+    acceptedScopes?: string | null
+    oauthScopes?: string | null
   }) {
     super(args.message)
     this.name = "GitHubAPIError"
@@ -33,6 +46,8 @@ export class GitHubAPIError extends Error {
     this.body = args.body
     this.rateLimit = args.rateLimit
     this.ssoHeader = args.ssoHeader ?? null
+    this.acceptedScopes = args.acceptedScopes ?? null
+    this.oauthScopes = args.oauthScopes ?? null
   }
 
   get isNotFound() {
@@ -63,6 +78,30 @@ export class GitHubAPIError extends Error {
   // copied the header onto) is NOT an SSO gate and must not misroute the user.
   get isSsoRequired() {
     return this.status === 403 && this.ssoHeader !== null
+  }
+
+  // A 403 caused by the token missing a scope the endpoint requires — as opposed
+  // to an org restriction, SAML gate, or rate limit (all also 403). GitHub sends
+  // X-Accepted-OAuth-Scopes on most responses, so its mere presence is NOT a gap;
+  // a real gap is when the accepted set has a requirement the token's granted
+  // scopes (X-OAuth-Scopes) don't satisfy. When either header is absent we cannot
+  // prove a gap, so this is false (fail closed — never mislabel a restriction as
+  // a scope problem). An empty required set ("" — endpoint needs no scope) is
+  // never a gap.
+  get isScopeGap() {
+    if (this.status !== 403) return false
+    if (this.acceptedScopes === null || this.oauthScopes === null) return false
+    const parse = (h: string) =>
+      h
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+    const required = parse(this.acceptedScopes)
+    if (required.length === 0) return false
+    const granted = new Set(parse(this.oauthScopes))
+    // GitHub treats X-Accepted-OAuth-Scopes as "any one of these satisfies the
+    // endpoint", so a gap is only when the token holds NONE of the accepted scopes.
+    return !required.some((scope) => granted.has(scope))
   }
 
   // The GitHub SSO authorization URL to send the user to, if the header carried

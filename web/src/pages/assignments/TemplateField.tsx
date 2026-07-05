@@ -225,6 +225,38 @@ const TemplateVerificationNote = ({
         </Note>
       )
 
+    case "private-fork": {
+      const label = verification.parent
+        ? verification.parentInOrg
+          ? t("assignments.template.privateForkInOrg_1", {
+              owner: verification.owner,
+              repo: verification.repo,
+              parent: verification.parent,
+            })
+          : t("assignments.template.privateForkCrossOrg_1", {
+              owner: verification.owner,
+              repo: verification.repo,
+              parent: verification.parent,
+            })
+        : t("assignments.template.privateForkNoParent_1", {
+            owner: verification.owner,
+            repo: verification.repo,
+          })
+      // In-org parent is usually reachable (advisory, amber); a cross-org or
+      // unknown parent is likely to fail at generate (error, red).
+      return verification.parentInOrg ? (
+        <Note tone="warning" icon={Info}>
+          {label} <Code>{verification.branch}</Code>
+          {t("assignments.template.privateForkInOrg_2")}
+        </Note>
+      ) : (
+        <Note tone="error" icon={AlertTriangle}>
+          {label} <Code>{verification.branch}</Code>
+          {t("assignments.template.privateForkCrossOrg_2")}
+        </Note>
+      )
+    }
+
     case "invalid":
       return (
         <Note tone="error" icon={AlertTriangle}>
@@ -260,10 +292,21 @@ const TemplateVerificationNote = ({
           icon={AlertTriangle}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          {t("assignments.template.restricted", {
-            owner: verification.owner,
-            repo: verification.repo,
-          })}
+          {verification.scopeGap
+            ? t("assignments.template.restrictedScope", {
+                owner: verification.owner,
+                repo: verification.repo,
+              })
+            : t("assignments.template.restricted", {
+                owner: verification.owner,
+                repo: verification.repo,
+              })}
+          <span className="mt-1 block text-xs text-base-content/70">
+            {t("assignments.template.githubSaid", {
+              status: verification.httpStatus,
+            })}{" "}
+            <span className="break-words italic">{verification.message}</span>
+          </span>
         </Note>
       )
 
