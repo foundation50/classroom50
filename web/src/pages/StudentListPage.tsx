@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { ExternalLink } from "lucide-react"
 
 import AddStudent from "@/pages/students/AddStudent"
 import Breadcrumb from "@/components/breadcrumb"
@@ -12,10 +11,10 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import EnrolledStudents from "@/pages/students/EnrolledStudents"
 import UploadRoster from "@/pages/students/UploadRoster"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
+import { GitHubLink } from "@/components/GitHubLink"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import useGetStudents, { useUpdateRosterCache } from "@/hooks/useGetStudents"
-import useGetClassroom from "@/hooks/useGetClassroom"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -33,7 +32,6 @@ const StudentListContent = ({
 }) => {
   const { t } = useTranslation()
   const { students } = useGetStudents(org, classroom)
-  const { data: classData } = useGetClassroom(org, classroom)
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
@@ -52,27 +50,24 @@ const StudentListContent = ({
   } = useTeamRoster(org, classroom, students)
   const countReady = !rosterLoading && !rosterError
   const enrolledCount = counts.enrolled
-  const className =
-    classData?.name || classData?.short_name || t("students.untitledClass")
 
   return (
     <>
-      <div className="pt-8 pb-10">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-8 pb-10">
         <h1 className="text-lg font-bold">{t("nav.students")}</h1>
-        <h3 className="text-base-content/70">
+        <span className="text-sm text-base-content/70">
           {countReady
-            ? t("students.enrolledIn", { count: enrolledCount, className })
-            : t("students.enrolledInLoading", { className })}
-        </h3>
-        <a
+            ? t("students.enrolledCount", { count: enrolledCount })
+            : t("students.enrolledCountLoading")}
+        </span>
+        <span aria-hidden="true" className="text-base-content/30">
+          ·
+        </span>
+        <GitHubLink
           href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
-          target="_blank"
-          rel="noreferrer"
-          className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-        >
-          <ExternalLink aria-hidden="true" className="size-3.5" />
-          {t("students.viewCsvOnGitHub")}
-        </a>
+          label={t("students.viewCsvOnGitHub")}
+          title={t("students.viewCsvOnGitHub")}
+        />
       </div>
 
       <EnrolledStudents
