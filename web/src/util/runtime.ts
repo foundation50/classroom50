@@ -36,16 +36,16 @@ export const RUNTIME_LANGUAGE_META: Record<
 > = {
   python: {
     label: "Python",
-    placeholder: "3.12",
+    placeholder: "3.14",
     versions: ["3.14", "3.13", "3.12", "3.11"],
   },
-  node: { label: "Node.js", placeholder: "20", versions: ["26", "24", "22"] },
+  node: { label: "Node.js", placeholder: "26", versions: ["26", "24", "22"] },
   java: {
     label: "Java",
-    placeholder: "21",
+    placeholder: "25",
     versions: ["25", "21", "17", "11"],
   },
-  go: { label: "Go", placeholder: "1.23", versions: ["1.26", "1.25"] },
+  go: { label: "Go", placeholder: "1.26", versions: ["1.26", "1.25"] },
 }
 
 // Split apt packages on commas/whitespace; tolerates an array. Order preserved.

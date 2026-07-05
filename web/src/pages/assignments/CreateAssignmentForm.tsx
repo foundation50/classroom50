@@ -304,6 +304,45 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
   </form.Subscribe>
 )
 
+// A bold field label with an optional help affordance: a question-mark icon
+// that reveals detailed guidance on hover/focus (DaisyUI tooltip, theme-aware).
+// Keeps the label short so the form stays scannable while the "why/how" moves
+// into the tooltip. `help` is the tooltip text; `htmlFor` ties the label to its
+// control. The icon is a real focusable button (keyboard/screen-reader
+// reachable) carrying the same text as its accessible name.
+const FieldLabel = ({
+  htmlFor,
+  label,
+  help,
+  required,
+}: {
+  htmlFor?: string
+  label: string
+  help?: string
+  required?: boolean
+}) => (
+  <div className="mb-1.5 flex items-center gap-1.5">
+    <label htmlFor={htmlFor} className="label font-bold">
+      {label}
+      {required ? <span className="text-error">*</span> : null}
+    </label>
+    {help ? (
+      <span
+        className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
+        data-tip={help}
+      >
+        <button
+          type="button"
+          aria-label={help}
+          className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
+        >
+          <HelpCircle aria-hidden="true" className="size-4" />
+        </button>
+      </span>
+    ) : null}
+  </div>
+)
+
 // A language toolchain version input (python/node/java/go). A themed combobox:
 // a text input with a chevron that opens a DaisyUI dropdown of the actively-
 // supported versions, but the input stays free-text so a teacher can type any
@@ -331,12 +370,13 @@ const LanguageVersionField = ({
           (document.activeElement as HTMLElement | null)?.blur()
         return (
           <div>
-            <label
+            <FieldLabel
               htmlFor={field.name}
-              className="label block font-bold mb-1.5"
-            >
-              {meta.label}
-            </label>
+              label={meta.label}
+              help={t("assignments.form.runtime.versionTip", {
+                language: meta.label,
+              })}
+            />
             <div className="dropdown w-full max-w-xs">
               <div className="join w-full">
                 <input
@@ -447,9 +487,11 @@ const RunnerField = ({ field, org }: { field: StringField; org?: string }) => {
 
   return (
     <div>
-      <label htmlFor={field.name} className="label block font-bold mb-1.5">
-        {t("assignments.form.runner.label")}
-      </label>
+      <FieldLabel
+        htmlFor={field.name}
+        label={t("assignments.form.runner.label")}
+        help={t("assignments.form.runner.tip")}
+      />
       <input
         id={field.name}
         name={field.name}
@@ -492,12 +534,11 @@ const ContainerFields = ({ form }: { form: AssignmentForm }) => {
       <form.Field name="container_image">
         {(field) => (
           <div>
-            <label
+            <FieldLabel
               htmlFor={field.name}
-              className="label block font-bold mb-1.5"
-            >
-              {t("assignments.form.dockerImage")}
-            </label>
+              label={t("assignments.form.dockerImage")}
+              help={t("assignments.form.dockerImageTip")}
+            />
             <input
               id={field.name}
               name={field.name}
@@ -508,9 +549,6 @@ const ContainerFields = ({ form }: { form: AssignmentForm }) => {
               onBlur={normalizeOnBlur(field)}
               onChange={(e) => field.handleChange(e.target.value)}
             />
-            <p className="mt-1.5 text-sm text-base-content/70">
-              {t("assignments.form.dockerImageHelp")}
-            </p>
           </div>
         )}
       </form.Field>
@@ -518,9 +556,11 @@ const ContainerFields = ({ form }: { form: AssignmentForm }) => {
       <form.Field name="container_user">
         {(field) => (
           <div>
-            <label htmlFor={field.name} className="block font-bold mb-1.5">
-              {t("assignments.form.containerUser")}
-            </label>
+            <FieldLabel
+              htmlFor={field.name}
+              label={t("assignments.form.containerUser")}
+              help={t("assignments.form.containerUserTip")}
+            />
             <input
               id={field.name}
               name={field.name}
@@ -531,10 +571,6 @@ const ContainerFields = ({ form }: { form: AssignmentForm }) => {
               onBlur={normalizeOnBlur(field)}
               onChange={(e) => field.handleChange(e.target.value)}
             />
-            <p className="mt-1.5 text-sm text-base-content/70">
-              {t("assignments.form.containerUserHelp_prefix")} <code>root</code>
-              {t("assignments.form.containerUserHelp_suffix")}
-            </p>
           </div>
         )}
       </form.Field>
@@ -553,12 +589,11 @@ const AptField = ({ form }: { form: AssignmentForm }) => {
         const error = field.state.meta.errors[0] as string | undefined
         return (
           <div className="mt-4">
-            <label
+            <FieldLabel
               htmlFor={field.name}
-              className="label block font-bold mb-1.5"
-            >
-              {t("assignments.form.runtime.aptLabel")}
-            </label>
+              label={t("assignments.form.runtime.aptLabel")}
+              help={t("assignments.form.runtime.aptTip")}
+            />
             <input
               id={field.name}
               name={field.name}
@@ -573,9 +608,6 @@ const AptField = ({ form }: { form: AssignmentForm }) => {
               )}
               onChange={(e) => field.handleChange(e.target.value)}
             />
-            <p className="mt-1.5 text-sm text-base-content/70">
-              {t("assignments.form.runtime.aptHelp")}
-            </p>
             {error ? (
               <p
                 role="alert"
@@ -1186,12 +1218,10 @@ const CreateAssignmentForm = ({
               </form.Subscribe>
 
               <div className="mt-4">
-                <h4 className="label font-bold mb-1.5">
-                  {t("assignments.form.runtime.languagesHeading")}
-                </h4>
-                <p className="mb-3 text-sm text-base-content/70">
-                  {t("assignments.form.runtime.languagesHelp")}
-                </p>
+                <FieldLabel
+                  label={t("assignments.form.runtime.languagesHeading")}
+                  help={t("assignments.form.runtime.languagesTip")}
+                />
                 <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
                   {RUNTIME_LANGUAGES.map((language) => (
                     <LanguageVersionField
@@ -1212,12 +1242,11 @@ const CreateAssignmentForm = ({
               <form.Field name="setup_command">
                 {(field) => (
                   <div className="mt-4">
-                    <label
+                    <FieldLabel
                       htmlFor={field.name}
-                      className="label block font-bold mb-1.5"
-                    >
-                      {t("assignments.form.setupCommand")}
-                    </label>
+                      label={t("assignments.form.setupCommand")}
+                      help={t("assignments.form.setupCommandTip")}
+                    />
                     <input
                       id={field.name}
                       name={field.name}
@@ -1230,9 +1259,6 @@ const CreateAssignmentForm = ({
                       onBlur={normalizeOnBlur(field)}
                       onChange={(e) => field.handleChange(e.target.value)}
                     />
-                    <p className="mt-1.5 text-sm text-base-content/70">
-                      {t("assignments.form.setupCommandHelp")}
-                    </p>
                   </div>
                 )}
               </form.Field>
@@ -1243,12 +1269,17 @@ const CreateAssignmentForm = ({
                   const error = field.state.meta.errors[0] as string | undefined
                   return (
                     <div className="mt-4">
-                      <label
+                      <FieldLabel
                         htmlFor={field.name}
-                        className="label block font-bold mb-1.5"
-                      >
-                        {t("assignments.form.allowedFiles")}
-                      </label>
+                        label={t("assignments.form.allowedFiles")}
+                        help={t("assignments.form.allowedFilesTip", {
+                          gitignore: ".gitignore",
+                          bang: "!",
+                          star: "*",
+                          example: "!hello.py",
+                          result: "hello.py",
+                        })}
+                      />
                       <textarea
                         id={field.name}
                         name={field.name}
@@ -1260,15 +1291,6 @@ const CreateAssignmentForm = ({
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
-                      <p className="mt-1.5 text-sm text-base-content/70">
-                        {t("assignments.form.allowedFilesHelp", {
-                          gitignore: ".gitignore",
-                          bang: "!",
-                          star: "*",
-                          example: "!hello.py",
-                          result: "hello.py",
-                        })}
-                      </p>
                       {error ? (
                         <p
                           role="alert"
@@ -1297,18 +1319,31 @@ const CreateAssignmentForm = ({
               <form.Field name="pass_threshold_enabled">
                 {(toggle) => (
                   <div className="mt-4">
-                    <label className="label cursor-pointer justify-start gap-3 p-0 font-bold">
-                      <input
-                        type="checkbox"
-                        className="toggle toggle-sm"
-                        checked={toggle.state.value}
-                        onChange={(e) => toggle.handleChange(e.target.checked)}
-                      />
-                      {t("assignments.form.passThresholdToggle")}
-                    </label>
-                    <p className="mt-1.5 text-sm text-base-content/70">
-                      {t("assignments.form.passThresholdHelp")}
-                    </p>
+                    <div className="flex items-center gap-1.5">
+                      <label className="label cursor-pointer justify-start gap-3 p-0 font-bold">
+                        <input
+                          type="checkbox"
+                          className="toggle toggle-sm"
+                          checked={toggle.state.value}
+                          onChange={(e) =>
+                            toggle.handleChange(e.target.checked)
+                          }
+                        />
+                        {t("assignments.form.passThresholdToggle")}
+                      </label>
+                      <span
+                        className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
+                        data-tip={t("assignments.form.passThresholdTip")}
+                      >
+                        <button
+                          type="button"
+                          aria-label={t("assignments.form.passThresholdTip")}
+                          className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
+                        >
+                          <HelpCircle aria-hidden="true" className="size-4" />
+                        </button>
+                      </span>
+                    </div>
 
                     {toggle.state.value && (
                       <form.Field name="pass_threshold">

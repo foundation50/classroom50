@@ -92,6 +92,11 @@ const EditAssignmentForm = ({
               runs_on: values.runs_on,
               container_image: values.container_image,
               container_user: values.container_user,
+              runtime_python: values.runtime_python,
+              runtime_node: values.runtime_node,
+              runtime_java: values.runtime_java,
+              runtime_go: values.runtime_go,
+              runtime_apt: values.runtime_apt,
               setup_command: values.setup_command,
               allowed_files: values.allowed_files,
               pass_threshold: values.pass_threshold_enabled
