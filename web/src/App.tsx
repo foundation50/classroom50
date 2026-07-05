@@ -6,15 +6,18 @@ import router from "./router"
 import { Spinner } from "@/components/Spinner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 
+const BASE_PATH = import.meta.env.BASE_URL.replace(/\/$/, "")
+
 // Public auth screens; everything else (incl. the app home "/") is authed and
 // must bounce to /login when the session ends. When a session ends mid-flight
 // the router keeps the authed route mounted for a frame — the subtree re-renders
 // against a now-null GitHub client and useGitHubClient() throws — so App renders
 // a redirect state instead (see sessionEndedOnAuthedRoute).
 function isAuthedPath(pathname: string): boolean {
-  const base = import.meta.env.BASE_URL.replace(/\/$/, "")
   const path =
-    base && pathname.startsWith(base) ? pathname.slice(base.length) : pathname
+    BASE_PATH && pathname.startsWith(BASE_PATH)
+      ? pathname.slice(BASE_PATH.length)
+      : pathname
   return path !== "/login" && path !== "/auth" && path !== "/auth/"
 }
 
@@ -44,8 +47,7 @@ export function App() {
     // Hard-redirect fallback: a rejected navigate() would leave the spinner up
     // forever (the effect won't re-run — its only dep is unchanged).
     router.navigate({ to: "/login" }).catch(() => {
-      const base = import.meta.env.BASE_URL.replace(/\/$/, "")
-      window.location.assign(`${base}/login`)
+      window.location.assign(`${BASE_PATH}/login`)
     })
   }, [sessionEndedOnAuthedRoute])
 
