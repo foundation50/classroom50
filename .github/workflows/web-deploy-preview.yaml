@@ -4,7 +4,6 @@ name: web Deploy to Preview (preview.classroom50.org)
 # (foundation50/classroom50-web-preview), whose GitHub Pages serves
 # preview.classroom50.org. Runs on every web-affecting push to `main`, so
 # day-to-day work merged into main is continuously deployed to the preview site.
-# Manual runs are available via the Actions tab.
 #
 # Branch model: single trunk. `main` is the default/integration branch — feature
 # PRs merge into it (squash) and each merge deploys here to preview. Production
@@ -41,7 +40,11 @@ concurrency:
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Covers build + test + publish plus the wait on the preview repo's Pages
+    # deploy (which can queue behind its own `pages` concurrency group).
+    timeout-minutes: 20
+    env:
+      PREVIEW_REPOSITORY: foundation50/classroom50-web-preview
     defaults:
       run:
         working-directory: web
@@ -79,6 +82,18 @@ jobs:
       - name: Write CNAME for preview domain
         run: echo "preview.classroom50.org" > dist/CNAME
 
+      # Fail before mutating build when private-repo 404s mask token scope bugs.
+      - name: Verify preview repo access
+        env:
+          GH_TOKEN: ${{ secrets.CLASSROOM50_PREVIEW_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+          if ! gh api "repos/$PREVIEW_REPOSITORY" -q .name >/dev/null; then
+            echo "CLASSROOM50_PREVIEW_DEPLOY_TOKEN cannot access $PREVIEW_REPOSITORY." >&2
+            echo "It needs Actions read+write on that repo (a 404 here usually means missing access, not a missing repo)." >&2
+            exit 1
+          fi
+
       # Publish dist/ to the preview repo's `build` branch. A separate branch
       # (not `main`) is required: force_orphan recreates the branch with only
       # these files, which would delete the preview repo's deploy workflow. Uses
@@ -87,7 +102,7 @@ jobs:
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
           deploy_key: ${{ secrets.PREVIEW_DEPLOY_KEY }}
-          external_repository: foundation50/classroom50-web-preview
+          external_repository: ${{ env.PREVIEW_REPOSITORY }}
           publish_branch: build
           # Repo-root-relative; the build wrote to web/dist.
           publish_dir: ./web/dist
@@ -104,9 +119,21 @@ jobs:
         run: |
           set -euo pipefail
 
-          repo="foundation50/classroom50-web-preview"
+          repo="$PREVIEW_REPOSITORY"
           workflow="deploy-pages.yaml"
-          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          # `gh workflow run` returns no run id, so correlate by databaseId: the
+          # dispatched run is the lowest id created after this cursor. A
+          # timestamp window can't distinguish two dispatches in the same second.
+          before="$(
+            gh run list \
+              --repo "$repo" \
+              --workflow "$workflow" \
+              --event workflow_dispatch \
+              --json databaseId \
+              --jq '[.[].databaseId] | max // 0' \
+              --limit 20
+          )"
 
           gh workflow run "$workflow" --repo "$repo" --ref main
 
@@ -117,9 +144,9 @@ jobs:
                 --repo "$repo" \
                 --workflow "$workflow" \
                 --event workflow_dispatch \
-                --json databaseId,createdAt \
-                --jq 'map(select(.createdAt >= "'"$started_at"'")) | first | .databaseId // ""' \
-                --limit 10
+                --json databaseId \
+                --jq "map(select(.databaseId > $before)) | min_by(.databaseId) | .databaseId // \"\"" \
+                --limit 20
             )"
 
             if [ -n "$run_id" ]; then
@@ -134,4 +161,12 @@ jobs:
             exit 1
           fi
 
-          gh run watch "$run_id" --repo "$repo" --exit-status
+          # A failure here is the *target* deploy failing; the new artifact is
+          # already on `build` but the live site still serves the previous
+          # deploy. Surface the target run so the red X is self-service.
+          if ! gh run watch "$run_id" --repo "$repo" --exit-status; then
+            url="$(gh run view "$run_id" --repo "$repo" --json url --jq .url)"
+            echo "Preview Pages deploy failed: $url" >&2
+            echo "The build branch holds the new artifact but the site still serves the previous deploy; re-run to retry." >&2
+            exit 1
+          fi
