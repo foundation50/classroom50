@@ -18,6 +18,13 @@ import { studentRepoName } from "@/util/studentRepo"
 import { classroomPagesSegment } from "@/util/secret"
 import { prefixCommit } from "@/util/commit"
 import { parseRunnerLabels } from "@/util/runners"
+import {
+  RUNTIME_LANGUAGES,
+  type RuntimeLanguage,
+  parseAptPackages,
+  validateAptPackages,
+  validateLanguageVersion,
+} from "@/util/runtime"
 import { parseAllowedFiles, validateAllowedFiles } from "@/util/allowedFiles"
 import {
   addRepositoryToTeam,
@@ -763,6 +770,38 @@ async function buildAssignmentEntry(
       runtime.container.user = containerUser
     }
   }
+  // Language toolchains (setup-X versions) and apt packages, validated against
+  // the same patterns the CLI enforces so a bad value can't reach the file.
+  const languageInputs: Record<RuntimeLanguage, string | undefined> = {
+    python: input.runtime_python,
+    node: input.runtime_node,
+    java: input.runtime_java,
+    go: input.runtime_go,
+  }
+  for (const language of RUNTIME_LANGUAGES) {
+    const version = languageInputs[language]?.trim()
+    if (!version) continue
+    const error = validateLanguageVersion(version)
+    if (error) {
+      throw new Error(`runtime.${language}: ${error}`)
+    }
+    runtime[language] = version
+  }
+  const aptPackages = parseAptPackages(input.runtime_apt ?? "")
+  if (aptPackages.length > 0) {
+    // The image owns its packages, so the schema/CLI forbid apt with a
+    // container — reject here rather than write a file the CLI won't parse.
+    if (containerImage) {
+      throw new Error(
+        "runtime.apt: extra apt packages can't be combined with a Docker image — install them in the image instead.",
+      )
+    }
+    const aptError = validateAptPackages(aptPackages)
+    if (aptError) {
+      throw new Error(`runtime.apt: ${aptError}`)
+    }
+    runtime.apt = aptPackages
+  }
   if (Object.keys(runtime).length > 0) {
     entry.runtime = runtime
   }
@@ -1129,6 +1168,12 @@ export type CreateAssignmentInput = {
   runs_on?: string
   container_image?: string
   container_user?: string
+  runtime_python?: string
+  runtime_node?: string
+  runtime_java?: string
+  runtime_go?: string
+  // Raw comma/space-separated apt packages; parsed to string[] on save.
+  runtime_apt?: string
   setup_command?: string
   allowed_files?: string
   pass_threshold?: number
@@ -1213,6 +1258,7 @@ export function buildReusedEntry(
           container: source.runtime.container
             ? { ...source.runtime.container }
             : undefined,
+          apt: source.runtime.apt ? [...source.runtime.apt] : undefined,
         }
       : undefined,
     allowed_files: source.allowed_files ? [...source.allowed_files] : undefined,
@@ -1221,6 +1267,7 @@ export function buildReusedEntry(
   if (!entry.template) delete entry.template
   if (!entry.due_meta) delete entry.due_meta
   if (entry.runtime && !entry.runtime.container) delete entry.runtime.container
+  if (entry.runtime && !entry.runtime.apt) delete entry.runtime.apt
   if (!entry.runtime) delete entry.runtime
   if (!entry.allowed_files) delete entry.allowed_files
   if (!entry.tests) delete entry.tests
@@ -1267,6 +1314,41 @@ const EDIT_MANAGED_ASSIGNMENT_KEYS = new Set<string>(
     .map(([key]) => key),
 )
 
+// Runtime sub-keys the edit form fully manages (rebuilt from input, so a
+// clearing edit wins). Anything else inside `runtime` (an unknown future
+// sub-key) is preserved verbatim on edit — the same "tolerate AND preserve"
+// contract applied at the assignment level, but one level deeper, since the
+// form rebuilds the whole `runtime` object from scratch. Keeping this in lock-
+// step with the CLI's RuntimeRef guards teachers who mix CLI/manual runtime
+// config with GUI edits.
+const RUNTIME_MANAGED_KEYS = new Set<string>([
+  "runs-on",
+  "container",
+  "python",
+  "node",
+  "java",
+  "go",
+  "apt",
+])
+
+// Copy forward unknown `runtime` sub-keys from the existing entry onto the
+// rebuilt runtime, without touching managed sub-keys. Returns the (possibly
+// new) runtime object, or undefined when neither side has one. Pure.
+export function preserveUnmanagedRuntimeKeys(
+  existingRuntime: Record<string, unknown> | undefined,
+  editedRuntime: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!existingRuntime) return editedRuntime
+  const carried: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(existingRuntime)) {
+    if (RUNTIME_MANAGED_KEYS.has(key)) continue
+    if (value === undefined) continue
+    carried[key] = value
+  }
+  if (Object.keys(carried).length === 0) return editedRuntime
+  return { ...(editedRuntime ?? {}), ...carried }
+}
+
 // Copy forward entry-level keys the edit form doesn't manage (e.g.
 // `migrated_from`, unknown future keys) onto the rebuilt edit, without
 // overwriting managed keys. Mirrors the CLI's AssignmentEntry.Extra round-trip.
@@ -1282,6 +1364,21 @@ export function preserveUnmanagedAssignmentKeys(
     if (value === undefined) continue
     merged[key] = value
   }
+
+  // `runtime` is a managed key (a clearing edit must win), but the form only
+  // knows the schema's runtime sub-keys, so carry forward any unknown ones from
+  // the existing entry so a GUI edit doesn't silently drop CLI/manual runtime
+  // config it can't model yet.
+  const nextRuntime = preserveUnmanagedRuntimeKeys(
+    existing.runtime as Record<string, unknown> | undefined,
+    edited.runtime as Record<string, unknown> | undefined,
+  )
+  if (nextRuntime && Object.keys(nextRuntime).length > 0) {
+    merged.runtime = nextRuntime
+  } else {
+    delete merged.runtime
+  }
+
   return merged as Assignment
 }
 // grant — the same write + grant as createAssignment, minus form resolution.

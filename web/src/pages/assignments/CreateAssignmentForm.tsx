@@ -34,6 +34,15 @@ import {
   type RunnerVerification,
 } from "@/util/runners"
 import { orgRunnersQuery } from "@/hooks/github/queries"
+import {
+  RUNTIME_LANGUAGES,
+  RUNTIME_LANGUAGE_META,
+  type RuntimeLanguage,
+  aptPackagesToText,
+  parseAptPackages,
+  validateAptPackages,
+  validateLanguageVersion,
+} from "@/util/runtime"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { TemplateField } from "./TemplateField"
 import {
@@ -62,6 +71,12 @@ export type CreateAssignmentFormValues = {
   runs_on: string
   container_image: string
   container_user: string
+  runtime_python: string
+  runtime_node: string
+  runtime_java: string
+  runtime_go: string
+  // Raw text (comma/space-separated); parsed to string[] on save.
+  runtime_apt: string
   setup_command: string
   // Raw textarea text; parsed to string[] on save, joined back on read.
   allowed_files: string
@@ -99,6 +114,11 @@ const useAssignmentForm = (
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",
       container_user: defaultValues?.container_user || "",
+      runtime_python: defaultValues?.runtime_python || "",
+      runtime_node: defaultValues?.runtime_node || "",
+      runtime_java: defaultValues?.runtime_java || "",
+      runtime_go: defaultValues?.runtime_go || "",
+      runtime_apt: defaultValues?.runtime_apt || "",
       setup_command: defaultValues?.setup_command || "",
       allowed_files: defaultValues?.allowed_files || "",
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
@@ -172,6 +192,29 @@ const useAssignmentForm = (
           }
         }
 
+        // Language toolchain versions + apt packages, mirroring the CLI's
+        // ValidateRuntime patterns so a bad value is caught before the commit.
+        const languageFields: Record<RuntimeLanguage, string> = {
+          python: value.runtime_python,
+          node: value.runtime_node,
+          java: value.runtime_java,
+          go: value.runtime_go,
+        }
+        for (const language of RUNTIME_LANGUAGES) {
+          const error = validateLanguageVersion(languageFields[language])
+          if (error) {
+            errors[`runtime_${language}`] = error
+          }
+        }
+        const aptPackages = parseAptPackages(value.runtime_apt)
+        const aptError = validateAptPackages(aptPackages)
+        if (aptError) {
+          errors.runtime_apt = aptError
+        } else if (aptPackages.length > 0 && value.container_image.trim()) {
+          // The image owns its packages; schema/CLI forbid apt with a container.
+          errors.runtime_apt = t("assignments.form.runtime.aptContainerError")
+        }
+
         return Object.keys(errors).length > 0 ? { fields: errors } : undefined
       },
     },
@@ -188,6 +231,11 @@ const useAssignmentForm = (
         runs_on: value.runs_on.trim(),
         container_image: value.container_image.trim(),
         container_user: value.container_user.trim(),
+        runtime_python: value.runtime_python.trim(),
+        runtime_node: value.runtime_node.trim(),
+        runtime_java: value.runtime_java.trim(),
+        runtime_go: value.runtime_go.trim(),
+        runtime_apt: value.runtime_apt.trim(),
         setup_command: value.setup_command.trim(),
         allowed_files: value.allowed_files,
         pass_threshold_enabled: value.pass_threshold_enabled,
@@ -228,6 +276,61 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
     )}
   </form.Subscribe>
 )
+
+// A language toolchain version input (python/node/java/go). Free-form; the
+// placeholder is the runner's default when omitted. Advisory shape check
+// mirrors the CLI's LanguageVersionPattern.
+const LanguageVersionField = ({
+  form,
+  language,
+}: {
+  form: AssignmentForm
+  language: RuntimeLanguage
+}) => {
+  const { t } = useTranslation()
+  const fieldName = `runtime_${language}` as const
+  const meta = RUNTIME_LANGUAGE_META[language]
+  return (
+    <form.Field name={fieldName}>
+      {(field) => {
+        const error = field.state.meta.errors[0] as string | undefined
+        return (
+          <div>
+            <label
+              htmlFor={field.name}
+              className="label block font-bold mb-1.5"
+            >
+              {meta.label}
+            </label>
+            <input
+              id={field.name}
+              name={field.name}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              className="input w-full max-w-xs"
+              placeholder={t("assignments.form.runtime.versionPlaceholder", {
+                version: meta.placeholder,
+              })}
+              value={field.state.value}
+              onBlur={normalizeOnBlur(field)}
+              onChange={(e) => field.handleChange(e.target.value)}
+            />
+            {error ? (
+              <p
+                role="alert"
+                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+              >
+                <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
+                {error}
+              </p>
+            ) : null}
+          </div>
+        )
+      }}
+    </form.Field>
+  )
+}
 
 // Free-form runner input with advisory, non-blocking verification: annotates
 // the value but never rewrites or clears what the teacher typed.
@@ -478,6 +581,11 @@ export const assignmentToFormValues = (
     ),
     container_image: assignment.runtime?.container?.image ?? "",
     container_user: assignment.runtime?.container?.user ?? "",
+    runtime_python: assignment.runtime?.python ?? "",
+    runtime_node: assignment.runtime?.node ?? "",
+    runtime_java: assignment.runtime?.java ?? "",
+    runtime_go: assignment.runtime?.go ?? "",
+    runtime_apt: aptPackagesToText(assignment.runtime?.apt),
     setup_command: setupCommand,
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
     pass_threshold: assignment.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
@@ -913,6 +1021,91 @@ const CreateAssignmentForm = ({
                     </p>
                   ) : null
                 }}
+              </form.Subscribe>
+
+              <div className="mt-4">
+                <h4 className="label font-bold mb-1.5">
+                  {t("assignments.form.runtime.languagesHeading")}
+                </h4>
+                <p className="mb-3 text-sm text-base-content/70">
+                  {t("assignments.form.runtime.languagesHelp")}
+                </p>
+                <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2">
+                  {RUNTIME_LANGUAGES.map((language) => (
+                    <LanguageVersionField
+                      key={language}
+                      form={form}
+                      language={language}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <form.Subscribe
+                selector={(state) => state.values.container_image}
+              >
+                {(containerImage) =>
+                  containerImage.trim() ? null : (
+                    <form.Field name="runtime_apt">
+                      {(field) => {
+                        const packages = parseAptPackages(field.state.value)
+                        const error = field.state.meta.errors[0] as
+                          string | undefined
+                        return (
+                          <div className="mt-4">
+                            <label
+                              htmlFor={field.name}
+                              className="label block font-bold mb-1.5"
+                            >
+                              {t("assignments.form.runtime.aptLabel")}
+                            </label>
+                            <input
+                              id={field.name}
+                              name={field.name}
+                              type="text"
+                              autoComplete="off"
+                              spellCheck={false}
+                              className="input w-full"
+                              placeholder={t(
+                                "assignments.form.runtime.aptPlaceholder",
+                              )}
+                              value={field.state.value}
+                              onBlur={normalizeOnBlur(field, (value) =>
+                                parseAptPackages(value).join(", "),
+                              )}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                            />
+                            <p className="mt-1.5 text-sm text-base-content/70">
+                              {t("assignments.form.runtime.aptHelp")}
+                            </p>
+                            {error ? (
+                              <p
+                                role="alert"
+                                className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                              >
+                                <AlertTriangle
+                                  aria-hidden="true"
+                                  className="size-4 shrink-0"
+                                />
+                                {error}
+                              </p>
+                            ) : (
+                              packages.length > 0 && (
+                                <p className="mt-1.5 text-xs text-base-content/70">
+                                  {t("assignments.form.runtime.aptCount", {
+                                    count: packages.length,
+                                  })}
+                                </p>
+                              )
+                            )}
+                          </div>
+                        )
+                      }}
+                    </form.Field>
+                  )
+                }
               </form.Subscribe>
 
               <form.Field name="setup_command">

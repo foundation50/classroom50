@@ -551,6 +551,17 @@
         "tooMany": "Too many labels ({{count}}) — 10 max.",
         "cannotVerify": "Can't verify — used as entered."
       },
+      "runtime": {
+        "languagesHeading": "Language versions",
+        "languagesHelp": "Pin a toolchain version the autograder provisions. Leave blank for the default.",
+        "versionPlaceholder": "e.g. {{version}}",
+        "aptLabel": "Extra apt packages",
+        "aptPlaceholder": "e.g. cmake, valgrind",
+        "aptHelp": "Ubuntu packages installed before grading, comma- or space-separated. Not available with a Docker image — install packages in the image instead.",
+        "aptCount_one": "{{count}} package",
+        "aptCount_other": "{{count}} packages",
+        "aptContainerError": "Extra apt packages can't be combined with a Docker image — install them in the image instead."
+      },
       "validation": {
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",

@@ -88,12 +88,23 @@ export type Assignment = {
   autograder: string
   max_group_size?: number
   feedback_pr?: boolean
+  // Mirrors classroom50/assignments/v1's `runtime` block and the CLI's
+  // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go
+  // pick the setup-X toolchain version the autograder provisions; apt installs
+  // extra Ubuntu packages (mutually exclusive with `container` — the image owns
+  // its packages). All optional; an absent block means the defaults
+  // (ubuntu-latest + Python 3.12).
   runtime?: {
     "runs-on"?: string | string[]
     container?: {
       image: string
       user?: string
     }
+    python?: string
+    node?: string
+    java?: string
+    go?: string
+    apt?: string[]
   }
   // Ordered .gitignore-style allowlist (last match wins, `!` re-includes).
   // Empty/absent = all files allowed. Enforced server-side.
