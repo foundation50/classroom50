@@ -312,10 +312,13 @@ const EnrolledStudents = ({
 
   // After a bulk run, clear the selection and refresh the caches the run
   // touched (roster team membership + pending invites).
-  const onBulkDone = (action: "unenroll" | "resend") => {
+  const onBulkDone = (action: "unenroll" | "invite") => {
     setSelectedKeys(new Set())
     invalidateInviteQueries()
-    if (action === "unenroll") invalidateTeamRoster()
+    // Unenroll changes team membership; invite changes org-invite state and may
+    // team-add an already-active member — refresh the enrolled roster for both.
+    invalidateTeamRoster()
+    void action
   }
 
   const renderRow = (row: TeamRosterRow) => {

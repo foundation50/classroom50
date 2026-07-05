@@ -8,6 +8,7 @@ import MemberDetailHeader from "@/components/memberList/MemberDetailHeader"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { unenrollStudent } from "@/api/mutations/students"
+import { inviteRosterStudents } from "@/api/mutations/students"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { rosterRowToMemberRow } from "@/util/memberRow"
@@ -82,6 +83,43 @@ const RosterMemberModal = ({
   const student = rowToStudent(row)
   const canEdit = row.state !== "pending"
   const canResend = row.state === "pending" && Boolean(row.github_id)
+  // A not_in_org row is on the roster (by username) but not in the org — offer a
+  // fresh org invite (id derived from username when the CSV has no github_id).
+  const canInvite = row.state === "not_in_org" && Boolean(row.username)
+
+  const handleInvite = async () => {
+    if (resending) return
+    setResending(true)
+    try {
+      const res = await inviteRosterStudents(client, {
+        org,
+        classroom,
+        students: [{ username: row.username, github_id: row.github_id }],
+      })
+      if (res.failed.length > 0) {
+        onError(
+          row.key,
+          t("students.inviteFailed", {
+            username: row.username || row.email,
+            error: res.failed[0].message,
+          }),
+        )
+        return
+      }
+      onResent(row.key)
+      onClose()
+    } catch (err) {
+      onError(
+        row.key,
+        t("students.inviteFailed", {
+          username: row.username || row.email,
+          error: getErrorMessage(err),
+        }),
+      )
+    } finally {
+      setResending(false)
+    }
+  }
 
   const handleResend = async () => {
     if (resending) return
@@ -208,6 +246,27 @@ const RosterMemberModal = ({
           )}
 
           <div className="flex flex-wrap items-center justify-end gap-2 border-t border-base-300 pt-4">
+            {canInvite ? (
+              <button
+                type="button"
+                className="btn btn-sm btn-primary"
+                disabled={resending || working}
+                onClick={() => void handleInvite()}
+              >
+                {resending ? (
+                  <span
+                    className="loading loading-spinner loading-xs"
+                    aria-hidden="true"
+                  />
+                ) : (
+                  <>
+                    <Send aria-hidden="true" className="size-4" />
+                    {t("students.inviteToOrg")}
+                  </>
+                )}
+              </button>
+            ) : null}
+
             {canResend ? (
               <button
                 type="button"

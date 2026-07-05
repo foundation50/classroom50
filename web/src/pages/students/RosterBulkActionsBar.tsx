@@ -10,6 +10,10 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/pages/students/bulkUnenrollRoster"
+import {
+  inviteRosterStudents,
+  type InviteRosterStudentsResult,
+} from "@/api/mutations/students"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
 // The three "add students" affordances the toolbar surfaces (when nothing is
@@ -130,7 +134,7 @@ const RosterBulkActionsBar = ({
   onClearSelection: () => void
   // Called after a run completes so the page can invalidate roster + invite
   // caches. `action` distinguishes what changed.
-  onDone: (action: "unenroll" | "resend") => void
+  onDone: (action: "unenroll" | "invite") => void
   // The "add students" triggers shown on the right when nothing is selected.
   addActions?: AddStudentActions
 }) => {
@@ -138,7 +142,7 @@ const RosterBulkActionsBar = ({
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
 
-  const [action, setAction] = useState<"unenroll" | "resend" | null>(null)
+  const [action, setAction] = useState<"unenroll" | "invite" | null>(null)
   const [phase, setPhase] = useState<Phase>("idle")
   const [progress, setProgress] = useState<Progress>({
     processed: 0,
@@ -151,6 +155,9 @@ const RosterBulkActionsBar = ({
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
+  const notInOrgSelected = selectedRows.filter((r) => r.state === "not_in_org")
+  // Both pending (resend) and not_in_org (fresh invite) rows are "invitable".
+  const invitableSelected = pendingSelected.length + notInOrgSelected.length
 
   const isOpen = phase !== "idle"
   useEffect(() => {
@@ -196,22 +203,29 @@ const RosterBulkActionsBar = ({
     }
   }
 
-  const runResend = async () => {
-    if (pendingSelected.length === 0) return
-    setAction("resend")
+  const runInvite = async () => {
+    if (invitableSelected === 0) return
+    setAction("invite")
     setPhase("working")
     setError(null)
     setResult(null)
     setProgress({
       processed: 0,
-      total: pendingSelected.length,
+      total: invitableSelected,
       message: t("students.bulk.starting"),
     })
-    const resent: string[] = []
+
+    const invited: { key: string; label: string; detail?: string }[] = []
     const skipped: { key: string; label: string; detail?: string }[] = []
     const failed: { key: string; label: string; detail?: string }[] = []
     let rateLimited = false
     let processed = 0
+    const tick = (label: string) => {
+      processed += 1
+      setProgress({ processed, total: invitableSelected, message: label })
+    }
+
+    // Pending rows: cancel + re-send the existing invite (resendOrgInvitation).
     for (const row of pendingSelected) {
       const label = row.username || row.email
       const inviteeId = Number(row.github_id)
@@ -221,12 +235,7 @@ const RosterBulkActionsBar = ({
           label,
           detail: t("students.bulk.noInviteId"),
         })
-        processed += 1
-        setProgress({
-          processed,
-          total: pendingSelected.length,
-          message: label,
-        })
+        tick(label)
         continue
       }
       try {
@@ -236,7 +245,7 @@ const RosterBulkActionsBar = ({
           inviteeId,
           invitationId: row.invitation_id,
         })
-        if (outcome.state === "invited") resent.push(row.key)
+        if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })
       } catch (err) {
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
@@ -245,8 +254,49 @@ const RosterBulkActionsBar = ({
           break
         }
       }
-      processed += 1
-      setProgress({ processed, total: pendingSelected.length, message: label })
+      tick(label)
+    }
+
+    // not_in_org rows: send a FRESH org invite (resolve id from username when
+    // the CSV has no github_id), carrying the classroom team. Skipped when a
+    // rate limit already halted the pending pass.
+    if (!rateLimited && notInOrgSelected.length > 0) {
+      try {
+        const res: InviteRosterStudentsResult = await inviteRosterStudents(
+          client,
+          {
+            org,
+            classroom,
+            students: notInOrgSelected.map((r) => ({
+              username: r.username,
+              github_id: r.github_id,
+            })),
+            onProgress: ({ message }) => tick(message),
+          },
+        )
+        const keyFor = (username: string) =>
+          notInOrgSelected.find((r) => r.username === username)?.key ?? username
+        for (const u of res.invited) invited.push({ key: keyFor(u), label: u })
+        for (const s of res.skipped)
+          skipped.push({
+            key: keyFor(s.username),
+            label: s.username,
+            detail:
+              s.reason === "already-member"
+                ? t("students.bulk.alreadyMember")
+                : t("students.bulk.alreadyPending"),
+          })
+        for (const f of res.failed)
+          failed.push({
+            key: keyFor(f.username),
+            label: f.username,
+            detail: f.message,
+          })
+      } catch (err) {
+        setError(getErrorMessage(err))
+        setPhase("error")
+        return
+      }
     }
 
     const sections: ResultView["sections"] = []
@@ -261,17 +311,17 @@ const RosterBulkActionsBar = ({
           {
             key: "rate-limited",
             label: t("students.resendAllRateLimitedShort", {
-              resent: resent.length,
+              resent: invited.length,
             }),
           },
         ],
       })
     setResult({
-      headline: t("students.bulk.resentHeadline", { count: resent.length }),
+      headline: t("students.bulk.invitedHeadline", { count: invited.length }),
       sections,
     })
     setPhase("complete")
-    onDone("resend")
+    onDone("invite")
   }
 
   const progressPercent =
@@ -310,18 +360,18 @@ const RosterBulkActionsBar = ({
               <button
                 type="button"
                 className="btn btn-sm join-item"
-                disabled={pendingSelected.length === 0}
+                disabled={invitableSelected === 0}
                 title={
-                  pendingSelected.length === 0
-                    ? t("students.bulk.resendNoPending")
-                    : t("students.bulk.resendSelected", {
-                        count: pendingSelected.length,
+                  invitableSelected === 0
+                    ? t("students.bulk.inviteNoneInvitable")
+                    : t("students.bulk.inviteSelected", {
+                        count: invitableSelected,
                       })
                 }
-                onClick={() => void runResend()}
+                onClick={() => void runInvite()}
               >
                 <Send aria-hidden="true" className="size-4" />
-                {t("students.bulk.resend")}
+                {t("students.bulk.invite")}
               </button>
               <button
                 type="button"
@@ -415,8 +465,8 @@ const RosterBulkActionsBar = ({
         <div className="modal-box max-w-2xl">
           <div className="flex items-start justify-between gap-4">
             <h3 id={titleId} className="text-lg font-bold">
-              {action === "resend"
-                ? t("students.bulk.resendTitle")
+              {action === "invite"
+                ? t("students.bulk.inviteTitle")
                 : t("students.bulk.unenrollTitle")}
             </h3>
             {phase !== "working" && (

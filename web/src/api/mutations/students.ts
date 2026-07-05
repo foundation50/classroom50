@@ -958,6 +958,99 @@ export async function reconcileTeamFromOrgMembers(
   return { added, skipped, failed }
 }
 
+export type InviteRosterStudentsInput = {
+  org: string
+  classroom: string
+  // Rows to invite. Each carries at least a username (a `not_in_org` roster row
+  // always has one); github_id is used when present, else derived from the
+  // username. `pending` rows are handled by resendOrgInvitation, not here.
+  students: { username: string; github_id?: string }[]
+  onProgress?: (progress: {
+    processed: number
+    total: number
+    message: string
+  }) => void
+}
+
+export type InviteRosterStudentsResult = {
+  // A fresh org invite was created (carrying the classroom team).
+  invited: string[]
+  // Already an active member or already had a pending invite — no new invite.
+  skipped: { username: string; reason: "already-member" | "already-pending" }[]
+  // Couldn't invite (username didn't resolve to a GitHub account, or the invite
+  // call failed).
+  failed: { username: string; message: string }[]
+}
+
+// Bulk-invite roster students who are on students.csv (by username) but not yet
+// in the organization — the `not_in_org` rows. Resolves each username to its
+// immutable GitHub id (using the stored github_id when present, else
+// GET /users/{username}) and sends a fresh org invitation carrying the
+// classroom team, so accepting it activates team membership atomically. This is
+// the roster-side counterpart to the Org Members "Invite" action; it does NOT
+// write students.csv (identity backfill is syncRosterFromTeam's job) and never
+// touches an existing active/pending state (ensureOrgMembership no-ops those).
+export async function inviteRosterStudents(
+  client: GitHubClient,
+  input: InviteRosterStudentsInput,
+): Promise<InviteRosterStudentsResult> {
+  const { org, classroom, students, onProgress } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const invited: string[] = []
+  const skipped: InviteRosterStudentsResult["skipped"] = []
+  const failed: InviteRosterStudentsResult["failed"] = []
+
+  const targets = students
+    .map((s) => ({ username: s.username.trim(), github_id: s.github_id }))
+    .filter((s) => s.username)
+  if (targets.length === 0) return { invited, skipped, failed }
+
+  // Resolve the classroom team once so every fresh invite carries it (accepting
+  // the single org invite then activates team membership). A missing team id is
+  // tolerated — the invite still sends, just without the team attached.
+  let teamIds: number[] | undefined
+  try {
+    const teamId = (await resolveClassroomTeam(client, org, classroom)).id
+    teamIds = teamId ? [teamId] : undefined
+  } catch {
+    teamIds = undefined
+  }
+
+  let processed = 0
+  const bump = (username: string) => {
+    processed += 1
+    onProgress?.({ processed, total: targets.length, message: username })
+  }
+
+  await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
+    const { username } = target
+    try {
+      // Prefer the stored id; otherwise resolve the current account by login.
+      let inviteeId = Number(target.github_id)
+      if (!Number.isFinite(inviteeId) || inviteeId <= 0) {
+        inviteeId = (await getUser(client, username)).id
+      }
+      const result = await ensureOrgMembership(client, {
+        org,
+        username,
+        inviteeId,
+        teamIds,
+      })
+      if (result.state === "invited") invited.push(username)
+      else if (result.state === "active")
+        skipped.push({ username, reason: "already-member" })
+      else skipped.push({ username, reason: "already-pending" })
+    } catch (err) {
+      failed.push({ username, message: getErrorMessage(err) })
+    } finally {
+      bump(username)
+    }
+  })
+
+  return { invited, skipped, failed }
+}
+
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
   teamResults: {
     username: string

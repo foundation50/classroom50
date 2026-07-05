@@ -8,6 +8,7 @@ import {
   bulkUnenrollStudents,
   bulkEnrollStudentsInClassroom,
   reconcileTeamFromOrgMembers,
+  inviteRosterStudents,
   syncRosterFromTeam,
   updateStudent,
   updateStudentWithConflictRetry,
@@ -1293,5 +1294,121 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     // octocat/torvalds carry no CSV github_id but ARE matched by login, so
     // they're already "claimed" — nothing to backfill, and no parse error.
     expect(result.noop).toBe(true)
+  })
+})
+
+// Fresh org invites for not_in_org roster students. A minimal fake client:
+// classroom.json (no team block -> derived slug, no team id), org-membership
+// state (404 = not a member), /users/{login} resolution, and the invitation
+// POST. Records invitations so we can assert what got sent.
+const makeInviteClient = (opts: {
+  users?: Record<string, { id: number }>
+  members?: string[]
+  invitationFails?: boolean
+}) => {
+  const invitations: { invitee_id?: number; team_ids?: number[] }[] = []
+  const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
+
+  const requestRaw = vi.fn().mockImplementation((path: string) => {
+    if (path.includes("classroom.json")) {
+      // Non-archived classroom for the archive guard; no team block so
+      // resolveClassroomTeam derives the slug and finds no team id.
+      return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+    }
+    return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+  })
+
+  const request = vi
+    .fn()
+    .mockImplementation((path: string, options?: { method?: string }) => {
+      if (path.startsWith("/users/")) {
+        const login = decodeURIComponent(path.slice("/users/".length))
+        const u = opts.users?.[login]
+        if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
+        return Promise.resolve({ login, id: u.id })
+      }
+      if (path.includes("/memberships/") && !path.includes("/teams/")) {
+        const login = decodeURIComponent(path.split("/memberships/")[1])
+        if (memberSet.has(login.toLowerCase())) {
+          return Promise.resolve({ state: "active" })
+        }
+        return Promise.reject(new Error("404 not a member"))
+      }
+      if (path.endsWith("/invitations") && options?.method === "POST") {
+        if (opts.invitationFails) {
+          return Promise.reject(new Error("invite blew up"))
+        }
+        const body = (options as { body?: { invitee_id?: number } }).body
+        invitations.push(body ?? {})
+        return Promise.resolve({})
+      }
+      return Promise.reject(new Error(`unexpected request: ${path}`))
+    })
+
+  return {
+    client: { request, requestRaw } as unknown as GitHubClient,
+    invitations,
+  }
+}
+
+describe("inviteRosterStudents — fresh invites for not_in_org students", () => {
+  it("invites by the stored github_id when present", async () => {
+    const { client, invitations } = makeInviteClient({ members: [] })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "octocat", github_id: "1" }],
+    })
+
+    expect(res.invited).toEqual(["octocat"])
+    expect(invitations).toEqual([{ invitee_id: 1, role: "direct_member" }])
+  })
+
+  it("resolves the id from the username when github_id is missing", async () => {
+    const { client, invitations } = makeInviteClient({
+      users: { torvalds: { id: 2 } },
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "torvalds", github_id: "" }],
+    })
+
+    expect(res.invited).toEqual(["torvalds"])
+    expect(invitations).toEqual([{ invitee_id: 2, role: "direct_member" }])
+  })
+
+  it("skips an already-active member without inviting", async () => {
+    const { client, invitations } = makeInviteClient({
+      members: ["octocat"],
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "octocat", github_id: "1" }],
+    })
+
+    expect(res.invited).toEqual([])
+    expect(res.skipped).toEqual([
+      { username: "octocat", reason: "already-member" },
+    ])
+    expect(invitations).toEqual([])
+  })
+
+  it("reports a row whose username can't be resolved as failed", async () => {
+    const { client } = makeInviteClient({ users: {} })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "ghost", github_id: "" }],
+    })
+
+    expect(res.invited).toEqual([])
+    expect(res.failed).toHaveLength(1)
+    expect(res.failed[0].username).toBe("ghost")
   })
 })
