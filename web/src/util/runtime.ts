@@ -1,12 +1,20 @@
 // Authoring helpers for the language-toolchain and apt fields of an
-// assignment's `runtime` block (python/node/java/go versions + extra Ubuntu
-// packages). Patterns and rules mirror the CLI's ValidateRuntime (runtime.go)
+// assignment's `runtime` block (python/node/java/go/rust versions + extra
+// Ubuntu packages). Patterns and rules mirror the CLI's ValidateRuntime
+// (runtime.go)
 // and the assignments-v1 schema so a bad value is caught in the form, not by a
 // rejected commit.
 
-// The four setup-X toolchains the autograder provisions, ordered for display.
-// Keys match the wire fields on `runtime` and the CLI's RuntimeRef.
-export const RUNTIME_LANGUAGES = ["python", "node", "java", "go"] as const
+// The setup-X toolchains the autograder provisions, ordered for display. Keys
+// match the wire fields on `runtime` and the CLI's RuntimeRef. Rust has no
+// first-party setup action; the runner provisions it via dtolnay/rust-toolchain.
+export const RUNTIME_LANGUAGES = [
+  "python",
+  "node",
+  "java",
+  "go",
+  "rust",
+] as const
 
 export type RuntimeLanguage = (typeof RUNTIME_LANGUAGES)[number]
 
@@ -49,7 +57,9 @@ export const CONTAINER_USER_PATTERN =
 // 2026-07, newest first. Sources: Python devguide, nodejs/Release, Adoptium
 // Temurin support, go.dev release policy. Verify periodically — support windows
 // move. Java lists LTS lines (classroom autograding wants LTS, not the
-// short-lived non-LTS feature releases).
+// short-lived non-LTS feature releases). Rust uses rustup channel specifiers
+// (`stable`/`nightly`) rather than a pinned-version support window, so its menu
+// leads with the channels and offers a couple of recent pins.
 export const RUNTIME_LANGUAGE_META: Record<
   RuntimeLanguage,
   { label: string; placeholder: string; versions: string[] }
@@ -66,6 +76,11 @@ export const RUNTIME_LANGUAGE_META: Record<
     versions: ["25", "21", "17", "11"],
   },
   go: { label: "Go", placeholder: "1.26", versions: ["1.26", "1.25"] },
+  rust: {
+    label: "Rust",
+    placeholder: "stable",
+    versions: ["stable", "nightly", "1.89", "1.85"],
+  },
 }
 
 // Split apt packages on commas/whitespace; tolerates an array. Order preserved.

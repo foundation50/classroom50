@@ -47,6 +47,7 @@ jobs:
       node:           ${{ steps.read.outputs.node }}
       java:           ${{ steps.read.outputs.java }}
       go:             ${{ steps.read.outputs.go }}
+      rust:           ${{ steps.read.outputs.rust }}
       apt:            ${{ steps.read.outputs.apt }}
       base-url:       ${{ steps.read.outputs.base-url }}
       classroom:      ${{ steps.read.outputs.classroom }}
@@ -347,7 +348,7 @@ jobs:
           # A hand-edited assignments.json with extra keys (e.g. an
           # `options:` smuggled at runtime level) would otherwise pass
           # this validator silently while the CLI rejects it at write.
-          _RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "apt"}
+          _RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "rust", "apt"}
           extras = set(runtime) - _RUNTIME_KEYS
           if extras:
               fail(f"runtime has unsupported keys: {sorted(extras)}")
@@ -358,6 +359,7 @@ jobs:
           node      = runtime.get("node")     or ""
           java      = runtime.get("java")     or ""
           go        = runtime.get("go")       or ""
+          rust      = runtime.get("rust")     or ""
           apt       = runtime.get("apt")      or []
 
           # runs-on mirrors GitHub Actions: a single label or an array
@@ -446,7 +448,7 @@ jobs:
           # self-hosted target share one code path.
           runs_on_json = json.dumps(runs_on_labels)
 
-          for label, value in [("python", python), ("node", node), ("java", java), ("go", go)]:
+          for label, value in [("python", python), ("node", node), ("java", java), ("go", go), ("rust", rust)]:
               if value and (not isinstance(value, str) or not _LANG.match(value)):
                   fail(f"runtime.{label} {value!r} must match {_LANG.pattern}")
 
@@ -498,6 +500,7 @@ jobs:
           emit("node", node)
           emit("java", java)
           emit("go", go)
+          emit("rust", rust)
           emit("apt", apt_str)
           emit("base-url", base_url)
           emit("classroom", classroom)
@@ -568,6 +571,14 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: ${{ needs.setup.outputs.go }}
+
+      # No first-party setup-rust; dtolnay/rust-toolchain is the de-facto
+      # standard. Pinned to @master with an explicit `toolchain:` input
+      # (its @rev-derived default can't read a version from a SHA pin).
+      - if: needs.setup.outputs.rust != ''
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ needs.setup.outputs.rust }}
 
       - if: needs.setup.outputs.apt != '' && runner.os == 'Linux'
         run: |

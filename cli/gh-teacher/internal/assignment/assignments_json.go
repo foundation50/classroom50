@@ -389,6 +389,7 @@ type RuntimeRef struct {
 	Node      string         `json:"node,omitempty"`
 	Java      string         `json:"java,omitempty"`
 	Go        string         `json:"go,omitempty"`
+	Rust      string         `json:"rust,omitempty"`
 	Apt       []string       `json:"apt,omitempty"`
 }
 

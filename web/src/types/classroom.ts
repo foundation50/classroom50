@@ -89,7 +89,7 @@ export type Assignment = {
   max_group_size?: number
   feedback_pr?: boolean
   // Mirrors classroom50/assignments/v1's `runtime` block and the CLI's
-  // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go
+  // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go/rust
   // pick the setup-X toolchain version the autograder provisions; apt installs
   // extra Ubuntu packages (mutually exclusive with `container` — the image owns
   // its packages). All optional; an absent block means the defaults
@@ -104,6 +104,7 @@ export type Assignment = {
     node?: string
     java?: string
     go?: string
+    rust?: string
     apt?: string[]
   }
   // Ordered .gitignore-style allowlist (last match wins, `!` re-includes).

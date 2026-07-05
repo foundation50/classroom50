@@ -184,7 +184,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	outputsMap, _ := setupOutputs.(map[string]any)
 	for _, out := range []string{
 		"submission-tag", "runs-on", "container",
-		"python", "node", "java", "go", "apt",
+		"python", "node", "java", "go", "rust", "apt",
 		"base-url", "classroom", "assignment",
 		// is-acceptance gates the whole skip-the-acceptance-commit path;
 		// a dropped output would make every gate below read empty and
@@ -281,7 +281,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// and `user` are container keys — private registry auth is out of
 	// scope for this model, so images must be publicly pullable.
 	for _, want := range []string{
-		`_RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "apt"}`,
+		`_RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "rust", "apt"}`,
 		`_CONTAINER_KEYS = {"image", "user"}`,
 		`emitted = {"image": image}`,
 		`emitted["options"] = f"--user {user}"`,
@@ -301,6 +301,8 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		"actions/setup-java@v5",
 		"if: needs.setup.outputs.go != ''",
 		"actions/setup-go@v6",
+		"if: needs.setup.outputs.rust != ''",
+		"dtolnay/rust-toolchain@master",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)

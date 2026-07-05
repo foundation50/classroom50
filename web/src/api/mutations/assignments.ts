@@ -819,6 +819,7 @@ async function buildAssignmentEntry(
     node: input.runtime_node,
     java: input.runtime_java,
     go: input.runtime_go,
+    rust: input.runtime_rust,
   }
   for (const language of RUNTIME_LANGUAGES) {
     const version = languageInputs[language]?.trim()
@@ -1214,6 +1215,7 @@ export type CreateAssignmentInput = {
   runtime_node?: string
   runtime_java?: string
   runtime_go?: string
+  runtime_rust?: string
   // Raw comma/space-separated apt packages; parsed to string[] on save.
   runtime_apt?: string
   setup_command?: string

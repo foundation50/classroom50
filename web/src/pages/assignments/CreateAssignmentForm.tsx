@@ -82,6 +82,7 @@ export type CreateAssignmentFormValues = {
   runtime_node: string
   runtime_java: string
   runtime_go: string
+  runtime_rust: string
   // Raw text (comma/space-separated); parsed to string[] on save.
   runtime_apt: string
   setup_command: string
@@ -126,6 +127,7 @@ const useAssignmentForm = (
       runtime_node: defaultValues?.runtime_node || "",
       runtime_java: defaultValues?.runtime_java || "",
       runtime_go: defaultValues?.runtime_go || "",
+      runtime_rust: defaultValues?.runtime_rust || "",
       runtime_apt: defaultValues?.runtime_apt || "",
       setup_command: defaultValues?.setup_command || "",
       allowed_files: defaultValues?.allowed_files || "",
@@ -207,6 +209,7 @@ const useAssignmentForm = (
           node: value.runtime_node,
           java: value.runtime_java,
           go: value.runtime_go,
+          rust: value.runtime_rust,
         }
         for (const language of RUNTIME_LANGUAGES) {
           const error = validateLanguageVersion(languageFields[language])
@@ -287,6 +290,7 @@ const useAssignmentForm = (
         runtime_node: value.runtime_node.trim(),
         runtime_java: value.runtime_java.trim(),
         runtime_go: value.runtime_go.trim(),
+        runtime_rust: value.runtime_rust.trim(),
         runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
         setup_command: value.setup_command.trim(),
         allowed_files: value.allowed_files,
@@ -367,6 +371,7 @@ export const assignmentToFormValues = (
     runtime_node: assignment.runtime?.node ?? "",
     runtime_java: assignment.runtime?.java ?? "",
     runtime_go: assignment.runtime?.go ?? "",
+    runtime_rust: assignment.runtime?.rust ?? "",
     // apt is hosted-only; a stored container block hides the apt field and the
     // submit path clears it, so blank it on read too — otherwise a legacy
     // container+apt entry would hold apt live-but-hidden and silently drop it.

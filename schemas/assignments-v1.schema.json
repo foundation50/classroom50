@@ -167,6 +167,7 @@
         "node": { "$ref": "#/$defs/langVersion" },
         "java": { "$ref": "#/$defs/langVersion" },
         "go": { "$ref": "#/$defs/langVersion" },
+        "rust": { "$ref": "#/$defs/langVersion" },
         "apt": {
           "type": "array",
           "items": { "type": "string", "pattern": "^[a-z0-9][a-z0-9.+-]{0,63}$" }

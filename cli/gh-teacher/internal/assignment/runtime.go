@@ -23,7 +23,7 @@ import (
 // flows verbatim into the workflow's `runs-on:`.
 var RunsOnLabelPattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$`)
 
-// LanguageVersionPattern: shared shape for python/node/java/go versions.
+// LanguageVersionPattern: shared shape for python/node/java/go/rust versions.
 // Permissive (`3.12`, `20`, `1.23.4`, `latest`) but injection-safe.
 var LanguageVersionPattern = regexp.MustCompile(`^[A-Za-z0-9._+-]{1,32}$`)
 
@@ -117,6 +117,7 @@ func ValidateRuntime(r RuntimeRef) error {
 		{"runtime.node", r.Node},
 		{"runtime.java", r.Java},
 		{"runtime.go", r.Go},
+		{"runtime.rust", r.Rust},
 	} {
 		if pair.value == "" {
 			continue

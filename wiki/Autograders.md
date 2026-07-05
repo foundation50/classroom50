@@ -348,6 +348,7 @@ When `runtime` is omitted, the workflow defaults to `ubuntu-latest` with Python 
 |---|---|---|
 | `runs-on` | string \| `[string]` | Runner selection, exactly like GitHub Actions' own `runs-on`: a single label (`"ubuntu-latest"`) or an array of labels (`["self-hosted", "gpu"]`) for a custom / self-hosted runner. No value allow-list — you own getting the label right; each label is only anti-injection-checked (1–10 labels). Omit for `ubuntu-latest`. |
 | `python` / `node` / `java` / `go` | string | Version strings passed to `actions/setup-python` / `setup-node` / `setup-java` (with `distribution: temurin`) / `setup-go`. `node`, `java`, `go` steps are skipped when their field is unset. `python` defaults to `3.12` on the host path; inside a `container` the image owns Python unless `python` is set explicitly. |
+| `rust` | string | Rustup toolchain specifier (`stable`, `nightly`, `1.79`, `nightly-2025-01-01`) passed to `dtolnay/rust-toolchain` (no first-party setup action exists). Skipped when unset. |
 | `apt` | `[string]` | Each package name must match `^[a-z0-9][a-z0-9.+-]{0,63}$` (Debian/Ubuntu source-package grammar, length-capped). Linux runners only. |
 | `container` | object | Escape hatch — see below. Mutually exclusive with `apt`. |
 

@@ -208,6 +208,19 @@ class TestValidatorHappyPaths:
         assert outputs["apt"] == "build-essential valgrind"
         assert outputs["container"] == "null"
 
+    def test_host_runtime_with_rust_emitted(self, inline_script, tmp_path):
+        # Rust has no first-party setup action (provisioned via
+        # dtolnay/rust-toolchain), but the validator treats it like any
+        # other language field: shape-checked and emitted verbatim.
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(runtime={"rust": "1.79"}),
+        )
+        assert rc == 0
+        assert outputs["rust"] == "1.79"
+        assert outputs["container"] == "null"
+
     def test_container_with_user_translates_to_options(self, inline_script, tmp_path):
         rc, _stdout, _stderr, outputs = _run_validator(
             inline_script, tmp_path,
@@ -419,6 +432,15 @@ class TestFieldValidation:
         # or by the regex check. Either way, no Python traceback.
         assert "Traceback" not in stderr
         assert "python" in stderr
+
+    def test_rust_with_shell_metacharacters_rejected(self, inline_script, tmp_path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script, tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(runtime={"rust": "1.79; rm -rf /"}),
+        )
+        assert rc != 0
+        assert "rust" in stderr
 
     def test_user_with_shell_metacharacters_rejected(self, inline_script, tmp_path):
         rc, _stdout, stderr, _outputs = _run_validator(

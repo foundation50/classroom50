@@ -76,7 +76,7 @@ export const FieldLabel = ({
   </div>
 )
 
-// A language toolchain version input (python/node/java/go). A themed combobox:
+// A language toolchain version input (python/node/java/go/rust). A themed combobox:
 // a text input with a chevron that opens a DaisyUI dropdown of the actively-
 // supported versions, but the input stays free-text so a teacher can type any
 // custom version. Empty = toolchain off (except Python, which the runner

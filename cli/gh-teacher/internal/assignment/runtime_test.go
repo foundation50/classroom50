@@ -23,7 +23,7 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 		},
 		{
 			name:    "all language fields",
-			runtime: RuntimeRef{Python: "3.12", Node: "20", Java: "21", Go: "1.23"},
+			runtime: RuntimeRef{Python: "3.12", Node: "20", Java: "21", Go: "1.23", Rust: "1.79"},
 		},
 		{
 			name:    "apt packages",
@@ -69,6 +69,15 @@ func TestValidateRuntime_HostPaths(t *testing.T) {
 			name:    "python version with semicolon rejected",
 			runtime: RuntimeRef{Python: "3.12; rm -rf /"},
 			wantErr: "runtime.python",
+		},
+		{
+			name:    "rust channel specifier accepted",
+			runtime: RuntimeRef{Rust: "stable"},
+		},
+		{
+			name:    "rust version with semicolon rejected",
+			runtime: RuntimeRef{Rust: "1.79; rm -rf /"},
+			wantErr: "runtime.rust",
 		},
 		{
 			name:    "apt with shell metacharacters rejected",
