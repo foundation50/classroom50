@@ -358,6 +358,76 @@ def test_main_soft_http_error_skips_and_exits_1(monkeypatch):
     assert rr.main() == 1
 
 
+def test_main_load_roster_hard_http_error_reports_token_scope(monkeypatch, capsys):
+    # A hard team-listing failure (401/403/599) must exit 1 AND emit the
+    # token-scope remediation (Members: Read / rotate-service-token). Both this
+    # and the transient branch return 1, so assert on the message, not just code.
+    _set_main_env(monkeypatch)
+
+    def boom(*a, **k):
+        raise _http_error(403)
+
+    monkeypatch.setattr(rr, "load_roster", boom)
+    monkeypatch.setattr(
+        rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "Members: Read" in err
+    assert "rotate-service-token" in err
+
+
+def test_main_load_roster_transient_http_error_reports_generic(monkeypatch, capsys):
+    # A non-hard team-listing failure (e.g. 404 missing/re-slugged team) exits 1
+    # with the generic "listing the classroom team failed" message — distinct
+    # from the hard-error token-scope guidance.
+    _set_main_env(monkeypatch)
+
+    def boom(*a, **k):
+        raise _http_error(404)
+
+    monkeypatch.setattr(rr, "load_roster", boom)
+    monkeypatch.setattr(
+        rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "listing the classroom team failed" in err
+    assert "Members: Read" not in err
+
+
+def test_main_load_roster_valueerror_is_reported_not_crashed(monkeypatch, capsys):
+    # A malformed team-listing body / pagination cap raises ValueError from
+    # _paginate_login_list; main() must surface it as an error and exit 1 rather
+    # than let the traceback escape (mirrors collect_scores.py).
+    _set_main_env(monkeypatch)
+
+    def boom(*a, **k):
+        raise ValueError("expected JSON array, got dict")
+
+    monkeypatch.setattr(rr, "load_roster", boom)
+    monkeypatch.setattr(
+        rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert rr.main() == 1
+    err = capsys.readouterr().err
+    assert "malformed" in err
+
+
+def test_main_empty_team_warns_and_exits_0(monkeypatch, capsys):
+    # An empty classroom team (no owner_filter) is nothing to regrade: succeed,
+    # but emit an empty-team warning so a green 0-repo run isn't mistaken for a
+    # real regrade.
+    _set_main_env(monkeypatch)
+    monkeypatch.setattr(rr, "load_roster", lambda *a, **k: [])
+    monkeypatch.setattr(
+        rr, "regrade_repo", lambda *a, **k: (_ for _ in ()).throw(AssertionError())
+    )
+    assert rr.main() == 0
+    err = capsys.readouterr().err
+    assert "no members" in err
+
+
 def test_main_skiprepo_counts_as_skipped_not_failed(monkeypatch):
     _set_main_env(monkeypatch)
     monkeypatch.setattr(rr, "load_roster", lambda *a, **k: ["alice", "bob"])
@@ -584,6 +654,18 @@ def test_list_team_member_logins_propagates_404(monkeypatch):
     monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
     with pytest.raises(urllib.error.HTTPError):
         rr.list_team_member_logins("https://api", "cs50org", "missing-team", "tok")
+
+
+def test_list_team_member_logins_raises_valueerror_on_non_array(monkeypatch):
+    # A non-array body (e.g. a GitHub error envelope during a partial outage)
+    # raises ValueError from _paginate_login_list rather than silently yielding
+    # no members — main() converts this to a loud error, not a crash.
+    def fake_get(url, token, *, accept, _retries=3):
+        return json.dumps({"message": "Server Error"}).encode("utf-8"), {}
+
+    monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
+    with pytest.raises(ValueError):
+        rr.list_team_member_logins("https://api", "cs50org", "classroom50-cs50", "tok")
 
 
 # Helpers ---------------------------------------------------------------------
