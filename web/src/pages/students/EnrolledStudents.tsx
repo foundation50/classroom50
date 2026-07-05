@@ -423,7 +423,7 @@ const EnrolledStudents = ({
     pendingHidden,
     teamSlug,
     csvMissingCount,
-    orgMembersMissingFromTeam,
+    notInOrgUsernames,
   } = useTeamRoster(org, classroom, students)
 
   const enrolled = useMemo(
@@ -518,18 +518,20 @@ const EnrolledStudents = ({
   }, [csvMissingCount, isLoading, isError])
 
   // Auto-reconcile on open: a rostered student who joined the ORG (native invite
-  // / SSO) but was never added to the classroom team renders as `not_in_org`,
-  // even though they're a full member. The team stays the enrollment source of
-  // truth — this just closes that gap by team-adding those confirmed members so
-  // they flip to `enrolled`. reconcileTeamFromOrgMembers re-verifies each is
-  // still active before the write; it never touches org membership or the CSV.
+  // / SSO) but was never added to the classroom team renders as `not_in_org`.
+  // Auto-reconcile simply tries to team-add every `not_in_org` username the
+  // teacher put in students.csv (the teacher owns the CSV's accuracy); the
+  // mutation team-adds the ones that are active org members and skips the rest,
+  // which stay `not_in_org` and are highlighted below for invite/removal. The
+  // team stays the enrollment source of truth; this touches neither org
+  // membership nor the CSV.
   //
   // Latched exactly like auto-sync: fire once per drift episode, re-arm only
-  // when the missing set empties. A failed add toasts once and, staying latched,
-  // does not retry in a loop.
+  // when the not_in_org set empties. A failed add toasts once and, staying
+  // latched, does not retry in a loop.
   const reconcileMutation = useMutation({
-    mutationFn: (members: { id: number; login: string }[]) =>
-      reconcileTeamFromOrgMembers(client, { org, classroom, members }),
+    mutationFn: (usernames: string[]) =>
+      reconcileTeamFromOrgMembers(client, { org, classroom, usernames }),
     onSuccess: (result) => {
       if (result.added.length > 0) {
         // Team membership changed; refresh the enrolled roster.
@@ -561,19 +563,21 @@ const EnrolledStudents = ({
   })
 
   const autoReconciledRef = useRef(false)
+  const notInOrgCount = notInOrgUsernames.length
   useEffect(() => {
     if (isLoading || isError) return
-    if (orgMembersMissingFromTeam.length === 0) {
+    if (notInOrgCount === 0) {
       autoReconciledRef.current = false
       return
     }
     if (autoReconciledRef.current || reconcileMutation.isPending) return
     autoReconciledRef.current = true
-    reconcileMutation.mutate(orgMembersMissingFromTeam)
-    // reconcileMutation identity is stable; the ref + missing-set/loading deps
-    // gate re-firing.
+    reconcileMutation.mutate(notInOrgUsernames)
+    // reconcileMutation identity is stable; the ref + count/loading deps gate
+    // re-firing. notInOrgCount (a number) is the stable dep — notInOrgUsernames
+    // itself is read inside the effect for the payload.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orgMembersMissingFromTeam, isLoading, isError])
+  }, [notInOrgCount, isLoading, isError])
 
   const resendForRow = async (row: TeamRosterRow) => {
     const inviteeId = Number(row.github_id)

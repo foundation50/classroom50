@@ -285,43 +285,17 @@ export function teamMembersMissingFromCsv(
   )
 }
 
-// The opposite reconcile direction from teamMembersMissingFromCsv: rostered
-// students who are ACTIVE org members but were never added to the classroom
-// team. They render as `not_in_org` (on students.csv with a username, not on the
-// team, not a pending invite) yet are fully in the org, so the team-driven
-// roster can — and should — auto-add them to the team, promoting them to
-// `enrolled` without the teacher touching org membership.
-//
-// Input is the already-computed roster (so the CSV↔team↔invite classification
-// isn't re-derived here) intersected with the org member list by github_id, then
-// login (a pre-rename CSV row keeps only the login). Returns the org member's
-// CURRENT login (never the possibly-stale CSV username) so the team-add targets
-// the right account. Pure so the count can gate an auto-add before any write.
-export function orgMembersMissingFromTeam(
-  rows: TeamRosterRow[],
-  orgMembers: GitHubUser[],
-): { id: number; login: string }[] {
-  const notInOrg = rows.filter((r) => r.state === "not_in_org")
-  if (notInOrg.length === 0) return []
-
-  const claimedIds = new Set(
-    notInOrg.map((r) => r.github_id.trim()).filter(Boolean),
-  )
-  const claimedLogins = new Set(
-    notInOrg.map((r) => r.username.trim().toLowerCase()).filter(Boolean),
-  )
-
-  const out: { id: number; login: string }[] = []
-  const seen = new Set<number>()
-  for (const m of orgMembers) {
-    if (seen.has(m.id)) continue
-    if (
-      claimedIds.has(String(m.id)) ||
-      claimedLogins.has(m.login.toLowerCase())
-    ) {
-      seen.add(m.id)
-      out.push({ id: m.id, login: m.login })
-    }
-  }
-  return out
+// The rostered usernames that are `not_in_org` — on students.csv with a GitHub
+// username but neither a team/org member nor a pending invite. Auto-reconcile
+// feeds these straight to reconcileTeamFromOrgMembers, which team-adds the ones
+// that turn out to be active org members and skips the rest (they stay
+// `not_in_org`, highlighted for the teacher to invite or remove). The CSV
+// username is authoritative — the teacher owns its accuracy — so no reverse
+// match against the live org-member list (which could target a recycled login
+// on the wrong account) is needed.
+export function notInOrgUsernames(rows: TeamRosterRow[]): string[] {
+  return rows
+    .filter((r) => r.state === "not_in_org")
+    .map((r) => r.username.trim())
+    .filter(Boolean)
 }

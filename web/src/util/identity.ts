@@ -42,7 +42,7 @@ export function memberIdSet(members: GitHubUser[]): Set<string> {
 
 // GitHub ids and lowercased logins already claimed by a roster; a member is
 // "claimed" when their id or login appears on any row. Shared so org-members
-// aggregation and the manual-match picker apply one predicate.
+// aggregation and the team-sync "missing member" join apply one predicate.
 export function rosterClaimSet(
   students: { github_id?: string; username?: string }[],
 ): {

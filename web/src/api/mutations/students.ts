@@ -18,10 +18,15 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "./classrooms"
-import { getRawFile, getUser, listTeamMembers } from "@/hooks/github/queries"
+import {
+  getRawFile,
+  getUser,
+  listTeamMembers,
+  sleep,
+} from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { isSameGitHubUser } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { prefixCommit } from "@/util/commit"
@@ -56,6 +61,28 @@ async function resolveClassroomTeam(
     }
   }
   return { slug: `classroom50-${classroom}` }
+}
+
+// Resolve the classroom team, retrying only TRANSIENT read failures (5xx / 429 /
+// network). A genuine "no team block" returns id: undefined without throwing
+// (handled inside resolveClassroomTeam), so it is NOT retried; a transient blip
+// is retried a couple of times and then propagates as a real error, so callers
+// can tell "the team doesn't exist" apart from "GitHub was briefly unreachable".
+async function resolveClassroomTeamWithRetry(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+): Promise<{ slug: string; id?: number }> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await resolveClassroomTeam(client, org, classroom)
+    } catch (err) {
+      const definitive =
+        err instanceof GitHubAPIError && isDefinitiveGitHubStatus(err.status)
+      if (definitive || attempt >= 2) throw err
+      await sleep(300 * (attempt + 1) + Math.random() * 200)
+    }
+  }
 }
 
 export type AddStudentToClassroomResult = CreateClassroomResult & {
@@ -327,16 +354,13 @@ export async function inviteByEmail(
   // Resolve the classroom team id up front: in a team-authoritative model, an
   // invite that can't carry the team is broken — the accepted student would land
   // in the org with no team and (since we write no CSV row) no roster row,
-  // silently uncollected. So if we can't resolve the team (missing team block OR
-  // a transient read failure), block the invite rather than send a half-working
-  // one. `resolveClassroomTeam` returns id: undefined for a classroom with no
-  // team block without throwing; a read failure throws — treat both as "no team".
-  let teamId: number | undefined
-  try {
-    teamId = (await resolveClassroomTeam(client, org, classroom)).id
-  } catch {
-    teamId = undefined
-  }
+  // silently uncollected. So block the invite unless we can attach the team.
+  // resolveClassroomTeamWithRetry returns id: undefined only for a genuine
+  // missing team block (no throw); a TRANSIENT read failure is retried and then
+  // propagates as its own error, so a brief GitHub blip surfaces "try again"
+  // rather than the misleading "re-run classroom setup" block below.
+  const teamId = (await resolveClassroomTeamWithRetry(client, org, classroom))
+    .id
   if (!teamId) {
     throw new Error(
       `Couldn't resolve the classroom team for ${classroom}, so no invite was ` +
@@ -845,26 +869,31 @@ export async function syncRosterFromTeam(
 export type ReconcileTeamInput = {
   org: string
   classroom: string
-  // Org members (id + current login) the roster classified as unprovisioned but
-  // who are active members absent from the classroom team. Resolved by the
-  // caller from orgMembersMissingFromTeam so this mutation stays a thin,
-  // re-verified writer.
-  members: { id: number; login: string }[]
+  // The rostered usernames (from `not_in_org` rows) to try to promote onto the
+  // classroom team. These are the GitHub usernames the teacher put in
+  // students.csv — the teacher owns their accuracy; this is just a convenient
+  // batch team-add. A username that isn't an active org member is skipped and
+  // stays `not_in_org` (highlighted in the roster for invite/removal).
+  usernames: string[]
 }
 
 export type ReconcileTeamResult = {
-  // Logins added to the classroom team this run.
+  // Usernames added to the classroom team this run.
   added: string[]
-  // Logins that couldn't be added (no longer active, or the team-add failed).
+  // Rostered usernames that aren't active org members yet, so nothing was added
+  // — they stay `not_in_org` for the teacher to invite or remove. Not an error.
+  skipped: string[]
+  // Usernames whose team-add API call failed (retryable, worth surfacing).
   failed: { login: string; message: string }[]
 }
 
-// Add rostered active org members to the classroom team so they stop rendering
-// as `unprovisioned` and become `enrolled`. The team stays the source of truth
-// for enrollment — this only closes the gap where a student joined the ORG
-// (native invite / SSO) but was never put on the team. Each add is:
-//   1) re-verified as an ACTIVE org member (the trust model used across the
-//      enroll paths — never team-add a non-member), then
+// Batch-add the roster's `not_in_org` students to the classroom team when they
+// turn out to already be active org members — the convenient team-add the
+// teacher would otherwise do by hand. The CSV username is authoritative (the
+// teacher owns its accuracy); this only closes the gap where a student joined
+// the ORG (native invite / SSO) but was never put on the team. Each add is:
+//   1) verified as an ACTIVE org member (never team-add a non-member); a
+//      non-member is SKIPPED (stays `not_in_org`, highlighted), not a failure.
 //   2) an idempotent PUT team membership.
 // Best-effort per user: one failure never blocks the others, and nothing here
 // touches org membership or students.csv.
@@ -872,26 +901,25 @@ export async function reconcileTeamFromOrgMembers(
   client: GitHubClient,
   input: ReconcileTeamInput,
 ): Promise<ReconcileTeamResult> {
-  const { org, classroom, members } = input
+  const { org, classroom, usernames } = input
   await assertClassroomNotArchived(client, org, classroom)
 
   const added: string[] = []
+  const skipped: string[] = []
   const failed: ReconcileTeamResult["failed"] = []
 
-  if (members.length === 0) return { added, failed }
+  if (usernames.length === 0) return { added, skipped, failed }
 
   const teamSlug = await resolveClassroomTeamSlug(client, org, classroom)
 
-  for (const m of members) {
-    const login = m.login.trim()
+  for (const username of usernames) {
+    const login = username.trim()
     if (!login) continue
-    // Re-verify active membership right before the write: the org list can be
-    // stale, and we never team-add a non-member.
+    // Only team-add active org members. A rostered non-member isn't a failure —
+    // they simply aren't in the org yet, so they stay `not_in_org` and the
+    // roster highlights them for the teacher to invite or remove.
     if (!(await isActiveMember(client, org, login))) {
-      failed.push({
-        login,
-        message: `${login} is no longer an active member of ${org}.`,
-      })
+      skipped.push(login)
       continue
     }
     const result = await tryAddUserToTeam(
@@ -903,7 +931,7 @@ export async function reconcileTeamFromOrgMembers(
     else failed.push({ login, message: result.detail })
   }
 
-  return { added, failed }
+  return { added, skipped, failed }
 }
 
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
@@ -1113,8 +1141,7 @@ export async function unenrollStudent(
 
   const currentStudents = parseStudentsCsv(currentCsv)
 
-  // Match the target row via the shared roster-row matcher (username/github_id,
-  // email only for a fully email-only target).
+  // Match the target row via the shared roster-row matcher (username/github_id).
   const sameRow = (student: StudentCsvRow) =>
     matchesRosterRow(student, toRemoveStudent)
 
@@ -1271,7 +1298,7 @@ export async function bulkUnenrollStudents(
   }
 
   // Same per-row match predicate as unenrollStudent (shared matchesRosterRow):
-  // username/github_id when present, email only for a fully email-only target.
+  // username/github_id.
   const matchesTarget = (row: StudentCsvRow, target: Student): boolean =>
     matchesRosterRow(row, target)
 

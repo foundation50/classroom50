@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
-  orgMembersMissingFromTeam,
+  notInOrgUsernames,
   rowToStudent,
   teamMembersMissingFromCsv,
 } from "./teamRoster"
@@ -306,61 +306,41 @@ describe("teamMembersMissingFromCsv", () => {
   })
 })
 
-describe("orgMembersMissingFromTeam", () => {
-  // A rostered student who is a live org member but absent from the classroom
-  // team: enrolled on the team (member 101) stays out of the result; the
-  // not_in_org-but-org-member (202) is returned for auto team-add.
+describe("notInOrgUsernames", () => {
+  // The rostered usernames that are `not_in_org` — what auto-reconcile tries to
+  // team-add. Enrolled team members and pending invites are excluded; only
+  // rows the roster classified as on-CSV-but-not-in-org contribute.
   const roster = (students: Student[], members: GitHubUser[]) =>
     buildTeamRoster({ members, students })
 
-  it("returns a not_in_org CSV row that is an active org member (by id)", () => {
+  it("returns the username of a not_in_org row", () => {
     const rows = roster(
       [
         csvRow({ github_id: "101", username: "ada" }),
         csvRow({ github_id: "202", username: "bob" }),
       ],
-      [member(101, "ada")], // only ada is on the team
+      [member(101, "ada")], // only ada is on the team; bob is not_in_org
     )
-    const missing = orgMembersMissingFromTeam(rows, [
-      member(101, "ada"),
-      member(202, "bob"),
-    ])
-    expect(missing).toEqual([{ id: 202, login: "bob" }])
+    expect(notInOrgUsernames(rows)).toEqual(["bob"])
   })
 
-  it("matches an id-less CSV row by login and returns the member's current login", () => {
+  it("returns the username of an id-less not_in_org row verbatim", () => {
     const rows = roster([csvRow({ username: "Bob" })], [])
-    // GitHub renamed bob -> bobby; match on the CSV login, return current login.
-    const missing = orgMembersMissingFromTeam(rows, [member(202, "bob")])
-    expect(missing).toEqual([{ id: 202, login: "bob" }])
+    // No reverse match against the org list: the CSV username is authoritative,
+    // returned as written (reconcile lowercases/verifies membership itself).
+    expect(notInOrgUsernames(rows)).toEqual(["Bob"])
   })
 
-  it("ignores not_in_org rows that are NOT org members (still not in org)", () => {
-    const rows = roster([csvRow({ username: "ghost" })], [])
-    expect(orgMembersMissingFromTeam(rows, [member(1, "someoneelse")])).toEqual(
-      [],
-    )
-  })
-
-  it("ignores already-enrolled team members", () => {
+  it("excludes already-enrolled team members", () => {
     const rows = roster(
       [csvRow({ github_id: "101", username: "ada" })],
       [member(101, "ada")],
     )
-    expect(orgMembersMissingFromTeam(rows, [member(101, "ada")])).toEqual([])
+    expect(notInOrgUsernames(rows)).toEqual([])
   })
 
   it("is empty when there are no not_in_org rows", () => {
     const rows = roster([], [member(101, "ada")])
-    expect(orgMembersMissingFromTeam(rows, [member(101, "ada")])).toEqual([])
-  })
-
-  it("dedupes if the same member appears twice in the org list", () => {
-    const rows = roster([csvRow({ github_id: "202", username: "bob" })], [])
-    const missing = orgMembersMissingFromTeam(rows, [
-      member(202, "bob"),
-      member(202, "bob"),
-    ])
-    expect(missing).toEqual([{ id: 202, login: "bob" }])
+    expect(notInOrgUsernames(rows)).toEqual([])
   })
 })
