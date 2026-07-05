@@ -81,7 +81,12 @@ const RosterMemberModal = ({
     if (!open && dialog.open) dialog.close()
   }, [open])
 
-  const busy = working || submitting
+  // `resending` covers an in-flight invite/resend; folding it into `busy` keeps
+  // the modal non-closeable (button, backdrop, Escape) while a write is pending,
+  // matching the unenroll (`working`) guard. Without it, closing or switching
+  // rows mid-invite would let the captured-row promise apply onResent/onError/
+  // onClose to a stale student.
+  const busy = working || submitting || resending
 
   const handleClose = () => {
     if (busy) return
@@ -124,6 +129,18 @@ const RosterMemberModal = ({
           t("students.inviteFailed", {
             username: row.username || row.email,
             error: res.failed[0].message,
+          }),
+        )
+        return
+      }
+      // A rate limit deferred the single invite: report it rather than closing
+      // as if the invite was sent.
+      if (res.deferred.length > 0) {
+        onError(
+          row.key,
+          t("students.inviteFailed", {
+            username: row.username || row.email,
+            error: t("students.bulk.rateLimitedDeferred"),
           }),
         )
         return
@@ -309,10 +326,15 @@ const RosterMemberModal = ({
               {canInvite && confirmingInvite ? (
                 <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
                   <p className="text-base-content/80">
-                    {t("students.confirmInviteBody", {
-                      label: row.username || row.email,
-                      org,
-                    })}
+                    {t(
+                      row.github_id
+                        ? "students.confirmInviteBody"
+                        : "students.confirmInviteBodyNoId",
+                      {
+                        label: row.username || row.email,
+                        org,
+                      },
+                    )}
                   </p>
                   <div className="flex justify-end gap-2">
                     <button

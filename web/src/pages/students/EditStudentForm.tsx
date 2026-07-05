@@ -21,10 +21,9 @@ export type EditStudentFormValues = {
 }
 
 // The teacher-facing metadata form for a roster row (first/last/email/section)
-// with the read-only GitHub identity panel. Extracted from EditStudent's dialog
-// so it can be embedded directly in the roster detail modal — nesting
-// EditStudent's own <dialog showModal> inside another modal dialog is invalid.
-// EditStudent keeps its dialog shell wrapping this same form.
+// with the read-only GitHub identity panel. Standalone (no dialog shell of its
+// own) so it embeds directly in the roster detail modal — nesting a second
+// `<dialog showModal>` inside another modal dialog is invalid.
 //
 // `resetSignal` lets a parent that keeps the form mounted (e.g. a detail modal
 // reused across rows) reset field values to the current student on open; a

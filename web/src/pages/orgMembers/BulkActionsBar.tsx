@@ -15,34 +15,27 @@ import {
   type BulkRemoveFromClassroomResult,
 } from "@/pages/orgMembers/bulkRemoveFromClassroom"
 import { ConfirmModal } from "@/components/modals"
+import {
+  BulkResultSection,
+  type BulkPhase,
+  type BulkProgress,
+  type BulkResultView,
+} from "@/components/bulk/resultView"
 
 // A classroom option for the picker (the config-repo dir name/path).
 export type BulkClassroomOption = { name: string; path: string }
-
-type Phase = "idle" | "working" | "complete" | "error"
-type Progress = { processed: number; total: number; message: string }
-
-// A completed run of either action, normalized so the results modal renders one
-// shape. `sections` are labeled groups of per-row lines (added / skipped etc.).
-type ResultView = {
-  headline: string
-  sections: {
-    title: string
-    rows: { key: string; label: string; detail?: string }[]
-  }[]
-}
 
 const buildAddResult = (
   res: BulkAddToClassroomResult,
   classroom: string,
   t: ReturnType<typeof useTranslation>["t"],
-): ResultView => {
+): BulkResultView => {
   const added = res.enroll?.addedStudents ?? []
   const csvSkipped = res.enroll?.skippedStudents ?? []
   const teamFailed = (res.enroll?.teamResults ?? []).filter(
     (r) => r.status === "failed",
   )
-  const sections: ResultView["sections"] = []
+  const sections: BulkResultView["sections"] = []
   if (added.length > 0) {
     sections.push({
       title: t("orgMembers.bulk.resultAdded"),
@@ -91,11 +84,11 @@ const buildRemoveResult = (
   res: BulkRemoveFromClassroomResult,
   classroom: string,
   t: ReturnType<typeof useTranslation>["t"],
-): ResultView => {
+): BulkResultView => {
   const removed = res.outcomes.filter((o) => o.status === "removed")
   const skipped = res.outcomes.filter((o) => o.status === "skipped")
   const failed = res.outcomes.filter((o) => o.status === "failed")
-  const sections: ResultView["sections"] = []
+  const sections: BulkResultView["sections"] = []
   if (skipped.length > 0) {
     sections.push({
       title: t("orgMembers.bulk.resultSkipped"),
@@ -139,32 +132,6 @@ const buildRemoveResult = (
     sections,
   }
 }
-
-const ResultSection = ({
-  title,
-  rows,
-}: {
-  title: string
-  rows: { key: string; label: string; detail?: string }[]
-}) => (
-  <div>
-    <h4 className="mb-2 font-semibold">{title}</h4>
-    <div className="max-h-48 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm">
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <td>
-                <code>{row.label}</code>
-              </td>
-              <td className="opacity-70">{row.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)
 
 // The members table's header toolbar: always shows select-all + a contextual
 // label; once rows are selected it reveals the classroom picker +
@@ -212,13 +179,13 @@ const BulkActionsBar = ({
 
   const [classroom, setClassroom] = useState("")
   const [action, setAction] = useState<"add" | "remove" | null>(null)
-  const [phase, setPhase] = useState<Phase>("idle")
-  const [progress, setProgress] = useState<Progress>({
+  const [phase, setPhase] = useState<BulkPhase>("idle")
+  const [progress, setProgress] = useState<BulkProgress>({
     processed: 0,
     total: 0,
     message: "",
   })
-  const [result, setResult] = useState<ResultView | null>(null)
+  const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)
   // Gates the destructive bulk remove behind a confirmation step.
   const [confirmingRemove, setConfirmingRemove] = useState(false)
@@ -494,7 +461,7 @@ const BulkActionsBar = ({
                 <span>{result.headline}</span>
               </div>
               {result.sections.map((section) => (
-                <ResultSection
+                <BulkResultSection
                   key={section.title}
                   title={section.title}
                   rows={section.rows}

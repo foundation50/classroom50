@@ -14,6 +14,12 @@ import {
   inviteRosterStudents,
   type InviteRosterStudentsResult,
 } from "@/api/mutations/students"
+import {
+  BulkResultSection,
+  type BulkPhase,
+  type BulkProgress,
+  type BulkResultView,
+} from "@/components/bulk/resultView"
 import type { TeamRosterRow } from "@/util/teamRoster"
 
 // The three "add students" affordances the toolbar surfaces (when nothing is
@@ -25,58 +31,27 @@ export type AddStudentActions = {
   onInviteLinks: () => void
 }
 
-type Phase = "idle" | "working" | "complete" | "error"
-type Progress = { processed: number; total: number; message: string }
-
-type ResultView = {
-  headline: string
-  sections: {
-    title: string
-    rows: { key: string; label: string; detail?: string }[]
-  }[]
-}
-
-const ResultSection = ({
-  title,
-  rows,
-}: {
-  title: string
-  rows: { key: string; label: string; detail?: string }[]
-}) => (
-  <div>
-    <h4 className="mb-2 font-semibold">{title}</h4>
-    <div className="max-h-48 overflow-auto rounded-box border border-base-300">
-      <table className="table table-sm">
-        <tbody>
-          {rows.map((row) => (
-            <tr key={row.key}>
-              <td>
-                <code>{row.label}</code>
-              </td>
-              <td className="opacity-70">{row.detail}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  </div>
-)
-
 const buildUnenrollResult = (
   res: BulkUnenrollRosterResult,
   t: ReturnType<typeof useTranslation>["t"],
-): ResultView => {
+): BulkResultView => {
   const removed = res.outcomes.filter((o) => o.status === "removed")
   const skipped = res.outcomes.filter((o) => o.status === "skipped")
   const failed = res.outcomes.filter((o) => o.status === "failed")
-  const sections: ResultView["sections"] = []
+  const sections: BulkResultView["sections"] = []
   if (skipped.length > 0) {
     sections.push({
       title: t("students.bulk.resultSkipped"),
       rows: skipped.map((o) => ({
         key: o.key,
         label: o.label,
-        detail: o.detail,
+        // `detail` is a stable reason token from bulkUnenrollRoster; translate
+        // it at the render boundary (raw tokens bypass the CI en.json audit and
+        // can't be localized), matching the pending path's t("...noInviteId").
+        detail:
+          o.detail === "already-removed"
+            ? t("students.bulk.alreadyRemoved")
+            : o.detail,
       })),
     })
   }
@@ -151,21 +126,29 @@ const RosterBulkActionsBar = ({
   const titleId = useId()
 
   const [action, setAction] = useState<"unenroll" | "invite" | null>(null)
-  const [phase, setPhase] = useState<Phase>("idle")
-  const [progress, setProgress] = useState<Progress>({
+  const [phase, setPhase] = useState<BulkPhase>("idle")
+  const [progress, setProgress] = useState<BulkProgress>({
     processed: 0,
     total: 0,
     message: "",
   })
-  const [result, setResult] = useState<ResultView | null>(null)
+  const [result, setResult] = useState<BulkResultView | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
+  const [confirmingInvite, setConfirmingInvite] = useState(false)
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
   const notInOrgSelected = selectedRows.filter((r) => r.state === "not_in_org")
   // Both pending (resend) and not_in_org (fresh invite) rows are "invitable".
   const invitableSelected = pendingSelected.length + notInOrgSelected.length
+  // not_in_org rows with no stored github_id are invited by resolving the
+  // current holder of the username (GET /users/{login}). A recycled/renamed
+  // login could resolve to a stranger, so inviting them is gated behind a
+  // confirmation that names the risk (see the invite button below).
+  const idlessInviteCount = notInOrgSelected.filter(
+    (r) => !r.github_id?.trim(),
+  ).length
 
   const isOpen = phase !== "idle"
   useEffect(() => {
@@ -300,6 +283,18 @@ const RosterBulkActionsBar = ({
             label: f.username,
             detail: f.message,
           })
+        // A rate limit inside the fresh-invite pass leaves the remaining rows
+        // deferred; surface them and flag the run so the rate-limit warning
+        // renders (mirrors the pending-pass break above).
+        if (res.deferred.length > 0) {
+          rateLimited = true
+          for (const u of res.deferred)
+            skipped.push({
+              key: keyFor(u),
+              label: u,
+              detail: t("students.bulk.rateLimitedDeferred"),
+            })
+        }
       } catch (err) {
         setError(getErrorMessage(err))
         setPhase("error")
@@ -307,7 +302,7 @@ const RosterBulkActionsBar = ({
       }
     }
 
-    const sections: ResultView["sections"] = []
+    const sections: BulkResultView["sections"] = []
     if (skipped.length > 0)
       sections.push({ title: t("students.bulk.resultSkipped"), rows: skipped })
     if (failed.length > 0)
@@ -388,7 +383,11 @@ const RosterBulkActionsBar = ({
                         count: invitableSelected,
                       })
                 }
-                onClick={() => void runInvite()}
+                onClick={() =>
+                  idlessInviteCount > 0
+                    ? setConfirmingInvite(true)
+                    : void runInvite()
+                }
               >
                 <Send aria-hidden="true" className="size-4" />
                 {t("students.bulk.invite")}
@@ -470,6 +469,24 @@ const RosterBulkActionsBar = ({
         onClose={() => setConfirmingUnenroll(false)}
       />
 
+      <ConfirmModal
+        open={confirmingInvite}
+        dangerous={false}
+        needsConfirm={false}
+        title={t("students.bulk.confirmInviteTitle", {
+          count: invitableSelected,
+        })}
+        description={t("students.bulk.confirmInviteBody", {
+          count: idlessInviteCount,
+        })}
+        confirmLabel={t("students.bulk.invite")}
+        onConfirm={async () => {
+          setConfirmingInvite(false)
+          setTimeout(() => void runInvite(), 0)
+        }}
+        onClose={() => setConfirmingInvite(false)}
+      />
+
       <dialog
         ref={dialogRef}
         className="modal"
@@ -530,7 +547,7 @@ const RosterBulkActionsBar = ({
                 <span>{result.headline}</span>
               </div>
               {result.sections.map((section) => (
-                <ResultSection
+                <BulkResultSection
                   key={section.title}
                   title={section.title}
                   rows={section.rows}

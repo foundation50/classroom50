@@ -12,6 +12,7 @@ import {
   syncRosterFromTeam,
   updateStudent,
   updateStudentWithConflictRetry,
+  parseStudentsCsv,
   STUDENT_CSV_FIELDS,
 } from "./students"
 import { GitHubAPIError } from "@/hooks/github/errors"
@@ -1297,6 +1298,47 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 })
 
+describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
+  const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
+
+  it("parses a row missing the trailing github_id into correct fields", () => {
+    // 5 fields: the empty trailing github_id column omitted. The row must parse
+    // (not throw) AND keep every value in its own column, with github_id -> "".
+    const rows = parseStudentsCsv(
+      HEADER + "octocat,Grace,Hopper,grace@example.edu,Section A\n",
+    )
+    expect(rows).toEqual([
+      {
+        username: "octocat",
+        first_name: "Grace",
+        last_name: "Hopper",
+        email: "grace@example.edu",
+        section: "Section A",
+        github_id: "",
+      },
+    ])
+  })
+
+  it("throws on a row short by more than one column", () => {
+    // 4 fields — short by 2. A row this incomplete can't be a mere dropped
+    // trailing github_id; Papa would map its values into the wrong columns, so
+    // the trailing-only guard must reject it rather than silently misalign
+    // identity. (A row short by exactly one is inherently ambiguous and is
+    // treated as the optional trailing github_id being omitted — see above.)
+    expect(() =>
+      parseStudentsCsv(HEADER + "octocat,Grace,Hopper,grace@example.edu\n"),
+    ).toThrow(/students\.csv/)
+  })
+
+  it("still rejects a TooManyFields (extra column) row as before", () => {
+    expect(() =>
+      parseStudentsCsv(
+        HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,extra\n",
+      ),
+    ).toThrow(/students\.csv/)
+  })
+})
+
 // Fresh org invites for not_in_org roster students. A minimal fake client:
 // classroom.json (no team block -> derived slug, no team id), org-membership
 // state (404 = not a member), /users/{login} resolution, and the invitation
@@ -1304,10 +1346,33 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
 const makeInviteClient = (opts: {
   users?: Record<string, { id: number }>
   members?: string[]
+  // Logins the org reports as having a still-pending invite (state "pending").
+  pending?: string[]
   invitationFails?: boolean
+  // When set, the Nth (0-based) POST /invitations rejects with a 429 rate limit
+  // and every later POST would too — used to exercise the mid-batch short-circuit.
+  rateLimitFromInvite?: number
 }) => {
   const invitations: { invitee_id?: number; team_ids?: number[] }[] = []
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
+  const pendingSet = new Set((opts.pending ?? []).map((m) => m.toLowerCase()))
+  let inviteAttempts = 0
+
+  const rateLimitError = () =>
+    new GitHubAPIError({
+      status: 429,
+      url: "/orgs/acme/invitations",
+      message: "You have exceeded a secondary rate limit",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: 60,
+      },
+    })
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
     if (path.includes("classroom.json")) {
@@ -1332,9 +1397,19 @@ const makeInviteClient = (opts: {
         if (memberSet.has(login.toLowerCase())) {
           return Promise.resolve({ state: "active" })
         }
+        if (pendingSet.has(login.toLowerCase())) {
+          return Promise.resolve({ state: "pending" })
+        }
         return Promise.reject(new Error("404 not a member"))
       }
       if (path.endsWith("/invitations") && options?.method === "POST") {
+        const attempt = inviteAttempts++
+        if (
+          opts.rateLimitFromInvite !== undefined &&
+          attempt >= opts.rateLimitFromInvite
+        ) {
+          return Promise.reject(rateLimitError())
+        }
         if (opts.invitationFails) {
           return Promise.reject(new Error("invite blew up"))
         }
@@ -1410,5 +1485,51 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(res.invited).toEqual([])
     expect(res.failed).toHaveLength(1)
     expect(res.failed[0].username).toBe("ghost")
+  })
+
+  it("skips a row that already has a pending invite", async () => {
+    const { client, invitations } = makeInviteClient({
+      pending: ["octocat"],
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "octocat", github_id: "1" }],
+    })
+
+    expect(res.invited).toEqual([])
+    expect(res.skipped).toEqual([
+      { username: "octocat", reason: "already-pending" },
+    ])
+    // A pending invite already exists, so no new invitation is POSTed.
+    expect(invitations).toEqual([])
+  })
+
+  it("stops inviting and defers the rest once a rate limit is hit", async () => {
+    // First invite trips a 429; every remaining target should be deferred, not
+    // re-fired at the throttled endpoint.
+    const { client, invitations } = makeInviteClient({
+      rateLimitFromInvite: 0,
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [
+        { username: "a", github_id: "1" },
+        { username: "b", github_id: "2" },
+        { username: "c", github_id: "3" },
+      ],
+    })
+
+    expect(res.invited).toEqual([])
+    expect(res.failed).toEqual([])
+    // All three land in deferred: the first from the rate-limited catch, the
+    // rest from the short-circuit that skips work once the flag is set.
+    expect(res.deferred.sort()).toEqual(["a", "b", "c"])
+    // Only the one attempt that tripped the limit was POSTed; no further invites
+    // were fired at the throttled endpoint.
+    expect(invitations).toEqual([])
   })
 })

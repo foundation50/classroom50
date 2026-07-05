@@ -152,7 +152,7 @@ export function splitName(name: string | null): {
   return { first_name: parts.at(0) ?? "", last_name: parts.slice(1).join(" ") }
 }
 
-function parseStudentsCsv(csv: string): StudentCsvRow[] {
+export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   const parsed = Papa.parse<Record<string, string>>(csv, {
     header: true,
     delimiter: ",",
@@ -160,18 +160,28 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
     transformHeader: (header) => header.trim(),
   })
 
-  // Papa flags a data row with fewer columns than the header as a
-  // `FieldMismatch`/`TooFewFields` error, but such a row is benign: a roster
-  // hand-edited or exported by a tool that drops empty TRAILING columns (e.g.
-  // `octocat,Grace,Hopper,,Section A` with the empty `github_id` omitted) still
-  // parses correctly under `header: true` — the missing trailing field is
-  // `undefined`, which normalizeStudentRow coerces to "". Tolerate these (and
-  // Papa's `Delimiter` auto-detect notices) so a sync/read doesn't abort on a
-  // roster that's merely missing trailing commas. TooManyFields stays fatal: an
-  // extra column means an unquoted delimiter split a value and later columns are
-  // misaligned, so the parsed identity can't be trusted.
+  // A `TooFewFields` row is tolerated ONLY when it is short by exactly one
+  // column — the ambiguous-but-benign "trailing `github_id` omitted" case:
+  // `octocat,Grace,Hopper,,Section A` (5 fields) maps cleanly under
+  // `header: true` (the missing trailing field is `undefined`, coerced to "" by
+  // normalizeStudentRow), so a sync/read shouldn't abort on a roster merely
+  // missing trailing commas. A row short by TWO or more can't be explained by a
+  // single dropped trailing field, and since Papa maps values POSITIONALLY it
+  // would silently shift every value into the wrong column (corrupting the
+  // identity/email join with no error) — exactly as untrustworthy as a
+  // `TooManyFields` row, so it stays fatal. (A row short by exactly one where a
+  // MIDDLE cell was dropped is positionally indistinguishable from a dropped
+  // trailing field, so it is unavoidably read as the latter; nothing in the row
+  // data can disambiguate the two.)
+  const shortRowsWithinTolerance = tooFewFieldsAreTrailingOnly(
+    csv,
+    parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
+  )
+
   const fatalErrors = parsed.errors.filter(
-    (error) => error.type !== "Delimiter" && error.code !== "TooFewFields",
+    (error) =>
+      error.type !== "Delimiter" &&
+      !(error.code === "TooFewFields" && shortRowsWithinTolerance),
   )
 
   if (fatalErrors.length > 0) {
@@ -185,6 +195,28 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
   return parsed.data
     .map((row) => normalizeStudentRow(row))
     .filter((row) => row.username || row.github_id || row.email)
+}
+
+// True when EVERY short data row is short by exactly one column, i.e. only the
+// trailing field was dropped. Re-parses without `header` to read raw row widths
+// (the header-keyed `data` hides which physical column is missing), so a row
+// dropping a middle cell — which Papa would silently left-shift — is NOT treated
+// as benign. A row that's short by 2+ (or a header we couldn't count) is fatal.
+function tooFewFieldsAreTrailingOnly(
+  csv: string,
+  headerWidth: number,
+): boolean {
+  if (headerWidth <= 0) return false
+  const raw = Papa.parse<string[]>(csv, {
+    delimiter: ",",
+    skipEmptyLines: "greedy",
+  })
+  // rows[0] is the header; a short DATA row is benign only at width-1.
+  return raw.data
+    .slice(1)
+    .every(
+      (row) => row.length === headerWidth || row.length === headerWidth - 1,
+    )
 }
 
 // Neutralize spreadsheet formula injection (OWASP CSV injection) in free-text
@@ -980,6 +1012,9 @@ export type InviteRosterStudentsResult = {
   // Couldn't invite (username didn't resolve to a GitHub account, or the invite
   // call failed).
   failed: { username: string; message: string }[]
+  // Not attempted because a GitHub rate limit was hit mid-batch — the teacher
+  // can retry these later once the limit clears (see the short-circuit below).
+  deferred: string[]
 }
 
 // Bulk-invite roster students who are on students.csv (by username) but not yet
@@ -1000,11 +1035,12 @@ export async function inviteRosterStudents(
   const invited: string[] = []
   const skipped: InviteRosterStudentsResult["skipped"] = []
   const failed: InviteRosterStudentsResult["failed"] = []
+  const deferred: string[] = []
 
   const targets = students
     .map((s) => ({ username: s.username.trim(), github_id: s.github_id }))
     .filter((s) => s.username)
-  if (targets.length === 0) return { invited, skipped, failed }
+  if (targets.length === 0) return { invited, skipped, failed, deferred }
 
   // Resolve the classroom team once so every fresh invite carries it (accepting
   // the single org invite then activates team membership). A missing team id is
@@ -1023,8 +1059,20 @@ export async function inviteRosterStudents(
     onProgress?.({ processed, total: targets.length, message: username })
   }
 
+  // Once GitHub returns a (secondary) rate limit, stop issuing new invites:
+  // hammering a throttled endpoint for every remaining target only extends the
+  // throttle window and floods the results with spurious failures. Remaining
+  // targets are reported as `deferred` for a later retry — mirroring the
+  // pending-resend loop in RosterBulkActionsBar, which breaks on isRateLimited.
+  let rateLimited = false
+
   await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
     const { username } = target
+    if (rateLimited) {
+      deferred.push(username)
+      bump(username)
+      return
+    }
     try {
       // Prefer the stored id; otherwise resolve the current account by login.
       let inviteeId = Number(target.github_id)
@@ -1042,13 +1090,18 @@ export async function inviteRosterStudents(
         skipped.push({ username, reason: "already-member" })
       else skipped.push({ username, reason: "already-pending" })
     } catch (err) {
-      failed.push({ username, message: getErrorMessage(err) })
+      if (err instanceof GitHubAPIError && err.isRateLimited) {
+        rateLimited = true
+        deferred.push(username)
+      } else {
+        failed.push({ username, message: getErrorMessage(err) })
+      }
     } finally {
       bump(username)
     }
   })
 
-  return { invited, skipped, failed }
+  return { invited, skipped, failed, deferred }
 }
 
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {

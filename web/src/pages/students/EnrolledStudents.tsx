@@ -231,11 +231,29 @@ const EnrolledStudents = ({
 
   // Auto-sync on open: append team members lacking a CSV row (fire once per
   // drift episode; re-arm when count returns to 0).
+  //
+  // suppressAutoSyncRef blocks the NEXT drift episode after a teacher-initiated
+  // unenroll: bulkUnenrollStudents/unenrollStudent drop the CSV row first and
+  // then best-effort remove team membership, so a transient team-drop failure
+  // leaves a live team member with no CSV row (csvMissingCount > 0). Without
+  // this guard, auto-sync would immediately re-append that just-removed student,
+  // silently reversing the unenroll behind a soft warning toast. We only defer
+  // the AUTOMATIC backfill — the explicit Sync button (and a fresh page open)
+  // still runs it — so a real drift the teacher wants backfilled is one click
+  // away, but an unenroll no longer undoes itself on its own.
   const autoSyncedRef = useRef(false)
+  const suppressAutoSyncRef = useRef(false)
   useEffect(() => {
     if (isLoading || isError) return
     if (csvMissingCount === 0) {
       autoSyncedRef.current = false
+      return
+    }
+    if (suppressAutoSyncRef.current) {
+      // Consume the one-episode suppression: latch as if we synced so this
+      // drift episode is skipped, and let the next fresh episode auto-sync.
+      suppressAutoSyncRef.current = false
+      autoSyncedRef.current = true
       return
     }
     if (autoSyncedRef.current || syncMutation.isPending) return
@@ -303,6 +321,9 @@ const EnrolledStudents = ({
 
   const onRowUnenrolled = (rowKey: string, teamWarning?: string) => {
     if (teamWarning) setWarning(rowKey, teamWarning)
+    // A failed team-drop would leave an orphaned team member; don't let the next
+    // auto-sync re-append the student the teacher just removed (see the effect).
+    suppressAutoSyncRef.current = true
     updateRosterCache((current) =>
       current.filter((s) => studentKey(s) !== rowKey),
     )
@@ -323,7 +344,9 @@ const EnrolledStudents = ({
     // Unenroll changes team membership; invite changes org-invite state and may
     // team-add an already-active member — refresh the enrolled roster for both.
     invalidateTeamRoster()
-    void action
+    // After a bulk unenroll, defer the next auto-sync: a per-row team-drop that
+    // failed would otherwise make auto-sync re-append the just-removed student.
+    if (action === "unenroll") suppressAutoSyncRef.current = true
   }
 
   const renderRow = (row: TeamRosterRow) => {
@@ -539,7 +562,12 @@ const EnrolledStudents = ({
               type="button"
               className="btn btn-ghost btn-sm btn-square"
               disabled={syncMutation.isPending}
-              onClick={() => syncMutation.mutate()}
+              onClick={() => {
+                // Explicit backfill: clear any post-unenroll suppression so the
+                // teacher's deliberate Sync always runs.
+                suppressAutoSyncRef.current = false
+                syncMutation.mutate()
+              }}
               aria-label={t("students.syncRosterTitle")}
               title={t("students.syncRosterTitle")}
             >
