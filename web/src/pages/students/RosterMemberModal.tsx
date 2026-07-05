@@ -1,17 +1,18 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, Send, Trash, X } from "lucide-react"
+import { ExternalLink, Pencil, Send, Trash, X } from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
 
-import MemberDetailHeader from "@/components/memberList/MemberDetailHeader"
+import Avatar from "@/components/avatar"
+import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { unenrollStudent } from "@/api/mutations/students"
 import { inviteRosterStudents } from "@/api/mutations/students"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
-import { rosterRowToMemberRow } from "@/util/memberRow"
+import { nameFromParts, initialsFromParts } from "@/util/students"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
@@ -56,6 +57,7 @@ const RosterMemberModal = ({
   const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
+  const [editingProfile, setEditingProfile] = useState(false)
   const [working, setWorking] = useState(false)
   const [resending, setResending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
@@ -78,6 +80,7 @@ const RosterMemberModal = ({
     if (busy) return
     setConfirmingUnenroll(false)
     setConfirmingInvite(false)
+    setEditingProfile(false)
     onClose()
   }
 
@@ -88,6 +91,12 @@ const RosterMemberModal = ({
 
   const student = rowToStudent(row)
   const canEdit = row.state !== "pending"
+  const displayName =
+    nameFromParts(row.first_name, row.last_name) || row.username || row.email
+  const displayInitials =
+    initialsFromParts(row.first_name, row.last_name) ||
+    (row.username || row.email)[0]?.toUpperCase() ||
+    "?"
   const canResend = row.state === "pending" && Boolean(row.github_id)
   // A not_in_org row is on the roster (by username) but not in the org — offer a
   // fresh org invite (id derived from username when the CSV has no github_id).
@@ -211,150 +220,123 @@ const RosterMemberModal = ({
         </div>
 
         <div className="flex flex-col gap-5 px-6 py-5">
-          <MemberDetailHeader row={rosterRowToMemberRow(row)} org={org} />
-
-          {/* GitHub & enrollment — a single read-only summary: status + the
-              classroom team (link + membership). */}
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
-              {t("students.sectionGithub")}
-            </h3>
-            <div className="divide-y divide-base-300 rounded-box border border-base-300">
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <span className="text-sm text-base-content/70">
-                  {t("students.statusLabel")}
-                </span>
-                {row.state === "enrolled" ? (
-                  <span className="badge badge-sm badge-success badge-soft">
-                    {t("students.statusEnrolled")}
-                  </span>
-                ) : row.state === "pending" ? (
-                  <span className="badge badge-sm badge-warning badge-soft">
-                    {t("students.statusPending")}
-                  </span>
-                ) : (
-                  <span className="badge badge-sm badge-error badge-soft">
-                    {t("students.statusNotInOrg")}
-                  </span>
-                )}
-              </div>
-              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
-                <span className="text-sm text-base-content/70">
-                  {t("students.classroomTeamLabel")}
-                </span>
+          {/* Identity — the GitHub username itself links to the profile. */}
+          <Avatar
+            name={displayName}
+            github={row.username || row.email}
+            initials={displayInitials}
+            subtitle={
+              row.username ? (
                 <a
-                  href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
+                  href={`https://github.com/${row.username}`}
                   target="_blank"
                   rel="noreferrer"
-                  className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
+                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
                 >
-                  {teamSlug}
-                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                  <GitHub aria-hidden="true" className="size-3.5 opacity-70" />
+                  <span className="font-mono">@{row.username}</span>
+                  <ExternalLink aria-hidden="true" className="size-3" />
                 </a>
-              </div>
-            </div>
-          </section>
+              ) : row.email ? (
+                <span className="text-sm text-base-content/70">
+                  {row.email}
+                </span>
+              ) : undefined
+            }
+          />
 
-          {/* Profile — the editable teacher-facing metadata. */}
-          <section className="flex flex-col gap-2">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
-              {t("students.sectionProfile")}
-            </h3>
-            {canEdit ? (
-              <EditStudentForm
-                org={org}
-                classroom={classroom}
-                student={student}
-                resetSignal={`${row.key}:${open}`}
-                onCancel={handleClose}
-                onSubmittingChange={setSubmitting}
-                onSaved={(updated) => onSaved(row.key, updated)}
-                showGitHubPanel={false}
-              />
-            ) : (
-              <p className="text-sm text-base-content/70">
-                {t("students.pendingNoEdit")}
-              </p>
-            )}
-          </section>
-
-          {/* Enrollment actions. The primary action (invite / resend) is
-              separated from the destructive unenroll by a divider so they don't
-              compete. */}
-          <section className="flex flex-col gap-3 border-t border-base-300 pt-4">
-            {canInvite ? (
-              confirmingInvite ? (
-                <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
-                  <p className="text-base-content/80">
-                    {t("students.confirmInviteBody", {
-                      label: row.username || row.email,
-                      org,
-                    })}
-                  </p>
-                  <div className="flex justify-end gap-2">
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm"
-                      disabled={resending}
-                      onClick={() => setConfirmingInvite(false)}
-                    >
-                      {t("common.cancel")}
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
-                      disabled={resending}
-                      onClick={() => void handleInvite()}
-                    >
-                      {resending ? (
-                        <>
-                          <span
-                            className="loading loading-spinner loading-xs"
-                            aria-hidden="true"
-                          />
-                          {t("common.working")}
-                        </>
-                      ) : (
-                        <>
-                          <Send aria-hidden="true" className="size-4" />
-                          {t("students.sendInvite")}
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ) : (
+          {/* Enrollment actions first: for a student not yet in the org, the
+              teacher decides membership before touching profile metadata. The
+              primary action (invite / resend) is separated from the destructive
+              unenroll. */}
+          <section className="flex flex-col gap-3">
+            <div className="flex flex-wrap items-center gap-2">
+              {canInvite && !confirmingInvite ? (
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm self-start"
+                  className="btn btn-primary btn-sm"
                   disabled={busy}
                   onClick={() => setConfirmingInvite(true)}
                 >
                   <Send aria-hidden="true" className="size-4" />
                   {t("students.inviteToOrg")}
                 </button>
-              )
-            ) : null}
+              ) : null}
 
-            {canResend ? (
-              <button
-                type="button"
-                className="btn btn-sm self-start"
-                disabled={resending || working}
-                onClick={() => void handleResend()}
-              >
-                {resending ? (
-                  <span
-                    className="loading loading-spinner loading-xs"
-                    aria-hidden="true"
-                  />
-                ) : (
-                  <>
-                    <Send aria-hidden="true" className="size-4" />
-                    {t("students.resend")}
-                  </>
-                )}
-              </button>
+              {canResend ? (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  disabled={resending || working}
+                  onClick={() => void handleResend()}
+                >
+                  {resending ? (
+                    <span
+                      className="loading loading-spinner loading-xs"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <>
+                      <Send aria-hidden="true" className="size-4" />
+                      {t("students.resend")}
+                    </>
+                  )}
+                </button>
+              ) : null}
+
+              {!confirmingUnenroll ? (
+                <button
+                  type="button"
+                  className="btn btn-error btn-ghost btn-sm"
+                  disabled={busy}
+                  onClick={() => setConfirmingUnenroll(true)}
+                >
+                  <Trash aria-hidden="true" className="size-4" />
+                  {t("students.unenrollStudent")}
+                </button>
+              ) : null}
+            </div>
+
+            {canInvite && confirmingInvite ? (
+              <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
+                <p className="text-base-content/80">
+                  {t("students.confirmInviteBody", {
+                    label: row.username || row.email,
+                    org,
+                  })}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    disabled={resending}
+                    onClick={() => setConfirmingInvite(false)}
+                  >
+                    {t("common.cancel")}
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    disabled={resending}
+                    onClick={() => void handleInvite()}
+                  >
+                    {resending ? (
+                      <>
+                        <span
+                          className="loading loading-spinner loading-xs"
+                          aria-hidden="true"
+                        />
+                        {t("common.working")}
+                      </>
+                    ) : (
+                      <>
+                        <Send aria-hidden="true" className="size-4" />
+                        {t("students.sendInvite")}
+                      </>
+                    )}
+                  </button>
+                </div>
+              </div>
             ) : null}
 
             {confirmingUnenroll ? (
@@ -397,16 +379,127 @@ const RosterMemberModal = ({
                   </button>
                 </div>
               </div>
+            ) : null}
+          </section>
+
+          {/* GitHub & enrollment — a single read-only summary: status + the
+              classroom team. */}
+          <section className="flex flex-col gap-2">
+            <h3 className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+              {t("students.sectionGithub")}
+            </h3>
+            <div className="divide-y divide-base-300 rounded-box border border-base-300">
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="text-sm text-base-content/70">
+                  {t("students.statusLabel")}
+                </span>
+                {row.state === "enrolled" ? (
+                  <span className="badge badge-sm badge-success badge-soft">
+                    {t("students.statusEnrolled")}
+                  </span>
+                ) : row.state === "pending" ? (
+                  <span className="badge badge-sm badge-warning badge-soft">
+                    {t("students.statusPending")}
+                  </span>
+                ) : (
+                  <span className="badge badge-sm badge-error badge-soft">
+                    {t("students.statusNotInOrg")}
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                <span className="text-sm text-base-content/70">
+                  {t("students.classroomTeamLabel")}
+                </span>
+                <a
+                  href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
+                >
+                  {teamSlug}
+                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                </a>
+              </div>
+            </div>
+          </section>
+
+          {/* Profile — read-only by default with an inline Edit toggle, so the
+              teacher isn't shown every action at once. */}
+          <section className="flex flex-col gap-2">
+            <div className="flex items-center justify-between gap-3">
+              <h3 className="text-xs font-semibold uppercase tracking-wide text-base-content/50">
+                {t("students.sectionProfile")}
+              </h3>
+              {canEdit && !editingProfile ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs gap-1"
+                  onClick={() => setEditingProfile(true)}
+                >
+                  <Pencil aria-hidden="true" className="size-3.5" />
+                  {t("common.edit")}
+                </button>
+              ) : null}
+            </div>
+
+            {!canEdit ? (
+              <p className="text-sm text-base-content/70">
+                {t("students.pendingNoEdit")}
+              </p>
+            ) : editingProfile ? (
+              <EditStudentForm
+                org={org}
+                classroom={classroom}
+                student={student}
+                resetSignal={`${row.key}:${open}:${editingProfile}`}
+                onCancel={() => setEditingProfile(false)}
+                onSubmittingChange={setSubmitting}
+                onSaved={(updated) => {
+                  onSaved(row.key, updated)
+                  setEditingProfile(false)
+                }}
+                showGitHubPanel={false}
+              />
             ) : (
-              <button
-                type="button"
-                className="btn btn-error btn-ghost btn-sm self-start"
-                disabled={busy}
-                onClick={() => setConfirmingUnenroll(true)}
-              >
-                <Trash aria-hidden="true" className="size-4" />
-                {t("students.unenrollStudent")}
-              </button>
+              <dl className="divide-y divide-base-300 rounded-box border border-base-300">
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <dt className="text-sm text-base-content/70">
+                    {t("students.nameColumn")}
+                  </dt>
+                  <dd className="text-sm">
+                    {nameFromParts(row.first_name, row.last_name) || (
+                      <span className="text-base-content/40">
+                        {t("students.notSet")}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <dt className="text-sm text-base-content/70">
+                    {t("students.emailColumn")}
+                  </dt>
+                  <dd className="text-sm">
+                    {row.email || (
+                      <span className="text-base-content/40">
+                        {t("students.notSet")}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+                <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+                  <dt className="text-sm text-base-content/70">
+                    {t("students.sectionColumn")}
+                  </dt>
+                  <dd className="text-sm">
+                    {row.section.trim() || (
+                      <span className="text-base-content/40">
+                        {t("students.notSet")}
+                      </span>
+                    )}
+                  </dd>
+                </div>
+              </dl>
             )}
           </section>
         </div>
