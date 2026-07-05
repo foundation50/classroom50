@@ -204,9 +204,17 @@ const RosterBulkActionsBar = ({
       const label = row.username || row.email
       const inviteeId = Number(row.github_id)
       if (!Number.isFinite(inviteeId) || inviteeId <= 0 || !row.username) {
-        skipped.push({ key: row.key, label, detail: t("students.bulk.noInviteId") })
+        skipped.push({
+          key: row.key,
+          label,
+          detail: t("students.bulk.noInviteId"),
+        })
         processed += 1
-        setProgress({ processed, total: pendingSelected.length, message: label })
+        setProgress({
+          processed,
+          total: pendingSelected.length,
+          message: label,
+        })
         continue
       }
       try {

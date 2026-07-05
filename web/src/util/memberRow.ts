@@ -30,6 +30,7 @@ export const rosterRowToMemberRow = (row: TeamRosterRow): MemberListRow => ({
   key: row.key,
   username: row.username,
   github_id: row.github_id,
-  name: nameFromParts(row.first_name, row.last_name) || row.username || row.email,
+  name:
+    nameFromParts(row.first_name, row.last_name) || row.username || row.email,
   email: row.email,
 })

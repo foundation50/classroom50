@@ -746,7 +746,10 @@ const EnrolledStudents = ({
             <span className="text-sm">{t("students.loadingRoster")}</span>
           </div>
         ) : isError ? (
-          <div role="alert" className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+          <div
+            role="alert"
+            className="flex flex-col items-center gap-3 px-6 py-10 text-center"
+          >
             <span className="flex items-center gap-2 text-sm text-error">
               <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
               {t("students.rosterLoadError")}
@@ -854,4 +857,3 @@ const EnrolledStudents = ({
 }
 
 export default EnrolledStudents
-
