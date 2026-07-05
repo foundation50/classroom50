@@ -1003,6 +1003,27 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(result.removed).toHaveLength(0)
     expect(result.notFound).toHaveLength(1)
   })
+
+  // Regression (#130): removing the LAST student must not commit a header-less
+  // file. Papa.unparse([]) yields "", so the pre-fix code wrote just "\n" — a
+  // roster the CLI/skeleton readers reject. The emptied CSV must keep the
+  // canonical header and round-trip through parseStudentsCsv to [].
+  it("commits a header-only CSV that parses to [] when the last student is removed", async () => {
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + "alice,,,alice@x.edu,,100\n",
+    })
+
+    const result = await bulkUnenrollStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [student("alice", "100")],
+    })
+
+    expect(result.removed.map((s) => s.username)).toEqual(["alice"])
+    const csv = committed.content!
+    expect(csv.split("\n")[0]).toBe(STUDENT_CSV_FIELDS.join(","))
+    expect(parseStudentsCsv(csv)).toEqual([])
+  })
 })
 
 // A fake client over multiple GitHub users, per-user org membership, and the

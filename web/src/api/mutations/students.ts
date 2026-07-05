@@ -264,6 +264,13 @@ function stringifyStudentsCsv(rows: StudentCsvRow[]) {
       return guarded
     })
 
+  // Papa.unparse omits the header for an empty array, so an emptied roster
+  // would commit a header-less file the CLI/skeleton readers reject. Write the
+  // canonical header explicitly instead (keep in lockstep with STUDENT_CSV_FIELDS).
+  if (normalizedRows.length === 0) {
+    return STUDENT_CSV_FIELDS.join(",") + "\n"
+  }
+
   return (
     Papa.unparse(normalizedRows, {
       columns: [...STUDENT_CSV_FIELDS],
