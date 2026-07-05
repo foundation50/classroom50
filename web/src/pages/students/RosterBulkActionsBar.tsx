@@ -122,6 +122,9 @@ const RosterBulkActionsBar = ({
   onClearSelection,
   onDone,
   addActions,
+  groupBySection,
+  onGroupBySectionChange,
+  canGroupBySection = false,
 }: {
   org: string
   classroom: string
@@ -137,6 +140,11 @@ const RosterBulkActionsBar = ({
   onDone: (action: "unenroll" | "invite") => void
   // The "add students" triggers shown on the right when nothing is selected.
   addActions?: AddStudentActions
+  // Group-by-section toggle, rendered in the header next to the count. Shown
+  // only when canGroupBySection (the filtered rows have >=1 section).
+  groupBySection?: boolean
+  onGroupBySectionChange?: (value: boolean) => void
+  canGroupBySection?: boolean
 }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
@@ -353,6 +361,18 @@ const RosterBulkActionsBar = ({
               : t("students.bulk.studentCount", { count: totalCount })}
           </span>
         </label>
+
+        {canGroupBySection && onGroupBySectionChange ? (
+          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
+            <input
+              type="checkbox"
+              className="toggle toggle-sm"
+              checked={Boolean(groupBySection)}
+              onChange={(e) => onGroupBySectionChange(e.target.checked)}
+            />
+            {t("students.groupBySection")}
+          </label>
+        ) : null}
 
         {hasSelection ? (
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">

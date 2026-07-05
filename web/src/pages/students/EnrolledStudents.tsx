@@ -507,21 +507,10 @@ const EnrolledStudents = ({
         </div>
       ) : null}
 
-      {/* Toolbar: group-by-section, then search, then the status filter — with
-          Sync pinned to the far right when there's drift to backfill. */}
+      {/* Toolbar: search + status filter (group-by-section lives in the table
+          header next to the count). Sync pinned far-right when applicable. */}
       {!isLoading && !isError && !isEmpty ? (
         <div className="flex flex-wrap items-center gap-3">
-          {hasSectionsInFiltered ? (
-            <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-              <input
-                type="checkbox"
-                className="toggle toggle-sm"
-                checked={groupBySection}
-                onChange={(e) => setGroupBySection(e.target.checked)}
-              />
-              {t("students.groupBySection")}
-            </label>
-          ) : null}
           <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
             <Search aria-hidden="true" className="size-4 opacity-50" />
             <input
@@ -646,6 +635,9 @@ const EnrolledStudents = ({
               onClearSelection={() => setSelectedKeys(new Set())}
               onDone={onBulkDone}
               addActions={addActions}
+              groupBySection={groupBySection}
+              onGroupBySectionChange={setGroupBySection}
+              canGroupBySection={hasSectionsInFiltered}
             />
             {filtered.length === 0 ? (
               <div className="px-6 py-10 text-center text-sm text-base-content/70">
