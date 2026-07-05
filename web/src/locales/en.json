@@ -566,7 +566,8 @@
         "aptPlaceholder": "e.g. cmake, valgrind",
         "aptTip": "Extra Ubuntu packages installed (apt-get) before grading, comma- or space-separated. Lowercase Debian package names.",
         "aptCount_one": "{{count}} package",
-        "aptCount_other": "{{count}} packages"
+        "aptCount_other": "{{count}} packages",
+        "runnerContainerError": "\"{{label}}\" is a macOS/Windows runner — a Docker image needs an Ubuntu (or custom/self-hosted) runner."
       },
       "validation": {
         "nameRequired": "Assignment name is required.",

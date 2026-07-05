@@ -80,3 +80,13 @@ export function validateAptPackages(packages: string[]): string | undefined {
   }
   return undefined
 }
+
+// Recognized GitHub-hosted macOS/Windows runner labels can't host a Linux
+// container (Actions runs containers on Ubuntu hosts only). Mirrors the CLI's
+// isNonUbuntuHostedLabel — a bare "macos"/"windows" or a custom/self-hosted
+// label passes (the teacher owns OS matching). Used to reject a container +
+// macOS/Windows runs-on combination the CLI would refuse.
+export function isNonUbuntuHostedLabel(label: string): boolean {
+  const normalized = label.trim().toLowerCase()
+  return normalized.startsWith("macos-") || normalized.startsWith("windows-")
+}

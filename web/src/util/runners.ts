@@ -60,14 +60,6 @@ export function isRunnerLabelShapeValid(label: string): boolean {
 // The CLI rejects more than 10 labels.
 const MAX_RUNNER_LABELS = 10
 
-// Mirrors the CLI exactly: a prefix-only deny-list of labels we KNOW can't run
-// a Linux container. Bare "macos"/"windows" pass (the CLI accepts them — the
-// teacher owns OS matching), so flagging them would be a false warning.
-function isNonUbuntuHostedLabel(label: string): boolean {
-  const normalized = label.trim().toLowerCase()
-  return normalized.startsWith("macos-") || normalized.startsWith("windows-")
-}
-
 export function isKnownHostedRunnerLabel(label: string): boolean {
   return KNOWN_HOSTED_RUNNER_SET.has(label.trim().toLowerCase())
 }
@@ -171,21 +163,4 @@ export function verifyRunnerLabels(
   }
 
   return { kind: "unknown", labels }
-}
-
-// Non-blocking warning mirroring the CLI's container rule: a macOS/Windows label
-// with a container image is rejected (containers run on Ubuntu only). Returns a
-// message only — the caller must NOT clear the runner value.
-export function containerRunnerWarning(
-  raw: string,
-  rawContainerImage: string,
-): string | null {
-  const usingContainer = Boolean(rawContainerImage.trim())
-  if (!usingContainer) return null
-
-  const offending = parseRunnerLabels(raw).find(isNonUbuntuHostedLabel)
-  if (!offending) return null
-
-  const os = offending.toLowerCase().startsWith("windows") ? "Windows" : "macOS"
-  return `Docker images need an Ubuntu runner — "${offending}" is ${os}.`
 }

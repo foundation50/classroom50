@@ -6,7 +6,6 @@ import {
   editAssignment,
   nextAvailableSlug,
   preserveUnmanagedAssignmentKeys,
-  preserveUnmanagedRuntimeKeys,
   resolveTemplate,
   verifyTemplateAccess,
 } from "./assignments"
@@ -201,33 +200,6 @@ describe("buildReusedEntry", () => {
     expect(entry.runtime?.apt).not.toBe(source.runtime?.apt)
     entry.runtime?.apt?.push("extra")
     expect(source.runtime?.apt).toHaveLength(2)
-  })
-})
-
-describe("preserveUnmanagedRuntimeKeys", () => {
-  it("returns the edited runtime unchanged when the existing one is absent", () => {
-    const edited = { python: "3.12" }
-    expect(preserveUnmanagedRuntimeKeys(undefined, edited)).toBe(edited)
-  })
-
-  it("carries forward an unknown runtime sub-key the form can't model", () => {
-    const existing = { python: "3.11", rust: "1.80" }
-    const edited = { python: "3.12" }
-    const merged = preserveUnmanagedRuntimeKeys(existing, edited)
-    // Managed field wins; unknown `rust` rides through.
-    expect(merged).toEqual({ python: "3.12", rust: "1.80" })
-  })
-
-  it("never carries forward a managed sub-key (a cleared edit wins)", () => {
-    // The edit dropped python/apt; they must NOT be resurrected from existing.
-    const existing = {
-      python: "3.11",
-      apt: ["cmake"],
-      "runs-on": "ubuntu-22.04",
-    }
-    const edited = { node: "20" }
-    const merged = preserveUnmanagedRuntimeKeys(existing, edited)
-    expect(merged).toEqual({ node: "20" })
   })
 })
 
@@ -459,10 +431,13 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.due).toBeUndefined()
   })
 
-  it("writes language runtimes and preserves an unknown runtime sub-key on edit", async () => {
-    // Existing CLI-authored entry with language toolchains + apt AND an unknown
-    // future runtime sub-key the GUI can't model. Editing via the GUI must NOT
-    // drop any of them (issue #60: GUI edits silently dropped runtime fields).
+  it("writes language runtimes and drops an unknown runtime sub-key on edit", async () => {
+    // Existing entry with language toolchains + apt AND a foreign runtime
+    // sub-key (`rust`). `runtime` is a CLOSED contract object — the CLI decodes
+    // it with DisallowUnknownFields (RuntimeRef has no Extra) and the schema
+    // sets additionalProperties:false — so a GUI edit must rebuild runtime from
+    // the known sub-keys and drop the foreign key, self-healing rather than
+    // round-tripping a file the CLI would refuse to parse.
     const runtimeEntry = {
       slug: SLUG,
       name: "Homework 1",
@@ -529,7 +504,7 @@ describe("editAssignment (preserved-entry integration)", () => {
     const client = { request, requestRaw } as unknown as GitHubClient
 
     // The edit form round-trips the language fields (python bumped to 3.12,
-    // node/apt kept) and never manages `rust`.
+    // node/apt kept). `rust` is not a schema sub-key, so it must be dropped.
     await editAssignment(
       client,
       editInput({
@@ -547,9 +522,36 @@ describe("editAssignment (preserved-entry integration)", () => {
       python: "3.12",
       node: "20",
       apt: ["cmake"],
-      // Unknown sub-key survives the read-modify-write.
-      rust: "1.80",
     })
+    // The foreign runtime sub-key self-heals away (closed contract object).
+    expect("rust" in (edited.runtime ?? {})).toBe(false)
+  })
+
+  it("rejects apt packages combined with a container image", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ container_image: "gcc:13", runtime_apt: "cmake" }),
+      ),
+    ).rejects.toThrow(/can't be combined with a Docker image/i)
+  })
+
+  it("rejects a container image paired with a macOS/Windows runner label", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(
+        client,
+        editInput({ container_image: "gcc:13", runs_on: "macos-15" }),
+      ),
+    ).rejects.toThrow(/Ubuntu hosts only/i)
+  })
+
+  it("rejects an invalid language version before any write", async () => {
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ runtime_python: "3.12 bad" })),
+    ).rejects.toThrow(/runtime\.python/i)
   })
 
   it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
