@@ -1,6 +1,13 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, Pencil, Send, Trash, X } from "lucide-react"
+import {
+  ExternalLink,
+  Pencil,
+  Send,
+  UserMinus,
+  UserPlus,
+  X,
+} from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
 
@@ -220,54 +227,57 @@ const RosterMemberModal = ({
         </div>
 
         <div className="flex flex-col gap-5 px-6 py-5">
-          {/* Identity — the GitHub username itself links to the profile. */}
-          <Avatar
-            name={displayName}
-            github={row.username || row.email}
-            initials={displayInitials}
-            subtitle={
-              row.username ? (
-                <a
-                  href={`https://github.com/${row.username}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
-                >
-                  <GitHub aria-hidden="true" className="size-3.5 opacity-70" />
-                  <span className="font-mono">@{row.username}</span>
-                  <ExternalLink aria-hidden="true" className="size-3" />
-                </a>
-              ) : row.email ? (
-                <span className="text-sm text-base-content/70">
-                  {row.email}
-                </span>
-              ) : undefined
-            }
-          />
+          {/* Identity with the enrollment actions as icons on the right — the
+              GitHub username itself links to the profile. */}
+          <div className="flex items-start justify-between gap-4">
+            <Avatar
+              name={displayName}
+              github={row.username || row.email}
+              initials={displayInitials}
+              subtitle={
+                row.username ? (
+                  <a
+                    href={`https://github.com/${row.username}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+                  >
+                    <GitHub
+                      aria-hidden="true"
+                      className="size-3.5 opacity-70"
+                    />
+                    <span className="font-mono">@{row.username}</span>
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                ) : row.email ? (
+                  <span className="text-sm text-base-content/70">
+                    {row.email}
+                  </span>
+                ) : undefined
+              }
+            />
 
-          {/* Enrollment actions first: for a student not yet in the org, the
-              teacher decides membership before touching profile metadata. The
-              primary action (invite / resend) is separated from the destructive
-              unenroll. */}
-          <section className="flex flex-col gap-3">
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex shrink-0 items-center gap-1">
               {canInvite && !confirmingInvite ? (
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary btn-sm btn-square"
                   disabled={busy}
+                  aria-label={t("students.inviteToOrg")}
+                  title={t("students.inviteToOrg")}
                   onClick={() => setConfirmingInvite(true)}
                 >
-                  <Send aria-hidden="true" className="size-4" />
-                  {t("students.inviteToOrg")}
+                  <UserPlus aria-hidden="true" className="size-4" />
                 </button>
               ) : null}
 
               {canResend ? (
                 <button
                   type="button"
-                  className="btn btn-sm"
+                  className="btn btn-sm btn-square"
                   disabled={resending || working}
+                  aria-label={t("students.resend")}
+                  title={t("students.resend")}
                   onClick={() => void handleResend()}
                 >
                   {resending ? (
@@ -276,10 +286,7 @@ const RosterMemberModal = ({
                       aria-hidden="true"
                     />
                   ) : (
-                    <>
-                      <Send aria-hidden="true" className="size-4" />
-                      {t("students.resend")}
-                    </>
+                    <Send aria-hidden="true" className="size-4" />
                   )}
                 </button>
               ) : null}
@@ -287,100 +294,108 @@ const RosterMemberModal = ({
               {!confirmingUnenroll ? (
                 <button
                   type="button"
-                  className="btn btn-error btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
                   disabled={busy}
+                  aria-label={t("students.unenrollStudent")}
+                  title={t("students.unenrollStudent")}
                   onClick={() => setConfirmingUnenroll(true)}
                 >
-                  <Trash aria-hidden="true" className="size-4" />
-                  {t("students.unenrollStudent")}
+                  <UserMinus aria-hidden="true" className="size-4" />
                 </button>
               ) : null}
             </div>
+          </div>
 
-            {canInvite && confirmingInvite ? (
-              <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
-                <p className="text-base-content/80">
-                  {t("students.confirmInviteBody", {
-                    label: row.username || row.email,
-                    org,
-                  })}
-                </p>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    disabled={resending}
-                    onClick={() => setConfirmingInvite(false)}
-                  >
-                    {t("common.cancel")}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    disabled={resending}
-                    onClick={() => void handleInvite()}
-                  >
-                    {resending ? (
-                      <>
-                        <span
-                          className="loading loading-spinner loading-xs"
-                          aria-hidden="true"
-                        />
-                        {t("common.working")}
-                      </>
-                    ) : (
-                      <>
-                        <Send aria-hidden="true" className="size-4" />
-                        {t("students.sendInvite")}
-                      </>
-                    )}
-                  </button>
+          {/* Inline confirmations for the enrollment actions above. */}
+          {(canInvite && confirmingInvite) || confirmingUnenroll ? (
+            <section className="flex flex-col gap-3">
+              {canInvite && confirmingInvite ? (
+                <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
+                  <p className="text-base-content/80">
+                    {t("students.confirmInviteBody", {
+                      label: row.username || row.email,
+                      org,
+                    })}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={resending}
+                      onClick={() => setConfirmingInvite(false)}
+                    >
+                      {t("common.cancel")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={resending}
+                      onClick={() => void handleInvite()}
+                    >
+                      {resending ? (
+                        <>
+                          <span
+                            className="loading loading-spinner loading-xs"
+                            aria-hidden="true"
+                          />
+                          {t("common.working")}
+                        </>
+                      ) : (
+                        <>
+                          <Send aria-hidden="true" className="size-4" />
+                          {t("students.sendInvite")}
+                        </>
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {confirmingUnenroll ? (
-              <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
-                <p className="text-base-content/80">
-                  {t("students.unenrollBodyPrefix")}{" "}
-                  <span className="font-semibold text-base-content">
-                    {label}
-                  </span>{" "}
-                  {t("students.unenrollBodyFrom")}{" "}
-                  <span className="font-semibold text-base-content">{org}</span>{" "}
-                  {t("students.unenrollBodySuffix", { classroom })}
-                </p>
-                <div className="flex justify-end gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    disabled={working}
-                    onClick={() => setConfirmingUnenroll(false)}
-                  >
-                    {t("students.keepStudent")}
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-error btn-sm"
-                    disabled={working}
-                    onClick={() => void handleUnenroll()}
-                  >
-                    {working ? (
-                      <>
-                        <span
-                          className="loading loading-spinner loading-xs"
-                          aria-hidden="true"
-                        />
-                        {t("common.working")}
-                      </>
-                    ) : (
-                      t("students.unenrollStudent")
-                    )}
-                  </button>
+              {confirmingUnenroll ? (
+                <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
+                  <p className="text-base-content/80">
+                    {t("students.unenrollBodyPrefix")}{" "}
+                    <span className="font-semibold text-base-content">
+                      {label}
+                    </span>{" "}
+                    {t("students.unenrollBodyFrom")}{" "}
+                    <span className="font-semibold text-base-content">
+                      {org}
+                    </span>{" "}
+                    {t("students.unenrollBodySuffix", { classroom })}
+                  </p>
+                  <div className="flex justify-end gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      disabled={working}
+                      onClick={() => setConfirmingUnenroll(false)}
+                    >
+                      {t("students.keepStudent")}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-error btn-sm"
+                      disabled={working}
+                      onClick={() => void handleUnenroll()}
+                    >
+                      {working ? (
+                        <>
+                          <span
+                            className="loading loading-spinner loading-xs"
+                            aria-hidden="true"
+                          />
+                          {t("common.working")}
+                        </>
+                      ) : (
+                        t("students.unenrollStudent")
+                      )}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ) : null}
-          </section>
+              ) : null}
+            </section>
+          ) : null}
 
           {/* GitHub & enrollment — a single read-only summary: status + the
               classroom team. */}
