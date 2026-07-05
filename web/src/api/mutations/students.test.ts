@@ -1264,4 +1264,34 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     expect(result.noop).toBe(true)
     expect(committed.content).toBeNull()
   })
+
+  // Regression: a roster hand-edited (or exported by a tool that drops empty
+  // trailing columns) has rows with only 5 fields — the empty `github_id`
+  // column omitted, e.g. `octocat,Grace,Hopper,g@x.edu,Section A`. Papa flags
+  // TooFewFields, but the row is benign (missing trailing field -> ""), so the
+  // parse must NOT throw and sync must still see the row's identity.
+  it("tolerates short rows missing the trailing github_id column", async () => {
+    const shortRows =
+      "octocat,Grace,Hopper,grace@example.edu,Section A\n" +
+      "torvalds,Linus,Torvalds,linus@example.edu,Section A\n"
+    const { client } = makeTeamClient({
+      startingCsv: HEADER + shortRows,
+      users: {},
+      // Both short-row students are already team members, so this is a noop —
+      // the point is that parsing the short rows doesn't throw.
+      teamHas: [
+        { login: "octocat", id: 1 },
+        { login: "torvalds", id: 2 },
+      ],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // octocat/torvalds carry no CSV github_id but ARE matched by login, so
+    // they're already "claimed" — nothing to backfill, and no parse error.
+    expect(result.noop).toBe(true)
+  })
 })

@@ -160,13 +160,23 @@ function parseStudentsCsv(csv: string): StudentCsvRow[] {
     transformHeader: (header) => header.trim(),
   })
 
+  // Papa flags a data row with fewer columns than the header as a
+  // `FieldMismatch`/`TooFewFields` error, but such a row is benign: a roster
+  // hand-edited or exported by a tool that drops empty TRAILING columns (e.g.
+  // `octocat,Grace,Hopper,,Section A` with the empty `github_id` omitted) still
+  // parses correctly under `header: true` — the missing trailing field is
+  // `undefined`, which normalizeStudentRow coerces to "". Tolerate these (and
+  // Papa's `Delimiter` auto-detect notices) so a sync/read doesn't abort on a
+  // roster that's merely missing trailing commas. TooManyFields stays fatal: an
+  // extra column means an unquoted delimiter split a value and later columns are
+  // misaligned, so the parsed identity can't be trusted.
   const fatalErrors = parsed.errors.filter(
-    (error) => error.type !== "Delimiter",
+    (error) => error.type !== "Delimiter" && error.code !== "TooFewFields",
   )
 
   if (fatalErrors.length > 0) {
     throw new Error(
-      `Could not parse students.csv: ${parsed.errors
+      `Could not parse students.csv: ${fatalErrors
         .map((error) => error.message)
         .join("; ")}`,
     )
