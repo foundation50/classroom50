@@ -46,6 +46,24 @@ function formatError(err: unknown) {
   return message
 }
 
+// Cold-reload teardown gate: a stored token is only torn down when /user
+// validation returns a definitive 401 (revoked/expired). A 403 is usually
+// rate-limiting and a 5xx/network blip is transient — expiring on either would
+// wipe a valid token (GitHubUserFetchError carries no headers to tell them
+// apart), so both are preserved.
+export function shouldExpireOnUserError(error: unknown): boolean {
+  return error instanceof GitHubUserFetchError && error.status === 401
+}
+
+// Recover a stranded "exchanging" screen: with no ?code to exchange (fresh
+// reload or a bfcache Back from GitHub's consent screen), the card would spin
+// forever, so reset it to "config". Every other screen is left as-is.
+export function recoverStrandedExchange(
+  current: GithubAuthScreen,
+): GithubAuthScreen {
+  return current === "exchanging" ? "config" : current
+}
+
 function sleep(ms: number, signal: AbortSignal) {
   return new Promise<void>((resolve) => {
     const timer = window.setTimeout(resolve, ms)
@@ -180,7 +198,7 @@ function useGithubAuthState() {
     // this page after Back on GitHub's consent screen, leaving startWebFlow's
     // state with no code to exchange. Else the card spins forever (#oauth-hang).
     if (!code) {
-      setScreen((current) => (current === "exchanging" ? "config" : current))
+      setScreen(recoverStrandedExchange)
       return
     }
 
@@ -242,7 +260,7 @@ function useGithubAuthState() {
     const onPageShow = (event: PageTransitionEvent) => {
       if (!event.persisted) return
       if (new URLSearchParams(window.location.search).has("code")) return
-      setScreen((current) => (current === "exchanging" ? "config" : current))
+      setScreen(recoverStrandedExchange)
     }
     window.addEventListener("pageshow", onPageShow)
     return () => window.removeEventListener("pageshow", onPageShow)
@@ -505,13 +523,11 @@ function useGithubAuthState() {
     clearSession(true)
   }, [clearSession, token])
 
-  // Cold-reload teardown for a revoked token. 401-only (matching GitHubProvider.
-  // onResponse): a 403 on /user is usually rate-limiting, and expiring on it
-  // would wipe a valid token — GitHubUserFetchError carries no headers to tell
-  // the two apart.
+  // Cold-reload teardown for a revoked token, gated by shouldExpireOnUserError
+  // (401-only, matching GitHubProvider.onResponse) so a 403/transient error
+  // can't wipe a valid token.
   useEffect(() => {
-    const error = githubUserQuery.error
-    if (error instanceof GitHubUserFetchError && error.status === 401) {
+    if (shouldExpireOnUserError(githubUserQuery.error)) {
       expireSession()
     }
   }, [githubUserQuery.error, expireSession])

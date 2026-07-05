@@ -20,8 +20,12 @@ export const Route = createFileRoute("/_authed/$org")({
 // config repo is expected for them, so gating would lock them out of their org.
 function OrgLayout() {
   const { org } = useParams({ from: "/_authed/$org" })
+  // Match the setup route by matched-route id, not a pathname suffix: a suffix
+  // check (endsWith("/setup")) both collides with any path segment named
+  // "setup" (e.g. an assignment slug) and silently breaks if the route is ever
+  // renamed — reintroducing the redirect loop this escape hatch prevents.
   const onSetupRoute = useRouterState({
-    select: (s) => s.location.pathname.replace(/\/+$/, "").endsWith("/setup"),
+    select: (s) => s.matches.some((m) => m.routeId === "/_authed/$org/setup/"),
   })
 
   const { data: membership, isLoading: loadingMembership } =
