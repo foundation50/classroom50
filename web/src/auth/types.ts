@@ -28,4 +28,4 @@ export type DeviceAuthState = {
 }
 
 export type GithubAuthScreen =
-  "config" | "exchanging" | "device-prompt" | "success" | "authed"
+  "config" | "exchanging" | "device-prompt" | "authed"

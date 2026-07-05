@@ -66,7 +66,6 @@ function sleep(ms: number, signal: AbortSignal) {
 function useGithubAuthState() {
   const queryClient = useQueryClient()
   const abortRef = useRef<AbortController | null>(null)
-  const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
   const pendingReturnToRef = useRef<string | null>(null)
@@ -113,9 +112,10 @@ function useGithubAuthState() {
     mutationFn: requestDeviceCode,
   })
 
-  // Shared landing for both web and device flows. Shows the success screen; once
-  // the profile loads, the /login guard redirects to "/". The timeout below
-  // settles the screen state if that doesn't happen (e.g. profile fetch fails).
+  // Shared landing for both web and device flows. Goes straight to the authed
+  // screen and prefetches the profile; once it resolves, status flips to
+  // authenticated and the /login guard redirects into the app. Until then the
+  // card shows a spinner (no interstitial success splash).
   const completeSignIn = useCallback(
     (data: { access_token: string; scope?: string }) => {
       persistGithubToken(data.access_token, data.scope || "")
@@ -123,27 +123,21 @@ function useGithubAuthState() {
       setTokenScope(data.scope || "")
       setSessionExpired(false)
       setDevice(null)
-      setScreen("success")
+      setScreen("authed")
 
       queryClient.prefetchQuery({
         queryKey: ["github", "user", data.access_token],
         queryFn: () => fetchGithubUser(data.access_token),
       })
-
-      if (successTimerRef.current) clearTimeout(successTimerRef.current)
-      successTimerRef.current = setTimeout(() => {
-        setScreen("authed")
-      }, 3500)
     },
     [queryClient],
   )
 
-  // On unmount mid-flow, abort the device poll loop and clear the pending
-  // success-screen timer so neither runs after teardown.
+  // On unmount mid-flow, abort the device poll loop so it doesn't run after
+  // teardown.
   useEffect(
     () => () => {
       abortRef.current?.abort()
-      if (successTimerRef.current) clearTimeout(successTimerRef.current)
     },
     [],
   )

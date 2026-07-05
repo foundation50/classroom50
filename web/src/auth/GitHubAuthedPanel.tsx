@@ -1,23 +1,22 @@
 import { CheckCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Spinner } from "@/components/Spinner"
 import type { GitHubUser } from "@/hooks/github/types"
 
 export function GitHubAuthedPanel({
   user,
-  isLoadingUser,
   onSignOut,
 }: {
   user: GitHubUser | null
-  isLoadingUser: boolean
   onSignOut: () => void
 }) {
   const { t } = useTranslation()
   return (
     <div className="space-y-5">
       {/* "Signed in" only once /user confirms the token is live; a stale token
-          would otherwise read as valid here (#stale-token). */}
+          would otherwise read as valid here (#stale-token). The card renders a
+          spinner instead while the profile is still loading, so this panel only
+          sees a resolved user or a genuine failure. */}
       {user ? (
         <div className="alert alert-success items-start text-sm">
           <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
@@ -38,12 +37,7 @@ export function GitHubAuthedPanel({
           </div>
         )}
 
-        {isLoadingUser && !user ? (
-          <div className="flex items-center gap-2 text-sm text-base-content/70">
-            <Spinner size="sm" label={t("auth.fetchingProfile")} />
-            <span>{t("auth.fetchingProfile")}</span>
-          </div>
-        ) : user ? (
+        {user ? (
           <div>
             <div className="text-xl font-bold tracking-tight">
               {user.name || user.login}

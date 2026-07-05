@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle, GraduationCap } from "lucide-react"
+import { AlertTriangle, GraduationCap } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import GitHub from "@/assets/github.svg?react"
 
@@ -49,27 +49,17 @@ export function GitHubAuthCard() {
 
         <div className="card-body">
           {auth.screen === "authed" ? (
-            <GitHubAuthedPanel
-              user={auth.user}
-              isLoadingUser={auth.isLoadingUser}
-              onSignOut={auth.signOut}
-            />
+            auth.isLoadingUser && !auth.user ? (
+              // "authed" screen before GET /user resolves: on cold reload (mount
+              // effect) or right after sign-in. Show a spinner and let the guard
+              // redirect once the profile lands, rather than flashing a
+              // half-built panel or a success splash.
+              <LoadingScreen label={t("auth.verifyingSession")} />
+            ) : (
+              <GitHubAuthedPanel user={auth.user} onSignOut={auth.signOut} />
+            )
           ) : auth.screen === "exchanging" ? (
             <LoadingScreen label={t("auth.exchangingCode")} />
-          ) : auth.screen === "success" ? (
-            <div className="flex flex-col items-center gap-4 py-10 text-center">
-              <div className="flex size-14 items-center justify-center rounded-full bg-success/10 text-success">
-                <CheckCircle aria-hidden="true" className="size-7" />
-              </div>
-              <div>
-                <h2 className="text-xl font-bold tracking-tight">
-                  {t("auth.successTitle")}
-                </h2>
-                <p className="mt-2 text-sm text-base-content/70">
-                  {t("auth.successRedirecting")}
-                </p>
-              </div>
-            </div>
           ) : auth.screen === "device-prompt" && auth.device ? (
             <GitHubDevicePrompt
               device={auth.device}
