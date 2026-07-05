@@ -1,10 +1,9 @@
 """Pure-helper tests for `collect_scores.py`.
 
-The HTTP / GitHub-API layer is exercised end-to-end by the
-functional smoke test against a live classroom; these tests focus
-on the data-shape invariants the rest of the loop depends on:
-schema validation, override-respect, atomic write semantics, the
-roster CSV parser, and the deterministic repo-name formula.
+The HTTP / GitHub-API layer is exercised end-to-end by the functional smoke
+test against a live classroom; these focus on the data-shape invariants the
+loop depends on: schema validation, override-respect, atomic write semantics,
+the roster CSV parser, and the deterministic repo-name formula.
 """
 
 from __future__ import annotations
@@ -34,10 +33,9 @@ def make_result(
     assignment_type: str = "individual",
     **overrides,
 ) -> dict:
-    """Return a valid v1 result payload, with overrides for the targeted
-    field. Carries `owner` (== username, the identity anchor) and
-    `assignment_type`. There is no `usernames` field — who pushed is
-    `submitted_by`, who owns the repo is `owner`."""
+    """Return a valid v1 result payload, with overrides for the targeted field.
+    Carries `owner` (== username, the identity anchor) and `assignment_type`.
+    No `usernames` field — who pushed is `submitted_by`, who owns is `owner`."""
     base = {
         "schema": cs.RESULT_SCHEMA_V1,
         "classroom": classroom,
@@ -70,8 +68,8 @@ def stored_record(**kwargs) -> dict:
 def make_update(*, assignment: str = "hello", assignment_type: str = "individual", **kwargs) -> dict:
     """An apply_updates input entry: a result-shaped record carrying the
     transport hints `_assignment` (bucket slug) and `_type` (mode) that
-    apply_updates buckets on and strips on store. owner stays; the bucket
-    key `assignment` is dropped."""
+    apply_updates buckets on and strips on store. owner stays; the bucket key
+    `assignment` is dropped."""
     rec = make_result(assignment=assignment, assignment_type=assignment_type, **kwargs)
     rec.pop("assignment", None)
     rec["_assignment"] = assignment
@@ -90,10 +88,9 @@ def write_roster(path, rows: list[dict[str, str]]) -> None:
 
 
 def stub_team_members(monkeypatch, logins: list[str]) -> None:
-    """Stub the team-member listing so collect_classroom's team-driven
-    username source yields `logins` (collection is now team-driven; the
-    classroom team, not students.csv, provides the (student, assignment)
-    pairs)."""
+    """Stub the team-member listing so collect_classroom's team-driven username
+    source yields `logins` (collection is team-driven; the classroom team, not
+    students.csv, provides the pairs)."""
     monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: list(logins))
 
 
@@ -321,13 +318,12 @@ class TestApplyUpdates:
         assert entries[0]["member_usernames"] == ["alice", "bob"]
 
     def test_group_credited_set_shrink_warns_and_still_replaces(self, capsys):
-        # A previously-credited teammate (bob) is dropped on re-collect (e.g.
-        # he left the classroom team but is still a repo collaborator, so the
-        # team-driven crediting gate no longer includes him). The entry is
-        # still replaced in place, but the silent revocation must now surface
-        # a warning naming the dropped member so a team/CSV divergence isn't
-        # invisible. The owner-only warning in collect_classroom only covers
-        # the len==1 collapse, so a >=2 -> >=1 shrink needs this guard.
+        # A previously-credited teammate (bob) is dropped on re-collect (e.g. he
+        # left the classroom team but is still a repo collaborator). The entry is
+        # still replaced in place, but the silent revocation must surface a
+        # warning naming the dropped member. The owner-only warning in
+        # collect_classroom only covers the len==1 collapse, so a >=2 -> >=1
+        # shrink needs this guard.
         scores = {"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}
         first = make_update(username="alice", assignment_type="group", score=8)
         first["member_usernames"] = ["alice", "bob", "carol"]

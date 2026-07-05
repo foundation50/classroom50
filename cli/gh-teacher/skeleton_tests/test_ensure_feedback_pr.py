@@ -1,15 +1,14 @@
 """Tests for ensure_feedback_pr.py — the Feedback PR maintainer the
 autograde-runner fetches from Pages (like runner.py) and runs.
 
-The script routes every GitHub call through the module-level `gh()`
-function, so these tests monkeypatch that single seam with a fake that
-dispatches on the `gh` argument tuple, then assert the (state, description,
-url) the orchestrator returns and the status it emits. This covers the
-branch matrix the former inline bash had no way to test:
-  empty base -> create + open; wrong base -> failure, no PR; no PR -> create;
-  create race lost -> re-query success; existing open -> in place;
-  closed-unmerged -> reopen (and failed-reopen -> failure, the F8 fix);
-  merged -> leave; HEAD_BRANCH lookup failure -> error status (the F3 fix).
+The script routes every GitHub call through the module-level `gh()`, so these
+tests monkeypatch that single seam with a fake that dispatches on the `gh`
+argument tuple, then assert the (state, description, url) the orchestrator
+returns and the status it emits. Covers the branch matrix the former inline bash
+couldn't test: empty base -> create + open; wrong base -> failure, no PR; no PR
+-> create; create race lost -> re-query success; existing open -> in place;
+closed-unmerged -> reopen (and failed-reopen -> failure, the F8 fix); merged ->
+leave; HEAD_BRANCH lookup failure -> error status (the F3 fix).
 """
 
 from __future__ import annotations
@@ -37,8 +36,8 @@ def _pr_list_json(number="", state="", merged=""):
 
 
 class FakeGh:
-    """A stub for efp.gh. Routes calls by a key built from the gh subcommand
-    + a few distinguishing args; returns scripted output or raises GhError.
+    """A stub for efp.gh. Routes calls by a key built from the gh subcommand +
+    a few distinguishing args; returns scripted output or raises GhError.
     Records every call for assertions.
     """
 
@@ -47,9 +46,7 @@ class FakeGh:
         self.calls: list[tuple[str, ...]] = []
 
     def _key(self, args: tuple[str, ...]) -> str:
-        # repo view / api <path> / pr list / pr create / pr reopen / pr view /
-        # label create. Use the first 2 args, plus the api path or pr number
-        # where it disambiguates.
+        # First 2 args, plus the api path or pr number where it disambiguates.
         if args[0] == "api":
             path = args[1]
             if path.startswith(f"repos/{REPO}/git/ref/heads/"):

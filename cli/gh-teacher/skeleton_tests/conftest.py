@@ -1,18 +1,16 @@
 """Loads the embedded publish/collect-time scripts for the test suite.
 
-These scripts live under `cli/gh-teacher/skeleton/dotgithub/scripts/`
-because `gh teacher init` embeds them at `.github/scripts/` in each org's
-`classroom50` repo:
+These live under `cli/gh-teacher/skeleton/dotgithub/scripts/` because `gh
+teacher init` embeds them at `.github/scripts/` in each org's `classroom50`
+repo:
 
   - collect_scores.py    — score collector (collect-scores.yaml)
-  - regrade_repos.py     — regrade fan-out: re-tags student repos so the
-                           autograder re-runs (regrade.yaml)
+  - regrade_repos.py     — regrade fan-out (regrade.yaml)
   - materialize_tests.py — translates assignments.json `tests` blocks into
                            per-assignment tests.json bundles (publish-pages.yaml)
   - probe_token.py       — service-token scope probe (probe-token.yaml)
 
-Importing via `importlib` keeps the embedded path canonical — no second
-copy to keep in sync.
+Importing via `importlib` keeps the embedded path canonical — no second copy.
 """
 
 from __future__ import annotations

@@ -1,19 +1,18 @@
 """Keeps the result/scores/tests/classroom JSON Schemas honest.
 
-Companion to test_assignments_schema.py. These schemas exist so non-CLI
-clients (the GUI) can validate the artifacts the system produces without
-hand-porting the Go/Python validators. Two kinds of check here:
+Companion to test_assignments_schema.py. These schemas let non-CLI clients
+(the GUI) validate the artifacts the system produces without hand-porting the
+Go/Python validators. Two kinds of check:
 
-  1. Accepts/rejects: pin each schema against real emitted shapes and
-     against malformed ones, so schema drift fails CI rather than
-     surfacing as a GUI/CLI disagreement.
-  2. Cross-validator parity: feed a table of result.json payloads through
-     BOTH the result-v1 schema and the authoritative Python validators
-     (runner.py / collect_scores.py validate_result) and assert they
-     agree on the rules the schema CAN express. Rules JSON Schema cannot
-     express (identity match, mode-dependent assignment_type, owner
-     identity match, score<=max-score cross-field) are enumerated below
-     and excluded from the parity assertion — the code validators own them.
+  1. Accepts/rejects: pin each schema against real emitted shapes and malformed
+     ones, so schema drift fails CI rather than surfacing as a GUI/CLI
+     disagreement.
+  2. Cross-validator parity: feed result.json payloads through BOTH the
+     result-v1 schema and the authoritative Python validators (runner.py /
+     collect_scores.py validate_result) and assert they agree on rules the
+     schema CAN express. Rules JSON Schema can't express (identity match,
+     mode-dependent assignment_type, owner match, score<=max-score) are
+     enumerated below and excluded — the code validators own them.
 """
 
 from __future__ import annotations
@@ -24,18 +23,17 @@ import pathlib
 import pytest
 from jsonschema import Draft202012Validator
 
-# Reuse conftest's importlib loader (the established skeleton_tests
-# pattern — see test_materialize_tests.py) rather than re-implementing it.
-# collect_scores is exposed directly; runner.py is loaded on demand because
-# this suite (collect/materialize/schema) doesn't import it by default.
+# Reuse conftest's importlib loader (the established skeleton_tests pattern)
+# rather than re-implementing it. collect_scores is exposed directly; runner.py
+# is loaded on demand since this suite doesn't import it by default.
 from conftest import _SCRIPTS_DIR, _load_module
 from conftest import collect_scores as cs
 
 _REPO_ROOT = pathlib.Path(__file__).resolve().parents[3]
 _SCHEMAS = _REPO_ROOT / "schemas"
 
-# runner.py isn't loaded by skeleton_tests/conftest (that suite is
-# collect/materialize), so load it here for the result-validator parity.
+# runner.py isn't loaded by skeleton_tests/conftest, so load it here for the
+# result-validator parity.
 runner = _load_module("runner", _SCRIPTS_DIR / "runner.py")
 
 
@@ -143,23 +141,19 @@ class TestResultSchema:
 # --- result/v1 cross-validator parity ---------------------------------------
 #
 # The schema and the code validators (runner.py / collect_scores.py
-# validate_result) must agree on the rules BOTH layers check. Two classes
-# of rule are deliberately EXCLUDED from the equality assertion:
+# validate_result) must agree on the rules BOTH layers check. Two classes of
+# rule are deliberately EXCLUDED from the equality assertion:
 #
-#   1. Rules the schema cannot express (the code validators own them):
-#      - identity match (classroom/assignment/owner vs the source repo)
-#      - mode-dependent assignment_type (individual vs group must match the run)
-#      - score <= max-score and per-test score <= max-score (cross-field)
+#   1. Rules the schema can't express (the code validators own them):
+#      identity match; mode-dependent assignment_type; score <= max-score and
+#      per-test score <= max-score.
 #   2. Rules the schema expresses MORE STRICTLY than the code validators
-#      (the schema is the canonical closed form; the code validators are
-#      deliberately lenient on these):
-#      - additionalProperties:false (code tolerates unknown top-level keys)
-#      - the exact UTC datetime pattern (code only requires a non-empty string)
-#      These are asserted explicitly in test_schema_stricter_than_code below,
-#      NOT folded into the equality table (which would make it fail).
+#      (schema is the canonical closed form; the code is deliberately lenient):
+#      additionalProperties:false; the exact UTC datetime pattern. Asserted in
+#      test_schema_stricter_than_code, NOT folded into the equality table.
 #
-# The parity table therefore keeps identity + scores valid, no extra keys,
-# and a canonical datetime, varying only rules both layers should agree on.
+# So the parity table keeps identity + scores valid, no extra keys, and a
+# canonical datetime, varying only rules both layers should agree on.
 
 _PARITY_CLASSROOM = "cs-principles"
 _PARITY_ASSIGNMENT = "hello"

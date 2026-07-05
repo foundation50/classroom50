@@ -1,16 +1,14 @@
 """Integration tests for `runner.py::main()`.
 
-The pure helpers (URL composition, validate_result, fetch_url
-retries, etc.) are unit-tested in test_runner.py. This file covers
-the orchestration glue — bundle fetch, extraction, entrypoint
-resolution (per-assignment vs classroom default vs vacuous pass),
-subprocess exec, result.json validation, and Finalizer-driven error
-synthesis.
+The pure helpers (URL composition, validate_result, fetch_url retries, etc.)
+are unit-tested in test_runner.py. This covers the orchestration glue — bundle
+fetch, extraction, entrypoint resolution (per-assignment vs classroom default
+vs vacuous pass), subprocess exec, result.json validation, and Finalizer-driven
+error synthesis.
 
-Each test stubs `runner.fetch_url` and the autograder subprocess so
-no real network or pytest invocation happens. Verifies the
-side-effects on the workspace (`result.json`, `release-body.md`) and
-on `$GITHUB_OUTPUT`.
+Each test stubs `runner.fetch_url` and the autograder subprocess so no real
+network or pytest invocation happens. Verifies side-effects on the workspace
+(`result.json`, `release-body.md`) and on `$GITHUB_OUTPUT`.
 """
 
 from __future__ import annotations

@@ -1,11 +1,10 @@
 """Tests for materialize_tests.py.
 
-The script reads each <classroom>/assignments.json and writes a
-<classroom>/autograders/<slug>/tests.json for every assignment that
-declares a `tests` block, so publish-pages.yaml's bundle step ships it to
-the runner. It must be slug-safe (the slug becomes a directory path) and
-forgiving (a malformed manifest warns and is skipped, never aborting the
-Pages deploy).
+Reads each <classroom>/assignments.json and writes a
+<classroom>/autograders/<slug>/tests.json for every assignment that declares a
+`tests` block, so publish-pages.yaml's bundle step ships it to the runner. Must
+be slug-safe (the slug becomes a directory path) and forgiving (a malformed
+manifest warns and is skipped, never aborting the Pages deploy).
 """
 
 from __future__ import annotations
@@ -16,8 +15,8 @@ from conftest import _load_module, _SCRIPTS_DIR
 from conftest import materialize_tests as mt
 
 # Load the grade-time runner too: materialize_tests (publish) and
-# runner.load_tests (grade) are the two halves of the tests.json contract,
-# so one test below pins that they agree.
+# runner.load_tests (grade) are the two halves of the tests.json contract, so
+# one test below pins that they agree.
 runner = _load_module("runner", _SCRIPTS_DIR / "runner.py")
 
 

@@ -1,33 +1,32 @@
 #!/usr/bin/env python3
 """classroom50 Feedback PR maintainer.
 
-Fetched from the teacher's GitHub Pages site by the autograde-runner
-reusable workflow's "Ensure Feedback PR" step, the same way runner.py is
-fetched and run. Lives here (not inline in the workflow) so the ~160 lines
-of control flow are unit-testable with a stubbed `gh`; the workflow step is
-a thin curl+exec shim.
+Fetched from the teacher's Pages site by the autograde-runner workflow's
+"Ensure Feedback PR" step (like runner.py). Lives here (not inline in the
+workflow) so the ~160 lines of control flow are unit-testable with a stubbed
+`gh`; the workflow step is a thin curl+exec shim.
 
-Opt-in per assignment (the workflow only invokes this when feedback-pr is
-on and there's a diff to show). Maintains ONE long-lived PR per repo:
+Opt-in per assignment (the workflow only invokes this when feedback-pr is on
+and there's a diff). Maintains ONE long-lived PR per repo:
   base = the frozen `feedback` branch at the baseline commit
   head = the repo's default branch
-so the teacher reviews the full starter->latest diff with inline comments,
-and it auto-updates on every submission. PRs opened by GITHUB_TOKEN don't
-retrigger workflows, so there's no loop.
+so the teacher reviews the full starter->latest diff with inline comments, and
+it auto-updates on every submission. PRs opened by GITHUB_TOKEN don't retrigger
+workflows, so there's no loop.
 
 Behavior (ported verbatim from the former inline bash):
   1. Freeze the base: create the `feedback` branch at BASE_SHA once, never
      advance it. If it already exists at a DIFFERENT sha, a student may have
-     pre-created it (ruleset leaves creation open) -> refuse to open/refresh
-     the PR against an unverified base, post a failure status, and stop.
-  2. Find the single PR (any state). If none, create it (labeled by mode);
-     on a create race lost to a concurrent run, re-query and treat the
-     existing PR as success. If one exists, reopen only a student's
-     *unmerged* close (a teacher merge is the grading-done signal).
+     pre-created it (ruleset leaves creation open) -> refuse to open/refresh the
+     PR against an unverified base, post a failure status, and stop.
+  2. Find the single PR (any state). If none, create it (labeled by mode); on a
+     create race lost to a concurrent run, re-query and treat the existing PR as
+     success. If one exists, reopen only a student's *unmerged* close (a teacher
+     merge is the grading-done signal).
   3. Always post a machine-readable `classroom50/feedback-pr` commit status
-     (success | failure | error), mirroring `classroom50/autograde`. The
-     status defaults to `error` and is promoted to `success` only at the
-     verified-good end, so an early failure reports error, not false success.
+     (success | failure | error), mirroring `classroom50/autograde`. It defaults
+     to `error` and is promoted to `success` only at the verified-good end, so
+     an early failure reports error, not false success.
 
 Environment (set by the autograde-runner workflow's grade job):
   GH_TOKEN            token for `gh` (Actions GITHUB_TOKEN)
@@ -39,8 +38,8 @@ Environment (set by the autograde-runner workflow's grade job):
   MODE                assignment mode (individual | group), for the PR label
 
 Exits 0 for every outcome (like runner.py): the status carries success vs
-failure vs error. Exits non-zero only on missing required env (invoked
-outside the workflow).
+failure vs error. Exits non-zero only on missing required env (invoked outside
+the workflow).
 """
 
 from __future__ import annotations
@@ -54,12 +53,12 @@ import sys
 # `classroom50-feedback-base-lock` org ruleset (pinned by a Go parity test).
 BASE_BRANCH = "feedback"
 
-# Commit-status context, mirroring classroom50/autograde so an agent can
-# poll whether the Feedback PR is in place.
+# Commit-status context, mirroring classroom50/autograde so an agent can poll
+# whether the Feedback PR is in place.
 STATUS_CONTEXT = "classroom50/feedback-pr"
 
-# Mode -> (PR label, label color). Mirrors GitHub Classroom's
-# Individual/Group feedback labels so a teacher can tell them apart.
+# Mode -> (PR label, color). Mirrors GitHub Classroom's Individual/Group
+# feedback labels so a teacher can tell them apart.
 _LABELS = {
     "group": ("Group Assignment", "5319E7"),
     "individual": ("Individual Assignment", "0E8A16"),
@@ -79,10 +78,10 @@ class GhError(Exception):
 def gh(*args: str, check: bool = True) -> str:
     """Run `gh` and return stdout (stripped). The single seam tests stub.
 
-    On a non-zero exit, raises GhError when check=True (carrying stderr for
-    legible logs), else returns "". A subprocess timeout is converted to a
-    GhError so callers (and main()'s handler) treat it uniformly rather than
-    crashing past the "always exit 0" contract. `gh` reads GH_TOKEN from env.
+    On a non-zero exit, raises GhError when check=True (carrying stderr), else
+    returns "". A subprocess timeout is converted to a GhError so callers treat
+    it uniformly rather than crashing past the "always exit 0" contract. `gh`
+    reads GH_TOKEN from env.
     """
     try:
         proc = subprocess.run(
@@ -120,18 +119,18 @@ def existing_base_sha(repo: str) -> str | None:
     Uses the API (not `git ls-remote`) so this runs without a config-repo
     checkout — the reusable workflow only checks out the student repo.
 
-    A genuine 404 (branch absent) returns None -> caller creates it. Any
-    OTHER failure (403/429/5xx/network) RAISES GhError rather than masquerading
-    as "absent": treating an unreadable base as absent would let the caller
-    fall through and open a PR over a base it could not verify, defeating the
-    poisoned-base guard (a student can pre-create the branch at a wrong SHA).
+    A genuine 404 (branch absent) returns None -> caller creates it. Any OTHER
+    failure (403/429/5xx/network) RAISES GhError rather than masquerading as
+    "absent": treating an unreadable base as absent would let the caller open a
+    PR over a base it couldn't verify, defeating the poisoned-base guard (a
+    student can pre-create the branch at a wrong SHA).
     """
     try:
         out = gh("api", f"repos/{repo}/git/ref/heads/{BASE_BRANCH}",
                  "--jq", ".object.sha")
     except GhError as exc:
-        # `gh api` exits 1 on any HTTP error; distinguish 404 (absent) from
-        # the rest via the error text gh prints (it includes "HTTP 404").
+        # `gh api` exits 1 on any HTTP error; distinguish 404 (absent) from the
+        # rest via the error text gh prints (it includes "HTTP 404").
         if "HTTP 404" in exc.output or "Not Found" in exc.output:
             return None
         raise
@@ -139,10 +138,10 @@ def existing_base_sha(repo: str) -> str | None:
 
 
 def create_base(repo: str, base_sha: str) -> bool:
-    """Create the frozen `feedback` branch at base_sha. Returns True on
-    success. A failure is non-fatal (logged as a notice) — the ruleset
-    leaves creation open to GITHUB_TOKEN, but a transient error shouldn't
-    abort; the next submission retries."""
+    """Create the frozen `feedback` branch at base_sha. Returns True on success.
+    A failure is non-fatal (logged as a notice) — the ruleset leaves creation
+    open to GITHUB_TOKEN, but a transient error shouldn't abort; the next
+    submission retries."""
     try:
         gh("api", "-X", "POST", f"repos/{repo}/git/refs",
            "-f", f"ref=refs/heads/{BASE_BRANCH}", "-f", f"sha={base_sha}")
@@ -153,14 +152,13 @@ def create_base(repo: str, base_sha: str) -> bool:
 
 
 def find_pr(repo: str, head: str) -> dict[str, str] | None:
-    """The single base<-head PR (any state) as {number, state, mergedAt},
-    or None. Matching any state means a previously closed/merged PR is
-    never duplicated.
+    """The single base<-head PR (any state) as {number, state, mergedAt}, or
+    None. Matching any state means a previously closed/merged PR is never
+    duplicated.
 
     Parses the JSON array directly (not a @tsv line): a tab-joined row is
-    fragile because an empty leading field (no PR number) survives gh's
-    output but is lost to a strip()+split, which would fabricate a phantom
-    PR. JSON is unambiguous about an empty list vs a real entry.
+    fragile because an empty leading field (no PR number) survives gh's output
+    but is lost to strip()+split, fabricating a phantom PR. JSON is unambiguous.
     """
     out = gh("pr", "list", "--repo", repo,
              "--base", BASE_BRANCH, "--head", head, "--state", "all",
@@ -225,8 +223,8 @@ def pr_body(head: str) -> str:
 
 
 def create_pr(repo: str, head: str, mode: str) -> str:
-    """Create the Feedback PR, returning its URL. Best-effort labels it
-    first. Raises GhError on a create failure (caller handles the race)."""
+    """Create the Feedback PR, returning its URL. Best-effort labels it first.
+    Raises GhError on a create failure (caller handles the race)."""
     label, color = label_for_mode(mode)
     # Best-effort label; never block PR creation on label setup.
     gh("label", "create", label, "--repo", repo, "--color", color,
@@ -302,13 +300,11 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
     # Existing PR: reopen only a student's unmerged close.
     url = f"{server_url}/{repo}/pull/{pr['number']}"
     if pr["state"] == "CLOSED" and not pr["mergedAt"]:
-        # A failed reopen must NOT report success (review finding F8). Trust
-        # `gh pr reopen`'s own exit status: if it raises, the reopen genuinely
-        # failed -> failure. If it succeeds, the PR is open; a follow-up
-        # `pr view` only DOWNGRADES to failure when it *confirms* the PR is
-        # still CLOSED — a transient/empty view is treated as success (the
-        # reopen didn't error), so a flaky read can't flip a reopened PR to a
-        # false failure.
+        # A failed reopen must NOT report success (F8). Trust `gh pr reopen`'s
+        # own exit: if it raises, the reopen genuinely failed -> failure. If it
+        # succeeds, a follow-up `pr view` only DOWNGRADES to failure when it
+        # *confirms* the PR is still CLOSED — a transient/empty view is treated
+        # as success, so a flaky read can't flip a reopened PR to a false failure.
         try:
             gh("pr", "reopen", pr["number"], "--repo", repo)
         except GhError as exc:
@@ -337,7 +333,7 @@ def emit_status(repo: str, sha: str, state: str, description: str, url: str) -> 
            "-f", f"description={description}", "-f", f"target_url={url}")
     except (GhError, OSError) as exc:
         # Last best-effort action; never let a status-POST failure (gh error,
-        # timeout-as-GhError, or a missing gh binary) mask the real outcome.
+        # timeout-as-GhError, missing gh binary) mask the real outcome.
         print(f"::warning::could not post {STATUS_CONTEXT} status: {exc}")
 
 
@@ -355,7 +351,7 @@ def main() -> int:
               file=sys.stderr)
         return 1
 
-    # Default to error so any uncaught failure reports error (never a false
+    # Default to error so any uncaught failure reports error (never false
     # success), mirroring the former `trap emit_status EXIT` design.
     state, description = "error", "Feedback PR step did not complete"
     url = f"{server_url}/{repo}/actions/runs/{run_id}"

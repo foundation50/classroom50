@@ -1,20 +1,18 @@
 """Loads the embedded scripts for the test suite.
 
-The runner-side scripts live under
-`cli/gh-teacher/skeleton/dotgithub/scripts/` because `gh teacher init`
-lands them at `.github/scripts/` in each org's `classroom50` repo:
-  - runner.py         — runner-side bootstrap (loaded as a module so
-                        its pure helpers are unit-testable)
-  - collect_scores.py — score collector (loaded so cross-binary
-                        constants like RESULT_SCHEMA_V1 can be
-                        compared, not just pinned to literals)
+The runner-side scripts live under `cli/gh-teacher/skeleton/dotgithub/scripts/`
+because `gh teacher init` lands them at `.github/scripts/` in each org's
+`classroom50` repo:
+  - runner.py         — runner-side bootstrap (loaded as a module so its pure
+                        helpers are unit-testable)
+  - collect_scores.py — score collector (loaded so cross-binary constants like
+                        RESULT_SCHEMA_V1 can be compared, not just pinned)
 
-The diagnostic-stub autograder lives under `cli/gh-teacher/embed/`
-because it's `//go:embed`-ed into the gh-teacher binary and written
-to `<classroom>/autograder.py` only when teachers run
-`gh teacher autograder set-default` without `--from`.
-test_default_autograder.py runs it as a subprocess because it does
-its work at module-execution time.
+The diagnostic-stub autograder lives under `cli/gh-teacher/embed/` because it's
+`//go:embed`-ed into the gh-teacher binary and written to
+`<classroom>/autograder.py` only when teachers run `gh teacher autograder
+set-default` without `--from`. test_default_autograder.py runs it as a
+subprocess because it does its work at module-execution time.
 """
 
 from __future__ import annotations

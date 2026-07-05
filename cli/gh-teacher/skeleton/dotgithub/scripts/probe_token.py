@@ -2,40 +2,36 @@
 """Teacher-triggered service-token probe.
 
 Exercises EVERY GitHub API scope the CLASSROOM50_SERVICE_TOKEN needs, so a
-teacher can run one workflow after provisioning (or after rotating) and get a
-single green/red signal that covers scopes the pre-provisioning validators
-(`gh teacher init` / the web "validate & save") cannot cheaply check — in
-particular the org-team read and the repo-level Actions permission that only
-surface at collect/regrade time otherwise.
+teacher runs one workflow after provisioning/rotating and gets a single
+green/red signal covering scopes the pre-provisioning validators (`gh teacher
+init` / the web "validate & save") can't cheaply check — the org-team read and
+the repo-level Actions permission that only surface at collect/regrade time.
 
-The probe is SIDE-EFFECT FREE by design. It never pushes a tag, re-runs a
-workflow, writes a secret, or mutates any repo. Write scopes are proven with
-read-only PROXIES that GitHub gates behind the write permission:
+SIDE-EFFECT FREE by design. Never pushes a tag, re-runs a workflow, writes a
+secret, or mutates a repo. Write scopes are proven with read-only PROXIES that
+GitHub gates behind the write permission:
 
   - Contents: write  -> GET /repos/{org}/classroom50 reports
-                        `permissions.push == true` only when the token can
-                        write contents (same signal the CLI/web validators use).
+                        `permissions.push == true` only with contents-write
+                        (same signal the CLI/web validators use).
   - Actions:  write  -> GET /repos/{org}/classroom50/actions/permissions is
-                        reachable only with the Actions permission; a fine-
-                        grained PAT's Actions permission is a single read/write
-                        pair, so reachability establishes the Actions grant
-                        regrade's rerun API needs. No run is actually re-run.
+                        reachable only with the Actions permission; a
+                        fine-grained PAT's Actions permission is a single
+                        read/write pair, so reachability establishes the grant
+                        regrade's rerun API needs. No run is re-run.
 
-What each check maps to (mirrors the wiki REST table):
+Scope -> probe (mirrors the wiki REST table):
+  Organization Members: R   -> GET /orgs/{org}/members      (+ per-team read)
+  Repository Contents: R    -> GET /repos/{org}/classroom50 (config repo)
+  Repository Contents: W    -> permissions.push on the config repo
+  Repository Actions:  R/W  -> GET /repos/{org}/classroom50/actions/permissions
+  Repository Metadata: R    -> GET /repos/{org}/classroom50/collaborators
 
-  | Scope                     | Probe (read-only)                                   |
-  | Organization Members: R   | GET /orgs/{org}/members            (+ per-team read) |
-  | Repository Contents: R    | GET /repos/{org}/classroom50 (config repo readable) |
-  | Repository Contents: W    | permissions.push on the config repo                 |
-  | Repository Actions:  R/W  | GET /repos/{org}/classroom50/actions/permissions    |
-  | Repository Metadata: R    | GET /repos/{org}/classroom50/collaborators          |
-
-Config + org scopes are ALWAYS probed. Per-classroom, the probe additionally
-reads the classroom team's members (the exact call collect-scores makes),
-which also exercises team VISIBILITY — a secret team the token can't see
-404/403s here even when the org-members proxy passes. A team that doesn't
-exist yet (404) is a PASS with a note (an early-term classroom legitimately
-has no team) — never a failure.
+Config + org scopes are ALWAYS probed. Per-classroom, the probe also reads the
+classroom team's members (the exact call collect-scores makes), which exercises
+team VISIBILITY — a secret team the token can't see 404/403s here even when the
+org-members proxy passes. A team that doesn't exist yet (404) is a PASS with a
+note (an early-term classroom legitimately has no team), never a failure.
 
 Environment (set by `probe-token.yaml`):
   CLASSROOM50_SERVICE_TOKEN — the fine-grained PAT to probe.
@@ -45,9 +41,9 @@ Environment (set by `probe-token.yaml`):
   GH_API_URL                — explicit override (test servers).
 
 Exit codes:
-  0 — every required scope is present (a per-classroom team read may be
-      skipped with a note when the team doesn't exist yet).
-  1 — at least one required scope is missing, or the token is invalid/expired.
+  0 — every required scope present (a per-classroom team read may be skipped
+      with a note when the team doesn't exist yet).
+  1 — at least one required scope missing, or the token is invalid/expired.
 """
 
 from __future__ import annotations
@@ -83,10 +79,10 @@ def _api_url() -> str:
 
 def http_get(url: str, token: str, *, _retries: int = 3) -> tuple[int, bytes]:
     """GET `url` with bearer auth. Returns (status, body) for a 2xx; raises
-    urllib.error.HTTPError for a non-2xx so callers can classify the status.
-    Retries 5xx/429 with exponential backoff (honoring Retry-After), mirroring
-    the collect/regrade transport. The token lives only in the Authorization
-    header — never logged or interpolated into output."""
+    urllib.error.HTTPError for a non-2xx so callers can classify. Retries
+    5xx/429 with exponential backoff (honoring Retry-After), mirroring the
+    collect/regrade transport. The token lives only in the Authorization header
+    — never logged or interpolated into output."""
     for attempt in range(_retries):
         req = urllib.request.Request(
             url,
@@ -131,9 +127,9 @@ def _repo_url(api_url: str, owner: str, repo: str) -> str:
 
 # Individual scope checks -----------------------------------------------------
 #
-# Each check returns a Check: ok True/False and a human message. A check that
-# can't run for a benign reason (no student repos yet) is `skipped` — counted
-# as a pass with a note, not a failure.
+# Each returns a Check: ok True/False and a human message. A check that can't
+# run for a benign reason (no student repos yet) is `skipped` — a pass with a
+# note, not a failure.
 
 
 class Check:
@@ -189,7 +185,7 @@ def check_config_contents_and_write(api_url: str, org: str, token: str) -> list[
 
 def check_actions(api_url: str, org: str, token: str) -> Check:
     """Actions: Read/Write — GET .../actions/permissions is reachable only with
-    the Actions permission (the fine-grained Actions permission is a single
+    the Actions permission (a fine-grained Actions permission is a single
     read/write pair, so reachability establishes the grant regrade's rerun API
     needs). Read-only: no run is re-run."""
     url = f"{_repo_url(api_url, org, CONFIG_REPO)}/actions/permissions"
@@ -210,7 +206,7 @@ def check_actions(api_url: str, org: str, token: str) -> Check:
 
 
 def check_metadata(api_url: str, org: str, token: str) -> Check:
-    """Metadata: Read — /collaborators is a Metadata endpoint; it is what group
+    """Metadata: Read — /collaborators is a Metadata endpoint, what group
     attribution reads. Metadata is auto-included on every fine-grained PAT, so
     this is expected to pass; a failure means the token is scoped to the wrong
     resource owner or a repo subset."""
@@ -377,7 +373,7 @@ def main() -> int:
         print_check(check)
     checks.extend(org_scope_checks)
 
-    # Per-classroom: read the exact team collect-scores reads. This catches the
+    # Per-classroom: read the exact team collect-scores reads. Catches the
     # team-visibility gap the org-members proxy can miss.
     classrooms = list(iter_classroom_meta(base_dir))
     if classrooms:

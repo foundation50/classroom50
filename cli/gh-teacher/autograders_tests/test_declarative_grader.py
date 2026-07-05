@@ -1,12 +1,11 @@
 """Tests for the built-in declarative test grader in runner.py.
 
-The grader turns a materialized tests.json (input/output, run-command,
-and pytest specs -- the GitHub Classroom-style autograding model) into a
-classroom50/result/v1 result.json. These tests exercise the comparison
-modes, per-test execution (timeouts, setup, exit codes, fixtures), the
-pytest points split, and the end-to-end run_declarative wiring. Real
-shell commands run in pytest's tmp_path so the subprocess behavior is
-covered, not mocked.
+The grader turns a materialized tests.json (input/output, run-command, and
+pytest specs -- the GitHub Classroom-style autograding model) into a
+classroom50/result/v1 result.json. These exercise the comparison modes,
+per-test execution (timeouts, setup, exit codes, fixtures), the pytest points
+split, and the end-to-end run_declarative wiring. Real shell commands run in
+pytest's tmp_path so the subprocess behavior is covered, not mocked.
 """
 
 from __future__ import annotations
@@ -169,8 +168,8 @@ def _pytest_run(testfile_body: str, tmp_path, points: int) -> dict:
     (tmp_path / "test_sample.py").write_text(testfile_body)
     spec = {
         "name": "suite", "type": "python",
-        # sys.executable so the subprocess uses this interpreter (which
-        # has pytest + pytest-json-report), not whatever `python` is on PATH.
+        # sys.executable so the subprocess uses this interpreter (which has
+        # pytest + pytest-json-report), not whatever `python` is on PATH.
         "run": f"{shlex.quote(sys.executable)} -m pytest -q",
         "timeout": 60, "points": points,
     }
@@ -224,10 +223,9 @@ class TestExecutePython:
         assert o["score"] == 2 and not o["passed"]
 
     def test_teacher_supplied_json_report_flags_not_duplicated(self, tmp_path):
-        # A run command that already configures the plugin must not get
-        # the flags appended again (pytest errors on duplicates). The
-        # report then lands at the teacher's path, not ours, so scoring
-        # falls back to the exit code.
+        # A run command that already configures the plugin must not get the
+        # flags appended again (pytest errors on duplicates). The report then
+        # lands at the teacher's path, not ours, so scoring falls back to exit.
         (tmp_path / "test_sample.py").write_text("def test_a():\n    assert True\n")
         spec = {
             "name": "suite", "type": "python",

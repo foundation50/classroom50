@@ -1,15 +1,13 @@
 """Tests for the runner-side bootstrap (`runner.py`).
 
-The runner's job is to (1) download + extract the per-assignment
-bundle, (2) resolve the entrypoint (per-assignment override,
-classroom default, or vacuous-pass fallback), (3) exec it with the
-right env / cwd, and (4) validate / synthesize the autograder's
-outputs. These tests cover the data-shape invariants the rest of
-the loop depends on plus the URL helpers and HTTP retry logic.
+The runner (1) downloads + extracts the per-assignment bundle, (2) resolves the
+entrypoint (per-assignment override, classroom default, or vacuous-pass
+fallback), (3) execs it with the right env/cwd, and (4) validates/synthesizes
+the autograder's outputs. These cover the data-shape invariants the loop
+depends on plus the URL helpers and HTTP retry logic.
 
-Integration testing of the diagnostic-stub autograder.py (shipped
-inside gh-teacher) lives in test_default_autograder.py
-(subprocess-driven).
+Integration testing of the diagnostic-stub autograder.py (shipped inside
+gh-teacher) lives in test_default_autograder.py (subprocess-driven).
 """
 
 from __future__ import annotations

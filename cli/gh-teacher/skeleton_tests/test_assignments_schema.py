@@ -1,10 +1,9 @@
 """Keeps schemas/assignments-v1.schema.json honest.
 
-The JSON Schema exists so non-CLI clients (the GUI) can validate
-assignments.json writes without hand-porting the Go validators. These
-tests pin it against the same shapes the Go suite pins, including the
-example kit's tests.json, so schema drift fails CI rather than
-surfacing as a GUI/CLI disagreement.
+The JSON Schema lets non-CLI clients (the GUI) validate assignments.json writes
+without hand-porting the Go validators. These tests pin it against the same
+shapes the Go suite pins, including the example kit's tests.json, so schema
+drift fails CI rather than surfacing as a GUI/CLI disagreement.
 """
 
 from __future__ import annotations

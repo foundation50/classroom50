@@ -1,8 +1,8 @@
 """Unit tests for `probe_token.py`.
 
-The probe's transport is stubbed (monkeypatched `http_get`); these tests cover
-the per-scope check outcomes, the team-slug resolution and classroom iteration,
-the 404-team "skip as pass" behavior, and main()'s exit-code contract. The
+The probe's transport is stubbed (monkeypatched `http_get`); these cover the
+per-scope check outcomes, team-slug resolution and classroom iteration, the
+404-team "skip as pass" behavior, and main()'s exit-code contract. The
 side-effect-free promise is enforced structurally: the checks only ever call
 `http_get` (a GET), never any write helper — there is none.
 """

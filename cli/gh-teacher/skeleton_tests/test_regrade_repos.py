@@ -1,10 +1,9 @@
 """Unit tests for `regrade_repos.py`.
 
-The GitHub-API transport is exercised end-to-end against a live classroom
-by the functional smoke test; these tests focus on the pure helpers and the
-per-repo decision logic (tag construction, idempotent reuse, missing-repo
-handling, hard-vs-skip error classification) and the roster/manifest loader,
-with the HTTP layer stubbed.
+The GitHub-API transport is exercised end-to-end by the functional smoke test;
+these focus on the pure helpers and per-repo decision logic (tag construction,
+idempotent reuse, missing-repo handling, hard-vs-skip error classification) and
+the roster/manifest loader, with the HTTP layer stubbed.
 """
 
 from __future__ import annotations

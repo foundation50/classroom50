@@ -1,18 +1,16 @@
 """Behavioral tests for the inline Python validator embedded in
 autograde-runner.yaml's setup job.
 
-The validator runs in production on every student submission against
-a teacher-controlled assignments.json + a student-controlled
-.classroom50.yaml, and it's the last gate before runtime values flow
-into the grade job's `runs-on:`/`container:` mapping. Drift between
-this validator and `runtime.go` (CLI write-time) would let injection
-past one or the other without any test catching it.
+The validator runs in production on every submission against a
+teacher-controlled assignments.json + a student-controlled .classroom50.yaml,
+and it's the last gate before runtime values flow into the grade job's
+`runs-on:`/`container:` mapping. Drift between it and `runtime.go` (CLI
+write-time) would let injection past one or the other untested.
 
-These tests extract the YAML-embedded `shell: python3 {0}` block,
-write it to a tempfile, and exec it as a subprocess with hand-crafted
-.classroom50.yaml + assignments.json fixtures so the validator's
-allow-lists, regexes, and emit shape can be exercised independently
-of the rest of the workflow.
+These tests extract the YAML-embedded `shell: python3 {0}` block, write it to a
+tempfile, and exec it as a subprocess with hand-crafted .classroom50.yaml +
+assignments.json fixtures so the validator's allow-lists, regexes, and emit
+shape can be exercised independently of the rest of the workflow.
 """
 
 from __future__ import annotations
@@ -36,9 +34,8 @@ _RUNNER_YAML = (
 
 
 def _extract_inline_python() -> str:
-    """Pull the inline Python validator body out of the setup-job's
-    `read` step. Identifies the step by its `id: read` + `shell:
-    python3 {0}` pair and returns the text of its `run:` block."""
+    """Pull the inline Python validator body out of the setup-job's `read`
+    step, identified by its `id: read` + `shell: python3 {0}` pair."""
     doc = yaml.safe_load(_RUNNER_YAML.read_text())
     setup_steps = doc["jobs"]["setup"]["steps"]
     for step in setup_steps:
@@ -64,10 +61,10 @@ def _run_validator(
 ) -> tuple[int, str, str, dict]:
     """Run the inline validator with hand-crafted env + fixtures.
 
-    Stubs network: the validator's `get(manifest_url)` call hits a
-    file:// URL pointing at the local manifest fixture instead of
-    GitHub Pages. Manifest=None → no file written, simulating a 404
-    (the validator should fail gracefully).
+    Stubs network: the validator's `get(manifest_url)` hits a file:// URL
+    pointing at the local manifest fixture instead of GitHub Pages.
+    Manifest=None → no file written, simulating a 404 (validator should fail
+    gracefully).
 
     Returns (exit_code, stdout, stderr, parsed-GITHUB_OUTPUT-as-dict).
     """
@@ -88,20 +85,10 @@ def _run_validator(
     gh_output = tmp_path / "github-output"
     gh_output.write_text("")
 
-    # Wire the validator's Pages fetch at a local file:// URL so the
-    # `get()` helper resolves without a network round-trip. The
-    # validator hard-codes `https://{owner}.github.io/classroom50` —
-    # we monkey-patch the env-driven owner to be the literal pages
-    # root via REPO_OWNER and a small wrapper.
-
-    # Simpler: replace `f"https://{owner}.github.io/classroom50"`
-    # with a file:// URL via env-injected sed-on-source. But the
-    # script reads `REPO_OWNER` from env and composes the URL itself.
-    # We can't intercept that cleanly without rewriting the script.
-    #
-    # Pragmatic workaround: write a tiny wrapper that monkey-patches
-    # urlopen before exec'ing the validator, so the file:// URL is
-    # served from the pages_root fixture.
+    # Serve the validator's Pages fetch from a local file:// URL. The script
+    # composes `https://{REPO_OWNER}.github.io/classroom50` from env itself, so
+    # rather than intercept that, a tiny wrapper monkey-patches urlopen before
+    # exec'ing the validator to serve the URL from the pages_root fixture.
 
     wrapper = textwrap.dedent(f"""
     import urllib.request
@@ -361,10 +348,9 @@ class TestRunsOnRejection:
 
 
 class TestUnknownKeyRejection:
-    """Hand-edited assignments.json with extra keys must be rejected
-    by the runtime validator, mirroring Go's DisallowUnknownFields.
-    Without this, `container.options: --privileged` would flow through
-    to the grade job."""
+    """Hand-edited assignments.json with extra keys must be rejected by the
+    runtime validator, mirroring Go's DisallowUnknownFields. Without this,
+    `container.options: --privileged` would flow through to the grade job."""
 
     def test_unknown_runtime_key_rejected(self, inline_script, tmp_path):
         rc, _stdout, stderr, _outputs = _run_validator(
@@ -453,9 +439,9 @@ class TestFieldValidation:
 
 class TestDeclarativeTestsValidation:
     """The setup job re-validates the `tests` block (mirroring
-    cli/gh-teacher/tests.go, like the runtime block's dual validation):
-    a hand-edited assignments.json must fail at setup with a clear
-    message, and nothing from `tests` may reach the job outputs."""
+    cli/gh-teacher/tests.go, like the runtime block's dual validation): a
+    hand-edited assignments.json must fail at setup with a clear message, and
+    nothing from `tests` may reach the job outputs."""
 
     def test_valid_tests_pass_and_never_reach_outputs(self, inline_script, tmp_path):
         rc, _stdout, _stderr, outputs = _run_validator(

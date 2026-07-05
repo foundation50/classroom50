@@ -1,15 +1,13 @@
-"""Subprocess-driven tests for the diagnostic-stub autograder.py
-shipped inside gh-teacher (`cli/gh-teacher/embed/autograder.py`).
+"""Subprocess-driven tests for the diagnostic-stub autograder.py shipped inside
+gh-teacher (`cli/gh-teacher/embed/autograder.py`).
 
-The stub does its work at module-execution time (no functions to
-unit-test), so we run it as a subprocess with synthesized env vars +
-a temp cwd and inspect the side effects: result.json, release-body.md,
-and $GITHUB_OUTPUT contents.
+The stub does its work at module-execution time (no functions to unit-test), so
+we run it as a subprocess with synthesized env vars + a temp cwd and inspect the
+side effects: result.json, release-body.md, and $GITHUB_OUTPUT.
 
-`gh teacher autograder set-default <org> <classroom>` writes this
-stub to `<classroom>/autograder.py` when the teacher omits `--from`,
-so the runner pipeline can be verified end-to-end before any real
-grading logic is in place.
+`gh teacher autograder set-default <org> <classroom>` writes this stub to
+`<classroom>/autograder.py` when the teacher omits `--from`, so the runner
+pipeline can be verified end-to-end before any real grading logic is in place.
 """
 
 from __future__ import annotations
