@@ -184,6 +184,7 @@ const CreateAssignmentPage = () => {
                       runtime_node: values.runtime_node,
                       runtime_java: values.runtime_java,
                       runtime_go: values.runtime_go,
+                      runtime_rust: values.runtime_rust,
                       runtime_apt: values.runtime_apt,
                       setup_command: values.setup_command,
                       allowed_files: values.allowed_files,
