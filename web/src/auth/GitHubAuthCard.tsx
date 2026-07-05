@@ -52,8 +52,6 @@ export function GitHubAuthCard() {
             <GitHubAuthedPanel
               user={auth.user}
               isLoadingUser={auth.isLoadingUser}
-              token={auth.token}
-              tokenScope={auth.tokenScope}
               onSignOut={auth.signOut}
             />
           ) : auth.screen === "exchanging" ? (
