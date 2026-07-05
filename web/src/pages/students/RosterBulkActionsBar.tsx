@@ -48,7 +48,7 @@ const buildUnenrollResult = (
         label: o.label,
         // `detail` is a stable reason token from bulkUnenrollRoster; translate
         // it at the render boundary (raw tokens bypass the CI en.json audit and
-        // can't be localized), matching the pending path's t("...noInviteId").
+        // can't be localized), matching the pending path's noInviteId handling.
         detail:
           o.detail === "already-removed"
             ? t("students.bulk.alreadyRemoved")
