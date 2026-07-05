@@ -3,11 +3,16 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
-import { githubKeys, teamMembersQuery } from "@/hooks/github/queries"
+import {
+  githubKeys,
+  listAllOrgMembers,
+  teamMembersQuery,
+} from "@/hooks/github/queries"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
   countByState,
+  orgMembersMissingFromTeam,
   teamMembersMissingFromCsv,
   type TeamRosterRow,
   type TeamRosterRowState,
@@ -39,6 +44,12 @@ export type UseTeamRosterResult = {
   // can sync (auto-synced on open). Opposite direction from `unprovisioned` (on
   // CSV, not on team), which sync can't fix.
   csvMissingCount: number
+  // Rostered students who are active org members but absent from the classroom
+  // team — the exact set auto-reconcile team-adds so they flip from
+  // `unprovisioned` to `enrolled`. They joined the ORG but were never put on the
+  // team (native invite / SSO), so unlike plain `unprovisioned` this IS fixable
+  // from the roster without touching org membership.
+  orgMembersMissingFromTeam: { id: number; login: string }[]
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -74,6 +85,16 @@ export function useTeamRoster(
     isForbidden: invitesForbidden,
   } = useGetOrgInvitations(org)
 
+  // Org members, to spot rostered students who are in the org but not on the
+  // team (auto-reconcile promotes them). A read failure (e.g. can't list
+  // members) yields [] so nothing auto-adds — the roster still renders.
+  const { data: orgMembers } = useQuery({
+    queryKey: githubKeys.orgMembersAll(org),
+    queryFn: () => listAllOrgMembers(client, org),
+    enabled: Boolean(org),
+    staleTime: 60_000,
+  })
+
   const rows = useMemo(
     () =>
       buildTeamRoster({
@@ -93,6 +114,12 @@ export function useTeamRoster(
     [members, students],
   )
 
+  // Rostered active org members absent from the team — what auto-reconcile adds.
+  const orgMembersMissing = useMemo(
+    () => orgMembersMissingFromTeam(rows, orgMembers ?? []),
+    [rows, orgMembers],
+  )
+
   // Enrolled rows come from team membership (readable by non-owners), so the
   // roster is usable even when invites are forbidden. Wait on the invite fetch
   // only when it's readable.
@@ -107,6 +134,7 @@ export function useTeamRoster(
     pendingHidden: invitesForbidden,
     teamSlug,
     csvMissingCount,
+    orgMembersMissingFromTeam: orgMembersMissing,
     refetch: () => {
       void refetchMembers()
     },

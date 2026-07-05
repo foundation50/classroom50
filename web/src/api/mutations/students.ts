@@ -1282,6 +1282,70 @@ export async function syncRosterFromTeam(
   })
 }
 
+export type ReconcileTeamInput = {
+  org: string
+  classroom: string
+  // Org members (id + current login) the roster classified as unprovisioned but
+  // who are active members absent from the classroom team. Resolved by the
+  // caller from orgMembersMissingFromTeam so this mutation stays a thin,
+  // re-verified writer.
+  members: { id: number; login: string }[]
+}
+
+export type ReconcileTeamResult = {
+  // Logins added to the classroom team this run.
+  added: string[]
+  // Logins that couldn't be added (no longer active, or the team-add failed).
+  failed: { login: string; message: string }[]
+}
+
+// Add rostered active org members to the classroom team so they stop rendering
+// as `unprovisioned` and become `enrolled`. The team stays the source of truth
+// for enrollment — this only closes the gap where a student joined the ORG
+// (native invite / SSO) but was never put on the team. Each add is:
+//   1) re-verified as an ACTIVE org member (the trust model used across the
+//      enroll paths — never team-add a non-member), then
+//   2) an idempotent PUT team membership.
+// Best-effort per user: one failure never blocks the others, and nothing here
+// touches org membership or students.csv.
+export async function reconcileTeamFromOrgMembers(
+  client: GitHubClient,
+  input: ReconcileTeamInput,
+): Promise<ReconcileTeamResult> {
+  const { org, classroom, members } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const added: string[] = []
+  const failed: ReconcileTeamResult["failed"] = []
+
+  if (members.length === 0) return { added, failed }
+
+  const teamSlug = await resolveClassroomTeamSlug(client, org, classroom)
+
+  for (const m of members) {
+    const login = m.login.trim()
+    if (!login) continue
+    // Re-verify active membership right before the write: the org list can be
+    // stale, and we never team-add a non-member.
+    if (!(await isActiveMember(client, org, login))) {
+      failed.push({
+        login,
+        message: `${login} is no longer an active member of ${org}.`,
+      })
+      continue
+    }
+    const result = await tryAddUserToTeam(
+      client,
+      { org, teamSlug, username: login },
+      "reconcile team from org members",
+    )
+    if (result.ok) added.push(login)
+    else failed.push({ login, message: result.detail })
+  }
+
+  return { added, failed }
+}
+
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
   teamResults: {
     username: string

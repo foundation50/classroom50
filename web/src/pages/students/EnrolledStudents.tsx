@@ -20,6 +20,7 @@ import {
   syncRosterFromTeam,
   unenrollStudent,
   matchStudentToAccountWithConflictRetry,
+  reconcileTeamFromOrgMembers,
 } from "@/api/mutations/students"
 import type { UnenrollStudentInput } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
@@ -675,6 +676,7 @@ const EnrolledStudents = ({
     pendingHidden,
     teamSlug,
     csvMissingCount,
+    orgMembersMissingFromTeam,
   } = useTeamRoster(org, classroom, students)
 
   const enrolled = useMemo(
@@ -783,6 +785,64 @@ const EnrolledStudents = ({
     // deps gate re-firing.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csvMissingCount, isLoading, isError])
+
+  // Auto-reconcile on open: a rostered student who joined the ORG (native invite
+  // / SSO) but was never added to the classroom team renders as `unprovisioned`,
+  // even though they're a full member. The team stays the enrollment source of
+  // truth — this just closes that gap by team-adding those confirmed members so
+  // they flip to `enrolled`. reconcileTeamFromOrgMembers re-verifies each is
+  // still active before the write; it never touches org membership or the CSV.
+  //
+  // Latched exactly like auto-sync: fire once per drift episode, re-arm only
+  // when the missing set empties. A failed add toasts once and, staying latched,
+  // does not retry in a loop.
+  const reconcileMutation = useMutation({
+    mutationFn: (members: { id: number; login: string }[]) =>
+      reconcileTeamFromOrgMembers(client, { org, classroom, members }),
+    onSuccess: (result) => {
+      if (result.added.length > 0) {
+        // Team membership changed; refresh the enrolled roster.
+        invalidateTeamRoster()
+        notify({
+          tone: "success",
+          durationMs: 5000,
+          message: t("students.reconcileAdded", {
+            count: result.added.length,
+          }),
+        })
+      }
+      if (result.failed.length > 0) {
+        notify({
+          tone: "warning",
+          durationMs: 8000,
+          message: t("students.reconcileFailed", {
+            list: result.failed.map((f) => f.login).join(", "),
+          }),
+        })
+      }
+    },
+    onError: (err) => {
+      notify({
+        tone: "error",
+        message: t("students.reconcileError", { error: getErrorMessage(err) }),
+      })
+    },
+  })
+
+  const autoReconciledRef = useRef(false)
+  useEffect(() => {
+    if (isLoading || isError) return
+    if (orgMembersMissingFromTeam.length === 0) {
+      autoReconciledRef.current = false
+      return
+    }
+    if (autoReconciledRef.current || reconcileMutation.isPending) return
+    autoReconciledRef.current = true
+    reconcileMutation.mutate(orgMembersMissingFromTeam)
+    // reconcileMutation identity is stable; the ref + missing-set/loading deps
+    // gate re-firing.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orgMembersMissingFromTeam, isLoading, isError])
 
   const resendForRow = async (row: TeamRosterRow) => {
     const inviteeId = Number(row.github_id)

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
+  orgMembersMissingFromTeam,
   rowToStudent,
   teamMembersMissingFromCsv,
 } from "./teamRoster"
@@ -275,5 +276,64 @@ describe("teamMembersMissingFromCsv", () => {
       [csvRow({ github_id: "101" }), csvRow({ username: "grace" })],
     )
     expect(missing).toEqual([])
+  })
+})
+
+describe("orgMembersMissingFromTeam", () => {
+  // A rostered student who is a live org member but absent from the classroom
+  // team: enrolled on the team (member 101) stays out of the result; the
+  // unprovisioned-but-org-member (202) is returned for auto team-add.
+  const roster = (students: Student[], members: GitHubUser[]) =>
+    buildTeamRoster({ members, students })
+
+  it("returns an unprovisioned CSV row that is an active org member (by id)", () => {
+    const rows = roster(
+      [
+        csvRow({ github_id: "101", username: "ada" }),
+        csvRow({ github_id: "202", username: "bob" }),
+      ],
+      [member(101, "ada")], // only ada is on the team
+    )
+    const missing = orgMembersMissingFromTeam(rows, [
+      member(101, "ada"),
+      member(202, "bob"),
+    ])
+    expect(missing).toEqual([{ id: 202, login: "bob" }])
+  })
+
+  it("matches an id-less CSV row by login and returns the member's current login", () => {
+    const rows = roster([csvRow({ username: "Bob" })], [])
+    // GitHub renamed bob -> bobby; match on the CSV login, return current login.
+    const missing = orgMembersMissingFromTeam(rows, [member(202, "bob")])
+    expect(missing).toEqual([{ id: 202, login: "bob" }])
+  })
+
+  it("ignores unprovisioned rows that are NOT org members (still not provisioned)", () => {
+    const rows = roster([csvRow({ username: "ghost" })], [])
+    expect(orgMembersMissingFromTeam(rows, [member(1, "someoneelse")])).toEqual(
+      [],
+    )
+  })
+
+  it("ignores already-enrolled team members", () => {
+    const rows = roster(
+      [csvRow({ github_id: "101", username: "ada" })],
+      [member(101, "ada")],
+    )
+    expect(orgMembersMissingFromTeam(rows, [member(101, "ada")])).toEqual([])
+  })
+
+  it("is empty when there are no unprovisioned rows", () => {
+    const rows = roster([], [member(101, "ada")])
+    expect(orgMembersMissingFromTeam(rows, [member(101, "ada")])).toEqual([])
+  })
+
+  it("dedupes if the same member appears twice in the org list", () => {
+    const rows = roster([csvRow({ github_id: "202", username: "bob" })], [])
+    const missing = orgMembersMissingFromTeam(rows, [
+      member(202, "bob"),
+      member(202, "bob"),
+    ])
+    expect(missing).toEqual([{ id: 202, login: "bob" }])
   })
 })
