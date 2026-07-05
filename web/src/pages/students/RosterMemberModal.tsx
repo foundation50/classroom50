@@ -261,23 +261,20 @@ const RosterMemberModal = ({
               {canInvite && !confirmingInvite ? (
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm btn-square"
+                  className="btn btn-primary btn-sm"
                   disabled={busy}
-                  aria-label={t("students.inviteToOrg")}
-                  title={t("students.inviteToOrg")}
                   onClick={() => setConfirmingInvite(true)}
                 >
                   <UserPlus aria-hidden="true" className="size-4" />
+                  {t("students.invite")}
                 </button>
               ) : null}
 
               {canResend ? (
                 <button
                   type="button"
-                  className="btn btn-sm btn-square"
+                  className="btn btn-sm"
                   disabled={resending || working}
-                  aria-label={t("students.resend")}
-                  title={t("students.resend")}
                   onClick={() => void handleResend()}
                 >
                   {resending ? (
@@ -288,19 +285,19 @@ const RosterMemberModal = ({
                   ) : (
                     <Send aria-hidden="true" className="size-4" />
                   )}
+                  {t("students.resend")}
                 </button>
               ) : null}
 
               {!confirmingUnenroll ? (
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm btn-square text-error hover:bg-error/10"
+                  className="btn btn-ghost btn-sm text-error hover:bg-error/10"
                   disabled={busy}
-                  aria-label={t("students.unenrollStudent")}
-                  title={t("students.unenrollStudent")}
                   onClick={() => setConfirmingUnenroll(true)}
                 >
                   <UserMinus aria-hidden="true" className="size-4" />
+                  {t("students.remove")}
                 </button>
               ) : null}
             </div>

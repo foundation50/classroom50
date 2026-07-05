@@ -217,6 +217,8 @@
     "notSet": "Not set",
     "confirmInviteBody": "Send an organization invitation to {{label}}? They'll be added to {{org}} and its classroom team once they accept.",
     "sendInvite": "Send invite",
+    "invite": "Invite",
+    "remove": "Remove",
     "inviteToOrg": "Invite to organization",
     "pendingBanner_one": "{{count}} pending invitation hasn't been accepted yet.",
     "pendingBanner_other": "{{count}} pending invitations haven't been accepted yet.",
