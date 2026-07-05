@@ -1,5 +1,4 @@
 import { useState } from "react"
-import { Plus, Send, Upload } from "lucide-react"
 
 import AddStudent from "@/pages/students/AddStudent"
 import Breadcrumb from "@/components/breadcrumb"
@@ -56,50 +55,25 @@ const StudentListContent = ({
 
   return (
     <>
-      <div className="flex flex-wrap items-start justify-between gap-4 pt-8 pb-10">
-        <div>
-          <h1 className="text-lg font-bold">{t("nav.students")}</h1>
-          <h3 className="text-base-content/70">
-            {countReady
-              ? t("students.enrolledIn", { count: enrolledCount, className })
-              : t("students.enrolledInLoading", { className })}
-          </h3>
-        </div>
-
-        {/* Consolidated "add students" widget: add one / upload roster /
-            invite links. Icon-only to keep the roster the page's focus. */}
-        <div className="join">
-          <button
-            type="button"
-            className="btn btn-sm join-item"
-            aria-label={t("students.addTitle")}
-            title={t("students.addTitle")}
-            onClick={() => setAddOpen(true)}
-          >
-            <Plus aria-hidden="true" className="size-4" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm join-item"
-            aria-label={t("students.uploadRosterTitle")}
-            title={t("students.uploadRosterTitle")}
-            onClick={() => setUploadOpen(true)}
-          >
-            <Upload aria-hidden="true" className="size-4" />
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm join-item"
-            aria-label={t("students.inviteStudents")}
-            title={t("students.inviteStudents")}
-            onClick={() => setInviteOpen(true)}
-          >
-            <Send aria-hidden="true" className="size-4" />
-          </button>
-        </div>
+      <div className="pt-8 pb-10">
+        <h1 className="text-lg font-bold">{t("nav.students")}</h1>
+        <h3 className="text-base-content/70">
+          {countReady
+            ? t("students.enrolledIn", { count: enrolledCount, className })
+            : t("students.enrolledInLoading", { className })}
+        </h3>
       </div>
 
-      <EnrolledStudents students={students} org={org} classroom={classroom} />
+      <EnrolledStudents
+        students={students}
+        org={org}
+        classroom={classroom}
+        addActions={{
+          onAddStudent: () => setAddOpen(true),
+          onUploadRoster: () => setUploadOpen(true),
+          onInviteLinks: () => setInviteOpen(true),
+        }}
+      />
 
       <AddStudent
         org={org}

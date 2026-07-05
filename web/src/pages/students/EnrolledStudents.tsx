@@ -1,9 +1,11 @@
 import {
   AlertTriangle,
   ChevronRight,
+  Plus,
   RefreshCw,
   Search,
   Send,
+  Upload,
 } from "lucide-react"
 
 import { nameFromParts, initialsFromParts } from "@/util/students"
@@ -37,7 +39,9 @@ import {
 } from "@/pages/orgMembers/selection"
 import { rosterRowToMemberRow } from "@/util/memberRow"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
-import RosterBulkActionsBar from "@/pages/students/RosterBulkActionsBar"
+import RosterBulkActionsBar, {
+  type AddStudentActions,
+} from "@/pages/students/RosterBulkActionsBar"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants, enterExit } from "@/lib/motion"
@@ -74,10 +78,12 @@ const EnrolledStudents = ({
   students = [],
   org,
   classroom,
+  addActions,
 }: {
   students: Student[]
   org: string
   classroom: string
+  addActions?: AddStudentActions
 }) => {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -567,6 +573,34 @@ const EnrolledStudents = ({
             <p className="mt-2 text-sm text-base-content/70">
               {t("students.emptyBody")}
             </p>
+            {addActions ? (
+              <div className="mt-4 flex justify-center gap-2">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-primary"
+                  onClick={addActions.onAddStudent}
+                >
+                  <Plus aria-hidden="true" className="size-4" />
+                  {t("students.addTitle")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={addActions.onUploadRoster}
+                >
+                  <Upload aria-hidden="true" className="size-4" />
+                  {t("students.uploadRosterTitle")}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={addActions.onInviteLinks}
+                >
+                  <Send aria-hidden="true" className="size-4" />
+                  {t("students.inviteStudents")}
+                </button>
+              </div>
+            ) : null}
           </div>
         ) : (
           <>
@@ -581,6 +615,7 @@ const EnrolledStudents = ({
               onToggleSelectAll={handleToggleSelectAll}
               onClearSelection={() => setSelectedKeys(new Set())}
               onDone={onBulkDone}
+              addActions={addActions}
             />
             {filtered.length === 0 ? (
               <div className="px-6 py-10 text-center text-sm text-base-content/70">

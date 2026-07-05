@@ -1,6 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Send, UserMinus, X } from "lucide-react"
+import { Plus, Send, Upload, UserMinus, X } from "lucide-react"
 
 import type { GitHubClient } from "@/hooks/github/client"
 import { ConfirmModal } from "@/components/modals"
@@ -11,6 +11,15 @@ import {
   type BulkUnenrollRosterResult,
 } from "@/pages/students/bulkUnenrollRoster"
 import type { TeamRosterRow } from "@/util/teamRoster"
+
+// The three "add students" affordances the toolbar surfaces (when nothing is
+// selected). The page owns the modals; the bar just triggers them, keeping the
+// controls adjacent to the table rather than floating in the page header.
+export type AddStudentActions = {
+  onAddStudent: () => void
+  onUploadRoster: () => void
+  onInviteLinks: () => void
+}
 
 type Phase = "idle" | "working" | "complete" | "error"
 type Progress = { processed: number; total: number; message: string }
@@ -108,6 +117,7 @@ const RosterBulkActionsBar = ({
   onToggleSelectAll,
   onClearSelection,
   onDone,
+  addActions,
 }: {
   org: string
   classroom: string
@@ -121,6 +131,8 @@ const RosterBulkActionsBar = ({
   // Called after a run completes so the page can invalidate roster + invite
   // caches. `action` distinguishes what changed.
   onDone: (action: "unenroll" | "resend") => void
+  // The "add students" triggers shown on the right when nothing is selected.
+  addActions?: AddStudentActions
 }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
@@ -335,6 +347,36 @@ const RosterBulkActionsBar = ({
               onClick={onClearSelection}
             >
               <X aria-hidden="true" className="size-4" />
+            </button>
+          </div>
+        ) : addActions ? (
+          <div className="join ml-auto">
+            <button
+              type="button"
+              className="btn btn-sm join-item"
+              aria-label={t("students.addTitle")}
+              title={t("students.addTitle")}
+              onClick={addActions.onAddStudent}
+            >
+              <Plus aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm join-item"
+              aria-label={t("students.uploadRosterTitle")}
+              title={t("students.uploadRosterTitle")}
+              onClick={addActions.onUploadRoster}
+            >
+              <Upload aria-hidden="true" className="size-4" />
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm join-item"
+              aria-label={t("students.inviteStudents")}
+              title={t("students.inviteStudents")}
+              onClick={addActions.onInviteLinks}
+            >
+              <Send aria-hidden="true" className="size-4" />
             </button>
           </div>
         ) : null}
