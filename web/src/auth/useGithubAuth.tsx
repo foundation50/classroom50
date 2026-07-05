@@ -182,7 +182,13 @@ function useGithubAuthState() {
     const code = params.get("code")
     const returnedState = params.get("state")
 
-    if (!code) return
+    // No code: recover a stranded "exchanging" screen — e.g. bfcache restored
+    // this page after Back on GitHub's consent screen, leaving startWebFlow's
+    // state with no code to exchange. Else the card spins forever (#oauth-hang).
+    if (!code) {
+      setScreen((current) => (current === "exchanging" ? "config" : current))
+      return
+    }
 
     window.history.replaceState({}, "", window.location.pathname)
 
@@ -233,6 +239,19 @@ function useGithubAuthState() {
         },
       },
     )
+  }, [])
+
+  // A bfcache restore freezes React state as-is with no effect re-run, so the
+  // mount effect above can't catch a stranded "exchanging" screen — pageshow
+  // (persisted only) is the one hook that fires here (#oauth-hang).
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      if (new URLSearchParams(window.location.search).has("code")) return
+      setScreen((current) => (current === "exchanging" ? "config" : current))
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
   }, [])
 
   const validateConfig = useCallback(() => {
@@ -492,8 +511,10 @@ function useGithubAuthState() {
     clearSession(true)
   }, [clearSession, token])
 
-  // Cold-reload path: a stored-but-revoked token fails /user validation with a
-  // 401. Tear down so the token doesn't linger and the guard redirects to /login.
+  // Cold-reload teardown for a revoked token. 401-only (matching GitHubProvider.
+  // onResponse): a 403 on /user is usually rate-limiting, and expiring on it
+  // would wipe a valid token — GitHubUserFetchError carries no headers to tell
+  // the two apart.
   useEffect(() => {
     const error = githubUserQuery.error
     if (error instanceof GitHubUserFetchError && error.status === 401) {

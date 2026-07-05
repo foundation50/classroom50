@@ -24,13 +24,25 @@ export function GitHubAuthedPanel({
   const { t } = useTranslation()
   return (
     <div className="space-y-5">
-      <div className="alert alert-success items-start text-sm">
-        <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
-        <span>
-          {t("auth.signedInTokenStored")}{" "}
-          <code className="font-mono">localStorage</code>
-        </span>
-      </div>
+      {/* "Signed in" only once /user confirms the token is live; a stale token
+          would otherwise read as valid here (#stale-token). */}
+      {user ? (
+        <div className="alert alert-success items-start text-sm">
+          <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
+          <span>
+            {t("auth.signedInTokenStored")}{" "}
+            <code className="font-mono">localStorage</code>
+          </span>
+        </div>
+      ) : isLoadingUser ? (
+        <div className="alert items-start text-sm">
+          <span
+            className="loading loading-spinner loading-sm"
+            aria-hidden="true"
+          />
+          <span>{t("auth.fetchingProfile")}</span>
+        </div>
+      ) : null}
 
       <div className="flex flex-col items-center gap-3 text-center">
         {user?.avatar_url ? (

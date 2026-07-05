@@ -6,14 +6,15 @@ export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context, location }) => {
     const { auth } = context
     if (auth.status === "unauthenticated") {
+      // Carry a deep link so a shared sub-route survives the login round-trip
+      // (#71); skip it for "/" (the post-login default) to avoid a noisy
+      // ?redirect=%2F. Root-by-pathname only — a stray query on "/" isn't worth
+      // round-tripping.
+      const returnTo = location.pathname + location.searchStr
+      const isRoot = location.pathname === "/"
       throw redirect({
         to: "/login",
-        search: {
-          // Same-origin relative path only (see isSafeReturnTo), so it survives
-          // the round-trip without open-redirect risk. Consumed post-auth in
-          // useGithubAuth and login.tsx's guard (#71).
-          redirect: location.pathname + location.searchStr,
-        },
+        search: isRoot ? undefined : { redirect: returnTo },
       })
     }
   },
