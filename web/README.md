@@ -37,6 +37,19 @@ rules, and the translate-`en.json`-with-an-LLM workflow.
 
 ## Deployment
 
-Pushes to `main` deploy to [classroom50.org](https://classroom50.org) via GitHub Pages (`.github/workflows/deploy.yml`). The production client ID comes from the `VITE_GITHUB_CLIENT_ID` repository variable (Settings → Secrets and variables → Actions → Variables) — it is a public identifier, not a secret.
+Web-affecting pushes to `main` deploy to
+[preview.classroom50.org](https://preview.classroom50.org) via
+`.github/workflows/web-deploy-preview.yaml`. That workflow builds and tests the
+web app, publishes `web/dist` to the `build` branch of
+`foundation50/classroom50-web-preview`, then dispatches that repo's GitHub Pages
+workflow.
 
-Note: the deploy workflow runs `vite build` directly, skipping the `tsc` typecheck that `npm run build` performs (the codebase currently has pre-existing type errors).
+Production deploys to [classroom50.org](https://classroom50.org) only when the
+release-please Release PR is merged and a `web-v*` release is created. Manual
+production redeploys are available through `.github/workflows/web-deploy.yaml`
+as an escape hatch.
+
+The GitHub OAuth client ID comes from the `VITE_GITHUB_CLIENT_ID` repository
+variable (Settings → Secrets and variables → Actions → Variables) — it is a
+public identifier, not a secret. If preview reuses the same OAuth app, include
+`https://preview.classroom50.org/login` in its allowed callback URLs.

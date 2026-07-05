@@ -2,9 +2,9 @@ name: web Deploy to Preview (preview.classroom50.org)
 
 # Builds the web app (web/) and publishes the built dist/ to the preview repo
 # (foundation50/classroom50-web-preview), whose GitHub Pages serves
-# preview.classroom50.org. Runs on every push to `main` (scoped to web/**), so
+# preview.classroom50.org. Runs on every web-affecting push to `main`, so
 # day-to-day work merged into main is continuously deployed to the preview site.
-# Manual runs available via the Actions tab.
+# Manual runs are available via the Actions tab.
 #
 # Branch model: single trunk. `main` is the default/integration branch — feature
 # PRs merge into it (squash) and each merge deploys here to preview. Production
@@ -16,20 +16,21 @@ name: web Deploy to Preview (preview.classroom50.org)
 # production (classroom50.org) and preview must live in different repos. Source
 # stays here; the preview repo holds only the built artifact + its own CNAME.
 #
-# Deploy mechanism: the preview repo uses Actions-based Pages. This force-pushes
-# dist/ to the preview repo's `build` branch, and its deploy-pages.yaml (on
-# `main`) publishes it.
+# Deploy mechanism: the preview repo uses Actions-based Pages. This workflow
+# force-pushes dist/ to the preview repo's `build` branch, then dispatches that
+# repo's deploy-pages.yaml on `main` to publish it.
 
 on:
   push:
     branches: [main]
     paths:
-      - 'web/**'
-      - '.github/workflows/web-deploy-preview.yaml'
+      - "web/**"
+      - "cli/gh-teacher/skeleton/dotgithub/**"
+      - ".github/workflows/web-deploy-preview.yaml"
   workflow_dispatch:
 
-# Only the cross-repo push needs auth (provided via PREVIEW_DEPLOY_KEY); this
-# workflow does not use the local repo's GITHUB_TOKEN to write anything.
+# Cross-repo writes use narrowly scoped credentials: PREVIEW_DEPLOY_KEY pushes
+# the artifact branch, and CLASSROOM50_PREVIEW_DEPLOY_TOKEN dispatches Pages.
 permissions:
   contents: read
 
@@ -78,11 +79,10 @@ jobs:
       - name: Write CNAME for preview domain
         run: echo "preview.classroom50.org" > dist/CNAME
 
-      # Publish dist/ to the preview repo's `build` branch, which triggers its
-      # Actions-based Pages deploy. A separate branch (not `main`) is required:
-      # force_orphan recreates the branch with only these files, which would
-      # delete the preview repo's deploy workflow. Uses an SSH deploy key scoped
-      # to only the preview repo.
+      # Publish dist/ to the preview repo's `build` branch. A separate branch
+      # (not `main`) is required: force_orphan recreates the branch with only
+      # these files, which would delete the preview repo's deploy workflow. Uses
+      # an SSH deploy key scoped to only the preview repo.
       - name: Publish to preview repo
         uses: peaceiris/actions-gh-pages@84c30a85c19949d7eee79c4ff27748b70285e453 # v4.1.0
         with:
@@ -95,3 +95,43 @@ jobs:
           # holds only the built artifact, no source history worth keeping).
           force_orphan: true
           full_commit_message: "deploy: preview.classroom50.org from ${{ github.sha }}"
+
+      # The orphan build branch intentionally does not contain .github/workflows,
+      # so GitHub cannot run the preview repo's push trigger from that ref.
+      - name: Deploy preview Pages site
+        env:
+          GH_TOKEN: ${{ secrets.CLASSROOM50_PREVIEW_DEPLOY_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          repo="foundation50/classroom50-web-preview"
+          workflow="deploy-pages.yaml"
+          started_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+          gh workflow run "$workflow" --repo "$repo" --ref main
+
+          run_id=""
+          for _ in {1..30}; do
+            run_id="$(
+              gh run list \
+                --repo "$repo" \
+                --workflow "$workflow" \
+                --event workflow_dispatch \
+                --json databaseId,createdAt \
+                --jq 'map(select(.createdAt >= "'"$started_at"'")) | first | .databaseId // ""' \
+                --limit 10
+            )"
+
+            if [ -n "$run_id" ]; then
+              break
+            fi
+
+            sleep 2
+          done
+
+          if [ -z "$run_id" ]; then
+            echo "Timed out waiting for preview Pages workflow to start" >&2
+            exit 1
+          fi
+
+          gh run watch "$run_id" --repo "$repo" --exit-status
