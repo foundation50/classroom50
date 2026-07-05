@@ -1,8 +1,16 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
+import path from "node:path"
 
 import {
+  APT_PACKAGE_PATTERN,
+  CONTAINER_IMAGE_PATTERN,
+  CONTAINER_USER_PATTERN,
+  LANGUAGE_VERSION_PATTERN,
   RUNTIME_LANGUAGES,
   RUNTIME_LANGUAGE_META,
+  RUNTIME_WIRE_KEYS,
   aptPackagesToText,
   isNonUbuntuHostedLabel,
   parseAptPackages,
@@ -144,5 +152,70 @@ describe("RUNTIME_LANGUAGE_META", () => {
         expect(validateLanguageVersion(v)).toBeUndefined()
       }
     }
+  })
+})
+
+// The `runtime` block is a CLOSED cross-tool contract (schema
+// additionalProperties:false; the Go RuntimeRef decodes it strictly with no
+// Extra; the web rebuilds it and drops unknown sub-keys on edit). That makes an
+// unknown sub-key fatal, so a NEW sub-key must ship across the schema, the Go
+// RuntimeRef, and the web in the SAME release. This test is the web's half of
+// that lockstep guard: it reads the schema source of truth and fails if the
+// web's known sub-key set or the shared regexes drift from it — so a one-sided
+// schema change can't merge without the web catching up.
+describe("runtime contract parity with assignments-v1 schema", () => {
+  // Repo-root schema, reached from web/src/util. Web tests already read the
+  // monorepo root (see the skeleton import), and vitest runs in a node env.
+  const schemaPath = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    "../../../schemas/assignments-v1.schema.json",
+  )
+  const schema = JSON.parse(readFileSync(schemaPath, "utf-8")) as {
+    $defs: { runtime: RuntimeSchema; langVersion: { pattern: string } }
+  }
+  type RuntimeSchema = {
+    additionalProperties: boolean
+    properties: Record<
+      string,
+      {
+        pattern?: string
+        items?: { pattern?: string }
+        properties?: Record<string, { pattern?: string }>
+      }
+    >
+  }
+  const runtime = schema.$defs.runtime
+
+  it("is a closed object (additionalProperties:false)", () => {
+    expect(runtime.additionalProperties).toBe(false)
+  })
+
+  it("has exactly the sub-keys the web knows (RUNTIME_WIRE_KEYS)", () => {
+    // Exact set equality both ways: a schema sub-key the web doesn't model (the
+    // silent-drop-on-edit hazard) OR a web key not in the schema fails here.
+    expect(new Set(Object.keys(runtime.properties))).toEqual(
+      new Set(RUNTIME_WIRE_KEYS),
+    )
+  })
+
+  it("shares the language, apt, and container patterns byte-for-byte", () => {
+    // Compare regex bodies without the ^...$ anchors and normalizing JSON
+    // Schema's capturing `(...)` group to the JS non-capturing `(?:...)` — a
+    // cosmetic difference the two dialects don't share, not a shape difference.
+    const body = (re: RegExp) => re.source.replace(/^\^|\$$/g, "")
+    const norm = (p: string) => p.replace(/^\^|\$$/g, "").replace(/\(\?:/g, "(")
+
+    expect(norm(schema.$defs.langVersion.pattern)).toBe(
+      body(LANGUAGE_VERSION_PATTERN),
+    )
+    expect(norm(runtime.properties.apt.items!.pattern!)).toBe(
+      body(APT_PACKAGE_PATTERN),
+    )
+    expect(norm(runtime.properties.container.properties!.image.pattern!)).toBe(
+      body(CONTAINER_IMAGE_PATTERN),
+    )
+    expect(norm(runtime.properties.container.properties!.user.pattern!)).toBe(
+      norm(CONTAINER_USER_PATTERN.source),
+    )
   })
 })

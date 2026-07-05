@@ -32,12 +32,30 @@ import {
 } from "./formFieldHelpers"
 import type { AssignmentForm } from "./CreateAssignmentForm"
 
+// A question-mark help affordance: a focusable button carrying detailed
+// guidance as its accessible name, wrapped in a theme-aware DaisyUI tooltip
+// that reveals `help` on hover/focus. The single source for the help-icon
+// markup and a11y contract — reused by FieldLabel and any inline toggle label.
+export const HelpTooltip = ({ help }: { help: string }) => (
+  <span
+    className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
+    data-tip={help}
+  >
+    <button
+      type="button"
+      aria-label={help}
+      className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
+    >
+      <HelpCircle aria-hidden="true" className="size-4" />
+    </button>
+  </span>
+)
+
 // A bold field label with an optional help affordance: a question-mark icon
 // that reveals detailed guidance on hover/focus (DaisyUI tooltip, theme-aware).
 // Keeps the label short so the form stays scannable while the "why/how" moves
 // into the tooltip. `help` is the tooltip text; `htmlFor` ties the label to its
-// control. The icon is a real focusable button (keyboard/screen-reader
-// reachable) carrying the same text as its accessible name.
+// control.
 export const FieldLabel = ({
   htmlFor,
   label,
@@ -54,20 +72,7 @@ export const FieldLabel = ({
       {label}
       {required ? <span className="text-error">*</span> : null}
     </label>
-    {help ? (
-      <span
-        className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
-        data-tip={help}
-      >
-        <button
-          type="button"
-          aria-label={help}
-          className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
-        >
-          <HelpCircle aria-hidden="true" className="size-4" />
-        </button>
-      </span>
-    ) : null}
+    {help ? <HelpTooltip help={help} /> : null}
   </div>
 )
 
@@ -92,10 +97,6 @@ export const LanguageVersionField = ({
       {(field) => {
         const error = field.state.meta.errors[0] as string | undefined
         const current = field.state.value.trim()
-        // Close the focus-driven dropdown after a pick so it doesn't linger
-        // (DaisyUI dropdowns stay open while a descendant holds focus).
-        const closeDropdown = () =>
-          (document.activeElement as HTMLElement | null)?.blur()
         return (
           <div>
             <FieldLabel
@@ -144,9 +145,13 @@ export const LanguageVersionField = ({
                       className={
                         version === current ? "active font-semibold" : undefined
                       }
-                      onClick={() => {
+                      onClick={(e) => {
                         field.handleChange(version)
-                        closeDropdown()
+                        // Close the focus-driven dropdown by blurring the
+                        // clicked item (the focus holder that keeps a DaisyUI
+                        // dropdown open) — scoped to this control so it can't
+                        // steal focus from an unrelated element.
+                        e.currentTarget.blur()
                       }}
                     >
                       <Check

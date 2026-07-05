@@ -134,7 +134,7 @@
     "runtime": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Omit entirely for the defaults (ubuntu-latest + Python 3.12). Never write empty-string fields.",
+      "description": "Omit entirely for the defaults (ubuntu-latest + Python 3.12). Never write empty-string fields. CLOSED CONTRACT: additionalProperties is false and every reader decodes runtime strictly (the CLI's RuntimeRef has no Extra / DisallowUnknownFields; the web rebuilds runtime from the known sub-keys and drops any unknown one on a read-modify-write edit). An unknown sub-key makes the whole file unparseable, so — unlike top-level entry keys, which evolve additively and preserve unknowns — a NEW runtime sub-key must ship in lockstep across this schema, the Go RuntimeRef, and the web Assignment['runtime'] type in the same release; otherwise an older reader silently strips it on edit.",
       "properties": {
         "runs-on": {
           "description": "GitHub Actions runner selection, mirroring Actions' own `runs-on`: a single label string (\"ubuntu-latest\") or an array of labels ([\"self-hosted\", \"gpu\"]) for custom / self-hosted runners. No value allow-list — a teacher customizing runs-on owns getting the label right; each label is only anti-injection-checked (1-10 labels). Omit for the default (ubuntu-latest).",

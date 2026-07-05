@@ -3,7 +3,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
-import { AlertTriangle, HelpCircle } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import AutogradingTestsPane from "./AutogradingTestsPane"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
@@ -31,6 +31,7 @@ import {
 import { TemplateField } from "./TemplateField"
 import {
   FieldLabel,
+  HelpTooltip,
   RunnerField,
   LanguageVersionField,
   ContainerFields,
@@ -887,18 +888,9 @@ const CreateAssignmentForm = ({
                         />
                         {t("assignments.form.passThresholdToggle")}
                       </label>
-                      <span
-                        className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
-                        data-tip={t("assignments.form.passThresholdTip")}
-                      >
-                        <button
-                          type="button"
-                          aria-label={t("assignments.form.passThresholdTip")}
-                          className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
-                        >
-                          <HelpCircle aria-hidden="true" className="size-4" />
-                        </button>
-                      </span>
+                      <HelpTooltip
+                        help={t("assignments.form.passThresholdTip")}
+                      />
                     </div>
 
                     {toggle.state.value && (

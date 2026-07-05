@@ -10,18 +10,31 @@ export const RUNTIME_LANGUAGES = ["python", "node", "java", "go"] as const
 
 export type RuntimeLanguage = (typeof RUNTIME_LANGUAGES)[number]
 
+// Every sub-key the closed `runtime` object may carry, matching the schema's
+// runtime.properties, the Go RuntimeRef fields, and Assignment['runtime']. The
+// runtime block is a CLOSED contract (schema additionalProperties:false; the
+// CLI decodes it strictly with no Extra), so this set is the web's half of the
+// lockstep invariant — a schema-parity test asserts it stays byte-for-byte
+// equal to the schema, so a new sub-key can't ship on one side alone.
+export const RUNTIME_WIRE_KEYS = [
+  "runs-on",
+  "container",
+  ...RUNTIME_LANGUAGES,
+  "apt",
+] as const
+
 // Identical to the CLI's LanguageVersionPattern (permissive but injection-safe:
 // "3.12", "20", "1.23.4", "latest").
-const LANGUAGE_VERSION_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/
+export const LANGUAGE_VERSION_PATTERN = /^[A-Za-z0-9._+-]{1,32}$/
 
 // Identical to the CLI's AptPackagePattern (lowercase Debian package name).
-const APT_PACKAGE_PATTERN = /^[a-z0-9][a-z0-9.+-]{0,63}$/
+export const APT_PACKAGE_PATTERN = /^[a-z0-9][a-z0-9.+-]{0,63}$/
 
 // Identical to the CLI's ContainerImagePattern / ContainerUserPattern: permissive
 // but injection-safe. Image flows into Actions' `container:`; user flows into
 // `container.options: --user <value>`, so both are anti-injection gated.
-const CONTAINER_IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/
-const CONTAINER_USER_PATTERN =
+export const CONTAINER_IMAGE_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,255}$/
+export const CONTAINER_USER_PATTERN =
   /^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$/
 
 // Human labels, an example version (placeholder), and a suggested-versions
