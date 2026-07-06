@@ -179,6 +179,10 @@ const OrgSetupPage = () => {
       if (!org) {
         return
       }
+      // Reset the board before a (re-)run so a prior run's per-step results —
+      // including the orgDefaults unenforced-settings list — can't linger on an
+      // error path that emits no fresh data. Mirrors RerunOrgSetup.
+      setSteps(initialInitSteps)
       return initClassroom50({
         client: githubClient,
         org,

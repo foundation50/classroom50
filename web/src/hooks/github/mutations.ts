@@ -2364,10 +2364,20 @@ export async function initClassroom50({
     onStepUpdate,
     fn: async () => {
       const result = await repairOrgDefaults(client, org, plan)
-      if (!result.ok || result.transient) {
-        return { status: "warning" as const, message: result.message }
+      // Forward the whole result so tryStep puts it on InitStepUpdate.data — the
+      // setup board lists the specific unenforced settings (badging enterprise-
+      // pinned ones) instead of only a count. Warn on ANY unenforced field, not
+      // just critical, so the board matches what the check page surfaces.
+      const status =
+        result.unenforced.length > 0 || result.transient
+          ? ("warning" as const)
+          : ("complete" as const)
+      return {
+        status,
+        message: result.message,
+        unenforced: result.unenforced,
+        enterprisePinned: result.enterprisePinned,
       }
-      return { status: "complete" as const, message: result.message }
     },
     options: { warningCodes: [403, 422] },
   })

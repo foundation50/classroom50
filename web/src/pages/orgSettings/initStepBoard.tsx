@@ -14,6 +14,11 @@ import type {
   InitStepStatus,
   InitStepUpdate,
 } from "@/hooks/github/mutations"
+import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
+import {
+  isOrgDefaultsStepData,
+  unenforcedDefaultItems,
+} from "./orgDefaultsStepData"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
 // re-run action on Org Settings. One source of truth for step order, titles,
@@ -207,6 +212,7 @@ export const InitStep = ({
   status,
   message,
   org,
+  data,
 }: {
   id: InitStepId
   title: string
@@ -215,6 +221,9 @@ export const InitStep = ({
   // Without an org the per-step GitHub deep link can't be built, so it's
   // omitted; the explanation and remediation still render.
   org?: string
+  // The step's structured result (InitStepUpdate.data). For orgDefaults it
+  // carries the specific unenforced member-privilege settings.
+  data?: unknown
 }) => {
   const { t } = useTranslation()
   const meta = INIT_STEP_META[id]
@@ -299,6 +308,9 @@ export const InitStep = ({
                   <ExternalLink aria-hidden="true" className="size-3.5" />
                 </a>
               )}
+              {id === "orgDefaults" && isOrgDefaultsStepData(data) && (
+                <UnenforcedDefaultsList items={unenforcedDefaultItems(data)} />
+              )}
             </div>
           )}
         </div>
@@ -325,6 +337,7 @@ export const InitStepBoard = ({
           status={step.status}
           message={step.message ?? step.error}
           org={org}
+          data={step.data}
         />
       )
     })}

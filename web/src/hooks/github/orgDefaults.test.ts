@@ -213,6 +213,20 @@ describe("repairOrgDefaults", () => {
     )
   })
 
+  it("flags non-critical-only drift so setup surfaces it too", async () => {
+    const live = enforced("team")
+    live.members_can_create_pages = false // non-critical, stays drifted
+    const { client } = makeClient({ readback: live })
+    const result = await repairOrgDefaults(client, "acme", "team")
+    // `ok` stays the critical-only "lockdown complete" verdict (CLI parity)...
+    expect(result.ok).toBe(true)
+    expect(result.unenforced.map((s) => s.field)).toContain(
+      "members_can_create_pages",
+    )
+    // ...but the message flags the drift so the setup board doesn't stay silent.
+    expect(result.message).toContain("need manual attention")
+  })
+
   it("aborts as transient on a secondary-rate-limit without falling back per-field", async () => {
     const { client, getPatchCount } = makeClient({
       combinedPatch: () => Promise.reject(rateLimited()),

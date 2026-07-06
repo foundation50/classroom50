@@ -354,9 +354,12 @@ export async function repairOrgDefaults(
     transient: false,
     unenforced,
     enterprisePinned,
-    message: ok
-      ? `${org}: org member-privilege lockdown applied.`
-      : `${org}: org member-privilege lockdown incomplete — ${unenforced.length} setting(s) need manual attention.`,
+    // Key the message on ANY drift (not just critical, which `ok` tracks) so the
+    // setup board flags non-critical settings the check page would also show.
+    message:
+      unenforced.length === 0
+        ? `${org}: org member-privilege lockdown applied.`
+        : `${org}: org member-privilege lockdown incomplete — ${unenforced.length} setting(s) need manual attention.`,
   }
 }
 
