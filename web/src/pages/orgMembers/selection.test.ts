@@ -4,6 +4,7 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
+  selectRange,
   toggleRow,
   toggleSelectAll,
 } from "./selection"
@@ -85,5 +86,47 @@ describe("selection helpers", () => {
       notSelf("self"),
     )
     expect(resolved.map((r) => r.key).sort()).toEqual(["a", "hidden"])
+  })
+
+  describe("selectRange", () => {
+    const order = [row("a"), row("b"), row("self"), row("c"), row("d")]
+
+    it("fills the inclusive span in rendered order, skipping the non-selectable row", () => {
+      const next = selectRange(order, "a", "c", new Set(), notSelf("self"))
+      expect([...next].sort()).toEqual(["a", "b", "c"])
+    })
+
+    it("fills the span regardless of click direction (target before anchor)", () => {
+      const next = selectRange(order, "d", "b", new Set(), notSelf("self"))
+      expect([...next].sort()).toEqual(["b", "c", "d"])
+    })
+
+    it("only adds to the selection (never deselects) and preserves existing keys", () => {
+      const next = selectRange(order, "a", "b", new Set(["z"]), notSelf("self"))
+      expect([...next].sort()).toEqual(["a", "b", "z"])
+    })
+
+    it("respects the actual rendered order it is given (reordered view)", () => {
+      // Group-by-section reorders rows: c and d render before a and b.
+      const reordered = [row("c"), row("d"), row("a"), row("b")]
+      const next = selectRange(reordered, "d", "b", new Set(), () => true)
+      expect([...next].sort()).toEqual(["a", "b", "d"])
+    })
+
+    it("selects only the anchor when anchor equals target", () => {
+      const next = selectRange(order, "b", "b", new Set(), notSelf("self"))
+      expect([...next]).toEqual(["b"])
+    })
+
+    it("returns an unchanged selection when either endpoint is not in the rendered order", () => {
+      const gone = selectRange(
+        order,
+        "missing",
+        "c",
+        new Set(["a"]),
+        () => true,
+      )
+      expect([...gone]).toEqual(["a"])
+    })
   })
 })

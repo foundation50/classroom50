@@ -60,6 +60,30 @@ export function toggleRow(
   return next
 }
 
+// Shift-click range fill: add every selectable row between the anchor and the
+// target (inclusive). `order` must be the ACTUAL rendered order so a reordered
+// view (e.g. group-by-section) fills the span the user sees. Only ever adds; a
+// no-op if either endpoint is absent.
+export function selectRange<T extends Keyed>(
+  order: T[],
+  anchorKey: string,
+  targetKey: string,
+  selectedKeys: ReadonlySet<string>,
+  selectable: (row: T) => boolean,
+): Set<string> {
+  const anchorIdx = order.findIndex((row) => row.key === anchorKey)
+  const targetIdx = order.findIndex((row) => row.key === targetKey)
+  if (anchorIdx === -1 || targetIdx === -1) return new Set(selectedKeys)
+  const [lo, hi] =
+    anchorIdx <= targetIdx ? [anchorIdx, targetIdx] : [targetIdx, anchorIdx]
+  const next = new Set(selectedKeys)
+  for (let i = lo; i <= hi; i++) {
+    const row = order[i]
+    if (selectable(row)) next.add(row.key)
+  }
+  return next
+}
+
 // Rows backing the current selection across the FULL set (a selected row hidden
 // by search is still acted on), with non-selectable rows (self) excluded so a
 // stale selection can't target them.

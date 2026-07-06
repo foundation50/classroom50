@@ -35,6 +35,7 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
+  selectRange,
   toggleRow,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
@@ -102,6 +103,8 @@ const EnrolledStudents = ({
   const [sectionFilter, setSectionFilter] = useState<string>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // Last plain-clicked checkbox; a shift-click fills the range from here.
+  const rangeAnchorKey = useRef<string | null>(null)
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
   const [driftDismissed, setDriftDismissed] = useState(false)
@@ -217,10 +220,38 @@ const EnrolledStudents = ({
     selectableFiltered,
     selectedKeys,
   )
-  const handleToggleRow = (key: string) =>
+  const handleToggleRow = (key: string) => {
     setSelectedKeys((prev) => toggleRow(prev, key))
+    rangeAnchorKey.current = key
+  }
   const handleToggleSelectAll = () =>
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
+
+  // group-by-section reorders rows into buckets, so a shift-range must span
+  // that rendered order, not the flat filtered list.
+  const renderedOrder = useMemo(
+    () =>
+      groupBySection && hasSectionsInFiltered
+        ? filteredBySection.flatMap((g) => g.students)
+        : filtered,
+    [groupBySection, hasSectionsInFiltered, filteredBySection, filtered],
+  )
+
+  // preventDefault suppresses the follow-up onChange toggle when we handle a
+  // range ourselves (the checkbox's onChange can't see shiftKey).
+  const handleRowCheckboxClick = (
+    e: React.MouseEvent<HTMLInputElement>,
+    key: string,
+  ) => {
+    const anchor = rangeAnchorKey.current
+    if (e.shiftKey && anchor && anchor !== key) {
+      e.preventDefault()
+      setSelectedKeys((prev) =>
+        selectRange(renderedOrder, anchor, key, prev, isSelectable),
+      )
+      rangeAnchorKey.current = key
+    }
+  }
 
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter).
@@ -412,7 +443,10 @@ const EnrolledStudents = ({
           disabled={selfRow}
           title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
           checked={selectedKeys.has(row.key)}
-          onClick={(e) => e.stopPropagation()}
+          onClick={(e) => {
+            e.stopPropagation()
+            handleRowCheckboxClick(e, row.key)
+          }}
           onChange={() => handleToggleRow(row.key)}
         />
         <div className="min-w-0 flex-1">

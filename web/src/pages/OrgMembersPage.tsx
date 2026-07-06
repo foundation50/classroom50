@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
@@ -36,6 +36,7 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
+  selectRange,
   toggleRow,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
@@ -84,6 +85,8 @@ const OrgMembersPage = () => {
   // persists across search filtering (a hidden-but-selected row is still acted
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
+  // Last plain-clicked checkbox; a shift-click fills the range from here.
+  const rangeAnchorKey = useRef<string | null>(null)
 
   // Refresh after an org-level member removal (unenrolls from every classroom +
   // removes org membership). Optimistically drop them from each affected
@@ -342,8 +345,26 @@ const OrgMembersPage = () => {
     [rows, selectedKeys, viewer],
   )
 
-  const handleToggleRow = (key: string) =>
+  const handleToggleRow = (key: string) => {
     setSelectedKeys((prev) => toggleRow(prev, key))
+    rangeAnchorKey.current = key
+  }
+
+  // preventDefault suppresses the follow-up onChange toggle when we handle a
+  // range ourselves (the checkbox's onChange can't see shiftKey).
+  const handleRowCheckboxClick = (
+    e: React.MouseEvent<HTMLInputElement>,
+    key: string,
+  ) => {
+    const anchor = rangeAnchorKey.current
+    if (e.shiftKey && anchor && anchor !== key) {
+      e.preventDefault()
+      setSelectedKeys((prev) =>
+        selectRange(filtered, anchor, key, prev, isSelectable),
+      )
+      rangeAnchorKey.current = key
+    }
+  }
 
   // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
   // without disturbing selected rows outside the current filter.
@@ -521,7 +542,10 @@ const OrgMembersPage = () => {
                               : undefined
                           }
                           checked={selectedKeys.has(row.key)}
-                          onClick={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleRowCheckboxClick(e, row.key)
+                          }}
                           onChange={() => handleToggleRow(row.key)}
                         />
                         <div className="min-w-0 flex-1">
