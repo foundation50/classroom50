@@ -93,6 +93,21 @@ export type AddStudentToClassroomResult = CreateClassroomResult & {
   teamWarning?: string
 }
 
+// Thrown when the student is already on this classroom's roster (by login or
+// github_id). A typed error so the UI can render a gentle, non-blocking,
+// translated "already enrolled" message instead of string-matching this
+// (English) message. Adding an existing ORG member who isn't yet on this
+// classroom is NOT this case — that path enrolls them (see
+// enrollStudentInClassroom).
+export class StudentAlreadyEnrolledError extends Error {
+  login: string
+  constructor(login: string) {
+    super(`Student already exists: ${login}`)
+    this.name = "StudentAlreadyEnrolledError"
+    this.login = login
+  }
+}
+
 // Best-effort single-user team add (enroll/mark/match paths). Returns the error
 // detail on failure so each caller phrases its own warning; team membership is
 // only read access to private templates and is retryable, so it never fails the
@@ -314,7 +329,7 @@ export async function addStudentToClassroom(
   )
 
   if (alreadyExists) {
-    throw new Error(`Student already exists: ${githubUser.login}`)
+    throw new StudentAlreadyEnrolledError(githubUser.login)
   }
 
   const nameParts = splitName(githubUser.name)

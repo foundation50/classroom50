@@ -161,6 +161,8 @@
     "unenrollStudent": "Unenroll student",
     "added": "Added {{label}}.",
     "invited": "Sent an organization invite to {{label}}.",
+    "alreadyEnrolled": "{{label}} is already enrolled in this classroom.",
+    "addFailed": "Couldn't add {{label}}: {{message}}",
     "count_one": "{{count}} Student",
     "count_other": "{{count}} Students",
     "untitledClass": "Untitled class",

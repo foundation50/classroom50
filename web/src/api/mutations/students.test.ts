@@ -14,6 +14,7 @@ import {
   updateStudentWithConflictRetry,
   parseStudentsCsv,
   STUDENT_CSV_FIELDS,
+  StudentAlreadyEnrolledError,
 } from "./students"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubClient } from "@/hooks/github/client"
@@ -166,6 +167,43 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
     const rows = rowsFromCsv(committed.content!)
     const bob = rows.find((r) => r.username === "bob")
     expect(bob?.github_id).toBe("43")
+  })
+
+  // A duplicate must surface a typed error so the Add Student modal can render a
+  // gentle, non-blocking, translated "already enrolled" warning instead of
+  // silently reverting (the reported bug).
+  it("throws StudentAlreadyEnrolledError when the login is already on the roster", async () => {
+    const { client } = makeClient({
+      startingCsv: `${HEADER}alice,,,,,42\n`,
+      membershipState: "active",
+      user: { login: "alice", id: 42 },
+    })
+
+    await expect(
+      enrollStudentInClassroom(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "alice",
+      }),
+    ).rejects.toBeInstanceOf(StudentAlreadyEnrolledError)
+  })
+
+  it("throws StudentAlreadyEnrolledError when the github_id matches a renamed login", async () => {
+    // The CSV stores a stale login but the same github_id; the current account
+    // resolves to a different login. Dedupe by id must still catch it.
+    const { client } = makeClient({
+      startingCsv: `${HEADER}old-alice,,,,,42\n`,
+      membershipState: "active",
+      user: { login: "new-alice", id: 42 },
+    })
+
+    await expect(
+      enrollStudentInClassroom(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "new-alice",
+      }),
+    ).rejects.toMatchObject({ login: "new-alice" })
   })
 })
 

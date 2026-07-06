@@ -11,8 +11,14 @@ import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
-import { enrollStudentInClassroom } from "@/hooks/github/mutations"
-import { inviteByEmail } from "@/api/mutations/students"
+import {
+  enrollStudentInClassroom,
+  getErrorMessage,
+} from "@/hooks/github/mutations"
+import {
+  inviteByEmail,
+  StudentAlreadyEnrolledError,
+} from "@/api/mutations/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { isValidEmail } from "@/util/orgMembership"
 import { splitName, toStudent } from "@/util/roster"
@@ -126,6 +132,21 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
         invalidateTeamRoster()
       }
     },
+    onError: (err, value) => {
+      // The mutation swallowed failures before, so a duplicate (or any other
+      // error) left the form silently reverting. Surface it as a gentle,
+      // non-blocking warning and keep the modal + form intact so the teacher
+      // can fix the entry or add someone else.
+      setSuccess("")
+      const label = value.username.trim() || value.email.trim()
+      if (err instanceof StudentAlreadyEnrolledError) {
+        setWarning(t("students.alreadyEnrolled", { label: err.login }))
+        return
+      }
+      setWarning(
+        t("students.addFailed", { label, message: getErrorMessage(err) }),
+      )
+    },
   })
 
   const form = useForm({
@@ -158,7 +179,10 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
     onSubmit: async ({ value }) => {
       setWarning("")
       setSuccess("")
-      await addMutation.mutateAsync(value)
+      // Errors are surfaced by the mutation's onError (as a warning); swallow
+      // the rejection here so it isn't also recorded as a form-level error while
+      // still letting isSubmitting track the in-flight request.
+      await addMutation.mutateAsync(value).catch(() => {})
     },
   })
 
