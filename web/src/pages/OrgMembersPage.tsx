@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
@@ -36,10 +36,9 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
-  selectRange,
-  toggleRow,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
+import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import {
   ClassificationBadge,
   GitHubIdentity,
@@ -85,13 +84,6 @@ const OrgMembersPage = () => {
   // persists across search filtering (a hidden-but-selected row is still acted
   // on); "select all" targets the currently-filtered rows.
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
-  // Last plain-clicked checkbox; a shift-click fills the range from here.
-  const rangeAnchorKey = useRef<string | null>(null)
-  // A shift-click's onClick sets this so the checkbox's follow-up onChange skips
-  // its toggle. preventDefault() in onClick doesn't reliably suppress onChange
-  // (React fires it anyway), which would toggle the just-range-selected endpoint
-  // row back off.
-  const rangeHandledRef = useRef(false)
 
   // Refresh after an org-level member removal (unenrolls from every classroom +
   // removes org membership). Optimistically drop them from each affected
@@ -350,32 +342,13 @@ const OrgMembersPage = () => {
     [rows, selectedKeys, viewer],
   )
 
-  const handleToggleRow = (key: string) => {
-    // A shift-click already handled this event as a range; swallow the toggle.
-    if (rangeHandledRef.current) {
-      rangeHandledRef.current = false
-      return
-    }
-    setSelectedKeys((prev) => toggleRow(prev, key))
-    rangeAnchorKey.current = key
-  }
-
-  // A shift-click fills the range from the anchor. Flag the event so the
-  // checkbox's onChange (which can't see shiftKey) doesn't then toggle the
-  // endpoint row.
-  const handleRowCheckboxClick = (
-    e: React.MouseEvent<HTMLInputElement>,
-    key: string,
-  ) => {
-    const anchor = rangeAnchorKey.current
-    if (e.shiftKey && anchor && anchor !== key) {
-      rangeHandledRef.current = true
-      setSelectedKeys((prev) =>
-        selectRange(filtered, anchor, key, prev, isSelectable),
-      )
-      rangeAnchorKey.current = key
-    }
-  }
+  // Shift-click range selection over the rendered order. OrgMembersPage renders
+  // `filtered` flat (no grouping), so the filtered list IS the rendered order.
+  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
+    filtered,
+    isSelectable,
+    setSelectedKeys,
+  )
 
   // Select-all targets the currently-filtered SELECTABLE rows (self excluded),
   // without disturbing selected rows outside the current filter.

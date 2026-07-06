@@ -35,10 +35,9 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
-  selectRange,
-  toggleRow,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
+import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
 import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import RosterBulkActionsBar, {
@@ -103,13 +102,6 @@ const EnrolledStudents = ({
   const [sectionFilter, setSectionFilter] = useState<string>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
-  // Last plain-clicked checkbox; a shift-click fills the range from here.
-  const rangeAnchorKey = useRef<string | null>(null)
-  // A shift-click's onClick sets this so the checkbox's follow-up onChange skips
-  // its toggle. preventDefault() in onClick doesn't reliably suppress onChange
-  // (React fires it anyway), which would toggle the just-range-selected endpoint
-  // row back off.
-  const rangeHandledRef = useRef(false)
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
   const [driftDismissed, setDriftDismissed] = useState(false)
@@ -225,15 +217,6 @@ const EnrolledStudents = ({
     selectableFiltered,
     selectedKeys,
   )
-  const handleToggleRow = (key: string) => {
-    // A shift-click already handled this event as a range; swallow the toggle.
-    if (rangeHandledRef.current) {
-      rangeHandledRef.current = false
-      return
-    }
-    setSelectedKeys((prev) => toggleRow(prev, key))
-    rangeAnchorKey.current = key
-  }
   const handleToggleSelectAll = () =>
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
 
@@ -247,22 +230,13 @@ const EnrolledStudents = ({
     [groupBySection, hasSectionsInFiltered, filteredBySection, filtered],
   )
 
-  // A shift-click fills the range from the anchor. Flag the event so the
-  // checkbox's onChange (which can't see shiftKey) doesn't then toggle the
-  // endpoint row.
-  const handleRowCheckboxClick = (
-    e: React.MouseEvent<HTMLInputElement>,
-    key: string,
-  ) => {
-    const anchor = rangeAnchorKey.current
-    if (e.shiftKey && anchor && anchor !== key) {
-      rangeHandledRef.current = true
-      setSelectedKeys((prev) =>
-        selectRange(renderedOrder, anchor, key, prev, isSelectable),
-      )
-      rangeAnchorKey.current = key
-    }
-  }
+  // Shift-click range selection over the rendered order (group-by-section
+  // aware), so a shift-range fills the span the user actually sees.
+  const { handleToggleRow, handleRowCheckboxClick } = useRangeSelection(
+    renderedOrder,
+    isSelectable,
+    setSelectedKeys,
+  )
 
   // Status-filter options; hide "Pending" when invites are owner-only and this
   // viewer can't read them (avoids a dead, always-empty filter).
