@@ -12,6 +12,8 @@ import io
 import json
 import pathlib
 import urllib.error
+import urllib.request
+import email.message
 
 import pytest
 
@@ -666,6 +668,61 @@ def test_list_team_member_logins_raises_valueerror_on_non_array(monkeypatch):
     monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
     with pytest.raises(ValueError):
         rr.list_team_member_logins("https://api", "cs50org", "classroom50-cs50", "tok")
+
+
+def test_list_team_member_logins_refuses_off_host_next_link(monkeypatch):
+    # The pagination loop attaches the bearer service token to whatever rel="next"
+    # points at, so a crafted off-host Link must fail closed rather than pivot the
+    # token to an attacker host (mirrors collect_scores.py's off-host refusal).
+    def fake_get(url, token, *, accept, _retries=3):
+        return (
+            json.dumps([{"login": "alice"}]).encode("utf-8"),
+            {"Link": '<https://evil.example/members?page=2>; rel="next"'},
+        )
+
+    monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
+    with pytest.raises(ValueError, match="off-host"):
+        rr.list_team_member_logins("https://api", "cs50org", "classroom50-cs50", "tok")
+
+
+def test_list_team_member_logins_stops_on_self_looping_next_link(monkeypatch):
+    # A rel="next" that points back at an already-seen URL must terminate via the
+    # seen_next guard instead of exhausting the page cap (mirrors collect_scores.py).
+    page1 = "https://api/orgs/cs50org/teams/classroom50-cs50/members?per_page=100&page=1"
+    calls = {"n": 0}
+
+    def fake_get(url, token, *, accept, _retries=3):
+        calls["n"] += 1
+        return (
+            json.dumps([{"login": "alice"}]).encode("utf-8"),
+            {"Link": f'<{page1}>; rel="next"'},
+        )
+
+    monkeypatch.setattr(rr, "_http_get_with_headers", fake_get)
+    got = rr.list_team_member_logins("https://api", "cs50org", "classroom50-cs50", "tok")
+    # Page 1 fetch (alice) -> follow next once (fetch again, alice) -> the same
+    # next URL is now seen -> stop. Two requests, not an exhausted 100-page cap.
+    assert got == ["alice", "alice"]
+    assert calls["n"] == 2
+
+
+def test_auth_stripping_redirect_drops_authorization_cross_host():
+    # CPython's default redirect handler replays every request header (including
+    # Authorization) across a cross-host 3xx, which would leak the service token;
+    # _AuthStrippingRedirect must remove it on the redirected request.
+    req = urllib.request.Request(
+        "https://api.github.com/orgs/o/teams/t/members",
+        headers={"Authorization": "Bearer sekret", "Accept": "application/json"},
+    )
+    handler = rr._AuthStrippingRedirect()
+    fp = io.BytesIO(b"")
+    hdrs = email.message.Message()
+    new_req = handler.redirect_request(
+        req, fp, 302, "Found", hdrs, "https://codeload.example/redirected"
+    )
+    assert new_req is not None
+    assert new_req.get_header("Authorization") is None
+    assert "authorization" not in {k.lower() for k in new_req.headers}
 
 
 # Helpers ---------------------------------------------------------------------

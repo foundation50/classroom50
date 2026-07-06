@@ -761,23 +761,53 @@ def _http_get(url: str, token: str, *, accept: str, _retries: int = 3) -> bytes:
 def _http_get_with_headers(
     url: str, token: str, *, accept: str, _retries: int = 3
 ) -> tuple[bytes, Any]:
-    """GET `url` with bearer auth; return (body, response headers). The single
-    GET transport core: retries 5xx/429 with backoff (honoring Retry-After),
-    wraps a read-phase stall into a synthetic 599, and follows redirects through
-    _OPENER so Authorization is stripped on a cross-host hop. Headers are
+    """GET `url` with bearer auth; return (body, response headers). Headers are
     returned so paginated callers can follow `Link: rel="next"` (mirrors
     collect_scores.py's _http_get_with_headers)."""
+    return _http_send("GET", url, token, accept=accept, body=None, _retries=_retries)
+
+
+def _http_request(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    accept: str,
+    body: bytes | None = None,
+    _retries: int = 3,
+) -> bytes:
+    """Issue `method url` with bearer auth; return the body. Thin wrapper over
+    the transport core for callers (the rerun/tag POSTs) that don't need the
+    response headers."""
+    result, _headers = _http_send(method, url, token, accept=accept, body=body, _retries=_retries)
+    return result
+
+
+def _http_send(
+    method: str,
+    url: str,
+    token: str,
+    *,
+    accept: str,
+    body: bytes | None,
+    _retries: int = 3,
+) -> tuple[bytes, Any]:
+    """The single transport core: issue `method url` with bearer auth and return
+    (body, response headers). Retries 5xx/429 with backoff (honoring Retry-After),
+    wraps a read-phase stall into a synthetic 599 so is_hard_http_error aborts the
+    run, and routes through _OPENER so a cross-host redirect strips Authorization.
+    Mirrors collect_scores.py's transport."""
+    headers = {
+        "Accept": accept,
+        "Authorization": f"Bearer {token}",
+        "User-Agent": "classroom50-regrade",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+    # A body is always a JSON payload (the rerun/tag POSTs); GET carries none.
+    if body is not None:
+        headers["Content-Type"] = "application/json"
     for attempt in range(_retries):
-        req = urllib.request.Request(
-            url,
-            method="GET",
-            headers={
-                "Accept": accept,
-                "Authorization": f"Bearer {token}",
-                "User-Agent": "classroom50-regrade",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
+        req = urllib.request.Request(url, method=method, data=body, headers=headers)
         try:
             with _OPENER.open(req, timeout=30) as resp:
                 return resp.read(), resp.headers
@@ -803,65 +833,7 @@ def _http_get_with_headers(
                 hdrs=None,  # type: ignore[arg-type]
                 fp=None,
             ) from exc
-    raise RuntimeError(f"_http_get_with_headers called with _retries={_retries}")
-
-
-def _http_request(
-    method: str,
-    url: str,
-    token: str,
-    *,
-    accept: str,
-    body: bytes | None = None,
-    _retries: int = 3,
-) -> bytes:
-    """Issue `method url` with bearer auth; return the body. GET delegates to the
-    single transport core (_http_get_with_headers); non-GET methods (the
-    rerun/tag POSTs) run their own retry loop here, routed through _OPENER so a
-    cross-host redirect strips Authorization. Retries 5xx/429 with backoff and
-    wraps a read-phase stall into a synthetic 599 (mirrors collect_scores.py's
-    transport)."""
-    if method == "GET" and body is None:
-        return _http_get(url, token, accept=accept, _retries=_retries)
-    for attempt in range(_retries):
-        req = urllib.request.Request(
-            url,
-            method=method,
-            data=body,
-            headers={
-                "Accept": accept,
-                "Authorization": f"Bearer {token}",
-                "Content-Type": "application/json",
-                "User-Agent": "classroom50-regrade",
-                "X-GitHub-Api-Version": "2022-11-28",
-            },
-        )
-        try:
-            with _OPENER.open(req, timeout=30) as resp:
-                return resp.read()
-        except urllib.error.HTTPError as exc:
-            if exc.code in (429, 500, 502, 503, 504) and attempt < _retries - 1:
-                retry_after = exc.headers.get("Retry-After") if exc.headers else None
-                delay = (
-                    min(int(retry_after), 30)
-                    if (retry_after or "").isdigit()
-                    else 2**attempt
-                )
-                time.sleep(delay)
-                continue
-            raise
-        except (urllib.error.URLError, TimeoutError, OSError) as exc:
-            if attempt < _retries - 1:
-                time.sleep(2**attempt)
-                continue
-            raise urllib.error.HTTPError(
-                url=url,
-                code=599,
-                msg=f"network error: {exc}",
-                hdrs=None,  # type: ignore[arg-type]
-                fp=None,
-            ) from exc
-    raise RuntimeError(f"_http_request called with _retries={_retries}")
+    raise RuntimeError(f"_http_send called with _retries={_retries}")
 
 
 def is_hard_http_error(exc: urllib.error.HTTPError) -> bool:
