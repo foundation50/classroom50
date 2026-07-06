@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  isFixResolvedClean,
   resolveDriftBannerView,
   type DriftBannerInput,
 } from "./SkeletonDriftBanner"
@@ -74,5 +75,28 @@ describe("resolveDriftBannerView", () => {
         dismissed: true,
       }),
     ).toBe("hidden")
+  })
+})
+
+describe("isFixResolvedClean", () => {
+  it("is true when the fix completed and skipped nothing", () => {
+    expect(
+      isFixResolvedClean({ status: "complete", skippedOverwrite: [] }),
+    ).toBe(true)
+  })
+
+  it("is false when the fix left files skipped (declined overwrite)", () => {
+    expect(
+      isFixResolvedClean({
+        status: "complete",
+        skippedOverwrite: ["workflows/collect-scores.yaml"],
+      }),
+    ).toBe(false)
+  })
+
+  it("is false for any non-complete status", () => {
+    expect(isFixResolvedClean({ status: "error", skippedOverwrite: [] })).toBe(
+      false,
+    )
   })
 })

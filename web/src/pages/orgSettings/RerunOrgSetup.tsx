@@ -49,9 +49,8 @@ const SummaryBanner = ({
   </CalloutDiv>
 )
 
-// DOM anchor shared with SkeletonDriftBanner so its "Update workflows" action
-// scrolls straight to this section.
-export const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
+// DOM anchor for this section, used as its SettingsSection id.
+const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 
 // Re-run the org setup from Org Settings: re-invokes the idempotent
 // initClassroom50 to re-apply lockdown, rulesets, and repo settings. Owner-gated;

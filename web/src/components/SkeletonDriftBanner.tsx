@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { useParams } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, FileWarning } from "lucide-react"
@@ -51,6 +51,17 @@ export function resolveDriftBannerView(
   return "hidden"
 }
 
+// A fix leaves the org clean only when it completed and skipped nothing; a
+// declined overwrite leaves skippedOverwrite non-empty and must stay on the
+// warning view. Pure so the result-contract mapping is testable (mirrors
+// resolveSkeletonDrift), independent of the component's async wiring.
+export function isFixResolvedClean(result: {
+  status: string
+  skippedOverwrite: string[]
+}): boolean {
+  return result.status === "complete" && result.skippedOverwrite.length === 0
+}
+
 // Global warning banner for an org owner when the `classroom50` config repo's
 // scaffolded workflows have drifted from the bundled skeleton (e.g. after an
 // action-pin bump). Self-service: the owner refreshes the drifted files inline
@@ -58,8 +69,9 @@ export function resolveDriftBannerView(
 // confirmation the owner dismisses (X or the Dismiss button).
 //
 // Dismiss is per-session and per-org: the banner mounts once in the stable
-// _authed layout and never remounts on org navigation, so dismissal is tracked
-// by org — dismissing org A must not suppress org B. Reappears on reload.
+// _authed layout and never remounts on org navigation, so all per-org state
+// (dismissal, the just-fixed org, the in-flight org) is keyed by org — a fix or
+// dismiss on org A must not affect org B. Reappears on reload.
 export function SkeletonDriftBanner() {
   // Loose param read: org-less routes (the org picker) yield undefined and the
   // owner-gated hook stays disabled.
@@ -77,6 +89,12 @@ export function SkeletonDriftBanner() {
   // tracked per-org so a fix on org A never greets org B after navigation.
   const [fixedCleanOrg, setFixedCleanOrg] = useState<string>()
 
+  // The org a fix is currently running for. The banner is a singleton (mounted
+  // once in _authed, never remounts on org navigation), so a single mutation is
+  // shared across orgs; this scopes the pending spinner/disabled state to the
+  // org that actually launched the run.
+  const [pendingOrg, setPendingOrg] = useState<string>()
+
   const {
     overwritePaths,
     resolveOverwrite,
@@ -84,24 +102,39 @@ export function SkeletonDriftBanner() {
     mountedRef,
   } = useSkeletonOverwriteConfirm()
 
+  // Decline any parked overwrite modal when the org changes. The banner is a
+  // singleton (never remounts on org navigation), so a modal opened for org A
+  // would otherwise linger on org B. resolveOverwrite is a no-op when nothing is
+  // parked. Read through a ref so the decline effect can depend on org alone yet
+  // always call the latest resolver.
+  const resolveOverwriteRef = useRef(resolveOverwrite)
+  useEffect(() => {
+    resolveOverwriteRef.current = resolveOverwrite
+  })
+  useEffect(() => {
+    return () => resolveOverwriteRef.current(false)
+  }, [org])
+
   const mutation = useMutation({
-    mutationFn: () =>
-      ensureSkeletonFiles(client, org as string, confirmSkeletonOverwrite),
-    onSuccess: (result) => {
+    // org is captured as a mutate variable so onSuccess attributes the result to
+    // the org the fix actually ran against, not the live param (which can change
+    // if the owner navigates while the run is in flight).
+    mutationFn: (targetOrg: string) =>
+      ensureSkeletonFiles(client, targetOrg, confirmSkeletonOverwrite),
+    onSuccess: (result, targetOrg) => {
       if (!mountedRef.current) return
-      // Clean iff the fix completed and left no drifted files behind (a declined
-      // overwrite leaves skippedOverwrite non-empty -> stay on the warning view).
-      if (
-        result.status === "complete" &&
-        result.skippedOverwrite.length === 0
-      ) {
-        setFixedCleanOrg(org)
+      // A declined overwrite leaves files drifted -> stay on the warning view.
+      if (isFixResolvedClean(result)) {
+        setFixedCleanOrg(targetOrg)
       }
-      // Refresh the cached drift check so the warning banner doesn't re-flash on
-      // the next mount. The success view no longer depends on this resolving.
+      // Refresh the fixed org's cached drift check so its warning doesn't
+      // re-flash on the next mount. The success view no longer depends on this.
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.skeletonDrift(org ?? ""),
+        queryKey: githubKeys.skeletonDrift(targetOrg),
       })
+    },
+    onSettled: () => {
+      if (mountedRef.current) setPendingOrg(undefined)
     },
   })
 
@@ -109,7 +142,9 @@ export function SkeletonDriftBanner() {
     hasOrg: Boolean(org),
     hasDrift,
     dismissed: dismissedOrg === org,
-    isPending: mutation.isPending,
+    // Scope pending to this org: a fix parked for another org must not disable
+    // or spin this org's button.
+    isPending: pendingOrg === org,
     fixResolvedClean: fixedCleanOrg === org,
   })
 
@@ -153,14 +188,15 @@ export function SkeletonDriftBanner() {
             <button
               type="button"
               className="btn btn-sm btn-warning self-start"
-              disabled={mutation.isPending}
+              disabled={pendingOrg === org}
               onClick={() => {
-                if (!mutation.isPending) {
-                  void runFix(() => mutation.mutateAsync())
+                if (org && pendingOrg !== org) {
+                  setPendingOrg(org)
+                  void runFix(() => mutation.mutateAsync(org))
                 }
               }}
             >
-              {mutation.isPending ? (
+              {pendingOrg === org ? (
                 <>
                   <span
                     className="loading loading-spinner loading-xs"
