@@ -133,10 +133,8 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
       }
     },
     onError: (err, value) => {
-      // The mutation swallowed failures before, so a duplicate (or any other
-      // error) left the form silently reverting. Surface it as a gentle,
-      // non-blocking warning and keep the modal + form intact so the teacher
-      // can fix the entry or add someone else.
+      // Surface every failure as a non-blocking warning, keeping the modal and
+      // form intact so the teacher can fix the entry or add someone else.
       setSuccess("")
       const label = value.username.trim() || value.email.trim()
       if (err instanceof StudentAlreadyEnrolledError) {
@@ -179,9 +177,8 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
     onSubmit: async ({ value }) => {
       setWarning("")
       setSuccess("")
-      // Errors are surfaced by the mutation's onError (as a warning); swallow
-      // the rejection here so it isn't also recorded as a form-level error while
-      // still letting isSubmitting track the in-flight request.
+      // onError already surfaces failures; swallow the rejection so it isn't
+      // also recorded as a form-level error.
       await addMutation.mutateAsync(value).catch(() => {})
     },
   })

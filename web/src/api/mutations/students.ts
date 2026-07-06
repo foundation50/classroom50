@@ -93,12 +93,8 @@ export type AddStudentToClassroomResult = CreateClassroomResult & {
   teamWarning?: string
 }
 
-// Thrown when the student is already on this classroom's roster (by login or
-// github_id). A typed error so the UI can render a gentle, non-blocking,
-// translated "already enrolled" message instead of string-matching this
-// (English) message. Adding an existing ORG member who isn't yet on this
-// classroom is NOT this case — that path enrolls them (see
-// enrollStudentInClassroom).
+// Already on this classroom's roster (matched by login or github_id). Typed so
+// the UI can branch on it instead of string-matching this message.
 export class StudentAlreadyEnrolledError extends Error {
   login: string
   constructor(login: string) {

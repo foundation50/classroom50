@@ -169,9 +169,6 @@ describe("enrollStudentInClassroom — already-member writes the row directly", 
     expect(bob?.github_id).toBe("43")
   })
 
-  // A duplicate must surface a typed error so the Add Student modal can render a
-  // gentle, non-blocking, translated "already enrolled" warning instead of
-  // silently reverting (the reported bug).
   it("throws StudentAlreadyEnrolledError when the login is already on the roster", async () => {
     const { client } = makeClient({
       startingCsv: `${HEADER}alice,,,,,42\n`,
