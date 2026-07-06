@@ -984,14 +984,14 @@
       "reviewFixSuffix": "."
     },
     "overwrite": {
-      "title": "Update workflow files to the latest version?",
-      "confirmLabel": "Overwrite",
-      "cancelLabel": "Keep mine",
-      "body_one": "1 Classroom 50 workflow/script file in your config repo differs from the latest bundled version and will be overwritten:",
-      "body_other": "{{count}} Classroom 50 workflow/script files in your config repo differ from the latest bundled version and will be overwritten:",
-      "warning_prefix": "If you customized any of these files, overwriting resets your changes to the bundled version — choose",
-      "keepMine": "Keep mine",
-      "warning_suffix": "to leave them untouched and continue with everything else."
+      "title": "Update workflow files to keep grading working?",
+      "confirmLabel": "Update now",
+      "cancelLabel": "Not now",
+      "body_one": "1 Classroom 50 workflow/script file in your config repo is out of date and will be refreshed:",
+      "body_other": "{{count}} Classroom 50 workflow/script files in your config repo are out of date and will be refreshed:",
+      "warning_prefix": "Classroom 50 manages these files, so updating is safe. Leaving them out of date can stop features like the autograder from running. If you customized a file, choose",
+      "keepMine": "Not now",
+      "warning_suffix": "to keep it as-is for now."
     },
     "steps": {
       "whyLabel": "Why:",
@@ -1069,7 +1069,8 @@
     "updating": "Updating…",
     "success": {
       "title": "Classroom workflow files are up to date",
-      "body": "All Classroom 50 workflow files now match the latest bundled version."
+      "body": "All Classroom 50 workflow files now match the latest bundled version.",
+      "dismiss": "Dismiss"
     }
   },
   "classes": {

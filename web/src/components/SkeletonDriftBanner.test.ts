@@ -8,10 +8,9 @@ import {
 const base: DriftBannerInput = {
   hasOrg: true,
   hasDrift: true,
-  fixedThisOrg: false,
   dismissed: false,
   isPending: false,
-  isFetching: false,
+  fixResolvedClean: false,
 }
 
 describe("resolveDriftBannerView", () => {
@@ -31,47 +30,47 @@ describe("resolveDriftBannerView", () => {
     expect(resolveDriftBannerView({ ...base, hasDrift: false })).toBe("hidden")
   })
 
-  it("shows the success check once a fix cleared the drift", () => {
+  it("shows the success check once a fix resolved with no drift left", () => {
+    // Driven off the mutation result, so it holds even if the cached drift
+    // read hasn't refreshed yet (post-commit tree reads are eventually
+    // consistent and may still report the old SHAs).
     expect(
-      resolveDriftBannerView({ ...base, fixedThisOrg: true, hasDrift: false }),
+      resolveDriftBannerView({
+        ...base,
+        fixResolvedClean: true,
+        hasDrift: true,
+      }),
     ).toBe("success")
   })
 
-  it("keeps the warning when a fix left drift (declined overwrite)", () => {
-    // fixedThisOrg is set, but drift remains — must not flash green.
+  it("keeps the warning when a fix skipped files (declined overwrite)", () => {
+    // fixResolvedClean is false because skippedOverwrite was non-empty.
     expect(
-      resolveDriftBannerView({ ...base, fixedThisOrg: true, hasDrift: true }),
+      resolveDriftBannerView({
+        ...base,
+        fixResolvedClean: false,
+        hasDrift: true,
+      }),
     ).toBe("warning")
   })
 
-  it("does not flash success while the post-fix re-check is in flight", () => {
-    expect(
-      resolveDriftBannerView({
-        ...base,
-        fixedThisOrg: true,
-        hasDrift: false,
-        isFetching: true,
-      }),
-    ).toBe("hidden")
-  })
-
   it("does not flash success while the fix mutation is still pending", () => {
+    // Pending + drift still present -> stay on the warning view (the button
+    // shows its spinner); success must wait until the mutation settles.
     expect(
       resolveDriftBannerView({
         ...base,
-        fixedThisOrg: true,
-        hasDrift: false,
+        fixResolvedClean: true,
         isPending: true,
       }),
-    ).toBe("hidden")
+    ).toBe("warning")
   })
 
   it("suppresses the success check after dismissal wins", () => {
     expect(
       resolveDriftBannerView({
         ...base,
-        fixedThisOrg: true,
-        hasDrift: false,
+        fixResolvedClean: true,
         dismissed: true,
       }),
     ).toBe("hidden")

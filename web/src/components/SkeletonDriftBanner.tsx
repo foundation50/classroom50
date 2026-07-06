@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useState } from "react"
 import { useParams } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, FileWarning } from "lucide-react"
@@ -16,10 +16,6 @@ import {
   useSkeletonOverwriteConfirm,
 } from "@/pages/orgSettings/skeletonOverwriteUi"
 
-// How long the green "up to date" confirmation lingers before the banner
-// auto-dismisses after a successful in-place fix.
-const SUCCESS_LINGER_MS = 2000
-
 export type DriftBannerView = "warning" | "success" | "hidden"
 
 // State the banner view depends on — structural so the tri-state decision stays
@@ -27,30 +23,30 @@ export type DriftBannerView = "warning" | "success" | "hidden"
 export type DriftBannerInput = {
   hasOrg: boolean
   hasDrift: boolean
-  // The org the user just ran a fix for, if any. Gates the success view so a
-  // first-load clean org never flashes a check the user didn't ask for.
-  fixedThisOrg: boolean
   dismissed: boolean
   isPending: boolean
-  // True while the post-fix re-check is in flight; gates out the window between
-  // the invalidate and the refetch resolving so we don't flash green early.
-  isFetching: boolean
+  // True once a fix for this org completed with no files left drifted. Drives
+  // the success view directly off the mutation result rather than re-reading
+  // the repo tree — a post-commit tree read is eventually consistent and can
+  // still report the old (drifted) SHAs, which would wrongly keep us on the
+  // warning view.
+  fixResolvedClean: boolean
 }
 
 // Tri-state view verdict:
-// - success: the user fixed this org and a settled re-check found no drift.
+// - success: a fix for this org completed and left no drift.
 // - warning: drift remains (including after a declined/failed fix or on first
-//   load), and the banner isn't dismissed.
+//   load) and a clean fix hasn't just completed, and the banner isn't dismissed.
 // - hidden: everything else.
-// Success is checked first so a just-fixed clean org shows the check rather than
-// nothing; a fix that left drift falls through to warning.
+// Success is checked first so a just-fixed org shows the check; a fix that
+// skipped files (declined overwrite) has fixResolvedClean=false and falls
+// through to warning.
 export function resolveDriftBannerView(
   input: DriftBannerInput,
 ): DriftBannerView {
-  const { hasOrg, hasDrift, fixedThisOrg, dismissed, isPending, isFetching } =
-    input
+  const { hasOrg, hasDrift, dismissed, isPending, fixResolvedClean } = input
   if (!hasOrg || dismissed) return "hidden"
-  if (fixedThisOrg && !hasDrift && !isPending && !isFetching) return "success"
+  if (fixResolvedClean && !isPending) return "success"
   if (hasDrift) return "warning"
   return "hidden"
 }
@@ -58,8 +54,8 @@ export function resolveDriftBannerView(
 // Global warning banner for an org owner when the `classroom50` config repo's
 // scaffolded workflows have drifted from the bundled skeleton (e.g. after an
 // action-pin bump). Self-service: the owner refreshes the drifted files inline
-// (confirming the overwrite), and once a re-check finds no drift we flash a
-// green check and auto-dismiss.
+// (confirming the overwrite), and once the fix resolves cleanly we show a green
+// confirmation the owner dismisses (X or the Dismiss button).
 //
 // Dismiss is per-session and per-org: the banner mounts once in the stable
 // _authed layout and never remounts on org navigation, so dismissal is tracked
@@ -68,7 +64,7 @@ export function SkeletonDriftBanner() {
   // Loose param read: org-less routes (the org picker) yield undefined and the
   // owner-gated hook stays disabled.
   const { org } = useParams({ strict: false })
-  const { hasDrift, isFetching } = useSkeletonDrift(org)
+  const { hasDrift } = useSkeletonDrift(org)
   const [dismissedOrg, setDismissedOrg] = useState<string>()
   const { t } = useTranslation()
 
@@ -76,9 +72,10 @@ export function SkeletonDriftBanner() {
   const queryClient = useQueryClient()
   const runFix = useSafeSubmit()
 
-  // Set once the user runs a fix; gates the green success state so a first-load
-  // clean org never flashes a check the user didn't ask for.
-  const [fixedOrg, setFixedOrg] = useState<string>()
+  // The org whose fix just completed with nothing left drifted. Drives the green
+  // success view directly off the mutation result (see DriftBannerInput) and is
+  // tracked per-org so a fix on org A never greets org B after navigation.
+  const [fixedCleanOrg, setFixedCleanOrg] = useState<string>()
 
   const {
     overwritePaths,
@@ -90,11 +87,18 @@ export function SkeletonDriftBanner() {
   const mutation = useMutation({
     mutationFn: () =>
       ensureSkeletonFiles(client, org as string, confirmSkeletonOverwrite),
-    onSuccess: () => {
+    onSuccess: (result) => {
       if (!mountedRef.current) return
-      setFixedOrg(org)
-      // Re-check drift: an explicit invalidate ignores the hook's staleTime, so
-      // the banner reflects the post-fix state instead of stale cache.
+      // Clean iff the fix completed and left no drifted files behind (a declined
+      // overwrite leaves skippedOverwrite non-empty -> stay on the warning view).
+      if (
+        result.status === "complete" &&
+        result.skippedOverwrite.length === 0
+      ) {
+        setFixedCleanOrg(org)
+      }
+      // Refresh the cached drift check so the warning banner doesn't re-flash on
+      // the next mount. The success view no longer depends on this resolving.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.skeletonDrift(org ?? ""),
       })
@@ -104,20 +108,10 @@ export function SkeletonDriftBanner() {
   const view = resolveDriftBannerView({
     hasOrg: Boolean(org),
     hasDrift,
-    fixedThisOrg: fixedOrg === org,
     dismissed: dismissedOrg === org,
     isPending: mutation.isPending,
-    isFetching,
+    fixResolvedClean: fixedCleanOrg === org,
   })
-
-  // Auto-dismiss after the success check has lingered.
-  useEffect(() => {
-    if (view !== "success") return
-    const timer = setTimeout(() => {
-      if (mountedRef.current) setDismissedOrg(org)
-    }, SUCCESS_LINGER_MS)
-    return () => clearTimeout(timer)
-  }, [view, org, mountedRef])
 
   return (
     <>
@@ -128,10 +122,18 @@ export function SkeletonDriftBanner() {
             tone="success"
             icon={<CheckCircle2 className="size-5" aria-hidden="true" />}
             title={t("skeletonDrift.success.title")}
+            onDismiss={() => setDismissedOrg(org)}
           >
             <p className="text-base-content/70">
               {t("skeletonDrift.success.body")}
             </p>
+            <button
+              type="button"
+              className="btn btn-sm btn-success self-start"
+              onClick={() => setDismissedOrg(org)}
+            >
+              {t("skeletonDrift.success.dismiss")}
+            </button>
           </AppBanner>
         ) : view === "warning" ? (
           <AppBanner
