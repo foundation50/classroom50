@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import { collapseVariants } from "@/lib/motion"
 
-export type AppBannerTone = "error" | "warning"
+export type AppBannerTone = "error" | "warning" | "success"
 
 // Full-bleed vs. constrained: the coloured bar spans the viewport, but its
 // contents align with the page below via the inner max-w container.
@@ -17,6 +17,10 @@ const TONE_CLASS: Record<AppBannerTone, { bar: string; icon: string }> = {
   warning: {
     bar: "border-warning/25 bg-warning/10 text-base-content",
     icon: "text-warning",
+  },
+  success: {
+    bar: "border-success/25 bg-success/10 text-base-content",
+    icon: "text-success",
   },
 }
 

@@ -1062,10 +1062,15 @@
   },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",
-    "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Re-run org setup to update them and keep grading, score collection, and Pages publishing working.",
+    "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Update them here to keep grading, score collection, and Pages publishing working.",
     "overwriteWarning_label": "Heads up:",
-    "overwriteWarning": "Updating overwrites the scaffolded workflow files (collect-scores, regrade, publish-pages, autograde-runner) with the defaults, replacing any manual edits — you'll confirm each one first.",
-    "action": "Update workflows"
+    "overwriteWarning": "Updating overwrites the scaffolded workflow files (collect-scores, regrade, publish-pages, autograde-runner) with the defaults, replacing any manual edits — you'll confirm first.",
+    "action": "Update workflows now",
+    "updating": "Updating…",
+    "success": {
+      "title": "Classroom workflow files are up to date",
+      "body": "All Classroom 50 workflow files now match the latest bundled version."
+    }
   },
   "classes": {
     "createTitle": "Create Classroom",
