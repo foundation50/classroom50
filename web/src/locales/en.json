@@ -27,7 +27,8 @@
     "done": "Done",
     "yes": "Yes",
     "no": "No",
-    "skipToMainContent": "Skip to main content"
+    "skipToMainContent": "Skip to main content",
+    "openOrgOnGitHub": "Open {{org}} on GitHub"
   },
   "notFound": {
     "title": "Page not found",

@@ -24,6 +24,7 @@ import { useGitHubViewer } from "@/hooks/github/hooks"
 import { githubKeys, invalidateInviteQueries } from "@/hooks/github/queries"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { githubOrgPeopleUrl } from "@/util/orgUrl"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import type { GitHubUser } from "@/hooks/github/types"
 import { isSameGitHubUser } from "@/util/students"
@@ -381,7 +382,19 @@ const OrgMembersPage = () => {
               </h1>
               <p className="mt-1 text-sm text-base-content/70">
                 {t("orgMembers.subtitlePrefix")}{" "}
-                <span className="font-mono font-semibold">{org}</span>{" "}
+                {org ? (
+                  <a
+                    href={githubOrgPeopleUrl(org)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t("common.openOrgOnGitHub", { org })}
+                    className="font-mono font-semibold hover:text-primary hover:underline"
+                  >
+                    {org}
+                  </a>
+                ) : (
+                  <span className="font-mono font-semibold">{org}</span>
+                )}{" "}
                 {t("orgMembers.subtitleSuffix")}
               </p>
               <a

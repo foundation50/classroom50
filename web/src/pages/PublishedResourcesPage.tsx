@@ -27,6 +27,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { classroomPagesSegment } from "@/util/secret"
+import { githubOrgUrl } from "@/util/orgUrl"
 
 // Pages base for an org's classroom50 config repo. `classroom50` is the fixed
 // repo name, not the org name. Single-sourced so every row derives from it.
@@ -470,7 +471,19 @@ const PublishedResourcesPage = () => {
               </h1>
               <p className="mt-1 text-sm text-base-content/70">
                 {t("published.pageSubheadingPrefix")}{" "}
-                <span className="font-mono font-semibold">{org}</span>
+                {org ? (
+                  <a
+                    href={githubOrgUrl(org)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t("common.openOrgOnGitHub", { org })}
+                    className="font-mono font-semibold hover:text-primary hover:underline"
+                  >
+                    {org}
+                  </a>
+                ) : (
+                  <span className="font-mono font-semibold">{org}</span>
+                )}
                 {t("published.pageSubheadingSuffix")}
               </p>
             </div>

@@ -37,6 +37,7 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import OrgPreflightNotice from "@/pages/orgSettings/OrgPreflightNotice"
 import { EnterDiv } from "@/lib/motionComponents"
+import { githubOrgUrl } from "@/util/orgUrl"
 
 type ClassFilter = "active" | "archived" | "all"
 
@@ -417,9 +418,15 @@ const ClassesPage = () => {
                     <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
                       {t("classes.githubOrganization")}
                     </div>
-                    <div className="font-mono text-sm font-semibold text-base-content">
+                    <a
+                      href={githubOrgUrl(org)}
+                      target="_blank"
+                      rel="noreferrer"
+                      title={t("common.openOrgOnGitHub", { org })}
+                      className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
+                    >
                       {org}
-                    </div>
+                    </a>
                   </div>
                 </div>
 

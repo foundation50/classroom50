@@ -18,6 +18,7 @@ import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
 import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
+import { githubOrgSettingsUrl } from "@/util/orgUrl"
 import { CalloutDiv } from "@/lib/motionComponents"
 import {
   CalendarClock,
@@ -512,7 +513,19 @@ const OrgSettingsPage = () => {
               </h1>
               <p className="mt-1 text-sm text-base-content/70">
                 {t("orgSettings.page.subheading_prefix")}{" "}
-                <span className="font-mono font-semibold">{org}</span>
+                {org ? (
+                  <a
+                    href={githubOrgSettingsUrl(org)}
+                    target="_blank"
+                    rel="noreferrer"
+                    title={t("common.openOrgOnGitHub", { org })}
+                    className="font-mono font-semibold hover:text-primary hover:underline"
+                  >
+                    {org}
+                  </a>
+                ) : (
+                  <span className="font-mono font-semibold">{org}</span>
+                )}
                 {t("orgSettings.page.subheading_suffix")}
               </p>
             </div>
