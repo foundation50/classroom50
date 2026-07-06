@@ -8,6 +8,7 @@ import { useTranslation } from "react-i18next"
 import { AppBanner } from "@/components/AppBanner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { ensureSkeletonFiles } from "@/hooks/github/mutations"
+import type { StaleSkeletonFile } from "@/hooks/github/mutations"
 import { githubKeys } from "@/hooks/github/queries"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -85,14 +86,11 @@ export function SkeletonDriftBanner() {
   const runFix = useSafeSubmit()
 
   // The org whose fix just completed with nothing left drifted. Drives the green
-  // success view directly off the mutation result (see DriftBannerInput) and is
-  // tracked per-org so a fix on org A never greets org B after navigation.
+  // success view directly off the mutation result (see DriftBannerInput).
   const [fixedCleanOrg, setFixedCleanOrg] = useState<string>()
 
-  // The org a fix is currently running for. The banner is a singleton (mounted
-  // once in _authed, never remounts on org navigation), so a single mutation is
-  // shared across orgs; this scopes the pending spinner/disabled state to the
-  // org that actually launched the run.
+  // The org a fix is currently running for. The mutation is shared across orgs,
+  // so this scopes the pending spinner/disabled state to the org that launched it.
   const [pendingOrg, setPendingOrg] = useState<string>()
 
   const {
@@ -102,10 +100,9 @@ export function SkeletonDriftBanner() {
     mountedRef,
   } = useSkeletonOverwriteConfirm()
 
-  // Decline any parked overwrite modal when the org changes. The banner is a
-  // singleton (never remounts on org navigation), so a modal opened for org A
-  // would otherwise linger on org B. resolveOverwrite is a no-op when nothing is
-  // parked. Read through a ref so the decline effect can depend on org alone yet
+  // Decline any parked overwrite modal when the org changes, so a modal opened
+  // for org A doesn't linger on org B (resolveOverwrite is a no-op when nothing
+  // is parked). Read through a ref so the effect can depend on org alone yet
   // always call the latest resolver.
   const resolveOverwriteRef = useRef(resolveOverwrite)
   useEffect(() => {
@@ -123,15 +120,17 @@ export function SkeletonDriftBanner() {
       ensureSkeletonFiles(client, targetOrg, confirmSkeletonOverwrite),
     onSuccess: (result, targetOrg) => {
       if (!mountedRef.current) return
+      const key = githubKeys.skeletonDrift(targetOrg)
       // A declined overwrite leaves files drifted -> stay on the warning view.
       if (isFixResolvedClean(result)) {
         setFixedCleanOrg(targetOrg)
+        // Seed the drift cache as clean directly. A post-commit tree read is
+        // eventually consistent and would refetch the old (drifted) SHAs, so
+        // invalidating here could re-flash the warning on the next mount.
+        queryClient.setQueryData<StaleSkeletonFile[]>(key, [])
+      } else {
+        void queryClient.invalidateQueries({ queryKey: key })
       }
-      // Refresh the fixed org's cached drift check so its warning doesn't
-      // re-flash on the next mount. The success view no longer depends on this.
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.skeletonDrift(targetOrg),
-      })
     },
     onSettled: () => {
       if (mountedRef.current) setPendingOrg(undefined)
@@ -148,66 +147,77 @@ export function SkeletonDriftBanner() {
     fixResolvedClean: fixedCleanOrg === org,
   })
 
+  const isSuccess = view === "success"
+
   return (
     <>
       <AnimatePresence initial={false}>
-        {view === "success" ? (
+        {view !== "hidden" ? (
+          // key stays view-scoped so AnimatePresence animates the warning->success swap.
           <AppBanner
-            key="skeleton-drift-success"
-            tone="success"
-            icon={<CheckCircle2 className="size-5" aria-hidden="true" />}
-            title={t("skeletonDrift.success.title")}
-            onDismiss={() => setDismissedOrg(org)}
-          >
-            <p className="text-base-content/70">
-              {t("skeletonDrift.success.body")}
-            </p>
-            <button
-              type="button"
-              className="btn btn-sm btn-success self-start"
-              onClick={() => setDismissedOrg(org)}
-            >
-              {t("skeletonDrift.success.dismiss")}
-            </button>
-          </AppBanner>
-        ) : view === "warning" ? (
-          <AppBanner
-            key="skeleton-drift"
-            tone="warning"
-            icon={<FileWarning className="size-5" aria-hidden="true" />}
-            title={t("skeletonDrift.title")}
-            onDismiss={() => setDismissedOrg(org)}
-          >
-            <p className="text-base-content/70">{t("skeletonDrift.body")}</p>
-            <p className="text-base-content/70">
-              <span className="font-semibold text-base-content">
-                {t("skeletonDrift.overwriteWarning_label")}
-              </span>{" "}
-              {t("skeletonDrift.overwriteWarning")}
-            </p>
-            <button
-              type="button"
-              className="btn btn-sm btn-warning self-start"
-              disabled={pendingOrg === org}
-              onClick={() => {
-                if (org && pendingOrg !== org) {
-                  setPendingOrg(org)
-                  void runFix(() => mutation.mutateAsync(org))
-                }
-              }}
-            >
-              {pendingOrg === org ? (
-                <>
-                  <span
-                    className="loading loading-spinner loading-xs"
-                    aria-hidden="true"
-                  />
-                  {t("skeletonDrift.updating")}
-                </>
+            key={isSuccess ? "skeleton-drift-success" : "skeleton-drift"}
+            tone={view}
+            icon={
+              isSuccess ? (
+                <CheckCircle2 className="size-5" aria-hidden="true" />
               ) : (
-                t("skeletonDrift.action")
-              )}
-            </button>
+                <FileWarning className="size-5" aria-hidden="true" />
+              )
+            }
+            title={t(
+              isSuccess ? "skeletonDrift.success.title" : "skeletonDrift.title",
+            )}
+            onDismiss={() => setDismissedOrg(org)}
+          >
+            {isSuccess ? (
+              <>
+                <p className="text-base-content/70">
+                  {t("skeletonDrift.success.body")}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-success self-start"
+                  onClick={() => setDismissedOrg(org)}
+                >
+                  {t("skeletonDrift.success.dismiss")}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="text-base-content/70">
+                  {t("skeletonDrift.body")}
+                </p>
+                <p className="text-base-content/70">
+                  <span className="font-semibold text-base-content">
+                    {t("skeletonDrift.overwriteWarning_label")}
+                  </span>{" "}
+                  {t("skeletonDrift.overwriteWarning")}
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-warning self-start"
+                  disabled={pendingOrg === org}
+                  onClick={() => {
+                    if (org && pendingOrg !== org) {
+                      setPendingOrg(org)
+                      void runFix(() => mutation.mutateAsync(org))
+                    }
+                  }}
+                >
+                  {pendingOrg === org ? (
+                    <>
+                      <span
+                        className="loading loading-spinner loading-xs"
+                        aria-hidden="true"
+                      />
+                      {t("skeletonDrift.updating")}
+                    </>
+                  ) : (
+                    t("skeletonDrift.action")
+                  )}
+                </button>
+              </>
+            )}
           </AppBanner>
         ) : null}
       </AnimatePresence>
