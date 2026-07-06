@@ -8,3 +8,13 @@ export const githubOrgPeopleUrl = (org: string): string =>
 
 export const githubOrgSettingsUrl = (org: string): string =>
   `https://github.com/organizations/${org}/settings/profile`
+
+// An assignment's starter-code (template) repo. Built from `template.owner`, not
+// the classroom org — a template can live under a different owner. Deep-links to
+// the stored branch when one is set.
+export const githubTemplateRepoUrl = (
+  owner: string,
+  repo: string,
+  branch?: string,
+): string =>
+  `https://github.com/${owner}/${repo}${branch ? `/tree/${branch}` : ""}`

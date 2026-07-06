@@ -651,7 +651,9 @@
       "deleteConfirm": "Delete assignment",
       "deleteCancel": "Keep assignment",
       "reuseTitle": "Reuse in another classroom",
-      "reuseAria": "Reuse assignment in another classroom"
+      "reuseAria": "Reuse assignment in another classroom",
+      "sourceRepoTitle": "View source repository",
+      "sourceRepoAria": "View source repository for {{name}}"
     },
     "template": {
       "label": "Template Repository",
@@ -1257,6 +1259,7 @@
     "lateBadge_one": "{{count}} late",
     "lateBadge_other": "{{count}} late",
     "downloadCsv": "Download Scores (CSV)",
+    "viewSourceRepo": "View source repository",
     "collectionNote": "Submissions are collected automatically, but new ones can take up to 24 hours to appear.",
     "lastCollected": "Last collected (org-wide) {{when}}.",
     "updated": "Updated {{when}}",

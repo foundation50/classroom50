@@ -2,8 +2,10 @@ import { useNavigate } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { Copy, Eye, Pencil, Trash2, UserRound, UsersRound } from "lucide-react"
 
+import GitHub from "@/assets/github.svg?react"
 import useGetScores from "@/hooks/useGetScores"
 import { formatDueDate } from "@/util/formatDate"
+import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
@@ -304,6 +306,27 @@ const AssignmentsTable = ({
                   })()}
                 </td>
                 <td>
+                  {assignment.template && (
+                    <a
+                      href={githubTemplateRepoUrl(
+                        assignment.template.owner,
+                        assignment.template.repo,
+                        assignment.template.branch,
+                      )}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="btn btn-circle btn-sm btn-ghost"
+                      title={t("assignments.table.sourceRepoTitle")}
+                      aria-label={t("assignments.table.sourceRepoAria", {
+                        name: assignment.name || assignment.slug,
+                      })}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                      }}
+                    >
+                      <GitHub aria-hidden="true" className="size-4" />
+                    </a>
+                  )}
                   <Link
                     className="btn btn-circle btn-sm btn-ghost"
                     to="/$org/$classroom/assignments/$assignment/edit"

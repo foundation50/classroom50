@@ -66,6 +66,8 @@ import {
   REGRADE_WORKFLOW,
 } from "@/hooks/github/mutations"
 import { formatDueDateTime, formatRelativeToNow } from "@/util/formatDate"
+import { githubTemplateRepoUrl } from "@/util/orgUrl"
+import { GitHubLink } from "@/components/GitHubLink"
 
 // Re-renders on an interval to keep relative timestamps fresh.
 const usePeriodicRerender = (intervalMs = 30_000) => {
@@ -510,6 +512,17 @@ const SubmissionsPageContent = () => {
                   <span className="badge badge-sm badge-error badge-soft">
                     {t("submissions.lateBadge", { count: lateCount })}
                   </span>
+                )}
+                {assignmentInfo?.template && (
+                  <GitHubLink
+                    href={githubTemplateRepoUrl(
+                      assignmentInfo.template.owner,
+                      assignmentInfo.template.repo,
+                      assignmentInfo.template.branch,
+                    )}
+                    label={t("submissions.viewSourceRepo")}
+                    title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
+                  />
                 )}
               </div>
             </div>
