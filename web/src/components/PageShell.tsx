@@ -8,9 +8,8 @@ import Drawer, {
 
 const DEFAULT_CONTENT_CLASS = "p-10 bg-base-200 2xl:px-50"
 
-// The standard authenticated page shell: the drawer wrapper, mobile toggle, the
-// scrolling content pane, and the sidebar rail. Every drawer page repeated this
-// same structure; PageShell owns it so pages render only their content.
+// Every drawer page repeated the Drawer/toggle/content/sidebar structure;
+// PageShell owns it so pages render only their content.
 //
 // contentClassName overrides the DrawerContent padding — the default matches the
 // 10 pages on `2xl:px-50`; the three `xl:px-50` owner pages pass their variant.
