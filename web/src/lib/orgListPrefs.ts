@@ -20,8 +20,3 @@ export const orgListPrefs = createListPrefs<OrgViewMode, OrgSortKey>({
   sanitizeSortOnLoad: (sort, defaultSort) =>
     sort === "last-modified" ? defaultSort : sort,
 })
-
-export const getStoredViewMode = orgListPrefs.getStoredViewMode
-export const persistViewMode = orgListPrefs.persistViewMode
-export const getStoredSortKey = orgListPrefs.getStoredSortKey
-export const persistSortKey = orgListPrefs.persistSortKey

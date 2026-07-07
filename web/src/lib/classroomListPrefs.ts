@@ -19,8 +19,3 @@ export const classroomListPrefs = createListPrefs<
   defaultView: "grid",
   defaultSort: "name-asc",
 })
-
-export const getStoredViewMode = classroomListPrefs.getStoredViewMode
-export const persistViewMode = classroomListPrefs.persistViewMode
-export const getStoredSortKey = classroomListPrefs.getStoredSortKey
-export const persistSortKey = classroomListPrefs.persistSortKey
