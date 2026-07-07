@@ -1,6 +1,32 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
+import {
+  fetchGithubUser,
+  fetchGithubUserWithScopes,
+  GitHubUserFetchError,
+} from "./github-user-api"
+
+function mockFetch(res: {
+  ok: boolean
+  status: number
+  scopesHeader?: string | null
+  body?: unknown
+}) {
+  const headers = new Headers()
+  if (typeof res.scopesHeader === "string") {
+    headers.set("x-oauth-scopes", res.scopesHeader)
+  }
+
+  vi.stubGlobal(
+    "fetch",
+    vi.fn().mockResolvedValue({
+      ok: res.ok,
+      status: res.status,
+      headers,
+      json: async () => res.body ?? {},
+    }),
+  )
+}
 
 afterEach(() => {
   vi.unstubAllGlobals()
@@ -66,5 +92,41 @@ describe("fetchGithubUser", () => {
 
   it("preserves the HTTP status in the error message", () => {
     expect(new GitHubUserFetchError(403).message).toBe("GitHub API: HTTP 403")
+  })
+})
+
+describe("fetchGithubUserWithScopes", () => {
+  it("returns the user and the X-OAuth-Scopes header (classic PAT)", async () => {
+    mockFetch({
+      ok: true,
+      status: 200,
+      scopesHeader: "repo, workflow",
+      body: { login: "octocat" },
+    })
+
+    const result = await fetchGithubUserWithScopes("ghp_token")
+
+    expect(result.user).toEqual({ login: "octocat" })
+    expect(result.scopes).toBe("repo, workflow")
+  })
+
+  it("returns null scopes when the header is absent (fine-grained PAT)", async () => {
+    mockFetch({ ok: true, status: 200, body: { login: "octocat" } })
+
+    const result = await fetchGithubUserWithScopes("github_pat_token")
+
+    expect(result.scopes).toBeNull()
+  })
+
+  it("throws GitHubUserFetchError carrying the status on a failed response", async () => {
+    mockFetch({ ok: false, status: 401 })
+
+    await expect(fetchGithubUserWithScopes("bad")).rejects.toMatchObject({
+      name: "GitHubUserFetchError",
+      status: 401,
+    })
+    await expect(fetchGithubUserWithScopes("bad")).rejects.toBeInstanceOf(
+      GitHubUserFetchError,
+    )
   })
 })

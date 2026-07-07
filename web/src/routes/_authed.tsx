@@ -1,6 +1,8 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
+import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
+import { Spinner } from "@/components/Spinner"
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context, location }) => {
@@ -23,6 +25,21 @@ export const Route = createFileRoute("/_authed")({
 })
 
 function AuthedLayout() {
+  // The GitHub client is null for a render frame when the token is torn down
+  // (sign-out, or a 401 expiring the session) before the router's async
+  // invalidate fires the redirect to /login. Hold the authed subtree until the
+  // client exists so its pages don't mount and call useGitHubClient() on a null
+  // client — otherwise every authed hook throws during that gap.
+  const client = useOptionalGitHubClient()
+
+  if (!client) {
+    return (
+      <div className="min-h-screen grid place-items-center">
+        <Spinner size="lg" label="Loading Classroom 50" />
+      </div>
+    )
+  }
+
   return (
     <>
       <ScopeWarningBanner />

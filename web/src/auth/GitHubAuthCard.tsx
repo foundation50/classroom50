@@ -6,6 +6,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "./useGithubAuth"
 import { GitHubAuthedPanel } from "./GitHubAuthedPanel"
 import { GitHubDevicePrompt } from "./GitHubDevicePrompt"
+import { GitHubPatPrompt } from "./GitHubPatPrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 import { AppVersionBadge } from "@/components/AppVersionBadge"
 import { WIKI_URL } from "@/version"
@@ -68,6 +69,13 @@ export function GitHubAuthCard() {
               onCodeCopied={auth.markDeviceCodeCopied}
               onVerificationOpened={auth.markVerificationOpened}
             />
+          ) : auth.screen === "pat-prompt" ? (
+            <GitHubPatPrompt
+              onSubmit={auth.submitPat}
+              onCancel={auth.cancelPatFlow}
+              isValidating={auth.isValidatingPat}
+              error={auth.patError}
+            />
           ) : (
             <form
               className="space-y-5"
@@ -111,20 +119,36 @@ export function GitHubAuthCard() {
                   {t("auth.signInWithGitHub")}
                 </button>
 
-                <button
-                  className="btn btn-outline btn-primary w-full"
-                  type="button"
-                  disabled={auth.isRequestingDeviceCode}
-                  onClick={() => void auth.startDeviceFlow()}
-                >
-                  {auth.isRequestingDeviceCode ? (
-                    <span
-                      className="loading loading-spinner loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : null}
-                  {t("auth.useDeviceCode")}
-                </button>
+                <details className="collapse collapse-arrow border border-base-300 bg-base-100">
+                  <summary className="collapse-title min-h-0 px-4 py-3 text-sm font-medium">
+                    {t("auth.otherSignInMethods")}
+                  </summary>
+
+                  <div className="collapse-content space-y-3">
+                    <button
+                      className="btn btn-outline btn-primary w-full"
+                      type="button"
+                      disabled={auth.isRequestingDeviceCode}
+                      onClick={() => void auth.startDeviceFlow()}
+                    >
+                      {auth.isRequestingDeviceCode ? (
+                        <span
+                          className="loading loading-spinner loading-sm"
+                          aria-hidden="true"
+                        />
+                      ) : null}
+                      {t("auth.useDeviceCode")}
+                    </button>
+
+                    <button
+                      className="btn btn-outline btn-primary w-full"
+                      type="button"
+                      onClick={() => auth.startPatFlow()}
+                    >
+                      {t("auth.usePersonalAccessToken")}
+                    </button>
+                  </div>
+                </details>
               </div>
             </form>
           )}

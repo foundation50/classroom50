@@ -104,7 +104,9 @@
     "signInSubtitle": "Sign in with your GitHub account to continue.",
     "exchangingCode": "Exchanging code for access token...",
     "signInWithGitHub": "Sign in with GitHub",
+    "otherSignInMethods": "Other sign-in methods",
     "useDeviceCode": "Use a device code instead",
+    "usePersonalAccessToken": "Use a personal access token",
     "footerTagline": "Manage assignments and submissions via GitHub.",
     "visitDocs": "Visit Classroom 50's docs",
     "signedInConfirmed": "Signed in - your session is active",
@@ -130,7 +132,15 @@
     "missingScopesBody_suffix_one": ". Some actions may fail until it is granted.",
     "missingScopesBody_suffix_other": ". Some actions may fail until they are granted.",
     "reauthorize": "Re-authorize",
-    "reauthorizeHint": "If re-authorizing doesn't clear this, an organization owner may need to approve the app in the org's OAuth policy settings."
+    "reauthorizeHint": "If re-authorizing doesn't clear this, an organization owner may need to approve the app in the org's OAuth policy settings.",
+    "patTitle": "Sign in with a personal access token",
+    "patInstructions": "Paste a GitHub personal access token (classic) to sign in directly, without the OAuth proxy. The token must have these scopes checked:",
+    "patCreateTokenLink": "Create a token with these scopes pre-selected",
+    "patFineGrainedNote": "Fine-grained tokens aren't supported — use a classic token.",
+    "patTokenLabel": "Personal access token",
+    "patStorageNote": "The token is stored in this browser's local storage, the same as tokens from the other sign-in methods.",
+    "patSubmit": "Sign in with token",
+    "patCancel": "Cancel"
   },
   "documentTitle": {
     "assignments": "Assignments",

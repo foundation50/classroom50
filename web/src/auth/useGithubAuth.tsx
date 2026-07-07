@@ -16,10 +16,15 @@ import {
   pollDeviceToken,
   requestDeviceCode,
 } from "./github-oauth-api"
-import { fetchGithubUser, GitHubUserFetchError } from "./github-user-api"
+import {
+  fetchGithubUser,
+  fetchGithubUserWithScopes,
+  GitHubUserFetchError,
+} from "./github-user-api"
 import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import router from "@/router"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
+import { missingScopes } from "./scopes"
 import {
   clearGithubToken,
   consumeOAuthSession,
@@ -93,6 +98,9 @@ function useGithubAuthState() {
   const [token, setToken] = useState<string | null>(null)
   const [tokenScope, setTokenScope] = useState("")
   const [error, setError] = useState<string | null>(null)
+  // Scoped to the PAT prompt so a token-entry failure surfaces on that screen
+  // without disturbing the config screen's `error`.
+  const [patError, setPatError] = useState<string | null>(null)
   const [device, setDevice] = useState<DeviceAuthState | null>(null)
   const [now, setNow] = useState(() => Date.now())
   const [hasLoadedStoredAuth, setHasLoadedStoredAuth] = useState(false)
@@ -128,6 +136,10 @@ function useGithubAuthState() {
 
   const requestDeviceCodeMutation = useMutation({
     mutationFn: requestDeviceCode,
+  })
+
+  const validatePatMutation = useMutation({
+    mutationFn: fetchGithubUserWithScopes,
   })
 
   // Shared landing for both web and device flows. Goes straight to the authed
@@ -492,6 +504,60 @@ function useGithubAuthState() {
     )
   }, [])
 
+  const startPatFlow = useCallback(() => {
+    setPatError(null)
+    setScreen("pat-prompt")
+  }, [])
+
+  const cancelPatFlow = useCallback(() => {
+    setPatError(null)
+    setScreen("config")
+  }, [])
+
+  const submitPat = useCallback(
+    (rawToken: string) => {
+      const token = rawToken.trim()
+      if (!token) return
+
+      setPatError(null)
+
+      validatePatMutation.mutate(token, {
+        onSuccess: ({ scopes }) => {
+          // A null X-OAuth-Scopes header means the token carries no verifiable
+          // scopes — a fine-grained PAT. Its per-resource permissions can't be
+          // checked here and typically fail mid-operation, so block it at entry
+          // rather than sign the user in on a token we can't vet.
+          if (scopes === null) {
+            setPatError(
+              "That looks like a fine-grained token, which can't be verified. Use a classic token with the scopes listed above.",
+            )
+            return
+          }
+
+          const missing = missingScopes(scopes)
+          if (missing.length > 0) {
+            setPatError(
+              `That token is missing required scopes: ${missing.join(", ")}. Add them and try again.`,
+            )
+            return
+          }
+
+          completeSignIn({ access_token: token, scope: scopes })
+        },
+        onError: (err) => {
+          if (err instanceof GitHubUserFetchError && err.status === 401) {
+            setPatError(
+              "That token was rejected by GitHub (401). Check it's valid and not expired.",
+            )
+            return
+          }
+          setPatError(formatError(err))
+        },
+      })
+    },
+    [completeSignIn, validatePatMutation],
+  )
+
   // Shared teardown for both a deliberate sign-out and an involuntary expiry.
   // `expired` flags the involuntary case so /login can explain the redirect.
   const clearSession = useCallback(
@@ -614,6 +680,11 @@ function useGithubAuthState() {
     cancelDeviceFlow,
     markDeviceCodeCopied,
     markVerificationOpened,
+    startPatFlow,
+    cancelPatFlow,
+    submitPat,
+    patError,
+    isValidatingPat: validatePatMutation.isPending,
     signOut,
     expireSession,
     sessionExpired,
