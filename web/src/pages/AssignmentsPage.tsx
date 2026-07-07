@@ -190,14 +190,18 @@ const StudentAssignmentsView = ({
   const { t } = useTranslation()
   return (
     <div>
-      <h1 className="text-2xl font-bold mt-6">
-        {t("assignments.studentHeading")}
-      </h1>
-      <label className="text-sm label mb-6">
-        {t("assignments.studentViewAll_prefix")}{" "}
-        <span className="font-bold">{classroom}</span>{" "}
-        {t("assignments.studentViewAll_suffix")}
-      </label>
+      <div className="mb-8">
+        <PageHeader
+          title={t("assignments.studentHeading")}
+          subtitle={
+            <>
+              {t("assignments.studentViewAll_prefix")}{" "}
+              <span className="font-bold">{classroom}</span>{" "}
+              {t("assignments.studentViewAll_suffix")}
+            </>
+          }
+        />
+      </div>
       <OrgRepos org={org} classroom={classroom} />
     </div>
   )

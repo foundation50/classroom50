@@ -2,6 +2,7 @@ import { useState } from "react"
 import { Link, useParams, useRouter } from "@tanstack/react-router"
 import { UsersRound } from "lucide-react"
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import Drawer, {
   DrawerContent,
@@ -198,9 +199,9 @@ const EditAssignmentPage = () => {
           {editWarning && (
             <div className="alert alert-warning mt-6">{editWarning}</div>
           )}
-          <h1 className="text-2xl font-bold mt-4 mb-6">
-            {t("assignmentSettings.heading")}
-          </h1>
+          <div className="mb-6">
+            <PageHeader title={t("assignmentSettings.heading")} />
+          </div>
           {isTeacher && archived && (
             <ArchivedClassroomNotice>
               {t("assignmentSettings.archivedNotice_prefix")}{" "}

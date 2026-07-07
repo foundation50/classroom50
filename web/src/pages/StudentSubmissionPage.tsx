@@ -9,6 +9,7 @@ import {
 } from "lucide-react"
 
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import Drawer, {
   DrawerContent,
@@ -257,11 +258,13 @@ const StudentSubmissionPage = () => {
         <DrawerToggle />
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
           <Breadcrumb endpoint={t("nav.mySubmission")} />
-          <h1 className="text-2xl font-bold mt-4">
-            {assignmentData?.name ||
+          <PageHeader
+            title={
+              assignmentData?.name ||
               assignment ||
-              t("submissions.student.fallbackTitle")}
-          </h1>
+              t("submissions.student.fallbackTitle")
+            }
+          />
           <AssignmentMeta assignment={assignmentData} />
           {org && classroom && assignment ? (
             <SubmissionBody

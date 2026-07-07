@@ -2,6 +2,7 @@ import { useState } from "react"
 
 import AddStudent from "@/pages/students/AddStudent"
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import Drawer, {
   DrawerContent,
   DrawerSidebar,
@@ -53,20 +54,26 @@ const StudentListContent = ({
 
   return (
     <>
-      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-8 pb-10">
-        <h1 className="text-lg font-bold">{t("nav.students")}</h1>
-        <span className="text-sm text-base-content/70">
-          {countReady
-            ? t("students.enrolledCount", { count: enrolledCount })
-            : t("students.enrolledCountLoading")}
-        </span>
-        <span aria-hidden="true" className="text-base-content/30">
-          ·
-        </span>
-        <GitHubLink
-          href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
-          label={t("students.viewCsvOnGitHub")}
-          title={t("students.viewCsvOnGitHub")}
+      <div className="mb-8">
+        <PageHeader
+          title={t("nav.students")}
+          subtitle={
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>
+                {countReady
+                  ? t("students.enrolledCount", { count: enrolledCount })
+                  : t("students.enrolledCountLoading")}
+              </span>
+              <span aria-hidden="true" className="text-base-content/30">
+                ·
+              </span>
+              <GitHubLink
+                href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
+                label={t("students.viewCsvOnGitHub")}
+                title={t("students.viewCsvOnGitHub")}
+              />
+            </span>
+          }
         />
       </div>
 
