@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useRef, useState } from "react"
 import {
   Check,
   ChevronRight,
@@ -11,12 +11,12 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
+import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import {
   BASE_LANG,
   LanguagePackError,
   type PackPreview,
-  type RegistryLanguage,
   UndetectableCodeError,
   languageLabel,
   shareUrlForLang,
@@ -39,13 +39,16 @@ export const LanguageSwitcher = ({
     setLang,
     prepareFromFile,
     prepareFromUrl,
-    prepareFromBuiltIn,
-    availableBuiltInLangs,
     commitPreview,
     removePack,
     packCoverages,
     packSources,
   } = useLanguage()
+  const {
+    offered,
+    error: registryError,
+    installAndActivate,
+  } = useLanguageRegistry()
 
   const [code, setCode] = useState("")
   const [url, setUrl] = useState("")
@@ -57,8 +60,6 @@ export const LanguageSwitcher = ({
   const [openSection, setOpenSection] = useState<AccordionSectionId | null>(
     null,
   )
-  const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
-  const [registryError, setRegistryError] = useState<string | null>(null)
   const [shareCodeOverride, setShareCodeOverride] = useState<string | null>(
     null,
   )
@@ -119,27 +120,6 @@ export const LanguageSwitcher = ({
     await runPrepare(() => prepareFromUrl(url.trim(), code.trim() || undefined))
   }
 
-  // Load the registry on mount so the active-language dropdown can offer
-  // ready-made packs alongside installed ones. Bail if unmounted mid-flight.
-  useEffect(() => {
-    let active = true
-    availableBuiltInLangs()
-      .then((langs) => {
-        if (active) setRegistry(langs)
-      })
-      .catch((err) => {
-        if (!active) return
-        setRegistryError(
-          err instanceof LanguagePackError
-            ? err.message
-            : t("language.errorRegistry"),
-        )
-      })
-    return () => {
-      active = false
-    }
-  }, [availableBuiltInLangs, t])
-
   // Controlled accordion: driving native <details> via its toggle event fights
   // React's `open` prop (closed sections need two clicks), so we intercept the
   // summary click and set the open section ourselves.
@@ -164,9 +144,7 @@ export const LanguageSwitcher = ({
     setInstallingSelected(true)
     setError(null)
     try {
-      const preview = await prepareFromBuiltIn(code)
-      await commitPreview(preview)
-      setRegistry((prev) => (prev ? prev.filter((l) => l.code !== code) : prev))
+      await installAndActivate(code)
     } catch (err) {
       showError(err)
     } finally {
@@ -222,16 +200,16 @@ export const LanguageSwitcher = ({
   )
 
   // Options for the active-language dropdown: everything already available
-  // (base + installed packs) plus registry languages not yet installed. The
-  // latter carry `install: true` so selecting one downloads before switching.
-  const langOptions = useMemo(() => {
-    const installedSet = new Set(availableLangs)
-    const opts = availableLangs.map((code) => ({ code, install: false }))
-    for (const l of registry ?? []) {
-      if (!installedSet.has(l.code)) opts.push({ code: l.code, install: true })
-    }
-    return opts
-  }, [availableLangs, registry])
+  // (base + installed packs) plus registry languages not yet installed
+  // (`offered`). The latter carry `install: true` so selecting one downloads
+  // before switching.
+  const langOptions = useMemo(
+    () => [
+      ...availableLangs.map((code) => ({ code, install: false })),
+      ...offered.map((l) => ({ code: l.code, install: true })),
+    ],
+    [availableLangs, offered],
+  )
 
   return (
     <div className="flex flex-col gap-5">
@@ -270,7 +248,9 @@ export const LanguageSwitcher = ({
             {t("language.activeHint")}
           </p>
         )}
-        {registryError && <p className="text-xs text-error">{registryError}</p>}
+        {registryError && (
+          <p className="text-xs text-error">{t("language.errorRegistry")}</p>
+        )}
       </div>
 
       <AccordionSection

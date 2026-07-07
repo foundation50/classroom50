@@ -1,14 +1,10 @@
-import { useEffect, useRef, useState } from "react"
+import { useRef, useState } from "react"
 import { Check, Globe, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { useLanguage } from "@/hooks/useLanguage"
-import {
-  BASE_LANG,
-  type RegistryLanguage,
-  languageLabel,
-  prepareFromBuiltIn,
-} from "@/i18n/customLocale"
+import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
+import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
 
 // Minimal language switcher for the login card. Installed languages (base +
 // previously installed packs) switch instantly; registry languages load on
@@ -17,13 +13,15 @@ import {
 // entry legible regardless of the current UI language.
 export function LoginLanguageMenu() {
   const { t } = useTranslation()
-  const { lang, availableLangs, setLang, availableBuiltInLangs, commitPack } =
-    useLanguage()
+  const { lang, availableLangs, setLang } = useLanguage()
+  const {
+    offered: more,
+    loading: loadingRegistry,
+    error: registryError,
+    loadRegistry,
+    installAndActivate,
+  } = useLanguageRegistry()
 
-  const [registry, setRegistry] = useState<RegistryLanguage[] | null>(null)
-  // Starts true: the mount effect always kicks off a registry fetch.
-  const [loadingRegistry, setLoadingRegistry] = useState(true)
-  const [registryError, setRegistryError] = useState(false)
   const [switchingCode, setSwitchingCode] = useState<string | null>(null)
   // Synchronous re-entry lock: `switchingCode` is async React state, so a fast
   // second click can fire before it re-renders. A ref flips immediately.
@@ -31,41 +29,6 @@ export function LoginLanguageMenu() {
 
   const label = (code: string) =>
     code === BASE_LANG ? t("language.baseName") : languageLabel(code, code)
-
-  const loadRegistry = async () => {
-    if (registry || loadingRegistry) return
-    setLoadingRegistry(true)
-    setRegistryError(false)
-    try {
-      setRegistry(await availableBuiltInLangs())
-    } catch {
-      // Registry unreachable: keep the installed list usable; the user can
-      // retry by reopening the menu.
-      setRegistryError(true)
-      setRegistry(null)
-    } finally {
-      setLoadingRegistry(false)
-    }
-  }
-
-  // Prefetch the registry on mount so the list is ready when the menu opens.
-  // Set state only after the fetch resolves, and bail if unmounted mid-flight.
-  useEffect(() => {
-    let active = true
-    availableBuiltInLangs()
-      .then((langs) => {
-        if (active) setRegistry(langs)
-      })
-      .catch(() => {
-        if (active) setRegistryError(true)
-      })
-      .finally(() => {
-        if (active) setLoadingRegistry(false)
-      })
-    return () => {
-      active = false
-    }
-  }, [availableBuiltInLangs])
 
   const closeMenu = () => {
     // daisyUI dropdowns are focus-driven; blurring the focused element closes
@@ -96,26 +59,17 @@ export function LoginLanguageMenu() {
       return true
     })
 
+  // Install + activate a registry pack. On failure the menu stays open so the
+  // user can retry another (installAndActivate throws; swallow to keep it open).
   const installAndSwitch = (code: string) =>
-    runSwitch(code, async () => (await prepareAndCommit(code)) !== null)
-
-  // Fetch + install + activate a registry pack. Returns the installed code, or
-  // null on failure (the menu stays open so the user can retry another).
-  const prepareAndCommit = async (code: string): Promise<string | null> => {
-    try {
-      const preview = await prepareFromBuiltIn(code)
-      await commitPack(preview.code, preview.bundle)
-      // Newly installed language becomes available; reflect it locally so it
-      // moves to "available now" without a second registry fetch.
-      setRegistry((prev) => (prev ? prev.filter((l) => l.code !== code) : prev))
-      return preview.code
-    } catch {
-      return null
-    }
-  }
-
-  const installedSet = new Set(availableLangs)
-  const more = (registry ?? []).filter((l) => !installedSet.has(l.code))
+    runSwitch(code, async () => {
+      try {
+        await installAndActivate(code)
+        return true
+      } catch {
+        return false
+      }
+    })
 
   return (
     <div className="dropdown dropdown-end">
