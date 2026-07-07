@@ -13,6 +13,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
+import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
@@ -291,7 +292,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
           <div className="flex items-center gap-3 pb-4">
             <h3 className="text-lg font-bold">{t("classes.form.basicInfo")}</h3>
             <GitHubLink
-              href={`https://github.com/${org}/classroom50/tree/main/${classroom}`}
+              href={classroomConfigTreeUrl(org, classroom)}
               label={t("classes.configRepo")}
               title={t("classes.configRepoTitle")}
             />

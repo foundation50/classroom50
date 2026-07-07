@@ -9,6 +9,10 @@ export const githubOrgPeopleUrl = (org: string): string =>
 export const githubOrgSettingsUrl = (org: string): string =>
   `https://github.com/organizations/${org}/settings/profile`
 
+// The private config repo's directory for a classroom slug.
+export const classroomConfigTreeUrl = (org: string, slug: string): string =>
+  `https://github.com/${org}/classroom50/tree/main/${slug}`
+
 // An assignment's starter-code (template) repo. Built from `template.owner`, not
 // the classroom org — a template can live under a different owner. Deep-links to
 // the stored branch when one is set.

@@ -10,8 +10,12 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetStudents from "@/hooks/useGetStudents"
-import type { ClassroomSummary } from "@/hooks/useClassroomSummaries"
+import {
+  classroomDisplayName,
+  type ClassroomSummary,
+} from "@/hooks/useClassroomSummaries"
 import { EnterDiv } from "@/lib/motionComponents"
+import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import {
@@ -35,9 +39,6 @@ type ClassroomCardProps = {
   // an async re-sort can't shift a different classroom under the open menu.
   onMenuOpenChange?: (open: boolean) => void
 }
-
-const classroomDisplayName = (summary: ClassroomSummary, unknown: string) =>
-  summary.name || summary.short_name || summary.path || unknown
 
 // Student + assignment counts for a single visible card. Reuses the shared
 // roster/assignments caches. Assignment count coalesces to 0 (unlike students,
@@ -123,13 +124,9 @@ function ClassroomMenu({
   const name = classroomDisplayName(summary, t("classes.unknownClassName"))
   const archived = summary.archived
 
-  const setMenuOpen = (next: boolean) => {
-    setOpen(next)
-  }
-
   const menuRef = useRef<HTMLUListElement | null>(null)
 
-  // Close the menu; optionally return focus to the trigger (keyboard paths).
+  // Escape returns focus to the trigger; a plain close does not.
   const closeMenu = (returnFocus = false) => {
     setOpen(false)
     if (returnFocus) triggerRef.current?.focus()
@@ -231,21 +228,16 @@ function ClassroomMenu({
       if (ctx) queryClient.setQueryData(ctx.key, ctx.prev)
       notify({
         tone: "error",
-        message: archived
-          ? t("classes.unarchiveFailed", {
-              classroom: slug,
-              error:
-                err instanceof Error
-                  ? err.message
-                  : t("classes.somethingWentWrong"),
-            })
-          : t("classes.archiveFailed", {
-              classroom: slug,
-              error:
-                err instanceof Error
-                  ? err.message
-                  : t("classes.somethingWentWrong"),
-            }),
+        message: t(
+          archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
+          {
+            classroom: slug,
+            error:
+              err instanceof Error
+                ? err.message
+                : t("classes.somethingWentWrong"),
+          },
+        ),
       })
     },
     onSuccess: (_r, active) => {
@@ -332,7 +324,7 @@ function ClassroomMenu({
         aria-label={t("classes.card.actionsAria", { name })}
         onClick={(e) => {
           e.stopPropagation()
-          setMenuOpen(!open)
+          setOpen(!open)
         }}
         onKeyDown={(e) => {
           if (e.key === "ArrowDown" || e.key === "ArrowUp") {
@@ -388,7 +380,7 @@ function ClassroomMenu({
             <a
               role="menuitem"
               tabIndex={-1}
-              href={`https://github.com/${org}/classroom50/tree/main/${slug}`}
+              href={classroomConfigTreeUrl(org, slug)}
               target="_blank"
               rel="noreferrer"
               className={menuItem}
@@ -440,7 +432,6 @@ function ClassroomMenu({
         }
         confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}
-        confirmText=""
         needsConfirm={false}
         dangerous={false}
         onConfirm={async () => {

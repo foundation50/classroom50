@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import useClassroomSummaries, {
+  classroomDisplayName,
   type ClassroomSummary,
 } from "@/hooks/useClassroomSummaries"
 import type { GitHubFileListing } from "@/hooks/github/types"
@@ -24,9 +25,6 @@ const SORT_OPTIONS: { key: ClassroomSortKey; labelKey: string }[] = [
   { key: "term", labelKey: "classes.toolbar.sort.term" },
   { key: "student-count", labelKey: "classes.toolbar.sort.studentCount" },
 ]
-
-const displayName = (s: ClassroomSummary) =>
-  s.name || s.short_name || s.path || ""
 
 // New classroom directories carry only name/path until classroom.json resolves;
 // the summaries hook lifts term/active/counts so this list can filter, search,
@@ -87,7 +85,7 @@ const ClassroomList = ({
           return false
         if (!query) return true
         return (
-          displayName(s).toLowerCase().includes(query) ||
+          classroomDisplayName(s).toLowerCase().includes(query) ||
           s.path.toLowerCase().includes(query) ||
           (s.term ?? "").toLowerCase().includes(query)
         )
@@ -97,7 +95,7 @@ const ClassroomList = ({
 
   const sorted = useMemo(() => {
     const byName = (a: ClassroomSummary, b: ClassroomSummary) =>
-      displayName(a).localeCompare(displayName(b))
+      classroomDisplayName(a).localeCompare(classroomDisplayName(b))
     const list = [...filtered]
     switch (sortKey) {
       case "term":

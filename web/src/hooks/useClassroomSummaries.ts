@@ -19,10 +19,10 @@ export type ClassroomSummary = {
   // Archived lifecycle derived from classroom.json's `active` flag via
   // isClassroomArchived; an unresolved/errored read is treated as active.
   archived: boolean
-  // Student count for the student-count sort. undefined while the roster is
-  // pending or unreadable; callers pin undefined to the bottom in name order.
+  // studentCount undefined while pending/unreadable (or when counts aren't
+  // requested); callers pin undefined to the bottom in name order.
   studentCount?: number
-  // classroom.json is still loading (distinct from a resolved-but-empty read).
+  // Distinct from a resolved-but-empty classroom.json read.
   loading: boolean
 }
 
@@ -82,3 +82,8 @@ const useClassroomSummaries = (
 }
 
 export default useClassroomSummaries
+
+export const classroomDisplayName = (
+  summary: ClassroomSummary,
+  fallback = "",
+) => summary.name || summary.short_name || summary.path || fallback
