@@ -36,6 +36,9 @@ describe("OrgLink", () => {
     render(<OrgLink org="acme" href="https://gh/acme" title="Open acme" />)
     const link = screen.getByRole("link", { name: "acme" })
     expect(link.getAttribute("href")).toBe("https://gh/acme")
+    expect(link.getAttribute("target")).toBe("_blank")
+    expect(link.getAttribute("rel")).toBe("noreferrer")
+    expect(link.getAttribute("title")).toBe("Open acme")
   })
 
   it("renders plain text (no link) when org is undefined", () => {

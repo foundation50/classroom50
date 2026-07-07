@@ -386,15 +386,17 @@ const OrgMembersPage = () => {
                   title={t("common.openOrgOnGitHub", { org })}
                 />{" "}
                 {t("orgMembers.subtitleSuffix")}
-                <a
-                  href={`https://github.com/orgs/${org}/people`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="mt-2 flex w-fit items-center gap-1 text-sm text-primary hover:underline"
-                >
-                  <ExternalLink aria-hidden="true" className="size-3.5" />
-                  {t("orgMembers.manageMembersOnGitHub")}
-                </a>
+                {org && (
+                  <a
+                    href={githubOrgPeopleUrl(org)}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 flex w-fit items-center gap-1 text-sm text-primary hover:underline"
+                  >
+                    <ExternalLink aria-hidden="true" className="size-3.5" />
+                    {t("orgMembers.manageMembersOnGitHub")}
+                  </a>
+                )}
               </>
             }
           />
