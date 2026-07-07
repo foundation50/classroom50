@@ -127,6 +127,14 @@ function ClassroomMenu({
     setOpen(next)
   }
 
+  const menuRef = useRef<HTMLUListElement | null>(null)
+
+  // Close the menu; optionally return focus to the trigger (keyboard paths).
+  const closeMenu = (returnFocus = false) => {
+    setOpen(false)
+    if (returnFocus) triggerRef.current?.focus()
+  }
+
   // Hold the parent's list order frozen while this card is "busy" — the menu is
   // open OR a destructive confirm modal is open — so an async re-sort (e.g. a
   // roster resolving under the student-count sort) can't reshuffle the list out
@@ -136,17 +144,23 @@ function ClassroomMenu({
     onMenuOpenChange?.(open || archiveOpen || deleteOpen)
   }, [open, archiveOpen, deleteOpen, onMenuOpenChange])
 
-  // Escape + outside-click close; return focus to the trigger on Escape.
+  // On open, move focus into the menu (first item), per the WAI-ARIA menu
+  // button pattern.
+  useEffect(() => {
+    if (!open) return
+    const first =
+      menuRef.current?.querySelector<HTMLElement>('[role="menuitem"]')
+    first?.focus()
+  }, [open])
+
+  // Escape + outside-click close; Escape returns focus to the trigger.
   useEffect(() => {
     if (!open) return
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setMenuOpen(false)
-        triggerRef.current?.focus()
-      }
+      if (e.key === "Escape") closeMenu(true)
     }
     const onClick = (e: MouseEvent) => {
-      if (!containerRef.current?.contains(e.target as Node)) setMenuOpen(false)
+      if (!containerRef.current?.contains(e.target as Node)) setOpen(false)
     }
     document.addEventListener("keydown", onKey)
     document.addEventListener("mousedown", onClick)
@@ -155,6 +169,38 @@ function ClassroomMenu({
       document.removeEventListener("mousedown", onClick)
     }
   }, [open])
+
+  // Arrow/Home/End roving between menu items (WAI-ARIA menu keyboard model).
+  const onMenuKeyDown = (e: React.KeyboardEvent<HTMLUListElement>) => {
+    const items = Array.from(
+      menuRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]') ?? [],
+    )
+    if (items.length === 0) return
+    const current = items.indexOf(document.activeElement as HTMLElement)
+    let next: number
+    switch (e.key) {
+      case "ArrowDown":
+        next = current < 0 ? 0 : (current + 1) % items.length
+        break
+      case "ArrowUp":
+        next = current <= 0 ? items.length - 1 : current - 1
+        break
+      case "Home":
+        next = 0
+        break
+      case "End":
+        next = items.length - 1
+        break
+      case "Tab":
+        // Tabbing out closes the menu (focus leaves), matching native menus.
+        setOpen(false)
+        return
+      default:
+        return
+    }
+    e.preventDefault()
+    items[next]?.focus()
+  }
 
   const archiveMutation = useMutation({
     mutationFn: (active: boolean) =>
@@ -288,6 +334,12 @@ function ClassroomMenu({
           e.stopPropagation()
           setMenuOpen(!open)
         }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault()
+            setOpen(true)
+          }
+        }}
       >
         <MoreVertical aria-hidden="true" className="size-4" />
       </button>
@@ -295,15 +347,19 @@ function ClassroomMenu({
       {open && (
         <ul
           id={menuId}
+          ref={menuRef}
           role="menu"
+          onKeyDown={onMenuKeyDown}
           className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 py-1 shadow-lg"
         >
           <li role="none">
             <Link
               role="menuitem"
+              tabIndex={-1}
               to="/$org/$classroom/edit"
               params={{ org, classroom: slug }}
               className={menuItem}
+              onClick={() => closeMenu()}
             >
               <Pencil aria-hidden="true" className="size-4" />
               {t("classes.card.edit")}
@@ -313,9 +369,10 @@ function ClassroomMenu({
             <button
               type="button"
               role="menuitem"
+              tabIndex={-1}
               className={menuItem}
               onClick={() => {
-                setMenuOpen(false)
+                closeMenu()
                 setArchiveOpen(true)
               }}
             >
@@ -330,10 +387,12 @@ function ClassroomMenu({
           <li role="none">
             <a
               role="menuitem"
+              tabIndex={-1}
               href={`https://github.com/${org}/classroom50/tree/main/${slug}`}
               target="_blank"
               rel="noreferrer"
               className={menuItem}
+              onClick={() => closeMenu()}
             >
               <ExternalLink aria-hidden="true" className="size-4" />
               {t("classes.card.viewOnGitHub")}
@@ -343,9 +402,10 @@ function ClassroomMenu({
             <button
               type="button"
               role="menuitem"
+              tabIndex={-1}
               className={`${menuItem} text-error`}
               onClick={() => {
-                setMenuOpen(false)
+                closeMenu()
                 setDeleteOpen(true)
               }}
             >
