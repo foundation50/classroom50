@@ -3,6 +3,7 @@
 // own i18n namespace while sharing the markup and behavior.
 
 import { LayoutGrid, List as ListIcon } from "lucide-react"
+import type { ReactNode } from "react"
 
 export type ListViewMode = "grid" | "list"
 
@@ -43,6 +44,37 @@ export function ViewToggle({
   )
 }
 
+// The single dashed-border empty-state card. `className` overrides the default
+// shell so the non-uniform call sites keep their own radius/padding (e.g.
+// PublishedResourcesPage's rounded-xl/p-6). NoSearchResults and the zero-data
+// states across the list pages all render through this.
+export function EmptyState({
+  icon,
+  title,
+  body,
+  action,
+  className = "rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center",
+}: {
+  icon?: ReactNode
+  title: ReactNode
+  body?: ReactNode
+  action?: ReactNode
+  className?: string
+}) {
+  return (
+    <div className={className}>
+      {icon}
+      <h2 className="text-lg font-semibold">{title}</h2>
+      {body && (
+        <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
+          {body}
+        </p>
+      )}
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+
 export function NoSearchResults({
   title,
   body,
@@ -55,18 +87,18 @@ export function NoSearchResults({
   onClear: () => void
 }) {
   return (
-    <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-      <h2 className="text-lg font-semibold">{title}</h2>
-      <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-        {body}
-      </p>
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm mt-4"
-        onClick={onClear}
-      >
-        {clearLabel}
-      </button>
-    </div>
+    <EmptyState
+      title={title}
+      body={body}
+      action={
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onClear}
+        >
+          {clearLabel}
+        </button>
+      }
+    />
   )
 }

@@ -1,8 +1,4 @@
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { Classroom50OrgSummary } from "@/hooks/github/queries"
 import useGetOrgs from "@/hooks/useGetOrgs"
@@ -22,7 +18,7 @@ import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { NoSearchResults, ViewToggle } from "@/components/list"
+import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
 import { enterExit } from "@/lib/motion"
@@ -349,159 +345,147 @@ const OrgsPage = () => {
   const noSearchResults = hasAnyOrgs && sorted.length === 0
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          {isLoading ? (
-            <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-              <Spinner size="lg" className="text-primary" />
-              <div>
-                <p className="text-base font-semibold">
-                  {t("orgs.loadingTitle")}
-                </p>
-                <p className="mt-1 text-sm text-base-content/70">
-                  {t("orgs.loadingSubtitle")}
-                </p>
-              </div>
+    <>
+      <PageShell page="orgs">
+        {isLoading ? (
+          <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
+            <Spinner size="lg" className="text-primary" />
+            <div>
+              <p className="text-base font-semibold">
+                {t("orgs.loadingTitle")}
+              </p>
+              <p className="mt-1 text-sm text-base-content/70">
+                {t("orgs.loadingSubtitle")}
+              </p>
             </div>
-          ) : (
-            <div className="mb-8">
-              <div className="flex flex-col gap-6 p-6">
+          </div>
+        ) : (
+          <div className="mb-8">
+            <div className="flex flex-col gap-6 p-6">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {t("orgs.headingCl50")}
+                </h1>
+              </div>
+
+              <MissingOrgNotice
+                refreshing={isFetching}
+                onRefresh={handleRefresh}
+              />
+
+              {hasAnyOrgs && (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <h1 className="text-2xl font-bold tracking-tight">
-                    {t("orgs.headingCl50")}
-                  </h1>
-                </div>
+                  <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
+                    <Search
+                      aria-hidden="true"
+                      className="size-4 text-base-content/50"
+                    />
+                    <input
+                      type="search"
+                      className="grow"
+                      placeholder={t("orgs.toolbar.searchPlaceholder")}
+                      aria-label={t("orgs.toolbar.searchLabel")}
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                    />
+                  </label>
 
-                <MissingOrgNotice
-                  refreshing={isFetching}
-                  onRefresh={handleRefresh}
-                />
+                  <div className="flex items-center gap-3">
+                    <select
+                      className="select select-bordered select-sm"
+                      aria-label={t("orgs.toolbar.sort.label")}
+                      value={sortKey}
+                      onChange={(e) => changeSort(e.target.value as OrgSortKey)}
+                    >
+                      {SORT_OPTIONS.map((opt) => (
+                        <option key={opt.key} value={opt.key}>
+                          {t(opt.labelKey)}
+                        </option>
+                      ))}
+                    </select>
 
-                {hasAnyOrgs && (
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
-                      <Search
-                        aria-hidden="true"
-                        className="size-4 text-base-content/50"
-                      />
-                      <input
-                        type="search"
-                        className="grow"
-                        placeholder={t("orgs.toolbar.searchPlaceholder")}
-                        aria-label={t("orgs.toolbar.searchLabel")}
-                        value={search}
-                        onChange={(e) => setSearch(e.target.value)}
-                      />
-                    </label>
+                    <ViewToggle
+                      viewMode={viewMode}
+                      onChange={changeView}
+                      groupLabel={t("orgs.toolbar.view.label")}
+                      gridLabel={t("orgs.toolbar.view.gridLabel")}
+                      listLabel={t("orgs.toolbar.view.listLabel")}
+                    />
 
-                    <div className="flex items-center gap-3">
-                      <select
-                        className="select select-bordered select-sm"
-                        aria-label={t("orgs.toolbar.sort.label")}
-                        value={sortKey}
-                        onChange={(e) =>
-                          changeSort(e.target.value as OrgSortKey)
-                        }
-                      >
-                        {SORT_OPTIONS.map((opt) => (
-                          <option key={opt.key} value={opt.key}>
-                            {t(opt.labelKey)}
-                          </option>
-                        ))}
-                      </select>
-
-                      <ViewToggle
-                        viewMode={viewMode}
-                        onChange={changeView}
-                        groupLabel={t("orgs.toolbar.view.label")}
-                        gridLabel={t("orgs.toolbar.view.gridLabel")}
-                        listLabel={t("orgs.toolbar.view.listLabel")}
-                      />
-
-                      <button
-                        type="button"
-                        className="btn btn-primary btn-sm"
-                        onClick={() => setModalOpen(true)}
-                      >
-                        {t("orgs.newOrg.button")}
-                      </button>
-                    </div>
-                  </div>
-                )}
-
-                {noSearchResults ? (
-                  <NoSearchResults
-                    title={t("orgs.noResults.title")}
-                    body={t("orgs.noResults.body", { query: search.trim() })}
-                    clearLabel={t("orgs.noResults.clear")}
-                    onClear={() => setSearch("")}
-                  />
-                ) : sorted.length > 0 ? (
-                  <div className="grid grid-cols-12 gap-4">
-                    {sorted.map((summary) => {
-                      const updatedIso = lastModifiedActive
-                        ? lastModified[summary.org.login]
-                        : undefined
-                      const updatedAgo = updatedIso
-                        ? formatRelativeToNow(new Date(updatedIso))
-                        : undefined
-                      return viewMode === "grid" ? (
-                        <OrgCard
-                          key={summary.org.id}
-                          summary={summary}
-                          updatedAgo={updatedAgo}
-                        />
-                      ) : (
-                        <OrgRow
-                          key={summary.org.id}
-                          summary={summary}
-                          updatedAgo={updatedAgo}
-                        />
-                      )
-                    })}
-                  </div>
-                ) : needsSetupOrgs.length > 0 ? (
-                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-                    <h2 className="text-lg font-semibold">
-                      {t("orgs.setUpFirst.title")}
-                    </h2>
-                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                      {t("orgs.setUpFirst.body")}
-                    </p>
                     <button
                       type="button"
-                      className="btn btn-primary btn-sm mt-4"
+                      className="btn btn-primary btn-sm"
+                      onClick={() => setModalOpen(true)}
+                    >
+                      {t("orgs.newOrg.button")}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {noSearchResults ? (
+                <NoSearchResults
+                  title={t("orgs.noResults.title")}
+                  body={t("orgs.noResults.body", { query: search.trim() })}
+                  clearLabel={t("orgs.noResults.clear")}
+                  onClear={() => setSearch("")}
+                />
+              ) : sorted.length > 0 ? (
+                <div className="grid grid-cols-12 gap-4">
+                  {sorted.map((summary) => {
+                    const updatedIso = lastModifiedActive
+                      ? lastModified[summary.org.login]
+                      : undefined
+                    const updatedAgo = updatedIso
+                      ? formatRelativeToNow(new Date(updatedIso))
+                      : undefined
+                    return viewMode === "grid" ? (
+                      <OrgCard
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    ) : (
+                      <OrgRow
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    )
+                  })}
+                </div>
+              ) : needsSetupOrgs.length > 0 ? (
+                <EmptyState
+                  title={t("orgs.setUpFirst.title")}
+                  body={t("orgs.setUpFirst.body")}
+                  action={
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
                       onClick={() => setModalOpen(true)}
                     >
                       <Plus aria-hidden="true" className="size-4" />
                       {t("orgs.setUpFirst.cta")}
                     </button>
-                  </div>
-                ) : (
-                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-                    <h2 className="text-lg font-semibold">
-                      {t("orgs.emptyTitle")}
-                    </h2>
-                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                      {t("orgs.emptyBody")}
-                    </p>
-                  </div>
-                )}
-              </div>
+                  }
+                />
+              ) : (
+                <EmptyState
+                  title={t("orgs.emptyTitle")}
+                  body={t("orgs.emptyBody")}
+                />
+              )}
             </div>
-          )}
-        </DrawerContent>
-        <DrawerSidebar page="orgs" />
-      </Drawer>
+          </div>
+        )}
+      </PageShell>
 
       <NewOrgModal
         open={modalOpen}
         needsSetupOrgs={needsSetupOrgs}
         onClose={() => setModalOpen(false)}
       />
-    </div>
+    </>
   )
 }
 

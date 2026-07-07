@@ -14,11 +14,7 @@ import GitHub from "@/assets/github.svg?react"
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubRepo } from "@/hooks/github/types"
 import MissingParams from "@/components/MissingParams"
@@ -322,77 +318,71 @@ const ClassesPage = () => {
   }
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <div className="mb-8">
-            <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <GitHub aria-hidden="true" className="size-5 opacity-70" />
+    <PageShell page="classes" selected="assignments">
+      <div className="mb-8">
+        <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <GitHub aria-hidden="true" className="size-5 opacity-70" />
 
-                  <div>
-                    <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
-                      {t("classes.githubOrganization")}
-                    </div>
-                    <a
-                      href={githubOrgUrl(org)}
-                      target="_blank"
-                      rel="noreferrer"
-                      title={t("common.openOrgOnGitHub", { org })}
-                      className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
-                    >
-                      {org}
-                    </a>
-                  </div>
+              <div>
+                <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
+                  {t("classes.githubOrganization")}
                 </div>
-
-                <div>
-                  {roleLoading ? (
-                    <div className="skeleton skeleton-shimmer h-8 w-48" />
-                  ) : (
-                    <h1 className="text-2xl font-bold tracking-tight">
-                      {isTeacher
-                        ? t("classes.myClasses")
-                        : t("classes.myAssignments")}
-                    </h1>
-                  )}
-                  <p className="mt-2 max-w-2xl text-sm text-base-content/70">
-                    {t("classes.manageSubtitle")}
-                  </p>
-                </div>
+                <a
+                  href={githubOrgUrl(org)}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={t("common.openOrgOnGitHub", { org })}
+                  className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
+                >
+                  {org}
+                </a>
               </div>
             </div>
-            {isStudent && !isMember && !loadingMembership && (
-              <JoinOrgCard org={org} />
-            )}
-          </div>
-          {isOwner && <OrgPreflightNotice org={org} />}
-          {roleLoading ? (
-            <div className="grid grid-cols-12 gap-4 mb-6">
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="skeleton skeleton-shimmer col-span-6 h-32 rounded-xl xl:col-span-4"
-                />
-              ))}
+
+            <div>
+              {roleLoading ? (
+                <div className="skeleton skeleton-shimmer h-8 w-48" />
+              ) : (
+                <h1 className="text-2xl font-bold tracking-tight">
+                  {isTeacher
+                    ? t("classes.myClasses")
+                    : t("classes.myAssignments")}
+                </h1>
+              )}
+              <p className="mt-2 max-w-2xl text-sm text-base-content/70">
+                {t("classes.manageSubtitle")}
+              </p>
             </div>
-          ) : (
-            <>
-              {classes.length === 0 && isTeacher && (
-                <CreateClassroomPane org={org} />
-              )}
-              {isTeacher && classes.length > 0 && (
-                <ClassroomList org={org} dirs={classes} />
-              )}
-              {isStudent && isMember && <OrgRepos org={org} />}
-            </>
+          </div>
+        </div>
+        {isStudent && !isMember && !loadingMembership && (
+          <JoinOrgCard org={org} />
+        )}
+      </div>
+      {isOwner && <OrgPreflightNotice org={org} />}
+      {roleLoading ? (
+        <div className="grid grid-cols-12 gap-4 mb-6">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="skeleton skeleton-shimmer col-span-6 h-32 rounded-xl xl:col-span-4"
+            />
+          ))}
+        </div>
+      ) : (
+        <>
+          {classes.length === 0 && isTeacher && (
+            <CreateClassroomPane org={org} />
           )}
-        </DrawerContent>
-        <DrawerSidebar page="classes" selected="assignments" />
-      </Drawer>
-    </div>
+          {isTeacher && classes.length > 0 && (
+            <ClassroomList org={org} dirs={classes} />
+          )}
+          {isStudent && isMember && <OrgRepos org={org} />}
+        </>
+      )}
+    </PageShell>
   )
 }
 
