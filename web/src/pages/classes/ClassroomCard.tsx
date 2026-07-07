@@ -6,6 +6,7 @@ import { ConfirmModal } from "@/components/modals"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetStudents from "@/hooks/useGetStudents"
 import type { ClassroomSummary } from "@/hooks/useClassroomSummaries"
@@ -47,12 +48,17 @@ function useCardCounts(org: string, classroom: string) {
     classroom,
   )
   const assignmentsQuery = useGetClassroomAssignments(org, classroom)
+  // A missing assignments.json 404s (a brand-new classroom has none), which is
+  // the normal zero case — not a failure. Only a non-404 error is "unavailable".
+  const assignmentsNotFound =
+    assignmentsQuery.error instanceof GitHubAPIError &&
+    assignmentsQuery.error.status === 404
   return {
     studentCount: studentsLoading ? undefined : students.length,
     assignmentCount: assignmentsQuery.isPending
       ? undefined
       : (assignmentsQuery.data?.assignments.length ?? 0),
-    assignmentsError: assignmentsQuery.isError,
+    assignmentsError: assignmentsQuery.isError && !assignmentsNotFound,
   }
 }
 

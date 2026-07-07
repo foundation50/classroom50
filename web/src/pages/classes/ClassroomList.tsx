@@ -117,6 +117,7 @@ const ClassroomList = ({
 
   const anyResolved = summaries.some((s) => !s.loading)
   const noResults = anyResolved && query.length > 0 && sorted.length === 0
+  const emptyFilter = anyResolved && query.length === 0 && sorted.length === 0
 
   return (
     <div className="space-y-4">
@@ -136,7 +137,7 @@ const ClassroomList = ({
         <div className="flex flex-wrap items-center gap-3">
           <div
             role="group"
-            aria-label={t("assignments.archived")}
+            aria-label={t("classes.filter.label")}
             className="join"
           >
             {(["active", "archived", "all"] as const).map((f) => (
@@ -217,6 +218,12 @@ const ClassroomList = ({
           >
             {t("classes.noResults.clear")}
           </button>
+        </div>
+      ) : emptyFilter ? (
+        <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+          <p className="text-sm text-base-content/70">
+            {t(`classes.emptyFilter.${filter}`)}
+          </p>
         </div>
       ) : (
         <div className="grid grid-cols-12 gap-4">

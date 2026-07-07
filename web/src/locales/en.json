@@ -1172,6 +1172,7 @@
       "joinButton": "Join organization"
     },
     "filter": {
+      "label": "Filter by status",
       "active": "Active",
       "archived": "Archived",
       "all": "All"
@@ -1204,6 +1205,11 @@
       "title": "No classrooms match your search",
       "body": "No classrooms match \u201c{{query}}\u201d.",
       "clear": "Clear search"
+    },
+    "emptyFilter": {
+      "active": "No active classrooms.",
+      "archived": "No archived classrooms.",
+      "all": "No classrooms yet."
     },
     "deleteTeamWarning": "Deleted {{classroom}}, but some GitHub teams could not be removed. Delete them manually in the organization's team settings.",
     "deletedToast": "Deleted {{classroom}}.",
