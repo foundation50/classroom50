@@ -14,10 +14,15 @@ const REQUIRED_PAT_SCOPES = [
   "delete_repo",
 ] as const
 
-// Classic-token page with the required scopes pre-checked.
-const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?description=${encodeURIComponent(
-  "Classroom 50",
-)}&scopes=${REQUIRED_PAT_SCOPES.join(",")}`
+// Classic-token page with the required scopes pre-checked. Built with
+// URLSearchParams (matching buildGithubAuthorizeUrl) so the scope list's
+// reserved characters (e.g. the ":" in admin:org) are encoded correctly.
+const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?${new URLSearchParams(
+  {
+    description: "Classroom 50",
+    scopes: REQUIRED_PAT_SCOPES.join(","),
+  },
+).toString()}`
 
 export function GitHubPatPrompt({
   onSubmit,
@@ -64,7 +69,7 @@ export function GitHubPatPrompt({
           className="link link-info link-hover inline-flex items-center gap-1 text-xs"
           href={CREATE_TOKEN_URL}
           target="_blank"
-          rel="noreferrer"
+          rel="noopener noreferrer"
         >
           <ExternalLink aria-hidden="true" className="size-3" />
           {t("auth.patCreateTokenLink")}

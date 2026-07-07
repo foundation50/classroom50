@@ -1,4 +1,5 @@
 import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
@@ -30,12 +31,13 @@ function AuthedLayout() {
   // invalidate fires the redirect to /login. Hold the authed subtree until the
   // client exists so its pages don't mount and call useGitHubClient() on a null
   // client — otherwise every authed hook throws during that gap.
+  const { t } = useTranslation()
   const client = useOptionalGitHubClient()
 
   if (!client) {
     return (
       <div className="min-h-screen grid place-items-center">
-        <Spinner size="lg" label="Loading Classroom 50" />
+        <Spinner size="lg" label={t("common.loadingApp")} />
       </div>
     )
   }
