@@ -49,8 +49,8 @@
     "primary": "Primary",
     "expandSidebar": "Expand sidebar",
     "collapseSidebar": "Collapse sidebar",
-    "allClasses": "All Classes",
-    "allClassesArrow": "‹ All Classes",
+    "allClasses": "All Classrooms",
+    "allClassesArrow": "‹ All Classrooms",
     "allAssignments": "All Assignments",
     "allAssignmentsArrow": "‹ All Assignments",
     "accountMenu": "Account menu",
@@ -62,7 +62,7 @@
     "mySubmission": "My Submission",
     "manageGroup": "Manage Group",
     "acceptAssignment": "Accept Assignment",
-    "myClasses": "My Classes",
+    "myClasses": "My Classrooms",
     "myAssignments": "My Assignments",
     "published": "Published",
     "members": "Members",
@@ -147,7 +147,7 @@
     "acceptAssignment": "Accept Assignment",
     "members": "Members",
     "newClassroom": "New Classroom",
-    "classes": "Classes",
+    "classes": "Classrooms",
     "mySubmission": "My Submission",
     "submissions": "Submissions"
   },
@@ -1152,12 +1152,12 @@
     "noStudents": "No Students",
     "viewAssignments": "View Assignments",
     "editClassAria": "Edit {{name}}",
-    "editClassTitle": "Edit assignment",
+    "editClassTitle": "Edit classroom",
     "githubOrganization": "GitHub Organization",
-    "myClasses": "My Classes",
+    "myClasses": "My Classrooms",
     "myAssignments": "My Assignments",
     "manageSubtitle": "Manage your courses and assignments.",
-    "newClass": "+ New Class",
+    "newClass": "New classroom",
     "empty": {
       "title": "No classrooms yet",
       "body": "Create your first classroom to start adding assignments, importing students, and managing submissions.",
@@ -1176,6 +1176,38 @@
       "archived": "Archived",
       "all": "All"
     },
+    "card": {
+      "assignmentCount_one": "{{count}} Assignment",
+      "assignmentCount_other": "{{count}} Assignments",
+      "noAssignments": "No Assignments",
+      "countsUnavailable": "Counts unavailable",
+      "actionsAria": "Actions for {{name}}",
+      "edit": "Edit classroom",
+      "viewOnGitHub": "View on GitHub"
+    },
+    "toolbar": {
+      "searchPlaceholder": "Search classrooms…",
+      "searchLabel": "Search classrooms",
+      "sort": {
+        "label": "Sort",
+        "nameAsc": "Name (A–Z)",
+        "term": "Term",
+        "studentCount": "Student count"
+      },
+      "view": {
+        "label": "View",
+        "gridLabel": "Grid view",
+        "listLabel": "List view"
+      }
+    },
+    "noResults": {
+      "title": "No classrooms match your search",
+      "body": "No classrooms match \u201c{{query}}\u201d.",
+      "clear": "Clear search"
+    },
+    "deleteTeamWarning": "Deleted {{classroom}}, but some GitHub teams could not be removed. Delete them manually in the organization's team settings.",
+    "deletedToast": "Deleted {{classroom}}.",
+    "deleteFailed": "Couldn't delete {{classroom}}: {{error}}",
     "repo": {
       "manageGroupAria": "Manage group for {{assignment}}",
       "manageGroupTitle": "Manage group",
@@ -1595,7 +1627,7 @@
     },
     "breadcrumb": {
       "label": "Breadcrumb",
-      "classes": "Classes",
+      "classes": "Classrooms",
       "assignments": "Assignments"
     },
     "planBadge": {
