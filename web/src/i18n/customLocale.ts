@@ -423,6 +423,17 @@ export function packCoverages(): Record<string, number> {
   return out
 }
 
+// Origin of each installed pack, so the UI can distinguish ready-made registry
+// packs from ones the user hand-loaded (file/URL).
+export function packSources(): Record<string, PackSource> {
+  const packs = readStoredPacks()
+  const out: Record<string, PackSource> = {}
+  for (const [code, pack] of Object.entries(packs)) {
+    out[code] = pack.source
+  }
+  return out
+}
+
 // Switch the active language and persist the choice.
 export async function selectLang(code: string): Promise<void> {
   const next = code === BASE_LANG ? BASE_LANG : normalizeLangCode(code)

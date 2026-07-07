@@ -8,6 +8,7 @@ import {
   commitPack,
   installedCodes as readInstalledCodes,
   packCoverages,
+  packSources,
   prepareFromBuiltIn,
   prepareFromFile,
   prepareFromUrl,
@@ -51,6 +52,7 @@ export function useLanguage() {
     commitPack,
     removePack,
     packCoverages,
+    packSources,
   }
 }
 
