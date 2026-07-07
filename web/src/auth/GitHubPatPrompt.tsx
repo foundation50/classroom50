@@ -2,17 +2,31 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, ExternalLink, KeyRound } from "lucide-react"
 
-// The classic-PAT checkboxes to tick, in the order GitHub's token page lists
-// them. read:org is omitted because admin:org already implies it (see
-// SCOPE_IMPLICATIONS in scopes.ts) — it isn't a box the user ticks separately.
-// Kept in sync with DEFAULT_GITHUB_SCOPE, which drives actual validation.
-const REQUIRED_PAT_SCOPES = [
+import { REQUIRED_SCOPES } from "./scopes"
+
+// The classic-PAT checkboxes to tick, derived from REQUIRED_SCOPES (the same
+// source missingScopes() validates against) so the on-screen list and the
+// pre-checked token URL can't drift from DEFAULT_GITHUB_SCOPE. read:org is
+// dropped because admin:org already implies it (SCOPE_IMPLICATIONS in
+// scopes.ts) — it isn't a box the user ticks separately. Displayed in GitHub's
+// token-page order; scopes without an explicit rank sort to the end so a newly
+// added required scope still appears (just not perfectly ordered) instead of
+// silently vanishing.
+const IMPLIED_PAT_SCOPES = new Set(["read:org"])
+const PAT_SCOPE_ORDER = [
   "repo",
   "workflow",
   "admin:org",
   "read:user",
   "delete_repo",
-] as const
+]
+const REQUIRED_PAT_SCOPES = REQUIRED_SCOPES.filter(
+  (scope) => !IMPLIED_PAT_SCOPES.has(scope),
+).sort((a, b) => {
+  const ai = PAT_SCOPE_ORDER.indexOf(a)
+  const bi = PAT_SCOPE_ORDER.indexOf(b)
+  return (ai === -1 ? Infinity : ai) - (bi === -1 ? Infinity : bi)
+})
 
 // Classic-token page with the required scopes pre-checked. Built with
 // URLSearchParams (matching buildGithubAuthorizeUrl) so the scope list's

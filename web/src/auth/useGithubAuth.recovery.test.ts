@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  classifyPatResult,
   recoverStrandedExchange,
   shouldExpireOnUserError,
 } from "./useGithubAuth"
@@ -44,5 +45,47 @@ describe("recoverStrandedExchange", () => {
     expect(recoverStrandedExchange("config")).toBe("config")
     expect(recoverStrandedExchange("device-prompt")).toBe("device-prompt")
     expect(recoverStrandedExchange("authed")).toBe("authed")
+  })
+})
+
+// The PAT entry gate: submitPat routes a validated token's X-OAuth-Scopes
+// header through classifyPatResult before deciding sign-in vs error. A null
+// header (fine-grained PAT) is blocked, an under-scoped classic token is
+// rejected with the missing list, and a fully-scoped token signs in.
+describe("classifyPatResult", () => {
+  it("blocks a fine-grained token (null header -> unverifiable)", () => {
+    expect(classifyPatResult(null)).toEqual({ kind: "fine-grained" })
+  })
+
+  it("rejects a classic token missing required scopes, listing them", () => {
+    const result = classifyPatResult("repo, workflow")
+    expect(result.kind).toBe("missing")
+    if (result.kind === "missing") {
+      // read:org is implied by admin:org, so it should not be reported once
+      // admin:org is present, but here neither admin:org nor read:user/delete_repo
+      // is granted.
+      expect(result.missing).toContain("admin:org")
+      expect(result.missing).toContain("read:user")
+      expect(result.missing).toContain("delete_repo")
+    }
+  })
+
+  it("treats an empty-scope classic token (empty string, not null) as missing every scope, not fine-grained", () => {
+    const result = classifyPatResult("")
+    expect(result.kind).toBe("missing")
+    if (result.kind === "missing") {
+      expect(result.missing.length).toBeGreaterThan(0)
+    }
+  })
+
+  it("signs in a fully-scoped classic token, carrying the scope string forward", () => {
+    // admin:org implies read:org, so the granted set need not list it explicitly.
+    const granted = "read:user repo workflow admin:org delete_repo"
+    expect(classifyPatResult(granted)).toEqual({ kind: "ok", scopes: granted })
+  })
+
+  it("accepts a comma+space delimited header the same as a space-delimited one", () => {
+    const granted = "read:user, repo, workflow, admin:org, delete_repo"
+    expect(classifyPatResult(granted)).toEqual({ kind: "ok", scopes: granted })
   })
 })

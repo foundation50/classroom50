@@ -38,14 +38,21 @@ import {
 import type { DeviceAuthState, GithubAuthScreen } from "./types"
 import type { AuthStatus } from "@/types/router"
 
-function formatError(err: unknown) {
+function formatError(
+  err: unknown,
+  // The subsystem a network failure most likely implicates. The web/device
+  // flows go through the Worker OAuth proxy; the PAT flow hits api.github.com
+  // directly, so it passes its own label instead of blaming a proxy it never
+  // touches.
+  networkTarget = "the Cloudflare Worker proxy",
+) {
   const message = err instanceof Error ? err.message : String(err)
 
   if (
     message.toLowerCase().includes("failed to fetch") ||
     message.toLowerCase().includes("networkerror")
   ) {
-    return "Network error reaching the Cloudflare Worker proxy; it may be down or unreachable."
+    return `Network error reaching ${networkTarget}; it may be down or unreachable.`
   }
 
   return message
@@ -67,6 +74,26 @@ export function recoverStrandedExchange(
   current: GithubAuthScreen,
 ): GithubAuthScreen {
   return current === "exchanging" ? "config" : current
+}
+
+// Decision for a validated PAT's X-OAuth-Scopes header, split out so every
+// branch is unit-testable. A null header means the scopes are unverifiable —
+// a fine-grained PAT — which we block at entry rather than sign in on a token
+// we can't vet. An empty string is a classic token with no boxes ticked, which
+// falls through to the missing-scopes check (missingScopes("") reports every
+// required scope). "ok" carries the scope string forward to completeSignIn.
+export type PatResult =
+  | { kind: "fine-grained" }
+  | { kind: "missing"; missing: string[] }
+  | { kind: "ok"; scopes: string }
+
+export function classifyPatResult(scopes: string | null): PatResult {
+  if (scopes === null) return { kind: "fine-grained" }
+
+  const missing = missingScopes(scopes)
+  if (missing.length > 0) return { kind: "missing", missing }
+
+  return { kind: "ok", scopes }
 }
 
 function sleep(ms: number, signal: AbortSignal) {
@@ -523,26 +550,27 @@ function useGithubAuthState() {
 
       validatePatMutation.mutate(token, {
         onSuccess: ({ scopes }) => {
-          // A null X-OAuth-Scopes header means the token carries no verifiable
-          // scopes — a fine-grained PAT. Its per-resource permissions can't be
-          // checked here and typically fail mid-operation, so block it at entry
-          // rather than sign the user in on a token we can't vet.
-          if (scopes === null) {
+          const result = classifyPatResult(scopes)
+
+          // A fine-grained PAT (null header) carries no verifiable scopes; its
+          // per-resource permissions can't be checked here and typically fail
+          // mid-operation, so block it at entry rather than sign in on a token
+          // we can't vet.
+          if (result.kind === "fine-grained") {
             setPatError(
               "That looks like a fine-grained token, which can't be verified. Use a classic token with the scopes listed above.",
             )
             return
           }
 
-          const missing = missingScopes(scopes)
-          if (missing.length > 0) {
+          if (result.kind === "missing") {
             setPatError(
-              `That token is missing required scopes: ${missing.join(", ")}. Add them and try again.`,
+              `That token is missing required scopes: ${result.missing.join(", ")}. Add them and try again.`,
             )
             return
           }
 
-          completeSignIn({ access_token: token, scope: scopes })
+          completeSignIn({ access_token: token, scope: result.scopes })
         },
         onError: (err) => {
           if (err instanceof GitHubUserFetchError && err.status === 401) {
@@ -551,7 +579,7 @@ function useGithubAuthState() {
             )
             return
           }
-          setPatError(formatError(err))
+          setPatError(formatError(err, "api.github.com"))
         },
       })
     },
