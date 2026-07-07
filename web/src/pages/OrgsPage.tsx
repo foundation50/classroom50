@@ -6,17 +6,35 @@ import Drawer, {
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { Classroom50OrgSummary } from "@/hooks/github/queries"
 import useGetOrgs from "@/hooks/useGetOrgs"
-import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
+import useOrgLastModified from "@/hooks/useOrgLastModified"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
-import { ExternalLink, Info, Lock, RefreshCw } from "lucide-react"
+import {
+  ExternalLink,
+  Info,
+  LayoutGrid,
+  List as ListIcon,
+  Lock,
+  Plus,
+  RefreshCw,
+  Search,
+} from "lucide-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import PlanBadge from "@/components/PlanBadge"
-import { enterExit, staggerTransition } from "@/lib/motion"
-import { classifyPlan, planSortWeight } from "@/lib/orgPlan"
+import NewOrgModal from "@/components/modals/NewOrgModal"
+import Spinner from "@/components/Spinner"
+import { enterExit } from "@/lib/motion"
+import {
+  getStoredSortKey,
+  getStoredViewMode,
+  persistSortKey,
+  persistViewMode,
+  type OrgSortKey,
+  type OrgViewMode,
+} from "@/lib/orgListPrefs"
+import { formatRelativeToNow } from "@/util/formatDate"
 
 function MissingOrgNotice({
   refreshing,
@@ -80,40 +98,87 @@ function MissingOrgNotice({
   )
 }
 
-function OrgCard({
-  summary,
-  index = 0,
-  planName,
-}: {
-  summary: Classroom50OrgSummary
-  index?: number
-  planName?: string
-}) {
-  const { t } = useTranslation()
+// Shared per-org affordances (whether the card/row can open, badges, actions),
+// so the grid card and list row stay in sync.
+function useOrgAffordances(summary: Classroom50OrgSummary) {
   const { org, membership, classroom50 } = summary
-
   const isReady = classroom50.status === "ready"
-  const needsSetup = classroom50.status === "needs_setup"
   const noAccess = classroom50.status === "no_access"
   const isAdmin = membership.role === "admin"
   const isActiveMember = membership.state === "active"
 
-  // Show a plan badge whenever GitHub returned a plan name (owners of
-  // Team/Enterprise/Free orgs). Unknown (non-owner, no plan visible) stays
-  // badge-less.
-  const showPlanBadge = classifyPlan(planName) !== "unknown"
+  return {
+    org,
+    noAccess,
+    showNoAccessBadge: noAccess && isAdmin,
+    // Teachers open ready orgs; students open any org they're an active member
+    // of (their assignment repos live there even without classroom50 access).
+    canOpen: isAdmin ? isReady : isActiveMember,
+    askTeacher: noAccess && !isActiveMember,
+  }
+}
 
-  // No-access-as-admin is the only role-derived badge we keep: a concrete "you
-  // can't read classroom50 here" state, not an inferred Teacher/Student label
-  // (which is just GitHub org-admin status and misleads students).
-  const showNoAccessBadge = noAccess && isAdmin
+function OrgActions({
+  summary,
+  updatedAgo,
+}: {
+  summary: Classroom50OrgSummary
+  updatedAgo?: string
+}) {
+  const { t } = useTranslation()
+  const { org, canOpen, askTeacher } = useOrgAffordances(summary)
+  return (
+    <>
+      <GitHubLink
+        href={`https://github.com/${org.login}`}
+        label={t("orgs.card.viewOnGitHub")}
+        title={t("orgs.card.openOnGitHub", { org: org.login })}
+        className="shrink-0"
+        showLogo={false}
+      />
+      {canOpen && (
+        <Link
+          to="/$org"
+          params={{ org: org.login }}
+          className="btn btn-primary btn-sm"
+        >
+          {t("orgs.card.open")}
+        </Link>
+      )}
+      {askTeacher && (
+        <button className="btn btn-disabled btn-sm">
+          {t("orgs.card.askTeacher")}
+        </button>
+      )}
+      {updatedAgo && (
+        <span className="sr-only">
+          {t("orgs.card.updatedAgo", { when: updatedAgo })}
+        </span>
+      )}
+    </>
+  )
+}
 
-  // A student is an active member who can't read the classroom50 config repo
-  // (no_access). Normal, not a dead end: they can still open the org to reach
-  // their assignment repos. A teacher (admin) opens any ready org; the
-  // service-token/policy preflight runs inside the org (ClassesPage), not here
-  // — checking every org would fan out too many GitHub API calls.
-  const canOpen = isAdmin ? isReady : isActiveMember
+function NoAccessBadge() {
+  const { t } = useTranslation()
+  return (
+    <span className="badge badge-neutral gap-1">
+      <Lock aria-hidden="true" className="size-3" />
+      {t("orgs.card.noAccessBadge_prefix")} <code>classroom50</code>{" "}
+      {t("orgs.card.noAccessBadge_suffix")}
+    </span>
+  )
+}
+
+function OrgCard({
+  summary,
+  updatedAgo,
+}: {
+  summary: Classroom50OrgSummary
+  updatedAgo?: string
+}) {
+  const { t } = useTranslation()
+  const { org, showNoAccessBadge } = useOrgAffordances(summary)
 
   return (
     <motion.div
@@ -121,7 +186,6 @@ function OrgCard({
       variants={enterExit}
       initial="initial"
       animate="animate"
-      transition={staggerTransition(index)}
     >
       <div className="card-body justify-between">
         <div className="flex gap-4">
@@ -140,126 +204,185 @@ function OrgCard({
               </p>
             )}
 
+            {updatedAgo && (
+              <p className="mt-1 text-xs text-base-content/50">
+                {t("orgs.card.updatedAgo", { when: updatedAgo })}
+              </p>
+            )}
+
             {showNoAccessBadge && (
               <div className="mt-3 flex flex-wrap gap-2">
-                <span className="badge badge-neutral gap-1">
-                  <Lock aria-hidden="true" className="size-3" />
-                  {t("orgs.card.noAccessBadge_prefix")} <code>classroom50</code>{" "}
-                  {t("orgs.card.noAccessBadge_suffix")}
-                </span>
+                <NoAccessBadge />
               </div>
             )}
           </div>
         </div>
 
-        <div className="card-actions mt-5 items-center justify-between">
-          <div className="flex items-center gap-3">
-            {showPlanBadge && (
-              <PlanBadge
-                name={planName}
-                title={
-                  classifyPlan(planName) === "free"
-                    ? t("orgs.card.planTitleFree")
-                    : t("orgs.card.planTitlePaid")
-                }
-              />
-            )}
-
-            <GitHubLink
-              href={`https://github.com/${org.login}`}
-              label={t("orgs.card.viewOnGitHub")}
-              title={t("orgs.card.openOnGitHub", { org: org.login })}
-              className="shrink-0"
-              showLogo={false}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            {canOpen && (
-              <Link
-                to="/$org"
-                params={{ org: org.login }}
-                className="btn btn-primary btn-sm"
-              >
-                {t("orgs.card.open")}
-              </Link>
-            )}
-
-            {needsSetup && (
-              <Link
-                to="/$org/setup"
-                params={{ org: org.login }}
-                className="btn btn-warning btn-sm"
-              >
-                {t("orgs.card.setUp")}
-              </Link>
-            )}
-
-            {noAccess && !isActiveMember && (
-              <button className="btn btn-disabled btn-sm">
-                {t("orgs.card.askTeacher")}
-              </button>
-            )}
-          </div>
+        <div className="card-actions mt-5 items-center justify-end gap-2">
+          <OrgActions summary={summary} />
         </div>
       </div>
     </motion.div>
   )
 }
 
+function OrgRow({
+  summary,
+  updatedAgo,
+}: {
+  summary: Classroom50OrgSummary
+  updatedAgo?: string
+}) {
+  const { org, showNoAccessBadge } = useOrgAffordances(summary)
+
+  return (
+    <motion.div
+      className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between"
+      variants={enterExit}
+      initial="initial"
+      animate="animate"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <img
+          src={org.avatar_url}
+          alt=""
+          className="size-9 shrink-0 rounded-lg border border-base-300"
+        />
+        <div className="min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="truncate font-semibold">{org.login}</span>
+            {showNoAccessBadge && (
+              <span className="hidden sm:inline-flex">
+                <NoAccessBadge />
+              </span>
+            )}
+          </div>
+          {org.description && (
+            <p className="truncate text-sm text-base-content/60">
+              {org.description}
+            </p>
+          )}
+          {updatedAgo && (
+            <p className="truncate text-xs text-base-content/50">
+              {updatedAgo}
+            </p>
+          )}
+        </div>
+      </div>
+
+      <div className="flex shrink-0 items-center justify-end gap-2">
+        <OrgActions summary={summary} updatedAgo={updatedAgo} />
+      </div>
+    </motion.div>
+  )
+}
+
+const SORT_OPTIONS: { key: OrgSortKey; labelKey: string }[] = [
+  { key: "name-asc", labelKey: "orgs.toolbar.sort.nameAsc" },
+  { key: "name-desc", labelKey: "orgs.toolbar.sort.nameDesc" },
+  { key: "last-modified", labelKey: "orgs.toolbar.sort.lastModified" },
+  { key: "status", labelKey: "orgs.toolbar.sort.status" },
+]
+
+// "ready" (teacher) before "no_access" (enrolled student) for the status sort.
+const statusWeight = (summary: Classroom50OrgSummary) =>
+  summary.classroom50.status === "ready" ? 0 : 1
+
 const OrgsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.organizations"))
   const queryClient = useQueryClient()
   const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
-  const [showUnsupported, setShowUnsupported] = useState(false)
+
+  const [viewMode, setViewMode] = useState<OrgViewMode>(getStoredViewMode)
+  const [sortKey, setSortKey] = useState<OrgSortKey>(getStoredSortKey)
+  const [search, setSearch] = useState("")
+  const [modalOpen, setModalOpen] = useState(false)
+
+  const changeView = (mode: OrgViewMode) => {
+    setViewMode(mode)
+    persistViewMode(mode)
+  }
+  const changeSort = (key: OrgSortKey) => {
+    setSortKey(key)
+    persistSortKey(key)
+  }
 
   // Confirmed Classroom 50 orgs the user can use: a teacher's ready org, or a
-  // student's enrolled org (no_access but the public Pages index confirmed it).
-  const cl50Orgs = orgs?.filter(
-    (summary) =>
-      summary.classroom50.status === "ready" ||
-      summary.classroom50.status === "no_access",
-  )
-  // Orgs where the user is an admin who hasn't set up Classroom 50 yet —
-  // offered in "Set Up". Unrelated (not_classroom50) and indeterminate
-  // (unknown) orgs are filtered out.
-  const nonCl50Orgs = orgs?.filter(
-    (summary) => summary.classroom50.status === "needs_setup",
-  )
-
-  // Plan is fetched only for the needs-setup subset (all admin-owned, so plan
-  // is visible) to drive the badge, sort, and free-org filter — without the
-  // per-org fan-out on the whole list.
-  const needsSetupLogins = useMemo(
-    () => nonCl50Orgs.map((summary) => summary.org.login),
-    [nonCl50Orgs],
-  )
-  const plans = useNeedsSetupPlans(needsSetupLogins)
-
-  // Bubble Team/Enterprise (supported) to top, then unknown, then free. Stable
-  // sort keeps GitHub's order within each bucket.
-  const sortedNonCl50Orgs = useMemo(
+  // student's enrolled org (no_access confirmed via the public Pages index).
+  const cl50Orgs = useMemo(
     () =>
-      [...nonCl50Orgs].sort((a, b) => {
-        const wa = planSortWeight(classifyPlan(plans[a.org.login]))
-        const wb = planSortWeight(classifyPlan(plans[b.org.login]))
-        return wa - wb
-      }),
-    [nonCl50Orgs, plans],
+      orgs.filter(
+        (summary) =>
+          summary.classroom50.status === "ready" ||
+          summary.classroom50.status === "no_access",
+      ),
+    [orgs],
+  )
+  // Admin-owned orgs without Classroom 50 yet — offered through the modal.
+  const needsSetupOrgs = useMemo(
+    () =>
+      orgs.filter((summary) => summary.classroom50.status === "needs_setup"),
+    [orgs],
   )
 
-  // Free-plan orgs can't be set up, so hide them by default. Unknown plan
-  // (guarded anyway) is always shown so a usable org is never hidden.
-  const visibleNonCl50Orgs = showUnsupported
-    ? sortedNonCl50Orgs
-    : sortedNonCl50Orgs.filter(
-        (summary) => classifyPlan(plans[summary.org.login]) !== "free",
-      )
-  const hiddenFreeCount = sortedNonCl50Orgs.length - visibleNonCl50Orgs.length
+  const query = search.trim().toLowerCase()
+  const filtered = useMemo(
+    () =>
+      query
+        ? cl50Orgs.filter((summary) => {
+            const { login, description } = summary.org
+            return (
+              login.toLowerCase().includes(query) ||
+              (description ?? "").toLowerCase().includes(query)
+            )
+          })
+        : cl50Orgs,
+    [cl50Orgs, query],
+  )
+
+  // Last-modified data is fetched only when its sort is active, for the shown
+  // set, so other views never fan out per-org.
+  const lastModifiedActive = sortKey === "last-modified"
+  const shownLogins = useMemo(
+    () => filtered.map((summary) => summary.org.login),
+    [filtered],
+  )
+  const lastModified = useOrgLastModified(shownLogins, lastModifiedActive)
+
+  const sorted = useMemo(() => {
+    const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
+      a.org.login.localeCompare(b.org.login)
+    const list = [...filtered]
+    switch (sortKey) {
+      case "name-desc":
+        return list.sort((a, b) => byName(b, a))
+      case "status":
+        return list.sort(
+          (a, b) => statusWeight(a) - statusWeight(b) || byName(a, b),
+        )
+      case "last-modified":
+        // Known timestamps newest-first; pending/unknown pinned to the bottom
+        // in stable Name order so rows don't reshuffle as queries resolve.
+        return list.sort((a, b) => {
+          const ta = lastModified[a.org.login]
+          const tb = lastModified[b.org.login]
+          if (ta && tb) return tb.localeCompare(ta)
+          if (ta) return -1
+          if (tb) return 1
+          return byName(a, b)
+        })
+      case "name-asc":
+      default:
+        return list.sort(byName)
+    }
+  }, [filtered, sortKey, lastModified])
 
   const handleRefresh = () =>
     queryClient.invalidateQueries({ queryKey: ["orgs"] })
+
+  const hasAnyOrgs = cl50Orgs.length > 0
+  const noSearchResults = hasAnyOrgs && sorted.length === 0
 
   return (
     <div className="min-h-screen">
@@ -268,10 +391,7 @@ const OrgsPage = () => {
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
           {isLoading ? (
             <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
-              <span
-                className="loading loading-spinner loading-lg text-primary"
-                aria-hidden="true"
-              />
+              <Spinner size="lg" className="text-primary" />
               <div>
                 <p className="text-base font-semibold">
                   {t("orgs.loadingTitle")}
@@ -284,74 +404,151 @@ const OrgsPage = () => {
           ) : (
             <div className="mb-8">
               <div className="flex flex-col gap-6 p-6">
-                <div className="w-full space-y-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <h1 className="text-2xl font-bold tracking-tight">
                     {t("orgs.headingCl50")}
                   </h1>
-                  <MissingOrgNotice
-                    refreshing={isFetching}
-                    onRefresh={handleRefresh}
-                  />
-                  <div className="grid grid-cols-12 gap-4">
-                    {cl50Orgs?.map((summary, i) => (
-                      <OrgCard
-                        key={summary.org.id}
-                        summary={summary}
-                        index={i}
-                      />
-                    ))}
-                  </div>
-                  {cl50Orgs?.length === 0 && (
-                    <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-                      <h2 className="text-lg font-semibold">
-                        {t("orgs.emptyTitle")}
-                      </h2>
-                      <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                        {t("orgs.emptyBody")}
-                      </p>
-                    </div>
-                  )}
+                  <button
+                    type="button"
+                    className="btn btn-primary btn-sm"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    {t("orgs.newOrg.button")}
+                  </button>
                 </div>
-                {nonCl50Orgs.length > 0 && <div className="divider" />}
-                {nonCl50Orgs.length > 0 && (
-                  <div className="w-full space-y-4">
-                    <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                      <h1 className="text-2xl font-bold tracking-tight">
-                        {t("orgs.headingSetUp")}
-                      </h1>
-                      {(hiddenFreeCount > 0 || showUnsupported) && (
-                        <label className="label cursor-pointer gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            className="toggle toggle-sm"
-                            checked={showUnsupported}
-                            onChange={(e) =>
-                              setShowUnsupported(e.target.checked)
-                            }
-                            aria-label={t("orgs.showUnsupported")}
-                          />
-                          <span className="label-text">
-                            {t("orgs.showUnsupported")}
-                            {hiddenFreeCount > 0 && !showUnsupported && (
-                              <span aria-hidden="true">
-                                {" "}
-                                ({hiddenFreeCount})
-                              </span>
-                            )}
-                          </span>
-                        </label>
-                      )}
+
+                <MissingOrgNotice
+                  refreshing={isFetching}
+                  onRefresh={handleRefresh}
+                />
+
+                {hasAnyOrgs && (
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
+                      <Search
+                        aria-hidden="true"
+                        className="size-4 text-base-content/50"
+                      />
+                      <input
+                        type="search"
+                        className="grow"
+                        placeholder={t("orgs.toolbar.searchPlaceholder")}
+                        aria-label={t("orgs.toolbar.searchLabel")}
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                      />
+                    </label>
+
+                    <div className="flex items-center gap-3">
+                      <select
+                        className="select select-bordered select-sm"
+                        aria-label={t("orgs.toolbar.sort.label")}
+                        value={sortKey}
+                        onChange={(e) =>
+                          changeSort(e.target.value as OrgSortKey)
+                        }
+                      >
+                        {SORT_OPTIONS.map((opt) => (
+                          <option key={opt.key} value={opt.key}>
+                            {t(opt.labelKey)}
+                          </option>
+                        ))}
+                      </select>
+
+                      <div
+                        role="group"
+                        aria-label={t("orgs.toolbar.view.label")}
+                        className="tabs tabs-box tabs-sm"
+                      >
+                        <button
+                          type="button"
+                          className={`tab ${viewMode === "grid" ? "tab-active" : ""}`}
+                          aria-label={t("orgs.toolbar.view.gridLabel")}
+                          aria-pressed={viewMode === "grid"}
+                          onClick={() => changeView("grid")}
+                        >
+                          <LayoutGrid aria-hidden="true" className="size-4" />
+                        </button>
+                        <button
+                          type="button"
+                          className={`tab ${viewMode === "list" ? "tab-active" : ""}`}
+                          aria-label={t("orgs.toolbar.view.listLabel")}
+                          aria-pressed={viewMode === "list"}
+                          onClick={() => changeView("list")}
+                        >
+                          <ListIcon aria-hidden="true" className="size-4" />
+                        </button>
+                      </div>
                     </div>
-                    <div className="grid grid-cols-12 gap-4">
-                      {visibleNonCl50Orgs.map((summary, i) => (
+                  </div>
+                )}
+
+                {noSearchResults ? (
+                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+                    <h2 className="text-lg font-semibold">
+                      {t("orgs.noResults.title")}
+                    </h2>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
+                      {t("orgs.noResults.body", { query: search.trim() })}
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm mt-4"
+                      onClick={() => setSearch("")}
+                    >
+                      {t("orgs.noResults.clear")}
+                    </button>
+                  </div>
+                ) : sorted.length > 0 ? (
+                  <div className="grid grid-cols-12 gap-4">
+                    {sorted.map((summary) => {
+                      const updatedIso = lastModifiedActive
+                        ? lastModified[summary.org.login]
+                        : undefined
+                      const updatedAgo = updatedIso
+                        ? formatRelativeToNow(new Date(updatedIso))
+                        : undefined
+                      return viewMode === "grid" ? (
                         <OrgCard
                           key={summary.org.id}
                           summary={summary}
-                          index={i}
-                          planName={plans[summary.org.login]}
+                          updatedAgo={updatedAgo}
                         />
-                      ))}
-                    </div>
+                      ) : (
+                        <OrgRow
+                          key={summary.org.id}
+                          summary={summary}
+                          updatedAgo={updatedAgo}
+                        />
+                      )
+                    })}
+                  </div>
+                ) : needsSetupOrgs.length > 0 ? (
+                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+                    <h2 className="text-lg font-semibold">
+                      {t("orgs.setUpFirst.title")}
+                    </h2>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
+                      {t("orgs.setUpFirst.body")}
+                    </p>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm mt-4"
+                      onClick={() => setModalOpen(true)}
+                    >
+                      <Plus aria-hidden="true" className="size-4" />
+                      {t("orgs.setUpFirst.cta")}
+                    </button>
+                  </div>
+                ) : (
+                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
+                    <h2 className="text-lg font-semibold">
+                      {t("orgs.emptyTitle")}
+                    </h2>
+                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
+                      {t("orgs.emptyBody")}
+                    </p>
                   </div>
                 )}
               </div>
@@ -360,6 +557,12 @@ const OrgsPage = () => {
         </DrawerContent>
         <DrawerSidebar page="orgs" />
       </Drawer>
+
+      <NewOrgModal
+        open={modalOpen}
+        needsSetupOrgs={needsSetupOrgs}
+        onClose={() => setModalOpen(false)}
+      />
     </div>
   )
 }

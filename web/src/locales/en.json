@@ -454,12 +454,46 @@
   },
   "orgs": {
     "headingCl50": "Classroom 50 Organizations",
-    "headingSetUp": "Set Up New Classroom 50 Organization",
     "loadingTitle": "Loading your organizations…",
     "loadingSubtitle": "This may take a moment.",
     "emptyTitle": "No Classroom 50 organizations yet",
     "emptyBody": "Organizations you belong to that use Classroom 50 will appear here. If you expect one, ask your instructor to confirm you've been added, then refresh.",
-    "showUnsupported": "Show unsupported organizations",
+    "toolbar": {
+      "searchPlaceholder": "Search organizations…",
+      "searchLabel": "Search organizations",
+      "view": {
+        "label": "View",
+        "gridLabel": "Grid view",
+        "listLabel": "List view"
+      },
+      "sort": {
+        "label": "Sort",
+        "nameAsc": "Name (A–Z)",
+        "nameDesc": "Name (Z–A)",
+        "lastModified": "Last modified",
+        "status": "Status"
+      }
+    },
+    "noResults": {
+      "title": "No organizations match your search",
+      "body": "No organizations match \u201c{{query}}\u201d.",
+      "clear": "Clear search"
+    },
+    "setUpFirst": {
+      "title": "Set up your first Classroom 50 organization",
+      "body": "You own organizations that aren't set up yet. Configure Classroom 50 to start creating classrooms and assignments.",
+      "cta": "Set up an organization"
+    },
+    "newOrg": {
+      "button": "New organization",
+      "title": "Set up a new Classroom 50 organization",
+      "description": "Pick one of your GitHub organizations to configure Classroom 50 in. Don't see the one you want? Create it on GitHub first.",
+      "pickPrompt": "Organizations ready to set up",
+      "createOnGitHub": "Create an organization on GitHub",
+      "allSetUp": "All of your organizations are already set up.",
+      "setUp": "Set up",
+      "freePlanDisabled": "Free plan — Classroom 50 needs a Team or Enterprise organization"
+    },
     "missingNotice": {
       "title": "Not seeing your organization?",
       "body": "Classroom 50 can only show GitHub organizations that you have explicitly granted access to during sign-in. If an organization is missing, you may need to update your OAuth permissions.",
@@ -475,8 +509,8 @@
       "viewOnGitHub": "View on GitHub",
       "openOnGitHub": "Open {{org}} on GitHub",
       "open": "Open",
-      "setUp": "Set Up",
-      "askTeacher": "Ask a teacher for access"
+      "askTeacher": "Ask a teacher for access",
+      "updatedAgo": "Updated {{when}}"
     }
   },
   "assignments": {

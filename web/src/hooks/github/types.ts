@@ -82,6 +82,11 @@ export type GitHubRepo = {
   default_branch: string
   visibility?: "public" | "private" | "internal"
   archived?: boolean
+  // Last push to the repo; used to sort orgs by "last modified" on the home
+  // page. GitHub returns both on GET /repos; typed optional as older callers
+  // don't rely on them.
+  pushed_at?: string
+  updated_at?: string
   description?: string | null
   owner?: {
     login: string
