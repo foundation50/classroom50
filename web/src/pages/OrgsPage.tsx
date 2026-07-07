@@ -10,6 +10,7 @@ import useOrgLastModified from "@/hooks/useOrgLastModified"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import {
+  ChevronDown,
   ExternalLink,
   Info,
   LayoutGrid,
@@ -45,56 +46,52 @@ function MissingOrgNotice({
 }) {
   const { t } = useTranslation()
   return (
-    <div className="rounded-2xl border border-info/20 bg-info/5 p-5 shadow-sm">
-      <div className="flex gap-4">
-        <div className="mt-1 flex size-10 shrink-0 items-center justify-center rounded-full bg-info/10 text-info">
-          <Info aria-hidden="true" className="size-5" />
-        </div>
+    <details className="group rounded-xl border border-info/20 bg-info/5">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
+        <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
+        <span className="min-w-0 flex-1 truncate font-medium text-base-content">
+          {t("orgs.missingNotice.title")}
+        </span>
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs"
+          disabled={refreshing}
+          onClick={(e) => {
+            // The button lives inside <summary>; stop the click from toggling
+            // the disclosure so refreshing doesn't also expand/collapse it.
+            e.preventDefault()
+            onRefresh()
+          }}
+        >
+          <RefreshCw
+            aria-hidden="true"
+            className={["size-3.5", refreshing ? "animate-spin" : ""].join(" ")}
+          />
+          {refreshing
+            ? t("orgs.missingNotice.refreshing")
+            : t("orgs.missingNotice.refresh")}
+        </button>
+        <ChevronDown
+          aria-hidden="true"
+          className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
+        />
+      </summary>
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-            <div>
-              <h2 className="text-base font-semibold text-base-content">
-                {t("orgs.missingNotice.title")}
-              </h2>
-
-              <p className="mt-1 text-sm leading-6 text-base-content/70">
-                {t("orgs.missingNotice.body")}
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-4 flex flex-col gap-2 sm:flex-row sm:items-center">
-            <a
-              href="https://github.com/settings/connections/applications"
-              target="_blank"
-              rel="noreferrer"
-              className="btn btn-info btn-sm"
-            >
-              {t("orgs.missingNotice.manageOauth")}
-              <ExternalLink aria-hidden="true" className="size-4" />
-            </a>
-
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={refreshing}
-              onClick={onRefresh}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                className={["size-4", refreshing ? "animate-spin" : ""].join(
-                  " ",
-                )}
-              />
-              {refreshing
-                ? t("orgs.missingNotice.refreshing")
-                : t("orgs.missingNotice.refresh")}
-            </button>
-          </div>
-        </div>
+      <div className="border-t border-info/20 px-4 py-3">
+        <p className="text-sm leading-6 text-base-content/70">
+          {t("orgs.missingNotice.body")}
+        </p>
+        <a
+          href="https://github.com/settings/connections/applications"
+          target="_blank"
+          rel="noreferrer"
+          className="btn btn-info btn-sm mt-3"
+        >
+          {t("orgs.missingNotice.manageOauth")}
+          <ExternalLink aria-hidden="true" className="size-4" />
+        </a>
       </div>
-    </div>
+    </details>
   )
 }
 
@@ -275,7 +272,6 @@ function OrgRow({
 
 const SORT_OPTIONS: { key: OrgSortKey; labelKey: string }[] = [
   { key: "name-asc", labelKey: "orgs.toolbar.sort.nameAsc" },
-  { key: "name-desc", labelKey: "orgs.toolbar.sort.nameDesc" },
   { key: "last-modified", labelKey: "orgs.toolbar.sort.lastModified" },
   { key: "status", labelKey: "orgs.toolbar.sort.status" },
 ]
@@ -351,8 +347,6 @@ const OrgsPage = () => {
       a.org.login.localeCompare(b.org.login)
     const list = [...filtered]
     switch (sortKey) {
-      case "name-desc":
-        return list.sort((a, b) => byName(b, a))
       case "status":
         return list.sort(
           (a, b) => statusWeight(a) - statusWeight(b) || byName(a, b),
@@ -404,14 +398,6 @@ const OrgsPage = () => {
                   <h1 className="text-2xl font-bold tracking-tight">
                     {t("orgs.headingCl50")}
                   </h1>
-                  <button
-                    type="button"
-                    className="btn btn-primary btn-sm"
-                    onClick={() => setModalOpen(true)}
-                  >
-                    <Plus aria-hidden="true" className="size-4" />
-                    {t("orgs.newOrg.button")}
-                  </button>
                 </div>
 
                 <MissingOrgNotice
@@ -455,11 +441,11 @@ const OrgsPage = () => {
                       <div
                         role="group"
                         aria-label={t("orgs.toolbar.view.label")}
-                        className="tabs tabs-box tabs-sm"
+                        className="join"
                       >
                         <button
                           type="button"
-                          className={`tab ${viewMode === "grid" ? "tab-active" : ""}`}
+                          className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
                           aria-label={t("orgs.toolbar.view.gridLabel")}
                           aria-pressed={viewMode === "grid"}
                           onClick={() => changeView("grid")}
@@ -468,7 +454,7 @@ const OrgsPage = () => {
                         </button>
                         <button
                           type="button"
-                          className={`tab ${viewMode === "list" ? "tab-active" : ""}`}
+                          className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
                           aria-label={t("orgs.toolbar.view.listLabel")}
                           aria-pressed={viewMode === "list"}
                           onClick={() => changeView("list")}
@@ -476,6 +462,14 @@ const OrgsPage = () => {
                           <ListIcon aria-hidden="true" className="size-4" />
                         </button>
                       </div>
+
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={() => setModalOpen(true)}
+                      >
+                        {t("orgs.newOrg.button")}
+                      </button>
                     </div>
                   </div>
                 )}

@@ -3,7 +3,7 @@
 // not server data.
 
 export type OrgViewMode = "grid" | "list"
-export type OrgSortKey = "name-asc" | "name-desc" | "last-modified" | "status"
+export type OrgSortKey = "name-asc" | "last-modified" | "status"
 
 const VIEW_KEY = "orgs_view_mode"
 const SORT_KEY = "orgs_sort_key"
@@ -12,12 +12,7 @@ const DEFAULT_VIEW: OrgViewMode = "grid"
 const DEFAULT_SORT: OrgSortKey = "name-asc"
 
 const VIEW_VALUES: OrgViewMode[] = ["grid", "list"]
-const SORT_VALUES: OrgSortKey[] = [
-  "name-asc",
-  "name-desc",
-  "last-modified",
-  "status",
-]
+const SORT_VALUES: OrgSortKey[] = ["name-asc", "last-modified", "status"]
 
 function canUseStorage() {
   return typeof window !== "undefined"
