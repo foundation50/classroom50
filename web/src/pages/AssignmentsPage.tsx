@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import Drawer, {
@@ -115,36 +116,37 @@ const TeacherAssignmentsView = ({
 
   return (
     <div>
-      <div className="flex justify-between">
-        <div>
-          {classroomLoading ? (
-            <div className="skeleton skeleton-shimmer mt-8 mb-2 h-6 w-48" />
-          ) : (
-            <h1 className="text-lg pt-8 pb-2 font-bold flex items-center gap-2">
+      <div className="mb-8">
+        <PageHeader
+          loading={classroomLoading}
+          title={
+            <span className="flex items-center gap-2">
               {classroomData?.name || classroomData?.short_name || classroom}
               {myRoleLabel ? (
                 <span className="badge badge-soft badge-primary badge-sm align-middle">
                   {myRoleLabel}
                 </span>
               ) : null}
-            </h1>
-          )}
-          <h3 className="pb-10">
-            {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading
-              ? "…"
-              : t("assignments.studentCount", { count: students.length })}
-          </h3>
-        </div>
-        <div className="pt-10">
-          {archived ? (
-            <span className="badge badge-soft badge-neutral">
-              {t("assignments.archived")}
             </span>
-          ) : (
-            <NewAssignmentButton org={org} classroom={classroom} />
-          )}
-        </div>
+          }
+          subtitle={
+            <>
+              {classroomData?.term ? `${classroomData?.term} • ` : ""}
+              {studentsLoading
+                ? "…"
+                : t("assignments.studentCount", { count: students.length })}
+            </>
+          }
+          action={
+            archived ? (
+              <span className="badge badge-soft badge-neutral">
+                {t("assignments.archived")}
+              </span>
+            ) : (
+              <NewAssignmentButton org={org} classroom={classroom} />
+            )
+          }
+        />
       </div>
       {archived ? (
         <ArchivedClassroomNotice>

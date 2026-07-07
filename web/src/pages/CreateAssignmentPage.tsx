@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import RequireTeacher from "@/components/RequireTeacher"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
@@ -119,12 +120,8 @@ const CreateAssignmentPage = () => {
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
           <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
           <RequireTeacher>
-            <div className="flex justify-between">
-              <div>
-                <h1 className="text-xl pt-8 pb-10 font-bold">
-                  {t("assignments.createHeading")}
-                </h1>
-              </div>
+            <div className="mb-8">
+              <PageHeader title={t("assignments.createHeading")} />
             </div>
             {emptyRoster.show ? (
               <EmptyRosterNotice

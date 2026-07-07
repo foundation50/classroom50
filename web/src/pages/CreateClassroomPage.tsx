@@ -15,6 +15,7 @@ import Drawer, {
 } from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import RequireTeacher from "@/components/RequireTeacher"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
@@ -98,12 +99,8 @@ const CreateClassroomPage = () => {
         <DrawerContent className="p-10 bg-base-200 2xl:px-50">
           <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
           <RequireTeacher allow="owner">
-            <div className="flex justify-between">
-              <div>
-                <h1 className="text-xl pt-8 pb-10 font-bold">
-                  {t("classes.createTitle")}
-                </h1>
-              </div>
+            <div className="mb-8">
+              <PageHeader title={t("classes.createTitle")} />
             </div>
             <div className="flex flex-col">
               <div className="mb-8">

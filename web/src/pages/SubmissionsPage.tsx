@@ -15,6 +15,7 @@ import {
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import Drawer, {
   DrawerContent,
@@ -495,48 +496,48 @@ const SubmissionsPageContent = () => {
               onRetry={() => refetchScores()}
             />
           )}
-          <div className="flex justify-between">
-            <div>
-              <h1 className="text-lg pt-8 pb-2 font-bold">
-                {assignmentInfo?.name}
-              </h1>
-              <div className="flex flex-wrap items-center gap-2 pb-10 text-sm text-base-content/70">
-                <span>
-                  {assignmentInfo?.due
-                    ? t("submissions.dueDate", {
-                        date: formatDueDateTime(assignmentInfo.due),
-                      })
-                    : t("submissions.noDueDate")}
-                </span>
-                {lateCount > 0 && (
-                  <span className="badge badge-sm badge-error badge-soft">
-                    {t("submissions.lateBadge", { count: lateCount })}
+          <div className="mb-8">
+            <PageHeader
+              title={assignmentInfo?.name}
+              subtitle={
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>
+                    {assignmentInfo?.due
+                      ? t("submissions.dueDate", {
+                          date: formatDueDateTime(assignmentInfo.due),
+                        })
+                      : t("submissions.noDueDate")}
                   </span>
-                )}
-                {assignmentInfo?.template && (
-                  <GitHubLink
-                    href={githubTemplateRepoUrl(
-                      assignmentInfo.template.owner,
-                      assignmentInfo.template.repo,
-                      assignmentInfo.template.branch,
-                    )}
-                    label={t("submissions.viewSourceRepo")}
-                    title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
-                  />
-                )}
-              </div>
-            </div>
-            <div className="pt-10">
-              <button
-                type="button"
-                className="btn btn-outline"
-                onClick={downloadScoresCsv}
-                disabled={!scoresInfo.length && !nonSubmitters.length}
-              >
-                <HardDriveDownload aria-hidden="true" />{" "}
-                {t("submissions.downloadCsv")}
-              </button>
-            </div>
+                  {lateCount > 0 && (
+                    <span className="badge badge-sm badge-error badge-soft">
+                      {t("submissions.lateBadge", { count: lateCount })}
+                    </span>
+                  )}
+                  {assignmentInfo?.template && (
+                    <GitHubLink
+                      href={githubTemplateRepoUrl(
+                        assignmentInfo.template.owner,
+                        assignmentInfo.template.repo,
+                        assignmentInfo.template.branch,
+                      )}
+                      label={t("submissions.viewSourceRepo")}
+                      title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
+                    />
+                  )}
+                </div>
+              }
+              action={
+                <button
+                  type="button"
+                  className="btn btn-outline"
+                  onClick={downloadScoresCsv}
+                  disabled={!scoresInfo.length && !nonSubmitters.length}
+                >
+                  <HardDriveDownload aria-hidden="true" />{" "}
+                  {t("submissions.downloadCsv")}
+                </button>
+              }
+            />
           </div>
           <div className="mb-4 rounded-box border border-info/20 bg-info/5">
             {/* Action bar: standing note left, the two actions + a single

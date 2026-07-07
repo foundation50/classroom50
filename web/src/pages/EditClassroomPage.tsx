@@ -1,4 +1,5 @@
 import Breadcrumb from "@/components/breadcrumb"
+import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import Drawer, {
   DrawerContent,
@@ -108,19 +109,19 @@ const EditClassroomContent = ({
         <div className="alert alert-error">{t("classes.couldNotLoad")}</div>
       ) : (
         <>
-          <div className="flex justify-between">
-            <div>
-              <h1 className="text-xl pt-8 pb-2 font-bold">
-                {t("documentTitle.classroomSettings")}
-              </h1>
-              <p className="pb-10 text-sm text-base-content/70">
-                {t("classes.settingsSubtitle_prefix")}{" "}
-                <span className="font-semibold">
-                  {cl.name || cl.short_name || classroom}
-                </span>{" "}
-                {t("classes.settingsSubtitle_suffix")}
-              </p>
-            </div>
+          <div className="mb-8">
+            <PageHeader
+              title={t("documentTitle.classroomSettings")}
+              subtitle={
+                <>
+                  {t("classes.settingsSubtitle_prefix")}{" "}
+                  <span className="font-semibold">
+                    {cl.name || cl.short_name || classroom}
+                  </span>{" "}
+                  {t("classes.settingsSubtitle_suffix")}
+                </>
+              }
+            />
           </div>
           <div className="flex flex-col">
             <div className="mb-8">
