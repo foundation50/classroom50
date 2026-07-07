@@ -4,12 +4,13 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { repoQuery } from "@/hooks/github/queries"
 
 // Reads each org's `classroom50` config-repo `pushed_at` to drive the home
-// page's "last modified" sort. Reuses `repoQuery` (same cache key as the
-// ready-org existence read) so we don't fan out a second request per org or
-// collide with githubKeys.repo. Only called with `enabled` true when the user
-// actually selects the last-modified sort, keeping the default view
-// fan-out-free. Maps login -> ISO timestamp, or undefined when pending /
-// unreadable (e.g. no_access orgs, 404s) — the caller pins those to the bottom.
+// page's "last modified" sort. Uses `repoQuery` so the result shares the
+// `githubKeys.repo(login, "classroom50")` cache with other classroom50-repo
+// readers instead of adding a bespoke per-org query. Only called with `enabled`
+// true when the user actually selects the last-modified sort, keeping the
+// default view fan-out-free. Maps login -> ISO timestamp, or undefined when
+// pending / unreadable (e.g. no_access orgs, 404s) — the caller pins those to
+// the bottom.
 const useOrgLastModified = (
   logins: string[],
   enabled: boolean,

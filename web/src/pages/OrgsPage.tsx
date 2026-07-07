@@ -105,6 +105,8 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
   const isReady = classroom50.status === "ready"
   const noAccess = classroom50.status === "no_access"
   const isAdmin = membership.role === "admin"
+  // useGetOrgs only surfaces active memberships, so every summary here is an
+  // active member.
   const isActiveMember = membership.state === "active"
 
   return {
@@ -114,7 +116,6 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
     // Teachers open ready orgs; students open any org they're an active member
     // of (their assignment repos live there even without classroom50 access).
     canOpen: isAdmin ? isReady : isActiveMember,
-    askTeacher: noAccess && !isActiveMember,
   }
 }
 
@@ -126,7 +127,7 @@ function OrgActions({
   updatedAgo?: string
 }) {
   const { t } = useTranslation()
-  const { org, canOpen, askTeacher } = useOrgAffordances(summary)
+  const { org, canOpen } = useOrgAffordances(summary)
   return (
     <>
       <GitHubLink
@@ -144,11 +145,6 @@ function OrgActions({
         >
           {t("orgs.card.open")}
         </Link>
-      )}
-      {askTeacher && (
-        <button className="btn btn-disabled btn-sm">
-          {t("orgs.card.askTeacher")}
-        </button>
       )}
       {updatedAgo && (
         <span className="sr-only">

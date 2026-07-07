@@ -509,7 +509,6 @@
       "viewOnGitHub": "View on GitHub",
       "openOnGitHub": "Open {{org}} on GitHub",
       "open": "Open",
-      "askTeacher": "Ask a teacher for access",
       "updatedAgo": "Updated {{when}}"
     }
   },
