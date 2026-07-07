@@ -1189,6 +1189,10 @@
     "toolbar": {
       "searchPlaceholder": "Search classrooms…",
       "searchLabel": "Search classrooms",
+      "termLabel": "Filter by term",
+      "termPrefix": "Term",
+      "sortPrefix": "Sort",
+      "allTerms": "All terms",
       "sort": {
         "label": "Sort",
         "nameAsc": "Name (A–Z)",

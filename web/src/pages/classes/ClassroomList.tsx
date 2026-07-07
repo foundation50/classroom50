@@ -42,6 +42,7 @@ const ClassroomList = ({
   const [viewMode, setViewMode] = useState<ClassroomViewMode>(getStoredViewMode)
   const [sortKey, setSortKey] = useState<ClassroomSortKey>(getStoredSortKey)
   const [filter, setFilter] = useState<ClassFilter>("active")
+  const [termFilter, setTermFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
   // While any card's menu is open, freeze the rendered order so an async
   // re-sort (e.g. a roster resolving under student-count sort) can't shift a
@@ -63,6 +64,22 @@ const ClassroomList = ({
     sortKey === "student-count",
   )
 
+  // Distinct non-empty terms across the (resolved) classrooms, for the term
+  // filter. Only offered when a teacher actually uses terms on 2+ of them.
+  const terms = useMemo(() => {
+    const set = new Set<string>()
+    for (const s of summaries) {
+      const term = s.term?.trim()
+      if (term) set.add(term)
+    }
+    return Array.from(set).sort((a, b) => a.localeCompare(b))
+  }, [summaries])
+  const showTermFilter = terms.length > 1
+  // Guard against a stale selection when the available terms change (e.g. the
+  // last classroom of a term is deleted): fall back to "all".
+  const activeTerm =
+    termFilter !== "all" && !terms.includes(termFilter) ? "all" : termFilter
+
   const query = search.trim().toLowerCase()
   const filtered = useMemo(
     () =>
@@ -70,6 +87,8 @@ const ClassroomList = ({
         if (s.loading) return false
         if (filter === "active" && s.archived) return false
         if (filter === "archived" && !s.archived) return false
+        if (activeTerm !== "all" && (s.term?.trim() ?? "") !== activeTerm)
+          return false
         if (!query) return true
         return (
           displayName(s).toLowerCase().includes(query) ||
@@ -77,7 +96,7 @@ const ClassroomList = ({
           (s.term ?? "").toLowerCase().includes(query)
         )
       }),
-    [summaries, filter, query],
+    [summaries, filter, activeTerm, query],
   )
 
   const sorted = useMemo(() => {
@@ -121,8 +140,8 @@ const ClassroomList = ({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
+      <div className="flex flex-wrap items-center gap-2 rounded-xl border border-base-300 bg-base-100 p-2">
+        <label className="input input-sm input-bordered flex min-w-48 flex-1 items-center gap-2">
           <Search aria-hidden="true" className="size-4 text-base-content/50" />
           <input
             type="search"
@@ -134,27 +153,51 @@ const ClassroomList = ({
           />
         </label>
 
-        <div className="flex flex-wrap items-center gap-3">
-          <div
-            role="group"
-            aria-label={t("classes.filter.label")}
-            className="join"
-          >
-            {(["active", "archived", "all"] as const).map((f) => (
-              <button
-                key={f}
-                type="button"
-                className={`btn btn-sm join-item ${filter === f ? "btn-active" : ""}`}
-                aria-pressed={filter === f}
-                onClick={() => setFilter(f)}
-              >
-                {t(`classes.filter.${f}`)}
-              </button>
-            ))}
-          </div>
+        <div
+          role="group"
+          aria-label={t("classes.filter.label")}
+          className="join"
+        >
+          {(["active", "archived", "all"] as const).map((f) => (
+            <button
+              key={f}
+              type="button"
+              className={`btn btn-sm join-item ${filter === f ? "btn-active" : ""}`}
+              aria-pressed={filter === f}
+              onClick={() => setFilter(f)}
+            >
+              {t(`classes.filter.${f}`)}
+            </button>
+          ))}
+        </div>
 
+        {showTermFilter && (
+          <div className="join">
+            <span className="join-item flex items-center border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
+              {t("classes.toolbar.termPrefix")}
+            </span>
+            <select
+              className="select select-bordered select-sm join-item"
+              aria-label={t("classes.toolbar.termLabel")}
+              value={activeTerm}
+              onChange={(e) => setTermFilter(e.target.value)}
+            >
+              <option value="all">{t("classes.toolbar.allTerms")}</option>
+              {terms.map((term) => (
+                <option key={term} value={term}>
+                  {term}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <div className="join">
+          <span className="join-item flex items-center border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
+            {t("classes.toolbar.sortPrefix")}
+          </span>
           <select
-            className="select select-bordered select-sm"
+            className="select select-bordered select-sm join-item"
             aria-label={t("classes.toolbar.sort.label")}
             value={sortKey}
             onChange={(e) => changeSort(e.target.value as ClassroomSortKey)}
@@ -165,42 +208,44 @@ const ClassroomList = ({
               </option>
             ))}
           </select>
-
-          <div
-            role="group"
-            aria-label={t("classes.toolbar.view.label")}
-            className="join"
-          >
-            <button
-              type="button"
-              className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
-              aria-label={t("classes.toolbar.view.gridLabel")}
-              aria-pressed={viewMode === "grid"}
-              onClick={() => changeView("grid")}
-            >
-              <LayoutGrid aria-hidden="true" className="size-4" />
-            </button>
-            <button
-              type="button"
-              className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
-              aria-label={t("classes.toolbar.view.listLabel")}
-              aria-pressed={viewMode === "list"}
-              onClick={() => changeView("list")}
-            >
-              <ListIcon aria-hidden="true" className="size-4" />
-            </button>
-          </div>
-
-          <Link
-            to="/$org/classes/new"
-            params={{ org }}
-            type="button"
-            className="btn btn-primary btn-sm"
-          >
-            <Plus aria-hidden="true" className="size-4" />
-            {t("classes.newClass")}
-          </Link>
         </div>
+
+        <div
+          role="group"
+          aria-label={t("classes.toolbar.view.label")}
+          className="join"
+        >
+          <button
+            type="button"
+            className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
+            aria-label={t("classes.toolbar.view.gridLabel")}
+            aria-pressed={viewMode === "grid"}
+            onClick={() => changeView("grid")}
+          >
+            <LayoutGrid aria-hidden="true" className="size-4" />
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
+            aria-label={t("classes.toolbar.view.listLabel")}
+            aria-pressed={viewMode === "list"}
+            onClick={() => changeView("list")}
+          >
+            <ListIcon aria-hidden="true" className="size-4" />
+          </button>
+        </div>
+
+        <div className="mx-1 hidden h-6 w-px self-center bg-base-300 sm:block" />
+
+        <Link
+          to="/$org/classes/new"
+          params={{ org }}
+          type="button"
+          className="btn btn-primary btn-sm"
+        >
+          <Plus aria-hidden="true" className="size-4" />
+          {t("classes.newClass")}
+        </Link>
       </div>
 
       {noResults ? (
