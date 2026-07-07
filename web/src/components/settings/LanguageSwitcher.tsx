@@ -317,57 +317,6 @@ export const LanguageSwitcher = ({
         </div>
       </AccordionSection>
 
-      {installedLangs.length > 0 && (
-        <AccordionSection
-          section="installed"
-          title={t("language.installedTitle")}
-          open={openSection === "installed"}
-          onToggle={toggleSection}
-        >
-          <ul className="menu bg-base-200 rounded-box max-h-56 w-full flex-nowrap gap-1 overflow-y-auto">
-            {installedLangs.map((c) => {
-              const cov = coverages[c]
-              const source = sources[c]
-              return (
-                <li key={c}>
-                  <div className="flex flex-row items-center justify-between">
-                    <span className="flex items-center gap-2">
-                      {languageLabel(c, lang)}
-                      {source && (
-                        <span
-                          className={`badge badge-sm ${
-                            source === "registry"
-                              ? "badge-ghost"
-                              : "badge-outline"
-                          }`}
-                        >
-                          {source === "registry"
-                            ? t("language.sourceRegistry")
-                            : t("language.sourceUser")}
-                        </span>
-                      )}
-                      {cov !== undefined && cov < 1 && (
-                        <span className="badge badge-ghost badge-sm">
-                          {Math.round(cov * 100)}%
-                        </span>
-                      )}
-                    </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
-                      aria-label={t("language.removePack", { code: c })}
-                      onClick={() => removePack(c)}
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </AccordionSection>
-      )}
-
       <AccordionSection
         section="install"
         title={t("language.installTitle")}
@@ -434,6 +383,57 @@ export const LanguageSwitcher = ({
           </div>
         </div>
       </AccordionSection>
+
+      {installedLangs.length > 0 && (
+        <AccordionSection
+          section="installed"
+          title={t("language.installedTitle")}
+          open={openSection === "installed"}
+          onToggle={toggleSection}
+        >
+          <ul className="menu bg-base-200 rounded-box max-h-56 w-full flex-nowrap gap-1 overflow-y-auto">
+            {installedLangs.map((c) => {
+              const cov = coverages[c]
+              const source = sources[c]
+              return (
+                <li key={c}>
+                  <div className="flex flex-row items-center justify-between">
+                    <span className="flex items-center gap-2">
+                      {languageLabel(c, lang)}
+                      {source && (
+                        <span
+                          className={`badge badge-sm ${
+                            source === "registry"
+                              ? "badge-ghost"
+                              : "badge-outline"
+                          }`}
+                        >
+                          {source === "registry"
+                            ? t("language.sourceRegistry")
+                            : t("language.sourceUser")}
+                        </span>
+                      )}
+                      {cov !== undefined && cov < 1 && (
+                        <span className="badge badge-ghost badge-sm">
+                          {Math.round(cov * 100)}%
+                        </span>
+                      )}
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-xs"
+                      aria-label={t("language.removePack", { code: c })}
+                      onClick={() => removePack(c)}
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        </AccordionSection>
+      )}
 
       {preview && (
         <div className="flex flex-col gap-3 rounded-box border border-base-300 bg-base-100 p-4">
