@@ -13,8 +13,6 @@ import {
   ChevronDown,
   ExternalLink,
   Info,
-  LayoutGrid,
-  List as ListIcon,
   Lock,
   Plus,
   RefreshCw,
@@ -24,17 +22,12 @@ import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
+import { NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
 import { enterExit } from "@/lib/motion"
-import {
-  getStoredSortKey,
-  getStoredViewMode,
-  persistSortKey,
-  persistViewMode,
-  type OrgSortKey,
-  type OrgViewMode,
-} from "@/lib/orgListPrefs"
+import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
+import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
 
 function MissingOrgNotice({
@@ -276,19 +269,10 @@ const OrgsPage = () => {
   const queryClient = useQueryClient()
   const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
 
-  const [viewMode, setViewMode] = useState<OrgViewMode>(getStoredViewMode)
-  const [sortKey, setSortKey] = useState<OrgSortKey>(getStoredSortKey)
+  const { viewMode, sortKey, changeView, changeSort } =
+    useListPrefsState(orgListPrefs)
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
-
-  const changeView = (mode: OrgViewMode) => {
-    setViewMode(mode)
-    persistViewMode(mode)
-  }
-  const changeSort = (key: OrgSortKey) => {
-    setSortKey(key)
-    persistSortKey(key)
-  }
 
   // Confirmed Classroom 50 orgs the user can use: a teacher's ready org, or a
   // student's enrolled org (no_access confirmed via the public Pages index).
@@ -428,30 +412,13 @@ const OrgsPage = () => {
                         ))}
                       </select>
 
-                      <div
-                        role="group"
-                        aria-label={t("orgs.toolbar.view.label")}
-                        className="join"
-                      >
-                        <button
-                          type="button"
-                          className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
-                          aria-label={t("orgs.toolbar.view.gridLabel")}
-                          aria-pressed={viewMode === "grid"}
-                          onClick={() => changeView("grid")}
-                        >
-                          <LayoutGrid aria-hidden="true" className="size-4" />
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
-                          aria-label={t("orgs.toolbar.view.listLabel")}
-                          aria-pressed={viewMode === "list"}
-                          onClick={() => changeView("list")}
-                        >
-                          <ListIcon aria-hidden="true" className="size-4" />
-                        </button>
-                      </div>
+                      <ViewToggle
+                        viewMode={viewMode}
+                        onChange={changeView}
+                        groupLabel={t("orgs.toolbar.view.label")}
+                        gridLabel={t("orgs.toolbar.view.gridLabel")}
+                        listLabel={t("orgs.toolbar.view.listLabel")}
+                      />
 
                       <button
                         type="button"
@@ -465,21 +432,12 @@ const OrgsPage = () => {
                 )}
 
                 {noSearchResults ? (
-                  <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-                    <h2 className="text-lg font-semibold">
-                      {t("orgs.noResults.title")}
-                    </h2>
-                    <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-                      {t("orgs.noResults.body", { query: search.trim() })}
-                    </p>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm mt-4"
-                      onClick={() => setSearch("")}
-                    >
-                      {t("orgs.noResults.clear")}
-                    </button>
-                  </div>
+                  <NoSearchResults
+                    title={t("orgs.noResults.title")}
+                    body={t("orgs.noResults.body", { query: search.trim() })}
+                    clearLabel={t("orgs.noResults.clear")}
+                    onClear={() => setSearch("")}
+                  />
                 ) : sorted.length > 0 ? (
                   <div className="grid grid-cols-12 gap-4">
                     {sorted.map((summary) => {

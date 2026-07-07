@@ -6,7 +6,7 @@ import { createListPrefs } from "@/lib/listPrefs"
 export type OrgViewMode = "grid" | "list"
 export type OrgSortKey = "name-asc" | "last-modified" | "status"
 
-const prefs = createListPrefs<OrgViewMode, OrgSortKey>({
+export const orgListPrefs = createListPrefs<OrgViewMode, OrgSortKey>({
   viewKey: "orgs_view_mode",
   sortKey: "orgs_sort_key",
   viewValues: ["grid", "list"],
@@ -21,7 +21,7 @@ const prefs = createListPrefs<OrgViewMode, OrgSortKey>({
     sort === "last-modified" ? defaultSort : sort,
 })
 
-export const getStoredViewMode = prefs.getStoredViewMode
-export const persistViewMode = prefs.persistViewMode
-export const getStoredSortKey = prefs.getStoredSortKey
-export const persistSortKey = prefs.persistSortKey
+export const getStoredViewMode = orgListPrefs.getStoredViewMode
+export const persistViewMode = orgListPrefs.persistViewMode
+export const getStoredSortKey = orgListPrefs.getStoredSortKey
+export const persistSortKey = orgListPrefs.persistSortKey

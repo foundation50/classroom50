@@ -3,6 +3,8 @@
 // React Query. Each list page instantiates its own accessor with its own
 // storage keys and allowed values via createListPrefs.
 
+import { useState } from "react"
+
 function canUseStorage() {
   return typeof window !== "undefined"
 }
@@ -58,4 +60,32 @@ export function createListPrefs<
     getStoredSortKey,
     persistSortKey,
   }
+}
+
+export type ListPrefs<
+  ViewMode extends string,
+  SortKey extends string,
+> = ReturnType<typeof createListPrefs<ViewMode, SortKey>>
+
+// Owns the view/sort UI state for a list page: seeds from storage on mount and
+// persists on change, so pages don't re-implement the setState-then-persist
+// wiring. Returns setters, not raw dispatchers, so callers can't set state
+// without persisting.
+export function useListPrefsState<
+  ViewMode extends string,
+  SortKey extends string,
+>(prefs: ListPrefs<ViewMode, SortKey>) {
+  const [viewMode, setViewMode] = useState<ViewMode>(prefs.getStoredViewMode)
+  const [sortKey, setSortKey] = useState<SortKey>(prefs.getStoredSortKey)
+
+  const changeView = (mode: ViewMode) => {
+    setViewMode(mode)
+    prefs.persistViewMode(mode)
+  }
+  const changeSort = (key: SortKey) => {
+    setSortKey(key)
+    prefs.persistSortKey(key)
+  }
+
+  return { viewMode, sortKey, changeView, changeSort }
 }

@@ -1,21 +1,19 @@
 import { Link } from "@tanstack/react-router"
-import { LayoutGrid, List as ListIcon, Plus, Search } from "lucide-react"
+import { Plus, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { NoSearchResults, ViewToggle } from "@/components/list"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
 } from "@/hooks/useClassroomSummaries"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import {
-  getStoredSortKey,
-  getStoredViewMode,
-  persistSortKey,
-  persistViewMode,
+  classroomListPrefs,
   type ClassroomSortKey,
-  type ClassroomViewMode,
 } from "@/lib/classroomListPrefs"
+import { useListPrefsState } from "@/lib/listPrefs"
 import { ClassroomCard, ClassroomRow } from "@/pages/classes/ClassroomCard"
 
 type ClassFilter = "active" | "archived" | "all"
@@ -37,20 +35,11 @@ const ClassroomList = ({
   dirs: GitHubFileListing[]
 }) => {
   const { t } = useTranslation()
-  const [viewMode, setViewMode] = useState<ClassroomViewMode>(getStoredViewMode)
-  const [sortKey, setSortKey] = useState<ClassroomSortKey>(getStoredSortKey)
+  const { viewMode, sortKey, changeView, changeSort } =
+    useListPrefsState(classroomListPrefs)
   const [filter, setFilter] = useState<ClassFilter>("active")
   const [termFilter, setTermFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
-
-  const changeView = (mode: ClassroomViewMode) => {
-    setViewMode(mode)
-    persistViewMode(mode)
-  }
-  const changeSort = (key: ClassroomSortKey) => {
-    setSortKey(key)
-    persistSortKey(key)
-  }
 
   const summaries = useClassroomSummaries(
     org,
@@ -211,30 +200,13 @@ const ClassroomList = ({
           </select>
         </div>
 
-        <div
-          role="group"
-          aria-label={t("classes.toolbar.view.label")}
-          className="join"
-        >
-          <button
-            type="button"
-            className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
-            aria-label={t("classes.toolbar.view.gridLabel")}
-            aria-pressed={viewMode === "grid"}
-            onClick={() => changeView("grid")}
-          >
-            <LayoutGrid aria-hidden="true" className="size-4" />
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
-            aria-label={t("classes.toolbar.view.listLabel")}
-            aria-pressed={viewMode === "list"}
-            onClick={() => changeView("list")}
-          >
-            <ListIcon aria-hidden="true" className="size-4" />
-          </button>
-        </div>
+        <ViewToggle
+          viewMode={viewMode}
+          onChange={changeView}
+          groupLabel={t("classes.toolbar.view.label")}
+          gridLabel={t("classes.toolbar.view.gridLabel")}
+          listLabel={t("classes.toolbar.view.listLabel")}
+        />
 
         <div className="mx-1 hidden h-6 w-px self-center bg-base-300 sm:block" />
 
@@ -250,21 +222,12 @@ const ClassroomList = ({
       </div>
 
       {noResults ? (
-        <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
-          <h2 className="text-lg font-semibold">
-            {t("classes.noResults.title")}
-          </h2>
-          <p className="mx-auto mt-1 max-w-md text-sm text-base-content/70">
-            {t("classes.noResults.body", { query: search.trim() })}
-          </p>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm mt-4"
-            onClick={() => setSearch("")}
-          >
-            {t("classes.noResults.clear")}
-          </button>
-        </div>
+        <NoSearchResults
+          title={t("classes.noResults.title")}
+          body={t("classes.noResults.body", { query: search.trim() })}
+          clearLabel={t("classes.noResults.clear")}
+          onClear={() => setSearch("")}
+        />
       ) : emptyFilter ? (
         <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
           <p className="text-sm text-base-content/70">
