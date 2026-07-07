@@ -731,6 +731,16 @@ export async function commitPack(
   return installed
 }
 
+// Commit a previewed pack, carrying its provenance/markers. The one owner of
+// PackPreview -> commitPack, so callers don't re-spread source/version/hash.
+export async function commitPreview(preview: PackPreview): Promise<string> {
+  return commitPack(preview.code, preview.bundle, {
+    source: preview.source,
+    version: preview.version,
+    hash: preview.hash,
+  })
+}
+
 // ---- Auto-refresh + update notifications ------------------------------------
 
 // Listeners for codes updated by refreshInstalledPacks. Bridges the non-React
@@ -927,11 +937,7 @@ export async function applyLangFromQuery(): Promise<void> {
     const entry = offered.find((l) => l.code === code)
     if (!entry) return
     const preview = await prepareFromBuiltIn(code, { entry })
-    await commitPack(preview.code, preview.bundle, {
-      source: preview.source,
-      version: preview.version,
-      hash: preview.hash,
-    })
+    await commitPreview(preview)
   } catch {
     // Invalid code, unavailable pack, or network failure — stay put.
   } finally {

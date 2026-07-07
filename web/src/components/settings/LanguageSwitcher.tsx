@@ -41,7 +41,7 @@ export const LanguageSwitcher = ({
     prepareFromUrl,
     prepareFromBuiltIn,
     availableBuiltInLangs,
-    commitPack,
+    commitPreview,
     removePack,
     packCoverages,
     packSources,
@@ -165,11 +165,7 @@ export const LanguageSwitcher = ({
     setError(null)
     try {
       const preview = await prepareFromBuiltIn(code)
-      await commitPack(preview.code, preview.bundle, {
-        source: preview.source,
-        version: preview.version,
-        hash: preview.hash,
-      })
+      await commitPreview(preview)
       setRegistry((prev) => (prev ? prev.filter((l) => l.code !== code) : prev))
     } catch (err) {
       showError(err)
@@ -183,11 +179,7 @@ export const LanguageSwitcher = ({
     if (!preview) return
     setBusy(true)
     try {
-      await commitPack(preview.code, preview.bundle, {
-        source: preview.source,
-        version: preview.version,
-        hash: preview.hash,
-      })
+      await commitPreview(preview)
       setPreview(null)
       setCode("")
       setUrl("")

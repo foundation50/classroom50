@@ -17,6 +17,7 @@ import {
   inferLangCode,
   missingKeys,
   normalizeLangCode,
+  packSources,
   parseBundle,
   prepareFromBuiltIn,
   prepareFromUrl,
@@ -979,5 +980,53 @@ describe("refreshInstalledPacks", () => {
     const seenLater: string[][] = []
     subscribeToPackUpdates((codes) => seenLater.push(codes))()
     expect(seenLater).toEqual([])
+  })
+})
+
+describe("packSources", () => {
+  let realWindow: (Window & typeof globalThis) | undefined
+
+  beforeEach(() => {
+    realWindow = globalThis.window
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    if (realWindow === undefined) {
+      // @ts-expect-error - restore the node env's missing window
+      delete globalThis.window
+    } else {
+      globalThis.window = realWindow
+    }
+  })
+
+  const stubStore = (packs: Record<string, unknown>) => {
+    const store = new Map([[PACKS_STORAGE_KEY, JSON.stringify(packs)]])
+    vi.stubGlobal("window", {
+      localStorage: {
+        getItem: (key: string) => store.get(key) ?? null,
+        setItem: () => {},
+        removeItem: () => {},
+      } as unknown as Storage,
+    })
+  }
+
+  it("maps each stored pack to its source, defaulting legacy packs to user", () => {
+    stubStore({
+      de: {
+        code: "de",
+        source: "registry",
+        bundle: { "nav.roleStudent": "x" },
+      },
+      fr: { code: "fr", source: "user", bundle: { "nav.roleStudent": "y" } },
+      // Legacy pack with no source field must read as "user" (the badge sentinel).
+      es: { code: "es", bundle: { "nav.roleStudent": "z" } },
+    })
+    expect(packSources()).toEqual({ de: "registry", fr: "user", es: "user" })
+  })
+
+  it("returns an empty map when no packs are stored", () => {
+    stubStore({})
+    expect(packSources()).toEqual({})
   })
 })
