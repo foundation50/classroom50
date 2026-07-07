@@ -15,11 +15,8 @@ import { motion } from "motion/react"
 import { useTranslation } from "react-i18next"
 import { enterExit, staggerTransition } from "@/lib/motion"
 
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
+import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireTeacher from "@/components/RequireTeacher"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -460,39 +457,29 @@ const PublishedResourcesPage = () => {
   const { org } = useParams({ strict: false })
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 xl:px-50">
-          <RequireTeacher>
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {t("published.pageHeading")}
-              </h1>
-              <p className="mt-1 text-sm text-base-content/70">
-                {t("published.pageSubheadingPrefix")}{" "}
-                {org ? (
-                  <a
-                    href={githubOrgUrl(org)}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t("common.openOrgOnGitHub", { org })}
-                    className="font-mono font-semibold hover:text-primary hover:underline"
-                  >
-                    {org}
-                  </a>
-                ) : (
-                  <span className="font-mono font-semibold">{org}</span>
-                )}
-                {t("published.pageSubheadingSuffix")}
-              </p>
-            </div>
-            {org && <PublishedResourcesPane org={org} />}
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar page="classes" selected="published" />
-      </Drawer>
-    </div>
+    <PageShell
+      contentClassName="p-10 bg-base-200 xl:px-50"
+      page="classes"
+      selected="published"
+    >
+      <RequireTeacher>
+        <PageHeader
+          title={t("published.pageHeading")}
+          subtitle={
+            <>
+              {t("published.pageSubheadingPrefix")}{" "}
+              <OrgLink
+                org={org}
+                href={githubOrgUrl(org ?? "")}
+                title={t("common.openOrgOnGitHub", { org })}
+              />
+              {t("published.pageSubheadingSuffix")}
+            </>
+          }
+        />
+        {org && <PublishedResourcesPane org={org} />}
+      </RequireTeacher>
+    </PageShell>
   )
 }
 

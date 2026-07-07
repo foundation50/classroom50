@@ -10,11 +10,8 @@ import {
   UserPlus,
 } from "lucide-react"
 
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
+import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireTeacher from "@/components/RequireTeacher"
 import Avatar from "@/components/avatar"
@@ -371,255 +368,244 @@ const OrgMembersPage = () => {
   )
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 xl:px-50">
-          <RequireTeacher allow="owner">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {t("orgMembers.heading")}
-              </h1>
-              <p className="mt-1 text-sm text-base-content/70">
+    <>
+      <PageShell
+        contentClassName="p-10 bg-base-200 xl:px-50"
+        page="classes"
+        selected="members"
+      >
+        <RequireTeacher allow="owner">
+          <PageHeader
+            title={t("orgMembers.heading")}
+            subtitle={
+              <>
                 {t("orgMembers.subtitlePrefix")}{" "}
-                {org ? (
-                  <a
-                    href={githubOrgPeopleUrl(org)}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t("common.openOrgOnGitHub", { org })}
-                    className="font-mono font-semibold hover:text-primary hover:underline"
-                  >
-                    {org}
-                  </a>
-                ) : (
-                  <span className="font-mono font-semibold">{org}</span>
-                )}{" "}
+                <OrgLink
+                  org={org}
+                  href={githubOrgPeopleUrl(org ?? "")}
+                  title={t("common.openOrgOnGitHub", { org })}
+                />{" "}
                 {t("orgMembers.subtitleSuffix")}
-              </p>
-              <a
-                href={`https://github.com/orgs/${org}/people`}
-                target="_blank"
-                rel="noreferrer"
-                className="mt-2 inline-flex items-center gap-1 text-sm text-primary hover:underline"
-              >
-                <ExternalLink aria-hidden="true" className="size-3.5" />
-                {t("orgMembers.manageMembersOnGitHub")}
-              </a>
+                <a
+                  href={`https://github.com/orgs/${org}/people`}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="mt-2 flex w-fit items-center gap-1 text-sm text-primary hover:underline"
+                >
+                  <ExternalLink aria-hidden="true" className="size-3.5" />
+                  {t("orgMembers.manageMembersOnGitHub")}
+                </a>
+              </>
+            }
+          />
+
+          {notes.length > 0 ? (
+            <div
+              className="alert alert-warning alert-soft mt-6 text-sm"
+              role="status"
+            >
+              <span>{notes.join(" ")}</span>
             </div>
+          ) : null}
 
-            {notes.length > 0 ? (
-              <div
-                className="alert alert-warning alert-soft mt-6 text-sm"
-                role="status"
-              >
-                <span>{notes.join(" ")}</span>
-              </div>
-            ) : null}
+          {discrepancyCount > 0 ? (
+            <div
+              className="alert alert-error alert-soft mt-6 text-sm"
+              role="status"
+            >
+              <AlertTriangle className="size-4" aria-hidden="true" />
+              <span>
+                {t("orgMembers.discrepancy", { count: discrepancyCount })}
+              </span>
+            </div>
+          ) : null}
 
-            {discrepancyCount > 0 ? (
-              <div
-                className="alert alert-error alert-soft mt-6 text-sm"
-                role="status"
-              >
-                <AlertTriangle className="size-4" aria-hidden="true" />
-                <span>
-                  {t("orgMembers.discrepancy", { count: discrepancyCount })}
-                </span>
-              </div>
-            ) : null}
-
-            <div className="mt-6 flex flex-wrap items-center gap-3">
-              <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
-                <Search aria-hidden="true" className="size-4 opacity-50" />
-                <input
-                  type="search"
-                  className="grow"
-                  placeholder={t("orgMembers.searchPlaceholder")}
-                  aria-label={t("orgMembers.searchLabel")}
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                />
-              </label>
-              <select
-                className="select select-bordered w-full sm:w-auto sm:min-w-[14rem]"
-                aria-label={t("orgMembers.filterByClassroomLabel")}
-                value={classroomFilter}
-                onChange={(e) => setClassroomFilter(e.target.value)}
-              >
-                <option value="">{t("orgMembers.filterAllClassrooms")}</option>
-                <option value={NO_CLASSROOM_FILTER}>
-                  {t("orgMembers.filterNoClassroom")}
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
+              <Search aria-hidden="true" className="size-4 opacity-50" />
+              <input
+                type="search"
+                className="grow"
+                placeholder={t("orgMembers.searchPlaceholder")}
+                aria-label={t("orgMembers.searchLabel")}
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+            </label>
+            <select
+              className="select select-bordered w-full sm:w-auto sm:min-w-[14rem]"
+              aria-label={t("orgMembers.filterByClassroomLabel")}
+              value={classroomFilter}
+              onChange={(e) => setClassroomFilter(e.target.value)}
+            >
+              <option value="">{t("orgMembers.filterAllClassrooms")}</option>
+              <option value={NO_CLASSROOM_FILTER}>
+                {t("orgMembers.filterNoClassroom")}
+              </option>
+              {classroomOptions.map((c) => (
+                <option key={c.path} value={c.path}>
+                  {c.name}
                 </option>
-                {classroomOptions.map((c) => (
-                  <option key={c.path} value={c.path}>
-                    {c.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              ))}
+            </select>
+          </div>
 
-            <div className="mt-4 card card-border w-full overflow-hidden bg-base-100 shadow-sm">
-              {isLoading ? (
-                <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-                  <span
-                    className="loading loading-spinner loading-md"
-                    aria-hidden="true"
+          <div className="mt-4 card card-border w-full overflow-hidden bg-base-100 shadow-sm">
+            {isLoading ? (
+              <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
+                <span
+                  className="loading loading-spinner loading-md"
+                  aria-hidden="true"
+                />
+                <span className="text-sm">{t("orgMembers.loading")}</span>
+              </div>
+            ) : isError ? (
+              <div className="px-6 py-10 text-center text-sm text-error">
+                {t("orgMembers.loadError")}
+              </div>
+            ) : filtered.length === 0 ? (
+              <div className="px-6 py-10 text-center text-sm text-base-content/70">
+                {classroomFilter === NO_CLASSROOM_FILTER
+                  ? t("orgMembers.noMembersNoClassroom")
+                  : classroomFilter
+                    ? t("orgMembers.noMembersInClassroom", {
+                        classroom:
+                          classroomOptions.find(
+                            (c) => c.path === classroomFilter,
+                          )?.name ?? classroomFilter,
+                      })
+                    : t("orgMembers.noMatch")}
+              </div>
+            ) : (
+              <>
+                {org ? (
+                  <BulkActionsBar
+                    org={org}
+                    client={client}
+                    selectedRows={selectedRows}
+                    totalCount={filtered.length}
+                    allSelected={allFilteredSelected}
+                    someSelected={someFilteredSelected}
+                    onToggleSelectAll={handleToggleSelectAll}
+                    members={members}
+                    classrooms={classroomOptions}
+                    onClearSelection={() => setSelectedKeys(new Set())}
+                    onDone={handleBulkDone}
                   />
-                  <span className="text-sm">{t("orgMembers.loading")}</span>
-                </div>
-              ) : isError ? (
-                <div className="px-6 py-10 text-center text-sm text-error">
-                  {t("orgMembers.loadError")}
-                </div>
-              ) : filtered.length === 0 ? (
-                <div className="px-6 py-10 text-center text-sm text-base-content/70">
-                  {classroomFilter === NO_CLASSROOM_FILTER
-                    ? t("orgMembers.noMembersNoClassroom")
-                    : classroomFilter
-                      ? t("orgMembers.noMembersInClassroom", {
-                          classroom:
-                            classroomOptions.find(
-                              (c) => c.path === classroomFilter,
-                            )?.name ?? classroomFilter,
-                        })
-                      : t("orgMembers.noMatch")}
-                </div>
-              ) : (
-                <>
-                  {org ? (
-                    <BulkActionsBar
-                      org={org}
-                      client={client}
-                      selectedRows={selectedRows}
-                      totalCount={filtered.length}
-                      allSelected={allFilteredSelected}
-                      someSelected={someFilteredSelected}
-                      onToggleSelectAll={handleToggleSelectAll}
-                      members={members}
-                      classrooms={classroomOptions}
-                      onClearSelection={() => setSelectedKeys(new Set())}
-                      onDone={handleBulkDone}
-                    />
-                  ) : null}
-                  <motion.ul
-                    className="divide-y divide-base-300"
-                    variants={enterExit}
-                    initial="initial"
-                    animate="animate"
-                  >
-                    {filtered.map((row) => (
-                      <ClickableRow
-                        key={row.key}
-                        className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
-                        role="button"
-                        tabIndex={0}
-                        onClick={() => setSelectedKey(row.key)}
-                        onKeyDown={(e) => {
-                          if (e.key === "Enter" || e.key === " ") {
-                            e.preventDefault()
-                            setSelectedKey(row.key)
-                          }
+                ) : null}
+                <motion.ul
+                  className="divide-y divide-base-300"
+                  variants={enterExit}
+                  initial="initial"
+                  animate="animate"
+                >
+                  {filtered.map((row) => (
+                    <ClickableRow
+                      key={row.key}
+                      className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
+                      role="button"
+                      tabIndex={0}
+                      onClick={() => setSelectedKey(row.key)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          setSelectedKey(row.key)
+                        }
+                      }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-sm shrink-0"
+                        aria-label={
+                          isSelf(row)
+                            ? t("orgMembers.bulk.selfNotSelectable")
+                            : t("orgMembers.bulk.selectRow", {
+                                label: row.username || row.email || row.name,
+                              })
+                        }
+                        disabled={isSelf(row)}
+                        title={
+                          isSelf(row)
+                            ? t("orgMembers.bulk.selfNotSelectable")
+                            : undefined
+                        }
+                        checked={selectedKeys.has(row.key)}
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleRowCheckboxClick(e, row.key)
                         }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="checkbox checkbox-sm shrink-0"
-                          aria-label={
-                            isSelf(row)
-                              ? t("orgMembers.bulk.selfNotSelectable")
-                              : t("orgMembers.bulk.selectRow", {
-                                  label: row.username || row.email || row.name,
-                                })
-                          }
-                          disabled={isSelf(row)}
-                          title={
-                            isSelf(row)
-                              ? t("orgMembers.bulk.selfNotSelectable")
-                              : undefined
-                          }
-                          checked={selectedKeys.has(row.key)}
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRowCheckboxClick(e, row.key)
-                          }}
-                          onChange={() => handleToggleRow(row.key)}
+                        onChange={() => handleToggleRow(row.key)}
+                      />
+                      <div className="min-w-0 flex-1">
+                        <Avatar
+                          name={row.name || row.username || row.email}
+                          github={row.username}
+                          initials={initialsFor(row)}
+                          subtitle={<GitHubIdentity row={row} />}
                         />
-                        <div className="min-w-0 flex-1">
-                          <Avatar
-                            name={row.name || row.username || row.email}
-                            github={row.username}
-                            initials={initialsFor(row)}
-                            subtitle={<GitHubIdentity row={row} />}
-                          />
-                        </div>
-                        <div className="flex shrink-0 items-center gap-3">
-                          {row.classification === "on-roster-not-member" &&
-                          row.github_id ? (
-                            <button
-                              type="button"
-                              className="btn btn-xs btn-primary"
-                              disabled={invitingKey === row.key}
-                              onClick={(e) => {
-                                e.stopPropagation()
-                                void handleQuickInvite(row)
-                              }}
-                            >
-                              {invitingKey === row.key ? (
-                                <span
-                                  className="loading loading-spinner loading-xs"
-                                  aria-hidden="true"
-                                />
-                              ) : (
-                                <>
-                                  <UserPlus
-                                    aria-hidden="true"
-                                    className="size-3.5"
-                                  />
-                                  {t("orgMembers.invite")}
-                                </>
-                              )}
-                            </button>
-                          ) : null}
-                          <span className="hidden text-xs text-base-content/70 sm:inline">
-                            {t("orgMembers.classroomCount", {
-                              count: row.classrooms.length,
-                            })}
-                          </span>
-                          {row.unprovisionedClassrooms.length > 0 ? (
-                            <span
-                              className="badge badge-sm badge-warning badge-soft gap-1"
-                              title={t("orgMembers.unprovisionedTitle", {
-                                classrooms:
-                                  row.unprovisionedClassrooms.join(", "),
-                              })}
-                            >
-                              <AlertTriangle
+                      </div>
+                      <div className="flex shrink-0 items-center gap-3">
+                        {row.classification === "on-roster-not-member" &&
+                        row.github_id ? (
+                          <button
+                            type="button"
+                            className="btn btn-xs btn-primary"
+                            disabled={invitingKey === row.key}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              void handleQuickInvite(row)
+                            }}
+                          >
+                            {invitingKey === row.key ? (
+                              <span
+                                className="loading loading-spinner loading-xs"
                                 aria-hidden="true"
-                                className="size-3"
                               />
-                              {t("orgMembers.unprovisionedBadge")}
-                            </span>
-                          ) : null}
-                          <ClassificationBadge
-                            row={row}
-                            isOwner={isOwner(row)}
-                          />
-                          <ChevronRight
-                            aria-hidden="true"
-                            className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
-                          />
-                        </div>
-                      </ClickableRow>
-                    ))}
-                  </motion.ul>
-                </>
-              )}
-            </div>
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar page="classes" selected="members" />
-      </Drawer>
+                            ) : (
+                              <>
+                                <UserPlus
+                                  aria-hidden="true"
+                                  className="size-3.5"
+                                />
+                                {t("orgMembers.invite")}
+                              </>
+                            )}
+                          </button>
+                        ) : null}
+                        <span className="hidden text-xs text-base-content/70 sm:inline">
+                          {t("orgMembers.classroomCount", {
+                            count: row.classrooms.length,
+                          })}
+                        </span>
+                        {row.unprovisionedClassrooms.length > 0 ? (
+                          <span
+                            className="badge badge-sm badge-warning badge-soft gap-1"
+                            title={t("orgMembers.unprovisionedTitle", {
+                              classrooms:
+                                row.unprovisionedClassrooms.join(", "),
+                            })}
+                          >
+                            <AlertTriangle
+                              aria-hidden="true"
+                              className="size-3"
+                            />
+                            {t("orgMembers.unprovisionedBadge")}
+                          </span>
+                        ) : null}
+                        <ClassificationBadge row={row} isOwner={isOwner(row)} />
+                        <ChevronRight
+                          aria-hidden="true"
+                          className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
+                        />
+                      </div>
+                    </ClickableRow>
+                  ))}
+                </motion.ul>
+              </>
+            )}
+          </div>
+        </RequireTeacher>
+      </PageShell>
 
       {org ? (
         <MemberDetailModal
@@ -640,7 +626,7 @@ const OrgMembersPage = () => {
           }}
         />
       ) : null}
-    </div>
+    </>
   )
 }
 

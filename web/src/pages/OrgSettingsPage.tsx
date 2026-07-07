@@ -1,10 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
+import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useParams } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -502,44 +499,35 @@ const OrgSettingsPage = () => {
   const { org } = useParams({ strict: false })
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 xl:px-50">
-          <RequireTeacher allow="owner">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">
-                {t("orgSettings.page.heading")}
-              </h1>
-              <p className="mt-1 text-sm text-base-content/70">
-                {t("orgSettings.page.subheading_prefix")}{" "}
-                {org ? (
-                  <a
-                    href={githubOrgSettingsUrl(org)}
-                    target="_blank"
-                    rel="noreferrer"
-                    title={t("common.openOrgOnGitHub", { org })}
-                    className="font-mono font-semibold hover:text-primary hover:underline"
-                  >
-                    {org}
-                  </a>
-                ) : (
-                  <span className="font-mono font-semibold">{org}</span>
-                )}
-                {t("orgSettings.page.subheading_suffix")}
-              </p>
-            </div>
-            <div className="mt-8 space-y-8">
-              <OrgSettingsPane />
-              {org && <OrgPolicyAuditPane org={org} />}
-              {org && <RerunOrgSetup org={org} />}
-              {org && <TeardownSection org={org} />}
-            </div>
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar page="classes" settings selected="settings" />
-      </Drawer>
-    </div>
+    <PageShell
+      contentClassName="p-10 bg-base-200 xl:px-50"
+      page="classes"
+      settings
+      selected="settings"
+    >
+      <RequireTeacher allow="owner">
+        <PageHeader
+          title={t("orgSettings.page.heading")}
+          subtitle={
+            <>
+              {t("orgSettings.page.subheading_prefix")}{" "}
+              <OrgLink
+                org={org}
+                href={githubOrgSettingsUrl(org ?? "")}
+                title={t("common.openOrgOnGitHub", { org })}
+              />
+              {t("orgSettings.page.subheading_suffix")}
+            </>
+          }
+        />
+        <div className="mt-8 space-y-8">
+          <OrgSettingsPane />
+          {org && <OrgPolicyAuditPane org={org} />}
+          {org && <RerunOrgSetup org={org} />}
+          {org && <TeardownSection org={org} />}
+        </div>
+      </RequireTeacher>
+    </PageShell>
   )
 }
 

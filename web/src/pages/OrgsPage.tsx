@@ -1,4 +1,5 @@
 import PageShell from "@/components/PageShell"
+import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { Classroom50OrgSummary } from "@/hooks/github/queries"
 import useGetOrgs from "@/hooks/useGetOrgs"
@@ -362,11 +363,7 @@ const OrgsPage = () => {
         ) : (
           <div className="mb-8">
             <div className="flex flex-col gap-6 p-6">
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {t("orgs.headingCl50")}
-                </h1>
-              </div>
+              <PageHeader title={t("orgs.headingCl50")} />
 
               <MissingOrgNotice
                 refreshing={isFetching}

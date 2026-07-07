@@ -3,11 +3,8 @@ import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
 
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
+import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import useGetOrgMembership from "@/hooks/useGetOrgMembership"
@@ -213,41 +210,35 @@ const OrgSetupPage = () => {
     orgPlanDetails?.plan?.name === "enterprise"
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <div className="mb-8">
-            <h1 className="font-bold text-2xl">{t("setup.pageHeading")}</h1>
-            <p className="text-sm text-base-content/70">
-              {t("setup.pageSubheading")}
-            </p>
-          </div>
-          {!isLoadingPlanDetails && !isTeamOrEnterprise && (
-            <NotTeamOrEnterpriseWarning />
-          )}
-          {isLoading && <Spinner label={t("setup.loadingSetup")} />}
-          {!isLoading && !isOwner && <NotAdminAlert />}
-          {!isLoading && isOwner && (
-            <OrgSteps
-              steps={steps}
-              mutation={mutation}
-              nextStep={nextStep}
-              org={org}
-              setStage={setCurrentStage}
-              stage={currentStage}
-            />
-          )}
+    <PageShell page="classes" selected="assignments">
+      <div className="mb-8">
+        <PageHeader
+          title={t("setup.pageHeading")}
+          subtitle={t("setup.pageSubheading")}
+        />
+      </div>
+      {!isLoadingPlanDetails && !isTeamOrEnterprise && (
+        <NotTeamOrEnterpriseWarning />
+      )}
+      {isLoading && <Spinner label={t("setup.loadingSetup")} />}
+      {!isLoading && !isOwner && <NotAdminAlert />}
+      {!isLoading && isOwner && (
+        <OrgSteps
+          steps={steps}
+          mutation={mutation}
+          nextStep={nextStep}
+          org={org}
+          setStage={setCurrentStage}
+          stage={currentStage}
+        />
+      )}
 
-          <SkeletonOverwriteModal
-            paths={overwritePaths}
-            onConfirm={() => resolveOverwrite(true)}
-            onClose={() => resolveOverwrite(false)}
-          />
-        </DrawerContent>
-        <DrawerSidebar page="classes" selected="assignments" />
-      </Drawer>
-    </div>
+      <SkeletonOverwriteModal
+        paths={overwritePaths}
+        onConfirm={() => resolveOverwrite(true)}
+        onClose={() => resolveOverwrite(false)}
+      />
+    </PageShell>
   )
 }
 
