@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { classifyPlan, planSortWeight } from "./orgPlan"
+import { classifyPlan } from "./orgPlan"
 
 describe("classifyPlan", () => {
   it("treats team and enterprise as supported", () => {
@@ -21,16 +21,5 @@ describe("classifyPlan", () => {
     // the user can actually work with.
     expect(classifyPlan("business")).toBe("unknown")
     expect(classifyPlan("Team")).toBe("unknown")
-  })
-})
-
-describe("planSortWeight", () => {
-  it("orders supported before unknown before free", () => {
-    expect(planSortWeight("supported")).toBeLessThan(planSortWeight("unknown"))
-    expect(planSortWeight("unknown")).toBeLessThan(planSortWeight("free"))
-  })
-
-  it("keeps unknown above free so an unknown-plan org is never demoted below free", () => {
-    expect(planSortWeight("unknown")).toBeLessThan(planSortWeight("free"))
   })
 })

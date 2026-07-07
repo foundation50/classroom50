@@ -116,13 +116,7 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
   }
 }
 
-function OrgActions({
-  summary,
-  updatedAgo,
-}: {
-  summary: Classroom50OrgSummary
-  updatedAgo?: string
-}) {
+function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
   const { t } = useTranslation()
   const { org, canOpen } = useOrgAffordances(summary)
   return (
@@ -142,11 +136,6 @@ function OrgActions({
         >
           {t("orgs.card.open")}
         </Link>
-      )}
-      {updatedAgo && (
-        <span className="sr-only">
-          {t("orgs.card.updatedAgo", { when: updatedAgo })}
-        </span>
       )}
     </>
   )
@@ -226,6 +215,7 @@ function OrgRow({
   summary: Classroom50OrgSummary
   updatedAgo?: string
 }) {
+  const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
 
   return (
@@ -257,14 +247,14 @@ function OrgRow({
           )}
           {updatedAgo && (
             <p className="truncate text-xs text-base-content/50">
-              {updatedAgo}
+              {t("orgs.card.updatedAgo", { when: updatedAgo })}
             </p>
           )}
         </div>
       </div>
 
       <div className="flex shrink-0 items-center justify-end gap-2">
-        <OrgActions summary={summary} updatedAgo={updatedAgo} />
+        <OrgActions summary={summary} />
       </div>
     </motion.div>
   )

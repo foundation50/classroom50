@@ -10,16 +10,3 @@ export function classifyPlan(name?: string): PlanCategory {
   if (name === "free") return "free"
   return "unknown"
 }
-
-// Sort weight for the "Set Up" list: supported orgs bubble to the top, unknown
-// in the middle (never demoted below free), free last.
-export function planSortWeight(category: PlanCategory): number {
-  switch (category) {
-    case "supported":
-      return 0
-    case "unknown":
-      return 1
-    case "free":
-      return 2
-  }
-}
