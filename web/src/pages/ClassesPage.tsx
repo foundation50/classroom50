@@ -1,9 +1,7 @@
 import { useParams, Link } from "@tanstack/react-router"
-import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   BookOpen,
-  BookText,
   ExternalLink,
   GraduationCap,
   Pencil,
@@ -14,8 +12,6 @@ import {
 import GitHub from "@/assets/github.svg?react"
 
 import useGetClasses from "@/hooks/useGetClasses"
-import useGetStudents from "@/hooks/useGetStudents"
-import { isClassroomArchived } from "@/types/classroom"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
 import Drawer, {
@@ -24,9 +20,8 @@ import Drawer, {
   DrawerToggle,
 } from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import type { GitHubFileListing, GitHubRepo } from "@/hooks/github/types"
+import type { GitHubRepo } from "@/hooks/github/types"
 import MissingParams from "@/components/MissingParams"
-import useGetClassroom from "@/hooks/useGetClassroom"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -36,85 +31,9 @@ import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import OrgPreflightNotice from "@/pages/orgSettings/OrgPreflightNotice"
+import ClassroomList from "@/pages/classes/ClassroomList"
 import { EnterDiv } from "@/lib/motionComponents"
 import { githubOrgUrl } from "@/util/orgUrl"
-
-type ClassFilter = "active" | "archived" | "all"
-
-const ClassCard = ({
-  cl,
-  org,
-  filter,
-}: {
-  cl: GitHubFileListing
-  org: string
-  filter: ClassFilter
-}) => {
-  const { t } = useTranslation()
-  const { data: classroomData } = useGetClassroom(org, cl.path)
-  const { students } = useGetStudents(org, cl.path)
-  const { isTeacher } = useCourseTeacherAccess(org)
-
-  const canEdit = isTeacher && cl.name
-  const archived = isClassroomArchived(classroomData ?? {})
-
-  // Defer rendering until the classroom's lifecycle is known. We can't tell
-  // active from archived until classroomData loads, so painting a card under
-  // Active/All then unmounting it when it resolves archived causes a grid
-  // relayout flash. Rendering nothing until resolved means each card appears
-  // once, in its correct tab.
-  if (!classroomData) return null
-  if (filter === "active" && archived) return null
-  if (filter === "archived" && !archived) return null
-
-  return (
-    <EnterDiv className="card bg-base-100 rounded-xl col-span-6 border border-base-300">
-      {canEdit && (
-        <Link
-          to="/$org/$classroom/edit"
-          params={{ org, classroom: cl.name }}
-          className="btn btn-ghost btn-sm btn-circle absolute right-3 top-3 z-10 text-base-content/70 hover:text-primary"
-          aria-label={t("classes.editClassAria", { name: cl.name })}
-          title={t("classes.editClassTitle")}
-        >
-          <Pencil aria-hidden="true" className="size-4" />
-        </Link>
-      )}
-      <div className="card-body gap-4">
-        <div className="flex items-center gap-2">
-          <label className="h-6 badge badge-soft badge-primary">
-            {classroomData?.term || t("classes.noTermSpecified")}
-          </label>
-          {archived ? (
-            <span className="h-6 badge badge-soft badge-neutral">
-              {t("classes.archived")}
-            </span>
-          ) : null}
-        </div>
-        <h1 className="text-xl h-8">
-          {classroomData?.name ||
-            classroomData?.short_name ||
-            t("classes.unknownClassName")}
-        </h1>
-        <div className="flex gap-2 h-6">
-          <UsersRound aria-hidden="true" />
-          {students
-            ? t("classes.studentCount", { count: students.length })
-            : t("classes.noStudents")}
-        </div>
-        <Link
-          type="button"
-          to="/$org/$classroom/assignments"
-          params={{ org, classroom: cl.path }}
-          className="btn btn-outline btn-primary w-full"
-        >
-          <BookText aria-hidden="true" />
-          {t("classes.viewAssignments")}
-        </Link>
-      </div>
-    </EnterDiv>
-  )
-}
 
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
@@ -397,7 +316,6 @@ const ClassesPage = () => {
   // non-owner can't read the service-token secret and would see a false
   // "failed" alert. Gate on ownership, not the broad teacher signal.
   const isOwner = membership?.role === "admin"
-  const [filter, setFilter] = useState<ClassFilter>("active")
 
   if (!org) {
     return <MissingParams message={t("classes.missingOrg")} />
@@ -445,19 +363,6 @@ const ClassesPage = () => {
                   </p>
                 </div>
               </div>
-
-              {isTeacher && classes.length > 0 && (
-                <div className="flex sm:self-end">
-                  <Link
-                    type="button"
-                    to="/$org/classes/new"
-                    params={{ org }}
-                    className="btn btn-primary"
-                  >
-                    {t("classes.newClass")}
-                  </Link>
-                </div>
-              )}
             </div>
             {isStudent && !isMember && !loadingMembership && (
               <JoinOrgCard org={org} />
@@ -478,37 +383,8 @@ const ClassesPage = () => {
               {classes.length === 0 && isTeacher && (
                 <CreateClassroomPane org={org} />
               )}
-              {isTeacher && (
-                <>
-                  {classes.length > 0 && (
-                    <div className="mb-4 flex justify-end">
-                      <div role="tablist" className="tabs tabs-box tabs-sm">
-                        {(["active", "archived", "all"] as const).map((f) => (
-                          <button
-                            key={f}
-                            role="tab"
-                            type="button"
-                            className={`tab capitalize ${filter === f ? "tab-active" : ""}`}
-                            aria-selected={filter === f}
-                            onClick={() => setFilter(f)}
-                          >
-                            {t(`classes.filter.${f}`)}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  <div className="grid grid-cols-12 gap-4 mb-6">
-                    {classes.map((cl) => (
-                      <ClassCard
-                        key={cl.path}
-                        cl={cl}
-                        org={org}
-                        filter={filter}
-                      />
-                    ))}
-                  </div>
-                </>
+              {isTeacher && classes.length > 0 && (
+                <ClassroomList org={org} dirs={classes} />
               )}
               {isStudent && isMember && <OrgRepos org={org} />}
             </>
