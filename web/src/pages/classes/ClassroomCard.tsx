@@ -7,6 +7,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/hooks/github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
+import type { GitHubFileListing } from "@/hooks/github/types"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetStudents from "@/hooks/useGetStudents"
 import type { ClassroomSummary } from "@/hooks/useClassroomSummaries"
@@ -41,7 +42,8 @@ const classroomDisplayName = (summary: ClassroomSummary, unknown: string) =>
 // Student + assignment counts for a single visible card. Reuses the shared
 // roster/assignments caches. Assignment count coalesces to 0 (unlike students,
 // useGetClassroomAssignments does not pre-default and 404s for a classroom with
-// no assignments.json); error surfaces as a null so the caller can show "—".
+// no assignments.json); a non-404 error sets assignmentsError so the caller can
+// show "Counts unavailable".
 function useCardCounts(org: string, classroom: string) {
   const { students, isLoading: studentsLoading } = useGetStudents(
     org,
@@ -55,9 +57,11 @@ function useCardCounts(org: string, classroom: string) {
     assignmentsQuery.error.status === 404
   return {
     studentCount: studentsLoading ? undefined : students.length,
+    // Optional-chain `assignments` too: jsonFileQuery does no shape validation,
+    // so a file that parses without an `assignments` array must not throw.
     assignmentCount: assignmentsQuery.isPending
       ? undefined
-      : (assignmentsQuery.data?.assignments.length ?? 0),
+      : (assignmentsQuery.data?.assignments?.length ?? 0),
     assignmentsError: assignmentsQuery.isError && !assignmentsNotFound,
   }
 }
@@ -65,20 +69,25 @@ function useCardCounts(org: string, classroom: string) {
 function CountStat({
   icon,
   loading,
+  loadingLabel,
   label,
 }: {
   icon: React.ReactNode
   loading: boolean
+  loadingLabel: string
   label: string
 }) {
   return (
     <span className="flex items-center gap-1.5 text-sm text-base-content/70">
       {icon}
       {loading ? (
-        <span
-          className="skeleton skeleton-shimmer inline-block h-4 w-16 align-middle"
-          aria-hidden="true"
-        />
+        <>
+          <span
+            className="skeleton skeleton-shimmer inline-block h-4 w-16 align-middle"
+            aria-hidden="true"
+          />
+          <span className="sr-only">{loadingLabel}</span>
+        </>
       ) : (
         label
       )}
@@ -116,8 +125,16 @@ function ClassroomMenu({
 
   const setMenuOpen = (next: boolean) => {
     setOpen(next)
-    onMenuOpenChange?.(next)
   }
+
+  // Hold the parent's list order frozen while this card is "busy" — the menu is
+  // open OR a destructive confirm modal is open — so an async re-sort (e.g. a
+  // roster resolving under the student-count sort) can't reshuffle the list out
+  // from under an in-flight Archive/Delete. The menu closes before the modal
+  // opens, so gating on the menu alone would release the freeze mid-flow.
+  useEffect(() => {
+    onMenuOpenChange?.(open || archiveOpen || deleteOpen)
+  }, [open, archiveOpen, deleteOpen, onMenuOpenChange])
 
   // Escape + outside-click close; return focus to the trigger on Escape.
   useEffect(() => {
@@ -137,7 +154,6 @@ function ClassroomMenu({
       document.removeEventListener("keydown", onKey)
       document.removeEventListener("mousedown", onClick)
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open])
 
   const archiveMutation = useMutation({
@@ -200,6 +216,28 @@ function ClassroomMenu({
   const deleteMutation = useMutation({
     mutationFn: () => deleteClassroom(client, { org, classroom: slug }),
     onSuccess: (result) => {
+      // deleteClassroom returns { deleted: false } as a no-op (e.g. the dir was
+      // already gone). Don't claim success in that case.
+      if (!result.deleted) {
+        notify({
+          tone: "warning",
+          message: t("classes.deleteNoop", { classroom: slug }),
+        })
+        queryClient.invalidateQueries({
+          queryKey: githubKeys.jsonFile(org, "classroom50"),
+        })
+        return
+      }
+      // Optimistically drop the dir from the cached listing so the card leaves
+      // at once — the Contents API is read-after-write eventual, so an immediate
+      // refetch can still return the just-deleted dir. Then invalidate to
+      // reconcile.
+      const listKey = githubKeys.jsonFile(org, "classroom50", "")
+      queryClient.setQueryData(
+        listKey,
+        (prev: GitHubFileListing[] | undefined) =>
+          prev ? prev.filter((entry) => entry.path !== slug) : prev,
+      )
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(org, "classroom50"),
       })
@@ -312,7 +350,7 @@ function ClassroomMenu({
               }}
             >
               <Trash2 aria-hidden="true" className="size-4" />
-              {t("classes.deleteClassroomAria")}
+              {t("classes.card.delete")}
             </button>
           </li>
         </ul>
@@ -403,6 +441,7 @@ function ClassroomStats({ org, slug }: { org: string; slug: string }) {
       <CountStat
         icon={<UsersRound aria-hidden="true" className="size-4" />}
         loading={studentCount === undefined}
+        loadingLabel={t("classes.card.loadingStudents")}
         label={
           studentCount === 0
             ? t("classes.noStudents")
@@ -412,6 +451,7 @@ function ClassroomStats({ org, slug }: { org: string; slug: string }) {
       <CountStat
         icon={<BookText aria-hidden="true" className="size-4" />}
         loading={assignmentCount === undefined && !assignmentsError}
+        loadingLabel={t("classes.card.loadingAssignments")}
         label={
           assignmentsError
             ? t("classes.card.countsUnavailable")

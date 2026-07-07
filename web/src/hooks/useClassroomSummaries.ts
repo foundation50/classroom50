@@ -16,9 +16,8 @@ export type ClassroomSummary = {
   name?: string
   short_name?: string
   term?: string
-  // Absent/true reads as active (per isClassroomArchived); an unresolved or
-  // errored classroom.json leaves this undefined -> treated as active.
-  active?: boolean
+  // Archived lifecycle derived from classroom.json's `active` flag via
+  // isClassroomArchived; an unresolved/errored read is treated as active.
   archived: boolean
   // Student count for the student-count sort. undefined while the roster is
   // pending or unreadable; callers pin undefined to the bottom in name order.
@@ -75,7 +74,6 @@ const useClassroomSummaries = (
       name: cl?.name,
       short_name: cl?.short_name,
       term: cl?.term,
-      active: cl?.active,
       archived: isClassroomArchived(cl ?? {}),
       studentCount: withStudentCounts ? roster?.length : undefined,
       loading: classroomResults[i]?.isPending ?? false,

@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { LayoutGrid, List as ListIcon, Plus, Search } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import useClassroomSummaries, {
@@ -44,10 +44,6 @@ const ClassroomList = ({
   const [filter, setFilter] = useState<ClassFilter>("active")
   const [termFilter, setTermFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
-  // While any card's menu is open, freeze the rendered order so an async
-  // re-sort (e.g. a roster resolving under student-count sort) can't shift a
-  // different classroom under the open menu and mis-target a destructive click.
-  const [menuOpen, setMenuOpen] = useState(false)
 
   const changeView = (mode: ClassroomViewMode) => {
     setViewMode(mode)
@@ -126,13 +122,20 @@ const ClassroomList = ({
     }
   }, [filtered, sortKey])
 
-  // Snapshot the order while a menu is open (see menuOpen above).
+  // While a card is "busy" (its menu or a destructive confirm modal is open),
+  // freeze the rendered order so an async re-sort (e.g. a roster resolving under
+  // the student-count sort) can't reshuffle the list under an in-flight action.
+  // A ref holds the latest sorted list so the callback can stay stable (a
+  // changing callback identity would re-fire the child's effect every render).
   const [frozen, setFrozen] = useState<ClassroomSummary[] | null>(null)
-  const displayList = menuOpen && frozen ? frozen : sorted
-  const handleMenuOpenChange = (open: boolean) => {
-    setFrozen(open ? sorted : null)
-    setMenuOpen(open)
-  }
+  const sortedRef = useRef(sorted)
+  useEffect(() => {
+    sortedRef.current = sorted
+  }, [sorted])
+  const displayList = frozen ?? sorted
+  const handleMenuOpenChange = useCallback((busy: boolean) => {
+    setFrozen(busy ? sortedRef.current : null)
+  }, [])
 
   const anyResolved = summaries.some((s) => !s.loading)
   const noResults = anyResolved && query.length > 0 && sorted.length === 0

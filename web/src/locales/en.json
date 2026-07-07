@@ -1182,8 +1182,11 @@
       "assignmentCount_other": "{{count}} Assignments",
       "noAssignments": "No Assignments",
       "countsUnavailable": "Counts unavailable",
+      "loadingStudents": "Loading student count…",
+      "loadingAssignments": "Loading assignment count…",
       "actionsAria": "Actions for {{name}}",
       "edit": "Edit classroom",
+      "delete": "Delete classroom",
       "viewOnGitHub": "View on GitHub"
     },
     "toolbar": {
@@ -1217,6 +1220,7 @@
     },
     "deleteTeamWarning": "Deleted {{classroom}}, but some GitHub teams could not be removed. Delete them manually in the organization's team settings.",
     "deletedToast": "Deleted {{classroom}}.",
+    "deleteNoop": "{{classroom}} was already deleted.",
     "deleteFailed": "Couldn't delete {{classroom}}: {{error}}",
     "repo": {
       "manageGroupAria": "Manage group for {{assignment}}",
