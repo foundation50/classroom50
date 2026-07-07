@@ -10,12 +10,8 @@ import {
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
+import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetSubmissionReleases from "@/hooks/useGetSubmissionReleases"
@@ -253,33 +249,27 @@ const StudentSubmissionPage = () => {
   )
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("nav.mySubmission")} />
-          <PageHeader
-            title={
-              assignmentData?.name ||
-              assignment ||
-              t("submissions.student.fallbackTitle")
-            }
-          />
-          <AssignmentMeta assignment={assignmentData} />
-          {org && classroom && assignment ? (
-            <SubmissionBody
-              org={org}
-              classroom={classroom}
-              assignment={assignment}
-              secret={secret}
-            />
-          ) : (
-            <MissingParams message={t("submissions.student.missingParams")} />
-          )}
-        </DrawerContent>
-        <DrawerSidebar selected="assignments" />
-      </Drawer>
-    </div>
+    <PageShell selected="assignments">
+      <Breadcrumb endpoint={t("nav.mySubmission")} />
+      <PageHeader
+        title={
+          assignmentData?.name ||
+          assignment ||
+          t("submissions.student.fallbackTitle")
+        }
+      />
+      <AssignmentMeta assignment={assignmentData} />
+      {org && classroom && assignment ? (
+        <SubmissionBody
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          secret={secret}
+        />
+      ) : (
+        <MissingParams message={t("submissions.student.missingParams")} />
+      )}
+    </PageShell>
   )
 }
 

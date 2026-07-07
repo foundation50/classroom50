@@ -6,13 +6,9 @@ import { useTranslation } from "react-i18next"
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
+import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -218,28 +214,22 @@ const AssignmentsPage = () => {
   } = useCourseTeacherAccess(org)
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("nav.assignments")} />
-          {roleLoading && (
-            <div className="mt-8 space-y-4">
-              <div className="skeleton skeleton-shimmer h-6 w-48" />
-              <div className="skeleton skeleton-shimmer h-4 w-32" />
-              <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
-            </div>
-          )}
-          {!roleLoading && isTeacher && org && classroom && (
-            <TeacherAssignmentsView org={org} classroom={classroom} />
-          )}
-          {!roleLoading && isStudent && org && classroom && (
-            <StudentAssignmentsView org={org} classroom={classroom} />
-          )}
-        </DrawerContent>
-        <DrawerSidebar selected="assignments" />
-      </Drawer>
-    </div>
+    <PageShell selected="assignments">
+      <Breadcrumb endpoint={t("nav.assignments")} />
+      {roleLoading && (
+        <div className="mt-8 space-y-4">
+          <div className="skeleton skeleton-shimmer h-6 w-48" />
+          <div className="skeleton skeleton-shimmer h-4 w-32" />
+          <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
+        </div>
+      )}
+      {!roleLoading && isTeacher && org && classroom && (
+        <TeacherAssignmentsView org={org} classroom={classroom} />
+      )}
+      {!roleLoading && isStudent && org && classroom && (
+        <StudentAssignmentsView org={org} classroom={classroom} />
+      )}
+    </PageShell>
   )
 }
 

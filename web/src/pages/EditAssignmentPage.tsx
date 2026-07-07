@@ -3,12 +3,8 @@ import { Link, useParams, useRouter } from "@tanstack/react-router"
 import { UsersRound } from "lucide-react"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
+import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
 import { Spinner } from "@/components/Spinner"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
@@ -183,82 +179,74 @@ const EditAssignmentPage = () => {
   )
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
-          {editError && (
-            <div className="alert alert-error mt-6">{editError}</div>
-          )}
-          {editSuccess && (
-            <div className="alert alert-success mt-6">
-              {t("assignmentSettings.editSuccess")}
-            </div>
-          )}
-          {editWarning && (
-            <div className="alert alert-warning mt-6">{editWarning}</div>
-          )}
-          <div className="mb-6">
-            <PageHeader title={t("assignmentSettings.heading")} />
-          </div>
-          {isTeacher && archived && (
-            <ArchivedClassroomNotice>
-              {t("assignmentSettings.archivedNotice_prefix")}{" "}
-              <Link
-                className="link"
-                to="/$org/$classroom/edit"
-                params={{ org: org ?? "", classroom: classroom ?? "" }}
-              >
-                {t("assignmentSettings.archivedNotice_link")}
-              </Link>{" "}
-              {t("assignmentSettings.archivedNotice_suffix")}
-            </ArchivedClassroomNotice>
-          )}
-          {isTeacher && org && classroom && assignment && (
-            <EditAssignmentForm
-              org={org}
-              classroom={classroom}
-              assignment={assignment}
-              defaultData={assignmentData}
-              readOnly={archived}
-              onCancel={() => {
-                router.history.back()
-              }}
-              onMutate={() => {
-                // Clear prior banners so a re-edit never shows stale state.
-                setEditSuccess(false)
-                setEditWarning("")
-                setEditError("")
-              }}
-              onError={(error) => {
-                setEditError(error.message)
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-              onSuccess={(result) => {
-                // Surface a non-fatal template-grant warning inline; else show
-                // the success banner.
-                if (result?.templateGrantWarning) {
-                  setEditWarning(result.templateGrantWarning)
-                } else {
-                  setEditSuccess(true)
-                  setTimeout(() => setEditSuccess(false), 3000)
-                }
-                window.scrollTo({ top: 0, behavior: "smooth" })
-              }}
-            />
-          )}
-          {isStudent && org && classroom && assignment && (
-            <EditAssignmentFormStudent
-              org={org}
-              classroom={classroom}
-              assignment={assignment}
-            />
-          )}
-        </DrawerContent>
-        <DrawerSidebar selected="assignments" />
-      </Drawer>
-    </div>
+    <PageShell selected="assignments">
+      <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
+      {editError && <div className="alert alert-error mt-6">{editError}</div>}
+      {editSuccess && (
+        <div className="alert alert-success mt-6">
+          {t("assignmentSettings.editSuccess")}
+        </div>
+      )}
+      {editWarning && (
+        <div className="alert alert-warning mt-6">{editWarning}</div>
+      )}
+      <div className="mb-6">
+        <PageHeader title={t("assignmentSettings.heading")} />
+      </div>
+      {isTeacher && archived && (
+        <ArchivedClassroomNotice>
+          {t("assignmentSettings.archivedNotice_prefix")}{" "}
+          <Link
+            className="link"
+            to="/$org/$classroom/edit"
+            params={{ org: org ?? "", classroom: classroom ?? "" }}
+          >
+            {t("assignmentSettings.archivedNotice_link")}
+          </Link>{" "}
+          {t("assignmentSettings.archivedNotice_suffix")}
+        </ArchivedClassroomNotice>
+      )}
+      {isTeacher && org && classroom && assignment && (
+        <EditAssignmentForm
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          defaultData={assignmentData}
+          readOnly={archived}
+          onCancel={() => {
+            router.history.back()
+          }}
+          onMutate={() => {
+            // Clear prior banners so a re-edit never shows stale state.
+            setEditSuccess(false)
+            setEditWarning("")
+            setEditError("")
+          }}
+          onError={(error) => {
+            setEditError(error.message)
+            window.scrollTo({ top: 0, behavior: "smooth" })
+          }}
+          onSuccess={(result) => {
+            // Surface a non-fatal template-grant warning inline; else show
+            // the success banner.
+            if (result?.templateGrantWarning) {
+              setEditWarning(result.templateGrantWarning)
+            } else {
+              setEditSuccess(true)
+              setTimeout(() => setEditSuccess(false), 3000)
+            }
+            window.scrollTo({ top: 0, behavior: "smooth" })
+          }}
+        />
+      )}
+      {isStudent && org && classroom && assignment && (
+        <EditAssignmentFormStudent
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+        />
+      )}
+    </PageShell>
   )
 }
 

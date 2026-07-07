@@ -1,11 +1,7 @@
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
+import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { Spinner } from "@/components/Spinner"
 import { useParams } from "@tanstack/react-router"
@@ -157,22 +153,16 @@ const EditClassroomPage = () => {
   const { org, classroom } = useParams({ strict: false })
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("nav.settings")} />
-          <RequireTeacher allow="instructor">
-            {!org || !classroom ? (
-              <MissingParams message={t("classes.missingOrgOrClassroom")} />
-            ) : (
-              <EditClassroomContent org={org} classroom={classroom} />
-            )}
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar selected="settings" />
-      </Drawer>
-    </div>
+    <PageShell selected="settings">
+      <Breadcrumb endpoint={t("nav.settings")} />
+      <RequireTeacher allow="instructor">
+        {!org || !classroom ? (
+          <MissingParams message={t("classes.missingOrgOrClassroom")} />
+        ) : (
+          <EditClassroomContent org={org} classroom={classroom} />
+        )}
+      </RequireTeacher>
+    </PageShell>
   )
 }
 

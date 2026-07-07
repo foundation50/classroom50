@@ -3,11 +3,7 @@ import { useState } from "react"
 import AddStudent from "@/pages/students/AddStudent"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import EnrolledStudents from "@/pages/students/EnrolledStudents"
 import UploadRoster from "@/pages/students/UploadRoster"
@@ -127,18 +123,12 @@ const StudentListPage = () => {
   const { org = "", classroom = "" } = useParams({ strict: false })
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("nav.students")} />
-          <RequireTeacher>
-            <StudentListContent org={org} classroom={classroom} />
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar selected="students" />
-      </Drawer>
-    </div>
+    <PageShell selected="students">
+      <Breadcrumb endpoint={t("nav.students")} />
+      <RequireTeacher>
+        <StudentListContent org={org} classroom={classroom} />
+      </RequireTeacher>
+    </PageShell>
   )
 }
 

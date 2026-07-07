@@ -8,11 +8,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { GitHubAPIError } from "@/hooks/github/errors"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
+import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -93,36 +89,30 @@ const CreateClassroomPage = () => {
   }
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
-          <RequireTeacher allow="owner">
-            <div className="mb-8">
-              <PageHeader title={t("classes.createTitle")} />
-            </div>
-            <div className="flex flex-col">
-              <div className="mb-8">
-                <CreateClassroomForm
-                  onSubmit={(values) =>
-                    createClassroomMutation.mutateAsync({
-                      name: values.name,
-                      classroom: values.slug,
-                      org,
-                      term: values.term,
-                      secret: values.secret || undefined,
-                      creator: user?.login,
-                    })
-                  }
-                />
-              </div>
-            </div>
-          </RequireTeacher>
-        </DrawerContent>
-        <DrawerSidebar selected="classes" page="classes" />
-      </Drawer>
-    </div>
+    <PageShell page="classes" selected="classes">
+      <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
+      <RequireTeacher allow="owner">
+        <div className="mb-8">
+          <PageHeader title={t("classes.createTitle")} />
+        </div>
+        <div className="flex flex-col">
+          <div className="mb-8">
+            <CreateClassroomForm
+              onSubmit={(values) =>
+                createClassroomMutation.mutateAsync({
+                  name: values.name,
+                  classroom: values.slug,
+                  org,
+                  term: values.term,
+                  secret: values.secret || undefined,
+                  creator: user?.login,
+                })
+              }
+            />
+          </div>
+        </div>
+      </RequireTeacher>
+    </PageShell>
   )
 }
 

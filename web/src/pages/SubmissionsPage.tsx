@@ -16,12 +16,8 @@ import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
+import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import Drawer, {
-  DrawerContent,
-  DrawerSidebar,
-  DrawerToggle,
-} from "@/components/drawer"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -457,504 +453,496 @@ const SubmissionsPageContent = () => {
   }
 
   return (
-    <div className="min-h-screen">
-      <Drawer>
-        <DrawerToggle />
-        <DrawerContent className="p-10 bg-base-200 2xl:px-50">
-          <Breadcrumb endpoint={t("nav.submissions")} />
-          {emptyRoster.show && (
-            <EmptyRosterNotice
-              org={org}
-              classroom={classroom}
-              hasRosterRows={emptyRoster.hasRosterRows}
-              className="mt-4"
-            />
-          )}
-          {rosterError && (
-            <QueryErrorAlert
-              message={
-                <>
-                  {t("submissions.errors.rosterLoad")}{" "}
-                  {t("submissions.errors.rosterLoadHint")}
-                </>
-              }
-              onRetry={() => refetchRoster()}
-            />
-          )}
-          {scoresError && (
-            <QueryErrorAlert
-              message={
-                <>
-                  {scoresErrorObj instanceof Error
-                    ? t("submissions.errors.gradebookLoadWithReason", {
-                        reason: scoresErrorObj.message,
-                      })
-                    : t("submissions.errors.gradebookLoad")}{" "}
-                  {t("submissions.errors.gradebookLoadHint")}
-                </>
-              }
-              onRetry={() => refetchScores()}
-            />
-          )}
-          <div className="mb-8">
-            <PageHeader
-              title={assignmentInfo?.name}
-              subtitle={
-                <div className="flex flex-wrap items-center gap-2">
-                  <span>
-                    {assignmentInfo?.due
-                      ? t("submissions.dueDate", {
-                          date: formatDueDateTime(assignmentInfo.due),
-                        })
-                      : t("submissions.noDueDate")}
-                  </span>
-                  {lateCount > 0 && (
-                    <span className="badge badge-sm badge-error badge-soft">
-                      {t("submissions.lateBadge", { count: lateCount })}
-                    </span>
-                  )}
-                  {assignmentInfo?.template && (
-                    <GitHubLink
-                      href={githubTemplateRepoUrl(
-                        assignmentInfo.template.owner,
-                        assignmentInfo.template.repo,
-                        assignmentInfo.template.branch,
-                      )}
-                      label={t("submissions.viewSourceRepo")}
-                      title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
-                    />
-                  )}
-                </div>
-              }
-              action={
-                <button
-                  type="button"
-                  className="btn btn-outline"
-                  onClick={downloadScoresCsv}
-                  disabled={!scoresInfo.length && !nonSubmitters.length}
-                >
-                  <HardDriveDownload aria-hidden="true" />{" "}
-                  {t("submissions.downloadCsv")}
-                </button>
-              }
-            />
-          </div>
-          <div className="mb-4 rounded-box border border-info/20 bg-info/5">
-            {/* Action bar: standing note left, the two actions + a single
-                contextual View link right. */}
-            <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
-              <div className="flex items-start gap-3">
-                <Info
-                  aria-hidden="true"
-                  className="mt-0.5 size-5 shrink-0 text-info"
-                />
-                <p className="text-sm text-base-content/70">
-                  {t("submissions.collectionNote")}{" "}
-                  {!collecting &&
-                    !regrading &&
-                    activeAction === null &&
-                    lastCollectedLabel && (
-                      <span className="text-base-content/70">
-                        {t("submissions.lastCollected", {
-                          when: lastCollectedLabel,
-                        })}
-                      </span>
-                    )}
-                </p>
-              </div>
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline"
-                  disabled={regrading || collecting || emptyRoster.show}
-                  title={
-                    emptyRoster.show
-                      ? t("submissions.regradeAll.titleEmptyRoster")
-                      : collecting
-                        ? t("submissions.regradeAll.titleCollecting")
-                        : regrading
-                          ? t("submissions.regradeAll.titleRegrading")
-                          : t("submissions.regradeAll.title")
-                  }
-                  onClick={() => {
-                    if (regrading || collecting || emptyRoster.show) return
-                    setRegradeConfirmOpen(true)
-                  }}
-                >
-                  {regradeAllActive && (
-                    <span
-                      className="loading loading-spinner loading-xs"
-                      aria-hidden="true"
-                    />
-                  )}
-                  {regradeAllActive
-                    ? t("submissions.regradeAll.active")
-                    : t("submissions.regradeAll.label")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  disabled={collecting || regrading || emptyRoster.show}
-                  title={
-                    emptyRoster.show
-                      ? t("submissions.collect.titleEmptyRoster")
-                      : regrading
-                        ? t("submissions.collect.titleRegrading")
-                        : t("submissions.collect.title")
-                  }
-                  onClick={() => {
-                    if (collecting || regrading || emptyRoster.show) return
-                    collectScores.collect()
-                  }}
-                >
-                  {collecting && (
-                    <span
-                      className="loading loading-spinner loading-xs"
-                      aria-hidden="true"
-                    />
-                  )}
-                  {collecting
-                    ? t("submissions.collect.active")
-                    : t("submissions.collect.label")}
-                </button>
-                <a
-                  className="btn btn-sm btn-ghost"
-                  href={viewRun?.html_url || viewWorkflowUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  <ExternalLink aria-hidden="true" className="size-4" />
-                  {viewLabel}
-                </a>
-              </div>
-            </div>
-
-            {/* Status strip — only while an action is active or recently
-                finished. Color + copy reflect that one action. */}
-            {activeAction === "collect" && collectScores.phase !== "idle" && (
-              <div
-                className="border-t border-info/20 px-4 py-2 text-sm"
-                role="status"
-                aria-live="polite"
-              >
-                {collectScores.phase === "dispatching" && (
-                  <span className="text-base-content/70">
-                    {t("submissions.collect.statusDispatching")}
-                  </span>
-                )}
-                {collectScores.phase === "running" && (
-                  <span className="flex items-center gap-1.5 text-base-content/70">
-                    <span
-                      className="loading loading-spinner loading-xs"
-                      aria-hidden="true"
-                    />
-                    {t("submissions.collect.statusRunning")}
-                  </span>
-                )}
-                {collectScores.phase === "completed" && (
-                  <span className="text-success">
-                    {t("submissions.collect.statusCompleted")}
-                  </span>
-                )}
-                {collectScores.phase === "failed" && (
-                  <span className="text-error">
-                    {collectScores.error instanceof Error
-                      ? t("submissions.collect.statusFailedWithReason", {
-                          reason: collectScores.error.message,
-                        })
-                      : t("submissions.collect.statusFailed")}{" "}
-                    {t("submissions.collect.statusFailedHint")}
-                  </span>
-                )}
-                {collectScores.phase === "timeout" && (
-                  <span className="text-base-content/70">
-                    {t("submissions.collect.statusTimeout")}
-                  </span>
-                )}
-              </div>
-            )}
-            {activeAction === "regrade" && regradeAll.phase !== "idle" && (
-              <div
-                className={`border-t px-4 py-2 text-sm ${
-                  regradeAll.phase === "failed"
-                    ? "border-error/20 text-error"
-                    : regradeAll.phase === "completed"
-                      ? "border-success/20 text-success"
-                      : "border-warning/20 text-base-content/70"
-                }`}
-                role="status"
-                aria-live="polite"
-              >
-                {regradeAll.phase === "dispatching" && (
-                  <span>{t("submissions.regradeAll.statusDispatching")}</span>
-                )}
-                {regradeAll.phase === "running" && (
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className="loading loading-spinner loading-xs"
-                      aria-hidden="true"
-                    />
-                    {t("submissions.regradeAll.statusRunning")}
-                  </span>
-                )}
-                {regradeAll.phase === "completed" && (
-                  <span>
-                    {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
-                    <span className="font-semibold">
-                      {t("submissions.collect.label")}
-                    </span>{" "}
-                    {t("submissions.regradeAll.statusCompleted_suffix")}
-                  </span>
-                )}
-                {regradeAll.phase === "failed" && (
-                  <span>
-                    {regradeAll.error instanceof Error
-                      ? t("submissions.regradeAll.statusFailedWithReason", {
-                          reason: regradeAll.error.message,
-                        })
-                      : t("submissions.regradeAll.statusFailed")}{" "}
-                    {t("submissions.regradeAll.statusFailedHint")}
-                  </span>
-                )}
-                {regradeAll.phase === "timeout" && (
-                  <span>{t("submissions.regradeAll.statusTimeout")}</span>
-                )}
-              </div>
-            )}
-          </div>
-          <details
-            open
-            className="card bg-base-100 rounded-xl border border-base-300 mb-4 group"
-          >
-            <summary className="card-body flex-row items-center gap-3 cursor-pointer list-none py-4">
-              <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
-                <LinkIcon aria-hidden="true" className="size-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <h2 className="font-bold">{t("submissions.accept.heading")}</h2>
-                <p className="text-sm text-base-content/70">
-                  {t("submissions.accept.subheading")}
-                </p>
-              </div>
-              <ChevronRight
-                aria-hidden="true"
-                className="size-5 shrink-0 text-base-content/70 transition-transform group-open:rotate-90"
-              />
-            </summary>
-            <div className="card-body gap-4 pt-0">
-              {secret ? (
-                <p className="text-sm text-base-content/70">
-                  {t("submissions.accept.unlistedNote")}
-                </p>
-              ) : null}
-
-              <div className="flex justify-between bg-base-200 text-base-content border border-base-300 items-center">
-                <pre className="overflow-x-auto px-4 py-3 text-sm">
-                  <code>{assignmentSubmitUrl}</code>
-                </pre>
-                <CopyIconButton
-                  copied={copiedSubmitLink}
-                  onCopy={copySubmitLink}
-                  label={t("submissions.accept.copyLink")}
-                />
-              </div>
-
-              <details className="group/cli">
-                <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-sm text-base-content/70 hover:text-base-content">
-                  <ChevronRight
-                    aria-hidden="true"
-                    className="size-4 transition-transform group-open/cli:rotate-90"
-                  />
-                  {t("submissions.accept.preferCli")}
-                </summary>
-                <div className="mt-2 flex justify-between bg-base-200 text-base-content border border-base-300 items-center">
-                  <pre className="overflow-x-auto px-4 py-3 text-sm">
-                    <code>{assignmentSubmitCli}</code>
-                  </pre>
-                  <CopyIconButton
-                    copied={copiedSubmitCli}
-                    onCopy={copySubmitCli}
-                    label={t("submissions.accept.copyCli")}
-                  />
-                </div>
-              </details>
-            </div>
-          </details>{" "}
-          <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
-            <StatCard
-              label={
-                isGroupAssignment
-                  ? t("submissions.stats.groupsSubmitted")
-                  : t("submissions.stats.submitted")
-              }
-            >
-              <div className="flex items-baseline gap-1">
-                <span className="text-2xl font-bold">{stats.submitted}</span>
-                {isGroupAssignment ? null : (
-                  <span className="text-base-content/70">
-                    / {scopedStudents.length}
-                  </span>
-                )}
-              </div>
-            </StatCard>
-            <StatCard label={t("submissions.stats.classAverage")}>
-              {!scopedScores?.[0]?.["max-score"] ? (
-                <span className="text-2xl font-bold">
-                  {t("submissions.stats.notAvailable")}
+    <PageShell selected="assignments">
+      <Breadcrumb endpoint={t("nav.submissions")} />
+      {emptyRoster.show && (
+        <EmptyRosterNotice
+          org={org}
+          classroom={classroom}
+          hasRosterRows={emptyRoster.hasRosterRows}
+          className="mt-4"
+        />
+      )}
+      {rosterError && (
+        <QueryErrorAlert
+          message={
+            <>
+              {t("submissions.errors.rosterLoad")}{" "}
+              {t("submissions.errors.rosterLoadHint")}
+            </>
+          }
+          onRetry={() => refetchRoster()}
+        />
+      )}
+      {scoresError && (
+        <QueryErrorAlert
+          message={
+            <>
+              {scoresErrorObj instanceof Error
+                ? t("submissions.errors.gradebookLoadWithReason", {
+                    reason: scoresErrorObj.message,
+                  })
+                : t("submissions.errors.gradebookLoad")}{" "}
+              {t("submissions.errors.gradebookLoadHint")}
+            </>
+          }
+          onRetry={() => refetchScores()}
+        />
+      )}
+      <div className="mb-8">
+        <PageHeader
+          title={assignmentInfo?.name}
+          subtitle={
+            <div className="flex flex-wrap items-center gap-2">
+              <span>
+                {assignmentInfo?.due
+                  ? t("submissions.dueDate", {
+                      date: formatDueDateTime(assignmentInfo.due),
+                    })
+                  : t("submissions.noDueDate")}
+              </span>
+              {lateCount > 0 && (
+                <span className="badge badge-sm badge-error badge-soft">
+                  {t("submissions.lateBadge", { count: lateCount })}
                 </span>
-              ) : (
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold">
-                    {avgScore ?? t("submissions.stats.notAvailable")}
-                  </span>
-                  <span className="text-base-content/70">
-                    / {scopedScores?.[0]?.["max-score"]}
-                  </span>
-                </div>
               )}
-            </StatCard>
-            {passingEnabled && (
-              <StatCard label={t("submissions.stats.passing")}>
-                {stats.passing + stats.failing === 0 ? (
-                  <span className="text-2xl font-bold">
-                    {t("submissions.stats.notAvailable")}
-                  </span>
-                ) : (
-                  <>
-                    <div className="flex items-baseline gap-1">
-                      <span className="text-2xl font-bold">
-                        {stats.passing}
-                      </span>
-                      <span className="text-base-content/70">
-                        / {stats.passing + stats.failing}
-                      </span>
-                    </div>
-                    <span className="text-xs text-base-content/70">
-                      {stats.failing > 0 ? (
-                        <button
-                          type="button"
-                          className="link link-hover decoration-dotted underline-offset-2 hover:text-error"
-                          onClick={showFailing}
-                          title={t("submissions.stats.showFailing")}
-                        >
-                          {t("submissions.stats.failingCount", {
-                            count: stats.failing,
-                          })}
-                        </button>
-                      ) : (
-                        <>
-                          {t("submissions.stats.failingCount", {
-                            count: stats.failing,
-                          })}
-                        </>
-                      )}
-                      {stats.ungraded > 0
-                        ? t("submissions.stats.ungradedSuffix", {
-                            count: stats.ungraded,
-                          })
-                        : ""}
-                    </span>
-                  </>
-                )}
-              </StatCard>
-            )}
-            {acceptedAvailable ? (
-              <StatCard label={t("submissions.stats.accepted")}>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-bold">{acceptedCount}</span>
-                  <span className="text-base-content/70">
-                    / {scopedStudents.length}
-                  </span>
-                </div>
-                {acceptedNotSubmittedCount > 0 && (
-                  <button
-                    type="button"
-                    className="link link-hover w-fit text-xs text-base-content/70 decoration-dotted underline-offset-2 hover:text-warning"
-                    onClick={showAcceptedNotSubmitted}
-                    title={t("submissions.stats.showAcceptedNotSubmitted")}
-                  >
-                    {t("submissions.stats.notYetSubmitted", {
-                      count: acceptedNotSubmittedCount,
-                    })}
-                  </button>
-                )}
-              </StatCard>
-            ) : null}
-          </div>
-          <div className="mb-2 flex items-center justify-end gap-1 text-sm text-base-content/70">
-            <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
-
+              {assignmentInfo?.template && (
+                <GitHubLink
+                  href={githubTemplateRepoUrl(
+                    assignmentInfo.template.owner,
+                    assignmentInfo.template.repo,
+                    assignmentInfo.template.branch,
+                  )}
+                  label={t("submissions.viewSourceRepo")}
+                  title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
+                />
+              )}
+            </div>
+          }
+          action={
             <button
               type="button"
-              className="btn btn-ghost btn-xs btn-circle"
-              disabled={scoresFetching}
-              onClick={() => refetchScores()}
-              aria-label={t("submissions.refresh")}
-              title={t("submissions.refresh")}
+              className="btn btn-outline"
+              onClick={downloadScoresCsv}
+              disabled={!scoresInfo.length && !nonSubmitters.length}
             >
-              <RefreshCw
-                aria-hidden="true"
-                size={14}
-                className={scoresFetching ? "animate-spin" : ""}
-              />
+              <HardDriveDownload aria-hidden="true" />{" "}
+              {t("submissions.downloadCsv")}
             </button>
+          }
+        />
+      </div>
+      <div className="mb-4 rounded-box border border-info/20 bg-info/5">
+        {/* Action bar: standing note left, the two actions + a single
+                contextual View link right. */}
+        <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <Info
+              aria-hidden="true"
+              className="mt-0.5 size-5 shrink-0 text-info"
+            />
+            <p className="text-sm text-base-content/70">
+              {t("submissions.collectionNote")}{" "}
+              {!collecting &&
+                !regrading &&
+                activeAction === null &&
+                lastCollectedLabel && (
+                  <span className="text-base-content/70">
+                    {t("submissions.lastCollected", {
+                      when: lastCollectedLabel,
+                    })}
+                  </span>
+                )}
+            </p>
           </div>
-          <SubmissionsControls
-            query={query}
-            onQueryChange={setQuery}
-            filters={filters}
-            onFiltersChange={setFilters}
-            sort={sort}
-            onSortChange={setSort}
-            isGroup={isGroupAssignment}
-            acceptedAvailable={acceptedAvailable}
-            passingAvailable={passingEnabled}
-            sections={sections}
-          />
-          <SubmissionsTable
-            scores={visibleRows}
-            students={students}
-            nonSubmitters={visibleNonSubmitters}
-            isGroup={isGroupAssignment}
-            org={org}
-            classroom={classroom}
-            assignment={assignment}
-            assignmentName={assignmentInfo?.name}
-            maxGroupSize={assignmentInfo?.max_group_size}
-            acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
-            thresholdFraction={thresholdFraction}
-          />
-          <ConfirmModal
-            open={regradeConfirmOpen}
-            title={t("submissions.regradeAll.confirmTitle", {
-              name: assignmentInfo?.name ?? assignment,
-            })}
-            description={
-              <>
-                {t("submissions.regradeAll.confirmBody1")}
-                <br />
-                <br />
-                {t("submissions.regradeAll.confirmBody2_prefix")}{" "}
+          <div className="flex shrink-0 items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm btn-outline"
+              disabled={regrading || collecting || emptyRoster.show}
+              title={
+                emptyRoster.show
+                  ? t("submissions.regradeAll.titleEmptyRoster")
+                  : collecting
+                    ? t("submissions.regradeAll.titleCollecting")
+                    : regrading
+                      ? t("submissions.regradeAll.titleRegrading")
+                      : t("submissions.regradeAll.title")
+              }
+              onClick={() => {
+                if (regrading || collecting || emptyRoster.show) return
+                setRegradeConfirmOpen(true)
+              }}
+            >
+              {regradeAllActive && (
+                <span
+                  className="loading loading-spinner loading-xs"
+                  aria-hidden="true"
+                />
+              )}
+              {regradeAllActive
+                ? t("submissions.regradeAll.active")
+                : t("submissions.regradeAll.label")}
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm btn-primary"
+              disabled={collecting || regrading || emptyRoster.show}
+              title={
+                emptyRoster.show
+                  ? t("submissions.collect.titleEmptyRoster")
+                  : regrading
+                    ? t("submissions.collect.titleRegrading")
+                    : t("submissions.collect.title")
+              }
+              onClick={() => {
+                if (collecting || regrading || emptyRoster.show) return
+                collectScores.collect()
+              }}
+            >
+              {collecting && (
+                <span
+                  className="loading loading-spinner loading-xs"
+                  aria-hidden="true"
+                />
+              )}
+              {collecting
+                ? t("submissions.collect.active")
+                : t("submissions.collect.label")}
+            </button>
+            <a
+              className="btn btn-sm btn-ghost"
+              href={viewRun?.html_url || viewWorkflowUrl}
+              target="_blank"
+              rel="noreferrer"
+            >
+              <ExternalLink aria-hidden="true" className="size-4" />
+              {viewLabel}
+            </a>
+          </div>
+        </div>
+
+        {/* Status strip — only while an action is active or recently
+                finished. Color + copy reflect that one action. */}
+        {activeAction === "collect" && collectScores.phase !== "idle" && (
+          <div
+            className="border-t border-info/20 px-4 py-2 text-sm"
+            role="status"
+            aria-live="polite"
+          >
+            {collectScores.phase === "dispatching" && (
+              <span className="text-base-content/70">
+                {t("submissions.collect.statusDispatching")}
+              </span>
+            )}
+            {collectScores.phase === "running" && (
+              <span className="flex items-center gap-1.5 text-base-content/70">
+                <span
+                  className="loading loading-spinner loading-xs"
+                  aria-hidden="true"
+                />
+                {t("submissions.collect.statusRunning")}
+              </span>
+            )}
+            {collectScores.phase === "completed" && (
+              <span className="text-success">
+                {t("submissions.collect.statusCompleted")}
+              </span>
+            )}
+            {collectScores.phase === "failed" && (
+              <span className="text-error">
+                {collectScores.error instanceof Error
+                  ? t("submissions.collect.statusFailedWithReason", {
+                      reason: collectScores.error.message,
+                    })
+                  : t("submissions.collect.statusFailed")}{" "}
+                {t("submissions.collect.statusFailedHint")}
+              </span>
+            )}
+            {collectScores.phase === "timeout" && (
+              <span className="text-base-content/70">
+                {t("submissions.collect.statusTimeout")}
+              </span>
+            )}
+          </div>
+        )}
+        {activeAction === "regrade" && regradeAll.phase !== "idle" && (
+          <div
+            className={`border-t px-4 py-2 text-sm ${
+              regradeAll.phase === "failed"
+                ? "border-error/20 text-error"
+                : regradeAll.phase === "completed"
+                  ? "border-success/20 text-success"
+                  : "border-warning/20 text-base-content/70"
+            }`}
+            role="status"
+            aria-live="polite"
+          >
+            {regradeAll.phase === "dispatching" && (
+              <span>{t("submissions.regradeAll.statusDispatching")}</span>
+            )}
+            {regradeAll.phase === "running" && (
+              <span className="flex items-center gap-1.5">
+                <span
+                  className="loading loading-spinner loading-xs"
+                  aria-hidden="true"
+                />
+                {t("submissions.regradeAll.statusRunning")}
+              </span>
+            )}
+            {regradeAll.phase === "completed" && (
+              <span>
+                {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
                 <span className="font-semibold">
                   {t("submissions.collect.label")}
                 </span>{" "}
-                {t("submissions.regradeAll.confirmBody2_suffix")}
-              </>
-            }
-            confirmText="regrade"
-            confirmLabel={t("submissions.regradeAll.label")}
-            cancelLabel={t("common.cancel")}
-            dangerous={false}
-            needsConfirm={false}
-            onConfirm={async () => {
-              regradeAll.regrade()
-            }}
-            onClose={() => setRegradeConfirmOpen(false)}
+                {t("submissions.regradeAll.statusCompleted_suffix")}
+              </span>
+            )}
+            {regradeAll.phase === "failed" && (
+              <span>
+                {regradeAll.error instanceof Error
+                  ? t("submissions.regradeAll.statusFailedWithReason", {
+                      reason: regradeAll.error.message,
+                    })
+                  : t("submissions.regradeAll.statusFailed")}{" "}
+                {t("submissions.regradeAll.statusFailedHint")}
+              </span>
+            )}
+            {regradeAll.phase === "timeout" && (
+              <span>{t("submissions.regradeAll.statusTimeout")}</span>
+            )}
+          </div>
+        )}
+      </div>
+      <details
+        open
+        className="card bg-base-100 rounded-xl border border-base-300 mb-4 group"
+      >
+        <summary className="card-body flex-row items-center gap-3 cursor-pointer list-none py-4">
+          <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+            <LinkIcon aria-hidden="true" className="size-5" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h2 className="font-bold">{t("submissions.accept.heading")}</h2>
+            <p className="text-sm text-base-content/70">
+              {t("submissions.accept.subheading")}
+            </p>
+          </div>
+          <ChevronRight
+            aria-hidden="true"
+            className="size-5 shrink-0 text-base-content/70 transition-transform group-open:rotate-90"
           />
-        </DrawerContent>
-        <DrawerSidebar selected="assignments" />
-      </Drawer>
-    </div>
+        </summary>
+        <div className="card-body gap-4 pt-0">
+          {secret ? (
+            <p className="text-sm text-base-content/70">
+              {t("submissions.accept.unlistedNote")}
+            </p>
+          ) : null}
+
+          <div className="flex justify-between bg-base-200 text-base-content border border-base-300 items-center">
+            <pre className="overflow-x-auto px-4 py-3 text-sm">
+              <code>{assignmentSubmitUrl}</code>
+            </pre>
+            <CopyIconButton
+              copied={copiedSubmitLink}
+              onCopy={copySubmitLink}
+              label={t("submissions.accept.copyLink")}
+            />
+          </div>
+
+          <details className="group/cli">
+            <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-sm text-base-content/70 hover:text-base-content">
+              <ChevronRight
+                aria-hidden="true"
+                className="size-4 transition-transform group-open/cli:rotate-90"
+              />
+              {t("submissions.accept.preferCli")}
+            </summary>
+            <div className="mt-2 flex justify-between bg-base-200 text-base-content border border-base-300 items-center">
+              <pre className="overflow-x-auto px-4 py-3 text-sm">
+                <code>{assignmentSubmitCli}</code>
+              </pre>
+              <CopyIconButton
+                copied={copiedSubmitCli}
+                onCopy={copySubmitCli}
+                label={t("submissions.accept.copyCli")}
+              />
+            </div>
+          </details>
+        </div>
+      </details>{" "}
+      <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
+        <StatCard
+          label={
+            isGroupAssignment
+              ? t("submissions.stats.groupsSubmitted")
+              : t("submissions.stats.submitted")
+          }
+        >
+          <div className="flex items-baseline gap-1">
+            <span className="text-2xl font-bold">{stats.submitted}</span>
+            {isGroupAssignment ? null : (
+              <span className="text-base-content/70">
+                / {scopedStudents.length}
+              </span>
+            )}
+          </div>
+        </StatCard>
+        <StatCard label={t("submissions.stats.classAverage")}>
+          {!scopedScores?.[0]?.["max-score"] ? (
+            <span className="text-2xl font-bold">
+              {t("submissions.stats.notAvailable")}
+            </span>
+          ) : (
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold">
+                {avgScore ?? t("submissions.stats.notAvailable")}
+              </span>
+              <span className="text-base-content/70">
+                / {scopedScores?.[0]?.["max-score"]}
+              </span>
+            </div>
+          )}
+        </StatCard>
+        {passingEnabled && (
+          <StatCard label={t("submissions.stats.passing")}>
+            {stats.passing + stats.failing === 0 ? (
+              <span className="text-2xl font-bold">
+                {t("submissions.stats.notAvailable")}
+              </span>
+            ) : (
+              <>
+                <div className="flex items-baseline gap-1">
+                  <span className="text-2xl font-bold">{stats.passing}</span>
+                  <span className="text-base-content/70">
+                    / {stats.passing + stats.failing}
+                  </span>
+                </div>
+                <span className="text-xs text-base-content/70">
+                  {stats.failing > 0 ? (
+                    <button
+                      type="button"
+                      className="link link-hover decoration-dotted underline-offset-2 hover:text-error"
+                      onClick={showFailing}
+                      title={t("submissions.stats.showFailing")}
+                    >
+                      {t("submissions.stats.failingCount", {
+                        count: stats.failing,
+                      })}
+                    </button>
+                  ) : (
+                    <>
+                      {t("submissions.stats.failingCount", {
+                        count: stats.failing,
+                      })}
+                    </>
+                  )}
+                  {stats.ungraded > 0
+                    ? t("submissions.stats.ungradedSuffix", {
+                        count: stats.ungraded,
+                      })
+                    : ""}
+                </span>
+              </>
+            )}
+          </StatCard>
+        )}
+        {acceptedAvailable ? (
+          <StatCard label={t("submissions.stats.accepted")}>
+            <div className="flex items-baseline gap-1">
+              <span className="text-2xl font-bold">{acceptedCount}</span>
+              <span className="text-base-content/70">
+                / {scopedStudents.length}
+              </span>
+            </div>
+            {acceptedNotSubmittedCount > 0 && (
+              <button
+                type="button"
+                className="link link-hover w-fit text-xs text-base-content/70 decoration-dotted underline-offset-2 hover:text-warning"
+                onClick={showAcceptedNotSubmitted}
+                title={t("submissions.stats.showAcceptedNotSubmitted")}
+              >
+                {t("submissions.stats.notYetSubmitted", {
+                  count: acceptedNotSubmittedCount,
+                })}
+              </button>
+            )}
+          </StatCard>
+        ) : null}
+      </div>
+      <div className="mb-2 flex items-center justify-end gap-1 text-sm text-base-content/70">
+        <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
+
+        <button
+          type="button"
+          className="btn btn-ghost btn-xs btn-circle"
+          disabled={scoresFetching}
+          onClick={() => refetchScores()}
+          aria-label={t("submissions.refresh")}
+          title={t("submissions.refresh")}
+        >
+          <RefreshCw
+            aria-hidden="true"
+            size={14}
+            className={scoresFetching ? "animate-spin" : ""}
+          />
+        </button>
+      </div>
+      <SubmissionsControls
+        query={query}
+        onQueryChange={setQuery}
+        filters={filters}
+        onFiltersChange={setFilters}
+        sort={sort}
+        onSortChange={setSort}
+        isGroup={isGroupAssignment}
+        acceptedAvailable={acceptedAvailable}
+        passingAvailable={passingEnabled}
+        sections={sections}
+      />
+      <SubmissionsTable
+        scores={visibleRows}
+        students={students}
+        nonSubmitters={visibleNonSubmitters}
+        isGroup={isGroupAssignment}
+        org={org}
+        classroom={classroom}
+        assignment={assignment}
+        assignmentName={assignmentInfo?.name}
+        maxGroupSize={assignmentInfo?.max_group_size}
+        acceptedUsernames={acceptedAvailable ? acceptedSet : undefined}
+        thresholdFraction={thresholdFraction}
+      />
+      <ConfirmModal
+        open={regradeConfirmOpen}
+        title={t("submissions.regradeAll.confirmTitle", {
+          name: assignmentInfo?.name ?? assignment,
+        })}
+        description={
+          <>
+            {t("submissions.regradeAll.confirmBody1")}
+            <br />
+            <br />
+            {t("submissions.regradeAll.confirmBody2_prefix")}{" "}
+            <span className="font-semibold">
+              {t("submissions.collect.label")}
+            </span>{" "}
+            {t("submissions.regradeAll.confirmBody2_suffix")}
+          </>
+        }
+        confirmText="regrade"
+        confirmLabel={t("submissions.regradeAll.label")}
+        cancelLabel={t("common.cancel")}
+        dangerous={false}
+        needsConfirm={false}
+        onConfirm={async () => {
+          regradeAll.regrade()
+        }}
+        onClose={() => setRegradeConfirmOpen(false)}
+      />
+    </PageShell>
   )
 }
 
