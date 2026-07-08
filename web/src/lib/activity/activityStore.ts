@@ -128,7 +128,7 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
   if (dedupKey) {
     const dup = recentByKey.find((r) => r.key === dedupKey)
     if (dup) {
-      // Replace the earlier entry in place so a mutation + its toast collapse.
+      // Replace the earlier entry in place (idempotent re-record of one op).
       entries = entries.map((e) =>
         e.id === dup.id ? { ...entry, id: e.id } : e,
       )
@@ -138,22 +138,6 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
       return
     }
     recentByKey.push({ key: dedupKey, at: now, id: entry.id })
-  } else if (entry.kind === "error") {
-    // No explicit key: fall back to label+window dedup so a mutation failure
-    // (recorded structurally by MutationCache) and its follow-up error toast
-    // (same message) collapse into one entry rather than double-reporting.
-    const dup = entries.find(
-      (e) =>
-        e.kind === "error" &&
-        e.label === entry.label &&
-        e.at >= now - DEDUP_WINDOW_MS,
-    )
-    if (dup) {
-      dup.at = now
-      persist()
-      emit()
-      return
-    }
   }
 
   entries = [...entries.filter((e) => e.at >= cutoff), entry]
@@ -164,12 +148,30 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
   emit()
 }
 
-// Record a caught/thrown error as an error-kind activity entry.
+// When the last "structural" error (MutationCache/global handler) was recorded.
+// A follow-up error toast for the SAME failure fires microseconds later at its
+// mutation's onError call site; we suppress that toast record so one failure is
+// listed once. Structural capture is preferred because it carries the
+// GitHubAPIError fields (status/requestId/scopeGap); the toast is a translated
+// summary. Non-mutation error toasts (no preceding structural error in the
+// window) still record — preserving the "capture what the user saw" path.
+let lastStructuralErrorAt = 0
+
+// Record a caught/thrown error as an error-kind activity entry. Used by the
+// MutationCache and the global window handlers (the "structural" sources).
 export function recordError(
   error: unknown,
   context?: { org?: string; label?: string; dedupKey?: string },
 ): void {
+  lastStructuralErrorAt = Date.now()
   pushEntry(toActivityEntry(error, context), context?.dedupKey)
+}
+
+// Record a user-facing error toast, unless it's the follow-up toast of a
+// structural error just recorded (same failure). See lastStructuralErrorAt.
+export function recordErrorToast(message: string): void {
+  if (Date.now() - lastStructuralErrorAt <= DEDUP_WINDOW_MS) return
+  pushEntry(toActivityEntry(new Error(message)))
 }
 
 // Record a non-error, meaningful action (e.g. a dispatched workflow).
@@ -198,6 +200,7 @@ export function activityForOrg(org: string | undefined): ActivityEntry[] {
 export function clearActivity(): void {
   entries = []
   recentByKey = []
+  lastStructuralErrorAt = 0
   persist()
   emit()
 }

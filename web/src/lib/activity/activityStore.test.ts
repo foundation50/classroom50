@@ -8,6 +8,7 @@ import {
   readActivity,
   recordAction,
   recordError,
+  recordErrorToast,
   toActivityEntry,
 } from "./activityStore"
 
@@ -111,12 +112,18 @@ describe("dedup", () => {
     expect(activityForOrg("acme")).toHaveLength(2)
   })
 
-  it("collapses a keyless error and a same-label toast within the window", () => {
-    // MutationCache records with a key; the follow-up error toast records
-    // keyless with the same message — label+window dedup collapses them.
+  it("suppresses an error toast that follows a structural error (same failure)", () => {
+    // MutationCache records structurally; the mutation's onError then toasts a
+    // translated message. The toast is suppressed so one failure lists once.
     recordError(new Error("Create failed"), { dedupKey: "mutation-7" })
-    recordError(new Error("Create failed"))
+    recordErrorToast("Couldn't create classroom: Create failed")
     expect(readActivity()).toHaveLength(1)
+  })
+
+  it("records a standalone error toast when no structural error preceded it", () => {
+    recordErrorToast("Something went wrong")
+    expect(readActivity()).toHaveLength(1)
+    expect(readActivity()[0].label).toBe("Something went wrong")
   })
 })
 
