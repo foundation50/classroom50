@@ -2,13 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
-import {
-  BarChart3,
-  HardDriveDownload,
-  Info,
-  LinkIcon,
-  RefreshCw,
-} from "lucide-react"
+import { BarChart3, Info, LinkIcon, RefreshCw } from "lucide-react"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -451,16 +445,6 @@ const SubmissionsPageContent = () => {
             )}
           </div>
         }
-        action={
-          <Button
-            variant="outline"
-            onClick={downloadScoresCsv}
-            disabled={!scoresInfo.length && !nonSubmitters.length}
-          >
-            <HardDriveDownload aria-hidden="true" />{" "}
-            {t("submissions.downloadCsv")}
-          </Button>
-        }
       />
       {/* Thin collection note with last-collected recency. Actions moved into
           the toolbar menu below so the roster surfaces near the top. */}
@@ -608,6 +592,8 @@ const SubmissionsPageContent = () => {
               onRegradeAll={() => setRegradeConfirmOpen(true)}
               viewHref={viewRun?.html_url || viewWorkflowUrl}
               viewLabel={viewLabel}
+              onDownloadCsv={downloadScoresCsv}
+              downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
             />
           </>
         }

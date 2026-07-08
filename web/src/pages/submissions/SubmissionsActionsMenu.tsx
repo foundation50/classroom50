@@ -1,17 +1,18 @@
 import {
   ChevronDown,
+  DownloadCloud,
   ExternalLink,
+  FileDown,
   RefreshCw,
-  HardDriveDownload,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"
 
-// Consolidates the three workflow actions (Collect now / Regrade all / View
-// workflow) into one dropdown so the toolbar stays compact and the roster
-// surfaces higher. daisyUI dropdowns are focus-driven; selecting an item blurs
-// to close. Disabled/loading gating mirrors the former inline buttons.
+// Consolidates the workflow actions (Collect now / Regrade all / View workflow)
+// plus the CSV export into one dropdown so the toolbar stays compact and the
+// roster surfaces higher. daisyUI dropdowns are focus-driven; selecting an item
+// blurs to close. Disabled/loading gating mirrors the former inline buttons.
 export function SubmissionsActionsMenu({
   collecting,
   regrading,
@@ -21,6 +22,8 @@ export function SubmissionsActionsMenu({
   onRegradeAll,
   viewHref,
   viewLabel,
+  onDownloadCsv,
+  downloadDisabled,
 }: {
   collecting: boolean
   regrading: boolean
@@ -30,6 +33,8 @@ export function SubmissionsActionsMenu({
   onRegradeAll: () => void
   viewHref: string
   viewLabel: string
+  onDownloadCsv: () => void
+  downloadDisabled: boolean
 }) {
   const { t } = useTranslation()
   const busy = collecting || regrading
@@ -84,7 +89,7 @@ export function SubmissionsActionsMenu({
               onCollect()
             }}
           >
-            <HardDriveDownload aria-hidden="true" className="size-4" />
+            <DownloadCloud aria-hidden="true" className="size-4" />
             {collecting
               ? t("submissions.collect.active")
               : t("submissions.collect.label")}
@@ -115,6 +120,24 @@ export function SubmissionsActionsMenu({
             <ExternalLink aria-hidden="true" className="size-4" />
             {viewLabel}
           </a>
+        </li>
+        <div
+          className="my-1 border-t border-base-content/10"
+          role="separator"
+        />
+        <li>
+          <button
+            type="button"
+            disabled={downloadDisabled}
+            onClick={() => {
+              closeMenu()
+              if (downloadDisabled) return
+              onDownloadCsv()
+            }}
+          >
+            <FileDown aria-hidden="true" className="size-4" />
+            {t("submissions.downloadCsv")}
+          </button>
         </li>
       </ul>
     </div>
