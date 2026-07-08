@@ -1593,8 +1593,11 @@
     "partialError": "Some activity couldn't be loaded. Showing what's available.",
     "filters": {
       "source": "Source:",
-      "type": "Type:"
+      "type": "Type:",
+      "allSources": "All sources",
+      "allTypes": "All types"
     },
+    "clearFilters": "Clear",
     "source": {
       "commit": "Config changes",
       "run": "Workflow runs",

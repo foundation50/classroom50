@@ -28,8 +28,10 @@ import {
   timelineToCsvRows,
 } from "@/lib/activity/timeline"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
-import { type ActivityFilterState } from "./orgActivity/ActivityFilters"
-import { ActivityToolbar } from "./orgActivity/ActivityToolbar"
+import {
+  ActivityToolbar,
+  type ActivityFilterState,
+} from "./orgActivity/ActivityToolbar"
 import { TimelineRow } from "./orgActivity/TimelineRow"
 
 // Unified, owner-only org Activity view. Merges three sources into one filterable,
