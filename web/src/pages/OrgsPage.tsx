@@ -363,119 +363,117 @@ const OrgsPage = () => {
             </div>
           </div>
         ) : (
-          <div className="mb-8">
-            <div className="flex flex-col gap-6 p-6">
-              <PageHeader title={t("orgs.headingCl50")} />
+          <>
+            <PageHeader title={t("orgs.headingCl50")} />
 
-              <MissingOrgNotice
-                refreshing={isFetching}
-                onRefresh={handleRefresh}
+            <MissingOrgNotice
+              refreshing={isFetching}
+              onRefresh={handleRefresh}
+            />
+
+            {hasAnyOrgs && (
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
+                  <Search
+                    aria-hidden="true"
+                    className="size-4 text-base-content/50"
+                  />
+                  <input
+                    type="search"
+                    className="grow"
+                    placeholder={t("orgs.toolbar.searchPlaceholder")}
+                    aria-label={t("orgs.toolbar.searchLabel")}
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                  />
+                </label>
+
+                <div className="flex items-center gap-3">
+                  <select
+                    className="select select-bordered select-sm"
+                    aria-label={t("orgs.toolbar.sort.label")}
+                    value={sortKey}
+                    onChange={(e) => changeSort(e.target.value as OrgSortKey)}
+                  >
+                    {SORT_OPTIONS.map((opt) => (
+                      <option key={opt.key} value={opt.key}>
+                        {t(opt.labelKey)}
+                      </option>
+                    ))}
+                  </select>
+
+                  <ViewToggle
+                    viewMode={viewMode}
+                    onChange={changeView}
+                    groupLabel={t("orgs.toolbar.view.label")}
+                    gridLabel={t("orgs.toolbar.view.gridLabel")}
+                    listLabel={t("orgs.toolbar.view.listLabel")}
+                  />
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    {t("orgs.newOrg.button")}
+                  </Button>
+                </div>
+              </div>
+            )}
+
+            {noSearchResults ? (
+              <NoSearchResults
+                title={t("orgs.noResults.title")}
+                body={t("orgs.noResults.body", { query: search.trim() })}
+                clearLabel={t("orgs.noResults.clear")}
+                onClear={() => setSearch("")}
               />
-
-              {hasAnyOrgs && (
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
-                    <Search
-                      aria-hidden="true"
-                      className="size-4 text-base-content/50"
+            ) : sorted.length > 0 ? (
+              <div className="grid grid-cols-12 gap-4">
+                {sorted.map((summary) => {
+                  const updatedIso = lastModifiedActive
+                    ? lastModified[summary.org.login]
+                    : undefined
+                  const updatedAgo = updatedIso
+                    ? formatRelativeToNow(new Date(updatedIso))
+                    : undefined
+                  return viewMode === "grid" ? (
+                    <OrgCard
+                      key={summary.org.id}
+                      summary={summary}
+                      updatedAgo={updatedAgo}
                     />
-                    <input
-                      type="search"
-                      className="grow"
-                      placeholder={t("orgs.toolbar.searchPlaceholder")}
-                      aria-label={t("orgs.toolbar.searchLabel")}
-                      value={search}
-                      onChange={(e) => setSearch(e.target.value)}
+                  ) : (
+                    <OrgRow
+                      key={summary.org.id}
+                      summary={summary}
+                      updatedAgo={updatedAgo}
                     />
-                  </label>
-
-                  <div className="flex items-center gap-3">
-                    <select
-                      className="select select-bordered select-sm"
-                      aria-label={t("orgs.toolbar.sort.label")}
-                      value={sortKey}
-                      onChange={(e) => changeSort(e.target.value as OrgSortKey)}
-                    >
-                      {SORT_OPTIONS.map((opt) => (
-                        <option key={opt.key} value={opt.key}>
-                          {t(opt.labelKey)}
-                        </option>
-                      ))}
-                    </select>
-
-                    <ViewToggle
-                      viewMode={viewMode}
-                      onChange={changeView}
-                      groupLabel={t("orgs.toolbar.view.label")}
-                      gridLabel={t("orgs.toolbar.view.gridLabel")}
-                      listLabel={t("orgs.toolbar.view.listLabel")}
-                    />
-
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setModalOpen(true)}
-                    >
-                      {t("orgs.newOrg.button")}
-                    </Button>
-                  </div>
-                </div>
-              )}
-
-              {noSearchResults ? (
-                <NoSearchResults
-                  title={t("orgs.noResults.title")}
-                  body={t("orgs.noResults.body", { query: search.trim() })}
-                  clearLabel={t("orgs.noResults.clear")}
-                  onClear={() => setSearch("")}
-                />
-              ) : sorted.length > 0 ? (
-                <div className="grid grid-cols-12 gap-4">
-                  {sorted.map((summary) => {
-                    const updatedIso = lastModifiedActive
-                      ? lastModified[summary.org.login]
-                      : undefined
-                    const updatedAgo = updatedIso
-                      ? formatRelativeToNow(new Date(updatedIso))
-                      : undefined
-                    return viewMode === "grid" ? (
-                      <OrgCard
-                        key={summary.org.id}
-                        summary={summary}
-                        updatedAgo={updatedAgo}
-                      />
-                    ) : (
-                      <OrgRow
-                        key={summary.org.id}
-                        summary={summary}
-                        updatedAgo={updatedAgo}
-                      />
-                    )
-                  })}
-                </div>
-              ) : needsSetupOrgs.length > 0 ? (
-                <EmptyState
-                  title={t("orgs.setUpFirst.title")}
-                  body={t("orgs.setUpFirst.body")}
-                  action={
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={() => setModalOpen(true)}
-                    >
-                      <Plus aria-hidden="true" className="size-4" />
-                      {t("orgs.setUpFirst.cta")}
-                    </Button>
-                  }
-                />
-              ) : (
-                <EmptyState
-                  title={t("orgs.emptyTitle")}
-                  body={t("orgs.emptyBody")}
-                />
-              )}
-            </div>
-          </div>
+                  )
+                })}
+              </div>
+            ) : needsSetupOrgs.length > 0 ? (
+              <EmptyState
+                title={t("orgs.setUpFirst.title")}
+                body={t("orgs.setUpFirst.body")}
+                action={
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    {t("orgs.setUpFirst.cta")}
+                  </Button>
+                }
+              />
+            ) : (
+              <EmptyState
+                title={t("orgs.emptyTitle")}
+                body={t("orgs.emptyBody")}
+              />
+            )}
+          </>
         )}
       </PageShell>
 

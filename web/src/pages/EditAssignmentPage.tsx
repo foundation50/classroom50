@@ -181,24 +181,12 @@ const EditAssignmentPage = () => {
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
-      {editError && (
-        <Alert tone="error" className="mt-6">
-          {editError}
-        </Alert>
-      )}
+      {editError && <Alert tone="error">{editError}</Alert>}
       {editSuccess && (
-        <Alert tone="success" className="mt-6">
-          {t("assignmentSettings.editSuccess")}
-        </Alert>
+        <Alert tone="success">{t("assignmentSettings.editSuccess")}</Alert>
       )}
-      {editWarning && (
-        <Alert tone="warning" className="mt-6">
-          {editWarning}
-        </Alert>
-      )}
-      <div className="mb-6">
-        <PageHeader title={t("assignmentSettings.heading")} />
-      </div>
+      {editWarning && <Alert tone="warning">{editWarning}</Alert>}
+      <PageHeader title={t("assignmentSettings.heading")} />
       {isTeacher && archived && (
         <ArchivedClassroomNotice>
           {t("assignmentSettings.archivedNotice_prefix")}{" "}

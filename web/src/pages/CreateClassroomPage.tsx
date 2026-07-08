@@ -92,25 +92,19 @@ const CreateClassroomPage = () => {
     <PageShell page="classes" selected="classes">
       <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
       <RequireTeacher allow="owner">
-        <div className="mb-8">
-          <PageHeader title={t("classes.createTitle")} />
-        </div>
-        <div className="flex flex-col">
-          <div className="mb-8">
-            <CreateClassroomForm
-              onSubmit={(values) =>
-                createClassroomMutation.mutateAsync({
-                  name: values.name,
-                  classroom: values.slug,
-                  org,
-                  term: values.term,
-                  secret: values.secret || undefined,
-                  creator: user?.login,
-                })
-              }
-            />
-          </div>
-        </div>
+        <PageHeader title={t("classes.createTitle")} />
+        <CreateClassroomForm
+          onSubmit={(values) =>
+            createClassroomMutation.mutateAsync({
+              name: values.name,
+              classroom: values.slug,
+              org,
+              term: values.term,
+              secret: values.secret || undefined,
+              creator: user?.login,
+            })
+          }
+        />
       </RequireTeacher>
     </PageShell>
   )

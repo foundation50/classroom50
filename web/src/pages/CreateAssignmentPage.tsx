@@ -114,9 +114,7 @@ const CreateAssignmentPage = () => {
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
       <RequireTeacher>
-        <div className="mb-8">
-          <PageHeader title={t("assignments.createHeading")} />
-        </div>
+        <PageHeader title={t("assignments.createHeading")} />
         {emptyRoster.show ? (
           <EmptyRosterNotice
             org={org}
@@ -124,18 +122,9 @@ const CreateAssignmentPage = () => {
             hasRosterRows={emptyRoster.hasRosterRows}
           />
         ) : null}
-        {errorMessage ? (
-          <Alert tone="error" className="mb-6">
-            {errorMessage}
-          </Alert>
-        ) : (
-          <></>
-        )}
+        {errorMessage ? <Alert tone="error">{errorMessage}</Alert> : <></>}
         {warningMessage ? (
-          <Alert
-            tone="warning"
-            className="mb-6 flex flex-col items-start gap-2"
-          >
+          <Alert tone="warning" className="flex flex-col items-start gap-2">
             <span>{warningMessage}</span>
             <Button
               size="sm"
@@ -152,47 +141,43 @@ const CreateAssignmentPage = () => {
         ) : (
           <></>
         )}
-        <div className="flex flex-col">
-          <div className="mb-8">
-            <CreateAssignmentForm
-              loading={createClassroomMutation.isPending}
-              org={org}
-              classroom={classroom}
-              takenSlugs={takenSlugs}
-              onSubmit={(values) => {
-                setErrorMessage("")
-                setWarningMessage("")
-                createClassroomMutation.mutateAsync({
-                  name: values.name,
-                  slug: values.slug,
-                  mode: values.mode,
-                  org,
-                  template_repo: values.template_repo,
-                  description: values.description,
-                  due_date: values.due_date,
-                  max_group_size: values.max_group_size,
-                  feedback_pr: values.feedback_pr,
-                  runs_on: values.runs_on,
-                  container_image: values.container_image,
-                  container_user: values.container_user,
-                  runtime_python: values.runtime_python,
-                  runtime_node: values.runtime_node,
-                  runtime_java: values.runtime_java,
-                  runtime_go: values.runtime_go,
-                  runtime_rust: values.runtime_rust,
-                  runtime_apt: values.runtime_apt,
-                  setup_command: values.setup_command,
-                  allowed_files: values.allowed_files,
-                  pass_threshold: values.pass_threshold_enabled
-                    ? values.pass_threshold
-                    : undefined,
-                  classroom,
-                  tests: values.tests,
-                })
-              }}
-            />
-          </div>
-        </div>
+        <CreateAssignmentForm
+          loading={createClassroomMutation.isPending}
+          org={org}
+          classroom={classroom}
+          takenSlugs={takenSlugs}
+          onSubmit={(values) => {
+            setErrorMessage("")
+            setWarningMessage("")
+            createClassroomMutation.mutateAsync({
+              name: values.name,
+              slug: values.slug,
+              mode: values.mode,
+              org,
+              template_repo: values.template_repo,
+              description: values.description,
+              due_date: values.due_date,
+              max_group_size: values.max_group_size,
+              feedback_pr: values.feedback_pr,
+              runs_on: values.runs_on,
+              container_image: values.container_image,
+              container_user: values.container_user,
+              runtime_python: values.runtime_python,
+              runtime_node: values.runtime_node,
+              runtime_java: values.runtime_java,
+              runtime_go: values.runtime_go,
+              runtime_rust: values.runtime_rust,
+              runtime_apt: values.runtime_apt,
+              setup_command: values.setup_command,
+              allowed_files: values.allowed_files,
+              pass_threshold: values.pass_threshold_enabled
+                ? values.pass_threshold
+                : undefined,
+              classroom,
+              tests: values.tests,
+            })
+          }}
+        />
       </RequireTeacher>
     </PageShell>
   )

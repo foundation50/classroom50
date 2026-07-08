@@ -141,11 +141,7 @@ const NotAdminAlert = () => {
 
 const NotTeamOrEnterpriseWarning = () => {
   const { t } = useTranslation()
-  return (
-    <Alert tone="warning" className="mb-4">
-      {t("setup.notTeamOrEnterprise")}
-    </Alert>
-  )
+  return <Alert tone="warning">{t("setup.notTeamOrEnterprise")}</Alert>
 }
 
 const OrgSetupPage = () => {
@@ -213,12 +209,10 @@ const OrgSetupPage = () => {
 
   return (
     <PageShell page="classes" selected="assignments">
-      <div className="mb-8">
-        <PageHeader
-          title={t("setup.pageHeading")}
-          subtitle={t("setup.pageSubheading")}
-        />
-      </div>
+      <PageHeader
+        title={t("setup.pageHeading")}
+        subtitle={t("setup.pageSubheading")}
+      />
       {!isLoadingPlanDetails && !isTeamOrEnterprise && (
         <NotTeamOrEnterpriseWarning />
       )}

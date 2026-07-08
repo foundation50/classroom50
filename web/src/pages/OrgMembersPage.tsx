@@ -370,11 +370,7 @@ const OrgMembersPage = () => {
 
   return (
     <>
-      <PageShell
-        contentClassName="p-10 bg-base-200 xl:px-50"
-        page="classes"
-        selected="members"
-      >
+      <PageShell page="classes" selected="members">
         <RequireTeacher allow="owner">
           <PageHeader
             title={t("orgMembers.heading")}

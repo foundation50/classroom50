@@ -105,44 +105,38 @@ const EditClassroomContent = ({
       {!cl ? (
         <Alert tone="error">{t("classes.couldNotLoad")}</Alert>
       ) : (
-        <>
-          <div className="mb-8">
-            <PageHeader
-              title={t("documentTitle.classroomSettings")}
-              subtitle={
-                <>
-                  {t("classes.settingsSubtitle_prefix")}{" "}
-                  <span className="font-semibold">
-                    {cl.name || cl.short_name || classroom}
-                  </span>{" "}
-                  {t("classes.settingsSubtitle_suffix")}
-                </>
-              }
-            />
-          </div>
-          <div className="flex flex-col">
-            <div className="mb-8">
-              <EditClassroomForm
-                cl={cl}
-                onSubmit={(values) =>
-                  runSave(() =>
-                    editClassroomMutation.mutateAsync({
-                      name: values.name,
-                      slug: classroom,
-                      org,
-                      term: values.term,
-                    }),
-                  )
-                }
-              />
-              <ClassroomStaffSection
-                org={org}
-                classroom={classroom}
-                disabled={isClassroomArchived(cl)}
-              />
-            </div>
-          </div>
-        </>
+        <div className="flex flex-col gap-6">
+          <PageHeader
+            title={t("documentTitle.classroomSettings")}
+            subtitle={
+              <>
+                {t("classes.settingsSubtitle_prefix")}{" "}
+                <span className="font-semibold">
+                  {cl.name || cl.short_name || classroom}
+                </span>{" "}
+                {t("classes.settingsSubtitle_suffix")}
+              </>
+            }
+          />
+          <EditClassroomForm
+            cl={cl}
+            onSubmit={(values) =>
+              runSave(() =>
+                editClassroomMutation.mutateAsync({
+                  name: values.name,
+                  slug: classroom,
+                  org,
+                  term: values.term,
+                }),
+              )
+            }
+          />
+          <ClassroomStaffSection
+            org={org}
+            classroom={classroom}
+            disabled={isClassroomArchived(cl)}
+          />
+        </div>
       )}
     </LoadingSwap>
   )

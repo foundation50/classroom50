@@ -462,7 +462,6 @@ const SubmissionsPageContent = () => {
           org={org}
           classroom={classroom}
           hasRosterRows={emptyRoster.hasRosterRows}
-          className="mt-4"
         />
       )}
       {rosterError && (
@@ -491,49 +490,47 @@ const SubmissionsPageContent = () => {
           onRetry={() => refetchScores()}
         />
       )}
-      <div className="mb-8">
-        <PageHeader
-          title={assignmentInfo?.name}
-          subtitle={
-            <div className="flex flex-wrap items-center gap-2">
-              <span>
-                {assignmentInfo?.due
-                  ? t("submissions.dueDate", {
-                      date: formatDueDateTime(assignmentInfo.due),
-                    })
-                  : t("submissions.noDueDate")}
+      <PageHeader
+        title={assignmentInfo?.name}
+        subtitle={
+          <div className="flex flex-wrap items-center gap-2">
+            <span>
+              {assignmentInfo?.due
+                ? t("submissions.dueDate", {
+                    date: formatDueDateTime(assignmentInfo.due),
+                  })
+                : t("submissions.noDueDate")}
+            </span>
+            {lateCount > 0 && (
+              <span className="badge badge-sm badge-error badge-soft">
+                {t("submissions.lateBadge", { count: lateCount })}
               </span>
-              {lateCount > 0 && (
-                <span className="badge badge-sm badge-error badge-soft">
-                  {t("submissions.lateBadge", { count: lateCount })}
-                </span>
-              )}
-              {assignmentInfo?.template && (
-                <GitHubLink
-                  href={githubTemplateRepoUrl(
-                    assignmentInfo.template.owner,
-                    assignmentInfo.template.repo,
-                    assignmentInfo.template.branch,
-                  )}
-                  label={t("submissions.viewSourceRepo")}
-                  title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
-                />
-              )}
-            </div>
-          }
-          action={
-            <Button
-              variant="outline"
-              onClick={downloadScoresCsv}
-              disabled={!scoresInfo.length && !nonSubmitters.length}
-            >
-              <HardDriveDownload aria-hidden="true" />{" "}
-              {t("submissions.downloadCsv")}
-            </Button>
-          }
-        />
-      </div>
-      <div className="mb-4 rounded-box border border-info/20 bg-info/5">
+            )}
+            {assignmentInfo?.template && (
+              <GitHubLink
+                href={githubTemplateRepoUrl(
+                  assignmentInfo.template.owner,
+                  assignmentInfo.template.repo,
+                  assignmentInfo.template.branch,
+                )}
+                label={t("submissions.viewSourceRepo")}
+                title={`${assignmentInfo.template.owner}/${assignmentInfo.template.repo}`}
+              />
+            )}
+          </div>
+        }
+        action={
+          <Button
+            variant="outline"
+            onClick={downloadScoresCsv}
+            disabled={!scoresInfo.length && !nonSubmitters.length}
+          >
+            <HardDriveDownload aria-hidden="true" />{" "}
+            {t("submissions.downloadCsv")}
+          </Button>
+        }
+      />
+      <div className="rounded-box border border-info/20 bg-info/5">
         {/* Action bar: standing note left, the two actions + a single
                 contextual View link right. */}
         <div className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -704,7 +701,7 @@ const SubmissionsPageContent = () => {
       </div>
       <details
         open
-        className="card bg-base-100 rounded-xl border border-base-300 mb-4 group"
+        className="card bg-base-100 rounded-xl border border-base-300 group"
       >
         <summary className="card-body flex-row items-center gap-3 cursor-pointer list-none py-4">
           <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
@@ -760,7 +757,7 @@ const SubmissionsPageContent = () => {
           </details>
         </div>
       </details>{" "}
-      <div className="grid grid-cols-2 gap-4 mb-6 lg:grid-cols-4">
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <StatCard
           label={
             isGroupAssignment
@@ -859,7 +856,7 @@ const SubmissionsPageContent = () => {
           </StatCard>
         ) : null}
       </div>
-      <div className="mb-2 flex items-center justify-end gap-1 text-sm text-base-content/70">
+      <div className="flex items-center justify-end gap-1 text-sm text-base-content/70">
         <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
 
         <Button

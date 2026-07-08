@@ -50,28 +50,26 @@ const StudentListContent = ({
 
   return (
     <>
-      <div className="mb-8">
-        <PageHeader
-          title={t("nav.students")}
-          subtitle={
-            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span>
-                {countReady
-                  ? t("students.enrolledCount", { count: enrolledCount })
-                  : t("students.enrolledCountLoading")}
-              </span>
-              <span aria-hidden="true" className="text-base-content/30">
-                ·
-              </span>
-              <GitHubLink
-                href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
-                label={t("students.viewCsvOnGitHub")}
-                title={t("students.viewCsvOnGitHub")}
-              />
+      <PageHeader
+        title={t("nav.students")}
+        subtitle={
+          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span>
+              {countReady
+                ? t("students.enrolledCount", { count: enrolledCount })
+                : t("students.enrolledCountLoading")}
             </span>
-          }
-        />
-      </div>
+            <span aria-hidden="true" className="text-base-content/30">
+              ·
+            </span>
+            <GitHubLink
+              href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
+              label={t("students.viewCsvOnGitHub")}
+              title={t("students.viewCsvOnGitHub")}
+            />
+          </span>
+        }
+      />
 
       <EnrolledStudents
         students={students}

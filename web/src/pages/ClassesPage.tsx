@@ -323,7 +323,7 @@ const ClassesPage = () => {
 
   return (
     <PageShell page="classes" selected="assignments">
-      <div className="mb-8 space-y-4">
+      <div className="space-y-4">
         <div className="flex items-center gap-3">
           <GitHub aria-hidden="true" className="size-5 opacity-70" />
 
@@ -357,7 +357,7 @@ const ClassesPage = () => {
       </div>
       {isOwner && <OrgPreflightNotice org={org} />}
       {roleLoading ? (
-        <div className="grid grid-cols-12 gap-4 mb-6">
+        <div className="grid grid-cols-12 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}

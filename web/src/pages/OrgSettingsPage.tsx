@@ -498,12 +498,7 @@ const OrgSettingsPage = () => {
   const { org } = useParams({ strict: false })
 
   return (
-    <PageShell
-      contentClassName="p-10 bg-base-200 xl:px-50"
-      page="classes"
-      settings
-      selected="settings"
-    >
+    <PageShell page="classes" settings selected="settings">
       <RequireTeacher allow="owner">
         <PageHeader
           title={t("orgSettings.page.heading")}
