@@ -746,7 +746,7 @@ export const SidebarFooter = () => {
       ) : null}
       <div
         ref={footerRef}
-        className={`relative cursor-pointer border-t border-neutral-content/20 py-4 ${org ? "" : "mt-auto"}`}
+        className={`relative cursor-pointer border-t border-neutral-content/20 py-4 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
         onClick={() => setMenuOpen((open) => !open)}
         role="button"
         tabIndex={0}
@@ -912,14 +912,14 @@ export const SidebarFooter = () => {
         </div>
 
         <div
-          className={`flex w-full items-center gap-4 text-left ${collapsed ? "justify-center" : "justify-start"}`}
+          className={`flex w-full items-center gap-3 text-left ${collapsed ? "justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
             <img
               src={avatar_img}
               alt={t("nav.avatarAlt", { name })}
-              className={`rounded-full ${collapsed ? "w-10" : "w-12"}`}
+              className={`rounded-full ${collapsed ? "w-8" : "w-9"}`}
             />
           </div>
 
