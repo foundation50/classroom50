@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config"
+import type { Plugin } from "vite"
 import react, { reactCompilerPreset } from "@vitejs/plugin-react"
 import babel from "@rolldown/plugin-babel"
 import tailwindcss from "@tailwindcss/vite"
@@ -46,6 +47,29 @@ function resolveReleaseInfo() {
 
 const release = resolveReleaseInfo()
 
+// Publishes the release identity as a fetchable /version.json alongside the
+// compile-time defines below. GitHub Pages can't set Cache-Control, so a
+// long-lived tab could run a stale build forever; it polls this unhashed,
+// short-cached file and compares the deployed commit against its inlined
+// __APP_COMMIT__ (see src/hooks/useVersionCheck.ts). generateBundle covers
+// `vite build`; configureServer serves the same payload in dev so the check
+// has an endpoint instead of a 404.
+function versionJsonPlugin(): Plugin {
+  const body = JSON.stringify(release, null, 2)
+  return {
+    name: "classroom50:version-json",
+    generateBundle() {
+      this.emitFile({ type: "asset", fileName: "version.json", source: body })
+    },
+    configureServer(server) {
+      server.middlewares.use("/version.json", (_req, res) => {
+        res.setHeader("Content-Type", "application/json")
+        res.end(body)
+      })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: {
@@ -62,6 +86,7 @@ export default defineConfig({
     svgr(),
     tailwindcss(),
     babel({ presets: [reactCompilerPreset()] }),
+    versionJsonPlugin(),
   ],
   resolve: {
     alias: {

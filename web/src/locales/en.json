@@ -1119,6 +1119,11 @@
       }
     }
   },
+  "appUpdate": {
+    "title": "A new version of Classroom 50 is available",
+    "body": "Reload the page to get the latest version.",
+    "action": "Reload now"
+  },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",
     "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Update them here to keep grading, score collection, and Pages publishing working.",
