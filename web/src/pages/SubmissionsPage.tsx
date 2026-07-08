@@ -717,7 +717,7 @@ const SubmissionsPageContent = () => {
         notAvailableLabel={t("submissions.stats.notAvailable")}
         passing={stats.passing}
         passingEnabled={passingEnabled}
-        passing_denom={stats.passing + stats.failing}
+        passingDenom={stats.passing + stats.failing}
         failing={stats.failing}
         ungraded={stats.ungraded}
         onShowFailing={showFailing}

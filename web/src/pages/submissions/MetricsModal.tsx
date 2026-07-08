@@ -17,7 +17,7 @@ export function MetricsModal({
   notAvailableLabel,
   passing,
   passingEnabled,
-  passing_denom,
+  passingDenom,
   failing,
   ungraded,
   onShowFailing,
@@ -36,7 +36,7 @@ export function MetricsModal({
   notAvailableLabel: string
   passing: number
   passingEnabled: boolean
-  passing_denom: number
+  passingDenom: number
   failing: number
   ungraded: number
   onShowFailing: () => void
@@ -76,10 +76,10 @@ export function MetricsModal({
         {passingEnabled && (
           <StatCard
             label={t("submissions.stats.passing")}
-            value={passing_denom === 0 ? notAvailableLabel : passing}
-            outOf={passing_denom === 0 ? undefined : passing_denom}
+            value={passingDenom === 0 ? notAvailableLabel : passing}
+            outOf={passingDenom === 0 ? undefined : passingDenom}
             hint={
-              passing_denom === 0 ? undefined : (
+              passingDenom === 0 ? undefined : (
                 <span className="text-xs text-base-content/70">
                   {failing > 0 ? (
                     <button

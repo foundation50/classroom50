@@ -155,13 +155,17 @@ const ActionIconLink = ({
       <Icon className="size-4" />
     </Button>
   ) : (
-    <span
-      className="btn btn-ghost btn-sm btn-square text-base-content/30"
+    <Button
+      variant="ghost"
+      size="sm"
+      shape="square"
+      className="text-base-content/30"
+      disabled
       aria-label={emptyLabel}
       title={emptyTitle}
     >
       <Icon className="size-4" />
-    </span>
+    </Button>
   )
 
 // Inline commit/details link in the expanded history row: external link when a
