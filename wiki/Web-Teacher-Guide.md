@@ -13,7 +13,7 @@ This guide will cover the following topics, roughly in the order a teacher is li
 - [Viewing Organizations](#viewing-organizations)
 - [Setting Up Classroom 50](#setting-up-classroom-50)
 - [Viewing and Creating Classrooms](#viewing-and-creating-classrooms)
-- [Viewing and Creating Assignments](#viewing-and-creating-assignments)
+- [Creating an Assignment](#creating-an-assignment)
 - [Viewing and Adding Students](#viewing-and-adding-students)
 - [Viewing and Collecting Submissions](#viewing-and-collecting-submissions)
 - [Editing Assignments and Classrooms](#editing-assignments-and-classrooms)
