@@ -72,17 +72,33 @@ import {
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { GitHubLink } from "@/components/GitHubLink"
 
-// Re-renders on an interval to keep relative timestamps fresh; returns the
-// current time captured at each tick so callers derive recency from that rather
-// than calling Date.now() during render (which the React Compiler flags as
-// impure).
-const usePeriodicRerender = (intervalMs = 30_000) => {
+// Re-renders so a relative "updated X ago" label stays live, at a cadence that
+// matches the elapsed magnitude: every second under a minute, every minute
+// under an hour, every hour beyond. Purely a UI refresh — no data fetching; it
+// returns the tick time so callers derive recency from it rather than calling
+// Date.now() during render (which the React Compiler flags as impure).
+const cadenceForElapsed = (elapsedMs: number): number => {
+  if (elapsedMs < 60_000) return 1_000
+  if (elapsedMs < 3_600_000) return 60_000
+  return 3_600_000
+}
+
+const useLiveNow = (referenceMs: number | null) => {
   const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
+    // No reference yet (data not loaded) — a slow 1-min heartbeat is enough to
+    // keep any other relative labels fresh without a per-second loop.
+    const intervalMs =
+      referenceMs && referenceMs > 0
+        ? cadenceForElapsed(Date.now() - referenceMs)
+        : 60_000
     const id = window.setInterval(() => setNow(Date.now()), intervalMs)
     return () => window.clearInterval(id)
-  }, [intervalMs])
+    // Re-arm when the reference changes (a refetch resets it to ~now, dropping
+    // back to the 1s cadence) and when `now` crosses a threshold (the elapsed
+    // magnitude — and thus the cadence — steps up).
+  }, [referenceMs, now])
 
   return now
 }
@@ -90,11 +106,6 @@ const usePeriodicRerender = (intervalMs = 30_000) => {
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
-  // 10s cadence keeps the "Updated …" recency label progressing off "just now"
-  // promptly (and the due countdown fresh) without a busy re-render loop. `now`
-  // is the tick time so recency is derived here rather than via Date.now() in
-  // render (React Compiler flags that as impure).
-  const now = usePeriodicRerender(10_000)
   const {
     data: scoresData,
     refetch: refetchScores,
@@ -103,6 +114,9 @@ const SubmissionsPageContent = () => {
     error: scoresErrorObj,
     dataUpdatedAt: scoresUpdatedAt,
   } = useGetScores(org, classroom)
+  // Live clock for the "Updated …" label, ticking faster the more recent the
+  // last fetch (1s < 1min < 1hr). UI-only; the fetch cadence is unchanged.
+  const now = useLiveNow(scoresUpdatedAt || null)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
   // Team-driven usernames (Section 7): the classroom GitHub team is
   // authoritative for enrollment; students.csv enriches display only. The
