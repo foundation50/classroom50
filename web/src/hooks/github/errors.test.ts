@@ -211,3 +211,37 @@ describe("isScopeGap", () => {
     ).toBe(false)
   })
 })
+
+describe("requestId", () => {
+  const withRequestId = (requestId?: string | null) =>
+    new GitHubAPIError({
+      status: 500,
+      url: "https://api.github.com/x",
+      message: "Server error",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+      requestId,
+    })
+
+  it("captures the X-GitHub-Request-Id when present", () => {
+    expect(withRequestId("ABCD:1234:5678").requestId).toBe("ABCD:1234:5678")
+  })
+
+  it("defaults to null when the header is absent", () => {
+    expect(withRequestId().requestId).toBeNull()
+    expect(withRequestId(null).requestId).toBeNull()
+  })
+
+  it("does not disturb the existing predicates", () => {
+    const error = apiError(403, "required; url=https://github.com/orgs/a/sso")
+    expect(error.requestId).toBeNull()
+    expect(error.isSsoRequired).toBe(true)
+  })
+})

@@ -27,6 +27,10 @@ export class GitHubAPIError extends Error {
   // when present. `null` for a fine-grained PAT or when absent. Compared against
   // `acceptedScopes` by `isScopeGap`.
   oauthScopes: string | null
+  // X-GitHub-Request-Id, the id GitHub stamps on every response. Non-sensitive
+  // and the fastest way for GitHub support (or the maintainer correlating with
+  // the audit log) to find the exact failing request. `null` when absent.
+  requestId: string | null
 
   constructor(args: {
     status: number
@@ -37,6 +41,7 @@ export class GitHubAPIError extends Error {
     ssoHeader?: string | null
     acceptedScopes?: string | null
     oauthScopes?: string | null
+    requestId?: string | null
   }) {
     super(args.message)
     this.name = "GitHubAPIError"
@@ -47,6 +52,7 @@ export class GitHubAPIError extends Error {
     this.ssoHeader = args.ssoHeader ?? null
     this.acceptedScopes = args.acceptedScopes ?? null
     this.oauthScopes = args.oauthScopes ?? null
+    this.requestId = args.requestId ?? null
   }
 
   get isNotFound() {
