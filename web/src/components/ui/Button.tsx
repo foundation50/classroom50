@@ -78,41 +78,41 @@ type CommonProps = {
   children?: ReactNode
 }
 
-type ButtonElementProps = CommonProps & {
-  as?: "button"
-  ref?: Ref<HTMLButtonElement>
-} & Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children">
+// A single props shape (not a discriminated union) so `onClick` and the other
+// button handlers keep inferring their event types at every call site — a union
+// of button/anchor props collapses those handler params to `any`. The anchor
+// variant is opt-in via `as="a"` or `href`; anchor-only attributes (`href`,
+// `target`, `rel`, `download`) are folded in as optional. `disabled` is
+// accepted on both; on an anchor it renders as inert (no href + aria-disabled).
+export type ButtonProps = CommonProps &
+  Omit<ButtonHTMLAttributes<HTMLButtonElement>, "children"> & {
+    as?: "button" | "a"
+    href?: string
+    target?: AnchorHTMLAttributes<HTMLAnchorElement>["target"]
+    rel?: string
+    download?: AnchorHTMLAttributes<HTMLAnchorElement>["download"]
+    ref?: Ref<HTMLButtonElement | HTMLAnchorElement>
+  }
 
-type AnchorElementProps = CommonProps & {
-  as: "a"
-  ref?: Ref<HTMLAnchorElement>
-} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "children">
-
-// A caller that passes `href` gets the anchor variant without spelling `as="a"`.
-type AnchorShorthandProps = CommonProps & {
-  as?: undefined
-  href: string
-  ref?: Ref<HTMLAnchorElement>
-} & Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "children">
-
-export type ButtonProps =
-  | ButtonElementProps
-  | AnchorElementProps
-  | AnchorShorthandProps
-
-export function Button(props: ButtonProps) {
-  const {
-    variant = "neutral",
-    size = "md",
-    shape = "default",
-    active = false,
-    loading = false,
-    loadingLabel,
-    className,
-    children,
-    ...rest
-  } = props
-
+export function Button({
+  variant = "neutral",
+  size = "md",
+  shape = "default",
+  active = false,
+  loading = false,
+  loadingLabel,
+  className,
+  children,
+  as,
+  href,
+  target,
+  rel,
+  download,
+  disabled,
+  type,
+  ref,
+  ...rest
+}: ButtonProps) {
   const classes = cx(
     "btn",
     VARIANT_CLASS[variant],
@@ -132,50 +132,33 @@ export function Button(props: ButtonProps) {
   // Render an <a> when the caller asked for one (via `as="a"` or an `href`).
   // Anchors can't be natively `disabled`, so a loading/disabled anchor drops
   // its href and marks aria-disabled to keep it inert and announced.
-  if (props.as === "a" || (props.as === undefined && "href" in props)) {
-    const {
-      as: _as,
-      ref,
-      href,
-      disabled,
-      ...anchorRest
-    } = rest as AnchorHTMLAttributes<HTMLAnchorElement> & {
-      as?: "a"
-      ref?: Ref<HTMLAnchorElement>
-      href?: string
-      disabled?: boolean
-    }
+  if (as === "a" || (as === undefined && href !== undefined)) {
     const inert = disabled || loading
     return (
       <a
-        ref={ref}
+        ref={ref as Ref<HTMLAnchorElement>}
         className={classes}
         href={inert ? undefined : href}
+        target={target}
+        rel={rel}
+        download={download}
         aria-disabled={inert || undefined}
         aria-busy={loading || undefined}
-        {...anchorRest}
+        {...(rest as AnchorHTMLAttributes<HTMLAnchorElement>)}
       >
         {inner}
       </a>
     )
   }
 
-  const {
-    ref,
-    type,
-    disabled,
-    ...buttonRest
-  } = rest as ButtonHTMLAttributes<HTMLButtonElement> & {
-    ref?: Ref<HTMLButtonElement>
-  }
   return (
     <button
-      ref={ref}
+      ref={ref as Ref<HTMLButtonElement>}
       type={type ?? "button"}
       className={classes}
       disabled={disabled || loading}
       aria-busy={loading || undefined}
-      {...buttonRest}
+      {...rest}
     >
       {inner}
     </button>

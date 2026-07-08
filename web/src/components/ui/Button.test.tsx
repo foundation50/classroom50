@@ -102,7 +102,12 @@ describe("Button", () => {
 
   it("forwards target and rel on the anchor variant", () => {
     render(
-      <Button as="a" href="https://example.com" target="_blank" rel="noreferrer">
+      <Button
+        as="a"
+        href="https://example.com"
+        target="_blank"
+        rel="noreferrer"
+      >
         Ext
       </Button>,
     )
