@@ -72,19 +72,29 @@ import {
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { GitHubLink } from "@/components/GitHubLink"
 
-// Re-renders on an interval to keep relative timestamps fresh.
+// Re-renders on an interval to keep relative timestamps fresh; returns the
+// current time captured at each tick so callers derive recency from that rather
+// than calling Date.now() during render (which the React Compiler flags as
+// impure).
 const usePeriodicRerender = (intervalMs = 30_000) => {
-  const [, setNow] = useState(() => Date.now())
+  const [now, setNow] = useState(() => Date.now())
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(Date.now()), intervalMs)
     return () => window.clearInterval(id)
   }, [intervalMs])
+
+  return now
 }
 
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
+  // 10s cadence keeps the "Updated …" recency label progressing off "just now"
+  // promptly (and the due countdown fresh) without a busy re-render loop. `now`
+  // is the tick time so recency is derived here rather than via Date.now() in
+  // render (React Compiler flags that as impure).
+  const now = usePeriodicRerender(10_000)
   const {
     data: scoresData,
     refetch: refetchScores,
@@ -119,10 +129,18 @@ const SubmissionsPageContent = () => {
   // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
+  // "Updated" recency label. A just-settled fetch is ~0s old, and
+  // formatRelativeToNow would render that as the awkward "0 seconds ago" that
+  // then lingers between ticks — show "just now" under a short threshold
+  // instead. The periodic rerender (below) advances it as time passes.
+  const scoresUpdatedSecondsAgo =
+    scoresUpdatedAt > 0 ? (now - scoresUpdatedAt) / 1000 : null
   const scoresLastUpdated =
-    scoresUpdatedAt > 0
-      ? formatRelativeToNow(scoresUpdatedAt)
-      : t("submissions.dashboard.never")
+    scoresUpdatedSecondsAgo === null
+      ? t("submissions.dashboard.never")
+      : scoresUpdatedSecondsAgo < 10
+        ? t("submissions.justNow")
+        : formatRelativeToNow(scoresUpdatedAt)
 
   const assignmentSubmitUrl =
     `${window.location.origin}/${org}/${classroom}/assignments/${assignment}/accept` +
@@ -138,7 +156,6 @@ const SubmissionsPageContent = () => {
   const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
 
-  usePeriodicRerender()
   const assignmentInfo = assignmentData?.assignments.find(
     (a) => a.slug === assignment,
   )
@@ -461,8 +478,23 @@ const SubmissionsPageContent = () => {
                 {t("submissions.lateBadge", { count: lateCount })}
               </Badge>
             )}
-            <span className="text-base-content/70">
+            <span className="inline-flex items-center gap-1 text-base-content/70">
               {t("submissions.updated", { when: scoresLastUpdated })}
+              <Button
+                variant="ghost"
+                size="xs"
+                shape="circle"
+                disabled={scoresFetching}
+                onClick={() => refetchScores()}
+                aria-label={t("submissions.refresh")}
+                title={t("submissions.refresh")}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  size={12}
+                  className={scoresFetching ? "animate-spin" : ""}
+                />
+              </Button>
             </span>
             {assignmentInfo?.template && (
               <GitHubLink
@@ -582,21 +614,6 @@ const SubmissionsPageContent = () => {
         sections={sections}
         trailing={
           <>
-            <Button
-              variant="ghost"
-              size="sm"
-              shape="circle"
-              disabled={scoresFetching}
-              onClick={() => refetchScores()}
-              aria-label={t("submissions.refresh")}
-              title={t("submissions.refresh")}
-            >
-              <RefreshCw
-                aria-hidden="true"
-                size={14}
-                className={scoresFetching ? "animate-spin" : ""}
-              />
-            </Button>
             <Button
               variant="ghost"
               size="sm"
