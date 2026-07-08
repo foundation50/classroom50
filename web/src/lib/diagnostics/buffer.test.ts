@@ -17,14 +17,17 @@ const noRateLimit = {
   retryAfter: null,
 }
 
-const githubError = (overrides?: Partial<ConstructorParameters<typeof GitHubAPIError>[0]>) =>
+const githubError = (
+  overrides?: Partial<ConstructorParameters<typeof GitHubAPIError>[0]>,
+) =>
   new GitHubAPIError({
     status: 403,
     url: "https://api.github.com/orgs/acme",
     message: "Forbidden",
     body: { secret: "should never leak" },
     rateLimit: noRateLimit,
-    ssoHeader: "required; url=https://github.com/orgs/acme/sso?authorization_request=SECRET_TOKEN",
+    ssoHeader:
+      "required; url=https://github.com/orgs/acme/sso?authorization_request=SECRET_TOKEN",
     acceptedScopes: "repo",
     oauthScopes: "read:user",
     requestId: "ABCD:1234",

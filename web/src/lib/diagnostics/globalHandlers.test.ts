@@ -24,7 +24,10 @@ describe("installDiagnosticsHandlers", () => {
     handlers.installDiagnosticsHandlers()
 
     window.dispatchEvent(
-      new ErrorEvent("error", { error: new Error("kaboom"), message: "kaboom" }),
+      new ErrorEvent("error", {
+        error: new Error("kaboom"),
+        message: "kaboom",
+      }),
     )
 
     const recent = buffer.readRecentErrors()
@@ -61,7 +64,7 @@ describe("installDiagnosticsHandlers", () => {
     handlers.installDiagnosticsHandlers()
 
     const errorRegistrations = addSpy.mock.calls.filter(
-      ([type]) => type === "error",
+      ([type]: [string, ...unknown[]]) => type === "error",
     )
     expect(errorRegistrations).toHaveLength(1)
   })

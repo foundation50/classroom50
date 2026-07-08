@@ -3,11 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { clearRecentErrors, recordError } from "./buffer"
-import {
-  clearObservedContext,
-  observeOrg,
-  observeResponse,
-} from "./observed"
+import { clearObservedContext, observeOrg, observeResponse } from "./observed"
 import { buildDiagnostics } from "./snapshot"
 
 afterEach(() => {
@@ -41,7 +37,9 @@ describe("buildDiagnostics", () => {
   it("explains why org plan is unknown rather than omitting it", () => {
     const text = buildDiagnostics({ org: "acme" })
     expect(text).toContain("Org: acme")
-    expect(text).toContain("plan: unknown (plan not visible — not an org owner?)")
+    expect(text).toContain(
+      "plan: unknown (plan not visible — not an org owner?)",
+    )
   })
 
   it("reports a known plan with its category", () => {
