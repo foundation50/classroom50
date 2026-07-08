@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
+import { verifyClassroom50ConfigRepo } from "./github/queries"
 
 export type OrgClassroom50Status = "ready" | "missing" | "unknown"
 
@@ -11,15 +12,18 @@ type OrgClassroom50Probe = "ready" | "missing"
 
 // Probe the `classroom50` config repo for one org. 404 = missing (unset or
 // private to me); any other error rethrows so the query stays "unknown" rather
-// than reporting a transient failure as missing. Pure over its client so the
-// 404-vs-rethrow contract the /$org/* gate depends on is unit-testable.
+// than reporting a transient failure as missing. A readable repo that lacks the
+// config marker is a name collision, reported "missing" so the /$org/* gate
+// doesn't render its folders as classrooms. Pure over its client so the
+// 404-vs-rethrow contract the gate depends on is unit-testable.
 export async function probeOrgClassroom50Status(
   client: { request: (path: string) => Promise<unknown> },
   org: string,
 ): Promise<OrgClassroom50Probe> {
   try {
     await client.request(`/repos/${org}/classroom50`)
-    return "ready"
+    const isConfigRepo = await verifyClassroom50ConfigRepo(client, org)
+    return isConfigRepo ? "ready" : "missing"
   } catch (error) {
     if (error instanceof GitHubAPIError && error.status === 404) {
       return "missing"

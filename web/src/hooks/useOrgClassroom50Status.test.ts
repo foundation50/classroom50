@@ -27,18 +27,39 @@ function apiError(status: number) {
   })
 }
 
-function clientReturning(impl: () => Promise<unknown>) {
+function clientReturning(impl: (path: string) => Promise<unknown>) {
   return { request: vi.fn(impl) }
 }
 
+// A client that resolves the repo GET but 404s the marker file — the
+// name-collision shape (some org owns an unrelated repo literally named
+// `classroom50`).
+function clientNameCollision() {
+  return clientReturning(async (path: string) => {
+    if (path.includes("/contents/")) throw apiError(404)
+    return { id: 1 }
+  })
+}
+
 describe("probeOrgClassroom50Status", () => {
-  it("returns 'ready' when the config repo request resolves", async () => {
+  it("returns 'ready' when the repo resolves AND carries the config marker", async () => {
     const client = clientReturning(async () => ({ id: 1 }))
 
     await expect(probeOrgClassroom50Status(client, "acme")).resolves.toBe(
       "ready",
     )
     expect(client.request).toHaveBeenCalledWith("/repos/acme/classroom50")
+    expect(client.request).toHaveBeenCalledWith(
+      "/repos/acme/classroom50/contents/.github/workflows/autograde-runner.yaml",
+    )
+  })
+
+  it("returns 'missing' for a name collision (repo exists but has no config marker)", async () => {
+    const client = clientNameCollision()
+
+    await expect(probeOrgClassroom50Status(client, "acme")).resolves.toBe(
+      "missing",
+    )
   })
 
   it("returns 'missing' on a 404 (repo unset or private to me)", async () => {

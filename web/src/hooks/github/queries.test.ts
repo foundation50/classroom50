@@ -2,14 +2,16 @@ import { describe, expect, it, vi } from "vitest"
 import {
   pagesAssignmentUrl,
   classroomsIndexUrl,
+  getClassroom50OrgSummary,
   listAllOrgMembers,
   listOrgAdmins,
   listOrgTeams,
   releasesQuery,
+  verifyClassroom50ConfigRepo,
 } from "./queries"
 import { GitHubAPIError } from "./errors"
 import type { GitHubClient } from "./client"
-import type { GitHubUser, GitHubRelease } from "./types"
+import type { GitHubOrgMembership, GitHubUser, GitHubRelease } from "./types"
 
 describe("pagesAssignmentUrl", () => {
   it("builds the plain classroom path when no secret is set", () => {
@@ -227,5 +229,78 @@ describe("releasesQuery", () => {
     ])
     const releases = await run({ request } as unknown as GitHubClient)
     expect(releases.map((r) => r.tag_name)).toEqual(["submit/2", "submit/1"])
+  })
+})
+
+const MARKER_PATH = "/contents/.github/workflows/autograde-runner.yaml"
+
+describe("verifyClassroom50ConfigRepo (name-collision guard)", () => {
+  it("returns true when the config-repo marker resolves", async () => {
+    const client = { request: vi.fn().mockResolvedValue({ type: "file" }) }
+    await expect(verifyClassroom50ConfigRepo(client, "acme")).resolves.toBe(
+      true,
+    )
+    expect(client.request).toHaveBeenCalledWith(
+      `/repos/acme/classroom50${MARKER_PATH}`,
+    )
+  })
+
+  it("returns false on a 404 (repo exists but isn't a config repo)", async () => {
+    const client = { request: vi.fn().mockRejectedValue(apiError(404)) }
+    await expect(verifyClassroom50ConfigRepo(client, "acme")).resolves.toBe(
+      false,
+    )
+  })
+
+  it("fails open (true) on a non-404 error so a blip never hides a real org", async () => {
+    const client = { request: vi.fn().mockRejectedValue(apiError(403)) }
+    await expect(verifyClassroom50ConfigRepo(client, "acme")).resolves.toBe(
+      true,
+    )
+  })
+})
+
+describe("getClassroom50OrgSummary (verifies config repo before 'ready')", () => {
+  const membership = (
+    role: "admin" | "member",
+    state: "active" | "pending" = "active",
+  ): GitHubOrgMembership =>
+    ({
+      state,
+      role,
+      organization: {
+        login: "acme",
+        id: 1,
+        avatar_url: "",
+        html_url: "https://github.com/acme",
+      },
+    }) as unknown as GitHubOrgMembership
+
+  it("is 'ready' when the repo exists AND carries the config marker", async () => {
+    const client = {
+      request: vi.fn().mockResolvedValue({ id: 1 }),
+    } as unknown as GitHubClient
+    const summary = await getClassroom50OrgSummary(client, membership("admin"))
+    expect(summary.classroom50.status).toBe("ready")
+    expect(summary.classroom50.canAccessRepo).toBe(true)
+  })
+
+  it("is 'not_classroom50' when a readable repo lacks the config marker (name collision)", async () => {
+    const client = {
+      request: vi.fn().mockImplementation((path: string) => {
+        if (path.includes("/contents/")) return Promise.reject(apiError(404))
+        return Promise.resolve({ id: 1 })
+      }),
+    } as unknown as GitHubClient
+    const summary = await getClassroom50OrgSummary(client, membership("admin"))
+    expect(summary.classroom50.status).toBe("not_classroom50")
+  })
+
+  it("is 'needs_setup' for an admin when the repo itself 404s", async () => {
+    const client = {
+      request: vi.fn().mockRejectedValue(apiError(404)),
+    } as unknown as GitHubClient
+    const summary = await getClassroom50OrgSummary(client, membership("admin"))
+    expect(summary.classroom50.status).toBe("needs_setup")
   })
 })
