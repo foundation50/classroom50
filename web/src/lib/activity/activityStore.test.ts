@@ -9,6 +9,7 @@ import {
   recordAction,
   recordError,
   recordErrorToast,
+  sourceFromStack,
   toActivityEntry,
 } from "./activityStore"
 
@@ -148,5 +149,37 @@ describe("orgFromApiUrl", () => {
       rateLimit: noRateLimit,
     })
     expect(toActivityEntry(gh, { org: "explicit" }).org).toBe("explicit")
+  })
+})
+
+describe("sourceFromStack", () => {
+  it("returns the first app frame as file:line:col", () => {
+    const stack = [
+      "Error: useGithubAuth must be used within GitHubAuthProvider",
+      "    at useGithubAuth (http://localhost:5173/src/auth/useGithubAuth.tsx:743:11)",
+      "    at SidebarFooter (http://localhost:5173/src/components/drawer/index.tsx:614:31)",
+    ].join("\n")
+    expect(sourceFromStack(stack)).toBe("useGithubAuth.tsx:743:11")
+  })
+
+  it("skips node_modules / framework frames", () => {
+    const stack = [
+      "Error: boom",
+      "    at http://localhost:5173/node_modules/.vite/deps/react-dom.js:1:2",
+      "    at renderWithHooks (http://localhost:5173/node_modules/react-dom/x.js:3:4)",
+      "    at MyComponent (http://localhost:5173/src/pages/Foo.tsx:12:5)",
+    ].join("\n")
+    expect(sourceFromStack(stack)).toBe("Foo.tsx:12:5")
+  })
+
+  it("returns undefined for an absent or app-frame-less stack", () => {
+    expect(sourceFromStack(undefined)).toBeUndefined()
+    expect(sourceFromStack("Error: boom\n    at <anonymous>")).toBeUndefined()
+  })
+
+  it("captures source from a thrown Error's stack in toActivityEntry", () => {
+    const err = new Error("thrown")
+    err.stack = "Error: thrown\n    at foo (http://x/src/lib/thing.ts:5:9)"
+    expect(toActivityEntry(err).source).toBe("thing.ts:5:9")
   })
 })

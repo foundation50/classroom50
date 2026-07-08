@@ -115,6 +115,11 @@ const ActivityRow = ({ entry }: { entry: ActivityEntry }) => {
             {entry.endpoint}
           </p>
         )}
+        {!entry.endpoint && entry.source && (
+          <p className="mt-0.5 truncate font-mono text-xs text-base-content/60">
+            {entry.source}
+          </p>
+        )}
         {meta.length > 0 && (
           <p className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-base-content/60">
             {meta.map((m) => (

@@ -32,6 +32,10 @@ export type ActivityEntry = {
   requestId?: string | null
   ssoRequired?: boolean
   scopeGap?: boolean
+  // First app (non-node_modules, non-framework) frame of the error's stack, for
+  // pinpointing an uncaught error's origin — e.g. "useGithubAuth.tsx:743". Kept
+  // short (one frame) and app-origin only; still no raw body/token.
+  source?: string
   // Epoch ms; drives TTL eviction and display order.
   at: number
 }
@@ -90,11 +94,30 @@ function emit(): void {
   for (const l of listeners) l()
 }
 
+// Extract the first app-origin frame from an Error stack, shortened to
+// "file.tsx:line:col". Skips node_modules and framework internals so the source
+// points at our code, not React/router plumbing. Returns undefined if the stack
+// is absent or has no app frame.
+export function sourceFromStack(stack: string | undefined): string | undefined {
+  if (!stack) return undefined
+  const lines = stack.split("\n")
+  for (const line of lines) {
+    // A stack frame referencing a bundled source. Skip framework/vendor frames.
+    if (/node_modules|react-dom|react\/|scheduler/.test(line)) continue
+    // Match the last path segment + line:col, e.g. ".../useGithubAuth.tsx:743:11".
+    const m = line.match(/([\w.-]+\.(?:tsx?|jsx?|mjs)):(\d+)(?::(\d+))?/)
+    if (m) {
+      return m[3] ? `${m[1]}:${m[2]}:${m[3]}` : `${m[1]}:${m[2]}`
+    }
+  }
+  return undefined
+}
+
 // Project any thrown value into an allow-listed entry. Never reads error.body or
 // error.ssoHeader — see the file header's privacy contract.
 export function toActivityEntry(
   error: unknown,
-  context?: { org?: string; label?: string },
+  context?: { org?: string; label?: string; source?: string },
 ): ActivityEntry {
   const base = {
     id: nextId(),
@@ -115,9 +138,19 @@ export function toActivityEntry(
     }
   }
   if (error instanceof Error) {
-    return { ...base, label: context?.label ?? error.message }
+    return {
+      ...base,
+      label: context?.label ?? error.message,
+      // Prefer the error's own stack (sourcemapped to .tsx in dev); fall back to
+      // the caller-supplied source (e.g. window.onerror's filename:lineno).
+      source: sourceFromStack(error.stack) ?? context?.source,
+    }
   }
-  return { ...base, label: context?.label ?? String(error) }
+  return {
+    ...base,
+    label: context?.label ?? String(error),
+    source: context?.source,
+  }
 }
 
 function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
@@ -161,7 +194,12 @@ let lastStructuralErrorAt = 0
 // MutationCache and the global window handlers (the "structural" sources).
 export function recordError(
   error: unknown,
-  context?: { org?: string; label?: string; dedupKey?: string },
+  context?: {
+    org?: string
+    label?: string
+    dedupKey?: string
+    source?: string
+  },
 ): void {
   lastStructuralErrorAt = Date.now()
   pushEntry(toActivityEntry(error, context), context?.dedupKey)

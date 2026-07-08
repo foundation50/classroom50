@@ -75,6 +75,7 @@ function errorLine(e: ActivityEntry): string {
   if (e.requestId) parts.push(`req=${e.requestId}`)
   if (e.ssoRequired) parts.push("ssoRequired")
   if (e.scopeGap) parts.push("scopeGap")
+  if (e.source) parts.push(`at ${e.source}`)
   // Keep the label (message) last so it can't be confused with the fielded
   // metadata. It's allow-listed (GitHub's own error string, or a thrown Error's
   // message), never the raw response body.

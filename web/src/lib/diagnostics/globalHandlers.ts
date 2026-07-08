@@ -17,8 +17,17 @@ export function installDiagnosticsHandlers(): void {
 
   window.addEventListener("error", (event) => {
     // event.error is the thrown value when available; fall back to the message
-    // (e.g. cross-origin script errors that null out error).
-    recordError(event.error ?? new Error(event.message || "Unknown error"))
+    // (e.g. cross-origin script errors that null out error). The event's
+    // filename:lineno is a reliable source even when a stack is unavailable.
+    const source =
+      event.filename && event.lineno
+        ? `${event.filename.split("/").pop()}:${event.lineno}${
+            event.colno ? `:${event.colno}` : ""
+          }`
+        : undefined
+    recordError(event.error ?? new Error(event.message || "Unknown error"), {
+      source,
+    })
   })
 
   window.addEventListener("unhandledrejection", (event) => {
