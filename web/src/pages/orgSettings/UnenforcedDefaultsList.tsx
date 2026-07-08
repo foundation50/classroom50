@@ -5,8 +5,9 @@ import type { UnenforcedDefaultItem } from "./orgDefaultsStepData"
 
 // The per-field list of member-privilege settings that need a manual fix, shared
 // by the setup step board and the org-policy audit pane so the two can't drift.
-// Each row is the setting, its by-hand fix, and an enterprise-pinned badge when
-// GitHub won't let the value change from the org. Renders nothing when empty.
+// Each row is the setting and its by-hand fix; the `pinned` subset (API accepted
+// the write but the value didn't stick on read-back) gets a "set manually" badge,
+// since a Fix it / re-run can't change those. Renders nothing when empty.
 export const UnenforcedDefaultsList = ({
   items,
 }: {
@@ -29,7 +30,7 @@ export const UnenforcedDefaultsList = ({
             )}
             {d.pinned && (
               <span className="ml-1 badge badge-ghost badge-xs align-middle">
-                {t("orgSettings.audit.managedByEnterprise")}
+                {t("orgSettings.audit.requiresManualFix")}
               </span>
             )}
           </span>

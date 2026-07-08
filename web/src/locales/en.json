@@ -984,7 +984,7 @@
       "changeThemOn_other": "— change them on",
       "gitHub": "GitHub",
       "orUseFixIt": " (or use \"Fix it\")",
-      "managedByEnterprise": "Managed by enterprise — set manually",
+      "requiresManualFix": "Set manually",
       "readError": "Couldn't read the organization to audit the lockdown. Check your access and retry.",
       "driftCanFix": "Use “Fix it” on a drifted setting, or re-run setup below to re-apply everything at once.",
       "driftCannotFix": "Ask an organization owner to repair the drift — these changes require owner permissions.",

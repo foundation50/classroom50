@@ -340,9 +340,9 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
   const isOwner = membership?.role === "admin"
 
   // Member-default fields a Fix it / re-run wrote but that didn't stick on
-  // read-back — silently overridden by an enterprise policy (GitHub returns 200
-  // but ignores the change). Surfaced as "Managed by enterprise" so we stop
-  // offering a Fix it that can't work.
+  // read-back (GitHub returns 200 but ignores the change) — often an org or
+  // enterprise policy, but we can't prove which. Surfaced as "set manually" so
+  // we stop offering a Fix it that can't work.
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
     new Set(),
   )
