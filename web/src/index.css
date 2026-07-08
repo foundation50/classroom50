@@ -1,58 +1,46 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+@import url("https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap");
 @import "tailwindcss";
 @plugin "daisyui/index.js" {
   themes: corporate --default;
 }
 
-/* Keep the original dark-navy sidebar look in light mode: the sidebar
-   uses `neutral`, but corporate's stock neutral is pure black. Pin it to the
-   pre-existing hand-picked palette (#212a3a rail / #accefb accent). The dark
-   theme redefines neutral separately below. */
+/* ── Light theme ────────────────────────────────────────────────────────────
+   A minimalist palette for an educational tool. Base surfaces are neutral
+   off-whites (no warm tint) — soft, not clinical pure white; text is a neutral
+   charcoal instead of pure black; the accent is `ai` (traditional Japanese
+   indigo) — calm and scholarly. A muted vermilion (`aka`) is reserved for the
+   accent/error family. Shapes stay flat and near-square (--depth/--noise 0,
+   small radii) for restraint. */
 @plugin "daisyui/theme" {
   name: "corporate";
   default: true;
   color-scheme: light;
-  --color-neutral: #212a3a;
-  --color-neutral-content: #ffffff;
-}
 
-/* Dark theme. Deliberately NOT a stock daisyUI dark theme: we keep
-   corporate's exact primary/secondary/accent/status hues and its radius/border
-   so switching light<->dark only inverts the base surfaces — the app's feel
-   (blue accent, flat corporate shapes) is identical in both. Only the base and
-   neutral surface + content colors change. Accent/radius values below are
-   copied verbatim from daisyui/theme/corporate.css. */
-@plugin "daisyui/theme" {
-  name: "corporate-dark";
-  default: false;
-  prefersdark: true;
-  color-scheme: dark;
+  --color-base-100: #fafafa;
+  --color-base-200: #f1f1f1;
+  --color-base-300: #e3e3e3;
+  --color-base-content: #2a2a2a;
 
-  --color-base-100: oklch(21% 0.02 262);
-  --color-base-200: oklch(17% 0.02 262);
-  --color-base-300: oklch(13% 0.02 262);
-  --color-base-content: oklch(93% 0.01 262);
+  --color-primary: #2a4d69;
+  --color-primary-content: #fafafa;
+  --color-secondary: #5f5f5f;
+  --color-secondary-content: #fafafa;
+  --color-accent: #b7472a;
+  --color-accent-content: #fafafa;
 
-  --color-primary: oklch(62% 0.158 241.966);
-  --color-primary-content: oklch(0% 0 0);
-  --color-secondary: oklch(62% 0.046 257.417);
-  --color-secondary-content: oklch(0% 0 0);
-  --color-accent: oklch(62% 0.118 184.704);
-  --color-accent-content: oklch(0% 0 0);
+  /* Sidebar rail follows `neutral`: a deep charcoal so the rail reads as a
+     quiet dark panel against the light canvas. */
+  --color-neutral: #2a2a2a;
+  --color-neutral-content: #f1f1f1;
 
-  /* Sidebar surface: a slightly lighter panel than base so it reads as a
-     distinct rail in dark mode (in light mode corporate's neutral is black). */
-  --color-neutral: oklch(26% 0.02 262);
-  --color-neutral-content: oklch(93% 0.01 262);
-
-  --color-info: oklch(65% 0.126 221.723);
-  --color-info-content: oklch(0% 0 0);
-  --color-success: oklch(62% 0.194 149.214);
-  --color-success-content: oklch(0% 0 0);
-  --color-warning: oklch(85% 0.199 91.936);
-  --color-warning-content: oklch(0% 0 0);
-  --color-error: oklch(70% 0.191 22.216);
-  --color-error-content: oklch(0% 0 0);
+  --color-info: #2a6f7a;
+  --color-info-content: #fafafa;
+  --color-success: #4f6f3f;
+  --color-success-content: #fafafa;
+  --color-warning: #b5822e;
+  --color-warning-content: #fafafa;
+  --color-error: #a83232;
+  --color-error-content: #fafafa;
 
   --radius-selector: 0.25rem;
   --radius-field: 0.25rem;
@@ -64,14 +52,60 @@
   --noise: 0;
 }
 
-/* Sidebar accent tokens. The rail/text follow daisyUI `neutral`, but the
-   active-border/logo accent and the active/hover surface were hand-picked hexes
-   that don't map to a theme token. Scope them per theme so light mode keeps the
-   original #accefb / #323b49 exactly, and dark mode uses theme-appropriate
-   equivalents. Consumed via arbitrary values in components/drawer. */
+/* ── Dark theme: "sumi" ──────────────────────────────────────────────────────
+   The night side of the same palette. Base surfaces are deep sumi ink; text is
+   a soft off-white. Accents lift slightly for legibility on dark, but keep the
+   indigo / vermilion identity so switching light<->dark only inverts surfaces. */
+@plugin "daisyui/theme" {
+  name: "corporate-dark";
+  default: false;
+  prefersdark: true;
+  color-scheme: dark;
+
+  --color-base-100: #1c1b19;
+  --color-base-200: #161513;
+  --color-base-300: #100f0e;
+  --color-base-content: #ece7dc;
+
+  --color-primary: #7fa8c9;
+  --color-primary-content: #14181c;
+  --color-secondary: #b3a894;
+  --color-secondary-content: #14181c;
+  --color-accent: #e0785c;
+  --color-accent-content: #14181c;
+
+  /* Sidebar surface: a slightly lighter ink panel than base so the rail reads
+     as a distinct surface in dark mode. */
+  --color-neutral: #26241f;
+  --color-neutral-content: #ece7dc;
+
+  --color-info: #6fb3bd;
+  --color-info-content: #14181c;
+  --color-success: #93b57f;
+  --color-success-content: #14181c;
+  --color-warning: #d9ab5e;
+  --color-warning-content: #14181c;
+  --color-error: #dd7a7a;
+  --color-error-content: #14181c;
+
+  --radius-selector: 0.25rem;
+  --radius-field: 0.25rem;
+  --radius-box: 0.25rem;
+  --size-selector: 0.25rem;
+  --size-field: 0.25rem;
+  --border: 1px;
+  --depth: 0;
+  --noise: 0;
+}
+
+/* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (sumi ink); the
+   active-border/logo accent and the active/hover surface don't map to a single
+   theme token, so scope them per theme. Light uses a soft washi-indigo accent
+   over a faint warm tint; dark reuses the theme primary over a translucent
+   sheet. Consumed via arbitrary values in components/drawer. */
 [data-theme="corporate"] {
-  --sidebar-accent: #accefb;
-  --sidebar-surface: #323b49;
+  --sidebar-accent: #9cb8d4;
+  --sidebar-surface: #3a3a3a;
 }
 [data-theme="corporate-dark"] {
   --sidebar-accent: var(--color-primary);
@@ -95,7 +129,8 @@
 
 html,
 body {
-  font-family: "Inter", system-ui, sans-serif;
+  font-family:
+    "Noto Sans", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
 }
 
 /* Loading skeletons: a moving sheen sweeping left-to-right signals "loading"
@@ -163,29 +198,14 @@ body {
 }
 
 /* ── WCAG 2.1 AA contrast overrides ────────────────────────────────────────
-   DaisyUI `corporate` ships several semantic colors that fail AA (4.5:1) as
-   text or button labels. We darken them (same hue, lower lightness) so they
-   clear AA against the app's white / #fafafa / light-tint backgrounds, while
-   staying close to the original palette. Declared unlayered so they win over
-   DaisyUI's layered theme definitions. Scoped to `[data-theme="corporate"]`
-   only (NOT bare `:root`): `data-theme` is always set on <html> — which IS
-   `:root` — so a `:root` branch would also match `corporate-dark` and clobber
-   its separately-tuned dark tokens. */
+   The light palette is hand-picked so the semantic hues clear AA (4.5:1) as
+   text on the neutral surfaces (#fafafa / #f1f1f1) — dark indigo, teal, green,
+   and red all pass comfortably. The one exception is `warning` (a gold), which is legible as a fill but dips under AA as small text or on a
+   soft badge; darken it for text use while keeping the gold identity. Declared
+   unlayered so it wins over DaisyUI's layered theme definition. Scoped to the
+   light theme only (NOT bare `:root`, which would also match the dark theme). */
 [data-theme="corporate"] {
-  /* #0082ce → #0069b4 : 4.1 → 5.7:1 */
-  --color-primary: oklch(50% 0.158 241.966);
-  /* #0091b4 → #007196 : 3.7 → 5.5:1 */
-  --color-info: oklch(50% 0.126 221.723);
-  /* #fe6366 → #d2152b : 2.9 → 5.4:1 */
-  --color-error: oklch(55% 0.214 24);
-  /* black → white (text on darker error) */
-  --color-error-content: oklch(100% 0 0);
-  /* #01a53b → #007b2a : 3.0 → 5.4:1 */
-  --color-success: oklch(50% 0.16 150);
-  /* #fdc700 → #8f5e00 : 1.6 → 5.0:1 on soft badge */
-  --color-warning: oklch(52% 0.13 80);
-  /* dark → white (text on darker warning fill) */
-  --color-warning-content: oklch(100% 0 0);
+  --color-warning: #8a5e1c;
 }
 
 /* Input placeholders ship at base-content/0.5 (~3.3:1). Raise to ~0.65 (~5.3:1). */
