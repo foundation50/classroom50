@@ -13,6 +13,7 @@ import {
 } from "@/hooks/github/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { missingScopes } from "@/auth/scopes"
+import { observeResponse } from "@/lib/diagnostics/observed"
 
 const GitHubClientContext = createContext<GitHubClient | null>(null)
 
@@ -36,6 +37,9 @@ export function GitHubProvider({
   const onResponse = useCallback(
     (signal: GitHubResponseSignal) => {
       if (!token) return
+      // Feed the diagnostics snapshot with the latest scopes/status regardless
+      // of outcome (a 401 below still tears the session down after this).
+      observeResponse(signal)
       // A live 401 means the token is revoked/expired: tear the session down so
       // the guard redirects to /login instead of stranding the user on a dead
       // authed page. expireSession() no-ops once the token is cleared.
