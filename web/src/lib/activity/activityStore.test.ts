@@ -153,13 +153,23 @@ describe("orgFromApiUrl", () => {
 })
 
 describe("sourceFromStack", () => {
-  it("returns the first app frame as file:line:col", () => {
+  it("returns the throwing frame and its caller, innermost first", () => {
     const stack = [
       "Error: useGithubAuth must be used within GitHubAuthProvider",
       "    at useGithubAuth (http://localhost:5173/src/auth/useGithubAuth.tsx:743:11)",
       "    at SidebarFooter (http://localhost:5173/src/components/drawer/index.tsx:614:31)",
     ].join("\n")
-    expect(sourceFromStack(stack)).toBe("useGithubAuth.tsx:743:11")
+    expect(sourceFromStack(stack)).toBe(
+      "useGithubAuth.tsx:743:11 < index.tsx:614:31",
+    )
+  })
+
+  it("strips a Vite HMR ?t= cache-buster from the frame", () => {
+    const stack = [
+      "Error: boom",
+      "    at fn (http://localhost:5173/src/auth/useGithubAuth.tsx?t=1783550938782:878:9)",
+    ].join("\n")
+    expect(sourceFromStack(stack)).toBe("useGithubAuth.tsx:878:9")
   })
 
   it("skips node_modules / framework frames", () => {

@@ -21,6 +21,11 @@ describe("buildDiagnostics", () => {
     expect(text).toContain("User agent:")
   })
 
+  it("marks a dev-server build so it isn't mistaken for a release", () => {
+    // Vitest runs with import.meta.env.DEV === true.
+    expect(buildDiagnostics()).toContain("LOCAL DEV SERVER")
+  })
+
   it("reports the granted scopes and any missing scope gap", () => {
     observeResponse({ status: 200, scopes: "read:user" })
     const text = buildDiagnostics()

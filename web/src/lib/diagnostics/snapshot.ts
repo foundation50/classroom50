@@ -25,6 +25,12 @@ export function buildDiagnostics(input: SnapshotInput = {}): string {
   const lines: string[] = []
 
   lines.push(`Classroom 50 diagnostics`)
+  if (import.meta.env.DEV) {
+    // A dev-server build stamps package.json's version, HEAD at server start,
+    // and the launch time — real-looking but NOT a deployed release. Say so
+    // plainly so a local run is never mistaken for what shipped.
+    lines.push(`Build: LOCAL DEV SERVER (not a deployed release)`)
+  }
   lines.push(`Version: ${formatAppVersion()}`)
   lines.push(`Built: ${appVersion.buildDate}`)
   lines.push(`Generated: ${new Date().toISOString()}`)

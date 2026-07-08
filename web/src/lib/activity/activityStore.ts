@@ -94,23 +94,29 @@ function emit(): void {
   for (const l of listeners) l()
 }
 
-// Extract the first app-origin frame from an Error stack, shortened to
-// "file.tsx:line:col". Skips node_modules and framework internals so the source
-// points at our code, not React/router plumbing. Returns undefined if the stack
-// is absent or has no app frame.
+// Extract up to the first few app-origin frames from an Error stack, each
+// shortened to "file.tsx:line:col" and joined with " < " (innermost first).
+// Skips node_modules and framework internals so the source points at our code,
+// not React/router plumbing — and keeps a couple of caller frames so the
+// throwing site AND the component that reached it are both visible. Returns
+// undefined if the stack is absent or has no app frame.
 export function sourceFromStack(stack: string | undefined): string | undefined {
   if (!stack) return undefined
-  const lines = stack.split("\n")
-  for (const line of lines) {
+  const frames: string[] = []
+  for (const line of stack.split("\n")) {
     // A stack frame referencing a bundled source. Skip framework/vendor frames.
     if (/node_modules|react-dom|react\/|scheduler/.test(line)) continue
     // Match the last path segment + line:col, e.g. ".../useGithubAuth.tsx:743:11".
-    const m = line.match(/([\w.-]+\.(?:tsx?|jsx?|mjs)):(\d+)(?::(\d+))?/)
+    // Strip a Vite HMR "?t=..." cache-buster so the frame stays readable.
+    const m = line.match(
+      /([\w.-]+\.(?:tsx?|jsx?|mjs))(?:\?[^:]*)?:(\d+)(?::(\d+))?/,
+    )
     if (m) {
-      return m[3] ? `${m[1]}:${m[2]}:${m[3]}` : `${m[1]}:${m[2]}`
+      frames.push(m[3] ? `${m[1]}:${m[2]}:${m[3]}` : `${m[1]}:${m[2]}`)
+      if (frames.length >= 3) break
     }
   }
-  return undefined
+  return frames.length > 0 ? frames.join(" < ") : undefined
 }
 
 // Project any thrown value into an allow-listed entry. Never reads error.body or
