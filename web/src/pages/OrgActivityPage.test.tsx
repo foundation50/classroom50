@@ -69,4 +69,18 @@ describe("OrgActivityPage", () => {
     expect(screen.queryByText("other org failure")).toBeNull()
     expect(screen.getByText("orgActivity.empty.title")).toBeTruthy()
   })
+
+  it("filters entries by the search box", async () => {
+    const { default: userEvent } = await import("@testing-library/user-event")
+    recordError(new Error("alpha failure"), { org: "acme" })
+    recordError(new Error("beta failure"), { org: "acme" })
+    render(<OrgActivityPage />)
+    expect(screen.getByText("alpha failure")).toBeTruthy()
+
+    const search = screen.getByLabelText("orgActivity.searchLabel")
+    await userEvent.type(search, "beta")
+
+    expect(screen.queryByText("alpha failure")).toBeNull()
+    expect(screen.getByText("beta failure")).toBeTruthy()
+  })
 })

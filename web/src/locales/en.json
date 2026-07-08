@@ -1585,6 +1585,9 @@
     "copyDiagnostics": "Copy diagnostics",
     "copied": "Copied",
     "clear": "Clear",
+    "exportCsv": "Export CSV",
+    "searchPlaceholder": "Search activity...",
+    "searchLabel": "Search activity",
     "loading": "Loading activity...",
     "loadOlder": "Load older",
     "partialError": "Some activity couldn't be loaded. Showing what's available.",
@@ -1616,6 +1619,10 @@
     "empty": {
       "title": "No activity yet",
       "body": "Config changes, workflow runs, and this session's errors will appear here."
+    },
+    "noMatch": {
+      "title": "No matching activity",
+      "body": "Try a different search or clear the filters."
     }
   },
   "orgMembers": {

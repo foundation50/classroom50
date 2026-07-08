@@ -2,9 +2,10 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQuery } from "@tanstack/react-query"
-import { Activity, Check, ClipboardCopy } from "lucide-react"
+import Papa from "papaparse"
+import { Activity } from "lucide-react"
 
-import { Alert, Button, Card, Spinner } from "@/components/ui"
+import { Alert, Card, Spinner, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { EmptyState } from "@/components/list"
@@ -20,15 +21,15 @@ import {
 import { useActivity } from "@/lib/activity/useActivity"
 import {
   commitToItem,
+  matchesQuery,
   mergeTimeline,
   runToItem,
   sessionToItems,
+  timelineToCsvRows,
 } from "@/lib/activity/timeline"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
-import {
-  ActivityFilters,
-  type ActivityFilterState,
-} from "./orgActivity/ActivityFilters"
+import { type ActivityFilterState } from "./orgActivity/ActivityFilters"
+import { ActivityToolbar } from "./orgActivity/ActivityToolbar"
 import { TimelineRow } from "./orgActivity/TimelineRow"
 
 // Unified, owner-only org Activity view. Merges three sources into one filterable,
@@ -51,6 +52,7 @@ const OrgActivityPage = () => {
   // append/replace bug of bumping `page`). Capped at GitHub's per_page max.
   const [perPage, setPerPage] = useState(30)
   const atMax = perPage >= 100
+  const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<ActivityFilterState>({
     sources: new Set(),
     types: new Set(),
@@ -86,19 +88,39 @@ const OrgActivityPage = () => {
     const sessionItems = sessionToItems(entries)
     const commitItems = (commits.data ?? []).map(commitToItem)
     const runItems = (runs.data ?? []).map((r) => runToItem(r, runLabel))
-    return mergeTimeline([...sessionItems, ...commitItems, ...runItems], {
-      sources: filters.sources,
-      types: filters.types,
-    })
+    const merged = mergeTimeline(
+      [...sessionItems, ...commitItems, ...runItems],
+      {
+        sources: filters.sources,
+        types: filters.types,
+      },
+    )
+    return query.trim() ? merged.filter((i) => matchesQuery(i, query)) : merged
     // runLabel closes over t only; stable enough for this memo.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries, commits.data, runs.data, filters])
+  }, [entries, commits.data, runs.data, filters, query])
 
   const diagnostics = buildDiagnostics({ org })
   const { copied, copy } = useCopyToClipboard(diagnostics)
 
+  // Export the currently-shown (filtered + searched) timeline as a CSV download.
+  const exportCsv = () => {
+    const csv = Papa.unparse(timelineToCsvRows(items), { header: true })
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement("a")
+    link.href = url
+    link.download = `${org ?? "org"}-activity.csv`
+    link.click()
+    URL.revokeObjectURL(url)
+  }
+
   const loading = commits.isLoading || runs.isLoading
   const sourceError = commits.isError || runs.isError
+  const hasActiveFilter =
+    query.trim().length > 0 ||
+    filters.sources.size > 0 ||
+    filters.types.size > 0
 
   return (
     <PageShell page="classes" selected="activity">
@@ -108,19 +130,16 @@ const OrgActivityPage = () => {
           subtitle={t("orgActivity.subtitle")}
         />
 
-        <div className="mt-6 flex flex-wrap items-start justify-between gap-3">
-          <ActivityFilters state={filters} onChange={setFilters} />
-          <Button variant="outline" size="sm" onClick={() => void copy()}>
-            {copied ? (
-              <Check aria-hidden="true" className="size-4" />
-            ) : (
-              <ClipboardCopy aria-hidden="true" className="size-4" />
-            )}
-            {copied
-              ? t("orgActivity.copied")
-              : t("orgActivity.copyDiagnostics")}
-          </Button>
-        </div>
+        <ActivityToolbar
+          query={query}
+          onQueryChange={setQuery}
+          filters={filters}
+          onFiltersChange={setFilters}
+          onExportCsv={exportCsv}
+          onCopyDiagnostics={() => void copy()}
+          copied={copied}
+          resultCount={items.length}
+        />
 
         {sourceError && (
           <Alert tone="warning" className="mt-4 text-sm" role="status">
@@ -143,8 +162,16 @@ const OrgActivityPage = () => {
                   className="mx-auto mb-3 size-8 text-base-content/40"
                 />
               }
-              title={t("orgActivity.empty.title")}
-              body={t("orgActivity.empty.body")}
+              title={
+                hasActiveFilter
+                  ? t("orgActivity.noMatch.title")
+                  : t("orgActivity.empty.title")
+              }
+              body={
+                hasActiveFilter
+                  ? t("orgActivity.noMatch.body")
+                  : t("orgActivity.empty.body")
+              }
             />
           )
         ) : (
@@ -156,8 +183,11 @@ const OrgActivityPage = () => {
                 ))}
               </ul>
             </Card>
-            <div className="mt-4 flex justify-center">
-              {!atMax && (
+            {/* "Load older" fetches more from the server; hide it while a search
+                or filter is narrowing the view (more server data wouldn't
+                obviously help, and the count would be confusing). */}
+            {!atMax && !hasActiveFilter && (
+              <div className="mt-4 flex justify-center">
                 <Button
                   variant="ghost"
                   size="sm"
@@ -166,8 +196,8 @@ const OrgActivityPage = () => {
                 >
                   {t("orgActivity.loadOlder")}
                 </Button>
-              )}
-            </div>
+              </div>
+            )}
           </>
         )}
       </RequireTeacher>

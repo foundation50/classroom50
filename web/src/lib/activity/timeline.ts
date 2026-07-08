@@ -157,3 +157,40 @@ export function mergeTimeline(
     .filter((i) => (byType && byType.size > 0 ? byType.has(i.type) : true))
     .sort((a, b) => b.at - a.at || (a.id < b.id ? 1 : -1))
 }
+
+// Case-insensitive substring match over the fields a user would search: label,
+// actor, type, and detail (sha / endpoint / event).
+export function matchesQuery(item: TimelineItem, query: string): boolean {
+  const q = query.trim().toLowerCase()
+  if (!q) return true
+  return [item.label, item.actor, item.type, item.detail].some((field) =>
+    field?.toLowerCase().includes(q),
+  )
+}
+
+// Rows for a CSV export of the timeline (feed to Papa.unparse with header:true).
+// ISO timestamp so the export is locale-independent and sortable in a
+// spreadsheet; the human columns mirror what the row shows.
+export type TimelineCsvRow = {
+  time: string
+  source: TimelineSource
+  type: TimelineType
+  status: TimelineStatus
+  label: string
+  actor: string
+  detail: string
+  link: string
+}
+
+export function timelineToCsvRows(items: TimelineItem[]): TimelineCsvRow[] {
+  return items.map((i) => ({
+    time: new Date(i.at).toISOString(),
+    source: i.source,
+    type: i.type,
+    status: i.status,
+    label: i.label,
+    actor: i.actor ?? "",
+    detail: i.detail ?? "",
+    link: i.href ?? "",
+  }))
+}

@@ -5,9 +5,11 @@ import type { ActivityEntry } from "@/lib/activity/activityStore"
 import {
   classifyConfigCommit,
   commitToItem,
+  matchesQuery,
   mergeTimeline,
   runToItem,
   sessionToItems,
+  timelineToCsvRows,
   type TimelineItem,
 } from "./timeline"
 
@@ -195,5 +197,56 @@ describe("mergeTimeline", () => {
   it("treats an empty filter set as 'all'", () => {
     const items = [item({ id: "a", at: 1 }), item({ id: "b", at: 2 })]
     expect(mergeTimeline(items, { sources: new Set() })).toHaveLength(2)
+  })
+})
+
+describe("matchesQuery", () => {
+  const it0 = (over: Partial<TimelineItem>): TimelineItem => ({
+    id: "x",
+    source: "commit",
+    type: "assignment",
+    label: "Create assignment: cs/hw1",
+    actor: "teacher",
+    detail: "abc1234",
+    at: 0,
+    status: "info",
+    ...over,
+  })
+
+  it("matches on label, actor, type, and detail case-insensitively", () => {
+    expect(matchesQuery(it0({}), "HW1")).toBe(true)
+    expect(matchesQuery(it0({}), "teacher")).toBe(true)
+    expect(matchesQuery(it0({}), "assignment")).toBe(true)
+    expect(matchesQuery(it0({}), "abc1234")).toBe(true)
+  })
+
+  it("returns true for an empty query and false for a non-match", () => {
+    expect(matchesQuery(it0({}), "  ")).toBe(true)
+    expect(matchesQuery(it0({}), "zzz")).toBe(false)
+  })
+})
+
+describe("timelineToCsvRows", () => {
+  it("maps items to flat rows with ISO time and empty strings for absent fields", () => {
+    const rows = timelineToCsvRows([
+      {
+        id: "a",
+        source: "run",
+        type: "run",
+        label: "Collecting scores",
+        at: Date.parse("2026-07-08T10:00:00Z"),
+        status: "ok",
+      },
+    ])
+    expect(rows[0]).toEqual({
+      time: "2026-07-08T10:00:00.000Z",
+      source: "run",
+      type: "run",
+      status: "ok",
+      label: "Collecting scores",
+      actor: "",
+      detail: "",
+      link: "",
+    })
   })
 })
