@@ -24,6 +24,7 @@ import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvi
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireTeacher from "@/components/RequireTeacher"
 import { LoadingSwap } from "@/lib/LoadingSwap"
+import { Alert } from "@/components/ui"
 
 const EditClassroomContent = ({
   org,
@@ -102,7 +103,7 @@ const EditClassroomContent = ({
       }
     >
       {!cl ? (
-        <div className="alert alert-error">{t("classes.couldNotLoad")}</div>
+        <Alert tone="error">{t("classes.couldNotLoad")}</Alert>
       ) : (
         <>
           <div className="mb-8">

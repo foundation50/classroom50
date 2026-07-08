@@ -10,6 +10,7 @@ import { GitHubPatPrompt } from "./GitHubPatPrompt"
 import { LoginLanguageMenu } from "./LoginLanguageMenu"
 import { AppVersionBadge } from "@/components/AppVersionBadge"
 import { WIKI_URL } from "@/version"
+import { Alert, Button, Card, Spinner } from "@/components/ui"
 
 function LoadingScreen({ label }: { label: string }) {
   return (
@@ -17,7 +18,7 @@ function LoadingScreen({ label }: { label: string }) {
       className="flex flex-col items-center gap-4 py-10 text-center text-base-content/70"
       role="status"
     >
-      <span className="loading loading-spinner loading-lg" aria-hidden="true" />
+      <Spinner size="lg" />
       <p className="text-sm">{label}</p>
     </div>
   )
@@ -30,7 +31,7 @@ export function GitHubAuthCard() {
 
   return (
     <main className="flex min-h-screen items-center justify-center bg-base-200 px-4 py-8">
-      <section className="card relative w-full max-w-lg rounded-xl border border-base-300 bg-base-100 shadow-sm">
+      <Card as="section" radius="xl" className="relative w-full max-w-lg">
         <div className="absolute right-3 top-3 z-10">
           <LoginLanguageMenu />
         </div>
@@ -48,7 +49,7 @@ export function GitHubAuthCard() {
           </div>
         </header>
 
-        <div className="card-body">
+        <Card.Body>
           {auth.screen === "authed" ? (
             auth.isLoadingUser && !auth.user ? (
               // "authed" screen before GET /user resolves: on cold reload (mount
@@ -85,39 +86,36 @@ export function GitHubAuthCard() {
               }}
             >
               {auth.error ? (
-                <div className="alert alert-error items-start text-sm">
+                <Alert tone="error" className="items-start text-sm">
                   <AlertTriangle
                     aria-hidden="true"
                     className="size-4 shrink-0"
                   />
                   <span>{auth.error}</span>
-                </div>
+                </Alert>
               ) : auth.sessionExpired ? (
-                <div className="alert alert-warning items-start text-sm">
+                <Alert tone="warning" className="items-start text-sm">
                   <AlertTriangle
                     aria-hidden="true"
                     className="size-4 shrink-0"
                   />
                   <span>Your session expired — sign in again to continue.</span>
-                </div>
+                </Alert>
               ) : null}
 
               <div className="space-y-3">
-                <button
-                  className="btn btn-primary w-full"
+                <Button
+                  variant="primary"
+                  className="w-full"
                   type="submit"
+                  loading={auth.isStartingWebFlow}
                   disabled={auth.isStartingWebFlow}
                 >
-                  {auth.isStartingWebFlow ? (
-                    <span
-                      className="loading loading-spinner loading-sm"
-                      aria-hidden="true"
-                    />
-                  ) : (
+                  {auth.isStartingWebFlow ? null : (
                     <GitHub aria-hidden="true" className="size-4" />
                   )}
                   {t("auth.signInWithGitHub")}
-                </button>
+                </Button>
 
                 <details className="collapse collapse-arrow border border-base-300 bg-base-100">
                   <summary className="collapse-title min-h-0 px-4 py-3 text-sm font-medium">
@@ -125,34 +123,31 @@ export function GitHubAuthCard() {
                   </summary>
 
                   <div className="collapse-content space-y-3">
-                    <button
-                      className="btn btn-outline btn-primary w-full"
+                    <Button
+                      variant="outline"
+                      className="w-full"
                       type="button"
+                      loading={auth.isRequestingDeviceCode}
                       disabled={auth.isRequestingDeviceCode}
                       onClick={() => void auth.startDeviceFlow()}
                     >
-                      {auth.isRequestingDeviceCode ? (
-                        <span
-                          className="loading loading-spinner loading-sm"
-                          aria-hidden="true"
-                        />
-                      ) : null}
                       {t("auth.useDeviceCode")}
-                    </button>
+                    </Button>
 
-                    <button
-                      className="btn btn-outline btn-primary w-full"
+                    <Button
+                      variant="outline"
+                      className="w-full"
                       type="button"
                       onClick={() => auth.startPatFlow()}
                     >
                       {t("auth.usePersonalAccessToken")}
-                    </button>
+                    </Button>
                   </div>
                 </details>
               </div>
             </form>
           )}
-        </div>
+        </Card.Body>
 
         <footer className="flex items-center justify-between gap-3 border-t border-base-200 px-7 py-4 text-xs text-base-content/70">
           <span>{t("auth.footerTagline")}</span>
@@ -168,7 +163,7 @@ export function GitHubAuthCard() {
             </a>
           </div>
         </footer>
-      </section>
+      </Card>
     </main>
   )
 }

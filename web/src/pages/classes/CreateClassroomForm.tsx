@@ -10,6 +10,7 @@ import {
   isValidSecret,
 } from "@/util/secret"
 import { slugify } from "@/util/slug"
+import { Button, Card, FormField, Input } from "@/components/ui"
 
 export type CreateClassroomFormValues = {
   name: string
@@ -95,126 +96,111 @@ const CreateClassroomForm = ({
     },
   })
   return (
-    <form
-      className="card bg-base-100 w-full shadow-sm"
+    <Card
+      as="form"
+      bordered={false}
+      className="w-full"
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
         form.handleSubmit()
       }}
     >
-      <div className="card-body">
+      <Card.Body>
         <h3 className="text-lg font-bold pb-4">
           {t("classes.form.basicInfo")}
         </h3>
 
         <form.Field name="name">
           {(field) => (
-            <>
-              <label htmlFor={field.name} className="label font-bold">
-                {t("classes.form.name")}
-                <span className="text-error">*</span>
-              </label>
-
-              <input
-                id={field.name}
-                name={field.name}
-                type="text"
-                required
-                aria-required="true"
-                aria-invalid={field.state.meta.errors.length > 0}
-                aria-describedby={
-                  field.state.meta.errors.length > 0
-                    ? `${field.name}-error`
-                    : undefined
-                }
-                className="input w-full mb-4"
-                placeholder={t("classes.form.namePlaceholder")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => {
-                  field.handleChange(e.target.value)
-                  form.setFieldValue("slug", slugify(e.target.value))
-                }}
-              />
-
-              {field.state.meta.errors.length > 0 && (
-                <p
-                  id={`${field.name}-error`}
-                  className="text-error text-sm mb-4"
-                  role="alert"
-                >
-                  {field.state.meta.errors[0]}
-                </p>
+            <FormField
+              label={t("classes.form.name")}
+              htmlFor={field.name}
+              required
+              error={
+                field.state.meta.errors.length > 0
+                  ? field.state.meta.errors[0]
+                  : undefined
+              }
+              className="mb-4"
+            >
+              {({ id, describedById, invalid }) => (
+                <Input
+                  id={id}
+                  name={field.name}
+                  required
+                  aria-required="true"
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  placeholder={t("classes.form.namePlaceholder")}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => {
+                    field.handleChange(e.target.value)
+                    form.setFieldValue("slug", slugify(e.target.value))
+                  }}
+                />
               )}
-            </>
+            </FormField>
           )}
         </form.Field>
 
         <form.Field name="slug">
           {(field) => (
-            <>
-              <label htmlFor={field.name} className="label font-bold">
-                {t("classes.form.slug")}
-                <span className="text-error">*</span>
-              </label>
-
-              <input
-                id={field.name}
-                name={field.name}
-                type="text"
-                required
-                aria-required="true"
-                aria-invalid={field.state.meta.errors.length > 0}
-                aria-describedby={
-                  field.state.meta.errors.length > 0
-                    ? `${field.name}-error`
-                    : undefined
-                }
-                className="input w-full mb-4"
-                placeholder={t("classes.form.slugPlaceholder")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-
-              {field.state.meta.errors.length > 0 && (
-                <p
-                  id={`${field.name}-error`}
-                  className="text-error text-sm mb-4"
-                  role="alert"
-                >
-                  {field.state.meta.errors[0]}
-                </p>
+            <FormField
+              label={t("classes.form.slug")}
+              htmlFor={field.name}
+              required
+              error={
+                field.state.meta.errors.length > 0
+                  ? field.state.meta.errors[0]
+                  : undefined
+              }
+              className="mb-4"
+            >
+              {({ id, describedById, invalid }) => (
+                <Input
+                  id={id}
+                  name={field.name}
+                  required
+                  aria-required="true"
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  placeholder={t("classes.form.slugPlaceholder")}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
-            </>
+            </FormField>
           )}
         </form.Field>
 
         <form.Field name="term">
           {(field) => (
-            <>
-              <label htmlFor={field.name} className="label font-bold">
-                {t("classes.form.term")}
-              </label>
-
-              <input
-                id={field.name}
-                name={field.name}
-                type="text"
-                className="input w-full mb-4"
-                placeholder={t("classes.form.termPlaceholder")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-
-              {field.state.meta.errors.length > 0 && (
-                <p className="text-error text-sm mb-4" role="alert">
-                  {field.state.meta.errors[0]}
-                </p>
+            <FormField
+              label={t("classes.form.term")}
+              htmlFor={field.name}
+              error={
+                field.state.meta.errors.length > 0
+                  ? field.state.meta.errors[0]
+                  : undefined
+              }
+              className="mb-4"
+            >
+              {({ id, describedById, invalid }) => (
+                <Input
+                  id={id}
+                  name={field.name}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  placeholder={t("classes.form.termPlaceholder")}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
               )}
-            </>
+            </FormField>
           )}
         </form.Field>
 
@@ -268,11 +254,10 @@ const CreateClassroomForm = ({
                             {t("classes.form.accessKey")}
                           </label>
                           <div className="flex gap-2">
-                            <input
+                            <Input
                               id={secretField.name}
                               name={secretField.name}
-                              type="text"
-                              className="input w-full font-mono"
+                              className="font-mono"
                               placeholder={t(
                                 "classes.form.accessKeyPlaceholder",
                               )}
@@ -282,9 +267,8 @@ const CreateClassroomForm = ({
                                 secretField.handleChange(e.target.value)
                               }
                             />
-                            <button
-                              type="button"
-                              className="btn btn-ghost"
+                            <Button
+                              variant="ghost"
                               onClick={() =>
                                 secretField.handleChange(
                                   generateSecret(DEFAULT_SECRET_LENGTH),
@@ -292,7 +276,7 @@ const CreateClassroomForm = ({
                               }
                             >
                               {t("classes.form.regenerate")}
-                            </button>
+                            </Button>
                           </div>
                           <p className="mt-1 text-xs text-base-content/70">
                             {t("classes.form.accessKeyHelp", {
@@ -314,7 +298,7 @@ const CreateClassroomForm = ({
           )}
         </form.Field>
 
-        <div className="card-actions justify-end p-2">
+        <Card.Actions className="justify-end p-2">
           <form.Subscribe
             selector={(state) => [state.canSubmit, state.isSubmitting]}
           >
@@ -323,29 +307,23 @@ const CreateClassroomForm = ({
               // button never reverts to a bare disabled state.
               const busy = isSubmitting || submitted
               return (
-                <button
+                <Button
                   type="submit"
-                  className="btn btn-primary"
+                  variant="primary"
+                  loading={busy}
+                  loadingLabel={t("classes.form.creating")}
                   disabled={!canSubmit || busy}
                 >
-                  {busy ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-sm"
-                        aria-hidden="true"
-                      />
-                      {t("classes.form.creating")}
-                    </>
-                  ) : (
-                    t("classes.form.createButton")
-                  )}
-                </button>
+                  {busy
+                    ? t("classes.form.creating")
+                    : t("classes.form.createButton")}
+                </Button>
               )
             }}
           </form.Subscribe>
-        </div>
-      </div>
-    </form>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
   )
 }
 

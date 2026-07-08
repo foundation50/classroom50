@@ -3,6 +3,7 @@ import {
   editClassroomWithConflictRetry,
 } from "@/api/mutations/classrooms"
 import { ConfirmModal } from "@/components/modals"
+import { Button, Card } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/hooks/github/queries"
@@ -314,10 +315,12 @@ function ClassroomMenu({
 
   return (
     <div ref={containerRef} className="relative">
-      <button
+      <Button
         ref={triggerRef}
-        type="button"
-        className="btn btn-ghost btn-sm btn-circle text-base-content/70 hover:text-primary"
+        variant="ghost"
+        size="sm"
+        shape="circle"
+        className="text-base-content/70 hover:text-primary"
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={menuId}
@@ -334,7 +337,7 @@ function ClassroomMenu({
         }}
       >
         <MoreVertical aria-hidden="true" className="size-4" />
-      </button>
+      </Button>
 
       {open && (
         <ul
@@ -550,8 +553,13 @@ export function ClassroomCard({
   const name = classroomDisplayName(summary, t("classes.unknownClassName"))
 
   return (
-    <EnterDiv className="card bg-base-100 col-span-12 rounded-xl border border-base-300 md:col-span-6 xl:col-span-4">
-      <div className="card-body gap-4">
+    <Card
+      as={EnterDiv}
+      radius="xl"
+      shadow={false}
+      className="col-span-12 md:col-span-6 xl:col-span-4"
+    >
+      <Card.Body className="gap-4">
         <div className="flex items-start justify-between gap-2">
           <ClassroomBadges summary={summary} />
           {canManage && (
@@ -565,8 +573,8 @@ export function ClassroomCard({
         <h2 className="truncate text-xl font-semibold">{name}</h2>
         <ClassroomStats org={org} slug={summary.path} />
         <ViewAssignmentsButton org={org} slug={summary.path} block />
-      </div>
-    </EnterDiv>
+      </Card.Body>
+    </Card>
   )
 }
 

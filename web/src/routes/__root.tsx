@@ -7,6 +7,7 @@ import type { RouterContext } from "@/types/router"
 import { TriangleAlert } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
+import { Button } from "@/components/ui"
 
 const RootComponent = () => {
   // Scope "view as" to the current org (reset across orgs via the key); the
@@ -35,13 +36,13 @@ const RootErrorComponent = ({ error }: { error: Error }) => {
           {error?.message || t("error.unexpected")}
         </p>
       </div>
-      <button
-        type="button"
-        className="btn btn-primary btn-sm"
+      <Button
+        variant="primary"
+        size="sm"
         onClick={() => window.location.reload()}
       >
         {t("error.reload")}
-      </button>
+      </Button>
     </div>
   )
 }

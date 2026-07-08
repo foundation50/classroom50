@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
+import { Button } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetOrgMembership from "@/hooks/useGetOrgMembership"
 import {
@@ -115,9 +116,10 @@ const TeardownSection = ({ org }: { org: string }) => {
         <CalloutText className="text-sm text-success">{done}</CalloutText>
       )}
 
-      <button
-        type="button"
-        className={`btn btn-error btn-sm ${error || done ? "mt-4" : ""}`}
+      <Button
+        variant="error"
+        size="sm"
+        className={error || done ? "mt-4" : ""}
         disabled={!isOwner || openMutation.isPending}
         title={
           isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")
@@ -129,7 +131,7 @@ const TeardownSection = ({ org }: { org: string }) => {
         {openMutation.isPending
           ? t("orgSettings.teardown.preparing")
           : t("orgSettings.teardown.button")}
-      </button>
+      </Button>
 
       {!isOwner && (
         <p className="mt-2 text-xs text-base-content/70">

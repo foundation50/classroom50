@@ -2,6 +2,8 @@ import { AlertTriangle } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Button, Alert, type ButtonVariant } from "@/components/ui"
+
 type ConfirmModalProps = {
   open: boolean
   title: string
@@ -112,9 +114,11 @@ export function ConfirmModal({
     }
   }
 
-  const confirmButtonClass = dangerous ? "btn btn-error" : "btn btn-primary"
+  const confirmButtonVariant: ButtonVariant = dangerous ? "error" : "primary"
 
-  const acknowledgeButtonClass = dangerous ? "btn btn-error" : "btn btn-warning"
+  const acknowledgeButtonVariant: ButtonVariant = dangerous
+    ? "error"
+    : "warning"
 
   return (
     <dialog
@@ -166,28 +170,25 @@ export function ConfirmModal({
             ) : null}
 
             {error ? (
-              <div
-                className="alert alert-error alert-soft mt-4 text-sm"
-                role="alert"
-              >
+              <Alert tone="error" className="mt-4 text-sm">
                 {error}
-              </div>
+              </Alert>
             ) : null}
 
             <div className="modal-action">
-              <button
-                type="button"
-                className="btn btn-ghost"
+              <Button
+                variant="ghost"
                 disabled={isSubmitting}
                 onClick={handleClose}
               >
                 {acknowledgeCancelLabel}
-              </button>
+              </Button>
 
-              <button
-                type="button"
-                className={acknowledgeButtonClass}
+              <Button
+                variant={acknowledgeButtonVariant}
                 disabled={isSubmitting}
+                loading={isSubmitting && !needsConfirm}
+                loadingLabel={t("common.working")}
                 onClick={(event) => {
                   event.stopPropagation()
 
@@ -199,20 +200,12 @@ export function ConfirmModal({
                   void handleSubmit()
                 }}
               >
-                {isSubmitting && !needsConfirm ? (
-                  <>
-                    <span
-                      className="loading loading-spinner loading-sm"
-                      aria-hidden="true"
-                    />
-                    {t("common.working")}
-                  </>
-                ) : needsConfirm ? (
-                  t("components.confirmModal.yesContinue")
-                ) : (
-                  resolvedConfirmLabel
-                )}
-              </button>
+                {isSubmitting && !needsConfirm
+                  ? t("common.working")
+                  : needsConfirm
+                    ? t("components.confirmModal.yesContinue")
+                    : resolvedConfirmLabel}
+              </Button>
             </div>
           </>
         ) : (
@@ -246,43 +239,30 @@ export function ConfirmModal({
               />
 
               {error ? (
-                <div
-                  className="alert alert-error alert-soft text-sm"
-                  role="alert"
-                >
+                <Alert tone="error" className="text-sm">
                   {error}
-                </div>
+                </Alert>
               ) : null}
             </div>
 
             <div className="modal-action">
-              <button
-                type="button"
-                className="btn btn-ghost"
+              <Button
+                variant="ghost"
                 disabled={isSubmitting}
                 onClick={handleClose}
               >
                 {resolvedCancelLabel}
-              </button>
+              </Button>
 
-              <button
-                type="button"
-                className={confirmButtonClass}
+              <Button
+                variant={confirmButtonVariant}
                 disabled={!canSubmit || isSubmitting}
+                loading={isSubmitting}
+                loadingLabel={t("common.working")}
                 onClick={() => void handleSubmit()}
               >
-                {isSubmitting ? (
-                  <>
-                    <span
-                      className="loading loading-spinner loading-sm"
-                      aria-hidden="true"
-                    />
-                    {t("common.working")}
-                  </>
-                ) : (
-                  resolvedConfirmLabel
-                )}
-              </button>
+                {isSubmitting ? t("common.working") : resolvedConfirmLabel}
+              </Button>
             </div>
           </>
         )}

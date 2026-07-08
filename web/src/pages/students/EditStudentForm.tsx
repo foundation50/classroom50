@@ -12,6 +12,7 @@ import { isValidEmail } from "@/util/orgMembership"
 import { studentKey } from "@/util/roster"
 import type { Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/api/mutations/students"
+import { Alert, Button, Input } from "@/components/ui"
 
 export type EditStudentFormValues = {
   first_name: string
@@ -140,13 +141,11 @@ const EditStudentForm = ({
                 className="mr-2 text-base-content/70"
                 aria-hidden="true"
               />
-              <input
+              <Input
                 id={field.name}
                 name={field.name}
-                type="text"
                 placeholder={t("students.firstNamePlaceholder")}
                 aria-label={t("students.firstNamePlaceholder")}
-                className="input w-full"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -162,13 +161,11 @@ const EditStudentForm = ({
                 className="mr-2 text-base-content/70"
                 aria-hidden="true"
               />
-              <input
+              <Input
                 id={field.name}
                 name={field.name}
-                type="text"
                 placeholder={t("students.lastNamePlaceholder")}
                 aria-label={t("students.lastNamePlaceholder")}
-                className="input w-full"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -186,19 +183,18 @@ const EditStudentForm = ({
                     className="size-6 mr-2 text-base-content/70"
                     aria-hidden="true"
                   />
-                  <input
+                  <Input
                     id={field.name}
                     name={field.name}
                     type="email"
                     placeholder={t("students.editEmailPlaceholder")}
                     aria-label={t("students.emailLabel")}
-                    aria-invalid={field.state.meta.errors.length > 0}
+                    invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
                       field.state.meta.errors.length > 0
                         ? `${field.name}-error`
                         : undefined
                     }
-                    className="input w-full"
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
@@ -222,13 +218,11 @@ const EditStudentForm = ({
           {(field) => (
             <div className="flex items-center">
               <Users className="mr-2 text-base-content/70" aria-hidden="true" />
-              <input
+              <Input
                 id={field.name}
                 name={field.name}
-                type="text"
                 placeholder={t("students.editSectionPlaceholder")}
                 aria-label={t("students.sectionLabel")}
-                className="input w-full"
                 value={field.state.value}
                 onBlur={field.handleBlur}
                 onChange={(e) => field.handleChange(e.target.value)}
@@ -252,39 +246,28 @@ const EditStudentForm = ({
       </div>
 
       {error ? (
-        <div className="alert alert-error alert-soft mt-4 text-sm">{error}</div>
+        <Alert tone="error" className="mt-4 text-sm">
+          {error}
+        </Alert>
       ) : null}
 
       <div className="modal-action">
-        <button
-          type="button"
-          className="btn btn-ghost"
-          disabled={submitting}
-          onClick={onCancel}
-        >
+        <Button variant="ghost" disabled={submitting} onClick={onCancel}>
           {t("common.cancel")}
-        </button>
+        </Button>
         <form.Subscribe
           selector={(state) => [state.canSubmit, state.isSubmitting]}
         >
           {([canSubmit, isSubmitting]) => (
-            <button
+            <Button
               type="submit"
-              className="btn btn-primary"
+              variant="primary"
+              loading={isSubmitting}
+              loadingLabel={t("students.saving")}
               disabled={!canSubmit || isSubmitting}
             >
-              {isSubmitting ? (
-                <>
-                  <span
-                    className="loading loading-spinner loading-sm"
-                    aria-hidden="true"
-                  />
-                  {t("students.saving")}
-                </>
-              ) : (
-                t("students.saveChanges")
-              )}
-            </button>
+              {isSubmitting ? t("students.saving") : t("students.saveChanges")}
+            </Button>
           )}
         </form.Subscribe>
       </div>

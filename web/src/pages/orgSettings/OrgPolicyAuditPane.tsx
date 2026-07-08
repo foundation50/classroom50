@@ -12,6 +12,7 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { Button, Spinner } from "@/components/ui"
 import PlanBadge from "@/components/PlanBadge"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
@@ -120,21 +121,15 @@ function ConcernRow({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {showFix && (
-            <button
-              type="button"
-              className="btn btn-xs btn-primary"
+            <Button
+              variant="primary"
+              size="xs"
+              loading={fixing}
               disabled={fixing}
               onClick={() => onFix(concern.id)}
             >
-              {fixing ? (
-                <span
-                  className="loading loading-spinner loading-xs"
-                  aria-hidden="true"
-                />
-              ) : (
-                t("orgSettings.audit.fixIt")
-              )}
-            </button>
+              {fixing ? null : t("orgSettings.audit.fixIt")}
+            </Button>
           )}
           <span
             className={`badge ${CONCERN_STATE_BADGE[concern.verdict.state]}`}
@@ -381,9 +376,9 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
       }
       description={t("orgSettings.audit.description")}
       action={
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => {
             void queryClient.invalidateQueries({
               queryKey: githubKeys.orgAuditPrefix(org),
@@ -391,15 +386,12 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
           }}
         >
           {t("orgSettings.audit.recheck")}
-        </button>
+        </Button>
       }
     >
       {isLoading && (
         <div className="flex items-center gap-2 text-sm text-base-content/70">
-          <span
-            className="loading loading-spinner loading-sm"
-            aria-hidden="true"
-          />
+          <Spinner size="sm" />
           {t("orgSettings.audit.auditing")}
         </div>
       )}

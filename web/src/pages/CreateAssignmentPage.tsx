@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
 import RequireTeacher from "@/components/RequireTeacher"
+import { Alert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -124,16 +125,20 @@ const CreateAssignmentPage = () => {
           />
         ) : null}
         {errorMessage ? (
-          <div className="alert alert-error mb-6">{errorMessage}</div>
+          <Alert tone="error" className="mb-6">
+            {errorMessage}
+          </Alert>
         ) : (
           <></>
         )}
         {warningMessage ? (
-          <div className="alert alert-warning mb-6 flex flex-col items-start gap-2">
+          <Alert
+            tone="warning"
+            className="mb-6 flex flex-col items-start gap-2"
+          >
             <span>{warningMessage}</span>
-            <button
-              type="button"
-              className="btn btn-sm"
+            <Button
+              size="sm"
               onClick={() =>
                 navigate({
                   to: "/$org/$classroom/assignments",
@@ -142,8 +147,8 @@ const CreateAssignmentPage = () => {
               }
             >
               {t("assignments.goToAssignments")}
-            </button>
-          </div>
+            </Button>
+          </Alert>
         ) : (
           <></>
         )}

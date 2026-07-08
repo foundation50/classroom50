@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 
 import { nameFromParts } from "@/util/students"
+import { Alert, Button, Card, Spinner } from "@/components/ui"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -485,13 +486,13 @@ const EnrolledStudents = ({
                 className="alert alert-warning alert-soft overflow-hidden"
               >
                 <span className="text-sm">{warning}</span>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-xs"
+                <Button
+                  variant="ghost"
+                  size="xs"
                   onClick={() => dismissWarning(key)}
                 >
                   {t("students.dismiss")}
-                </button>
+                </Button>
               </motion.div>
             ))}
           </AnimatePresence>
@@ -502,35 +503,36 @@ const EnrolledStudents = ({
           not_in_org rather than expanding an inline list. Dismissable for the
           session; a refresh re-derives and shows it again. */}
       {!isLoading && !isError && !driftDismissed && notInOrg.length > 0 ? (
-        <div
-          role="alert"
-          className="alert alert-warning alert-soft flex items-center justify-between gap-3"
+        <Alert
+          tone="warning"
+          className="flex items-center justify-between gap-3"
         >
           <span className="flex items-center gap-2 text-sm">
             <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
             {t("students.driftBanner", { count: notInOrg.length })}
           </span>
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => {
                 setStatusFilter("not_in_org")
               }}
             >
               {t("students.driftReview")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs btn-square"
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              shape="square"
               aria-label={t("students.dismiss")}
               title={t("students.dismiss")}
               onClick={() => setDriftDismissed(true)}
             >
               <X aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
           </div>
-        </div>
+        </Alert>
       ) : null}
 
       {/* Pending-invites banner: clicking "Review" filters to pending so the
@@ -541,40 +543,38 @@ const EnrolledStudents = ({
       !pendingHidden &&
       !pendingDismissed &&
       counts.pending > 0 ? (
-        <div
-          role="alert"
-          className="alert alert-info alert-soft flex items-center justify-between gap-3"
-        >
+        <Alert tone="info" className="flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 text-sm">
             <Send aria-hidden="true" className="size-4 shrink-0" />
             {t("students.pendingBanner", { count: counts.pending })}
           </span>
           <div className="flex shrink-0 items-center gap-1">
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => setStatusFilter("pending")}
             >
               {t("students.pendingReview")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs btn-square"
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              shape="square"
               aria-label={t("students.dismiss")}
               title={t("students.dismiss")}
               onClick={() => setPendingDismissed(true)}
             >
               <X aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
           </div>
-        </div>
+        </Alert>
       ) : null}
 
       {/* Non-owner: pending invites are owner-only. */}
       {!isLoading && !isError && pendingHidden ? (
-        <div role="alert" className="alert alert-info alert-soft">
+        <Alert tone="info">
           <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
-        </div>
+        </Alert>
       ) : null}
 
       {/* Toolbar: search + status filter (group-by-section lives in the table
@@ -620,9 +620,10 @@ const EnrolledStudents = ({
             </select>
           ) : null}
           {syncMutation.isPending || csvMissingCount > 0 ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm btn-square"
+            <Button
+              variant="ghost"
+              size="sm"
+              shape="square"
               disabled={syncMutation.isPending}
               onClick={() => {
                 // Explicit backfill: clear any post-unenroll suppression so the
@@ -637,19 +638,16 @@ const EnrolledStudents = ({
                 aria-hidden="true"
                 className={`size-4 ${syncMutation.isPending ? "animate-spin" : ""}`}
               />
-            </button>
+            </Button>
           ) : null}
         </div>
       ) : null}
 
       {/* The list card. */}
-      <div className="card card-border w-full overflow-hidden bg-base-100 shadow-sm">
+      <Card className="w-full overflow-hidden">
         {isLoading ? (
           <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-            <span
-              className="loading loading-spinner loading-md"
-              aria-hidden="true"
-            />
+            <Spinner size="md" />
             <span className="text-sm">{t("students.loadingRoster")}</span>
           </div>
         ) : isError ? (
@@ -661,9 +659,9 @@ const EnrolledStudents = ({
               <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
               {t("students.rosterLoadError")}
             </span>
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() =>
                 void queryClient.invalidateQueries({
                   queryKey: githubKeys.teamMembers(org, teamSlug),
@@ -672,7 +670,7 @@ const EnrolledStudents = ({
             >
               <RefreshCw aria-hidden="true" className="size-4" />
               {t("students.rosterRetry")}
-            </button>
+            </Button>
           </div>
         ) : isEmpty ? (
           <div className="px-6 py-12 text-center">
@@ -684,30 +682,22 @@ const EnrolledStudents = ({
             </p>
             {addActions ? (
               <div className="mt-4 flex justify-center gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
+                <Button
+                  variant="primary"
+                  size="sm"
                   onClick={addActions.onAddStudent}
                 >
                   <Plus aria-hidden="true" className="size-4" />
                   {t("students.addTitle")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={addActions.onUploadRoster}
-                >
+                </Button>
+                <Button size="sm" onClick={addActions.onUploadRoster}>
                   <Upload aria-hidden="true" className="size-4" />
                   {t("students.uploadRosterTitle")}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  onClick={addActions.onInviteLinks}
-                >
+                </Button>
+                <Button size="sm" onClick={addActions.onInviteLinks}>
                   <Send aria-hidden="true" className="size-4" />
                   {t("students.inviteStudents")}
-                </button>
+                </Button>
               </div>
             ) : null}
           </div>
@@ -783,7 +773,7 @@ const EnrolledStudents = ({
             )}
           </>
         )}
-      </div>
+      </Card>
 
       <RosterMemberModal
         open={Boolean(selected)}

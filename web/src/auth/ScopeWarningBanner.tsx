@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "./useGithubAuth"
 import { AppBanner } from "@/components/AppBanner"
 import { useMissingScopes } from "@/context/github/GitHubProvider"
+import { Button } from "@/components/ui"
 
 // Surfaces missing required scopes detected from live API responses:
 // best-effort, non-blocking, with a re-authorize action. A revoked/expired
@@ -35,13 +36,14 @@ export function ScopeWarningBanner() {
             <code className="font-mono text-xs">{missing.join(", ")}</code>
             {t("auth.missingScopesBody_suffix", { count: scopeCount })}
           </p>
-          <button
-            type="button"
-            className="btn btn-sm btn-warning self-start"
+          <Button
+            variant="warning"
+            size="sm"
+            className="self-start"
             onClick={() => void startWebFlow()}
           >
             {t("auth.reauthorize")}
-          </button>
+          </Button>
           <p className="text-xs text-base-content/70">
             {t("auth.reauthorizeHint")}
           </p>

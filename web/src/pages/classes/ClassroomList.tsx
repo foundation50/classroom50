@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NoSearchResults, ViewToggle } from "@/components/list"
+import { Button } from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
@@ -149,15 +150,16 @@ const ClassroomList = ({
           className="join"
         >
           {(["active", "archived", "all"] as const).map((f) => (
-            <button
+            <Button
               key={f}
-              type="button"
-              className={`btn btn-sm join-item ${filter === f ? "btn-active" : ""}`}
+              size="sm"
+              className="join-item"
+              active={filter === f}
               aria-pressed={filter === f}
               onClick={() => setFilter(f)}
             >
               {t(`classes.filter.${f}`)}
-            </button>
+            </Button>
           ))}
         </div>
 

@@ -1,6 +1,7 @@
 import { Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { Button, Select } from "@/components/ui"
 import type {
   SubmissionFilters,
   SubmissionSort,
@@ -66,8 +67,9 @@ const SubmissionsControls = ({
       </label>
 
       {sections.length > 0 && (
-        <select
-          className="select select-bordered select-sm w-auto min-w-0 max-w-[10rem]"
+        <Select
+          selectSize="sm"
+          className="w-auto min-w-0 max-w-[10rem]"
           value={filters.section}
           onChange={(e) =>
             onFiltersChange({ ...filters, section: e.target.value })
@@ -80,11 +82,12 @@ const SubmissionsControls = ({
               {section}
             </option>
           ))}
-        </select>
+        </Select>
       )}
 
-      <select
-        className="select select-bordered select-sm w-auto min-w-0"
+      <Select
+        selectSize="sm"
+        className="w-auto min-w-0"
         value={filters.submission}
         onChange={(e) =>
           onFiltersChange({
@@ -105,11 +108,12 @@ const SubmissionsControls = ({
             {t("submissions.filters.notSubmitted")}
           </option>
         )}
-      </select>
+      </Select>
 
       {passingAvailable && (
-        <select
-          className="select select-bordered select-sm w-auto min-w-0"
+        <Select
+          selectSize="sm"
+          className="w-auto min-w-0"
           value={filters.passing}
           // Disabled when filtering to non-submitters: they have no grade, so a
           // passing/failing filter would always yield an empty table.
@@ -125,12 +129,13 @@ const SubmissionsControls = ({
           <option value="all">{t("submissions.filters.allGrades")}</option>
           <option value="passing">{t("submissions.filters.passing")}</option>
           <option value="failing">{t("submissions.filters.failing")}</option>
-        </select>
+        </Select>
       )}
 
       {acceptedAvailable && (
-        <select
-          className="select select-bordered select-sm w-auto min-w-0"
+        <Select
+          selectSize="sm"
+          className="w-auto min-w-0"
           value={filters.accepted}
           onChange={(e) =>
             onFiltersChange({
@@ -145,22 +150,19 @@ const SubmissionsControls = ({
           <option value="not-accepted">
             {t("submissions.filters.notAccepted")}
           </option>
-        </select>
+        </Select>
       )}
 
       {hasActiveFilter && (
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={clearAll}
-        >
+        <Button variant="ghost" size="sm" onClick={clearAll}>
           <X aria-hidden="true" className="size-4" />{" "}
           {t("submissions.filters.clear")}
-        </button>
+        </Button>
       )}
 
-      <select
-        className="select select-bordered select-sm ml-auto w-auto min-w-0"
+      <Select
+        selectSize="sm"
+        className="ml-auto w-auto min-w-0"
         value={sort}
         onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
         aria-label={t("submissions.filters.sortAria")}
@@ -171,7 +173,7 @@ const SubmissionsControls = ({
         <option value="name-desc">
           {t("submissions.filters.sortNameDesc")}
         </option>
-      </select>
+      </Select>
     </div>
   )
 }

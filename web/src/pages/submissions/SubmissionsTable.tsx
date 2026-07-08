@@ -19,6 +19,7 @@ import {
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
+import { Button, Modal } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -242,68 +243,61 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
 
   return (
     <>
-      <button
-        type="button"
-        className="btn btn-ghost btn-sm btn-square text-base-content/70 disabled:opacity-60"
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="square"
+        className="text-base-content/70 disabled:opacity-60"
         disabled={resolving}
+        loading={resolving}
+        loadingLabel={t("submissions.table.review")}
         onClick={handleReview}
         aria-label={t("submissions.table.reviewAria")}
         title={t("submissions.table.review")}
       >
-        {resolving ? (
-          <span
-            className="loading loading-spinner loading-xs"
-            aria-hidden="true"
-          />
+        {!resolving && <MessageCircle aria-hidden="true" className="size-4" />}
+      </Button>
+      <Modal
+        dialogRef={dialogRef}
+        size="md"
+        hideCloseButton
+        aria-labelledby={titleId}
+      >
+        {errorMsg ? (
+          <>
+            <h3 id={titleId} className="text-lg font-bold">
+              {t("submissions.reviewModal.errorTitle")}
+            </h3>
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
+              {errorMsg}
+            </p>
+          </>
         ) : (
-          <MessageCircle aria-hidden="true" className="size-4" />
+          <>
+            <h3 id={titleId} className="text-lg font-bold">
+              {t("submissions.reviewModal.emptyTitle")}
+            </h3>
+            <p className="mt-2 text-sm leading-6 text-base-content/70">
+              {t("submissions.reviewModal.emptyBody_prefix")}{" "}
+              <span className="font-mono">{repo}</span>{" "}
+              {t("submissions.reviewModal.emptyBody_suffix")}
+            </p>
+          </>
         )}
-      </button>
-      <dialog ref={dialogRef} className="modal" aria-labelledby={titleId}>
-        <div className="modal-box max-w-md">
-          {errorMsg ? (
-            <>
-              <h3 id={titleId} className="text-lg font-bold">
-                {t("submissions.reviewModal.errorTitle")}
-              </h3>
-              <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-base-content/70">
-                {errorMsg}
-              </p>
-            </>
-          ) : (
-            <>
-              <h3 id={titleId} className="text-lg font-bold">
-                {t("submissions.reviewModal.emptyTitle")}
-              </h3>
-              <p className="mt-2 text-sm leading-6 text-base-content/70">
-                {t("submissions.reviewModal.emptyBody_prefix")}{" "}
-                <span className="font-mono">{repo}</span>{" "}
-                {t("submissions.reviewModal.emptyBody_suffix")}
-              </p>
-            </>
-          )}
-          <div className="modal-action">
-            <a
-              className="btn btn-ghost btn-sm"
-              href={`https://github.com/${org}/${repo}/pulls`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {t("submissions.reviewModal.openRepoPrs")}
-            </a>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => dialogRef.current?.close()}
-            >
-              {t("common.close")}
-            </button>
-          </div>
+        <div className="modal-action">
+          <a
+            className="btn btn-ghost btn-sm"
+            href={`https://github.com/${org}/${repo}/pulls`}
+            target="_blank"
+            rel="noreferrer"
+          >
+            {t("submissions.reviewModal.openRepoPrs")}
+          </a>
+          <Button size="sm" onClick={() => dialogRef.current?.close()}>
+            {t("common.close")}
+          </Button>
         </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>{t("common.close")}</button>
-        </form>
-      </dialog>
+      </Modal>
     </>
   )
 }
@@ -357,26 +351,25 @@ const RegradeButton = ({
 
   return (
     <>
-      <button
-        type="button"
-        className={`${ACTION_BTN} text-base-content/70 disabled:opacity-60`}
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="square"
+        className="text-base-content/70 disabled:opacity-60"
         disabled={inFlight || blocked}
+        loading={inFlight}
+        loadingLabel={t("submissions.rowRegrade.title")}
         onClick={handleClick}
         aria-label={t("submissions.rowRegrade.aria", { owner })}
         title={title}
       >
-        {inFlight ? (
-          <span
-            className="loading loading-spinner loading-xs"
-            aria-hidden="true"
-          />
-        ) : (
+        {!inFlight && (
           <RefreshCw
             aria-hidden="true"
             className={`size-4 ${phase === "completed" ? "text-success" : phase === "failed" ? "text-error" : ""}`}
           />
         )}
-      </button>
+      </Button>
       <ConfirmModal
         open={confirmOpen}
         title={t("submissions.rowRegrade.confirmTitle", {
@@ -683,9 +676,11 @@ const SubmissionsTable = ({
                       <td>
                         <div className="flex items-center gap-1">
                           {isGroup && (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm btn-square text-base-content/70"
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              shape="square"
+                              className="text-base-content/70"
                               onClick={() => setManageOwner(rest.owner)}
                               aria-label={t("submissions.table.membersAria")}
                               title={t("submissions.table.members")}
@@ -694,7 +689,7 @@ const SubmissionsTable = ({
                                 aria-hidden="true"
                                 className="size-4"
                               />
-                            </button>
+                            </Button>
                           )}
                           <ActionIconLink
                             href={repoHref}

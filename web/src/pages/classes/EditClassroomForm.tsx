@@ -17,6 +17,7 @@ import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
+import { Button, Card, FormField, Input } from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
@@ -48,17 +49,19 @@ const DeleteClassroomButton = ({
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
         }}
-        className="btn btn-circle btn-sm btn-ghost text-error"
+        className="text-error"
         aria-label={t("classes.deleteClassroomAria")}
       >
         <Trash2 className="size-4" aria-hidden="true" />
-      </button>
+      </Button>
 
       <ConfirmModal
         open={open}
@@ -145,13 +148,13 @@ const ArchiveClassroomButton = ({
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
         }}
-        className="btn btn-sm btn-ghost"
         title={
           archived ? t("classes.unarchiveTitle") : t("classes.archiveTitle")
         }
@@ -167,7 +170,7 @@ const ArchiveClassroomButton = ({
             {t("classes.archive")}
           </>
         )}
-      </button>
+      </Button>
 
       <ConfirmModal
         open={open}
@@ -279,15 +282,17 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   if (!org || !classroom) return null
 
   return (
-    <form
-      className="card bg-base-100 w-full shadow-sm"
+    <Card
+      as="form"
+      bordered={false}
+      className="w-full"
       onSubmit={(e) => {
         e.preventDefault()
         e.stopPropagation()
         form.handleSubmit()
       }}
     >
-      <div className="card-body">
+      <Card.Body>
         <div className="flex justify-between">
           <div className="flex items-center gap-3 pb-4">
             <h3 className="text-lg font-bold">{t("classes.form.basicInfo")}</h3>
@@ -325,88 +330,80 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
         <fieldset disabled={archived} className="m-0 min-w-0 border-0 p-0">
           <form.Field name="name">
             {(field) => (
-              <>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("classes.form.name")}
-                  <span className="text-error">*</span>
-                </label>
-
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  required
-                  aria-required="true"
-                  aria-invalid={field.state.meta.errors.length > 0}
-                  aria-describedby={
-                    field.state.meta.errors.length > 0
-                      ? `${field.name}-error`
-                      : undefined
-                  }
-                  className="input w-full mb-4"
-                  placeholder={t("classes.form.namePlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-
-                {field.state.meta.errors.length > 0 && (
-                  <p
-                    id={`${field.name}-error`}
-                    className="text-error text-sm mb-4"
-                    role="alert"
-                  >
-                    {field.state.meta.errors[0]}
-                  </p>
+              <FormField
+                label={t("classes.form.name")}
+                htmlFor={field.name}
+                required
+                error={
+                  field.state.meta.errors.length > 0
+                    ? field.state.meta.errors[0]
+                    : undefined
+                }
+                className="mb-4"
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    id={id}
+                    name={field.name}
+                    required
+                    aria-required="true"
+                    aria-describedby={describedById}
+                    invalid={invalid}
+                    placeholder={t("classes.form.namePlaceholder")}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                 )}
-              </>
+              </FormField>
             )}
           </form.Field>
 
-          <>
-            <label htmlFor="classroom-slug-display" className="label font-bold">
-              {t("classes.form.slug")}
-              <span className="text-error">*</span>
-            </label>
-
-            <input
-              id="classroom-slug-display"
-              type="text"
-              disabled
-              className="input w-full mb-4"
-              placeholder={t("classes.form.slugPlaceholder")}
-              value={classroom}
-            />
-          </>
+          <FormField
+            label={t("classes.form.slug")}
+            htmlFor="classroom-slug-display"
+            required
+            className="mb-4"
+          >
+            {({ id }) => (
+              <Input
+                id={id}
+                disabled
+                placeholder={t("classes.form.slugPlaceholder")}
+                value={classroom}
+              />
+            )}
+          </FormField>
 
           <form.Field name="term">
             {(field) => (
-              <>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("classes.form.term")}
-                </label>
-
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  className="input w-full mb-4"
-                  placeholder={t("classes.form.termPlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-
-                {field.state.meta.errors.length > 0 && (
-                  <p className="text-error text-sm mb-4" role="alert">
-                    {field.state.meta.errors[0]}
-                  </p>
+              <FormField
+                label={t("classes.form.term")}
+                htmlFor={field.name}
+                error={
+                  field.state.meta.errors.length > 0
+                    ? field.state.meta.errors[0]
+                    : undefined
+                }
+                className="mb-4"
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    id={id}
+                    name={field.name}
+                    aria-describedby={describedById}
+                    invalid={invalid}
+                    placeholder={t("classes.form.termPlaceholder")}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
                 )}
-              </>
+              </FormField>
             )}
           </form.Field>
 
-          <div className="card-actions justify-end p-2">
+          <Card.Actions className="justify-end p-2">
             <form.Subscribe
               selector={(state) => [
                 state.canSubmit,
@@ -415,9 +412,11 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               ]}
             >
               {([canSubmit, isSubmitting, isDefaultValue]) => (
-                <button
+                <Button
                   type="submit"
-                  className="btn btn-primary"
+                  variant="primary"
+                  loading={isSubmitting}
+                  loadingLabel={t("classes.form.saving")}
                   disabled={
                     !canSubmit || isSubmitting || submitted || isDefaultValue
                   }
@@ -427,24 +426,16 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
                       : undefined
                   }
                 >
-                  {isSubmitting ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-sm"
-                        aria-hidden="true"
-                      />
-                      {t("classes.form.saving")}
-                    </>
-                  ) : (
-                    t("classes.form.saveButton")
-                  )}
-                </button>
+                  {isSubmitting
+                    ? t("classes.form.saving")
+                    : t("classes.form.saveButton")}
+                </Button>
               )}
             </form.Subscribe>
-          </div>
+          </Card.Actions>
         </fieldset>
-      </div>
-    </form>
+      </Card.Body>
+    </Card>
   )
 }
 

@@ -5,6 +5,8 @@
 import { LayoutGrid, List as ListIcon } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { Button } from "@/components/ui"
+
 export type ListViewMode = "grid" | "list"
 
 export function ViewToggle({
@@ -22,24 +24,26 @@ export function ViewToggle({
 }) {
   return (
     <div role="group" aria-label={groupLabel} className="join">
-      <button
-        type="button"
-        className={`btn btn-sm join-item ${viewMode === "grid" ? "btn-active" : ""}`}
+      <Button
+        size="sm"
+        active={viewMode === "grid"}
+        className="join-item"
         aria-label={gridLabel}
         aria-pressed={viewMode === "grid"}
         onClick={() => onChange("grid")}
       >
         <LayoutGrid aria-hidden="true" className="size-4" />
-      </button>
-      <button
-        type="button"
-        className={`btn btn-sm join-item ${viewMode === "list" ? "btn-active" : ""}`}
+      </Button>
+      <Button
+        size="sm"
+        active={viewMode === "list"}
+        className="join-item"
         aria-label={listLabel}
         aria-pressed={viewMode === "list"}
         onClick={() => onChange("list")}
       >
         <ListIcon aria-hidden="true" className="size-4" />
-      </button>
+      </Button>
     </div>
   )
 }
@@ -91,13 +95,9 @@ export function NoSearchResults({
       title={title}
       body={body}
       action={
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm"
-          onClick={onClear}
-        >
+        <Button variant="ghost" size="sm" onClick={onClear}>
           {clearLabel}
-        </button>
+        </Button>
       }
     />
   )

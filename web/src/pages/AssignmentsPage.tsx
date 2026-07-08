@@ -4,6 +4,7 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
+import { Button } from "@/components/ui"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
@@ -45,13 +46,14 @@ const NewAssignmentButton = ({
           {t("assignments.newButton.assignment")}
         </Link>
         <div className="dropdown dropdown-end join-item">
-          <button
+          <Button
+            variant="primary"
             tabIndex={0}
-            className="btn btn-primary join-item h-full border-l border-primary-content/20 px-2"
+            className="join-item h-full border-l border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
             <ChevronDown aria-hidden="true" className="size-4" />
-          </button>
+          </Button>
           <ul
             tabIndex={0}
             className="dropdown-content menu z-10 mt-1 w-max rounded-box border border-base-content/5 bg-base-100 p-1 shadow"

@@ -1,6 +1,8 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, X } from "lucide-react"
+import { ExternalLink } from "lucide-react"
+
+import { Modal } from "@/components/ui"
 import {
   appVersion,
   commitUrl,
@@ -50,80 +52,72 @@ export const AboutDialog = forwardRef<HTMLDialogElement, { titleId: string }>(
     const release = releaseUrl()
 
     return (
-      <dialog ref={ref} className="modal" aria-labelledby={titleId}>
-        <div className="modal-box flex max-h-[85vh] max-w-md flex-col overflow-y-auto text-base-content">
-          <form method="dialog">
-            <button
-              className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-              aria-label={t("common.close")}
-            >
-              <X className="size-4" aria-hidden="true" />
-            </button>
-          </form>
-          <h3 id={titleId} className="text-lg font-bold">
-            {t("nav.aboutDialogTitle")}
-          </h3>
-          <p className="mt-1 mb-4 text-sm text-base-content/70">
-            {t("nav.aboutDialogDescription")}
-          </p>
+      <Modal
+        ref={ref}
+        size="md"
+        boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
+        aria-labelledby={titleId}
+      >
+        <h3 id={titleId} className="text-lg font-bold">
+          {t("nav.aboutDialogTitle")}
+        </h3>
+        <p className="mt-1 mb-4 text-sm text-base-content/70">
+          {t("nav.aboutDialogDescription")}
+        </p>
 
-          <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
-            <dt className="text-base-content/60">{t("nav.aboutVersion")}</dt>
-            <dd className="font-mono tabular-nums">
-              {release ? (
-                <a
-                  className="link link-info link-hover inline-flex items-center gap-1"
-                  href={release}
-                  target="_blank"
-                  rel="noreferrer"
-                >
-                  v{appVersion.version}
-                  <ExternalLink aria-hidden="true" className="size-3" />
-                </a>
-              ) : (
-                <>v{appVersion.version}</>
-              )}
-            </dd>
-
-            <dt className="text-base-content/60">{t("nav.aboutCommit")}</dt>
-            <dd className="font-mono">
+        <dl className="grid grid-cols-[auto_1fr] gap-x-4 gap-y-2 text-sm">
+          <dt className="text-base-content/60">{t("nav.aboutVersion")}</dt>
+          <dd className="font-mono tabular-nums">
+            {release ? (
               <a
                 className="link link-info link-hover inline-flex items-center gap-1"
-                href={commitUrl()}
+                href={release}
                 target="_blank"
                 rel="noreferrer"
               >
-                {shortCommit()}
+                v{appVersion.version}
                 <ExternalLink aria-hidden="true" className="size-3" />
               </a>
-            </dd>
+            ) : (
+              <>v{appVersion.version}</>
+            )}
+          </dd>
 
-            <dt className="text-base-content/60">{t("nav.aboutBuilt")}</dt>
-            <dd className="font-mono tabular-nums">{appVersion.buildDate}</dd>
-          </dl>
+          <dt className="text-base-content/60">{t("nav.aboutCommit")}</dt>
+          <dd className="font-mono">
+            <a
+              className="link link-info link-hover inline-flex items-center gap-1"
+              href={commitUrl()}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {shortCommit()}
+              <ExternalLink aria-hidden="true" className="size-3" />
+            </a>
+          </dd>
 
-          <div className="divider my-4" />
+          <dt className="text-base-content/60">{t("nav.aboutBuilt")}</dt>
+          <dd className="font-mono tabular-nums">{appVersion.buildDate}</dd>
+        </dl>
 
-          <h4 className="mb-3 text-sm font-semibold">
-            {t("nav.aboutSupportTitle")}
-          </h4>
-          <div className="flex flex-col gap-2">
-            <SupportLink
-              href={DISCUSSIONS_URL}
-              title={t("nav.aboutAskQuestion")}
-              hint={t("nav.aboutAskQuestionHint")}
-            />
-            <SupportLink
-              href={ISSUES_URL}
-              title={t("nav.aboutReportIssue")}
-              hint={t("nav.aboutReportIssueHint")}
-            />
-          </div>
+        <div className="divider my-4" />
+
+        <h4 className="mb-3 text-sm font-semibold">
+          {t("nav.aboutSupportTitle")}
+        </h4>
+        <div className="flex flex-col gap-2">
+          <SupportLink
+            href={DISCUSSIONS_URL}
+            title={t("nav.aboutAskQuestion")}
+            hint={t("nav.aboutAskQuestionHint")}
+          />
+          <SupportLink
+            href={ISSUES_URL}
+            title={t("nav.aboutReportIssue")}
+            hint={t("nav.aboutReportIssueHint")}
+          />
         </div>
-        <form method="dialog" className="modal-backdrop">
-          <button>{t("common.close")}</button>
-        </form>
-      </dialog>
+      </Modal>
     )
   },
 )

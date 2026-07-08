@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, ExternalLink, KeyRound } from "lucide-react"
 
 import { REQUIRED_SCOPES } from "./scopes"
+import { Alert, Button, Input } from "@/components/ui"
 
 // The classic-PAT checkboxes to tick, derived from REQUIRED_SCOPES (the same
 // source missingScopes() validates against) so the on-screen list and the
@@ -63,10 +64,10 @@ export function GitHubPatPrompt({
       }}
     >
       {error ? (
-        <div className="alert alert-error items-start text-sm">
+        <Alert tone="error" className="items-start text-sm">
           <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
           <span>{error}</span>
-        </div>
+        </Alert>
       ) : null}
 
       <div className="space-y-2">
@@ -95,8 +96,8 @@ export function GitHubPatPrompt({
 
       <label className="form-control w-full">
         <span className="label-text sr-only">{t("auth.patTokenLabel")}</span>
-        <input
-          className="input input-bordered w-full font-mono text-sm"
+        <Input
+          className="font-mono text-sm"
           type="password"
           autoComplete="off"
           spellCheck={false}
@@ -113,30 +114,28 @@ export function GitHubPatPrompt({
       </p>
 
       <div className="space-y-3">
-        <button
-          className="btn btn-primary w-full"
+        <Button
+          variant="primary"
+          className="w-full"
           type="submit"
+          loading={isValidating}
           disabled={!trimmed || isValidating}
         >
-          {isValidating ? (
-            <span
-              className="loading loading-spinner loading-sm"
-              aria-hidden="true"
-            />
-          ) : (
+          {isValidating ? null : (
             <KeyRound aria-hidden="true" className="size-4" />
           )}
           {t("auth.patSubmit")}
-        </button>
+        </Button>
 
-        <button
-          className="btn btn-outline w-full"
+        <Button
+          variant="outline"
+          className="w-full"
           type="button"
           onClick={onCancel}
           disabled={isValidating}
         >
           {t("auth.patCancel")}
-        </button>
+        </Button>
       </div>
     </form>
   )

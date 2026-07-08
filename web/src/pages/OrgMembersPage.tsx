@@ -10,6 +10,7 @@ import {
   UserPlus,
 } from "lucide-react"
 
+import { Alert, Button, Card, Spinner } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -402,24 +403,18 @@ const OrgMembersPage = () => {
           />
 
           {notes.length > 0 ? (
-            <div
-              className="alert alert-warning alert-soft mt-6 text-sm"
-              role="status"
-            >
+            <Alert tone="warning" className="mt-6 text-sm" role="status">
               <span>{notes.join(" ")}</span>
-            </div>
+            </Alert>
           ) : null}
 
           {discrepancyCount > 0 ? (
-            <div
-              className="alert alert-error alert-soft mt-6 text-sm"
-              role="status"
-            >
+            <Alert tone="error" className="mt-6 text-sm" role="status">
               <AlertTriangle className="size-4" aria-hidden="true" />
               <span>
                 {t("orgMembers.discrepancy", { count: discrepancyCount })}
               </span>
-            </div>
+            </Alert>
           ) : null}
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
@@ -452,13 +447,10 @@ const OrgMembersPage = () => {
             </select>
           </div>
 
-          <div className="mt-4 card card-border w-full overflow-hidden bg-base-100 shadow-sm">
+          <Card className="mt-4 w-full overflow-hidden">
             {isLoading ? (
               <div className="flex items-center justify-center gap-3 px-6 py-12 text-base-content/70">
-                <span
-                  className="loading loading-spinner loading-md"
-                  aria-hidden="true"
-                />
+                <Spinner size="md" />
                 <span className="text-sm">{t("orgMembers.loading")}</span>
               </div>
             ) : isError ? (
@@ -549,21 +541,17 @@ const OrgMembersPage = () => {
                       <div className="flex shrink-0 items-center gap-3">
                         {row.classification === "on-roster-not-member" &&
                         row.github_id ? (
-                          <button
-                            type="button"
-                            className="btn btn-xs btn-primary"
+                          <Button
+                            variant="primary"
+                            size="xs"
+                            loading={invitingKey === row.key}
                             disabled={invitingKey === row.key}
                             onClick={(e) => {
                               e.stopPropagation()
                               void handleQuickInvite(row)
                             }}
                           >
-                            {invitingKey === row.key ? (
-                              <span
-                                className="loading loading-spinner loading-xs"
-                                aria-hidden="true"
-                              />
-                            ) : (
+                            {invitingKey === row.key ? null : (
                               <>
                                 <UserPlus
                                   aria-hidden="true"
@@ -572,7 +560,7 @@ const OrgMembersPage = () => {
                                 {t("orgMembers.invite")}
                               </>
                             )}
-                          </button>
+                          </Button>
                         ) : null}
                         <span className="hidden text-xs text-base-content/70 sm:inline">
                           {t("orgMembers.classroomCount", {
@@ -605,7 +593,7 @@ const OrgMembersPage = () => {
                 </motion.ul>
               </>
             )}
-          </div>
+          </Card>
         </RequireTeacher>
       </PageShell>
 

@@ -16,6 +16,7 @@ import {
   SkeletonOverwriteModal,
   useSkeletonOverwriteConfirm,
 } from "@/pages/orgSettings/skeletonOverwriteUi"
+import { Button } from "@/components/ui"
 
 export type DriftBannerView = "warning" | "success" | "hidden"
 
@@ -174,13 +175,14 @@ export function SkeletonDriftBanner() {
                 <p className="text-base-content/70">
                   {t("skeletonDrift.success.body")}
                 </p>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-success self-start"
+                <Button
+                  variant="success"
+                  size="sm"
+                  className="self-start"
                   onClick={() => setDismissedOrg(org)}
                 >
                   {t("skeletonDrift.success.dismiss")}
-                </button>
+                </Button>
               </>
             ) : (
               <>
@@ -193,9 +195,12 @@ export function SkeletonDriftBanner() {
                   </span>{" "}
                   {t("skeletonDrift.overwriteWarning")}
                 </p>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-warning self-start"
+                <Button
+                  variant="warning"
+                  size="sm"
+                  className="self-start"
+                  loading={pendingOrg === org}
+                  loadingLabel={t("skeletonDrift.updating")}
                   disabled={pendingOrg === org}
                   onClick={() => {
                     if (org && pendingOrg !== org) {
@@ -204,18 +209,10 @@ export function SkeletonDriftBanner() {
                     }
                   }}
                 >
-                  {pendingOrg === org ? (
-                    <>
-                      <span
-                        className="loading loading-spinner loading-xs"
-                        aria-hidden="true"
-                      />
-                      {t("skeletonDrift.updating")}
-                    </>
-                  ) : (
-                    t("skeletonDrift.action")
-                  )}
-                </button>
+                  {pendingOrg === org
+                    ? t("skeletonDrift.updating")
+                    : t("skeletonDrift.action")}
+                </Button>
               </>
             )}
           </AppBanner>

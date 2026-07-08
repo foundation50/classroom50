@@ -5,6 +5,7 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import { AlertTriangle } from "lucide-react"
 import AutogradingTestsPane from "./AutogradingTestsPane"
+import { Button, Card } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   testToDraft,
@@ -421,8 +422,8 @@ const CreateAssignmentForm = ({
     >
       {/* readOnly disables every descendant control. */}
       <fieldset disabled={readOnly} className="m-0 min-w-0 border-0 p-0">
-        <div className="card bg-base-100 w-full shadow-sm mb-6">
-          <div className="card-body">
+        <Card bordered={false} className="w-full mb-6">
+          <Card.Body>
             <h3 className="text-lg font-bold pb-4">
               {t("assignments.form.basicInfo")}
             </h3>
@@ -700,12 +701,12 @@ const CreateAssignmentForm = ({
                 </div>
               )}
             </form.Field>
-          </div>
+          </Card.Body>
           <FormErrors form={form} />
-        </div>
+        </Card>
 
-        <div className="card bg-base-100 w-full shadow-sm mb-6">
-          <div className="card-body">
+        <Card bordered={false} className="w-full mb-6">
+          <Card.Body>
             <details className="group">
               <summary className="cursor-pointer text-lg font-bold marker:content-none flex items-center gap-2">
                 <span className="transition-transform group-open:rotate-90">
@@ -946,22 +947,17 @@ const CreateAssignmentForm = ({
                 )}
               </form.Field>
             </details>
-          </div>
-        </div>
+          </Card.Body>
+        </Card>
 
         <AutogradingTestsPane form={form} />
       </fieldset>
       <div className="divider" />
       <div className="card-actions justify-end p-2">
         {onCancel && (
-          <button
-            type="button"
-            className="btn btn-ghost"
-            onClick={onCancel}
-            disabled={loading}
-          >
+          <Button variant="ghost" onClick={onCancel} disabled={loading}>
             {readOnly ? t("assignments.form.back") : t("common.cancel")}
-          </button>
+          </Button>
         )}
         {!readOnly && (
           <form.Subscribe
@@ -972,9 +968,10 @@ const CreateAssignmentForm = ({
             ]}
           >
             {([canSubmit, isSubmitting, isDefaultValue]) => (
-              <button
+              <Button
+                variant="primary"
                 type="submit"
-                className="btn btn-primary"
+                loading={isSubmitting || loading}
                 disabled={
                   !canSubmit ||
                   isSubmitting ||
@@ -982,17 +979,12 @@ const CreateAssignmentForm = ({
                   (edit && isDefaultValue)
                 }
               >
-                {isSubmitting || loading ? (
-                  <span
-                    className="loading loading-spinner"
-                    aria-hidden="true"
-                  />
-                ) : edit ? (
-                  t("assignments.form.saveChanges")
-                ) : (
-                  t("assignments.form.createButton")
-                )}
-              </button>
+                {isSubmitting || loading
+                  ? null
+                  : edit
+                    ? t("assignments.form.saveChanges")
+                    : t("assignments.form.createButton")}
+              </Button>
             )}
           </form.Subscribe>
         )}

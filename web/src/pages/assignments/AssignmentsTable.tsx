@@ -19,6 +19,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Assignment, Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
+import { Button } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -42,19 +43,21 @@ const DeleteAssignmentButton = ({
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
         }}
-        className="btn btn-circle btn-sm btn-ghost text-error"
+        className="text-error"
         aria-label={t("assignments.table.deleteAria", {
           name: assignment.name || assignment.slug,
         })}
       >
         <Trash2 className="size-4" aria-hidden="true" />
-      </button>
+      </Button>
 
       <ConfirmModal
         open={open}
@@ -104,18 +107,19 @@ const ReuseAssignmentButton = ({
 
   return (
     <>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
         onClick={(e) => {
           e.stopPropagation()
           setOpen(true)
         }}
-        className="btn btn-circle btn-sm btn-ghost"
         title={t("assignments.table.reuseTitle")}
         aria-label={t("assignments.table.reuseAria")}
       >
         <Copy aria-hidden="true" className="size-4" />
-      </button>
+      </Button>
 
       {open ? (
         <ReuseAssignmentModal

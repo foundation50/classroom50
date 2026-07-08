@@ -9,6 +9,7 @@ import {
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
+import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/hooks/github/types"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
@@ -68,14 +69,15 @@ const AcceptNavbar = () => {
         </Link>
       </div>
       <div className="flex-none pr-4">
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm gap-2"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="gap-2"
           onClick={() => langDialogRef.current?.showModal()}
         >
           <Languages aria-hidden="true" className="size-5" />
           <span className="hidden sm:inline">{t("nav.language")}</span>
-        </button>
+        </Button>
       </div>
       <LanguageDialog ref={langDialogRef} titleId={langDialogTitleId} />
     </div>
@@ -84,9 +86,9 @@ const AcceptNavbar = () => {
 
 const AcceptCard = ({ children }: { children: React.ReactNode }) => {
   return (
-    <div className="card w-200 max-w-full p-8 rounded-xl border border-base-300">
+    <Card radius="xl" shadow={false} className="w-200 max-w-full p-8">
       {children}
-    </div>
+    </Card>
   )
 }
 
@@ -148,7 +150,7 @@ const AssignmentNotFound = ({
   return (
     <AcceptLayout>
       <AcceptCard>
-        <div className="card-body gap-8">
+        <Card.Body className="gap-8">
           <div>
             <span className="badge badge-error badge-soft gap-2">
               <AlertTriangle aria-hidden="true" className="size-4" />
@@ -207,7 +209,7 @@ const AssignmentNotFound = ({
 
             <UserInfo user={user} />
           </div>
-        </div>
+        </Card.Body>
       </AcceptCard>
     </AcceptLayout>
   )
@@ -498,14 +500,15 @@ const RepairToggle = ({
           <p className="text-sm text-base-content/70">
             {t("accept.repair.hint")}
           </p>
-          <button
-            type="button"
-            className="btn btn-warning btn-sm mt-3 w-full"
+          <Button
+            variant="warning"
+            size="sm"
+            className="mt-3 w-full"
             disabled={disabled}
             onClick={onRerun}
           >
             {t("accept.repair.rerun")}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -731,7 +734,7 @@ const AcceptAssignmentPage = () => {
               acceptMutation.isSuccess) && <AcceptProgress steps={steps} />}
 
             {acceptMutation.isError && (
-              <div className="alert alert-error items-start">
+              <Alert tone="error" className="items-start">
                 <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
                 <div>
                   <div className="font-bold">{t("accept.errorTitle")}</div>
@@ -744,7 +747,7 @@ const AcceptAssignmentPage = () => {
                     {t("accept.errorRetryHint")}
                   </div>
                 </div>
-              </div>
+              </Alert>
             )}
 
             <AnimatePresence initial={false}>
@@ -772,13 +775,13 @@ const AcceptAssignmentPage = () => {
                     </a>
 
                     {assignmentData?.mode === "group" && (
-                      <button
-                        type="button"
-                        className="btn btn-outline w-full text-lg p-5"
+                      <Button
+                        variant="outline"
+                        className="w-full text-lg p-5"
                         onClick={() => setCollaboratorsOpen(true)}
                       >
                         {t("accept.editCollaborators")}
-                      </button>
+                      </Button>
                     )}
 
                     {org && classroom && (
@@ -797,16 +800,16 @@ const AcceptAssignmentPage = () => {
             {!acceptMutation.data &&
               !repoExistsAlready &&
               !acceptMutation.isPending && (
-                <button
-                  type="button"
-                  className="btn btn-primary w-full text-lg p-5"
+                <Button
+                  variant="primary"
+                  className="w-full text-lg p-5"
                   disabled={!username || acceptMutation.isPending}
                   onClick={() =>
                     void runAccept(() => acceptMutation.mutateAsync())
                   }
                 >
                   {t("accept.acceptButton")}
-                </button>
+                </Button>
               )}
 
             {(repoExistsAlready || acceptMutation.isError) &&

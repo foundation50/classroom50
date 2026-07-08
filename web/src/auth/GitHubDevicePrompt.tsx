@@ -3,6 +3,7 @@ import { Check, Copy, ExternalLink } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { DeviceAuthState } from "./types"
+import { Button } from "@/components/ui"
 
 function StepNumber({ value, done }: { value: number; done: boolean }) {
   return (
@@ -77,11 +78,10 @@ export function GitHubDevicePrompt({
             {device.userCode}
           </div>
 
-          <button
-            className={[
-              "btn btn-sm w-full",
-              copied ? "btn-success" : "btn-outline btn-primary",
-            ].join(" ")}
+          <Button
+            variant={copied ? "success" : "outline"}
+            size="sm"
+            className="w-full"
             onClick={copyCode}
           >
             {copied ? (
@@ -95,7 +95,7 @@ export function GitHubDevicePrompt({
                 {t("auth.deviceCopyCode")}
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -150,9 +150,9 @@ export function GitHubDevicePrompt({
 
       <div className="divider" />
 
-      <button className="btn btn-outline w-full" onClick={onCancel}>
+      <Button variant="outline" className="w-full" onClick={onCancel}>
         {t("common.cancel")}
-      </button>
+      </Button>
     </div>
   )
 }

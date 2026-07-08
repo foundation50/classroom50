@@ -11,6 +11,7 @@ import {
 import { X } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"
+import { Button } from "@/components/ui"
 
 export type ToastTone = "info" | "success" | "warning" | "error"
 
@@ -149,14 +150,14 @@ const ToastViewport = ({
             className={`${TONE_CLASS[toast.tone]} max-w-sm`}
           >
             <span className="text-sm">{toast.message}</span>
-            <button
-              type="button"
-              className="btn btn-ghost btn-xs"
+            <Button
+              variant="ghost"
+              size="xs"
               aria-label="Dismiss notification"
               onClick={() => onDismiss(toast.id)}
             >
               <X aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
           </motion.div>
         ))}
       </AnimatePresence>

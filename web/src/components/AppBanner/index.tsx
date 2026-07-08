@@ -4,6 +4,7 @@ import { motion } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { collapseVariants } from "@/lib/motion"
+import { Button } from "@/components/ui"
 
 export type AppBannerTone = "error" | "warning" | "success"
 
@@ -60,14 +61,16 @@ export const AppBanner = ({
           {children}
         </div>
         {onDismiss ? (
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="xs"
+            shape="square"
             aria-label={t("components.banner.dismiss")}
-            className="btn btn-ghost btn-xs btn-square -mr-1 shrink-0"
+            className="-mr-1 shrink-0"
             onClick={onDismiss}
           >
             <X aria-hidden="true" className="size-4" />
-          </button>
+          </Button>
         ) : null}
       </div>
     </motion.div>

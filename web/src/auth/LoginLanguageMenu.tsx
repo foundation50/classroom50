@@ -2,6 +2,7 @@ import { useRef, useState } from "react"
 import { Check, Globe, Loader2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { Button } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { BASE_LANG, languageLabel } from "@/i18n/customLocale"
@@ -73,16 +74,18 @@ export function LoginLanguageMenu() {
 
   return (
     <div className="dropdown dropdown-end">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
+        className="text-base-content/70"
         tabIndex={0}
-        className="btn btn-ghost btn-sm btn-circle text-base-content/70"
         aria-label={t("language.switcherLabel")}
         title={t("language.switcherLabel")}
         onClick={() => void loadRegistry()}
       >
         <Globe aria-hidden="true" className="size-5" />
-      </button>{" "}
+      </Button>{" "}
       <ul
         tabIndex={0}
         className="dropdown-content menu z-10 mt-1 max-h-80 w-60 flex-nowrap overflow-y-auto rounded-box border border-base-content/5 bg-base-100 p-1 shadow"

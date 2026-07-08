@@ -11,6 +11,7 @@ import {
 } from "lucide-react"
 import { orgRunnersQuery } from "@/hooks/github/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
+import { Button, HelpTooltip } from "@/components/ui"
 import {
   isKnownHostedRunnerLabel,
   isRunnerLabelShapeValid,
@@ -32,24 +33,9 @@ import {
 } from "./formFieldHelpers"
 import type { AssignmentForm } from "./CreateAssignmentForm"
 
-// A question-mark help affordance: a focusable button carrying detailed
-// guidance as its accessible name, wrapped in a theme-aware DaisyUI tooltip
-// that reveals `help` on hover/focus. The single source for the help-icon
-// markup and a11y contract — reused by FieldLabel and any inline toggle label.
-export const HelpTooltip = ({ help }: { help: string }) => (
-  <span
-    className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
-    data-tip={help}
-  >
-    <button
-      type="button"
-      aria-label={help}
-      className="btn btn-ghost btn-xs btn-circle text-base-content/50 hover:text-base-content"
-    >
-      <HelpCircle aria-hidden="true" className="size-4" />
-    </button>
-  </span>
-)
+// A question-mark help affordance now lives in the shared ui module; re-exported
+// here so existing importers (CreateAssignmentForm) keep working.
+export { HelpTooltip }
 
 // A bold field label with an optional help affordance: a question-mark icon
 // that reveals detailed guidance on hover/focus (DaisyUI tooltip, theme-aware).
@@ -123,16 +109,16 @@ export const LanguageVersionField = ({
                   onBlur={normalizeOnBlur(field)}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                <button
-                  type="button"
+                <Button
+                  shape="square"
                   tabIndex={0}
-                  className="btn btn-square join-item border-base-content/20"
+                  className="join-item border-base-content/20"
                   aria-label={t("assignments.form.runtime.versionMenu", {
                     language: meta.label,
                   })}
                 >
                   <ChevronDown aria-hidden="true" className="size-4" />
-                </button>
+                </Button>
               </div>
               <ul
                 tabIndex={0}

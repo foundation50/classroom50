@@ -19,6 +19,7 @@ import {
   isOrgDefaultsStepData,
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
+import { Spinner } from "@/components/ui"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
 // re-run action on Org Settings. One source of truth for step order, titles,
@@ -199,9 +200,7 @@ const STATUS_ICON: Record<InitStepStatus, ReactNode> = {
   complete: <CheckCircle aria-hidden="true" className="size-4" />,
   warning: <AlertCircle aria-hidden="true" className="size-4" />,
   error: <AlertTriangle aria-hidden="true" className="size-4" />,
-  running: (
-    <span className="loading loading-spinner size-4" aria-hidden="true" />
-  ),
+  running: <Spinner size="xs" className="size-4" />,
   pending: null,
   skipped: null,
 }

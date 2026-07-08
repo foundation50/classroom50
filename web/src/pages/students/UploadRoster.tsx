@@ -1,10 +1,10 @@
-import { X } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
 import type { GitHubClient } from "@/hooks/github/client"
+import { Alert, Button, Modal } from "@/components/ui"
 import {
   isLikelyGithubUsername,
   normalizeGithubUsername,
@@ -126,7 +126,6 @@ const UploadRoster = ({
   onOpenChange,
 }: UploadRosterProps) => {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const { t } = useTranslation()
 
@@ -142,15 +141,6 @@ const UploadRoster = ({
   const [error, setError] = useState<string | null>(null)
 
   const isOpen = phase !== "idle"
-
-  // Drive the native <dialog> for free focus-trap, Escape, and backdrop
-  // inertness (matches the app's other modals).
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (isOpen && !dialog.open) dialog.showModal()
-    if (!isOpen && dialog.open) dialog.close()
-  }, [isOpen])
 
   const reset = () => {
     setPhase("idle")
@@ -257,240 +247,203 @@ const UploadRoster = ({
         onChange={handleFileChange}
       />
 
-      <dialog
-        ref={dialogRef}
-        className="modal"
+      <Modal
+        open={isOpen}
+        onClose={reset}
+        closeDisabled={phase === "importing"}
+        size="3xl"
         aria-labelledby={titleId}
-        onCancel={(event) => {
-          // Escape during an in-flight import would abandon it; block it.
-          if (phase === "importing") {
-            event.preventDefault()
-            return
-          }
-          reset()
-        }}
       >
-        <div className="modal-box max-w-3xl">
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <h3 id={titleId} className="text-lg font-bold">
-                {t("students.importStudentsTitle")}
-              </h3>
-              {fileName && (
-                <p className="text-sm opacity-70 mt-1">
-                  {t("students.fileLabel", { fileName })}
-                </p>
-              )}
-            </div>
-
-            {phase !== "importing" && (
-              <button
-                type="button"
-                className="btn btn-sm btn-circle btn-ghost"
-                aria-label={t("common.close")}
-                onClick={reset}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h3 id={titleId} className="text-lg font-bold">
+              {t("students.importStudentsTitle")}
+            </h3>
+            {fileName && (
+              <p className="text-sm opacity-70 mt-1">
+                {t("students.fileLabel", { fileName })}
+              </p>
             )}
           </div>
-
-          {phase === "preview" && (
-            <div className="mt-6">
-              <div className="alert mb-4">
-                <span>
-                  {t("students.usernamesFound", { count: rows.length })}
-                </span>
-              </div>
-
-              {rows.length > 0 ? (
-                <div className="max-h-80 overflow-auto rounded-box border border-base-300">
-                  <table className="table table-sm">
-                    <thead>
-                      <tr>
-                        <th scope="col">#</th>
-                        <th scope="col">
-                          {t("students.githubUsernameColumn")}
-                        </th>
-                        <th scope="col">{t("students.nameColumn")}</th>
-                        <th scope="col">{t("students.emailColumn")}</th>
-                        <th scope="col">{t("students.sectionColumn")}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {rows.map((row, index) => (
-                        <tr key={row.username.toLowerCase()}>
-                          <td>{index + 1}</td>
-                          <td>
-                            <code>{row.username}</code>
-                          </td>
-                          <td className="opacity-70">
-                            {[row.first_name, row.last_name]
-                              .filter(Boolean)
-                              .join(" ")}
-                          </td>
-                          <td className="opacity-70">{row.email}</td>
-                          <td className="opacity-70">{row.section}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
-                <div className="alert alert-warning">
-                  {t("students.noValidUsernames")}
-                </div>
-              )}
-
-              <div className="modal-action">
-                <button type="button" className="btn btn-ghost" onClick={reset}>
-                  {t("common.cancel")}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  disabled={rows.length === 0}
-                  onClick={startImport}
-                >
-                  {t("students.importCount", { count: rows.length })}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {phase === "importing" && (
-            <div className="mt-6">
-              <p className="mb-2 font-medium">{progress.message}</p>
-
-              <progress
-                className="progress progress-primary w-full"
-                value={progress.processed}
-                max={progress.total || 1}
-              />
-
-              <div className="mt-2 flex justify-between text-sm opacity-70">
-                <span>
-                  {t("students.progressProcessed", {
-                    processed: progress.processed,
-                    total: progress.total,
-                  })}
-                </span>
-                <span>
-                  {t("students.progressPercent", { percent: progressPercent })}
-                </span>
-              </div>
-
-              <div className="mt-6 alert">
-                <span>{t("students.keepTabOpen")}</span>
-              </div>
-            </div>
-          )}
-
-          {phase === "complete" && result && (
-            <div className="mt-6 space-y-4">
-              <div className="alert alert-success">
-                <span>
-                  {t("students.addedCount", {
-                    count: result.addedStudents.length,
-                  })}
-                </span>
-              </div>
-
-              {result.addedStudents.length > 0 && (
-                <ImportResultSection
-                  title={t("students.resultAdded")}
-                  rows={result.addedStudents.map((student) => ({
-                    key: student.username,
-                    label: student.username,
-                    detail: [student.first_name, student.last_name]
-                      .filter(Boolean)
-                      .join(" "),
-                  }))}
-                />
-              )}
-
-              {result.skippedStudents.length > 0 && (
-                <ImportResultSection
-                  title={t("students.resultSkipped")}
-                  rows={result.skippedStudents.map((student) => ({
-                    key: student.username,
-                    label: student.username,
-                    detail: student.message ?? student.reason,
-                  }))}
-                />
-              )}
-
-              {result.teamResults?.some(
-                (teamResult) => teamResult.status === "failed",
-              ) && (
-                <ImportResultSection
-                  title={t("students.resultTeamFailures")}
-                  rows={result.teamResults
-                    .filter((teamResult) => teamResult.status === "failed")
-                    .map((teamResult) => ({
-                      key: teamResult.username,
-                      label: teamResult.username,
-                      detail:
-                        teamResult.message ?? t("students.couldNotAddToTeam"),
-                    }))}
-                />
-              )}
-
-              {result.notInOrg && result.notInOrg.length > 0 && (
-                <ImportResultSection
-                  title={t("students.resultNotInOrg")}
-                  rows={result.notInOrg.map((username) => ({
-                    key: username,
-                    label: username,
-                    detail: t("students.notInOrgDetail"),
-                  }))}
-                />
-              )}
-
-              <div className="modal-action">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={reset}
-                >
-                  {t("students.done")}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {phase === "error" && (
-            <div className="mt-6">
-              <div className="alert alert-error" role="alert">
-                <span>{error ?? t("students.somethingWentWrong")}</span>
-              </div>
-
-              <div className="modal-action">
-                <button type="button" className="btn btn-ghost" onClick={reset}>
-                  {t("common.close")}
-                </button>
-
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={() => fileInputRef.current?.click()}
-                >
-                  {t("students.chooseAnotherFile")}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
 
-        {phase !== "importing" && (
-          <form method="dialog" className="modal-backdrop">
-            <button type="button" onClick={reset}>
-              {t("common.close")}
-            </button>
-          </form>
+        {phase === "preview" && (
+          <div className="mt-6">
+            <Alert tone="info" className="mb-4">
+              <span>
+                {t("students.usernamesFound", { count: rows.length })}
+              </span>
+            </Alert>
+
+            {rows.length > 0 ? (
+              <div className="max-h-80 overflow-auto rounded-box border border-base-300">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th scope="col">#</th>
+                      <th scope="col">{t("students.githubUsernameColumn")}</th>
+                      <th scope="col">{t("students.nameColumn")}</th>
+                      <th scope="col">{t("students.emailColumn")}</th>
+                      <th scope="col">{t("students.sectionColumn")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {rows.map((row, index) => (
+                      <tr key={row.username.toLowerCase()}>
+                        <td>{index + 1}</td>
+                        <td>
+                          <code>{row.username}</code>
+                        </td>
+                        <td className="opacity-70">
+                          {[row.first_name, row.last_name]
+                            .filter(Boolean)
+                            .join(" ")}
+                        </td>
+                        <td className="opacity-70">{row.email}</td>
+                        <td className="opacity-70">{row.section}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : (
+              <Alert tone="warning">{t("students.noValidUsernames")}</Alert>
+            )}
+
+            <div className="modal-action">
+              <Button variant="ghost" onClick={reset}>
+                {t("common.cancel")}
+              </Button>
+
+              <Button
+                variant="primary"
+                disabled={rows.length === 0}
+                onClick={startImport}
+              >
+                {t("students.importCount", { count: rows.length })}
+              </Button>
+            </div>
+          </div>
         )}
-      </dialog>
+
+        {phase === "importing" && (
+          <div className="mt-6">
+            <p className="mb-2 font-medium">{progress.message}</p>
+
+            <progress
+              className="progress progress-primary w-full"
+              value={progress.processed}
+              max={progress.total || 1}
+            />
+
+            <div className="mt-2 flex justify-between text-sm opacity-70">
+              <span>
+                {t("students.progressProcessed", {
+                  processed: progress.processed,
+                  total: progress.total,
+                })}
+              </span>
+              <span>
+                {t("students.progressPercent", { percent: progressPercent })}
+              </span>
+            </div>
+
+            <Alert tone="info" className="mt-6">
+              <span>{t("students.keepTabOpen")}</span>
+            </Alert>
+          </div>
+        )}
+
+        {phase === "complete" && result && (
+          <div className="mt-6 space-y-4">
+            <Alert tone="success">
+              <span>
+                {t("students.addedCount", {
+                  count: result.addedStudents.length,
+                })}
+              </span>
+            </Alert>
+
+            {result.addedStudents.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultAdded")}
+                rows={result.addedStudents.map((student) => ({
+                  key: student.username,
+                  label: student.username,
+                  detail: [student.first_name, student.last_name]
+                    .filter(Boolean)
+                    .join(" "),
+                }))}
+              />
+            )}
+
+            {result.skippedStudents.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultSkipped")}
+                rows={result.skippedStudents.map((student) => ({
+                  key: student.username,
+                  label: student.username,
+                  detail: student.message ?? student.reason,
+                }))}
+              />
+            )}
+
+            {result.teamResults?.some(
+              (teamResult) => teamResult.status === "failed",
+            ) && (
+              <ImportResultSection
+                title={t("students.resultTeamFailures")}
+                rows={result.teamResults
+                  .filter((teamResult) => teamResult.status === "failed")
+                  .map((teamResult) => ({
+                    key: teamResult.username,
+                    label: teamResult.username,
+                    detail:
+                      teamResult.message ?? t("students.couldNotAddToTeam"),
+                  }))}
+              />
+            )}
+
+            {result.notInOrg && result.notInOrg.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultNotInOrg")}
+                rows={result.notInOrg.map((username) => ({
+                  key: username,
+                  label: username,
+                  detail: t("students.notInOrgDetail"),
+                }))}
+              />
+            )}
+
+            <div className="modal-action">
+              <Button variant="primary" onClick={reset}>
+                {t("students.done")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div className="mt-6">
+            <Alert tone="error">
+              <span>{error ?? t("students.somethingWentWrong")}</span>
+            </Alert>
+
+            <div className="modal-action">
+              <Button variant="ghost" onClick={reset}>
+                {t("common.close")}
+              </Button>
+
+              <Button
+                variant="primary"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {t("students.chooseAnotherFile")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   )
 }

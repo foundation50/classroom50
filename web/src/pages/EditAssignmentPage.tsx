@@ -6,6 +6,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { Spinner } from "@/components/Spinner"
+import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
@@ -80,7 +81,7 @@ const EditAssignmentFormStudent = ({
   if (assignmentMode === "individual") {
     return (
       <div className="mt-6">
-        <div className="alert alert-info">
+        <Alert tone="info">
           <div>
             {t("assignmentSettings.individual_prefix")}{" "}
             <Link
@@ -92,15 +93,15 @@ const EditAssignmentFormStudent = ({
             </Link>
             {t("assignmentSettings.individual_suffix")}
           </div>
-        </div>
+        </Alert>
       </div>
     )
   }
 
   return (
     <>
-      <div className="card mb-6 w-full border border-base-200 bg-base-100 shadow-sm">
-        <div className="card-body gap-6">
+      <Card bordered={false} className="mb-6 w-full border border-base-200">
+        <Card.Body className="gap-6">
           <div className="flex items-start gap-4">
             <div className="flex size-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
               <UsersRound aria-hidden="true" className="size-6" />
@@ -132,18 +133,17 @@ const EditAssignmentFormStudent = ({
             </div>
           </div>
 
-          <div className="card-actions justify-end border-t border-base-200 pt-6">
-            <button
-              type="button"
-              className="btn btn-primary"
+          <Card.Actions className="justify-end border-t border-base-200 pt-6">
+            <Button
+              variant="primary"
               onClick={() => setCollaboratorsOpen(true)}
             >
               <UsersRound aria-hidden="true" className="size-4" />
               {t("assignmentSettings.manageCollaborators")}
-            </button>
-          </div>
-        </div>
-      </div>
+            </Button>
+          </Card.Actions>
+        </Card.Body>
+      </Card>
 
       {user?.login && (
         <GroupCollaboratorsModal
@@ -181,14 +181,20 @@ const EditAssignmentPage = () => {
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
-      {editError && <div className="alert alert-error mt-6">{editError}</div>}
+      {editError && (
+        <Alert tone="error" className="mt-6">
+          {editError}
+        </Alert>
+      )}
       {editSuccess && (
-        <div className="alert alert-success mt-6">
+        <Alert tone="success" className="mt-6">
           {t("assignmentSettings.editSuccess")}
-        </div>
+        </Alert>
       )}
       {editWarning && (
-        <div className="alert alert-warning mt-6">{editWarning}</div>
+        <Alert tone="warning" className="mt-6">
+          {editWarning}
+        </Alert>
       )}
       <div className="mb-6">
         <PageHeader title={t("assignmentSettings.heading")} />

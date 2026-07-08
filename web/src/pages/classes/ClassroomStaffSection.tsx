@@ -22,6 +22,7 @@ import { normalizeGithubUsername } from "@/api/mutations/students"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
+import { Button, Card, FormField, Input, Select } from "@/components/ui"
 
 // i18n key for each role's singular label. A map (not inline t()) so it works in
 // module scope; components translate via t(ROLE_LABEL_KEY[role]).
@@ -45,8 +46,8 @@ const ClassroomStaffSection = ({
 }) => {
   const { t } = useTranslation()
   return (
-    <div className="card bg-base-100 w-full shadow-sm mt-8">
-      <div className="card-body">
+    <Card bordered={false} className="w-full mt-8">
+      <Card.Body>
         <div className="flex items-center gap-3 pb-1">
           <div className="flex items-center gap-2">
             <ShieldCheck
@@ -79,8 +80,8 @@ const ClassroomStaffSection = ({
             />
           ))}
         </div>
-      </div>
-    </div>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -185,42 +186,44 @@ const AddStaff = ({
       }}
     >
       <div className="grow min-w-[12rem]">
-        <label htmlFor="staff-username" className="label font-bold text-sm">
-          {t("classes.staff.githubUsername")}
-        </label>
-        <input
-          id="staff-username"
-          type="text"
-          autoComplete="off"
-          spellCheck={false}
-          className="input w-full"
-          placeholder={t("classes.staff.usernamePlaceholder")}
-          value={username}
-          disabled={disabled || addMutation.isPending}
-          onChange={(e) => setUsername(e.target.value)}
-        />
+        <FormField
+          label={t("classes.staff.githubUsername")}
+          htmlFor="staff-username"
+        >
+          {({ id }) => (
+            <Input
+              id={id}
+              autoComplete="off"
+              spellCheck={false}
+              placeholder={t("classes.staff.usernamePlaceholder")}
+              value={username}
+              disabled={disabled || addMutation.isPending}
+              onChange={(e) => setUsername(e.target.value)}
+            />
+          )}
+        </FormField>
       </div>
       <div>
-        <label htmlFor="staff-role" className="label font-bold text-sm">
-          {t("classes.staff.role")}
-        </label>
-        <select
-          id="staff-role"
-          className="select"
-          value={role}
-          disabled={disabled || addMutation.isPending}
-          onChange={(e) => setRole(e.target.value as StaffRole)}
-        >
-          {STAFF_ROLES.map((r) => (
-            <option key={r} value={r}>
-              {t(ROLE_LABEL_KEY[r])}
-            </option>
-          ))}
-        </select>
+        <FormField label={t("classes.staff.role")} htmlFor="staff-role">
+          {({ id }) => (
+            <Select
+              id={id}
+              value={role}
+              disabled={disabled || addMutation.isPending}
+              onChange={(e) => setRole(e.target.value as StaffRole)}
+            >
+              {STAFF_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {t(ROLE_LABEL_KEY[r])}
+                </option>
+              ))}
+            </Select>
+          )}
+        </FormField>
       </div>
-      <button
+      <Button
         type="submit"
-        className="btn btn-primary"
+        variant="primary"
         disabled={disabled || addMutation.isPending || !username.trim()}
       >
         {addMutation.isPending ? (
@@ -229,7 +232,7 @@ const AddStaff = ({
           <UserPlus aria-hidden="true" className="size-4" />
         )}
         {t("classes.staff.add")}
-      </button>
+      </Button>
     </form>
   )
 }
@@ -369,9 +372,10 @@ const StaffMemberRow = ({
           {roleLabel}
         </span>
       </a>
-      <button
-        type="button"
-        className="btn btn-ghost btn-xs text-error"
+      <Button
+        variant="ghost"
+        size="xs"
+        className="text-error"
         title={t("classes.staff.removeRole", { role: roleLabel })}
         disabled={disabled || removeMutation.isPending}
         onClick={() => removeMutation.mutate()}
@@ -381,7 +385,7 @@ const StaffMemberRow = ({
         ) : (
           <X aria-hidden="true" className="size-3.5" />
         )}
-      </button>
+      </Button>
     </li>
   )
 }

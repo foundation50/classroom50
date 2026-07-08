@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
+import { Button } from "@/components/ui"
 import {
   initClassroom50,
   type InitStepId,
@@ -130,9 +131,11 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       title={t("orgSettings.rerun.title")}
       description={t("orgSettings.rerun.description")}
       action={
-        <button
-          type="button"
-          className="btn btn-primary btn-sm"
+        <Button
+          variant="primary"
+          size="sm"
+          loading={mutation.isPending}
+          loadingLabel={t("orgSettings.rerun.running")}
           disabled={!isOwner || mutation.isPending}
           title={
             isOwner ? undefined : t("orgSettings.rerun.requiresOwnerTitle")
@@ -141,18 +144,10 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
             if (!mutation.isPending) void runRerun(() => mutation.mutateAsync())
           }}
         >
-          {mutation.isPending ? (
-            <>
-              <span
-                className="loading loading-spinner loading-sm"
-                aria-hidden="true"
-              />
-              {t("orgSettings.rerun.running")}
-            </>
-          ) : (
-            t("orgSettings.rerun.button")
-          )}
-        </button>
+          {mutation.isPending
+            ? t("orgSettings.rerun.running")
+            : t("orgSettings.rerun.button")}
+        </Button>
       }
     >
       {!isOwner && (

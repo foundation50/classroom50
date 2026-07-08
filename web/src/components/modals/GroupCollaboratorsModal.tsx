@@ -5,6 +5,7 @@ import { Plus, Trash2, UsersRound } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
+import { Alert, Button, Modal } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -92,7 +93,6 @@ export function GroupCollaboratorsModal({
   maxGroupSize,
   students = [],
 }: GroupCollaboratorsModalProps) {
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   // Synchronous re-entrancy guard: isSaving (mutation.isPending) updates a tick
@@ -158,19 +158,6 @@ export function GroupCollaboratorsModal({
     seededKeyRef.current = repoName
     setDraftCollaborators(initialCollaborators)
   }, [open, repoName, loadingCollaborators, initialCollaborators])
-
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-
-    if (open && !dialog.open) {
-      dialog.showModal()
-    }
-
-    if (!open && dialog.open) {
-      dialog.close()
-    }
-  }, [open])
 
   useEffect(() => {
     if (!open) {
@@ -386,307 +373,277 @@ export function GroupCollaboratorsModal({
   const personCount = draftCollaborators.length + (ownerDisplayLogin ? 1 : 0)
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="modal"
+    <Modal
+      open={open}
+      onClose={onClose}
+      closeDisabled={isSaving}
+      size="xl"
       aria-labelledby={titleId}
-      onClose={() => {
-        if (!isSaving) onClose()
-      }}
-      onCancel={(event) => {
-        if (isSaving) {
-          event.preventDefault()
-          return
-        }
-        onClose()
-      }}
     >
-      <div className="modal-box max-w-xl">
-        <div className="flex items-start gap-4">
-          <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-            <UsersRound className="size-5" aria-hidden="true" />
-          </div>
-
-          <div className="min-w-0 flex-1">
-            <h3 id={titleId} className="text-lg font-bold">
-              {assignmentName ||
-                t("components.modals.groupCollaborators.title")}
-            </h3>
-            {repoName && (
-              <a
-                className="link mt-1 inline-flex items-center gap-1.5 text-sm"
-                href={repoUrl || `https://github.com/${org}/${repoName}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <GitHub aria-hidden="true" className="size-4" />
-                {t("components.modals.groupCollaborators.viewRepository")}
-              </a>
-            )}
-          </div>
+      <div className="flex items-start gap-4">
+        <div className="flex size-11 shrink-0 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <UsersRound className="size-5" aria-hidden="true" />
         </div>
 
-        {loadingCollaborators ? (
-          <div className="flex py-10">
-            <Spinner
-              className="m-auto"
-              label={t("components.modals.groupCollaborators.loading")}
-            />
-          </div>
-        ) : (
-          <>
-            {saved && (
-              <div className="alert alert-success alert-soft mt-4 text-sm">
-                {t("components.modals.groupCollaborators.saved")}
-              </div>
-            )}
-
-            {submitError && (
-              <div className="alert alert-error alert-soft mt-4 text-sm">
-                {submitError}
-              </div>
-            )}
-
-            {!canManage && (
-              <div className="alert alert-info alert-soft mt-4 text-sm">
-                {t("components.modals.groupCollaborators.onlyOwner_prefix")}
-                {ownerDisplayLogin ? (
-                  <>
-                    {" "}
-                    (<span className="font-mono">{ownerDisplayLogin}</span>)
-                  </>
-                ) : null}{" "}
-                {t("components.modals.groupCollaborators.onlyOwner_suffix")}
-              </div>
-            )}
-
-            <div className="mt-4">
-              <div className="mb-2 flex items-center justify-between gap-4">
-                <span className="text-sm font-medium">
-                  {t("components.modals.groupCollaborators.groupMembers")}
-                </span>
-                <span className="text-xs text-base-content/70">
-                  {t("components.modals.groupCollaborators.personCount", {
-                    count: personCount,
-                  })}
-                </span>
-              </div>
-
-              {/* One bordered list for owner + members + pending removals, so it
-                  reads as a single roster rather than stacked cards. */}
-              <ul className="divide-y divide-base-200 rounded-2xl border border-base-200">
-                {ownerDisplayLogin && (
-                  <li className="flex items-center gap-3 px-4 py-2.5">
-                    <GitHub
-                      aria-hidden="true"
-                      className="size-5 shrink-0 text-base-content/70"
-                    />
-                    <span className="min-w-0 flex-1 leading-tight">
-                      <CollaboratorIdentity
-                        login={ownerDisplayLogin}
-                        students={students}
-                      />
-                    </span>
-                    <span className="badge badge-primary badge-soft badge-sm">
-                      {t("components.modals.groupCollaborators.ownerBadge")}
-                    </span>
-                  </li>
-                )}
-
-                {draftCollaborators.map((username) => {
-                  const normalized = normalizeUsername(username)
-                  const isInvalid = invalidCollaborators.has(normalized)
-
-                  return (
-                    <li
-                      key={username}
-                      className={[
-                        "flex items-center gap-3 px-4 py-2.5",
-                        isInvalid ? "bg-error/5" : "",
-                      ].join(" ")}
-                    >
-                      <GitHub
-                        aria-hidden="true"
-                        className={[
-                          "size-5 shrink-0",
-                          isInvalid ? "text-error" : "text-base-content/70",
-                        ].join(" ")}
-                      />
-                      <span className="min-w-0 flex-1 leading-tight">
-                        <CollaboratorIdentity
-                          login={username}
-                          students={students}
-                        />
-                        {isInvalid && (
-                          <span className="mt-0.5 block text-xs text-error">
-                            {t(
-                              "components.modals.groupCollaborators.couldntAdd",
-                            )}
-                          </span>
-                        )}
-                      </span>
-                      {canManage && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm btn-square text-base-content/70 hover:text-error"
-                          aria-label={t(
-                            "components.modals.groupCollaborators.removeUser",
-                            { username },
-                          )}
-                          onClick={() => removeFromDraft(username)}
-                        >
-                          <Trash2 aria-hidden="true" className="size-4" />
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-
-                {markedForRemoval.map((username) => {
-                  const failedToRemove = invalidCollaborators.has(
-                    normalizeUsername(username),
-                  )
-                  return (
-                    <li
-                      key={`remove-${username}`}
-                      className="flex items-center gap-3 bg-error/5 px-4 py-2.5"
-                    >
-                      <GitHub
-                        aria-hidden="true"
-                        className="size-5 shrink-0 text-error/50"
-                      />
-                      <span className="min-w-0 flex-1 leading-tight text-error line-through opacity-70">
-                        <CollaboratorIdentity
-                          login={username}
-                          students={students}
-                        />
-                      </span>
-                      <span className="text-xs font-medium text-error/70">
-                        {failedToRemove
-                          ? t(
-                              "components.modals.groupCollaborators.couldntRemove",
-                            )
-                          : t("components.modals.groupCollaborators.removing")}
-                      </span>
-                      {canManage && (
-                        <button
-                          type="button"
-                          className="btn btn-ghost btn-sm text-error"
-                          onClick={() => restoreToDraft(username)}
-                        >
-                          {t("components.modals.groupCollaborators.undo")}
-                        </button>
-                      )}
-                    </li>
-                  )
-                })}
-
-                {draftCollaborators.length === 0 &&
-                  markedForRemoval.length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-base-content/70">
-                      {t(
-                        "components.modals.groupCollaborators.noCollaborators",
-                      )}
-                    </li>
-                  )}
-              </ul>
-
-              {tooMany && (
-                <p className="mt-2 text-sm text-error">
-                  {t("components.modals.groupCollaborators.tooMany", {
-                    max: maxGroupSize ?? 1,
-                  })}
-                </p>
-              )}
-              {hasDuplicates && (
-                <p className="mt-2 text-sm text-error">
-                  {t("components.modals.groupCollaborators.mustBeUnique")}
-                </p>
-              )}
-
-              {canManage && !isFull && (
-                <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                  <input
-                    className="input input-bordered flex-1"
-                    placeholder={t(
-                      "components.modals.groupCollaborators.addPlaceholder",
-                    )}
-                    aria-label={t(
-                      "components.modals.groupCollaborators.addAriaLabel",
-                    )}
-                    value={newCollaborator}
-                    onChange={(e) => setNewCollaborator(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === "Enter") {
-                        e.preventDefault()
-                        addPendingUsername()
-                      }
-                    }}
-                  />
-                  <button
-                    type="button"
-                    className="btn btn-outline"
-                    onClick={addPendingUsername}
-                  >
-                    <Plus aria-hidden="true" className="size-4" />
-                    {t("components.modals.groupCollaborators.add")}
-                  </button>
-                </div>
-              )}
-
-              {canManage && isFull && (
-                <p className="mt-3 text-xs text-base-content/70">
-                  {t("components.modals.groupCollaborators.groupFull")}
-                </p>
-              )}
-            </div>
-          </>
-        )}
-
-        <div className="modal-action">
-          <button
-            type="button"
-            className="btn btn-ghost"
-            disabled={isSaving}
-            onClick={() => onClose()}
-          >
-            {t("common.cancel")}
-          </button>
-          {canManage && hasChanges && (
-            <button
-              type="button"
-              className="btn btn-ghost"
-              disabled={isSaving}
-              onClick={discardChanges}
+        <div className="min-w-0 flex-1">
+          <h3 id={titleId} className="text-lg font-bold">
+            {assignmentName || t("components.modals.groupCollaborators.title")}
+          </h3>
+          {repoName && (
+            <a
+              className="link mt-1 inline-flex items-center gap-1.5 text-sm"
+              href={repoUrl || `https://github.com/${org}/${repoName}`}
+              target="_blank"
+              rel="noreferrer"
             >
-              {t("components.modals.groupCollaborators.discardChanges")}
-            </button>
-          )}
-          {canManage && (
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={
-                loadingCollaborators ||
-                isSaving ||
-                tooMany ||
-                hasDuplicates ||
-                !hasChanges
-              }
-              onClick={() => void handleSave()}
-            >
-              {isSaving && (
-                <span className="loading loading-spinner" aria-hidden="true" />
-              )}
-              {t("components.modals.groupCollaborators.saveCollaborators")}
-            </button>
+              <GitHub aria-hidden="true" className="size-4" />
+              {t("components.modals.groupCollaborators.viewRepository")}
+            </a>
           )}
         </div>
       </div>
 
-      <form method="dialog" className="modal-backdrop">
-        <button disabled={isSaving}>{t("common.close")}</button>
-      </form>
-    </dialog>
+      {loadingCollaborators ? (
+        <div className="flex py-10">
+          <Spinner
+            className="m-auto"
+            label={t("components.modals.groupCollaborators.loading")}
+          />
+        </div>
+      ) : (
+        <>
+          {saved && (
+            <Alert tone="success" className="mt-4 text-sm">
+              {t("components.modals.groupCollaborators.saved")}
+            </Alert>
+          )}
+
+          {submitError && (
+            <Alert tone="error" className="mt-4 text-sm">
+              {submitError}
+            </Alert>
+          )}
+
+          {!canManage && (
+            <Alert tone="info" className="mt-4 text-sm">
+              {t("components.modals.groupCollaborators.onlyOwner_prefix")}
+              {ownerDisplayLogin ? (
+                <>
+                  {" "}
+                  (<span className="font-mono">{ownerDisplayLogin}</span>)
+                </>
+              ) : null}{" "}
+              {t("components.modals.groupCollaborators.onlyOwner_suffix")}
+            </Alert>
+          )}
+
+          <div className="mt-4">
+            <div className="mb-2 flex items-center justify-between gap-4">
+              <span className="text-sm font-medium">
+                {t("components.modals.groupCollaborators.groupMembers")}
+              </span>
+              <span className="text-xs text-base-content/70">
+                {t("components.modals.groupCollaborators.personCount", {
+                  count: personCount,
+                })}
+              </span>
+            </div>
+
+            {/* One bordered list for owner + members + pending removals, so it
+                  reads as a single roster rather than stacked cards. */}
+            <ul className="divide-y divide-base-200 rounded-2xl border border-base-200">
+              {ownerDisplayLogin && (
+                <li className="flex items-center gap-3 px-4 py-2.5">
+                  <GitHub
+                    aria-hidden="true"
+                    className="size-5 shrink-0 text-base-content/70"
+                  />
+                  <span className="min-w-0 flex-1 leading-tight">
+                    <CollaboratorIdentity
+                      login={ownerDisplayLogin}
+                      students={students}
+                    />
+                  </span>
+                  <span className="badge badge-primary badge-soft badge-sm">
+                    {t("components.modals.groupCollaborators.ownerBadge")}
+                  </span>
+                </li>
+              )}
+
+              {draftCollaborators.map((username) => {
+                const normalized = normalizeUsername(username)
+                const isInvalid = invalidCollaborators.has(normalized)
+
+                return (
+                  <li
+                    key={username}
+                    className={[
+                      "flex items-center gap-3 px-4 py-2.5",
+                      isInvalid ? "bg-error/5" : "",
+                    ].join(" ")}
+                  >
+                    <GitHub
+                      aria-hidden="true"
+                      className={[
+                        "size-5 shrink-0",
+                        isInvalid ? "text-error" : "text-base-content/70",
+                      ].join(" ")}
+                    />
+                    <span className="min-w-0 flex-1 leading-tight">
+                      <CollaboratorIdentity
+                        login={username}
+                        students={students}
+                      />
+                      {isInvalid && (
+                        <span className="mt-0.5 block text-xs text-error">
+                          {t("components.modals.groupCollaborators.couldntAdd")}
+                        </span>
+                      )}
+                    </span>
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        shape="square"
+                        className="text-base-content/70 hover:text-error"
+                        aria-label={t(
+                          "components.modals.groupCollaborators.removeUser",
+                          { username },
+                        )}
+                        onClick={() => removeFromDraft(username)}
+                      >
+                        <Trash2 aria-hidden="true" className="size-4" />
+                      </Button>
+                    )}
+                  </li>
+                )
+              })}
+
+              {markedForRemoval.map((username) => {
+                const failedToRemove = invalidCollaborators.has(
+                  normalizeUsername(username),
+                )
+                return (
+                  <li
+                    key={`remove-${username}`}
+                    className="flex items-center gap-3 bg-error/5 px-4 py-2.5"
+                  >
+                    <GitHub
+                      aria-hidden="true"
+                      className="size-5 shrink-0 text-error/50"
+                    />
+                    <span className="min-w-0 flex-1 leading-tight text-error line-through opacity-70">
+                      <CollaboratorIdentity
+                        login={username}
+                        students={students}
+                      />
+                    </span>
+                    <span className="text-xs font-medium text-error/70">
+                      {failedToRemove
+                        ? t(
+                            "components.modals.groupCollaborators.couldntRemove",
+                          )
+                        : t("components.modals.groupCollaborators.removing")}
+                    </span>
+                    {canManage && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-error"
+                        onClick={() => restoreToDraft(username)}
+                      >
+                        {t("components.modals.groupCollaborators.undo")}
+                      </Button>
+                    )}
+                  </li>
+                )
+              })}
+
+              {draftCollaborators.length === 0 &&
+                markedForRemoval.length === 0 && (
+                  <li className="px-4 py-6 text-center text-sm text-base-content/70">
+                    {t("components.modals.groupCollaborators.noCollaborators")}
+                  </li>
+                )}
+            </ul>
+
+            {tooMany && (
+              <p className="mt-2 text-sm text-error">
+                {t("components.modals.groupCollaborators.tooMany", {
+                  max: maxGroupSize ?? 1,
+                })}
+              </p>
+            )}
+            {hasDuplicates && (
+              <p className="mt-2 text-sm text-error">
+                {t("components.modals.groupCollaborators.mustBeUnique")}
+              </p>
+            )}
+
+            {canManage && !isFull && (
+              <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+                <input
+                  className="input input-bordered flex-1"
+                  placeholder={t(
+                    "components.modals.groupCollaborators.addPlaceholder",
+                  )}
+                  aria-label={t(
+                    "components.modals.groupCollaborators.addAriaLabel",
+                  )}
+                  value={newCollaborator}
+                  onChange={(e) => setNewCollaborator(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                      e.preventDefault()
+                      addPendingUsername()
+                    }
+                  }}
+                />
+                <Button variant="outline" onClick={addPendingUsername}>
+                  <Plus aria-hidden="true" className="size-4" />
+                  {t("components.modals.groupCollaborators.add")}
+                </Button>
+              </div>
+            )}
+
+            {canManage && isFull && (
+              <p className="mt-3 text-xs text-base-content/70">
+                {t("components.modals.groupCollaborators.groupFull")}
+              </p>
+            )}
+          </div>
+        </>
+      )}
+
+      <div className="modal-action">
+        <Button variant="ghost" disabled={isSaving} onClick={() => onClose()}>
+          {t("common.cancel")}
+        </Button>
+        {canManage && hasChanges && (
+          <Button variant="ghost" disabled={isSaving} onClick={discardChanges}>
+            {t("components.modals.groupCollaborators.discardChanges")}
+          </Button>
+        )}
+        {canManage && (
+          <Button
+            variant="primary"
+            disabled={
+              loadingCollaborators ||
+              isSaving ||
+              tooMany ||
+              hasDuplicates ||
+              !hasChanges
+            }
+            loading={isSaving}
+            loadingLabel={t(
+              "components.modals.groupCollaborators.saveCollaborators",
+            )}
+            onClick={() => void handleSave()}
+          >
+            {t("components.modals.groupCollaborators.saveCollaborators")}
+          </Button>
+        )}
+      </div>
+    </Modal>
   )
 }

@@ -1,10 +1,13 @@
 import type { PropsWithChildren, ReactNode } from "react"
 
+import { Card } from "@/components/ui"
+
 // Standardized wrapper for each Org Settings group (Service Token, Organization
 // Policy, Re-run Setup, Danger Zone) so the page reads as consistent sections.
-// Owns the card shell and header (title + optional description, optional
-// right-aligned action, optional title adornment). `tone="danger"` styles
-// destructive groups (Danger Zone).
+// Renders the shared Card primitive (2xl radius, no shadow) as its shell, plus
+// the section header (title + optional description, optional right-aligned
+// action, optional title adornment). `tone="danger"` restyles the shell for
+// destructive groups (Danger Zone) via the error-tinted border/bg.
 const SettingsSection = ({
   title,
   description,
@@ -24,12 +27,17 @@ const SettingsSection = ({
   const isDanger = tone === "danger"
 
   return (
-    <section
+    <Card
+      as="section"
       id={id}
-      className={[
-        "scroll-mt-24 rounded-2xl border p-6",
-        isDanger ? "border-error/30 bg-error/5" : "border-base-300 bg-base-100",
-      ].join(" ")}
+      radius="2xl"
+      shadow={false}
+      bordered={!isDanger}
+      className={
+        isDanger
+          ? "scroll-mt-24 border border-error/30 bg-error/5 p-6"
+          : "scroll-mt-24 p-6"
+      }
     >
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0">
@@ -52,7 +60,7 @@ const SettingsSection = ({
       </div>
 
       <div className="mt-4">{children}</div>
-    </section>
+    </Card>
   )
 }
 

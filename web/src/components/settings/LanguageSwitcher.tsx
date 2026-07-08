@@ -10,6 +10,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { Alert, Button } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -298,9 +299,9 @@ export const LanguageSwitcher = ({
               aria-label={t("language.shareUrlLabel")}
               onFocus={(e) => e.currentTarget.select()}
             />
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => void copyShareUrl()}
               disabled={!shareUrl}
             >
@@ -312,7 +313,7 @@ export const LanguageSwitcher = ({
               {shareCopied
                 ? t("language.shareCopied")
                 : t("language.shareCopy")}
-            </button>
+            </Button>
           </div>
         </div>
       </AccordionSection>
@@ -372,14 +373,14 @@ export const LanguageSwitcher = ({
               onChange={(e) => setUrl(e.target.value)}
               disabled={busy}
             />
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => void handleUrl()}
               disabled={busy}
             >
               {t("language.fetch")}
-            </button>
+            </Button>
           </div>
         </div>
       </AccordionSection>
@@ -419,14 +420,14 @@ export const LanguageSwitcher = ({
                         </span>
                       )}
                     </span>
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-xs"
+                    <Button
+                      variant="ghost"
+                      size="xs"
                       aria-label={t("language.removePack", { code: c })}
                       onClick={() => removePack(c)}
                     >
                       <Trash2 className="size-4" aria-hidden="true" />
-                    </button>
+                    </Button>
                   </div>
                 </li>
               )
@@ -463,18 +464,18 @@ export const LanguageSwitcher = ({
             </div>
           )}
           <div className="flex flex-row justify-end gap-2">
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleCancel}
               disabled={busy}
             >
               <X className="size-4" aria-hidden="true" />
               {t("language.previewCancel")}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
               onClick={() => void handleConfirm()}
               disabled={busy}
             >
@@ -484,15 +485,15 @@ export const LanguageSwitcher = ({
                 <Check className="size-4" aria-hidden="true" />
               )}
               {t("language.previewConfirm", { code: preview.code })}
-            </button>
+            </Button>
           </div>
         </div>
       )}
 
       {error && (
-        <div className="alert alert-error" role="alert">
+        <Alert tone="error">
           <span className="text-sm">{error}</span>
-        </div>
+        </Alert>
       )}
     </div>
   )

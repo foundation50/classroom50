@@ -2,13 +2,15 @@ import type { ComponentType, ReactNode, SVGProps } from "react"
 
 export type InlineNoteTone = "success" | "warning" | "error" | "neutral"
 
-// Explicit dark-on-light colors rather than daisyUI's *-content tones, too light
-// to read on a white form background.
+// DaisyUI semantic tints (theme-aware), replacing the former raw Tailwind
+// palette (`green-50`/`amber-50`/...) so inline notes track the active theme
+// like the rest of the app. Each tone is a soft tint of its semantic token with
+// a matching border and readable foreground.
 const TONE_CLASS: Record<InlineNoteTone, string> = {
-  success: "bg-green-50 border-green-200 text-green-800",
-  warning: "bg-amber-50 border-amber-200 text-amber-900",
-  error: "bg-red-50 border-red-200 text-red-800",
-  neutral: "bg-base-200 border-base-300 text-base-content/80",
+  success: "border-success/30 bg-success/10 text-success",
+  warning: "border-warning/30 bg-warning/10 text-warning",
+  error: "border-error/30 bg-error/10 text-error",
+  neutral: "border-base-300 bg-base-200 text-base-content/80",
 }
 
 // Compact tinted note for inline field feedback (an icon plus a short message).

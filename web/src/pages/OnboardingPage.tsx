@@ -7,6 +7,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import { Spinner } from "@/components/Spinner"
+import { Button, Card } from "@/components/ui"
 import {
   MembershipError,
   classifyMembershipError,
@@ -40,9 +41,13 @@ const OnboardNavbar = () => {
 }
 
 const OnboardCard = ({ children }: { children: React.ReactNode }) => (
-  <div className="card w-200 max-w-[calc(100vw-2em)] p-8 m-auto rounded-xl mt-10 border border-base-300">
+  <Card
+    radius="xl"
+    shadow={false}
+    className="w-200 max-w-[calc(100vw-2em)] p-8 m-auto mt-10"
+  >
     {children}
-  </div>
+  </Card>
 )
 
 const OnboardShell = ({ children }: { children: React.ReactNode }) => (
@@ -271,14 +276,10 @@ const OnboardingPage = () => {
               <p className="text-center text-sm text-base-content/70">
                 {t("getStarted.checking.stillChecking")}
               </p>
-              <button
-                type="button"
-                className="btn btn-outline w-full"
-                onClick={retry}
-              >
+              <Button variant="outline" className="w-full" onClick={retry}>
                 <Loader2 aria-hidden="true" className="size-4" />
                 {t("getStarted.checking.retry")}
-              </button>
+              </Button>
             </div>
           )}
         </EnterDiv>

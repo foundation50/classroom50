@@ -2,6 +2,7 @@ import { AlertTriangle, Check, ClipboardCopy, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { Button, Card } from "@/components/ui"
 
 // Distinct membership-failure causes the student flow (onboarding + accept) can
 // hit; each maps to a title/body and at least one recovery action.
@@ -105,18 +106,14 @@ const CopyableDetails = ({
         <pre className="overflow-x-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap">
           {text}
         </pre>
-        <button
-          type="button"
-          className="btn btn-outline btn-sm"
-          onClick={() => void copy()}
-        >
+        <Button variant="outline" size="sm" onClick={() => void copy()}>
           {copied ? (
             <Check aria-hidden="true" className="size-4" />
           ) : (
             <ClipboardCopy aria-hidden="true" className="size-4" />
           )}
           {copied ? t("membership.copied") : t("membership.copyDetails")}
-        </button>
+        </Button>
         <span aria-live="polite" className="sr-only">
           {copied ? t("membership.copied") : ""}
         </span>
@@ -157,7 +154,7 @@ export const MembershipError = ({
   }[cause]
 
   return (
-    <div className="card-body gap-6">
+    <Card.Body className="gap-6">
       <div>
         <span className={`badge ${badgeTone} badge-soft gap-2`}>
           <AlertTriangle aria-hidden="true" className="size-4" />
@@ -210,19 +207,15 @@ export const MembershipError = ({
             )}
 
             {cause === "generic" && onRetry && (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                onClick={onRetry}
-              >
+              <Button variant="primary" size="sm" onClick={onRetry}>
                 {t("membership.generic.retry")}
-              </button>
+              </Button>
             )}
           </div>
         </div>
       </div>
 
       <CopyableDetails details={details} />
-    </div>
+    </Card.Body>
   )
 }

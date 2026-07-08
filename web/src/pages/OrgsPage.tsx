@@ -19,10 +19,12 @@ import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
+import { Button, Card } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
 import { enterExit } from "@/lib/motion"
+import { EnterDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
@@ -42,9 +44,9 @@ function MissingOrgNotice({
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.missingNotice.title")}
         </span>
-        <button
-          type="button"
-          className="btn btn-ghost btn-xs"
+        <Button
+          variant="ghost"
+          size="xs"
           disabled={refreshing}
           onClick={(e) => {
             // The button lives inside <summary>; stop the click from toggling
@@ -60,7 +62,7 @@ function MissingOrgNotice({
           {refreshing
             ? t("orgs.missingNotice.refreshing")
             : t("orgs.missingNotice.refresh")}
-        </button>
+        </Button>
         <ChevronDown
           aria-hidden="true"
           className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
@@ -153,13 +155,13 @@ function OrgCard({
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
 
   return (
-    <motion.div
-      className="card bg-base-100 rounded-xl col-span-12 border border-base-300 md:col-span-6"
-      variants={enterExit}
-      initial="initial"
-      animate="animate"
+    <Card
+      as={EnterDiv}
+      radius="xl"
+      shadow={false}
+      className="col-span-12 md:col-span-6"
     >
-      <div className="card-body justify-between">
+      <Card.Body className="justify-between">
         <div className="flex gap-4">
           <img
             src={org.avatar_url}
@@ -190,11 +192,11 @@ function OrgCard({
           </div>
         </div>
 
-        <div className="card-actions mt-5 items-center justify-end gap-2">
+        <Card.Actions className="mt-5 items-center justify-end gap-2">
           <OrgActions summary={summary} />
-        </div>
-      </div>
-    </motion.div>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -409,13 +411,13 @@ const OrgsPage = () => {
                       listLabel={t("orgs.toolbar.view.listLabel")}
                     />
 
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => setModalOpen(true)}
                     >
                       {t("orgs.newOrg.button")}
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -456,14 +458,14 @@ const OrgsPage = () => {
                   title={t("orgs.setUpFirst.title")}
                   body={t("orgs.setUpFirst.body")}
                   action={
-                    <button
-                      type="button"
-                      className="btn btn-primary btn-sm"
+                    <Button
+                      variant="primary"
+                      size="sm"
                       onClick={() => setModalOpen(true)}
                     >
                       <Plus aria-hidden="true" className="size-4" />
                       {t("orgs.setUpFirst.cta")}
-                    </button>
+                    </Button>
                   }
                 />
               ) : (

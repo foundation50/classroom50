@@ -1,6 +1,8 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
+import { Alert, Button } from "@/components/ui"
+
 // Error banner (no dismiss) with an inline retry, shared by the submissions
 // dashboard panels that load an independent data source (roster, gradebook).
 // Extracted so the two blocks can't drift on markup/retry wiring.
@@ -15,17 +17,13 @@ export function QueryErrorAlert({
 }) {
   const { t } = useTranslation()
   return (
-    <div className={`alert alert-error ${className}`}>
+    <Alert tone="error" className={className}>
       <div>
         {message}
-        <button
-          type="button"
-          className="btn btn-sm btn-ghost ml-2"
-          onClick={onRetry}
-        >
+        <Button variant="ghost" size="sm" className="ml-2" onClick={onRetry}>
           {t("submissions.errors.retry")}
-        </button>
+        </Button>
       </div>
-    </div>
+    </Alert>
   )
 }

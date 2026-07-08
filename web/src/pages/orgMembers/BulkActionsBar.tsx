@@ -1,7 +1,8 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, UserMinus, X } from "lucide-react"
 
+import { Alert, Button, Modal } from "@/components/ui"
 import type { GitHubClient } from "@/hooks/github/client"
 import type { GitHubUser } from "@/hooks/github/types"
 import type { StudentCsvRow } from "@/api/mutations/students"
@@ -174,7 +175,6 @@ const BulkActionsBar = ({
   }) => void
 }) => {
   const { t } = useTranslation()
-  const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
 
   const [classroom, setClassroom] = useState("")
@@ -201,12 +201,6 @@ const BulkActionsBar = ({
     classroom || (classrooms.length > 0 ? classrooms[0].path : "")
 
   const isOpen = phase !== "idle"
-  useEffect(() => {
-    const dialog = dialogRef.current
-    if (!dialog) return
-    if (isOpen && !dialog.open) dialog.showModal()
-    if (!isOpen && dialog.open) dialog.close()
-  }, [isOpen])
 
   const closeModal = () => {
     if (phase === "working") return
@@ -330,9 +324,10 @@ const BulkActionsBar = ({
             </select>
 
             <div className="join">
-              <button
-                type="button"
-                className="btn btn-sm btn-primary join-item"
+              <Button
+                variant="primary"
+                size="sm"
+                className="join-item"
                 disabled={!effectiveClassroom}
                 aria-label={t("orgMembers.bulk.addToClassroom", {
                   classroom: effectiveClassroom,
@@ -344,10 +339,11 @@ const BulkActionsBar = ({
               >
                 <Plus aria-hidden="true" className="size-4" />
                 {t("orgMembers.bulk.add")}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost join-item text-error hover:bg-error/10"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="join-item text-error hover:bg-error/10"
                 disabled={!effectiveClassroom}
                 aria-label={t("orgMembers.bulk.removeFromClassroom", {
                   classroom: effectiveClassroom,
@@ -359,18 +355,19 @@ const BulkActionsBar = ({
               >
                 <UserMinus aria-hidden="true" className="size-4" />
                 {t("orgMembers.bulk.remove")}
-              </button>
+              </Button>
             </div>
 
-            <button
-              type="button"
-              className="btn btn-sm btn-ghost btn-square"
+            <Button
+              variant="ghost"
+              size="sm"
+              shape="square"
               aria-label={t("orgMembers.bulk.clearSelection")}
               title={t("orgMembers.bulk.clearSelection")}
               onClick={onClearSelection}
             >
               <X aria-hidden="true" className="size-4" />
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>
@@ -419,114 +416,81 @@ const BulkActionsBar = ({
         onClose={() => setConfirmingAdd(false)}
       />
 
-      <dialog
-        ref={dialogRef}
-        className="modal"
+      <Modal
+        open={isOpen}
+        onClose={closeModal}
+        closeDisabled={phase === "working"}
+        size="2xl"
         aria-labelledby={titleId}
-        onCancel={(event) => {
-          if (phase === "working") {
-            event.preventDefault()
-            return
-          }
-          closeModal()
-        }}
       >
-        <div className="modal-box max-w-2xl">
-          <div className="flex items-start justify-between gap-4">
-            <h3 id={titleId} className="text-lg font-bold">
-              {action === "remove"
-                ? t("orgMembers.bulk.removeTitle", {
-                    classroom: effectiveClassroom,
-                  })
-                : t("orgMembers.bulk.addTitle", {
-                    classroom: effectiveClassroom,
-                  })}
-            </h3>
-            {phase !== "working" && (
-              <button
-                type="button"
-                className="btn btn-sm btn-circle btn-ghost"
-                aria-label={t("common.close")}
-                onClick={closeModal}
-              >
-                <X size={16} aria-hidden="true" />
-              </button>
-            )}
-          </div>
-
-          {phase === "working" && (
-            <div className="mt-6">
-              <p className="mb-2 font-medium">{progress.message}</p>
-              <progress
-                className="progress progress-primary w-full"
-                value={progress.processed}
-                max={progress.total || 1}
-              />
-              <div className="mt-2 flex justify-between text-sm opacity-70">
-                <span>
-                  {t("orgMembers.bulk.progressProcessed", {
-                    processed: progress.processed,
-                    total: progress.total,
-                  })}
-                </span>
-                <span>{progressPercent}%</span>
-              </div>
-              <div className="alert mt-6">
-                <span>{t("orgMembers.bulk.keepTabOpen")}</span>
-              </div>
-            </div>
-          )}
-
-          {phase === "complete" && result && (
-            <div className="mt-6 space-y-4">
-              <div className="alert alert-success">
-                <span>{result.headline}</span>
-              </div>
-              {result.sections.map((section) => (
-                <BulkResultSection
-                  key={section.title}
-                  title={section.title}
-                  rows={section.rows}
-                />
-              ))}
-              <div className="modal-action">
-                <button
-                  type="button"
-                  className="btn btn-primary"
-                  onClick={closeModal}
-                >
-                  {t("orgMembers.bulk.done")}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {phase === "error" && (
-            <div className="mt-6">
-              <div className="alert alert-error" role="alert">
-                <span>{error ?? t("orgMembers.somethingWrong")}</span>
-              </div>
-              <div className="modal-action">
-                <button
-                  type="button"
-                  className="btn btn-ghost"
-                  onClick={closeModal}
-                >
-                  {t("common.close")}
-                </button>
-              </div>
-            </div>
-          )}
+        <div className="flex items-start justify-between gap-4">
+          <h3 id={titleId} className="text-lg font-bold">
+            {action === "remove"
+              ? t("orgMembers.bulk.removeTitle", {
+                  classroom: effectiveClassroom,
+                })
+              : t("orgMembers.bulk.addTitle", {
+                  classroom: effectiveClassroom,
+                })}
+          </h3>
         </div>
 
-        {phase !== "working" && (
-          <form method="dialog" className="modal-backdrop">
-            <button type="button" onClick={closeModal}>
-              {t("common.close")}
-            </button>
-          </form>
+        {phase === "working" && (
+          <div className="mt-6">
+            <p className="mb-2 font-medium">{progress.message}</p>
+            <progress
+              className="progress progress-primary w-full"
+              value={progress.processed}
+              max={progress.total || 1}
+            />
+            <div className="mt-2 flex justify-between text-sm opacity-70">
+              <span>
+                {t("orgMembers.bulk.progressProcessed", {
+                  processed: progress.processed,
+                  total: progress.total,
+                })}
+              </span>
+              <span>{progressPercent}%</span>
+            </div>
+            <Alert tone="info" className="mt-6">
+              <span>{t("orgMembers.bulk.keepTabOpen")}</span>
+            </Alert>
+          </div>
         )}
-      </dialog>
+
+        {phase === "complete" && result && (
+          <div className="mt-6 space-y-4">
+            <Alert tone="success">
+              <span>{result.headline}</span>
+            </Alert>
+            {result.sections.map((section) => (
+              <BulkResultSection
+                key={section.title}
+                title={section.title}
+                rows={section.rows}
+              />
+            ))}
+            <div className="modal-action">
+              <Button variant="primary" onClick={closeModal}>
+                {t("orgMembers.bulk.done")}
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {phase === "error" && (
+          <div className="mt-6">
+            <Alert tone="error">
+              <span>{error ?? t("orgMembers.somethingWrong")}</span>
+            </Alert>
+            <div className="modal-action">
+              <Button variant="ghost" onClick={closeModal}>
+                {t("common.close")}
+              </Button>
+            </div>
+          </div>
+        )}
+      </Modal>
     </>
   )
 }

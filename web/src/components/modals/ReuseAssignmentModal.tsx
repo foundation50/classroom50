@@ -9,6 +9,7 @@ import {
   ReuseModalShell,
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
+import { FormField, Input, Select } from "@/components/ui"
 
 // Reuse ("Duplicate") an assignment into any classroom in the same org —
 // our equivalent of GitHub Classroom's "Reuse assignment", including into the
@@ -92,70 +93,74 @@ export const ReuseAssignmentModal = ({
         </div>
       ) : (
         <div className="mt-6 space-y-4">
-          <label className="form-control w-full">
-            <span className="label-text mb-1 font-medium">
-              {t("components.modals.reuseAssignment.targetClassroom")}
-            </span>
-            <select
-              className="select select-bordered w-full"
-              value={targetClassroom}
-              disabled={reuse.isPending}
-              onChange={(e) => handlePickTarget(e.target.value)}
-            >
-              <option value="" disabled>
-                {t("components.modals.reuseAssignment.chooseClassroom")}
-              </option>
-              {targets.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name === classroom
-                    ? t(
-                        "components.modals.reuseAssignment.thisClassroomOption",
-                        {
-                          classroom: c.name,
-                        },
-                      )
-                    : c.name}
+          <FormField
+            label={t("components.modals.reuseAssignment.targetClassroom")}
+          >
+            {({ id, describedById, invalid }) => (
+              <Select
+                id={id}
+                aria-describedby={describedById}
+                invalid={invalid}
+                value={targetClassroom}
+                disabled={reuse.isPending}
+                onChange={(e) => handlePickTarget(e.target.value)}
+              >
+                <option value="" disabled>
+                  {t("components.modals.reuseAssignment.chooseClassroom")}
                 </option>
-              ))}
-            </select>
-          </label>
+                {targets.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name === classroom
+                      ? t(
+                          "components.modals.reuseAssignment.thisClassroomOption",
+                          {
+                            classroom: c.name,
+                          },
+                        )
+                      : c.name}
+                  </option>
+                ))}
+              </Select>
+            )}
+          </FormField>
 
-          <label className="form-control w-full">
-            <span className="label-text mb-1 font-medium">
-              {t("components.modals.reuseAssignment.slugLabel")}
-            </span>
-            <input
-              type="text"
-              className={`input input-bordered w-full font-mono ${
-                reuse.slugTaken ? "input-error" : ""
-              }`}
-              value={reuse.displayedSlug}
-              disabled={reuse.isPending || !targetClassroom || targetLoading}
-              onChange={(e) => reuse.onSlugChange(e.target.value)}
-              onBlur={reuse.onSlugBlur}
-            />
-            <span
-              className={`label-text-alt mt-1 ${
-                reuse.slugTaken ? "text-error" : "text-base-content/70"
-              }`}
-            >
-              {!targetClassroom
-                ? t("components.modals.reuseAssignment.chooseClassroomFirst")
-                : reuseSlugStatus({
-                    t,
-                    loading: targetLoading,
-                    error: targetError,
-                    slugTaken: reuse.slugTaken,
-                    slugTouched: reuse.slugTouched,
-                    normalizedSlug: reuse.normalizedSlug,
-                    displayedSlug: reuse.displayedSlug,
-                    classroomLabel: targetClassroom,
-                    uniqueHint: t(
-                      "components.modals.reuseAssignment.uniqueHint",
-                    ),
-                  })}
-            </span>
-          </label>
+          {(() => {
+            const slugStatus = !targetClassroom
+              ? t("components.modals.reuseAssignment.chooseClassroomFirst")
+              : reuseSlugStatus({
+                  t,
+                  loading: targetLoading,
+                  error: targetError,
+                  slugTaken: reuse.slugTaken,
+                  slugTouched: reuse.slugTouched,
+                  normalizedSlug: reuse.normalizedSlug,
+                  displayedSlug: reuse.displayedSlug,
+                  classroomLabel: targetClassroom,
+                  uniqueHint: t("components.modals.reuseAssignment.uniqueHint"),
+                })
+            return (
+              <FormField
+                label={t("components.modals.reuseAssignment.slugLabel")}
+                error={reuse.slugTaken ? slugStatus : undefined}
+                hint={slugStatus}
+              >
+                {({ id, describedById, invalid }) => (
+                  <Input
+                    id={id}
+                    aria-describedby={describedById}
+                    invalid={invalid}
+                    className="font-mono"
+                    value={reuse.displayedSlug}
+                    disabled={
+                      reuse.isPending || !targetClassroom || targetLoading
+                    }
+                    onChange={(e) => reuse.onSlugChange(e.target.value)}
+                    onBlur={reuse.onSlugBlur}
+                  />
+                )}
+              </FormField>
+            )
+          })()}
         </div>
       )}
     </ReuseModalShell>

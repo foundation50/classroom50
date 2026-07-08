@@ -4,6 +4,7 @@ import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./CreateAssignmentForm"
 
+import { Button, Card, Input, Select } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import { emptyTestDraft, validateTestDraft } from "@/util/assignmentTests"
 import type { AssignmentTestComparison } from "@/types/classroom"
@@ -131,14 +132,13 @@ const AutogradingTestModal = ({
                 <label htmlFor={field.name} className="label font-bold">
                   {t("assignments.autograder.testName")}
                 </label>
-                <input
+                <Input
                   id={field.name}
-                  className="input w-full"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder={t("assignments.autograder.testNamePlaceholder")}
-                  aria-invalid={field.state.meta.errors.length > 0}
+                  invalid={field.state.meta.errors.length > 0}
                   aria-describedby={
                     field.state.meta.errors.length > 0
                       ? `${field.name}-error`
@@ -190,9 +190,9 @@ const AutogradingTestModal = ({
                 <label htmlFor={field.name} className="label font-bold">
                   {t("assignments.autograder.setupCommand")}
                 </label>
-                <input
+                <Input
                   id={field.name}
-                  className="input w-full font-mono"
+                  className="font-mono"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
@@ -210,16 +210,16 @@ const AutogradingTestModal = ({
                 <label htmlFor={field.name} className="label font-bold">
                   {t("assignments.autograder.runCommand")}
                 </label>
-                <input
+                <Input
                   id={field.name}
-                  className="input w-full font-mono"
+                  className="font-mono"
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                   placeholder={t(
                     "assignments.autograder.runCommandPlaceholder",
                   )}
-                  aria-invalid={field.state.meta.errors.length > 0}
+                  invalid={field.state.meta.errors.length > 0}
                   aria-describedby={
                     field.state.meta.errors.length > 0
                       ? `${field.name}-error`
@@ -306,9 +306,8 @@ const AutogradingTestModal = ({
                           >
                             {t("assignments.autograder.comparison")}
                           </label>
-                          <select
+                          <Select
                             id={field.name}
-                            className="select w-full"
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) =>
@@ -326,7 +325,7 @@ const AutogradingTestModal = ({
                             <option value="regex">
                               {t("assignments.autograder.comparisonRegex")}
                             </option>
-                          </select>
+                          </Select>
                         </div>
                       )}
                     </form.Field>
@@ -340,9 +339,9 @@ const AutogradingTestModal = ({
                         <label htmlFor={field.name} className="label font-bold">
                           {t("assignments.autograder.exitCode")}
                         </label>
-                        <input
+                        <Input
                           id={field.name}
-                          className="input w-32"
+                          className="w-32"
                           type="number"
                           min={0}
                           max={255}
@@ -357,7 +356,7 @@ const AutogradingTestModal = ({
                             )
                           }
                           placeholder="0"
-                          aria-invalid={field.state.meta.errors.length > 0}
+                          invalid={field.state.meta.errors.length > 0}
                           aria-describedby={
                             field.state.meta.errors.length > 0
                               ? `${field.name}-error`
@@ -394,9 +393,9 @@ const AutogradingTestModal = ({
                   <label htmlFor={field.name} className="label font-bold">
                     {t("assignments.autograder.timeout")}
                   </label>
-                  <input
+                  <Input
                     id={field.name}
-                    className="input w-32"
+                    className="w-32"
                     type="number"
                     min={0}
                     max={600}
@@ -408,7 +407,7 @@ const AutogradingTestModal = ({
                         e.target.value === "" ? 0 : e.target.valueAsNumber,
                       )
                     }
-                    aria-invalid={field.state.meta.errors.length > 0}
+                    invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
                       field.state.meta.errors.length > 0
                         ? `${field.name}-error`
@@ -432,9 +431,9 @@ const AutogradingTestModal = ({
                   <label htmlFor={field.name} className="label font-bold">
                     {t("assignments.autograder.points")}
                   </label>
-                  <input
+                  <Input
                     id={field.name}
-                    className="input w-32"
+                    className="w-32"
                     type="number"
                     min={0}
                     max={1000}
@@ -446,7 +445,7 @@ const AutogradingTestModal = ({
                         e.target.value === "" ? 0 : e.target.valueAsNumber,
                       )
                     }
-                    aria-invalid={field.state.meta.errors.length > 0}
+                    invalid={field.state.meta.errors.length > 0}
                     aria-describedby={
                       field.state.meta.errors.length > 0
                         ? `${field.name}-error`
@@ -464,13 +463,9 @@ const AutogradingTestModal = ({
         </div>
 
         <div className="modal-action">
-          <button
-            type="button"
-            className="btn btn-primary"
-            onClick={handleDone}
-          >
+          <Button variant="primary" onClick={handleDone}>
             {t("assignments.autograder.done")}
-          </button>
+          </Button>
         </div>
       </div>
       <div className="modal-backdrop">
@@ -512,10 +507,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   }
 
   return (
-    <div className="card bg-base-100 shadow-sm">
+    <Card bordered={false}>
       <form.Field name="tests" mode="array">
         {(field) => (
-          <div className="card-body">
+          <Card.Body>
             <div className="flex justify-between mb-6">
               <div>
                 <h3 className="text-lg font-bold">
@@ -539,9 +534,8 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 </h3>
               </div>
               <div>
-                <button
-                  type="button"
-                  className="btn btn-primary btn-outline"
+                <Button
+                  variant="outline"
                   onClick={() => {
                     const newIndex = field.state.value.length
                     field.pushValue(emptyTestDraft())
@@ -549,7 +543,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                   }}
                 >
                   {t("assignments.autograder.addTest")}
-                </button>
+                </Button>
               </div>
             </div>
             <table className="table">
@@ -613,20 +607,21 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
 
                         <td>
                           <div className="flex justify-end gap-2">
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-ghost"
+                            <Button
+                              variant="ghost"
+                              size="sm"
                               onClick={() => openEditor(index)}
                               aria-label={t("assignments.autograder.editTest", {
                                 number: index + 1,
                               })}
                             >
                               <Pencil aria-hidden="true" size={16} />
-                            </button>
+                            </Button>
 
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-ghost text-error"
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="text-error"
                               onClick={() => field.removeValue(index)}
                               aria-label={t(
                                 "assignments.autograder.removeTest",
@@ -634,7 +629,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                               )}
                             >
                               <Trash aria-hidden="true" size={16} />
-                            </button>
+                            </Button>
                           </div>
                         </td>
                       </tr>
@@ -650,10 +645,10 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
               index={editingIndex}
               onClose={closeEditor}
             />
-          </div>
+          </Card.Body>
         )}
       </form.Field>
-    </div>
+    </Card>
   )
 }
 

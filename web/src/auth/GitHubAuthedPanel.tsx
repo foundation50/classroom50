@@ -2,6 +2,7 @@ import { CheckCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import type { GitHubUser } from "@/hooks/github/types"
+import { Alert, Button } from "@/components/ui"
 
 export function GitHubAuthedPanel({
   user,
@@ -18,10 +19,10 @@ export function GitHubAuthedPanel({
           spinner instead while the profile is still loading, so this panel only
           sees a resolved user or a genuine failure. */}
       {user ? (
-        <div className="alert alert-success items-start text-sm">
+        <Alert tone="success" className="items-start text-sm">
           <CheckCircle aria-hidden="true" className="size-4 shrink-0" />
           <span>{t("auth.signedInConfirmed")}</span>
-        </div>
+        </Alert>
       ) : null}
 
       <div className="flex flex-col items-center gap-3 text-center">
@@ -56,9 +57,9 @@ export function GitHubAuthedPanel({
 
       <div className="divider" />
 
-      <button className="btn btn-outline w-full" onClick={onSignOut}>
+      <Button variant="outline" className="w-full" onClick={onSignOut}>
         {t("auth.signOutClearToken")}
-      </button>
+      </Button>
     </div>
   )
 }

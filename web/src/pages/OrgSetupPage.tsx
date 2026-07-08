@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
+import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import useGetOrgMembership from "@/hooks/useGetOrgMembership"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -47,8 +48,8 @@ const OrgSteps = ({
   const { t } = useTranslation()
   const runSetup = useSafeSubmit()
   return (
-    <div className="card border border-base-300 bg-base-100 shadow-sm">
-      <div className="card-body gap-5">
+    <Card>
+      <Card.Body className="gap-5">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
           <ul className="steps steps-horizontal col-start-2 justify-self-center">
             <li
@@ -61,39 +62,36 @@ const OrgSteps = ({
               className={`step ${stage === 3 ? "step-primary" : "[--step-bg:var(--color-base-300)]"}`}
             ></li>
           </ul>
-          <div className="card-actions col-start-3 justify-self-end">
+          <Card.Actions className="col-start-3 justify-self-end">
             {stage === 1 &&
               (!nextStep ? (
-                <button
+                <Button
+                  variant="primary"
+                  className="ml-auto"
+                  loading={mutation.isPending}
+                  loadingLabel={t("setup.runSetup")}
                   disabled={mutation.isPending}
-                  className="btn btn-primary ml-auto"
                   onClick={() => void runSetup(() => mutation.mutateAsync())}
                 >
-                  {mutation.isPending ? (
-                    <span
-                      className="loading loading-spinner"
-                      aria-hidden="true"
-                    />
-                  ) : (
-                    t("setup.runSetup")
-                  )}
-                </button>
+                  {mutation.isPending ? null : t("setup.runSetup")}
+                </Button>
               ) : (
-                <button
-                  className="btn btn-primary ml-auto"
+                <Button
+                  variant="primary"
+                  className="ml-auto"
                   onClick={() => setStage(2)}
                 >
                   {t("setup.nextServiceToken")}
                   <ArrowRight aria-hidden="true" className="size-4" />
-                </button>
+                </Button>
               ))}
             {stage === 2 && (
-              <button className="btn btn-ghost" onClick={() => setStage(1)}>
+              <Button variant="ghost" onClick={() => setStage(1)}>
                 <ArrowLeft aria-hidden="true" className="size-4" />
                 {t("setup.back")}
-              </button>
+              </Button>
             )}
-          </div>
+          </Card.Actions>
         </div>
 
         {stage === 1 ? (
@@ -131,22 +129,22 @@ const OrgSteps = ({
             </Link>
           </EnterDiv>
         )}
-      </div>
-    </div>
+      </Card.Body>
+    </Card>
   )
 }
 
 const NotAdminAlert = () => {
   const { t } = useTranslation()
-  return <div className="alert alert-error">{t("setup.notAdmin")}</div>
+  return <Alert tone="error">{t("setup.notAdmin")}</Alert>
 }
 
 const NotTeamOrEnterpriseWarning = () => {
   const { t } = useTranslation()
   return (
-    <div className="alert alert-warning mb-4">
+    <Alert tone="warning" className="mb-4">
       {t("setup.notTeamOrEnterprise")}
-    </div>
+    </Alert>
   )
 }
 

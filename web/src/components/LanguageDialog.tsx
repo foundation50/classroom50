@@ -1,7 +1,7 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
-import { X } from "lucide-react"
 
+import { Modal } from "@/components/ui"
 import { LanguageSwitcher } from "@/components/settings/LanguageSwitcher"
 
 // Language-pack modal shown from the sidebar footer. Extracted alongside
@@ -22,27 +22,19 @@ export const LanguageDialog = forwardRef<
   }
 
   return (
-    <dialog ref={ref} className="modal" aria-labelledby={titleId}>
-      <div className="modal-box flex max-h-[85vh] max-w-lg flex-col overflow-y-auto text-base-content">
-        <form method="dialog">
-          <button
-            className="btn btn-sm btn-circle btn-ghost absolute right-3 top-3"
-            aria-label={t("common.close")}
-          >
-            <X className="size-4" aria-hidden="true" />
-          </button>
-        </form>
-        <h3 id={titleId} className="text-lg font-bold">
-          {t("nav.languageDialogTitle")}
-        </h3>
-        <p className="mt-1 mb-4 text-sm text-base-content/70">
-          {t("nav.languageDialogDescription")}
-        </p>
-        <LanguageSwitcher onApplied={close} />
-      </div>
-      <form method="dialog" className="modal-backdrop">
-        <button>{t("common.close")}</button>
-      </form>
-    </dialog>
+    <Modal
+      ref={ref}
+      size="lg"
+      boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
+      aria-labelledby={titleId}
+    >
+      <h3 id={titleId} className="text-lg font-bold">
+        {t("nav.languageDialogTitle")}
+      </h3>
+      <p className="mt-1 mb-4 text-sm text-base-content/70">
+        {t("nav.languageDialogDescription")}
+      </p>
+      <LanguageSwitcher onApplied={close} />
+    </Modal>
   )
 })

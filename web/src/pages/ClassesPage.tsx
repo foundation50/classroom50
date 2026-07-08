@@ -15,6 +15,8 @@ import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
 import PageShell from "@/components/PageShell"
+import PageHeader from "@/components/PageHeader"
+import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubRepo } from "@/hooks/github/types"
 import MissingParams from "@/components/MissingParams"
@@ -34,19 +36,19 @@ import { githubOrgUrl } from "@/util/orgUrl"
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   return (
-    <div className="card border border-dashed border-base-300 bg-base-100 shadow-sm">
-      <div className="card-body items-center py-12 text-center">
+    <Card dashed>
+      <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Plus aria-hidden="true" className="size-7" />
         </div>
 
-        <h2 className="card-title text-xl">{t("classes.empty.title")}</h2>
+        <Card.Title className="text-xl">{t("classes.empty.title")}</Card.Title>
 
         <p className="max-w-md text-base-content/70">
           {t("classes.empty.body")}
         </p>
 
-        <div className="card-actions mt-4">
+        <Card.Actions className="mt-4">
           <Link
             to="/$org/classes/new"
             params={{ org }}
@@ -56,9 +58,9 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
             <Plus aria-hidden="true" className="size-4" />
             {t("classes.empty.createButton")}
           </Link>
-        </div>
-      </div>
-    </div>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -79,13 +81,13 @@ const JoinOrgCard = ({ org }: { org: string }) => {
   })
 
   return (
-    <div className="card border border-dashed border-base-300 bg-base-100 shadow-sm">
-      <div className="card-body items-center py-12 text-center">
+    <Card dashed>
+      <Card.Body className="items-center py-12 text-center">
         <div className="mb-2 flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
           <Plus aria-hidden="true" className="size-7" />
         </div>
 
-        <h2 className="card-title text-xl">{t("classes.join.title")}</h2>
+        <Card.Title className="text-xl">{t("classes.join.title")}</Card.Title>
 
         <p className="max-w-md text-base-content/70">
           {t("classes.join.body_prefix")}{" "}
@@ -94,33 +96,29 @@ const JoinOrgCard = ({ org }: { org: string }) => {
         </p>
 
         {mutation.isError ? (
-          <div className="alert alert-error mt-4 max-w-md text-left">
+          <Alert tone="error" className="mt-4 max-w-md text-left">
             {t("classes.join.error")}
-          </div>
+          </Alert>
         ) : null}
 
-        <div className="card-actions mt-4">
-          <button
-            type="button"
-            className="btn btn-primary"
+        <Card.Actions className="mt-4">
+          <Button
+            variant="primary"
+            loading={mutation.isPending}
+            loadingLabel={t("classes.join.joining")}
             disabled={mutation.isPending}
             onClick={() => void run(() => mutation.mutateAsync())}
           >
-            {mutation.isPending ? (
-              <span
-                className="loading loading-spinner loading-sm"
-                aria-hidden="true"
-              />
-            ) : (
+            {mutation.isPending ? null : (
               <Plus aria-hidden="true" className="size-4" />
             )}
             {mutation.isPending
               ? t("classes.join.joining")
               : t("classes.join.joinButton")}
-          </button>
-        </div>
-      </div>
-    </div>
+          </Button>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -141,7 +139,13 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
     Boolean(classroom && assignment) && assignmentData?.mode === "group"
 
   return (
-    <EnterDiv className="card relative col-span-12 rounded-2xl border border-base-200 bg-base-100 md:col-span-6 xl:col-span-4">
+    <Card
+      as={EnterDiv}
+      radius="2xl"
+      bordered={false}
+      shadow={false}
+      className="relative col-span-12 border border-base-200 md:col-span-6 xl:col-span-4"
+    >
       {canManageGroup && classroom && assignment && (
         <Link
           to="/$org/$classroom/assignments/$assignment/edit"
@@ -154,7 +158,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         </Link>
       )}
 
-      <div className="card-body gap-4">
+      <Card.Body className="gap-4">
         <div className="flex items-start justify-between gap-4 pr-8">
           <div className="min-w-0">
             <div className="mb-2 flex items-center gap-2">
@@ -214,7 +218,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
         )}
 
-        <div className="card-actions items-center justify-between pt-1">
+        <Card.Actions className="items-center justify-between pt-1">
           <div className="flex flex-wrap items-end gap-2">
             {assignmentData?.mode === "individual" && (
               <div className="badge badge-ghost badge-sm py-3">
@@ -239,9 +243,9 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             {t("classes.repo.openRepo")}
             <ExternalLink aria-hidden="true" className="size-4" />
           </a>
-        </div>
-      </div>
-    </EnterDiv>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
   )
 }
 
@@ -319,44 +323,34 @@ const ClassesPage = () => {
 
   return (
     <PageShell page="classes" selected="assignments">
-      <div className="mb-8">
-        <div className="flex flex-col gap-6 p-6 sm:flex-row sm:items-center sm:justify-between">
-          <div className="space-y-4">
-            <div className="flex items-center gap-3">
-              <GitHub aria-hidden="true" className="size-5 opacity-70" />
+      <div className="mb-8 space-y-4">
+        <div className="flex items-center gap-3">
+          <GitHub aria-hidden="true" className="size-5 opacity-70" />
 
-              <div>
-                <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
-                  {t("classes.githubOrganization")}
-                </div>
-                <a
-                  href={githubOrgUrl(org)}
-                  target="_blank"
-                  rel="noreferrer"
-                  title={t("common.openOrgOnGitHub", { org })}
-                  className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
-                >
-                  {org}
-                </a>
-              </div>
+          <div>
+            <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
+              {t("classes.githubOrganization")}
             </div>
-
-            <div>
-              {roleLoading ? (
-                <div className="skeleton skeleton-shimmer h-8 w-48" />
-              ) : (
-                <h1 className="text-2xl font-bold tracking-tight">
-                  {isTeacher
-                    ? t("classes.myClasses")
-                    : t("classes.myAssignments")}
-                </h1>
-              )}
-              <p className="mt-2 max-w-2xl text-sm text-base-content/70">
-                {t("classes.manageSubtitle")}
-              </p>
-            </div>
+            <a
+              href={githubOrgUrl(org)}
+              target="_blank"
+              rel="noreferrer"
+              title={t("common.openOrgOnGitHub", { org })}
+              className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
+            >
+              {org}
+            </a>
           </div>
         </div>
+
+        <PageHeader
+          loading={roleLoading}
+          title={
+            isTeacher ? t("classes.myClasses") : t("classes.myAssignments")
+          }
+          subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
+        />
+
         {isStudent && !isMember && !loadingMembership && (
           <JoinOrgCard org={org} />
         )}

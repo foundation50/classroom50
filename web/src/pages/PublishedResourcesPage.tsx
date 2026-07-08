@@ -17,6 +17,7 @@ import { enterExit, staggerTransition } from "@/lib/motion"
 
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
+import { Button } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireTeacher from "@/components/RequireTeacher"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -119,9 +120,9 @@ function CopyButton({ value }: { value: string }) {
   const { t } = useTranslation()
   const { copied, copy } = useCopyToClipboard(value, 1200)
   return (
-    <button
-      type="button"
-      className="btn btn-ghost btn-xs"
+    <Button
+      variant="ghost"
+      size="xs"
       aria-label={t("published.copyUrl")}
       title={t("published.copyUrl")}
       onClick={copy}
@@ -131,7 +132,7 @@ function CopyButton({ value }: { value: string }) {
       ) : (
         <Copy aria-hidden="true" className="size-3.5" />
       )}
-    </button>
+    </Button>
   )
 }
 

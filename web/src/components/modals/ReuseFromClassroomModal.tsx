@@ -8,6 +8,7 @@ import {
   ReuseModalShell,
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
+import { FormField, Input, Select } from "@/components/ui"
 
 // Reuse an assignment FROM any classroom INTO the current one — the "pull"
 // counterpart to the per-row "push" reuse on the assignments table. Opened from
@@ -111,97 +112,85 @@ export const ReuseFromClassroomModal = ({
         </div>
       ) : (
         <div className="mt-6 space-y-4">
-          <label className="form-control w-full">
-            <span className="label-text mb-1 font-medium">
-              {t("components.modals.reuseFromClassroom.sourceClassroom")}
-            </span>
-            <select
-              className="select select-bordered w-full"
-              value={sourceClassroom}
-              disabled={reuse.isPending}
-              onChange={(e) => handlePickClassroom(e.target.value)}
-            >
-              <option value="" disabled>
-                {t("components.modals.reuseFromClassroom.chooseClassroom")}
-              </option>
-              {sources.map((c) => (
-                <option key={c.name} value={c.name}>
-                  {c.name === classroom
-                    ? t(
-                        "components.modals.reuseFromClassroom.thisClassroomOption",
-                        { classroom: c.name },
-                      )
-                    : c.name}
-                </option>
-              ))}
-            </select>
-          </label>
-
-          {sourceClassroom ? (
-            <label className="form-control w-full">
-              <span className="label-text mb-1 font-medium">
-                {t("components.modals.reuseFromClassroom.assignment")}
-              </span>
-              <select
-                className="select select-bordered w-full"
-                value={sourceSlug}
-                disabled={
-                  reuse.isPending ||
-                  sourceLoading ||
-                  sourceAssignments.length === 0
-                }
-                onChange={(e) => handlePickAssignment(e.target.value)}
+          <FormField
+            label={t("components.modals.reuseFromClassroom.sourceClassroom")}
+          >
+            {({ id, describedById, invalid }) => (
+              <Select
+                id={id}
+                aria-describedby={describedById}
+                invalid={invalid}
+                value={sourceClassroom}
+                disabled={reuse.isPending}
+                onChange={(e) => handlePickClassroom(e.target.value)}
               >
                 <option value="" disabled>
-                  {sourceLoading
-                    ? t(
-                        "components.modals.reuseFromClassroom.loadingAssignments",
-                      )
-                    : sourceAssignments.length === 0
-                      ? t("components.modals.reuseFromClassroom.noAssignments")
-                      : t(
-                          "components.modals.reuseFromClassroom.chooseAssignment",
-                        )}
+                  {t("components.modals.reuseFromClassroom.chooseClassroom")}
                 </option>
-                {sourceAssignments.map((a) => (
-                  <option key={a.slug} value={a.slug}>
-                    {a.name || a.slug}
+                {sources.map((c) => (
+                  <option key={c.name} value={c.name}>
+                    {c.name === classroom
+                      ? t(
+                          "components.modals.reuseFromClassroom.thisClassroomOption",
+                          { classroom: c.name },
+                        )
+                      : c.name}
                   </option>
                 ))}
-              </select>
-              {sourceError ? (
-                <span className="label-text-alt mt-1 text-error">
-                  {t("components.modals.reuseFromClassroom.loadError", {
-                    classroom: sourceClassroom,
-                  })}
-                </span>
-              ) : null}
-            </label>
+              </Select>
+            )}
+          </FormField>
+
+          {sourceClassroom ? (
+            <FormField
+              label={t("components.modals.reuseFromClassroom.assignment")}
+              error={
+                sourceError
+                  ? t("components.modals.reuseFromClassroom.loadError", {
+                      classroom: sourceClassroom,
+                    })
+                  : undefined
+              }
+            >
+              {({ id, describedById, invalid }) => (
+                <Select
+                  id={id}
+                  aria-describedby={describedById}
+                  invalid={invalid}
+                  value={sourceSlug}
+                  disabled={
+                    reuse.isPending ||
+                    sourceLoading ||
+                    sourceAssignments.length === 0
+                  }
+                  onChange={(e) => handlePickAssignment(e.target.value)}
+                >
+                  <option value="" disabled>
+                    {sourceLoading
+                      ? t(
+                          "components.modals.reuseFromClassroom.loadingAssignments",
+                        )
+                      : sourceAssignments.length === 0
+                        ? t(
+                            "components.modals.reuseFromClassroom.noAssignments",
+                          )
+                        : t(
+                            "components.modals.reuseFromClassroom.chooseAssignment",
+                          )}
+                  </option>
+                  {sourceAssignments.map((a) => (
+                    <option key={a.slug} value={a.slug}>
+                      {a.name || a.slug}
+                    </option>
+                  ))}
+                </Select>
+              )}
+            </FormField>
           ) : null}
 
-          {selectedAssignment ? (
-            <label className="form-control w-full">
-              <span className="label-text mb-1 font-medium">
-                {t("components.modals.reuseFromClassroom.slugLabel", {
-                  classroom,
-                })}
-              </span>
-              <input
-                type="text"
-                className={`input input-bordered w-full font-mono ${
-                  reuse.slugTaken ? "input-error" : ""
-                }`}
-                value={reuse.displayedSlug}
-                disabled={reuse.isPending || destLoading}
-                onChange={(e) => reuse.onSlugChange(e.target.value)}
-                onBlur={reuse.onSlugBlur}
-              />
-              <span
-                className={`label-text-alt mt-1 ${
-                  reuse.slugTaken ? "text-error" : "text-base-content/70"
-                }`}
-              >
-                {reuseSlugStatus({
+          {selectedAssignment
+            ? (() => {
+                const slugStatus = reuseSlugStatus({
                   t,
                   loading: destLoading,
                   error: destError,
@@ -213,10 +202,31 @@ export const ReuseFromClassroomModal = ({
                   uniqueHint: t(
                     "components.modals.reuseFromClassroom.uniqueHint",
                   ),
-                })}
-              </span>
-            </label>
-          ) : null}
+                })
+                return (
+                  <FormField
+                    label={t("components.modals.reuseFromClassroom.slugLabel", {
+                      classroom,
+                    })}
+                    error={reuse.slugTaken ? slugStatus : undefined}
+                    hint={slugStatus}
+                  >
+                    {({ id, describedById, invalid }) => (
+                      <Input
+                        id={id}
+                        aria-describedby={describedById}
+                        invalid={invalid}
+                        className="font-mono"
+                        value={reuse.displayedSlug}
+                        disabled={reuse.isPending || destLoading}
+                        onChange={(e) => reuse.onSlugChange(e.target.value)}
+                        onBlur={reuse.onSlugBlur}
+                      />
+                    )}
+                  </FormField>
+                )
+              })()
+            : null}
         </div>
       )}
     </ReuseModalShell>

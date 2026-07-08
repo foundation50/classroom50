@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -111,9 +112,11 @@ export function ServiceTokenInfo() {
 
   return (
     <div ref={popupRef} className="dropdown">
-      <button
-        type="button"
-        className="btn btn-circle btn-ghost btn-xs text-base-content/70 hover:text-base-content"
+      <Button
+        variant="ghost"
+        shape="circle"
+        size="xs"
+        className="text-base-content/70 hover:text-base-content"
         aria-label={t("orgSettings.serviceToken.infoAria")}
         aria-expanded={open}
         onClick={() => setOpen((open) => !open)}
@@ -121,7 +124,7 @@ export function ServiceTokenInfo() {
         <span className="flex h-4 w-4 items-center justify-center rounded-full border border-current text-[11px] font-bold">
           i
         </span>
-      </button>
+      </Button>
 
       {open && (
         <div className="dropdown-content z-50 mt-2 w-80 rounded-box border border-base-300 bg-base-100 p-4 text-sm shadow-xl">
@@ -250,9 +253,10 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
         })()}
 
       {tokenAlreadySet && (
-        <button
-          type="button"
-          className="btn btn-ghost btn-sm mt-4 gap-1"
+        <Button
+          variant="ghost"
+          size="sm"
+          className="mt-4 gap-1"
           aria-expanded={configOpen}
           onClick={() => setManualOpen(!configOpen)}
         >
@@ -264,7 +268,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
           {configOpen
             ? t("orgSettings.serviceToken.hideConfig")
             : t("orgSettings.serviceToken.updateOrReplace")}
-        </button>
+        </Button>
       )}
 
       {configOpen && (
@@ -466,25 +470,20 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                     : t("orgSettings.serviceToken.savedNew")}
                 </p>
               )}
-              <button
-                disabled={patMutation.isPending || !serviceToken}
+              <Button
+                variant="primary"
                 type="submit"
-                className="btn btn-primary self-end mt-2"
+                className="self-end mt-2"
+                loading={patMutation.isPending}
+                loadingLabel={t("orgSettings.serviceToken.validating")}
+                disabled={patMutation.isPending || !serviceToken}
               >
-                {patMutation.isPending ? (
-                  <>
-                    <span
-                      className="loading loading-spinner loading-sm"
-                      aria-hidden="true"
-                    />
-                    {t("orgSettings.serviceToken.validating")}
-                  </>
-                ) : tokenAlreadySet ? (
-                  t("orgSettings.serviceToken.updateButton")
-                ) : (
-                  t("orgSettings.serviceToken.saveButton")
-                )}
-              </button>
+                {patMutation.isPending
+                  ? t("orgSettings.serviceToken.validating")
+                  : tokenAlreadySet
+                    ? t("orgSettings.serviceToken.updateButton")
+                    : t("orgSettings.serviceToken.saveButton")}
+              </Button>
             </div>
           </form>
         </>

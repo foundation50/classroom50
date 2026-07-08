@@ -25,6 +25,7 @@ import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/hooks/github/types"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
+import { Alert, Card } from "@/components/ui"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -147,10 +148,10 @@ const SubmissionBody = ({
           ? repoError.message
           : ""
     return (
-      <div className="alert alert-error mt-6">
+      <Alert tone="error" className="mt-6">
         {t("submissions.student.loadError")}
         {message ? ` ${message}` : ""}
-      </div>
+      </Alert>
     )
   }
 
@@ -177,9 +178,9 @@ const SubmissionBody = ({
   if (!releases || releases.length === 0) {
     return (
       <EnterDiv className="mt-6 space-y-4">
-        <div className="alert alert-info">
+        <Alert tone="info">
           <div>{t("submissions.student.noGradedYet")}</div>
-        </div>
+        </Alert>
         <a
           href={studentRepo.html_url}
           target="_blank"
@@ -210,13 +211,13 @@ const SubmissionBody = ({
         </a>
       </div>
 
-      <EnterDiv className="card border border-base-200 bg-base-100 shadow-sm">
+      <Card as={EnterDiv} bordered={false} className="border border-base-200">
         <ul className="divide-y divide-base-200">
           {releases.map((release) => (
             <ReleaseRow key={release.id} release={release} />
           ))}
         </ul>
-      </EnterDiv>
+      </Card>
     </div>
   )
 }
