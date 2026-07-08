@@ -35,8 +35,17 @@ export const REPAIRABLE_CONCERNS: ReadonlySet<ConcernId> = new Set<ConcernId>([
 // API accepted but that didn't stick on read-back — silently overridden by an
 // enterprise policy (200 but ignored). Plan-gated fields the API rejected
 // (403/422) are excluded. Only populated for orgDefaults.
+//
+// `unresolved` is set when a concern-level repair (branchProtection, rulesets)
+// did not complete. We deliberately do NOT assert a cause: a failed write maps
+// ambiguously to permissions, an org/enterprise policy, a rate limit, a
+// malformed body, or a still-initializing repo (see the plan's Sources). We
+// carry the mutation's own `message` (which names the attempted action and the
+// settings URL) and a `transient` flag so the UI can offer a retry instead of a
+// permanent "needs manual setup" for temporary failures.
 export type RepairResult = {
   unfixableFields: string[]
+  unresolved?: { message: string; transient: boolean }
 }
 
 // Restore a single concern's required setting. Plan is needed for orgDefaults
@@ -58,9 +67,27 @@ export async function repairConcern(
     case "orgPrCreation":
       await ensureOrgCanCreatePullRequests(client, org)
       return { unfixableFields: [] }
-    case "branchProtection":
-      await ensureBranchProtection(client, org, CONFIG_REPO, "main")
+    case "branchProtection": {
+      const result = await ensureBranchProtection(
+        client,
+        org,
+        CONFIG_REPO,
+        "main",
+      )
+      if (result.status === "warning") {
+        // branch_not_found means the repo is still initializing — a transient
+        // state, not a manual-setup situation. Everything else is reported as
+        // "couldn't complete" without asserting the cause.
+        return {
+          unfixableFields: [],
+          unresolved: {
+            message: result.message,
+            transient: result.reason === "branch_not_found",
+          },
+        }
+      }
       return { unfixableFields: [] }
+    }
     case "workflowPermissions":
       await ensureWorkflowPermissions(client, org, CONFIG_REPO)
       return { unfixableFields: [] }
@@ -70,8 +97,18 @@ export async function repairConcern(
     case "pages":
       await ensurePages(client, org, CONFIG_REPO)
       return { unfixableFields: [] }
-    case "rulesets":
-      await repairRulesets(client, org)
+    case "rulesets": {
+      const result = await repairRulesets(client, org)
+      if (result.status === "warning") {
+        // A rulesets warning (some rulesets failed, or the list call failed) is
+        // reported as unresolved. We can't tell a policy block from a validation
+        // error, so it's non-transient but cause-neutral.
+        return {
+          unfixableFields: [],
+          unresolved: { message: result.message, transient: false },
+        }
+      }
       return { unfixableFields: [] }
+    }
   }
 }
