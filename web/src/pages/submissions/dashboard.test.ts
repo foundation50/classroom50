@@ -7,6 +7,7 @@ import {
   DEFAULT_FILTERS,
   acceptedRosterCount,
   acceptedUsernames,
+  applyStatusSelection,
   buildScoresCsvRows,
   buildSectionLookup,
   computeStats,
@@ -20,6 +21,7 @@ import {
   scoreTone,
   selectActiveWorkflowAction,
   showsNonSubmitters,
+  statusSelectValue,
   type SubmissionFilters,
 } from "./dashboard"
 
@@ -586,5 +588,69 @@ describe("nonSubmitterStatus", () => {
         acceptedUsernames: accepted,
       }),
     ).toBe("not-accepted")
+  })
+})
+
+describe("statusSelectValue / applyStatusSelection", () => {
+  it("maps filters to the combined value, submission taking precedence", () => {
+    expect(statusSelectValue(filters())).toBe("all")
+    expect(statusSelectValue(filters({ submission: "late" }))).toBe("late")
+    expect(statusSelectValue(filters({ accepted: "not-accepted" }))).toBe(
+      "not-accepted",
+    )
+    // Submission wins when both axes are set (a submitted row is accepted).
+    expect(
+      statusSelectValue(
+        filters({ submission: "submitted", accepted: "accepted" }),
+      ),
+    ).toBe("submitted")
+  })
+
+  it("round-trips every option through apply then read", () => {
+    for (const value of [
+      "all",
+      "submitted",
+      "on-time",
+      "late",
+      "not-submitted",
+      "accepted",
+      "not-accepted",
+    ] as const) {
+      expect(statusSelectValue(applyStatusSelection(filters(), value))).toBe(
+        value,
+      )
+    }
+  })
+
+  it("resets the other axis so the two stay mutually exclusive", () => {
+    const afterSubmission = applyStatusSelection(
+      filters({ accepted: "accepted" }),
+      "late",
+    )
+    expect(afterSubmission.submission).toBe("late")
+    expect(afterSubmission.accepted).toBe("all")
+
+    const afterAccepted = applyStatusSelection(
+      filters({ submission: "late" }),
+      "not-accepted",
+    )
+    expect(afterAccepted.accepted).toBe("not-accepted")
+    expect(afterAccepted.submission).toBe("all")
+
+    const cleared = applyStatusSelection(
+      filters({ submission: "late", accepted: "accepted" }),
+      "all",
+    )
+    expect(cleared.submission).toBe("all")
+    expect(cleared.accepted).toBe("all")
+  })
+
+  it("preserves the section and passing axes it doesn't own", () => {
+    const out = applyStatusSelection(
+      filters({ section: "P3", passing: "failing" }),
+      "submitted",
+    )
+    expect(out.section).toBe("P3")
+    expect(out.passing).toBe("failing")
   })
 })

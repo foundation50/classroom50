@@ -225,6 +225,48 @@ export function nonSubmitterStatus(
     : "not-accepted"
 }
 
+// The combined "Status" toolbar select folds the submission axis and the
+// acceptance axis into one control. Its option ids are a closed literal union
+// (no `${axis}:${value}` string encoding, no `as` casts) so a renamed filter
+// value fails at compile time instead of silently mismatching at runtime.
+export type StatusSelectValue =
+  | "all"
+  | "submitted"
+  | "on-time"
+  | "late"
+  | "not-submitted"
+  | "accepted"
+  | "not-accepted"
+
+// Which combined value the current filters map to. Submission takes precedence
+// (a submitted row is accepted by definition), then acceptance, else "all".
+export function statusSelectValue(
+  filters: SubmissionFilters,
+): StatusSelectValue {
+  if (filters.submission !== "all") return filters.submission
+  if (filters.accepted !== "all") return filters.accepted
+  return "all"
+}
+
+// Apply a combined-select choice, resetting the other axis so the two stay
+// mutually exclusive from this control. Submission values set `submission`
+// (accepted reset to "all"); acceptance values set `accepted` (submission reset
+// to "all").
+export function applyStatusSelection(
+  filters: SubmissionFilters,
+  value: StatusSelectValue,
+): SubmissionFilters {
+  switch (value) {
+    case "all":
+      return { ...filters, submission: "all", accepted: "all" }
+    case "accepted":
+    case "not-accepted":
+      return { ...filters, accepted: value, submission: "all" }
+    default:
+      return { ...filters, submission: value, accepted: "all" }
+  }
+}
+
 // Count of ROSTER students who accepted. Intersecting with the roster keeps the
 // "Accepted N / roster" stat from exceeding its denominator when `accepted`
 // includes non-roster owners (an unenrolled student, a stray test repo).

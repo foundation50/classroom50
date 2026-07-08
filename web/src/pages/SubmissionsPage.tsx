@@ -68,6 +68,7 @@ import {
   formatDueDateTime,
   formatRelativeToNow,
   isPastDue,
+  dueDeadlineInstant,
 } from "@/util/formatDate"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -77,7 +78,7 @@ import { GitHubLink } from "@/components/GitHubLink"
 // under an hour, every hour beyond. Purely a UI refresh — no data fetching; it
 // returns the tick time so callers derive recency from it rather than calling
 // Date.now() during render (which the React Compiler flags as impure).
-const cadenceForElapsed = (elapsedMs: number): number => {
+export const cadenceForElapsed = (elapsedMs: number): number => {
   if (elapsedMs < 60_000) return 1_000
   if (elapsedMs < 3_600_000) return 60_000
   return 3_600_000
@@ -187,7 +188,9 @@ const SubmissionsPageContent = () => {
   // "2 hours ago"). Past due flips the badge to error and the label to overdue.
   const dueDate = assignmentInfo?.due
   const dueOverdue = dueDate ? isPastDue(dueDate) : false
-  const dueRelative = dueDate ? formatRelativeToNow(new Date(dueDate)) : null
+  const dueRelative = dueDate
+    ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
+    : null
 
   // Roster students with no submission. "Credited" = login appears in any row's
   // `usernames` (member_usernames for groups, else [owner]), so group teammates
@@ -306,12 +309,12 @@ const SubmissionsPageContent = () => {
   // the other axes so the surfaced set matches the label exactly.
   const showFailing = () =>
     setFilters({ ...DEFAULT_FILTERS, passing: "failing" })
+  // On this page a "not submitted" row implies the student accepted (no repo
+  // ⇒ nothing to submit), so the accepted-not-submitted set is just the
+  // not-submitted filter — a single axis the Status select represents exactly,
+  // so switching away from it never silently drops a hidden acceptance filter.
   const showAcceptedNotSubmitted = () =>
-    setFilters({
-      ...DEFAULT_FILTERS,
-      accepted: "accepted",
-      submission: "not-submitted",
-    })
+    setFilters({ ...DEFAULT_FILTERS, submission: "not-submitted" })
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
   // accepted axis so a transient empty repo list can't flip the visible set.
@@ -406,7 +409,15 @@ const SubmissionsPageContent = () => {
   }, [collectScores.phase, refetchScores, refetchLastRun])
 
   const downloadScoresCsv = () => {
-    const rows = buildScoresCsvRows(scoresInfo, nonSubmitters)
+    // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
+    // "score 0" row is meaningless — and worse, on a degraded collect that
+    // credited only the owner, a submitting teammate would be exported as 0,
+    // clobbering their real group grade. So the CSV covers group non-submitters
+    // via their group's row, not as individual score-0 rows (restoring the
+    // pre-#174 export). Individual non-submitters (accepted-no-push or
+    // never-accepted) are still legitimately 0 and stay in the export.
+    const csvNonSubmitters = isGroupAssignment ? [] : nonSubmitters
+    const rows = buildScoresCsvRows(scoresInfo, csvNonSubmitters)
 
     const csv = Papa.unparse(rows, {
       header: true,

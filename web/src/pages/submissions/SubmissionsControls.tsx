@@ -2,16 +2,21 @@ import { Search, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Input, Select, cx } from "@/components/ui"
+import { Button, Input, LabeledControl, Select } from "@/components/ui"
 import type {
+  StatusSelectValue,
   SubmissionFilters,
   SubmissionSort,
 } from "@/pages/submissions/dashboard"
-import { DEFAULT_FILTERS } from "@/pages/submissions/dashboard"
+import {
+  DEFAULT_FILTERS,
+  applyStatusSelection,
+  statusSelectValue,
+} from "@/pages/submissions/dashboard"
 
-// A select glued to a `bg-base-200` label prefix (the org/classroom toolbar
-// convention, e.g. ClassroomList) so each dropdown reads as "Status: All" and
-// its purpose is clear at a glance instead of a bare value.
+// A select glued to a labelled prefix (the org/classroom toolbar convention)
+// via the shared LabeledControl primitive, so each dropdown reads as
+// "Status: All" and its purpose is clear at a glance.
 const LabeledSelect = ({
   label,
   className,
@@ -21,18 +26,15 @@ const LabeledSelect = ({
   label: string
   className?: string
 } & React.ComponentPropsWithoutRef<"select">) => (
-  <div className="join">
-    <span className="join-item flex items-center whitespace-nowrap border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
-      {label}
-    </span>
+  <LabeledControl label={label}>
     <Select
       selectSize="sm"
-      className={cx("join-item w-auto min-w-0", className)}
+      className={`join-item w-auto min-w-0${className ? ` ${className}` : ""}`}
       {...props}
     >
       {children}
     </Select>
-  </div>
+  </LabeledControl>
 )
 
 // Search + sort + filter controls for the assignment overview dashboard.
@@ -82,35 +84,11 @@ const SubmissionsControls = ({
   // The Status select folds the submission axis and the acceptance axis into one
   // control. Underneath they stay separate fields on SubmissionFilters (the
   // dashboard filter logic is unchanged); the select is just a combined view.
-  // Selecting a value sets one axis and resets the other, so the two are
-  // mutually exclusive from this control (a submitted row is accepted by
-  // definition, so the cross-product was never meaningful anyway).
-  const statusValue =
-    filters.submission !== "all"
-      ? `submission:${filters.submission}`
-      : filters.accepted !== "all"
-        ? `accepted:${filters.accepted}`
-        : "all"
-  const onStatusChange = (raw: string) => {
-    if (raw === "all") {
-      onFiltersChange({ ...filters, submission: "all", accepted: "all" })
-      return
-    }
-    const [axis, value] = raw.split(":")
-    if (axis === "submission") {
-      onFiltersChange({
-        ...filters,
-        submission: value as SubmissionFilters["submission"],
-        accepted: "all",
-      })
-    } else {
-      onFiltersChange({
-        ...filters,
-        accepted: value as SubmissionFilters["accepted"],
-        submission: "all",
-      })
-    }
-  }
+  // The value↔filters mapping lives in dashboard.ts (statusSelectValue /
+  // applyStatusSelection) — typed option ids, unit-tested, no string parsing.
+  const statusValue = statusSelectValue(filters)
+  const onStatusChange = (value: StatusSelectValue) =>
+    onFiltersChange(applyStatusSelection(filters, value))
 
   return (
     <div className="flex flex-wrap items-center gap-2">
@@ -153,34 +131,27 @@ const SubmissionsControls = ({
       <LabeledSelect
         label={t("submissions.filters.submissionLabel")}
         value={statusValue}
-        onChange={(e) => onStatusChange(e.target.value)}
+        onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
         aria-label={t("submissions.filters.submissionAria")}
       >
         <option value="all">{t("submissions.filters.allStatuses")}</option>
-        <option value="submission:submitted">
-          {t("submissions.filters.submitted")}
-        </option>
-        <option value="submission:on-time">
-          {t("submissions.filters.onTime")}
-        </option>
-        <option value="submission:late">{t("submissions.filters.late")}</option>
+        <option value="submitted">{t("submissions.filters.submitted")}</option>
+        <option value="on-time">{t("submissions.filters.onTime")}</option>
+        <option value="late">{t("submissions.filters.late")}</option>
         {!isGroup && (
           // A grade requires a submission, so "Not submitted" is mutually
           // exclusive with a passing/failing filter — disable it then.
-          <option
-            value="submission:not-submitted"
-            disabled={filters.passing !== "all"}
-          >
+          <option value="not-submitted" disabled={filters.passing !== "all"}>
             {t("submissions.filters.notSubmitted")}
           </option>
         )}
         {acceptedAvailable && (
           <>
             <option disabled>────────</option>
-            <option value="accepted:accepted">
+            <option value="accepted">
               {t("submissions.filters.accepted")}
             </option>
-            <option value="accepted:not-accepted">
+            <option value="not-accepted">
               {t("submissions.filters.notAccepted")}
             </option>
           </>

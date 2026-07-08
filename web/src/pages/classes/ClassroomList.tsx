@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NoSearchResults, ViewToggle } from "@/components/list"
-import { Button } from "@/components/ui"
+import { Button, LabeledControl } from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
@@ -164,10 +164,7 @@ const ClassroomList = ({
         </div>
 
         {showTermFilter && (
-          <div className="join">
-            <span className="join-item flex items-center border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
-              {t("classes.toolbar.termPrefix")}
-            </span>
+          <LabeledControl label={t("classes.toolbar.termPrefix")}>
             <select
               className="select select-bordered select-sm join-item"
               aria-label={t("classes.toolbar.termLabel")}
@@ -181,13 +178,10 @@ const ClassroomList = ({
                 </option>
               ))}
             </select>
-          </div>
+          </LabeledControl>
         )}
 
-        <div className="join">
-          <span className="join-item flex items-center border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
-            {t("classes.toolbar.sortPrefix")}
-          </span>
+        <LabeledControl label={t("classes.toolbar.sortPrefix")}>
           <select
             className="select select-bordered select-sm join-item"
             aria-label={t("classes.toolbar.sort.label")}
@@ -200,7 +194,7 @@ const ClassroomList = ({
               </option>
             ))}
           </select>
-        </div>
+        </LabeledControl>
 
         <ViewToggle
           viewMode={viewMode}

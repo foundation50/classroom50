@@ -116,17 +116,21 @@ export const formatInvitedAt = (dateString?: string | null): string | null => {
   return formatRelativeToNow(date)
 }
 
-export const isPastDue = (dateString: string): boolean => {
-  // A bare YYYY-MM-DD has no time. buildDueFields pins such a deadline to 23:59
-  // local, so treat the whole day as "not past due" until local end-of-day —
-  // else we'd flag it ~24h early (at local midnight).
+// The instant a deadline actually falls due, matching isPastDue's parsing: a
+// bare YYYY-MM-DD is the *end* of that local day (23:59:59.999), a full
+// timestamp is itself. Returns null for an unparseable value. Use this for any
+// deadline math (relative countdown, overdue) so the countdown text and the
+// past-due flag can't disagree by a day on bare dates.
+export const dueDeadlineInstant = (dateString: string): Date | null => {
   const date = isBareDate(dateString)
     ? new Date(`${dateString}T23:59:59.999`)
     : parseDueDate(dateString)
-  if (Number.isNaN(date.getTime())) {
-    return false
-  }
+  return Number.isNaN(date.getTime()) ? null : date
+}
 
+export const isPastDue = (dateString: string): boolean => {
+  const date = dueDeadlineInstant(dateString)
+  if (!date) return false
   return date.getTime() < Date.now()
 }
 
