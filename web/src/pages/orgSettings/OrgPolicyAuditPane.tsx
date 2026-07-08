@@ -25,6 +25,7 @@ import type {
   OrgAuditReport,
 } from "@/orgPolicy/audit"
 import { REPAIRABLE_CONCERNS, repairConcern } from "@/orgPolicy/repair"
+import type { RepairResult } from "@/orgPolicy/repair"
 import { mergeUnresolved, readUnresolved } from "@/orgPolicy/unresolvedStore"
 import type { CheckState } from "@/hooks/github/orgChecks"
 import SettingsSection from "./SettingsSection"
@@ -74,6 +75,27 @@ const CONCERN_STATE_BADGE: Record<CheckState, string> = {
   enforced: "badge-success",
   unenforced: "badge-error",
   unreadable: "badge-neutral badge-ghost",
+}
+
+// What a Fix-it result means for the pane, derived purely from the RepairResult
+// so the transient-vs-persist decision (R5) is unit-testable without a render.
+// `persist` fields are what gets written to the per-org store (transient
+// failures are deliberately excluded); `transientNotice` drives the retry hint.
+export type RepairOutcome = {
+  pinnedFields: string[]
+  unresolvedConcern: string | null
+  transientNotice: boolean
+}
+
+export function classifyRepairOutcome(result: RepairResult): RepairOutcome {
+  const transient = result.unresolved?.transient === true
+  return {
+    pinnedFields: result.unfixableFields,
+    // A transient failure is retryable — never recorded as a manual-setup concern.
+    unresolvedConcern:
+      result.unresolved && !transient ? result.unresolved.message : null,
+    transientNotice: transient,
+  }
 }
 
 export function ConcernRow({
@@ -357,13 +379,18 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
 
   // Fields a Fix it / re-run wrote that didn't stick on read-back; we stop
   // offering a Fix it for them since it can't work. (See OrgDefaultsStepData.)
-  // Seeded from per-org storage so the signal survives a reload/re-check.
+  // Seeded from per-org storage so the signal survives a reload/re-check. Safe
+  // to seed once: the pane is keyed on `org` at its call site, so an org switch
+  // remounts and re-reads storage rather than reusing this state.
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
     () => readUnresolved(org).fields,
   )
   // Concern-level outcomes: a branchProtection/rulesets Fix-it that didn't
   // complete. Maps concern id -> the attempted-action message we show. Seeded
-  // from storage; only non-transient outcomes are ever added/persisted.
+  // from storage; only non-transient outcomes are ever added/persisted. The
+  // store persists ids only, so a storage-restored entry has an empty message
+  // and the row shows the generic couldntAutoConfigure copy (the specific
+  // attempted-action message is only shown within the session that produced it).
   const [unresolvedConcerns, setUnresolvedConcerns] = useState<
     Map<ConcernId, string>
   >(() => {
@@ -386,27 +413,24 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
     mutationFn: (id: ConcernId) =>
       repairConcern(client, org, id, planDetails?.plan?.name),
     onSuccess: (result, id) => {
-      setTransientNotice(false)
-      if (result.unfixableFields.length > 0) {
+      const outcome = classifyRepairOutcome(result)
+      setTransientNotice(outcome.transientNotice)
+      if (outcome.pinnedFields.length > 0) {
         setEnterprisePinned((prev) => {
           const next = new Set(prev)
-          for (const f of result.unfixableFields) next.add(f)
+          for (const f of outcome.pinnedFields) next.add(f)
           return next
         })
-        mergeUnresolved(org, { fields: result.unfixableFields })
+        mergeUnresolved(org, { fields: outcome.pinnedFields })
       }
-      if (result.unresolved) {
-        if (result.unresolved.transient) {
-          // Don't persist or suppress — the user can retry.
-          setTransientNotice(true)
-        } else {
-          setUnresolvedConcerns((prev) => {
-            const next = new Map(prev)
-            next.set(id, result.unresolved!.message)
-            return next
-          })
-          mergeUnresolved(org, { concerns: [id] })
-        }
+      if (outcome.unresolvedConcern !== null) {
+        const message = outcome.unresolvedConcern
+        setUnresolvedConcerns((prev) => {
+          const next = new Map(prev)
+          next.set(id, message)
+          return next
+        })
+        mergeUnresolved(org, { concerns: [id] })
       }
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgAuditPrefix(org),
