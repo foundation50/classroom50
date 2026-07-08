@@ -14,8 +14,13 @@ import { ActionsBanner } from "./components/status/ActionsBanner"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
+import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
 
 const client = new QueryClient()
+
+// Capture async / out-of-render errors for the diagnostics snapshot. Passive —
+// records only, never swallows.
+installDiagnosticsHandlers()
 
 // Make the deployed release identifiable from the browser console (a static SPA
 // has no version in the URL or a server header). Deliberate release diagnostic,
