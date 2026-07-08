@@ -41,3 +41,33 @@ export async function listActiveAndRecentRuns(
     throw error
   }
 }
+
+// A specific page of <org>/classroom50 runs for the org Activity timeline
+// (browse/audit view), distinct from listActiveAndRecentRuns which the banner
+// polls under its own key. Same endpoint + 404->[] handling; paginated so the
+// timeline can "load older". Kept on a separate key so paging the audit view
+// never disturbs the banner's active-run poll cache.
+export const workflowRunsPageKey = (owner: string, page: number) =>
+  ["github", "repo-actions-runs", owner, "page", page] as const
+
+export async function listWorkflowRunsPage(
+  client: GitHubClient,
+  org: string,
+  page: number,
+  perPage = 30,
+  signal?: AbortSignal,
+): Promise<GitHubWorkflowRun[]> {
+  try {
+    const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
+      `/repos/${encodeURIComponent(
+        org,
+      )}/classroom50/actions/runs?per_page=${perPage}&page=${page}`,
+      { method: "GET", signal },
+    )
+    return (res.workflow_runs ?? []).sort((a, b) => b.id - a.id)
+  } catch (error) {
+    if (signal?.aborted) throw error
+    if (error instanceof GitHubAPIError && error.isNotFound) return []
+    throw error
+  }
+}
