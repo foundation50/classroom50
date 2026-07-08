@@ -158,7 +158,7 @@ const SubmissionBody = ({
   // No repo means the student hasn't accepted yet.
   if (!studentRepo) {
     return (
-      <EnterDiv className="alert alert-warning mt-6">
+      <EnterDiv className="alert alert-info alert-soft mt-6">
         <div>
           {t("submissions.student.notAccepted_prefix")}{" "}
           <Link

@@ -2,10 +2,11 @@ import { Link } from "@tanstack/react-router"
 import { Info, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-// Empty/unenrolled-roster warning. Owns the daisyUI alert shell + ARIA so the
+// Empty/unenrolled-roster notice. Owns the daisyUI alert shell + ARIA so the
 // assignments list and create pages can't drift in markup; copy adapts to
-// whether the roster has rows (invited, not joined) or is empty. Render only
-// when useEmptyRosterWarning().show is true.
+// whether the roster has rows (invited, not joined) or is empty. Rendered as an
+// informational (info) tone — an empty roster is an expected state, not an
+// error. Render only when useEmptyRosterWarning().show is true.
 export const EmptyRosterNotice = ({
   org,
   classroom,

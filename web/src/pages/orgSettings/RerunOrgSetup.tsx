@@ -151,7 +151,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       }
     >
       {!isOwner && (
-        <SummaryBanner tone="warning">
+        <SummaryBanner tone="error">
           {t("orgSettings.rerun.requiresOwnerNote")}
         </SummaryBanner>
       )}

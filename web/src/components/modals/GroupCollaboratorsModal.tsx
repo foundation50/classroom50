@@ -425,7 +425,7 @@ export function GroupCollaboratorsModal({
           )}
 
           {!canManage && (
-            <Alert tone="info" className="mt-4 text-sm">
+            <Alert tone="error" className="mt-4 text-sm">
               {t("components.modals.groupCollaborators.onlyOwner_prefix")}
               {ownerDisplayLogin ? (
                 <>

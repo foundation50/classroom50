@@ -572,7 +572,7 @@ const EnrolledStudents = ({
 
       {/* Non-owner: pending invites are owner-only. */}
       {!isLoading && !isError && pendingHidden ? (
-        <Alert tone="info">
+        <Alert tone="error">
           <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
         </Alert>
       ) : null}

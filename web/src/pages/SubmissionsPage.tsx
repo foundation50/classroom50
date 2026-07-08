@@ -626,7 +626,7 @@ const SubmissionsPageContent = () => {
               </span>
             )}
             {collectScores.phase === "running" && (
-              <span className="flex items-center gap-1.5 text-base-content/70">
+              <span className="flex items-center gap-1.5 text-info">
                 <Spinner size="xs" />
                 {t("submissions.collect.statusRunning")}
               </span>
@@ -660,7 +660,7 @@ const SubmissionsPageContent = () => {
                 ? "border-error/20 text-error"
                 : regradeAll.phase === "completed"
                   ? "border-success/20 text-success"
-                  : "border-warning/20 text-base-content/70"
+                  : "border-info/20 text-info"
             }`}
             role="status"
             aria-live="polite"

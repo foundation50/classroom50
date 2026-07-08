@@ -139,9 +139,9 @@ const NotAdminAlert = () => {
   return <Alert tone="error">{t("setup.notAdmin")}</Alert>
 }
 
-const NotTeamOrEnterpriseWarning = () => {
+const NotTeamOrEnterpriseNotice = () => {
   const { t } = useTranslation()
-  return <Alert tone="warning">{t("setup.notTeamOrEnterprise")}</Alert>
+  return <Alert tone="error">{t("setup.notTeamOrEnterprise")}</Alert>
 }
 
 const OrgSetupPage = () => {
@@ -214,7 +214,7 @@ const OrgSetupPage = () => {
         subtitle={t("setup.pageSubheading")}
       />
       {!isLoadingPlanDetails && !isTeamOrEnterprise && (
-        <NotTeamOrEnterpriseWarning />
+        <NotTeamOrEnterpriseNotice />
       )}
       {isLoading && <Spinner label={t("setup.loadingSetup")} />}
       {!isLoading && !isOwner && <NotAdminAlert />}

@@ -62,7 +62,7 @@ const EditAssignmentFormStudent = ({
 
   if (!assignmentRepo) {
     return (
-      <EnterDiv className="alert alert-warning mt-6">
+      <EnterDiv className="alert alert-info alert-soft mt-6">
         <div>
           {t("assignmentSettings.notAccepted_prefix")}{" "}
           <Link

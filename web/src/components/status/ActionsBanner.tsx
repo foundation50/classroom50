@@ -75,7 +75,7 @@ const StatusIcon = ({
   return (
     <Loader2
       aria-hidden="true"
-      className={`size-4 shrink-0 animate-spin ${tinted ? "text-warning" : ""}`}
+      className={`size-4 shrink-0 animate-spin ${tinted ? "text-info" : ""}`}
     />
   )
 }
@@ -85,8 +85,8 @@ const StatusIcon = ({
 const ROW_TONE: Record<Tracker["phase"], string> = {
   failed: "bg-error/10 text-error",
   success: "bg-success/10 text-success",
-  running: "bg-warning/10 text-warning",
-  pending: "bg-warning/10 text-warning",
+  running: "bg-info/10 text-info",
+  pending: "bg-info/10 text-info",
 }
 
 const TrackerRow = ({
@@ -313,7 +313,7 @@ export function ActionsBanner() {
       ? "border-error bg-error text-error-content"
       : primaryPhase === "success"
         ? "border-success bg-success text-success-content"
-        : "border-warning bg-warning text-warning-content"
+        : "border-info bg-info text-info-content"
 
   // Failed actions NOT leading the header. When the latest action is itself the
   // failure the bar is already red, so exclude it.
