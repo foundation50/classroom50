@@ -97,7 +97,12 @@ describe("repairConcern", () => {
 
   it("branchProtection success returns no unresolved outcome", async () => {
     const { client } = makeClient()
-    const result = await repairConcern(client, "acme", "branchProtection", "team")
+    const result = await repairConcern(
+      client,
+      "acme",
+      "branchProtection",
+      "team",
+    )
     expect(result.unresolved).toBeUndefined()
   })
 
@@ -117,7 +122,12 @@ describe("repairConcern", () => {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
     }
-    const result = await repairConcern(client, "acme", "branchProtection", "team")
+    const result = await repairConcern(
+      client,
+      "acme",
+      "branchProtection",
+      "team",
+    )
     expect(result.unresolved).toBeDefined()
     expect(result.unresolved?.transient).toBe(false)
     expect(result.unresolved?.message).toBeTruthy()
@@ -139,7 +149,12 @@ describe("repairConcern", () => {
       request: request as unknown as GitHubClient["request"],
       requestRaw: () => Promise.reject(new Error("x")),
     }
-    const result = await repairConcern(client, "acme", "branchProtection", "team")
+    const result = await repairConcern(
+      client,
+      "acme",
+      "branchProtection",
+      "team",
+    )
     expect(result.unresolved).toBeDefined()
     expect(result.unresolved?.transient).toBe(true)
   })

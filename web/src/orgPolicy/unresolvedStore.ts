@@ -10,7 +10,9 @@
 const KEY_PREFIX = "c50:audit:unresolved:v1:"
 
 function canUseStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  return (
+    typeof window !== "undefined" && typeof window.localStorage !== "undefined"
+  )
 }
 
 function store(): Storage | null {
@@ -46,9 +48,7 @@ export function readUnresolved(org: string): UnresolvedRecord {
     const parsed = JSON.parse(raw) as Partial<StoredShape>
     return {
       fields: new Set(Array.isArray(parsed.fields) ? parsed.fields : []),
-      concerns: new Set(
-        Array.isArray(parsed.concerns) ? parsed.concerns : [],
-      ),
+      concerns: new Set(Array.isArray(parsed.concerns) ? parsed.concerns : []),
     }
   } catch {
     return empty()
