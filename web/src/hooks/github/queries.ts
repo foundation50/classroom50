@@ -5,6 +5,7 @@ import Papa from "papaparse"
 import type { GitHubClient } from "./client"
 import type {
   GitHubBranchRef,
+  GitHubCommit,
   GitHubCommitRef,
   GitHubFileListing,
   GitHubOrgInvitation,
@@ -74,6 +75,9 @@ export const githubKeys = {
   branchRef: (org: string) => [...githubKeys.all, "branchRef", org] as const,
   commitTree: (org: string, branchSha: string) =>
     [...githubKeys.all, "commitRef", org, branchSha] as const,
+
+  configCommits: (org: string, page: number) =>
+    [...githubKeys.all, "config-commits", org, page] as const,
 
   rawFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "raw-file", owner, repo, path, ref ?? null] as const,
@@ -493,6 +497,38 @@ export function releasesQuery(
     },
     enabled: Boolean(owner && repo),
     staleTime: 5 * 60 * 1000,
+    retry: false,
+  })
+}
+
+// One page of the classroom50 config-repo commit history, newest-first — the
+// audit log behind the org Activity view. Each GUI write is a structured
+// "[Classroom 50] <verb> <target>" commit (see util/commit.ts), so the messages
+// read as an audit trail as-is. A missing/uninitialized repo 404s -> [] so a
+// fresh org degrades to an empty section rather than an error.
+export function configCommitsQuery(
+  client: GitHubClient,
+  org: string | undefined,
+  page: number,
+  perPage = 30,
+) {
+  return queryOptions({
+    queryKey: githubKeys.configCommits(org ?? "", page),
+    queryFn: async ({ signal }): Promise<GitHubCommit[]> => {
+      try {
+        return await client.request<GitHubCommit[]>(
+          `/repos/${encodeURIComponent(
+            org ?? "",
+          )}/classroom50/commits?per_page=${perPage}&page=${page}`,
+          { method: "GET", signal },
+        )
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.status === 404) return []
+        throw err
+      }
+    },
+    enabled: Boolean(org),
+    staleTime: 60 * 1000,
     retry: false,
   })
 }

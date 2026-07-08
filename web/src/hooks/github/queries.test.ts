@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   pagesAssignmentUrl,
   classroomsIndexUrl,
+  configCommitsQuery,
   getClassroom50OrgSummary,
   listAllOrgMembers,
   listOrgAdmins,
@@ -230,6 +231,52 @@ describe("releasesQuery", () => {
     ])
     const releases = await run({ request } as unknown as GitHubClient)
     expect(releases.map((r) => r.tag_name)).toEqual(["submit/2", "submit/1"])
+  })
+})
+
+describe("configCommitsQuery", () => {
+  const apiError = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/repos/acme/classroom50/commits",
+      message: status === 404 ? "Not Found" : `boom ${status}`,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  const run = (client: GitHubClient, page = 1) =>
+    (
+      configCommitsQuery(client, "acme", page).queryFn as (ctx: {
+        signal?: AbortSignal
+      }) => Promise<unknown>
+    )({})
+
+  it("returns [] when the config repo is missing (404) — uninitialized org", async () => {
+    const request = vi.fn().mockRejectedValue(apiError(404))
+    await expect(run({ request } as unknown as GitHubClient)).resolves.toEqual(
+      [],
+    )
+  })
+
+  it("rethrows a non-404 so it surfaces as an error", async () => {
+    const request = vi.fn().mockRejectedValue(apiError(403))
+    await expect(run({ request } as unknown as GitHubClient)).rejects.toThrow()
+  })
+
+  it("requests the commits endpoint with per_page and page params", async () => {
+    const request = vi.fn().mockResolvedValue([])
+    await run({ request } as unknown as GitHubClient, 2)
+    expect(request).toHaveBeenCalledWith(
+      "/repos/acme/classroom50/commits?per_page=30&page=2",
+      expect.objectContaining({ method: "GET" }),
+    )
   })
 })
 
