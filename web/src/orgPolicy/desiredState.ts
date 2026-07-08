@@ -17,7 +17,7 @@ export type MemberDefaultSetting = {
   enterpriseOnly: boolean
 }
 
-// The 16 member-default fields, in the CLI's order. Criticality and
+// The 15 member-default fields, in the CLI's order. Criticality and
 // enterprise-only flags mirror the CLI: critical marks lockdown fields whose
 // absence re-opens the org-wide repo-admin danger; enterprise-only fields have
 // no member-privileges toggle on Team/Free, so init skips them there.
@@ -147,14 +147,6 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
     enterpriseOnly: true,
   },
   {
-    field: "members_can_fork_private_repositories",
-    value: false,
-    desc: "forking of private repos disabled",
-    manualFix: 'uncheck "Allow forking of private repositories"',
-    critical: true,
-    enterpriseOnly: false,
-  },
-  {
     field: "members_can_invite_outside_collaborators",
     value: false,
     desc: "member-invited outside collaborators disabled",
@@ -166,8 +158,8 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
 ]
 
 // memberDefaultSettings returns the in-scope settings for a plan. Only
-// "enterprise" gets all 16; every other plan (team/free/unknown) is treated as
-// non-enterprise and the 4 enterprise-only fields are filtered out, leaving 12.
+// "enterprise" gets all 15; every other plan (team/free/unknown) is treated as
+// non-enterprise and the 4 enterprise-only fields are filtered out, leaving 11.
 export function memberDefaultSettings(
   plan: string | undefined,
 ): MemberDefaultSetting[] {

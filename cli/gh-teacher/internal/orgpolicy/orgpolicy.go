@@ -195,13 +195,6 @@ func allMemberDefaultSettings() []MemberDefaultSetting {
 			enterpriseOnly: true,
 		},
 		{
-			Field:     "members_can_fork_private_repositories",
-			Value:     false,
-			Desc:      "forking of private repos disabled",
-			ManualFix: `uncheck "Allow forking of private repositories"`,
-			Critical:  true,
-		},
-		{
 			Field:          "members_can_invite_outside_collaborators",
 			Value:          false,
 			Desc:           "member-invited outside collaborators disabled",

@@ -98,8 +98,8 @@ describe("buildOrgAuditReport", () => {
     expect(report.unenforcedDefaults).toHaveLength(0)
     expect(report.manualUnreadable).toHaveLength(4)
     // The full member-default list is surfaced so teachers see every permission
-    // we set, all enforced here (12 on a team plan).
-    expect(report.defaultVerdicts).toHaveLength(12)
+    // we set, all enforced here (11 on a team plan).
+    expect(report.defaultVerdicts).toHaveLength(11)
     expect(report.defaultVerdicts.every((v) => v.enforced)).toBe(true)
   })
 

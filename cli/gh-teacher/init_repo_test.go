@@ -360,7 +360,6 @@ func TestApplyOrgMemberDefaults_HappyPath(t *testing.T) {
 		"members_can_change_repo_visibility",
 		"members_can_delete_issues",
 		"members_can_create_teams",
-		"members_can_fork_private_repositories",
 		"readers_can_create_discussions",
 		"members_can_create_private_pages",
 	} {

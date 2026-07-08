@@ -129,10 +129,10 @@ describe("repairOrgDefaults", () => {
     expect(result.unenforced).toHaveLength(0)
     // One combined PATCH, no per-field.
     expect(patchBodies).toHaveLength(1)
-    expect(Object.keys(patchBodies[0]).length).toBe(12)
+    expect(Object.keys(patchBodies[0]).length).toBe(11)
   })
 
-  it("sends only 12 fields on a team plan", async () => {
+  it("sends only 11 fields on a team plan", async () => {
     const { client, patchBodies } = makeClient({ readback: enforced("team") })
     await repairOrgDefaults(client, "acme", "team")
     expect(Object.keys(patchBodies[0])).not.toContain(
@@ -153,8 +153,8 @@ describe("repairOrgDefaults", () => {
     })
     const result = await repairOrgDefaults(client, "acme", "team")
     // 1 combined + per-field fallback: the 2 in-scope repo-creation fields are
-    // grouped into 1 sub-PATCH, the other 10 go individually = 11; total 12.
-    expect(getPatchCount()).toBe(12)
+    // grouped into 1 sub-PATCH, the other 9 go individually = 10; total 11.
+    expect(getPatchCount()).toBe(11)
     expect(result.ok).toBe(false)
     expect(result.unenforced.map((s) => s.field)).toContain(
       "members_can_delete_repositories",

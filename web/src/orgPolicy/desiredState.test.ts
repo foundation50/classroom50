@@ -34,15 +34,15 @@ function enforcedLive(plan: string | undefined): Record<string, unknown> {
 }
 
 describe("memberDefaultSettings", () => {
-  it("returns all 16 fields on enterprise", () => {
-    expect(memberDefaultSettings("enterprise")).toHaveLength(16)
+  it("returns all 15 fields on enterprise", () => {
+    expect(memberDefaultSettings("enterprise")).toHaveLength(15)
   })
 
   it.each(["team", "free", "", undefined])(
-    "returns 12 fields with no enterprise-only fields on %s",
+    "returns 11 fields with no enterprise-only fields on %s",
     (plan) => {
       const settings = memberDefaultSettings(plan)
-      expect(settings).toHaveLength(12)
+      expect(settings).toHaveLength(11)
       const fields = settings.map((s) => s.field)
       for (const ent of ENTERPRISE_ONLY_FIELDS) {
         expect(fields).not.toContain(ent)
@@ -64,7 +64,7 @@ describe("classifyDefaults", () => {
       enforcedLive("enterprise"),
       "enterprise",
     )
-    expect(verdicts).toHaveLength(16)
+    expect(verdicts).toHaveLength(15)
     expect(verdicts.every((v) => v.enforced)).toBe(true)
     expect(criticalMissed).toBe(false)
   })
@@ -97,7 +97,7 @@ describe("classifyDefaults", () => {
     // A wrong value for an enterprise-only field must not affect a team verdict.
     live.members_can_create_public_repositories = true
     const { verdicts, criticalMissed } = classifyDefaults(live, "team")
-    expect(verdicts).toHaveLength(12)
+    expect(verdicts).toHaveLength(11)
     expect(
       verdicts.some(
         (v) => v.setting.field === "members_can_create_public_repositories",
