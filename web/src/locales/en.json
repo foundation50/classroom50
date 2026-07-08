@@ -140,7 +140,18 @@
     "patTokenLabel": "Personal access token",
     "patStorageNote": "The token is stored in this browser's local storage, the same as tokens from the other sign-in methods.",
     "patSubmit": "Sign in with token",
-    "patCancel": "Cancel"
+    "patCancel": "Cancel",
+    "errorNetwork": "Network error reaching {{target}}; it may be down or unreachable.",
+    "errorNetworkProxyTarget": "the Cloudflare Worker proxy",
+    "errorStateMismatch": "State mismatch -- possible CSRF. Please try signing in again.",
+    "errorMissingPkce": "Missing PKCE verifier or client ID. Please try signing in again.",
+    "errorClientIdMissing": "GitHub OAuth client ID is not configured (VITE_GITHUB_CLIENT_ID).",
+    "errorDeviceExpired": "Device code expired. Please try again.",
+    "errorDeviceDeclined": "You declined the authorization request.",
+    "errorDeviceNoToken": "Token endpoint returned no access_token and no error.",
+    "errorPatFineGrained": "That looks like a fine-grained token, which can't be verified. Use a classic token with the scopes listed above.",
+    "errorPatMissingScopes": "That token is missing required scopes: {{scopes}}. Add them and try again.",
+    "errorPatRejected401": "That token was rejected by GitHub (401). Check it's valid and not expired."
   },
   "documentTitle": {
     "assignments": "Assignments",
