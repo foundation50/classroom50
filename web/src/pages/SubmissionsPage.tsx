@@ -191,18 +191,21 @@ const SubmissionsPageContent = () => {
 
   // Roster students with no submission. "Credited" = login appears in any row's
   // `usernames` (member_usernames for groups, else [owner]), so group teammates
-  // aren't falsely flagged. Individual assignments only. Gated on scores having
-  // loaded — until then scoresInfo is empty and would flag the whole roster.
+  // aren't falsely flagged. For groups, uncredited students surface as
+  // "No group · not submitted" (see #174) — a student who never joined a
+  // submitting group has no repo, so the row makes the omission explicit
+  // instead of vanishing. Gated on scores having loaded — until then scoresInfo
+  // is empty and would flag the whole roster.
   const scoresLoaded = scoresData !== undefined
   const nonSubmitters = useMemo(() => {
-    if (isGroupAssignment || !scoresLoaded) return []
+    if (!scoresLoaded) return []
     const credited = new Set(
       scoresInfo.flatMap((row) => row.usernames.map((u) => u.toLowerCase())),
     )
     return students.filter(
       (student) => !credited.has(student.username.toLowerCase()),
     )
-  }, [isGroupAssignment, scoresLoaded, scoresInfo, students])
+  }, [scoresLoaded, scoresInfo, students])
 
   // Dashboard controls — all client-side over already-loaded data.
   const [query, setQuery] = useState("")

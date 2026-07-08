@@ -22,7 +22,7 @@ import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import { Badge, Button, Modal } from "@/components/ui"
-import { scoreTone } from "@/pages/submissions/dashboard"
+import { nonSubmitterStatus, scoreTone } from "@/pages/submissions/dashboard"
 import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -71,6 +71,52 @@ const ScoreBadge = ({
       {score}/{max}
     </Badge>
   )
+}
+
+// Per-row status chip for a roster student with no submission: distinguishes
+// accepted-but-not-submitted, never-accepted, and (group) no-group from a flat
+// "Not submitted", so a teacher can nudge accepters vs chase non-accepters.
+const NonSubmitterStatusBadge = ({
+  username,
+  isGroup,
+  acceptedUsernames,
+}: {
+  username: string
+  isGroup: boolean
+  acceptedUsernames?: Set<string>
+}) => {
+  const { t } = useTranslation()
+  const status = nonSubmitterStatus(username, { isGroup, acceptedUsernames })
+  switch (status) {
+    case "accepted-not-submitted":
+      return (
+        <Badge tone="warning" className="whitespace-nowrap">
+          {t("submissions.table.acceptedAwaiting")}
+        </Badge>
+      )
+    case "not-accepted":
+      return (
+        <Badge ghost className="whitespace-nowrap">
+          {t("submissions.table.notAccepted")}
+        </Badge>
+      )
+    case "no-group":
+      return (
+        <Badge
+          ghost
+          className="whitespace-nowrap"
+          title={t("submissions.table.noGroupTitle")}
+        >
+          {t("submissions.table.noGroup")}
+        </Badge>
+      )
+    default:
+      return (
+        <Badge ghost className="whitespace-nowrap">
+          {t("submissions.table.notSubmitted")}
+        </Badge>
+      )
+  }
 }
 
 // Icon action in the Actions cell: an external link when a URL is present, else
@@ -842,9 +888,11 @@ const SubmissionsTable = ({
                   />
                 </td>
                 <td>
-                  <span className="badge badge-ghost whitespace-nowrap">
-                    {t("submissions.table.notSubmitted")}
-                  </span>
+                  <NonSubmitterStatusBadge
+                    username={student.username}
+                    isGroup={isGroup}
+                    acceptedUsernames={acceptedUsernames}
+                  />
                 </td>
                 <td>—</td>
                 <td>—</td>

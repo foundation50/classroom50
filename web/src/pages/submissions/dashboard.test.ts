@@ -14,6 +14,7 @@ import {
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
+  nonSubmitterStatus,
   rowMatchesQuery,
   rowPassState,
   scoreTone,
@@ -550,5 +551,40 @@ describe("selectActiveWorkflowAction", () => {
     expect(
       selectActiveWorkflowAction(idle, { running: false, idle: false }),
     ).toBe("regrade")
+  })
+})
+
+describe("nonSubmitterStatus", () => {
+  it("is no-group for group assignments", () => {
+    expect(nonSubmitterStatus("alice", { isGroup: true })).toBe("no-group")
+    // Group ignores acceptance data entirely.
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: true,
+        acceptedUsernames: new Set(["alice"]),
+      }),
+    ).toBe("no-group")
+  })
+
+  it("is not-submitted when acceptance data is unavailable (individual)", () => {
+    expect(nonSubmitterStatus("alice", { isGroup: false })).toBe(
+      "not-submitted",
+    )
+  })
+
+  it("distinguishes accepted-not-submitted from not-accepted", () => {
+    const accepted = new Set(["alice"])
+    expect(
+      nonSubmitterStatus("alice", {
+        isGroup: false,
+        acceptedUsernames: accepted,
+      }),
+    ).toBe("accepted-not-submitted")
+    expect(
+      nonSubmitterStatus("bob", {
+        isGroup: false,
+        acceptedUsernames: accepted,
+      }),
+    ).toBe("not-accepted")
   })
 })

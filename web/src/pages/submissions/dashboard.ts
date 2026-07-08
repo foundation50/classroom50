@@ -199,6 +199,32 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
   return accepted.has(username.trim().toLowerCase())
 }
 
+// Per-row status for a roster student with no submission row. Distinguishes the
+// three states that would otherwise collapse into a flat "Not submitted":
+//   - no-group: group assignment — the student isn't credited on any submitting
+//     group's repo (group repos are named after the founder, so a never-joined
+//     student has nothing to reconcile against).
+//   - accepted-not-submitted: individual — a repo exists (accepted) but no push.
+//   - not-accepted: individual — never accepted, so no repo.
+//   - not-submitted: acceptance data unavailable (repos not loaded yet) — a
+//     neutral fallback so a transient empty repo list can't mislabel everyone.
+export type NonSubmitterStatus =
+  "no-group" | "accepted-not-submitted" | "not-accepted" | "not-submitted"
+
+export function nonSubmitterStatus(
+  username: string,
+  {
+    isGroup,
+    acceptedUsernames,
+  }: { isGroup: boolean; acceptedUsernames?: Set<string> },
+): NonSubmitterStatus {
+  if (isGroup) return "no-group"
+  if (!acceptedUsernames) return "not-submitted"
+  return hasAccepted(username, acceptedUsernames)
+    ? "accepted-not-submitted"
+    : "not-accepted"
+}
+
 // Count of ROSTER students who accepted. Intersecting with the roster keeps the
 // "Accepted N / roster" stat from exceeding its denominator when `accepted`
 // includes non-roster owners (an unenrolled student, a stray test repo).
