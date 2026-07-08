@@ -16,6 +16,7 @@ import type {
   GitHubWorkflowRun,
 } from "./types"
 import type { Assignment } from "@/types/classroom"
+import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 import { GitHubAPIError } from "./errors"
 import {
   COLLECT_SCORES_WORKFLOW,
@@ -885,15 +886,13 @@ export type Classroom50OrgSummary = {
 type Classroom50Status =
   "ready" | "needs_setup" | "no_access" | "not_classroom50" | "unknown"
 
-// A repo merely named `classroom50` isn't proof of a Classroom 50 org (the
-// project's own source repo has that name). The scaffold marker every genuine
-// config repo carries is — see SKELETON_PATHS.
-const CONFIG_REPO_MARKER_PATH = ".github/workflows/autograde-runner.yaml"
+const CONFIG_REPO_MARKER_PATH = `${ORG_GITHUB_DIR}/${CONFIG_REPO_MARKER_REL}`
 
 // True when a readable `classroom50` repo is a real config repo, not a name
-// collision. A clean 404 on the marker means collision; any other error is
-// transient/permission, so fail open — hiding a real teacher's org behind a
-// read blip is worse than briefly showing one extra.
+// collision (an org owning an unrelated repo named `classroom50`, e.g. this
+// project's own source). A clean 404 on the marker means collision; any other
+// error is transient/permission, so fail open — hiding a real teacher's org
+// behind a read blip is worse than briefly showing one extra.
 export async function verifyClassroom50ConfigRepo(
   client: { request: (path: string) => Promise<unknown> },
   org: string,

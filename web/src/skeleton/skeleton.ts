@@ -8,7 +8,7 @@
 // dotgithub/ is rewritten to .github/ at commit time; the source dir is named
 // `dotgithub` because `//go:embed` (no `all:`) skips dot-prefixed paths.
 const SKELETON_SOURCE_DIR = "dotgithub"
-const ORG_GITHUB_DIR = ".github"
+export const ORG_GITHUB_DIR = ".github"
 
 // Substituted with the config repo's default branch at commit time, so
 // publish-pages.yaml's push trigger fires.
@@ -44,6 +44,14 @@ export const SKELETON_PATHS = [
   "workflows/probe-token.yaml",
   "scripts/probe_token.py",
 ] as const
+
+// The scaffold marker used to tell a genuine config repo from an org that
+// merely owns a repo named `classroom50`. Typed as a SKELETON_PATHS member so a
+// rename that drops the workflow fails the build here instead of silently
+// hiding every real teacher's org behind a 404 (see verifyClassroom50ConfigRepo
+// in hooks/github/queries.ts).
+export const CONFIG_REPO_MARKER_REL: (typeof SKELETON_PATHS)[number] =
+  "workflows/autograde-runner.yaml"
 
 // Map a bundled module key to its org-relative skeleton path, e.g.
 //   .../skeleton/dotgithub/workflows/publish-pages.yaml -> workflows/publish-pages.yaml

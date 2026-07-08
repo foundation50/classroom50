@@ -12,10 +12,10 @@ type OrgClassroom50Probe = "ready" | "missing"
 
 // Probe the `classroom50` config repo for one org. 404 = missing (unset or
 // private to me); any other error rethrows so the query stays "unknown" rather
-// than reporting a transient failure as missing. A readable repo that lacks the
-// config marker is a name collision, reported "missing" so the /$org/* gate
-// doesn't render its folders as classrooms. Pure over its client so the
-// 404-vs-rethrow contract the gate depends on is unit-testable.
+// than reporting a transient failure as missing. A readable repo lacking the
+// config marker is reported "missing" (see verifyClassroom50ConfigRepo). Pure
+// over its client so the 404-vs-rethrow contract the gate depends on is
+// unit-testable.
 export async function probeOrgClassroom50Status(
   client: { request: (path: string) => Promise<unknown> },
   org: string,

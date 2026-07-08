@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import { probeOrgClassroom50Status } from "./useOrgClassroom50Status"
 import { GitHubAPIError } from "./github/errors"
+import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 
 // The /$org/* gate redirects an admin to /setup only on "missing", and fails
 // open on any other shape. That safety hinges on this probe returning "missing"
@@ -50,7 +51,7 @@ describe("probeOrgClassroom50Status", () => {
     )
     expect(client.request).toHaveBeenCalledWith("/repos/acme/classroom50")
     expect(client.request).toHaveBeenCalledWith(
-      "/repos/acme/classroom50/contents/.github/workflows/autograde-runner.yaml",
+      `/repos/acme/classroom50/contents/${ORG_GITHUB_DIR}/${CONFIG_REPO_MARKER_REL}`,
     )
   })
 
@@ -69,6 +70,20 @@ describe("probeOrgClassroom50Status", () => {
 
     await expect(probeOrgClassroom50Status(client, "acme")).resolves.toBe(
       "missing",
+    )
+  })
+
+  it("returns 'ready' when the marker probe fails open on a non-404 (repo OK, blip on the marker read)", async () => {
+    // Distinct from the 403 rethrow below: there the repo GET itself fails; here
+    // the repo resolves and only the marker read blips. The helper fails open so
+    // a real teacher's org is never hidden behind a transient marker read.
+    const client = clientReturning(async (path: string) => {
+      if (path.includes("/contents/")) throw apiError(403)
+      return { id: 1 }
+    })
+
+    await expect(probeOrgClassroom50Status(client, "acme")).resolves.toBe(
+      "ready",
     )
   })
 

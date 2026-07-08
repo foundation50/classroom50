@@ -12,6 +12,7 @@ import {
 import { GitHubAPIError } from "./errors"
 import type { GitHubClient } from "./client"
 import type { GitHubOrgMembership, GitHubUser, GitHubRelease } from "./types"
+import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 
 describe("pagesAssignmentUrl", () => {
   it("builds the plain classroom path when no secret is set", () => {
@@ -232,7 +233,7 @@ describe("releasesQuery", () => {
   })
 })
 
-const MARKER_PATH = "/contents/.github/workflows/autograde-runner.yaml"
+const MARKER_PATH = `/contents/${ORG_GITHUB_DIR}/${CONFIG_REPO_MARKER_REL}`
 
 describe("verifyClassroom50ConfigRepo (name-collision guard)", () => {
   it("returns true when the config-repo marker resolves", async () => {
@@ -294,6 +295,18 @@ describe("getClassroom50OrgSummary (verifies config repo before 'ready')", () =>
     } as unknown as GitHubClient
     const summary = await getClassroom50OrgSummary(client, membership("admin"))
     expect(summary.classroom50.status).toBe("not_classroom50")
+  })
+
+  it("stays 'ready' when the marker probe fails open on a non-404 (readable repo, blip on the marker read)", async () => {
+    const client = {
+      request: vi.fn().mockImplementation((path: string) => {
+        if (path.includes("/contents/")) return Promise.reject(apiError(403))
+        return Promise.resolve({ id: 1 })
+      }),
+    } as unknown as GitHubClient
+    const summary = await getClassroom50OrgSummary(client, membership("admin"))
+    expect(summary.classroom50.status).toBe("ready")
+    expect(summary.classroom50.canAccessRepo).toBe(true)
   })
 
   it("is 'needs_setup' for an admin when the repo itself 404s", async () => {
