@@ -55,7 +55,10 @@ let entries: ActivityEntry[] = load()
 const listeners = new Set<() => void>()
 
 function canUseStorage(): boolean {
-  return typeof window !== "undefined" && typeof window.sessionStorage !== "undefined"
+  return (
+    typeof window !== "undefined" &&
+    typeof window.sessionStorage !== "undefined"
+  )
 }
 
 function load(): ActivityEntry[] {
@@ -102,6 +105,7 @@ export function toActivityEntry(
   if (error instanceof GitHubAPIError) {
     return {
       ...base,
+      org: context?.org ?? orgFromApiUrl(error.url),
       label: context?.label ?? error.message,
       status: error.status,
       endpoint: error.url,
@@ -125,13 +129,31 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
     const dup = recentByKey.find((r) => r.key === dedupKey)
     if (dup) {
       // Replace the earlier entry in place so a mutation + its toast collapse.
-      entries = entries.map((e) => (e.id === dup.id ? { ...entry, id: e.id } : e))
+      entries = entries.map((e) =>
+        e.id === dup.id ? { ...entry, id: e.id } : e,
+      )
       dup.at = now
       persist()
       emit()
       return
     }
     recentByKey.push({ key: dedupKey, at: now, id: entry.id })
+  } else if (entry.kind === "error") {
+    // No explicit key: fall back to label+window dedup so a mutation failure
+    // (recorded structurally by MutationCache) and its follow-up error toast
+    // (same message) collapse into one entry rather than double-reporting.
+    const dup = entries.find(
+      (e) =>
+        e.kind === "error" &&
+        e.label === entry.label &&
+        e.at >= now - DEDUP_WINDOW_MS,
+    )
+    if (dup) {
+      dup.at = now
+      persist()
+      emit()
+      return
+    }
   }
 
   entries = [...entries.filter((e) => e.at >= cutoff), entry]
@@ -178,6 +200,15 @@ export function clearActivity(): void {
   recentByKey = []
   persist()
   emit()
+}
+
+// Best-effort org extraction from a GitHub API URL, so a failed mutation can be
+// attributed to the org page without every call site threading org through.
+// Matches /orgs/{org}/... and /repos/{org}/... — the two org-owned shapes.
+export function orgFromApiUrl(url: string | undefined): string | undefined {
+  if (!url) return undefined
+  const m = url.match(/\/(?:orgs|repos)\/([^/]+)/)
+  return m ? m[1] : undefined
 }
 
 // useSyncExternalStore plumbing for the provider.

@@ -110,4 +110,36 @@ describe("dedup", () => {
     recordError(new Error("two"), { org: "acme", dedupKey: "k2" })
     expect(activityForOrg("acme")).toHaveLength(2)
   })
+
+  it("collapses a keyless error and a same-label toast within the window", () => {
+    // MutationCache records with a key; the follow-up error toast records
+    // keyless with the same message — label+window dedup collapses them.
+    recordError(new Error("Create failed"), { dedupKey: "mutation-7" })
+    recordError(new Error("Create failed"))
+    expect(readActivity()).toHaveLength(1)
+  })
+})
+
+describe("orgFromApiUrl", () => {
+  it("extracts org from /orgs/ and /repos/ URLs", () => {
+    const gh = new GitHubAPIError({
+      status: 404,
+      url: "https://api.github.com/repos/acme/some-repo/contents/x",
+      message: "Not Found",
+      body: null,
+      rateLimit: noRateLimit,
+    })
+    expect(toActivityEntry(gh).org).toBe("acme")
+  })
+
+  it("prefers an explicit org context over the URL-derived one", () => {
+    const gh = new GitHubAPIError({
+      status: 404,
+      url: "https://api.github.com/repos/acme/x",
+      message: "Not Found",
+      body: null,
+      rateLimit: noRateLimit,
+    })
+    expect(toActivityEntry(gh, { org: "explicit" }).org).toBe("explicit")
+  })
 })

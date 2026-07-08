@@ -1,13 +1,14 @@
 // Assembles the allow-listed "Copy diagnostics" text a user pastes into a
 // support thread. Every line is an explicit, non-sensitive fact — build
 // identity, browser, granted scopes, org + plan, and the recent-error summary
-// from the diagnostics buffer. It NEVER includes the raw response body or the
-// raw X-GitHub-SSO header (the buffer already excludes them; see buffer.ts).
+// from the session Activity store. It NEVER includes the raw response body or
+// the raw X-GitHub-SSO header (the store already excludes them; see
+// lib/activity/activityStore.ts).
 
 import { appVersion, formatAppVersion } from "@/version"
 import { classifyPlan } from "@/lib/orgPlan"
 import { missingScopes } from "@/auth/scopes"
-import { readRecentErrors } from "./buffer"
+import { readActivity, type ActivityEntry } from "@/lib/activity/activityStore"
 import { readObservedContext } from "./observed"
 
 export type SnapshotInput = {
@@ -36,7 +37,8 @@ export function buildDiagnostics(input: SnapshotInput = {}): string {
   lines.push(scopesLine(ctx.scopes))
   lines.push(orgPlanLine(org, input.planName))
 
-  const errors = readRecentErrors()
+  // Only error-kind activity is relevant to a bug report's "recent errors".
+  const errors = readActivity().filter((e) => e.kind === "error")
   lines.push("")
   lines.push(`Recent errors: ${errors.length === 0 ? "none" : ""}`.trimEnd())
   for (const e of errors) {
@@ -66,16 +68,16 @@ function orgPlanLine(org: string | null, planName?: string): string {
   return `Org: ${orgPart} — plan: ${planName} (${category})`
 }
 
-function errorLine(e: ReturnType<typeof readRecentErrors>[number]): string {
-  const parts = [e.timestamp, e.name]
+function errorLine(e: ActivityEntry): string {
+  const parts = [new Date(e.at).toISOString()]
   if (e.status !== undefined) parts.push(`HTTP ${e.status}`)
   if (e.endpoint) parts.push(e.endpoint)
   if (e.requestId) parts.push(`req=${e.requestId}`)
   if (e.ssoRequired) parts.push("ssoRequired")
   if (e.scopeGap) parts.push("scopeGap")
-  // Keep the message last so it can't be confused with the fielded metadata.
-  // It's allow-listed (GitHub's own error string, or a thrown Error's message),
-  // never the raw response body.
-  if (e.message) parts.push(e.message)
+  // Keep the label (message) last so it can't be confused with the fielded
+  // metadata. It's allow-listed (GitHub's own error string, or a thrown Error's
+  // message), never the raw response body.
+  if (e.label) parts.push(e.label)
   return parts.join(" | ")
 }

@@ -1,5 +1,4 @@
 import { GitHubAPIError, readGitHubRateLimitHeaders } from "./errors"
-import { recordError } from "@/lib/diagnostics/buffer"
 
 // Bound every request so a half-open GitHub connection can't pin a poll or
 // mutation forever (React Query imposes no request timeout; the banner uses
@@ -117,7 +116,7 @@ export function createGitHubClient(args: {
           ? body.message
           : `GitHub API request failed with ${res.status}`
 
-      const error = new GitHubAPIError({
+      throw new GitHubAPIError({
         status: res.status,
         url,
         message,
@@ -128,8 +127,6 @@ export function createGitHubClient(args: {
         oauthScopes: res.headers.get("x-oauth-scopes"),
         requestId: res.headers.get("x-github-request-id"),
       })
-      recordError(error)
-      throw error
     }
 
     return res

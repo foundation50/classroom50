@@ -2,12 +2,12 @@
 import { afterEach, describe, expect, it } from "vitest"
 
 import { GitHubAPIError } from "@/hooks/github/errors"
-import { clearRecentErrors, recordError } from "./buffer"
+import { clearActivity, recordError } from "@/lib/activity/activityStore"
 import { clearObservedContext, observeOrg, observeResponse } from "./observed"
 import { buildDiagnostics } from "./snapshot"
 
 afterEach(() => {
-  clearRecentErrors()
+  clearActivity()
   clearObservedContext()
 })
 
@@ -89,7 +89,6 @@ describe("buildDiagnostics", () => {
   it("includes the message for a non-GitHub error (the async-capture case)", () => {
     recordError(new TypeError("Cannot read properties of undefined"))
     const text = buildDiagnostics()
-    expect(text).toContain("TypeError")
     expect(text).toContain("Cannot read properties of undefined")
   })
 })

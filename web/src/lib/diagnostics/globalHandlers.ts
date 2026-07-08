@@ -1,12 +1,12 @@
 // Passive global capture of async / out-of-render errors that otherwise reach
 // only the browser console — an uncaught exception outside a React render, or
-// an unhandled promise rejection. They feed the same diagnostics buffer as
-// GitHub API errors so a snapshot reflects them too.
+// an unhandled promise rejection. They feed the session Activity store so the
+// activity view and the diagnostics snapshot reflect them too.
 //
 // Passive by design: the handlers only record. They never preventDefault, so
 // the console output and the router errorComponent still fire as before.
 
-import { recordError } from "./buffer"
+import { recordError } from "@/lib/activity/activityStore"
 
 let installed = false
 

@@ -5,10 +5,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 // graph to exercise a clean install.
 async function freshModules() {
   vi.resetModules()
-  const buffer = await import("./buffer")
+  const store = await import("@/lib/activity/activityStore")
   const handlers = await import("./globalHandlers")
-  buffer.clearRecentErrors()
-  return { buffer, handlers }
+  store.clearActivity()
+  return { store, handlers }
 }
 
 let addSpy: ReturnType<typeof vi.spyOn>
@@ -20,7 +20,7 @@ afterEach(() => vi.restoreAllMocks())
 
 describe("installDiagnosticsHandlers", () => {
   it("records an entry for a global error event", async () => {
-    const { buffer, handlers } = await freshModules()
+    const { store, handlers } = await freshModules()
     handlers.installDiagnosticsHandlers()
 
     window.dispatchEvent(
@@ -30,22 +30,22 @@ describe("installDiagnosticsHandlers", () => {
       }),
     )
 
-    const recent = buffer.readRecentErrors()
+    const recent = store.readActivity()
     expect(recent).toHaveLength(1)
-    expect(recent[0].message).toBe("kaboom")
+    expect(recent[0].label).toBe("kaboom")
   })
 
   it("falls back to the event message when error is null (cross-origin)", async () => {
-    const { buffer, handlers } = await freshModules()
+    const { store, handlers } = await freshModules()
     handlers.installDiagnosticsHandlers()
 
     window.dispatchEvent(new ErrorEvent("error", { message: "opaque" }))
 
-    expect(buffer.readRecentErrors()[0].message).toBe("opaque")
+    expect(store.readActivity()[0].label).toBe("opaque")
   })
 
   it("records the reason for an unhandled rejection", async () => {
-    const { buffer, handlers } = await freshModules()
+    const { store, handlers } = await freshModules()
     handlers.installDiagnosticsHandlers()
 
     // Construct the event directly; a real rejection would log noise.
@@ -53,7 +53,7 @@ describe("installDiagnosticsHandlers", () => {
     Object.defineProperty(event, "reason", { value: new Error("rejected") })
     window.dispatchEvent(event)
 
-    expect(buffer.readRecentErrors()[0].message).toBe("rejected")
+    expect(store.readActivity()[0].label).toBe("rejected")
   })
 
   it("registers listeners only once across repeated calls", async () => {

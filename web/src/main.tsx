@@ -1,6 +1,10 @@
 import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import {
+  MutationCache,
+  QueryClient,
+  QueryClientProvider,
+} from "@tanstack/react-query"
 import { ReactQueryDevtools } from "@tanstack/react-query-devtools"
 import { MotionConfig } from "motion/react"
 
@@ -15,10 +19,22 @@ import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpd
 import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
+import { recordError } from "./lib/activity/activityStore"
 
-const client = new QueryClient()
+// Record every failed mutation as session activity. Mutations are the app's
+// real write operations (create/delete/dispatch/enroll), so a rejection here is
+// a genuine, user-affecting failure — unlike the benign existence-check 404s on
+// the read path, which are caught and turned into verdicts and so never reach
+// this cache. The mutationId dedups against a matching error toast.
+const client = new QueryClient({
+  mutationCache: new MutationCache({
+    onError: (error, _variables, _context, mutation) => {
+      recordError(error, { dedupKey: `mutation-${mutation.mutationId}` })
+    },
+  }),
+})
 
-// Capture async / out-of-render errors for the diagnostics snapshot. Passive —
+// Capture async / out-of-render errors for the activity store. Passive —
 // records only, never swallows.
 installDiagnosticsHandlers()
 
