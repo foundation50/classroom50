@@ -22,6 +22,7 @@ import { Route as AuthedOrgSettingsIndexRouteImport } from './routes/_authed/$or
 import { Route as AuthedOrgPublishedIndexRouteImport } from './routes/_authed/$org/published/index'
 import { Route as AuthedOrgMembersIndexRouteImport } from './routes/_authed/$org/members/index'
 import { Route as AuthedOrgClassesIndexRouteImport } from './routes/_authed/$org/classes/index'
+import { Route as AuthedOrgActivityIndexRouteImport } from './routes/_authed/$org/activity/index'
 import { Route as AuthedOrgClassroomIndexRouteImport } from './routes/_authed/$org/$classroom/index'
 import { Route as AuthedOrgClassesNewIndexRouteImport } from './routes/_authed/$org/classes/new/index'
 import { Route as AuthedOrgClassroomStudentsIndexRouteImport } from './routes/_authed/$org/$classroom/students/index'
@@ -97,6 +98,11 @@ const AuthedOrgMembersIndexRoute = AuthedOrgMembersIndexRouteImport.update({
 const AuthedOrgClassesIndexRoute = AuthedOrgClassesIndexRouteImport.update({
   id: '/classes/',
   path: '/classes/',
+  getParentRoute: () => AuthedOrgRouteRoute,
+} as any)
+const AuthedOrgActivityIndexRoute = AuthedOrgActivityIndexRouteImport.update({
+  id: '/activity/',
+  path: '/activity/',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
 const AuthedOrgClassroomIndexRoute = AuthedOrgClassroomIndexRouteImport.update({
@@ -180,6 +186,7 @@ export interface FileRoutesByFullPath {
   '/auth/': typeof AuthIndexRoute
   '/$org/': typeof AuthedOrgIndexRoute
   '/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
+  '/$org/activity/': typeof AuthedOrgActivityIndexRoute
   '/$org/classes/': typeof AuthedOrgClassesIndexRoute
   '/$org/members/': typeof AuthedOrgMembersIndexRoute
   '/$org/published/': typeof AuthedOrgPublishedIndexRoute
@@ -205,6 +212,7 @@ export interface FileRoutesByTo {
   '/auth': typeof AuthIndexRoute
   '/$org': typeof AuthedOrgIndexRoute
   '/$org/$classroom': typeof AuthedOrgClassroomIndexRoute
+  '/$org/activity': typeof AuthedOrgActivityIndexRoute
   '/$org/classes': typeof AuthedOrgClassesIndexRoute
   '/$org/members': typeof AuthedOrgMembersIndexRoute
   '/$org/published': typeof AuthedOrgPublishedIndexRoute
@@ -233,6 +241,7 @@ export interface FileRoutesById {
   '/auth/': typeof AuthIndexRoute
   '/_authed/$org/': typeof AuthedOrgIndexRoute
   '/_authed/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
+  '/_authed/$org/activity/': typeof AuthedOrgActivityIndexRoute
   '/_authed/$org/classes/': typeof AuthedOrgClassesIndexRoute
   '/_authed/$org/members/': typeof AuthedOrgMembersIndexRoute
   '/_authed/$org/published/': typeof AuthedOrgPublishedIndexRoute
@@ -261,6 +270,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/$org/'
     | '/$org/$classroom/'
+    | '/$org/activity/'
     | '/$org/classes/'
     | '/$org/members/'
     | '/$org/published/'
@@ -286,6 +296,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/$org'
     | '/$org/$classroom'
+    | '/$org/activity'
     | '/$org/classes'
     | '/$org/members'
     | '/$org/published'
@@ -313,6 +324,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/_authed/$org/'
     | '/_authed/$org/$classroom/'
+    | '/_authed/$org/activity/'
     | '/_authed/$org/classes/'
     | '/_authed/$org/members/'
     | '/_authed/$org/published/'
@@ -432,6 +444,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassesIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
+    '/_authed/$org/activity/': {
+      id: '/_authed/$org/activity/'
+      path: '/activity'
+      fullPath: '/$org/activity/'
+      preLoaderRoute: typeof AuthedOrgActivityIndexRouteImport
+      parentRoute: typeof AuthedOrgRouteRoute
+    }
     '/_authed/$org/$classroom/': {
       id: '/_authed/$org/$classroom/'
       path: '/$classroom'
@@ -522,6 +541,7 @@ declare module '@tanstack/react-router' {
 interface AuthedOrgRouteRouteChildren {
   AuthedOrgIndexRoute: typeof AuthedOrgIndexRoute
   AuthedOrgClassroomIndexRoute: typeof AuthedOrgClassroomIndexRoute
+  AuthedOrgActivityIndexRoute: typeof AuthedOrgActivityIndexRoute
   AuthedOrgClassesIndexRoute: typeof AuthedOrgClassesIndexRoute
   AuthedOrgMembersIndexRoute: typeof AuthedOrgMembersIndexRoute
   AuthedOrgPublishedIndexRoute: typeof AuthedOrgPublishedIndexRoute
@@ -543,6 +563,7 @@ interface AuthedOrgRouteRouteChildren {
 const AuthedOrgRouteRouteChildren: AuthedOrgRouteRouteChildren = {
   AuthedOrgIndexRoute: AuthedOrgIndexRoute,
   AuthedOrgClassroomIndexRoute: AuthedOrgClassroomIndexRoute,
+  AuthedOrgActivityIndexRoute: AuthedOrgActivityIndexRoute,
   AuthedOrgClassesIndexRoute: AuthedOrgClassesIndexRoute,
   AuthedOrgMembersIndexRoute: AuthedOrgMembersIndexRoute,
   AuthedOrgPublishedIndexRoute: AuthedOrgPublishedIndexRoute,

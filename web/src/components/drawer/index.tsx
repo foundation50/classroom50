@@ -18,6 +18,7 @@ import {
   Languages,
   Info,
   BookOpen,
+  Activity,
 } from "lucide-react"
 import {
   Link,
@@ -1027,6 +1028,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const onSettings = settings || selected === "settings"
   const onPublished = selected === "published"
   const onMembers = selected === "members"
+  const onActivity = selected === "activity"
   if (!org) return null
 
   const classesLabel = showTeacherUi
@@ -1069,6 +1071,17 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
                 label={t("nav.members")}
                 icon={<UsersRound aria-hidden="true" />}
                 active={onMembers}
+              />
+            </Link>
+          </Tip>
+        )}
+        {showTeacherUi && isOwner && (
+          <Tip label={t("nav.activity")}>
+            <Link to="/$org/activity" params={{ org }}>
+              <SidebarItemBody
+                label={t("nav.activity")}
+                icon={<Activity aria-hidden="true" />}
+                active={onActivity}
               />
             </Link>
           </Tip>

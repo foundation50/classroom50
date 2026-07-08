@@ -21,7 +21,10 @@ export function useActivity(org: string | undefined): {
   // Most-recent-first, org-scoped view derived from the raw snapshot.
   const entries = useMemo(() => {
     if (!org) return []
-    return snapshot.filter((e) => e.org === org).slice().reverse()
+    return snapshot
+      .filter((e) => e.org === org)
+      .slice()
+      .reverse()
   }, [snapshot, org])
 
   const clear = useCallback(() => clearActivity(), [])

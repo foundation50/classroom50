@@ -66,6 +66,7 @@
     "myAssignments": "My Assignments",
     "published": "Published",
     "members": "Members",
+    "activity": "Activity",
     "organizations": "Organizations",
     "untitledCourse": "Untitled Course",
     "userFallback": "User",
@@ -175,7 +176,8 @@
     "newClassroom": "New Classroom",
     "classes": "Classrooms",
     "mySubmission": "My Submission",
-    "submissions": "Submissions"
+    "submissions": "Submissions",
+    "activity": "Activity"
   },
   "students": {
     "addTitle": "Add Student",
@@ -1575,6 +1577,17 @@
       "releasesIntro": "Each submission opens its graded release on GitHub, with your score and per-test results.",
       "fallbackTitle": "Submission",
       "missingParams": "Missing course or assignment information."
+    }
+  },
+  "orgActivity": {
+    "heading": "Activity",
+    "subtitle": "Errors and actions this browser session has recorded. Session-only: nothing is stored on a server, and it clears when you close the tab.",
+    "copyDiagnostics": "Copy diagnostics",
+    "copied": "Copied",
+    "clear": "Clear",
+    "empty": {
+      "title": "No activity yet",
+      "body": "Failed operations, errors, and workflow actions from this session will appear here."
     }
   },
   "orgMembers": {
