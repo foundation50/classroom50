@@ -25,6 +25,7 @@ import type {
   OrgAuditReport,
 } from "@/orgPolicy/audit"
 import { REPAIRABLE_CONCERNS, repairConcern } from "@/orgPolicy/repair"
+import { mergeUnresolved, readUnresolved } from "@/orgPolicy/unresolvedStore"
 import type { CheckState } from "@/hooks/github/orgChecks"
 import SettingsSection from "./SettingsSection"
 import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
@@ -75,18 +76,23 @@ const CONCERN_STATE_BADGE: Record<CheckState, string> = {
   unreadable: "badge-neutral badge-ghost",
 }
 
-function ConcernRow({
+export function ConcernRow({
   concern,
   canFix,
   fixing,
   onFix,
   driftedDetails,
+  unresolvedMessage,
 }: {
   concern: ConcernCheck
   canFix: boolean
   fixing: boolean
   onFix: (id: ConcernId) => void
   driftedDetails?: UnenforcedDefaultItem[]
+  // When set, a prior Fix-it attempt didn't complete — carries the
+  // attempted-action message. We suppress "Fix it" and show a cause-neutral
+  // "needs manual setup" state instead.
+  unresolvedMessage?: string
 }) {
   const { t } = useTranslation()
   const isDrifted = concern.verdict.state === "unenforced"
@@ -97,7 +103,11 @@ function ConcernRow({
     driftedDetails.length > 0 &&
     driftedDetails.every((d) => d.pinned)
   const showFix =
-    isDrifted && canFix && REPAIRABLE_CONCERNS.has(concern.id) && !allPinned
+    isDrifted &&
+    canFix &&
+    REPAIRABLE_CONCERNS.has(concern.id) &&
+    !allPinned &&
+    unresolvedMessage === undefined
 
   return (
     <div className="rounded-lg border border-base-300 bg-base-100 p-3">
@@ -107,6 +117,11 @@ function ConcernRow({
           {concern.verdict.detail && (
             <p className="mt-0.5 text-xs text-base-content/70">
               {concern.verdict.detail}
+            </p>
+          )}
+          {unresolvedMessage !== undefined && (
+            <p className="mt-1 text-xs text-base-content/70">
+              {t("orgSettings.audit.couldntAutoConfigure")}
             </p>
           )}
           <a
@@ -130,6 +145,11 @@ function ConcernRow({
             >
               {fixing ? null : t("orgSettings.audit.fixIt")}
             </Button>
+          )}
+          {unresolvedMessage !== undefined && (
+            <span className="badge badge-warning badge-soft">
+              {t("orgSettings.audit.needsManualSetup")}
+            </span>
           )}
           <span
             className={`badge ${CONCERN_STATE_BADGE[concern.verdict.state]}`}
@@ -171,12 +191,14 @@ function AuditBody({
   canFix,
   fixingId,
   enterprisePinned,
+  unresolvedConcerns,
   onFix,
 }: {
   report: OrgAuditReport
   canFix: boolean
   fixingId: ConcernId | null
   enterprisePinned: Set<string>
+  unresolvedConcerns: Map<ConcernId, string>
   onFix: (id: ConcernId) => void
 }) {
   const { t } = useTranslation()
@@ -220,6 +242,7 @@ function AuditBody({
             canFix={canFix}
             fixing={fixingId === c.id}
             onFix={onFix}
+            unresolvedMessage={unresolvedConcerns.get(c.id)}
             driftedDetails={
               c.id === "orgDefaults"
                 ? toUnenforcedItems(report.unenforcedDefaults, enterprisePinned)
@@ -334,9 +357,24 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
 
   // Fields a Fix it / re-run wrote that didn't stick on read-back; we stop
   // offering a Fix it for them since it can't work. (See OrgDefaultsStepData.)
+  // Seeded from per-org storage so the signal survives a reload/re-check.
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
-    new Set(),
+    () => readUnresolved(org).fields,
   )
+  // Concern-level outcomes: a branchProtection/rulesets Fix-it that didn't
+  // complete. Maps concern id -> the attempted-action message we show. Seeded
+  // from storage; only non-transient outcomes are ever added/persisted.
+  const [unresolvedConcerns, setUnresolvedConcerns] = useState<
+    Map<ConcernId, string>
+  >(() => {
+    const stored = readUnresolved(org).concerns
+    const map = new Map<ConcernId, string>()
+    for (const id of stored) map.set(id as ConcernId, "")
+    return map
+  })
+  // A transient failure (rate limit / repo still initializing) — surfaced as a
+  // retry notice rather than a permanent manual-setup flip.
+  const [transientNotice, setTransientNotice] = useState(false)
 
   const {
     data: report,
@@ -347,13 +385,28 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
   const fixMutation = useMutation({
     mutationFn: (id: ConcernId) =>
       repairConcern(client, org, id, planDetails?.plan?.name),
-    onSuccess: (result) => {
+    onSuccess: (result, id) => {
+      setTransientNotice(false)
       if (result.unfixableFields.length > 0) {
         setEnterprisePinned((prev) => {
           const next = new Set(prev)
           for (const f of result.unfixableFields) next.add(f)
           return next
         })
+        mergeUnresolved(org, { fields: result.unfixableFields })
+      }
+      if (result.unresolved) {
+        if (result.unresolved.transient) {
+          // Don't persist or suppress — the user can retry.
+          setTransientNotice(true)
+        } else {
+          setUnresolvedConcerns((prev) => {
+            const next = new Map(prev)
+            next.set(id, result.unresolved!.message)
+            return next
+          })
+          mergeUnresolved(org, { concerns: [id] })
+        }
       }
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgAuditPrefix(org),
@@ -416,12 +469,23 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
         </div>
       )}
 
+      {transientNotice && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
+          <TriangleAlert
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0"
+          />
+          <span>{t("orgSettings.audit.fixTransient")}</span>
+        </div>
+      )}
+
       {report && (
         <AuditBody
           report={report}
           canFix={Boolean(isOwner)}
           fixingId={fixingId}
           enterprisePinned={enterprisePinned}
+          unresolvedConcerns={unresolvedConcerns}
           onFix={(id) => {
             if (!fixMutation.isPending)
               void runFix(() => fixMutation.mutateAsync(id))
