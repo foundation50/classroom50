@@ -4,6 +4,7 @@ import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
+import { Button } from "@/components/ui"
 import { useVersionCheck } from "@/hooks/useVersionCheck"
 
 // State the banner depends on — structural so the decision stays a pure,
@@ -50,13 +51,14 @@ export function UpdateAvailableBanner() {
           onDismiss={() => setDismissedCommit(data?.commit)}
         >
           <p className="text-base-content/70">{t("appUpdate.body")}</p>
-          <button
-            type="button"
-            className="btn btn-sm btn-success self-start"
+          <Button
+            variant="success"
+            size="sm"
+            className="self-start"
             onClick={() => window.location.reload()}
           >
             {t("appUpdate.action")}
-          </button>
+          </Button>
         </AppBanner>
       ) : null}
     </AnimatePresence>
