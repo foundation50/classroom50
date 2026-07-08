@@ -28,6 +28,7 @@ import {
 } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "../../auth/useGithubAuth"
+import GitHub from "@/assets/github.svg?react"
 import duck from "@/assets/duck.png"
 import { useCourseTeacherAccess } from "../../hooks/useCourseTeacherAccess"
 import {
@@ -43,6 +44,7 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
+import { githubOrgUrl } from "@/util/orgUrl"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { useTheme } from "@/hooks/useTheme"
 import { LanguageDialog } from "@/components/LanguageDialog"
@@ -720,9 +722,31 @@ export const SidebarFooter = () => {
 
   return (
     <>
+      {org ? (
+        <a
+          href={githubOrgUrl(org)}
+          target="_blank"
+          rel="noreferrer"
+          title={t("common.openOrgOnGitHub", { org })}
+          className={`mt-auto block border-t border-neutral-content/20 py-2 text-neutral-content/70 transition-colors hover:text-neutral-content ${collapsed ? "flex justify-center px-2" : "px-6"}`}
+        >
+          {collapsed ? (
+            <GitHub aria-hidden="true" className="size-4 shrink-0 opacity-80" />
+          ) : (
+            <>
+              <span className="block text-[0.625rem] font-medium uppercase tracking-wide text-neutral-content/50">
+                {t("classes.githubOrganization")}
+              </span>
+              <span className="block break-words font-mono text-xs font-semibold text-neutral-content">
+                {org}
+              </span>
+            </>
+          )}
+        </a>
+      ) : null}
       <div
         ref={footerRef}
-        className="relative mt-auto cursor-pointer border-t border-neutral-content/20 py-4"
+        className={`relative cursor-pointer border-t border-neutral-content/20 py-4 ${org ? "" : "mt-auto"}`}
         onClick={() => setMenuOpen((open) => !open)}
         role="button"
         tabIndex={0}

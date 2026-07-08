@@ -9,7 +9,6 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -31,7 +30,6 @@ import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import OrgPreflightNotice from "@/pages/orgSettings/OrgPreflightNotice"
 import ClassroomList from "@/pages/classes/ClassroomList"
 import { EnterDiv } from "@/lib/motionComponents"
-import { githubOrgUrl } from "@/util/orgUrl"
 
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
@@ -323,38 +321,15 @@ const ClassesPage = () => {
 
   return (
     <PageShell page="classes" selected="assignments">
-      <div className="space-y-4">
-        <div className="flex items-center gap-3">
-          <GitHub aria-hidden="true" className="size-5 opacity-70" />
+      <PageHeader
+        loading={roleLoading}
+        title={isTeacher ? t("classes.myClasses") : t("classes.myAssignments")}
+        subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
+      />
 
-          <div>
-            <div className="text-xs font-medium uppercase tracking-wide text-base-content/70">
-              {t("classes.githubOrganization")}
-            </div>
-            <a
-              href={githubOrgUrl(org)}
-              target="_blank"
-              rel="noreferrer"
-              title={t("common.openOrgOnGitHub", { org })}
-              className="font-mono text-sm font-semibold text-base-content hover:text-primary hover:underline"
-            >
-              {org}
-            </a>
-          </div>
-        </div>
-
-        <PageHeader
-          loading={roleLoading}
-          title={
-            isTeacher ? t("classes.myClasses") : t("classes.myAssignments")
-          }
-          subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
-        />
-
-        {isStudent && !isMember && !loadingMembership && (
-          <JoinOrgCard org={org} />
-        )}
-      </div>
+      {isStudent && !isMember && !loadingMembership && (
+        <JoinOrgCard org={org} />
+      )}
       {isOwner && <OrgPreflightNotice org={org} />}
       {roleLoading ? (
         <div className="grid grid-cols-12 gap-4">
