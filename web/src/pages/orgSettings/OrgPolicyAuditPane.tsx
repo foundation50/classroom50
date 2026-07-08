@@ -27,7 +27,10 @@ import { REPAIRABLE_CONCERNS, repairConcern } from "@/orgPolicy/repair"
 import type { CheckState } from "@/hooks/github/orgChecks"
 import SettingsSection from "./SettingsSection"
 import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
-import type { UnenforcedDefaultItem } from "./orgDefaultsStepData"
+import {
+  toUnenforcedItems,
+  type UnenforcedDefaultItem,
+} from "./orgDefaultsStepData"
 import { CalloutDiv } from "@/lib/motionComponents"
 
 // Org policy audit pane: surfaces every policy concern with its live drift
@@ -224,12 +227,7 @@ function AuditBody({
             onFix={onFix}
             driftedDetails={
               c.id === "orgDefaults"
-                ? report.unenforcedDefaults.map((s) => ({
-                    field: s.field,
-                    desc: s.desc,
-                    manualFix: s.manualFix,
-                    pinned: enterprisePinned.has(s.field),
-                  }))
+                ? toUnenforcedItems(report.unenforcedDefaults, enterprisePinned)
                 : undefined
             }
           />
