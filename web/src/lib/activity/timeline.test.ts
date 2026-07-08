@@ -1,0 +1,199 @@
+import { describe, expect, it } from "vitest"
+
+import type { GitHubCommit, GitHubWorkflowRun } from "@/hooks/github/types"
+import type { ActivityEntry } from "@/lib/activity/activityStore"
+import {
+  classifyConfigCommit,
+  commitToItem,
+  mergeTimeline,
+  runToItem,
+  sessionToItems,
+  type TimelineItem,
+} from "./timeline"
+
+const commit = (
+  message: string,
+  over?: Partial<GitHubCommit>,
+): GitHubCommit => ({
+  sha: "abc1234def",
+  html_url: "https://github.com/acme/classroom50/commit/abc1234def",
+  commit: {
+    message,
+    author: { name: "Teacher", date: "2026-07-08T10:00:00Z" },
+  },
+  author: { login: "teacher", avatar_url: "" },
+  ...over,
+})
+
+const run = (over?: Partial<GitHubWorkflowRun>): GitHubWorkflowRun => ({
+  id: 100,
+  path: ".github/workflows/collect-scores.yaml",
+  status: "completed",
+  conclusion: "success",
+  created_at: "2026-07-08T11:00:00Z",
+  run_started_at: "2026-07-08T11:00:05Z",
+  updated_at: "2026-07-08T11:01:00Z",
+  html_url: "https://github.com/acme/classroom50/actions/runs/100",
+  event: "workflow_dispatch",
+  ...over,
+})
+
+const label = (file: string | undefined, fallback: string | undefined) =>
+  file ?? fallback ?? "workflow"
+
+describe("classifyConfigCommit", () => {
+  it("classifies by the verb/target after the prefix", () => {
+    expect(
+      classifyConfigCommit("[Classroom 50] Create assignment: cs/hw1"),
+    ).toBe("assignment")
+    expect(classifyConfigCommit("[Classroom 50] Update classroom cs")).toBe(
+      "classroom",
+    )
+    expect(classifyConfigCommit("[Classroom 50] Add student: cs/alice")).toBe(
+      "student",
+    )
+    expect(classifyConfigCommit("Update scores.json")).toBe("scores")
+    expect(classifyConfigCommit("[Classroom 50] Bootstrap skeleton")).toBe(
+      "config",
+    )
+  })
+})
+
+describe("commitToItem", () => {
+  it("strips the prefix, classifies, and sets actor/href/time", () => {
+    const item = commitToItem(
+      commit("[Classroom 50] Create assignment: cs/hw1"),
+    )
+    expect(item.source).toBe("commit")
+    expect(item.type).toBe("assignment")
+    expect(item.label).toBe("Create assignment: cs/hw1")
+    expect(item.actor).toBe("teacher")
+    expect(item.href).toContain("/commit/abc1234def")
+    expect(item.detail).toBe("abc1234") // short sha
+    expect(item.at).toBe(Date.parse("2026-07-08T10:00:00Z"))
+  })
+
+  it("falls back to the commit author name for a workflow-authored commit", () => {
+    const item = commitToItem(
+      commit("Update scores.json", {
+        author: null,
+        commit: {
+          message: "Update scores.json",
+          author: { name: "github-actions[bot]", date: "2026-07-08T10:00:00Z" },
+        },
+      }),
+    )
+    expect(item.actor).toBe("github-actions[bot]")
+    expect(item.type).toBe("scores")
+  })
+})
+
+describe("runToItem", () => {
+  it("maps a successful run to ok status with a workflow label", () => {
+    const item = runToItem(run(), label)
+    expect(item.source).toBe("run")
+    expect(item.status).toBe("ok")
+    expect(item.label).toBe("collect-scores.yaml")
+    expect(item.href).toContain("/actions/runs/100")
+  })
+
+  it("maps an in-flight run to running", () => {
+    expect(runToItem(run({ status: "in_progress" }), label).status).toBe(
+      "running",
+    )
+  })
+
+  it("maps a failed run to error", () => {
+    expect(
+      runToItem(run({ status: "completed", conclusion: "failure" }), label)
+        .status,
+    ).toBe("error")
+  })
+
+  it("uses the triggering actor when present", () => {
+    const item = runToItem(
+      run({ triggering_actor: { login: "teacher" } }),
+      label,
+    )
+    expect(item.actor).toBe("teacher")
+  })
+})
+
+describe("sessionToItems", () => {
+  const entry = (over: Partial<ActivityEntry>): ActivityEntry => ({
+    id: "e1",
+    kind: "error",
+    label: "boom",
+    at: 1000,
+    ...over,
+  })
+
+  it("maps errors and actions with the right status/type", () => {
+    const items = sessionToItems([
+      entry({ id: "e1", kind: "error", label: "boom", endpoint: "/x" }),
+      entry({ id: "e2", kind: "action", label: "did a thing" }),
+    ])
+    expect(items[0]).toMatchObject({
+      source: "session",
+      type: "error",
+      status: "error",
+      detail: "/x",
+    })
+    expect(items[1]).toMatchObject({ type: "action", status: "info" })
+  })
+
+  it("prefers endpoint, then source, then HTTP status for detail", () => {
+    expect(sessionToItems([entry({ source: "foo.tsx:1" })])[0].detail).toBe(
+      "at foo.tsx:1",
+    )
+    expect(sessionToItems([entry({ status: 404 })])[0].detail).toBe("HTTP 404")
+  })
+})
+
+describe("mergeTimeline", () => {
+  const item = (over: Partial<TimelineItem>): TimelineItem => ({
+    id: "x",
+    source: "session",
+    type: "error",
+    label: "l",
+    at: 0,
+    status: "error",
+    ...over,
+  })
+
+  it("sorts strictly newest-first across sources", () => {
+    const merged = mergeTimeline([
+      item({ id: "a", at: 100 }),
+      item({ id: "b", at: 300 }),
+      item({ id: "c", at: 200 }),
+    ])
+    expect(merged.map((i) => i.id)).toEqual(["b", "c", "a"])
+  })
+
+  it("filters by source", () => {
+    const merged = mergeTimeline(
+      [
+        item({ id: "a", source: "session", at: 1 }),
+        item({ id: "b", source: "commit", at: 2 }),
+      ],
+      { sources: new Set(["commit"]) },
+    )
+    expect(merged.map((i) => i.id)).toEqual(["b"])
+  })
+
+  it("filters by type", () => {
+    const merged = mergeTimeline(
+      [
+        item({ id: "a", type: "assignment", at: 1 }),
+        item({ id: "b", type: "run", at: 2 }),
+      ],
+      { types: new Set(["assignment"]) },
+    )
+    expect(merged.map((i) => i.id)).toEqual(["a"])
+  })
+
+  it("treats an empty filter set as 'all'", () => {
+    const items = [item({ id: "a", at: 1 }), item({ id: "b", at: 2 })]
+    expect(mergeTimeline(items, { sources: new Set() })).toHaveLength(2)
+  })
+})

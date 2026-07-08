@@ -185,4 +185,35 @@ export type GitHubWorkflowRun = {
   head_sha?: string
   html_url: string
   event: string
+  // Human title of the run (often the head commit subject). Present on the list
+  // endpoint; used to label a run when the workflow file isn't mapped.
+  display_title?: string
+  // Who triggered the run (a teacher's token, or the Actions bot for cron). Used
+  // for actor attribution in the activity timeline.
+  triggering_actor?: {
+    login: string
+    avatar_url?: string
+  }
+}
+
+// A commit from the REST list-commits endpoint
+// (GET /repos/{owner}/{repo}/commits). Distinct from GitHubCommitRef (the
+// git-data single-commit tree ref). Used by the org activity timeline to render
+// classroom50 config-repo history as an audit log.
+export type GitHubCommit = {
+  sha: string
+  html_url: string
+  commit: {
+    message: string
+    author?: {
+      name?: string
+      date?: string
+    }
+  }
+  // The GitHub account, when the commit author is a known user (null for a
+  // workflow/bot-authored commit that isn't linked to an account).
+  author: {
+    login: string
+    avatar_url?: string
+  } | null
 }
