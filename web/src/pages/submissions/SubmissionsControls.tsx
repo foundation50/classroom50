@@ -1,4 +1,5 @@
 import { Search, X } from "lucide-react"
+import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Input, Select } from "@/components/ui"
@@ -11,7 +12,9 @@ import { DEFAULT_FILTERS } from "@/pages/submissions/dashboard"
 // Search + sort + filter controls for the assignment overview dashboard.
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The
 // not-submitted filter is hidden for group assignments; passing/accepted selects
-// appear only when available.
+// appear only when available. `trailing` hosts the page's toolbar actions
+// (updated/refresh, Metrics, Invite, Actions menu) so they share one bar with
+// search + filters — keeping the roster high on the page.
 const SubmissionsControls = ({
   query,
   onQueryChange,
@@ -23,6 +26,7 @@ const SubmissionsControls = ({
   acceptedAvailable = false,
   passingAvailable = false,
   sections = [],
+  trailing,
 }: {
   query: string
   onQueryChange: (value: string) => void
@@ -34,6 +38,7 @@ const SubmissionsControls = ({
   acceptedAvailable?: boolean
   passingAvailable?: boolean
   sections?: string[]
+  trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
   const hasActiveFilter =
@@ -49,7 +54,7 @@ const SubmissionsControls = ({
   }
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       <Input
         type="search"
         inputSize="sm"
@@ -161,20 +166,25 @@ const SubmissionsControls = ({
         </Button>
       )}
 
-      <Select
-        selectSize="sm"
-        className="ml-auto w-auto min-w-0"
-        value={sort}
-        onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
-        aria-label={t("submissions.filters.sortAria")}
-      >
-        <option value="recent">{t("submissions.filters.sortRecent")}</option>
-        <option value="oldest">{t("submissions.filters.sortOldest")}</option>
-        <option value="name-asc">{t("submissions.filters.sortNameAsc")}</option>
-        <option value="name-desc">
-          {t("submissions.filters.sortNameDesc")}
-        </option>
-      </Select>
+      <div className="ml-auto flex flex-wrap items-center gap-2">
+        <Select
+          selectSize="sm"
+          className="w-auto min-w-0"
+          value={sort}
+          onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
+          aria-label={t("submissions.filters.sortAria")}
+        >
+          <option value="recent">{t("submissions.filters.sortRecent")}</option>
+          <option value="oldest">{t("submissions.filters.sortOldest")}</option>
+          <option value="name-asc">
+            {t("submissions.filters.sortNameAsc")}
+          </option>
+          <option value="name-desc">
+            {t("submissions.filters.sortNameDesc")}
+          </option>
+        </Select>
+        {trailing}
+      </div>
     </div>
   )
 }

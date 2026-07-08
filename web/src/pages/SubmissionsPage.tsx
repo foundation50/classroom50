@@ -3,8 +3,7 @@ import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
 import {
-  ChevronRight,
-  ExternalLink,
+  BarChart3,
   HardDriveDownload,
   Info,
   LinkIcon,
@@ -16,17 +15,13 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import {
-  Alert,
-  Badge,
-  Button,
-  CopyableCode,
-  Spinner,
-  StatCard,
-} from "@/components/ui"
+import { Alert, Badge, Button, Spinner } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
+import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMenu"
+import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
+import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { ConfirmModal } from "@/components/modals"
 import {
   DEFAULT_FILTERS,
@@ -63,7 +58,6 @@ import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
@@ -133,14 +127,12 @@ const SubmissionsPageContent = () => {
   const assignmentSubmitCli =
     `gh student accept ${org} ${classroom} ${assignment}` +
     (secret ? ` --key ${secret}` : "")
-  const { copied: copiedSubmitLink, copy: copySubmitLink } = useCopyToClipboard(
-    assignmentSubmitUrl,
-    1500,
-  )
-  const { copied: copiedSubmitCli, copy: copySubmitCli } = useCopyToClipboard(
-    assignmentSubmitCli,
-    1500,
-  )
+
+  // Toolbar modals: metrics + accept-link are consolidated behind buttons so
+  // the roster surfaces near the top instead of below stat cards and the
+  // accept disclosure.
+  const [metricsOpen, setMetricsOpen] = useState(false)
+  const [acceptOpen, setAcceptOpen] = useState(false)
 
   usePeriodicRerender()
   const assignmentInfo = assignmentData?.assignments.find(
@@ -470,316 +462,97 @@ const SubmissionsPageContent = () => {
           </Button>
         }
       />
-      <div className="flex flex-col gap-3">
-        {/* Action zone: standing note (with last-collected recency, shown
-            whenever known) on the left, the two actions + one contextual View
-            link on the right. Live status moves to the Alert strip below. */}
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="flex items-start gap-2 text-sm text-base-content/70">
-            <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-            <p>
-              {t("submissions.collectionNote")}{" "}
-              {lastCollectedLabel && (
-                <span>
-                  {t("submissions.lastCollected", { when: lastCollectedLabel })}
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={regrading || collecting || emptyRoster.show}
-              title={
-                emptyRoster.show
-                  ? t("submissions.regradeAll.titleEmptyRoster")
-                  : collecting
-                    ? t("submissions.regradeAll.titleCollecting")
-                    : regrading
-                      ? t("submissions.regradeAll.titleRegrading")
-                      : t("submissions.regradeAll.title")
-              }
-              loading={regradeAllActive}
-              loadingLabel={t("submissions.regradeAll.active")}
-              onClick={() => {
-                if (regrading || collecting || emptyRoster.show) return
-                setRegradeConfirmOpen(true)
-              }}
-            >
-              {regradeAllActive
-                ? t("submissions.regradeAll.active")
-                : t("submissions.regradeAll.label")}
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              disabled={collecting || regrading || emptyRoster.show}
-              title={
-                emptyRoster.show
-                  ? t("submissions.collect.titleEmptyRoster")
-                  : regrading
-                    ? t("submissions.collect.titleRegrading")
-                    : t("submissions.collect.title")
-              }
-              loading={collecting}
-              loadingLabel={t("submissions.collect.active")}
-              onClick={() => {
-                if (collecting || regrading || emptyRoster.show) return
-                collectScores.collect()
-              }}
-            >
-              {collecting
-                ? t("submissions.collect.active")
-                : t("submissions.collect.label")}
-            </Button>
-            <Button
-              as="a"
-              variant="ghost"
-              size="sm"
-              href={viewRun?.html_url || viewWorkflowUrl}
-              target="_blank"
-              rel="noreferrer"
-            >
-              <ExternalLink aria-hidden="true" className="size-4" />
-              {viewLabel}
-            </Button>
-          </div>
-        </div>
-
-        {/* Live status strip. Full phase mapping: dispatching stays a quiet
-            neutral line (transient); running/completed/failed/timeout become an
-            Alert; idle renders nothing. */}
-        {activeAction === "collect" && collectScores.phase !== "idle" && (
-          <>
-            {collectScores.phase === "dispatching" && (
-              <p className="text-sm text-base-content/70" role="status">
-                {t("submissions.collect.statusDispatching")}
-              </p>
-            )}
-            {collectScores.phase === "running" && (
-              <Alert tone="info" role="status">
-                <Spinner size="xs" />
-                {t("submissions.collect.statusRunning")}
-              </Alert>
-            )}
-            {collectScores.phase === "completed" && (
-              <Alert tone="success" role="status">
-                {t("submissions.collect.statusCompleted")}
-              </Alert>
-            )}
-            {collectScores.phase === "failed" && (
-              <Alert tone="error" role="status">
-                {collectScores.error instanceof Error
-                  ? t("submissions.collect.statusFailedWithReason", {
-                      reason: collectScores.error.message,
-                    })
-                  : t("submissions.collect.statusFailed")}{" "}
-                {t("submissions.collect.statusFailedHint")}
-              </Alert>
-            )}
-            {collectScores.phase === "timeout" && (
-              <Alert tone="warning" role="status">
-                {t("submissions.collect.statusTimeout")}
-              </Alert>
-            )}
-          </>
-        )}
-        {activeAction === "regrade" && regradeAll.phase !== "idle" && (
-          <>
-            {regradeAll.phase === "dispatching" && (
-              <p className="text-sm text-base-content/70" role="status">
-                {t("submissions.regradeAll.statusDispatching")}
-              </p>
-            )}
-            {regradeAll.phase === "running" && (
-              <Alert tone="info" role="status">
-                <Spinner size="xs" />
-                {t("submissions.regradeAll.statusRunning")}
-              </Alert>
-            )}
-            {regradeAll.phase === "completed" && (
-              <Alert tone="success" role="status">
-                {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
-                <span className="font-semibold">
-                  {t("submissions.collect.label")}
-                </span>{" "}
-                {t("submissions.regradeAll.statusCompleted_suffix")}
-              </Alert>
-            )}
-            {regradeAll.phase === "failed" && (
-              <Alert tone="error" role="status">
-                {regradeAll.error instanceof Error
-                  ? t("submissions.regradeAll.statusFailedWithReason", {
-                      reason: regradeAll.error.message,
-                    })
-                  : t("submissions.regradeAll.statusFailed")}{" "}
-                {t("submissions.regradeAll.statusFailedHint")}
-              </Alert>
-            )}
-            {regradeAll.phase === "timeout" && (
-              <Alert tone="warning" role="status">
-                {t("submissions.regradeAll.statusTimeout")}
-              </Alert>
-            )}
-          </>
-        )}
+      {/* Thin collection note with last-collected recency. Actions moved into
+          the toolbar menu below so the roster surfaces near the top. */}
+      <div className="flex items-start gap-2 text-sm text-base-content/70">
+        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+        <p>
+          {t("submissions.collectionNote")}{" "}
+          {lastCollectedLabel && (
+            <span>
+              {t("submissions.lastCollected", { when: lastCollectedLabel })}
+            </span>
+          )}
+        </p>
       </div>
-      <details
-        open
-        className="card bg-base-100 rounded-xl border border-base-300 group"
-      >
-        <summary className="card-body flex-row items-center gap-3 cursor-pointer list-none py-4">
-          <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
-            <LinkIcon aria-hidden="true" className="size-5" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="font-bold">{t("submissions.accept.heading")}</h2>
-            <p className="text-sm text-base-content/70">
-              {t("submissions.accept.subheading")}
+
+      {/* Live status strip. Full phase mapping: dispatching stays a quiet
+          neutral line (transient); running/completed/failed/timeout become an
+          Alert; idle renders nothing. */}
+      {activeAction === "collect" && collectScores.phase !== "idle" && (
+        <>
+          {collectScores.phase === "dispatching" && (
+            <p className="text-sm text-base-content/70" role="status">
+              {t("submissions.collect.statusDispatching")}
             </p>
-          </div>
-          <ChevronRight
-            aria-hidden="true"
-            className="size-5 shrink-0 text-base-content/70 transition-transform group-open:rotate-90"
-          />
-        </summary>
-        <div className="card-body gap-4 pt-0">
-          {secret ? (
-            <p className="text-sm text-base-content/70">
-              {t("submissions.accept.unlistedNote")}
+          )}
+          {collectScores.phase === "running" && (
+            <Alert tone="info" role="status">
+              <Spinner size="xs" />
+              {t("submissions.collect.statusRunning")}
+            </Alert>
+          )}
+          {collectScores.phase === "completed" && (
+            <Alert tone="success" role="status">
+              {t("submissions.collect.statusCompleted")}
+            </Alert>
+          )}
+          {collectScores.phase === "failed" && (
+            <Alert tone="error" role="status">
+              {collectScores.error instanceof Error
+                ? t("submissions.collect.statusFailedWithReason", {
+                    reason: collectScores.error.message,
+                  })
+                : t("submissions.collect.statusFailed")}{" "}
+              {t("submissions.collect.statusFailedHint")}
+            </Alert>
+          )}
+          {collectScores.phase === "timeout" && (
+            <Alert tone="warning" role="status">
+              {t("submissions.collect.statusTimeout")}
+            </Alert>
+          )}
+        </>
+      )}
+      {activeAction === "regrade" && regradeAll.phase !== "idle" && (
+        <>
+          {regradeAll.phase === "dispatching" && (
+            <p className="text-sm text-base-content/70" role="status">
+              {t("submissions.regradeAll.statusDispatching")}
             </p>
-          ) : null}
-
-          <CopyableCode
-            value={assignmentSubmitUrl}
-            copied={copiedSubmitLink}
-            onCopy={copySubmitLink}
-            label={t("submissions.accept.copyLink")}
-          />
-
-          <details className="group/cli">
-            <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-sm text-base-content/70 hover:text-base-content">
-              <ChevronRight
-                aria-hidden="true"
-                className="size-4 transition-transform group-open/cli:rotate-90"
-              />
-              {t("submissions.accept.preferCli")}
-            </summary>
-            <CopyableCode
-              className="mt-2"
-              value={assignmentSubmitCli}
-              copied={copiedSubmitCli}
-              onCopy={copySubmitCli}
-              label={t("submissions.accept.copyCli")}
-            />
-          </details>
-        </div>
-      </details>{" "}
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
-        <StatCard
-          label={
-            isGroupAssignment
-              ? t("submissions.stats.groupsSubmitted")
-              : t("submissions.stats.submitted")
-          }
-          value={stats.submitted}
-          outOf={isGroupAssignment ? undefined : scopedStudents.length}
-        />
-        <StatCard
-          label={t("submissions.stats.classAverage")}
-          value={
-            !scopedScores?.[0]?.["max-score"]
-              ? t("submissions.stats.notAvailable")
-              : (avgScore ?? t("submissions.stats.notAvailable"))
-          }
-          outOf={scopedScores?.[0]?.["max-score"] || undefined}
-        />
-        {passingEnabled && (
-          <StatCard
-            label={t("submissions.stats.passing")}
-            value={
-              stats.passing + stats.failing === 0
-                ? t("submissions.stats.notAvailable")
-                : stats.passing
-            }
-            outOf={
-              stats.passing + stats.failing === 0
-                ? undefined
-                : stats.passing + stats.failing
-            }
-            hint={
-              stats.passing + stats.failing === 0 ? undefined : (
-                <span className="text-xs text-base-content/70">
-                  {stats.failing > 0 ? (
-                    <button
-                      type="button"
-                      className="link link-hover decoration-dotted underline-offset-2 hover:text-error"
-                      onClick={showFailing}
-                      title={t("submissions.stats.showFailing")}
-                    >
-                      {t("submissions.stats.failingCount", {
-                        count: stats.failing,
-                      })}
-                    </button>
-                  ) : (
-                    <>
-                      {t("submissions.stats.failingCount", {
-                        count: stats.failing,
-                      })}
-                    </>
-                  )}
-                  {stats.ungraded > 0
-                    ? t("submissions.stats.ungradedSuffix", {
-                        count: stats.ungraded,
-                      })
-                    : ""}
-                </span>
-              )
-            }
-          />
-        )}
-        {acceptedAvailable ? (
-          <StatCard
-            label={t("submissions.stats.accepted")}
-            value={acceptedCount}
-            outOf={scopedStudents.length}
-            hint={
-              acceptedNotSubmittedCount > 0 ? (
-                <button
-                  type="button"
-                  className="link link-hover w-fit text-xs text-base-content/70 decoration-dotted underline-offset-2 hover:text-warning"
-                  onClick={showAcceptedNotSubmitted}
-                  title={t("submissions.stats.showAcceptedNotSubmitted")}
-                >
-                  {t("submissions.stats.notYetSubmitted", {
-                    count: acceptedNotSubmittedCount,
-                  })}
-                </button>
-              ) : undefined
-            }
-          />
-        ) : null}
-      </div>
-      <div className="flex items-center justify-end gap-1 text-sm text-base-content/70">
-        <span>{t("submissions.updated", { when: scoresLastUpdated })}</span>
-
-        <Button
-          variant="ghost"
-          size="xs"
-          shape="circle"
-          disabled={scoresFetching}
-          onClick={() => refetchScores()}
-          aria-label={t("submissions.refresh")}
-          title={t("submissions.refresh")}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            size={14}
-            className={scoresFetching ? "animate-spin" : ""}
-          />
-        </Button>
-      </div>
+          )}
+          {regradeAll.phase === "running" && (
+            <Alert tone="info" role="status">
+              <Spinner size="xs" />
+              {t("submissions.regradeAll.statusRunning")}
+            </Alert>
+          )}
+          {regradeAll.phase === "completed" && (
+            <Alert tone="success" role="status">
+              {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
+              <span className="font-semibold">
+                {t("submissions.collect.label")}
+              </span>{" "}
+              {t("submissions.regradeAll.statusCompleted_suffix")}
+            </Alert>
+          )}
+          {regradeAll.phase === "failed" && (
+            <Alert tone="error" role="status">
+              {regradeAll.error instanceof Error
+                ? t("submissions.regradeAll.statusFailedWithReason", {
+                    reason: regradeAll.error.message,
+                  })
+                : t("submissions.regradeAll.statusFailed")}{" "}
+              {t("submissions.regradeAll.statusFailedHint")}
+            </Alert>
+          )}
+          {regradeAll.phase === "timeout" && (
+            <Alert tone="warning" role="status">
+              {t("submissions.regradeAll.statusTimeout")}
+            </Alert>
+          )}
+        </>
+      )}
       <SubmissionsControls
         query={query}
         onQueryChange={setQuery}
@@ -791,6 +564,53 @@ const SubmissionsPageContent = () => {
         acceptedAvailable={acceptedAvailable}
         passingAvailable={passingEnabled}
         sections={sections}
+        trailing={
+          <>
+            <Button
+              variant="ghost"
+              size="sm"
+              shape="circle"
+              disabled={scoresFetching}
+              onClick={() => refetchScores()}
+              aria-label={t("submissions.refresh")}
+              title={t("submissions.updated", { when: scoresLastUpdated })}
+            >
+              <RefreshCw
+                aria-hidden="true"
+                size={14}
+                className={scoresFetching ? "animate-spin" : ""}
+              />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setMetricsOpen(true)}
+              title={t("submissions.metrics.title")}
+            >
+              <BarChart3 aria-hidden="true" className="size-4" />
+              {t("submissions.menu.metrics")}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setAcceptOpen(true)}
+              title={t("submissions.accept.heading")}
+            >
+              <LinkIcon aria-hidden="true" className="size-4" />
+              {t("submissions.menu.invite")}
+            </Button>
+            <SubmissionsActionsMenu
+              collecting={collecting}
+              regrading={regrading}
+              regradeAllActive={regradeAllActive}
+              emptyRoster={emptyRoster.show}
+              onCollect={() => collectScores.collect()}
+              onRegradeAll={() => setRegradeConfirmOpen(true)}
+              viewHref={viewRun?.html_url || viewWorkflowUrl}
+              viewLabel={viewLabel}
+            />
+          </>
+        }
       />
       <SubmissionsTable
         scores={visibleRows}
@@ -833,6 +653,33 @@ const SubmissionsPageContent = () => {
           regradeAll.regrade()
         }}
         onClose={() => setRegradeConfirmOpen(false)}
+      />
+      <MetricsModal
+        open={metricsOpen}
+        onClose={() => setMetricsOpen(false)}
+        isGroup={isGroupAssignment}
+        submitted={stats.submitted}
+        rosterCount={scopedStudents.length}
+        avgScore={avgScore}
+        maxScore={scopedScores?.[0]?.["max-score"]}
+        notAvailableLabel={t("submissions.stats.notAvailable")}
+        passing={stats.passing}
+        passingEnabled={passingEnabled}
+        passing_denom={stats.passing + stats.failing}
+        failing={stats.failing}
+        ungraded={stats.ungraded}
+        onShowFailing={showFailing}
+        acceptedAvailable={acceptedAvailable}
+        acceptedCount={acceptedCount}
+        acceptedNotSubmitted={acceptedNotSubmittedCount}
+        onShowAcceptedNotSubmitted={showAcceptedNotSubmitted}
+      />
+      <AcceptLinkModal
+        open={acceptOpen}
+        onClose={() => setAcceptOpen(false)}
+        url={assignmentSubmitUrl}
+        cli={assignmentSubmitCli}
+        hasSecret={Boolean(secret)}
       />
     </PageShell>
   )

@@ -1364,6 +1364,14 @@
     "lastCollected": "Last collected (org-wide) {{when}}.",
     "updated": "Updated {{when}}",
     "refresh": "Refresh submissions",
+    "menu": {
+      "actions": "Actions",
+      "metrics": "Metrics",
+      "invite": "Invite link"
+    },
+    "metrics": {
+      "title": "Submission metrics"
+    },
     "dashboard": {
       "never": "never"
     },
