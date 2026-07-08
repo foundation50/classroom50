@@ -5,6 +5,7 @@
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/hooks/github/types"
 import type { Student } from "@/types/classroom"
+import type { BadgeTone } from "@/components/ui"
 import { getName } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 
@@ -25,6 +26,24 @@ export function rowPassState(
   if (!max || !Number.isFinite(max)) return "ungraded"
   if (!Number.isFinite(row.score)) return "ungraded"
   return row.score / max >= thresholdFraction ? "passing" : "failing"
+}
+
+// Badge appearance for a score chip. The ungraded state (no threshold or
+// zero/NaN max) has no semantic tone — it renders as daisyUI's neutral `ghost`
+// badge, which `BadgeTone` can't express (ghost is a separate `<Badge ghost>`
+// prop). So return a discriminated result the caller maps: `{ ghost: true }`
+// -> `<Badge ghost>`, else `{ tone }`. Single source for the table row, the
+// history timeline, and any future score chip.
+export type ScoreTone = { ghost: true } | { ghost?: false; tone: BadgeTone }
+
+export function scoreTone(
+  score: number,
+  max: number,
+  thresholdFraction: number | null,
+): ScoreTone {
+  const state = rowPassState({ score, "max-score": max }, thresholdFraction)
+  if (state === "ungraded") return { ghost: true }
+  return { tone: state === "passing" ? "success" : "error" }
 }
 
 // Top-line stat-strip counts. `rostered` is meaningless as a group-assignment
@@ -340,4 +359,73 @@ export function filterNonSubmitters(
 
     return true
   })
+}
+
+// Rows for the exported gradebook CSV, in the order the file writes them.
+// Submitters come first (newest submission first), then non-submitters pinned
+// after with a 0 score and blank submission fields, so the export covers the
+// whole roster. Column order and the empty-string-vs-literal typing are the
+// contract downstream sheets rely on — keep them stable.
+export type ScoresCsvRow = {
+  usernames: string
+  score: number
+  max_score: number | string
+  submissions: number
+  submitted_at: string
+  late: string
+  commit: string
+  review: string
+  release: string
+}
+
+export function buildScoresCsvRows(
+  scoresInfo: SubmissionRow[],
+  nonSubmitters: Student[],
+): ScoresCsvRow[] {
+  const submittedRows: ScoresCsvRow[] = scoresInfo
+    .toSorted(
+      (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
+    )
+    .map(({ usernames, score, datetime, submissionCount, late, ...rest }) => ({
+      usernames: usernames.join(", "),
+      score,
+      max_score: rest["max-score"],
+      submissions: submissionCount,
+      submitted_at: new Date(datetime).toISOString(),
+      late: late ? "yes" : "no",
+      commit: rest.commit,
+      review: rest.review,
+      release: rest.release,
+    }))
+
+  const nonSubmittedRows: ScoresCsvRow[] = nonSubmitters.map((student) => ({
+    usernames: student.username,
+    score: 0,
+    max_score: "",
+    submissions: 0,
+    submitted_at: "",
+    late: "",
+    commit: "",
+    review: "",
+    release: "",
+  }))
+
+  return [...submittedRows, ...nonSubmittedRows]
+}
+
+// Which workflow action a single contextual "View …" link points at, and which
+// status strip (if any) shows. A running action wins; else the most recently
+// finished; else null. Derived fresh each render so the link never sticks on a
+// stale action. `idle` phases mean "nothing to show" for that action.
+export type WorkflowPhaseState = { running: boolean; idle: boolean }
+
+export function selectActiveWorkflowAction(
+  collect: WorkflowPhaseState,
+  regrade: WorkflowPhaseState,
+): "collect" | "regrade" | null {
+  if (collect.running) return "collect"
+  if (regrade.running) return "regrade"
+  if (!collect.idle) return "collect"
+  if (!regrade.idle) return "regrade"
+  return null
 }
