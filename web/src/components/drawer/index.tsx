@@ -46,6 +46,7 @@ import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import { studentRepoName } from "@/util/studentRepo"
 import { githubOrgUrl } from "@/util/orgUrl"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
+import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useTheme } from "@/hooks/useTheme"
 import { LanguageDialog } from "@/components/LanguageDialog"
 import { AboutDialog } from "@/components/AboutDialog"
@@ -621,6 +622,10 @@ export const SidebarFooter = () => {
     shouldThrow: false,
   })
   const { isStudent, isLoading: roleLoading } = useCourseTeacherAccess(org)
+  // Org plan for the About-dialog diagnostics snapshot. Cached and shared with
+  // the setup/audit panes; `plan` is only visible to org owners, so this is
+  // often undefined (the snapshot then reports "unknown" with a reason).
+  const { data: orgPlanDetails } = useGetOrgPlanDetails(org)
   // Precise classroom role (Instructor vs TA); respects the "view as" preview.
   // `actualRole` is the real (preview-independent) role.
   const {
@@ -964,6 +969,7 @@ export const SidebarFooter = () => {
           ref={aboutDialogRef}
           titleId={aboutDialogTitleId}
           org={org}
+          planName={orgPlanDetails?.plan?.name}
         />,
         document.body,
       )}
