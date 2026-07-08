@@ -37,4 +37,24 @@ describe("Input", () => {
     expect(cls).not.toContain("w-full")
     expect(cls).toContain("w-32")
   })
+
+  it("renders a leading icon inside a single bordered shell", () => {
+    render(
+      <Input
+        aria-label="search"
+        leadingIcon={<svg data-testid="icon" />}
+        inputSize="sm"
+      />,
+    )
+    const input = screen.getByLabelText("search")
+    // The <input> is a bare grower; the border lives on the wrapping label.
+    expect(input.className).toBe("grow")
+    const label = input.closest("label")!
+    expect(label.className).toContain("input")
+    expect(label.className).toContain("input-bordered")
+    expect(label.className).toContain("input-sm")
+    // Exactly one element owns the border recipe (no double border).
+    expect(input.className).not.toContain("input-bordered")
+    expect(screen.getByTestId("icon")).not.toBeNull()
+  })
 })
