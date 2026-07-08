@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
 // pattern: one localStorage key, applied by toggling `data-theme` on <html>.
@@ -35,6 +35,26 @@ function applyTheme(theme: Theme) {
   document.documentElement.setAttribute("data-theme", theme)
 }
 
+// Cross-fade an explicit light<->dark switch via the View Transitions API: the
+// browser snapshots the old page, applies the theme, and GPU-composites a
+// single cross-fade between the two snapshots (smooth, unlike transitioning
+// every element's colors at once). Falls back to an instant apply where the API
+// is unavailable. Duration/easing live in the `::view-transition-*` rules in
+// index.css; reduced-motion is handled there too.
+function applyThemeAnimated(theme: Theme) {
+  if (typeof document === "undefined") return
+  const startViewTransition = (
+    document as Document & {
+      startViewTransition?: (cb: () => void) => unknown
+    }
+  ).startViewTransition
+  if (typeof startViewTransition !== "function") {
+    applyTheme(theme)
+    return
+  }
+  startViewTransition.call(document, () => applyTheme(theme))
+}
+
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme)
 
@@ -42,8 +62,18 @@ export function useTheme() {
   // writing on mount would freeze a first-visit OS default into a locked explicit
   // choice, so "follow the OS" could never recover. We persist only on an
   // explicit user action (setTheme/toggleTheme) below.
+  //
+  // The first run only re-asserts what the anti-flash script already painted, so
+  // it must NOT animate; every later change (toggle, OS, cross-tab) cross-fades
+  // via the View Transitions API.
+  const firstApply = useRef(true)
   useEffect(() => {
-    applyTheme(theme)
+    if (firstApply.current) {
+      firstApply.current = false
+      applyTheme(theme)
+    } else {
+      applyThemeAnimated(theme)
+    }
   }, [theme])
 
   // While the user has made no explicit choice, follow the OS and any choice

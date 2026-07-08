@@ -136,6 +136,25 @@ body {
     "Noto Sans", "Noto Sans JP", "Noto Sans CJK JP", system-ui, sans-serif;
 }
 
+/* Theme cross-fade via the View Transitions API. `useTheme` wraps an explicit
+   light<->dark switch in `document.startViewTransition`, so the browser
+   GPU-composites a single fade between a snapshot of the old page and the new
+   one — far smoother than transitioning every element's colors at once, and
+   never applied to the anti-flash first paint. Tune only the duration/easing;
+   the default cross-fade (opacity of old vs. new) is exactly what we want. */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation-duration: 600ms;
+  animation-timing-function: var(--ease-out-soft);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+  }
+}
+
 /* Loading skeletons: a moving sheen sweeping left-to-right signals "loading"
    more clearly than a static block. Layered over daisyUI's `skeleton` base via
    `className="skeleton skeleton-shimmer"`. */
