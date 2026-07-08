@@ -1,8 +1,10 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, Check, ClipboardCopy } from "lucide-react"
 
-import { Modal } from "@/components/ui"
+import { Button, Modal } from "@/components/ui"
+import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
   appVersion,
   commitUrl,
@@ -42,12 +44,55 @@ function SupportLink({
   )
 }
 
+// Collapsible "Copy diagnostics" block: an allow-listed snapshot the user can
+// paste into a bug report. Mirrors MembershipError's CopyableDetails. Nothing
+// is sent anywhere — copy-to-clipboard only.
+function CopyableDiagnostics({
+  org,
+  planName,
+}: {
+  org?: string | null
+  planName?: string
+}) {
+  const { t } = useTranslation()
+  const text = buildDiagnostics({ org, planName })
+  const { copied, copy } = useCopyToClipboard(text)
+
+  return (
+    <details className="mt-2 rounded-lg border border-base-300 bg-base-200/40 p-3 text-sm">
+      <summary className="cursor-pointer font-medium text-base-content">
+        {t("nav.aboutDiagnosticsShow")}
+      </summary>
+      <div className="mt-3 space-y-3">
+        <pre className="max-h-48 overflow-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap">
+          {text}
+        </pre>
+        <Button variant="outline" size="sm" onClick={() => void copy()}>
+          {copied ? (
+            <Check aria-hidden="true" className="size-4" />
+          ) : (
+            <ClipboardCopy aria-hidden="true" className="size-4" />
+          )}
+          {copied
+            ? t("nav.aboutDiagnosticsCopied")
+            : t("nav.aboutDiagnosticsCopy")}
+        </Button>
+        <span aria-live="polite" className="sr-only">
+          {copied ? t("nav.aboutDiagnosticsCopied") : ""}
+        </span>
+      </div>
+    </details>
+  )
+}
+
 // About modal from the profile menu — always-accessible build/version info.
 // Version links to the GitHub Release for this build's `web-v<version>` tag
 // (when it exists); the commit links to the exact source commit, so a bug report
 // can point at precisely what shipped.
-export const AboutDialog = forwardRef<HTMLDialogElement, { titleId: string }>(
-  function AboutDialog({ titleId }, ref) {
+export const AboutDialog = forwardRef<
+  HTMLDialogElement,
+  { titleId: string; org?: string | null; planName?: string }
+>(function AboutDialog({ titleId, org, planName }, ref) {
     const { t } = useTranslation()
     const release = releaseUrl()
 
@@ -117,6 +162,16 @@ export const AboutDialog = forwardRef<HTMLDialogElement, { titleId: string }>(
             hint={t("nav.aboutReportIssueHint")}
           />
         </div>
+
+        <div className="divider my-4" />
+
+        <h4 className="mb-1 text-sm font-semibold">
+          {t("nav.aboutDiagnosticsTitle")}
+        </h4>
+        <p className="mb-2 text-xs text-base-content/60">
+          {t("nav.aboutDiagnosticsHint")}
+        </p>
+        <CopyableDiagnostics org={org} planName={planName} />
       </Modal>
     )
   },

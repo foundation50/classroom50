@@ -97,7 +97,12 @@
     "aboutReportIssue": "Report an issue",
     "aboutReportIssueHint": "Found a bug or have a feature request?",
     "aboutAskQuestion": "Ask a question",
-    "aboutAskQuestionHint": "Get help from the community."
+    "aboutAskQuestionHint": "Get help from the community.",
+    "aboutDiagnosticsTitle": "Diagnostics",
+    "aboutDiagnosticsHint": "Copy technical details to include in a bug report or support thread. No data is sent anywhere; it only fills your clipboard.",
+    "aboutDiagnosticsShow": "Show diagnostics",
+    "aboutDiagnosticsCopy": "Copy diagnostics",
+    "aboutDiagnosticsCopied": "Copied"
   },
   "auth": {
     "signInTitle": "Sign in",

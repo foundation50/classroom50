@@ -960,7 +960,11 @@ export const SidebarFooter = () => {
       )}
 
       {createPortal(
-        <AboutDialog ref={aboutDialogRef} titleId={aboutDialogTitleId} />,
+        <AboutDialog
+          ref={aboutDialogRef}
+          titleId={aboutDialogTitleId}
+          org={org}
+        />,
         document.body,
       )}
     </>
