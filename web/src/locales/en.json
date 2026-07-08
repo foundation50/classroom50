@@ -1581,13 +1581,41 @@
   },
   "orgActivity": {
     "heading": "Activity",
-    "subtitle": "Errors and actions this browser session has recorded. Session-only: nothing is stored on a server, and it clears when you close the tab.",
+    "subtitle": "Config changes, workflow runs, and this session's errors for the organization, newest first.",
     "copyDiagnostics": "Copy diagnostics",
     "copied": "Copied",
     "clear": "Clear",
+    "loading": "Loading activity...",
+    "loadOlder": "Load older",
+    "partialError": "Some activity couldn't be loaded. Showing what's available.",
+    "filters": {
+      "source": "Source:",
+      "type": "Type:"
+    },
+    "source": {
+      "commit": "Config changes",
+      "run": "Workflow runs",
+      "session": "This session"
+    },
+    "type": {
+      "assignment": "Assignment",
+      "classroom": "Classroom",
+      "student": "Student",
+      "scores": "Scores",
+      "config": "Config",
+      "run": "Workflow run",
+      "error": "Error",
+      "action": "Action"
+    },
+    "status": {
+      "ok": "Completed",
+      "error": "Failed",
+      "running": "Running",
+      "info": ""
+    },
     "empty": {
       "title": "No activity yet",
-      "body": "Failed operations, errors, and workflow actions from this session will appear here."
+      "body": "Config changes, workflow runs, and this session's errors will appear here."
     }
   },
   "orgMembers": {

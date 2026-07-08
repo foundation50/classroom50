@@ -251,9 +251,9 @@ describe("configCommitsQuery", () => {
       },
     })
 
-  const run = (client: GitHubClient, page = 1) =>
+  const run = (client: GitHubClient, perPage = 30) =>
     (
-      configCommitsQuery(client, "acme", page).queryFn as (ctx: {
+      configCommitsQuery(client, "acme", perPage).queryFn as (ctx: {
         signal?: AbortSignal
       }) => Promise<unknown>
     )({})
@@ -270,11 +270,11 @@ describe("configCommitsQuery", () => {
     await expect(run({ request } as unknown as GitHubClient)).rejects.toThrow()
   })
 
-  it("requests the commits endpoint with per_page and page params", async () => {
+  it("requests the commits endpoint with the perPage window", async () => {
     const request = vi.fn().mockResolvedValue([])
-    await run({ request } as unknown as GitHubClient, 2)
+    await run({ request } as unknown as GitHubClient, 60)
     expect(request).toHaveBeenCalledWith(
-      "/repos/acme/classroom50/commits?per_page=30&page=2",
+      "/repos/acme/classroom50/commits?per_page=60",
       expect.objectContaining({ method: "GET" }),
     )
   })
