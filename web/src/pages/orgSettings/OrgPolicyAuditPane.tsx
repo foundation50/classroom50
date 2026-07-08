@@ -337,10 +337,8 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
   const { data: membership } = useGetOrgMembership(org)
   const isOwner = membership?.role === "admin"
 
-  // Member-default fields a Fix it / re-run wrote but that didn't stick on
-  // read-back (GitHub returns 200 but ignores the change) — often an org or
-  // enterprise policy, but we can't prove which. Surfaced as "set manually" so
-  // we stop offering a Fix it that can't work.
+  // Fields a Fix it / re-run wrote that didn't stick on read-back; we stop
+  // offering a Fix it for them since it can't work. (See OrgDefaultsStepData.)
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
     new Set(),
   )

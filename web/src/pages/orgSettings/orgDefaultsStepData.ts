@@ -1,28 +1,24 @@
 import type { MemberDefaultSetting } from "@/orgPolicy/desiredState"
 
-// Structured detail the orgDefaults setup step carries in InitStepUpdate.data:
-// the member-privilege settings that didn't stick, plus the subset the API
-// accepted (200) but that still didn't take on read-back — a subset of
-// `unenforced` that a Fix it / re-run can't change (often an org or enterprise
-// policy, but we can't prove which).
+// Structured detail the orgDefaults setup step carries in InitStepUpdate.data.
+// `enterprisePinned` is the subset of `unenforced` the API accepted (200) but
+// that still didn't take on read-back, so a Fix it / re-run can't change it
+// (often an org or enterprise policy, but we can't prove which).
 export type OrgDefaultsStepData = {
   unenforced: MemberDefaultSetting[]
   enterprisePinned: MemberDefaultSetting[]
 }
 
-// One row of the failed-settings list: the setting, its by-hand fix, and whether
-// it's pinned — the write was accepted but didn't stick, so it must be set
-// manually (shown as a badge).
 export type UnenforcedDefaultItem = {
   field: string
   desc: string
   manualFix: string
+  // Write accepted but didn't stick — must be set manually (shown as a badge).
   pinned: boolean
 }
 
 // The one place a MemberDefaultSetting becomes a display row, shared by the setup
-// step and the audit pane so the two can't map differently. `pinnedFields` is the
-// subset (by field) that couldn't be written, sourced per surface.
+// step and the audit pane so the two can't map differently.
 export function toUnenforcedItems(
   settings: MemberDefaultSetting[],
   pinnedFields: Set<string>,
@@ -45,7 +41,6 @@ export function isOrgDefaultsStepData(
   return Array.isArray(d.unenforced) && Array.isArray(d.enterprisePinned)
 }
 
-// Render every unenforced field, flagging the pinned subset by field.
 export function unenforcedDefaultItems(
   data: OrgDefaultsStepData,
 ): UnenforcedDefaultItem[] {
