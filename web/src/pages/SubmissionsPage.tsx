@@ -2,7 +2,13 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
-import { BarChart3, Info, LinkIcon, RefreshCw } from "lucide-react"
+import {
+  BarChart3,
+  CalendarClock,
+  Info,
+  LinkIcon,
+  RefreshCw,
+} from "lucide-react"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -58,7 +64,11 @@ import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
 } from "@/hooks/github/mutations"
-import { formatDueDateTime, formatRelativeToNow } from "@/util/formatDate"
+import {
+  formatDueDateTime,
+  formatRelativeToNow,
+  isPastDue,
+} from "@/util/formatDate"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { GitHubLink } from "@/components/GitHubLink"
 
@@ -141,6 +151,12 @@ const SubmissionsPageContent = () => {
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
   const lateCount = scoresInfo.filter((row) => row.late).length
+
+  // Due-date presentation: absolute date + a relative countdown ("in 3 days" /
+  // "2 hours ago"). Past due flips the badge to error and the label to overdue.
+  const dueDate = assignmentInfo?.due
+  const dueOverdue = dueDate ? isPastDue(dueDate) : false
+  const dueRelative = dueDate ? formatRelativeToNow(new Date(dueDate)) : null
 
   // Roster students with no submission. "Credited" = login appears in any row's
   // `usernames` (member_usernames for groups, else [owner]), so group teammates
@@ -420,18 +436,34 @@ const SubmissionsPageContent = () => {
         title={assignmentInfo?.name}
         subtitle={
           <div className="flex flex-wrap items-center gap-2">
-            <span>
-              {assignmentInfo?.due
-                ? t("submissions.dueDate", {
-                    date: formatDueDateTime(assignmentInfo.due),
-                  })
-                : t("submissions.noDueDate")}
-            </span>
+            {dueDate ? (
+              <Badge
+                tone={dueOverdue ? "error" : "info"}
+                size="md"
+                title={formatDueDateTime(dueDate)}
+              >
+                <CalendarClock aria-hidden="true" className="size-3.5" />
+                {dueOverdue
+                  ? t("submissions.dueOverdue", {
+                      date: formatDueDateTime(dueDate),
+                      relative: dueRelative,
+                    })
+                  : t("submissions.dueIn", {
+                      date: formatDueDateTime(dueDate),
+                      relative: dueRelative,
+                    })}
+              </Badge>
+            ) : (
+              <span>{t("submissions.noDueDate")}</span>
+            )}
             {lateCount > 0 && (
               <Badge tone="error" size="sm">
                 {t("submissions.lateBadge", { count: lateCount })}
               </Badge>
             )}
+            <span className="text-base-content/70">
+              {t("submissions.updated", { when: scoresLastUpdated })}
+            </span>
             {assignmentInfo?.template && (
               <GitHubLink
                 href={githubTemplateRepoUrl(
@@ -557,7 +589,7 @@ const SubmissionsPageContent = () => {
               disabled={scoresFetching}
               onClick={() => refetchScores()}
               aria-label={t("submissions.refresh")}
-              title={t("submissions.updated", { when: scoresLastUpdated })}
+              title={t("submissions.refresh")}
             >
               <RefreshCw
                 aria-hidden="true"

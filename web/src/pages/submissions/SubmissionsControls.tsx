@@ -2,12 +2,38 @@ import { Search, X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Input, Select } from "@/components/ui"
+import { Button, Input, Select, cx } from "@/components/ui"
 import type {
   SubmissionFilters,
   SubmissionSort,
 } from "@/pages/submissions/dashboard"
 import { DEFAULT_FILTERS } from "@/pages/submissions/dashboard"
+
+// A select glued to a `bg-base-200` label prefix (the org/classroom toolbar
+// convention, e.g. ClassroomList) so each dropdown reads as "Status: All" and
+// its purpose is clear at a glance instead of a bare value.
+const LabeledSelect = ({
+  label,
+  className,
+  children,
+  ...props
+}: {
+  label: string
+  className?: string
+} & React.ComponentPropsWithoutRef<"select">) => (
+  <div className="join">
+    <span className="join-item flex items-center whitespace-nowrap border border-base-300 bg-base-200 px-3 text-sm text-base-content/70">
+      {label}
+    </span>
+    <Select
+      selectSize="sm"
+      className={cx("join-item w-auto min-w-0", className)}
+      {...props}
+    >
+      {children}
+    </Select>
+  </div>
+)
 
 // Search + sort + filter controls for the assignment overview dashboard.
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The
@@ -73,9 +99,9 @@ const SubmissionsControls = ({
       />
 
       {sections.length > 0 && (
-        <Select
-          selectSize="sm"
-          className="w-auto min-w-0 max-w-[10rem]"
+        <LabeledSelect
+          label={t("submissions.filters.sectionLabel")}
+          className="max-w-[10rem]"
           value={filters.section}
           onChange={(e) =>
             onFiltersChange({ ...filters, section: e.target.value })
@@ -88,12 +114,11 @@ const SubmissionsControls = ({
               {section}
             </option>
           ))}
-        </Select>
+        </LabeledSelect>
       )}
 
-      <Select
-        selectSize="sm"
-        className="w-auto min-w-0"
+      <LabeledSelect
+        label={t("submissions.filters.submissionLabel")}
         value={filters.submission}
         onChange={(e) =>
           onFiltersChange({
@@ -114,12 +139,11 @@ const SubmissionsControls = ({
             {t("submissions.filters.notSubmitted")}
           </option>
         )}
-      </Select>
+      </LabeledSelect>
 
       {passingAvailable && (
-        <Select
-          selectSize="sm"
-          className="w-auto min-w-0"
+        <LabeledSelect
+          label={t("submissions.filters.passingLabel")}
           value={filters.passing}
           // Disabled when filtering to non-submitters: they have no grade, so a
           // passing/failing filter would always yield an empty table.
@@ -135,13 +159,12 @@ const SubmissionsControls = ({
           <option value="all">{t("submissions.filters.allGrades")}</option>
           <option value="passing">{t("submissions.filters.passing")}</option>
           <option value="failing">{t("submissions.filters.failing")}</option>
-        </Select>
+        </LabeledSelect>
       )}
 
       {acceptedAvailable && (
-        <Select
-          selectSize="sm"
-          className="w-auto min-w-0"
+        <LabeledSelect
+          label={t("submissions.filters.acceptedLabel")}
           value={filters.accepted}
           onChange={(e) =>
             onFiltersChange({
@@ -156,7 +179,7 @@ const SubmissionsControls = ({
           <option value="not-accepted">
             {t("submissions.filters.notAccepted")}
           </option>
-        </Select>
+        </LabeledSelect>
       )}
 
       {hasActiveFilter && (
@@ -167,9 +190,8 @@ const SubmissionsControls = ({
       )}
 
       <div className="ml-auto flex flex-wrap items-center gap-2">
-        <Select
-          selectSize="sm"
-          className="w-auto min-w-0"
+        <LabeledSelect
+          label={t("submissions.filters.sortLabel")}
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
           aria-label={t("submissions.filters.sortAria")}
@@ -182,7 +204,7 @@ const SubmissionsControls = ({
           <option value="name-desc">
             {t("submissions.filters.sortNameDesc")}
           </option>
-        </Select>
+        </LabeledSelect>
         {trailing}
       </div>
     </div>
