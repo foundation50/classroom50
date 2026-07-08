@@ -36,13 +36,10 @@ export const REPAIRABLE_CONCERNS: ReadonlySet<ConcernId> = new Set<ConcernId>([
 // enterprise policy (200 but ignored). Plan-gated fields the API rejected
 // (403/422) are excluded. Only populated for orgDefaults.
 //
-// `unresolved` is set when a concern-level repair (branchProtection, rulesets)
-// did not complete. We deliberately do NOT assert a cause: a failed write maps
-// ambiguously to permissions, an org/enterprise policy, a rate limit, a
-// malformed body, or a still-initializing repo (see the plan's Sources). We
-// carry the mutation's own `message` (which names the attempted action and the
-// settings URL) and a `transient` flag so the UI can offer a retry instead of a
-// permanent "needs manual setup" for temporary failures.
+// `unresolved` = a concern repair (branchProtection, rulesets) returned a
+// warning. Cause-neutral by design (a failed write maps ambiguously to
+// permissions/policy/rate-limit/etc.); `transient` flags retryable failures so
+// the UI can offer a retry instead of a permanent "needs manual setup".
 export type RepairResult = {
   unfixableFields: string[]
   unresolved?: { message: string; transient: boolean }
@@ -75,9 +72,8 @@ export async function repairConcern(
         "main",
       )
       if (result.status === "warning") {
-        // branch_not_found means the repo is still initializing — a transient
-        // state, not a manual-setup situation. Everything else is reported as
-        // "couldn't complete" without asserting the cause.
+        // branch_not_found means the repo is still initializing — transient, so
+        // the UI offers a retry rather than flipping to manual setup.
         return {
           unfixableFields: [],
           unresolved: {
@@ -100,9 +96,8 @@ export async function repairConcern(
     case "rulesets": {
       const result = await repairRulesets(client, org)
       if (result.status === "warning") {
-        // A rulesets warning (some rulesets failed, or the list call failed) is
-        // reported as unresolved. We can't tell a policy block from a validation
-        // error, so it's non-transient but cause-neutral.
+        // Can't distinguish a policy block from a validation error, so
+        // non-transient but cause-neutral.
         return {
           unfixableFields: [],
           unresolved: { message: result.message, transient: false },

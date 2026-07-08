@@ -78,9 +78,9 @@ const CONCERN_STATE_BADGE: Record<CheckState, string> = {
 }
 
 // What a Fix-it result means for the pane, derived purely from the RepairResult
-// so the transient-vs-persist decision (R5) is unit-testable without a render.
-// `persist` fields are what gets written to the per-org store (transient
-// failures are deliberately excluded); `transientNotice` drives the retry hint.
+// so the transient-vs-persist decision is unit-testable without a render.
+// `pinnedFields` are what gets written to the per-org store (transient failures
+// are deliberately excluded); `transientNotice` drives the retry hint.
 export type RepairOutcome = {
   pinnedFields: string[]
   unresolvedConcern: string | null
@@ -379,18 +379,14 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
 
   // Fields a Fix it / re-run wrote that didn't stick on read-back; we stop
   // offering a Fix it for them since it can't work. (See OrgDefaultsStepData.)
-  // Seeded from per-org storage so the signal survives a reload/re-check. Safe
-  // to seed once: the pane is keyed on `org` at its call site, so an org switch
-  // remounts and re-reads storage rather than reusing this state.
+  // Seeded from storage; the `key={org}` remount re-reads on org switch.
   const [enterprisePinned, setEnterprisePinned] = useState<Set<string>>(
     () => readUnresolved(org).fields,
   )
   // Concern-level outcomes: a branchProtection/rulesets Fix-it that didn't
-  // complete. Maps concern id -> the attempted-action message we show. Seeded
-  // from storage; only non-transient outcomes are ever added/persisted. The
-  // store persists ids only, so a storage-restored entry has an empty message
-  // and the row shows the generic couldntAutoConfigure copy (the specific
-  // attempted-action message is only shown within the session that produced it).
+  // complete. Maps concern id -> the attempted-action message we show. Storage
+  // keeps ids only, so a restored entry has an empty message and falls back to
+  // the generic couldntAutoConfigure copy.
   const [unresolvedConcerns, setUnresolvedConcerns] = useState<
     Map<ConcernId, string>
   >(() => {
