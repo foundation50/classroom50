@@ -1,7 +1,7 @@
 import { Search, X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Select } from "@/components/ui"
+import { Button, Input, Select } from "@/components/ui"
 import type {
   SubmissionFilters,
   SubmissionSort,
@@ -50,21 +50,22 @@ const SubmissionsControls = ({
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2">
-      <label className="input input-bordered input-sm flex min-w-[12rem] flex-1 items-center gap-2 sm:max-w-xs">
-        <Search aria-hidden="true" className="size-4 opacity-60" />
-        <input
-          type="search"
-          className="grow"
-          placeholder={
-            isGroup
-              ? t("submissions.filters.searchGroupPlaceholder")
-              : t("submissions.filters.searchStudentPlaceholder")
-          }
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          aria-label={t("submissions.filters.searchAria")}
-        />
-      </label>
+      <Input
+        type="search"
+        inputSize="sm"
+        className="min-w-[12rem] flex-1 sm:max-w-xs"
+        leadingIcon={
+          <Search aria-hidden="true" className="size-4 opacity-60" />
+        }
+        placeholder={
+          isGroup
+            ? t("submissions.filters.searchGroupPlaceholder")
+            : t("submissions.filters.searchStudentPlaceholder")
+        }
+        value={query}
+        onChange={(e) => onQueryChange(e.target.value)}
+        aria-label={t("submissions.filters.searchAria")}
+      />
 
       {sections.length > 0 && (
         <Select
