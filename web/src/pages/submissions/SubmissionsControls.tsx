@@ -79,6 +79,39 @@ const SubmissionsControls = ({
     onFiltersChange({ ...DEFAULT_FILTERS })
   }
 
+  // The Status select folds the submission axis and the acceptance axis into one
+  // control. Underneath they stay separate fields on SubmissionFilters (the
+  // dashboard filter logic is unchanged); the select is just a combined view.
+  // Selecting a value sets one axis and resets the other, so the two are
+  // mutually exclusive from this control (a submitted row is accepted by
+  // definition, so the cross-product was never meaningful anyway).
+  const statusValue =
+    filters.submission !== "all"
+      ? `submission:${filters.submission}`
+      : filters.accepted !== "all"
+        ? `accepted:${filters.accepted}`
+        : "all"
+  const onStatusChange = (raw: string) => {
+    if (raw === "all") {
+      onFiltersChange({ ...filters, submission: "all", accepted: "all" })
+      return
+    }
+    const [axis, value] = raw.split(":")
+    if (axis === "submission") {
+      onFiltersChange({
+        ...filters,
+        submission: value as SubmissionFilters["submission"],
+        accepted: "all",
+      })
+    } else {
+      onFiltersChange({
+        ...filters,
+        accepted: value as SubmissionFilters["accepted"],
+        submission: "all",
+      })
+    }
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2">
       <Input
@@ -119,25 +152,38 @@ const SubmissionsControls = ({
 
       <LabeledSelect
         label={t("submissions.filters.submissionLabel")}
-        value={filters.submission}
-        onChange={(e) =>
-          onFiltersChange({
-            ...filters,
-            submission: e.target.value as SubmissionFilters["submission"],
-          })
-        }
+        value={statusValue}
+        onChange={(e) => onStatusChange(e.target.value)}
         aria-label={t("submissions.filters.submissionAria")}
       >
-        <option value="all">{t("submissions.filters.allSubmissions")}</option>
-        <option value="submitted">{t("submissions.filters.submitted")}</option>
-        <option value="on-time">{t("submissions.filters.onTime")}</option>
-        <option value="late">{t("submissions.filters.late")}</option>
+        <option value="all">{t("submissions.filters.allStatuses")}</option>
+        <option value="submission:submitted">
+          {t("submissions.filters.submitted")}
+        </option>
+        <option value="submission:on-time">
+          {t("submissions.filters.onTime")}
+        </option>
+        <option value="submission:late">{t("submissions.filters.late")}</option>
         {!isGroup && (
           // A grade requires a submission, so "Not submitted" is mutually
           // exclusive with a passing/failing filter — disable it then.
-          <option value="not-submitted" disabled={filters.passing !== "all"}>
+          <option
+            value="submission:not-submitted"
+            disabled={filters.passing !== "all"}
+          >
             {t("submissions.filters.notSubmitted")}
           </option>
+        )}
+        {acceptedAvailable && (
+          <>
+            <option disabled>────────</option>
+            <option value="accepted:accepted">
+              {t("submissions.filters.accepted")}
+            </option>
+            <option value="accepted:not-accepted">
+              {t("submissions.filters.notAccepted")}
+            </option>
+          </>
         )}
       </LabeledSelect>
 
@@ -159,26 +205,6 @@ const SubmissionsControls = ({
           <option value="all">{t("submissions.filters.allGrades")}</option>
           <option value="passing">{t("submissions.filters.passing")}</option>
           <option value="failing">{t("submissions.filters.failing")}</option>
-        </LabeledSelect>
-      )}
-
-      {acceptedAvailable && (
-        <LabeledSelect
-          label={t("submissions.filters.acceptedLabel")}
-          value={filters.accepted}
-          onChange={(e) =>
-            onFiltersChange({
-              ...filters,
-              accepted: e.target.value as SubmissionFilters["accepted"],
-            })
-          }
-          aria-label={t("submissions.filters.acceptedAria")}
-        >
-          <option value="all">{t("submissions.filters.allAcceptance")}</option>
-          <option value="accepted">{t("submissions.filters.accepted")}</option>
-          <option value="not-accepted">
-            {t("submissions.filters.notAccepted")}
-          </option>
         </LabeledSelect>
       )}
 
