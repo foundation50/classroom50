@@ -84,4 +84,41 @@ describe("Button", () => {
       screen.getByRole("button", { name: "Submit" }).getAttribute("type"),
     ).toBe("submit")
   })
+
+  it("renders an anchor with the same recipe when given href", () => {
+    render(
+      <Button href="https://example.com" variant="ghost" size="sm">
+        Open
+      </Button>,
+    )
+    const link = screen.getByRole("link", { name: "Open" })
+    expect(link.tagName).toBe("A")
+    expect(link.getAttribute("href")).toBe("https://example.com")
+    const cls = link.className
+    expect(cls).toContain("btn")
+    expect(cls).toContain("btn-ghost")
+    expect(cls).toContain("btn-sm")
+  })
+
+  it("forwards target and rel on the anchor variant", () => {
+    render(
+      <Button as="a" href="https://example.com" target="_blank" rel="noreferrer">
+        Ext
+      </Button>,
+    )
+    const link = screen.getByRole("link", { name: "Ext" })
+    expect(link.getAttribute("target")).toBe("_blank")
+    expect(link.getAttribute("rel")).toBe("noreferrer")
+  })
+
+  it("makes a disabled anchor inert (no href, aria-disabled)", () => {
+    render(
+      <Button as="a" href="https://example.com" disabled>
+        Dead
+      </Button>,
+    )
+    const link = screen.getByText("Dead").closest("a")!
+    expect(link.hasAttribute("href")).toBe(false)
+    expect(link.getAttribute("aria-disabled")).toBe("true")
+  })
 })
