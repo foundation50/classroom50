@@ -13,12 +13,12 @@
         try {
           var stored = localStorage.getItem("classroom50:theme")
           var theme =
-            stored === "corporate" || stored === "corporate-dark"
+            stored === "sumi" || stored === "sumi-dark"
               ? stored
               : window.matchMedia &&
                   window.matchMedia("(prefers-color-scheme: dark)").matches
-                ? "corporate-dark"
-                : "corporate"
+                ? "sumi-dark"
+                : "sumi"
           document.documentElement.setAttribute("data-theme", theme)
         } catch (e) {}
       })()

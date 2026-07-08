@@ -14,7 +14,7 @@ describe("theme anti-flash contract (index.html <-> useTheme)", () => {
     fileURLToPath(new URL("../../index.html", import.meta.url)),
     "utf8",
   )
-  const THEMES: Theme[] = ["corporate", "corporate-dark"]
+  const THEMES: Theme[] = ["sumi", "sumi-dark"]
 
   it("index.html references the same storage key", () => {
     expect(indexHtml).toContain(THEME_STORAGE_KEY)

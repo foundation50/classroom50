@@ -1,45 +1,47 @@
 @import url("https://fonts.googleapis.com/css2?family=Noto+Sans:ital,wght@0,400;0,500;0,600;0,700;1,400&family=Noto+Sans+JP:wght@400;500;700&display=swap");
 @import "tailwindcss";
 @plugin "daisyui/index.js" {
-  themes: corporate --default;
+  themes: sumi --default;
 }
 
-/* ── Light theme ────────────────────────────────────────────────────────────
-   A minimalist palette for an educational tool. Base surfaces are neutral
-   off-whites (no warm tint) — soft, not clinical pure white; text is a neutral
-   charcoal instead of pure black; the accent is `ai` (traditional Japanese
-   indigo) — calm and scholarly. A muted vermilion (`aka`) is reserved for the
-   accent/error family. Shapes stay flat and near-square (--depth/--noise 0,
-   small radii) for restraint. */
+/* ── Light theme: "sumi" ─────────────────────────────────────────────────────
+   Our own custom daisyUI theme (not a stock one). A minimalist, ink-on-paper
+   palette on neutral surfaces: neutral off-white base (no warm tint) — soft,
+   not clinical white; near-black neutral ink for strong text contrast; a single
+   calm indigo accent (#3e5da8). Semantic hues sit at a deliberate mid chroma —
+   saturated enough to read as distinct at a glance, low enough to stay in
+   harmony so the palette never tires the eye (each pairs with a soft tint via
+   daisyUI). A warm vermilion is the secondary pop. Flat, near-square shapes
+   (--depth/--noise 0, small radii) keep the look restrained. */
 @plugin "daisyui/theme" {
-  name: "corporate";
+  name: "sumi";
   default: true;
   color-scheme: light;
 
   --color-base-100: #fafafa;
   --color-base-200: #f1f1f1;
   --color-base-300: #e3e3e3;
-  --color-base-content: #2a2a2a;
+  --color-base-content: #232323;
 
-  --color-primary: #2a4d69;
+  --color-primary: #3e5da8;
   --color-primary-content: #fafafa;
-  --color-secondary: #5f5f5f;
+  --color-secondary: #5a5a5a;
   --color-secondary-content: #fafafa;
-  --color-accent: #b7472a;
+  --color-accent: #c04a2b;
   --color-accent-content: #fafafa;
 
   /* Sidebar rail follows `neutral`: a deep charcoal so the rail reads as a
      quiet dark panel against the light canvas. */
-  --color-neutral: #2a2a2a;
+  --color-neutral: #232323;
   --color-neutral-content: #f1f1f1;
 
-  --color-info: #2a6f7a;
+  --color-info: #2f7d8a;
   --color-info-content: #fafafa;
-  --color-success: #4f6f3f;
+  --color-success: #3f7d54;
   --color-success-content: #fafafa;
-  --color-warning: #b5822e;
-  --color-warning-content: #fafafa;
-  --color-error: #a83232;
+  --color-warning: #a4741d;
+  --color-warning-content: #1b1b1d;
+  --color-error: #b0392f;
   --color-error-content: #fafafa;
 
   --radius-selector: 0.25rem;
@@ -52,40 +54,41 @@
   --noise: 0;
 }
 
-/* ── Dark theme: "sumi" ──────────────────────────────────────────────────────
-   The night side of the same palette. Base surfaces are deep sumi ink; text is
-   a soft off-white. Accents lift slightly for legibility on dark, but keep the
-   indigo / vermilion identity so switching light<->dark only inverts surfaces. */
+/* ── Dark theme: "sumi-dark" ──────────────────────────────────────────────────
+   The night side of our custom sumi theme. Neutral dark surfaces with soft
+   off-white ink; the accent and semantics lift to lighter, still-saturated
+   hues (indigo #8ba3d4, etc.) so they pop against the dark ground while keeping
+   the same identity — and the same restrained harmony — as light mode. */
 @plugin "daisyui/theme" {
-  name: "corporate-dark";
+  name: "sumi-dark";
   default: false;
   prefersdark: true;
   color-scheme: dark;
 
-  --color-base-100: #1c1b19;
-  --color-base-200: #161513;
-  --color-base-300: #100f0e;
-  --color-base-content: #ece7dc;
+  --color-base-100: #1b1b1d;
+  --color-base-200: #161618;
+  --color-base-300: #100f11;
+  --color-base-content: #ececee;
 
-  --color-primary: #7fa8c9;
+  --color-primary: #8ba3d4;
   --color-primary-content: #14181c;
-  --color-secondary: #b3a894;
+  --color-secondary: #a8a8ac;
   --color-secondary-content: #14181c;
-  --color-accent: #e0785c;
+  --color-accent: #e08a6f;
   --color-accent-content: #14181c;
 
-  /* Sidebar surface: a slightly lighter ink panel than base so the rail reads
+  /* Sidebar surface: a slightly lighter panel than base so the rail reads
      as a distinct surface in dark mode. */
-  --color-neutral: #26241f;
-  --color-neutral-content: #ece7dc;
+  --color-neutral: #26262a;
+  --color-neutral-content: #ececee;
 
-  --color-info: #6fb3bd;
+  --color-info: #6fb8c4;
   --color-info-content: #14181c;
-  --color-success: #93b57f;
+  --color-success: #8fb89f;
   --color-success-content: #14181c;
-  --color-warning: #d9ab5e;
+  --color-warning: #d0ad6e;
   --color-warning-content: #14181c;
-  --color-error: #dd7a7a;
+  --color-error: #d08a82;
   --color-error-content: #14181c;
 
   --radius-selector: 0.25rem;
@@ -98,16 +101,16 @@
   --noise: 0;
 }
 
-/* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (sumi ink); the
-   active-border/logo accent and the active/hover surface don't map to a single
-   theme token, so scope them per theme. Light uses a soft washi-indigo accent
-   over a faint warm tint; dark reuses the theme primary over a translucent
-   sheet. Consumed via arbitrary values in components/drawer. */
-[data-theme="corporate"] {
-  --sidebar-accent: #9cb8d4;
+/* Sidebar accent tokens. The rail/text follow daisyUI `neutral` (the ink
+   charcoal); the active-border/logo accent and the active/hover surface don't
+   map to a single theme token, so scope them per theme. Light uses a soft
+   indigo accent over a neutral charcoal surface; dark reuses the theme primary
+   over a translucent sheet. Consumed via arbitrary values in components/drawer. */
+[data-theme="sumi"] {
+  --sidebar-accent: #8ba3d4;
   --sidebar-surface: #3a3a3a;
 }
-[data-theme="corporate-dark"] {
+[data-theme="sumi-dark"] {
   --sidebar-accent: var(--color-primary);
   --sidebar-surface: color-mix(
     in oklch,
@@ -198,13 +201,14 @@ body {
 }
 
 /* ── WCAG 2.1 AA contrast overrides ────────────────────────────────────────
-   The light palette is hand-picked so the semantic hues clear AA (4.5:1) as
-   text on the neutral surfaces (#fafafa / #f1f1f1) — dark indigo, teal, green,
-   and red all pass comfortably. The one exception is `warning` (a gold), which is legible as a fill but dips under AA as small text or on a
-   soft badge; darken it for text use while keeping the gold identity. Declared
-   unlayered so it wins over DaisyUI's layered theme definition. Scoped to the
-   light theme only (NOT bare `:root`, which would also match the dark theme). */
-[data-theme="corporate"] {
+   The light semantic tokens are tuned a touch vivid so button fills (color +
+   white label) pop. `warning` (gold) is the one that fails AA as small text /
+   soft-badge foreground, so darken just that token for text use while keeping a
+   gold fill. info/success/error/primary clear AA as text at body size; soft
+   badges get an extra per-theme darkening below. Declared unlayered so it wins
+   over daisyUI's layered theme definition; scoped to the light theme only (a
+   bare :root would also match the dark theme). */
+[data-theme="sumi"] {
   --color-warning: #8a5e1c;
 }
 
@@ -229,14 +233,14 @@ textarea::placeholder {
    dark, where the token is tuned for white button labels rather than text.
    Nudge the badge foreground per theme (darker in light, lighter in dark) so
    every soft badge clears AA without touching the button-fill tokens. */
-[data-theme="corporate"] .badge-soft {
+[data-theme="sumi"] .badge-soft {
   color: color-mix(
     in oklab,
     var(--badge-color, var(--color-base-content)) 88%,
     black
   );
 }
-[data-theme="corporate-dark"] .badge-soft {
+[data-theme="sumi-dark"] .badge-soft {
   color: color-mix(
     in oklab,
     var(--badge-color, var(--color-base-content)) 75%,

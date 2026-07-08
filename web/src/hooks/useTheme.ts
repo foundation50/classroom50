@@ -2,13 +2,14 @@ import { useCallback, useEffect, useState } from "react"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
 // pattern: one localStorage key, applied by toggling `data-theme` on <html>.
-// The two theme names are the ones registered in index.css.
+// The two theme names ("sumi" light / "sumi-dark" dark) are the ones registered
+// in index.css.
 export const THEME_STORAGE_KEY = "classroom50:theme"
 
-export type Theme = "corporate" | "corporate-dark"
+export type Theme = "sumi" | "sumi-dark"
 
-const LIGHT: Theme = "corporate"
-const DARK: Theme = "corporate-dark"
+const LIGHT: Theme = "sumi"
+const DARK: Theme = "sumi-dark"
 
 // Resolve the initial theme: an explicit stored choice wins; else fall back to
 // the OS `prefers-color-scheme`. Kept in sync with the anti-flash inline script
