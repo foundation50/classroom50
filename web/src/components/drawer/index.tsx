@@ -1048,7 +1048,9 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
               <SidebarItemBody
                 label={classesLabel}
                 icon={<BookText aria-hidden="true" />}
-                active={!onSettings && !onPublished && !onMembers}
+                active={
+                  !onSettings && !onPublished && !onMembers && !onActivity
+                }
               />
             </Link>
           </Tip>
