@@ -85,4 +85,11 @@ describe("buildDiagnostics", () => {
   it("says 'none' when there are no recent errors", () => {
     expect(buildDiagnostics()).toContain("Recent errors: none")
   })
+
+  it("includes the message for a non-GitHub error (the async-capture case)", () => {
+    recordError(new TypeError("Cannot read properties of undefined"))
+    const text = buildDiagnostics()
+    expect(text).toContain("TypeError")
+    expect(text).toContain("Cannot read properties of undefined")
+  })
 })
