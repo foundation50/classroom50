@@ -21,13 +21,7 @@ describe("StatCard", () => {
   })
 
   it("renders a hint node when provided", () => {
-    render(
-      <StatCard
-        label="Passing"
-        value={5}
-        hint={<span>2 failing</span>}
-      />,
-    )
+    render(<StatCard label="Passing" value={5} hint={<span>2 failing</span>} />)
     expect(screen.getByText("2 failing")).not.toBeNull()
   })
 })

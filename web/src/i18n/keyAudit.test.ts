@@ -18,14 +18,7 @@ const SRC_DIR = fileURLToPath(new URL("..", import.meta.url))
 // i18next plural/context keys expand the base key with suffixes; a call to
 // t("x", { count }) is valid if x_one/x_other (etc.) exist. Accept a call key
 // when it, or any of its suffixed forms, is present in the flattened base.
-const PLURAL_SUFFIXES = [
-  "_zero",
-  "_one",
-  "_two",
-  "_few",
-  "_many",
-  "_other",
-]
+const PLURAL_SUFFIXES = ["_zero", "_one", "_two", "_few", "_many", "_other"]
 
 const baseKeys = new Set(Object.keys(flattenBundle(en)))
 
@@ -41,7 +34,10 @@ function walk(dir: string): string[] {
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       out.push(...walk(full))
-    } else if (/\.(ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) {
+    } else if (
+      /\.(ts|tsx)$/.test(entry.name) &&
+      !/\.test\.tsx?$/.test(entry.name)
+    ) {
       out.push(full)
     }
   }
@@ -54,7 +50,7 @@ function walk(dir: string): string[] {
 const T_CALL = /\bt\(\s*(["'`])((?:(?!\1)[^\\$]|\\.)*)\1/g
 
 describe("i18n key audit", () => {
-  it("every static t(\"…\") key exists in en.json", () => {
+  it('every static t("…") key exists in en.json', () => {
     const missing: { file: string; key: string }[] = []
     for (const file of walk(SRC_DIR)) {
       const text = readFileSync(file, "utf8")
