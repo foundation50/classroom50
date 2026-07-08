@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, afterEach, vi, beforeAll } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
+import { createRef } from "react"
 
 import { Modal } from "./Modal"
 
@@ -97,5 +98,27 @@ describe("Modal", () => {
     const cancel = new Event("cancel", { cancelable: true })
     dialog.dispatchEvent(cancel)
     expect(cancel.defaultPrevented).toBe(false)
+  })
+
+  it("stays closed in ref-driven mode until opened imperatively, and wires dialogRef", () => {
+    const onClose = vi.fn()
+    const dialogRef = createRef<HTMLDialogElement | null>()
+    const { container } = render(
+      <Modal dialogRef={dialogRef} onClose={onClose} aria-label="dlg">
+        x
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+
+    // `open` is omitted: the sync effect early-returns, so the dialog is not
+    // auto-opened and the ref is populated for the caller to drive.
+    expect(dialog.open).toBe(false)
+    expect(dialogRef.current).toBe(dialog)
+
+    // Opening imperatively still routes native close through onClose.
+    dialogRef.current?.showModal()
+    expect(dialog.open).toBe(true)
+    dialog.close()
+    expect(onClose).toHaveBeenCalledTimes(1)
   })
 })

@@ -11,7 +11,7 @@ import {
 import { X } from "lucide-react"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"
-import { Button } from "@/components/ui"
+import { Button, alertToneClass } from "@/components/ui"
 
 export type ToastTone = "info" | "success" | "warning" | "error"
 
@@ -44,15 +44,6 @@ type NotificationContextValue = {
 }
 
 const NotificationContext = createContext<NotificationContextValue | null>(null)
-
-// daisyUI alert classes per tone. `alert-soft` matches the inline alerts this
-// provider generalizes (EnrolledStudents, EditAssignment).
-const TONE_CLASS: Record<ToastTone, string> = {
-  info: "alert alert-info alert-soft",
-  success: "alert alert-success alert-soft",
-  warning: "alert alert-warning alert-soft",
-  error: "alert alert-error alert-soft",
-}
 
 let toastSeq = 0
 const nextId = () => `toast-${++toastSeq}`
@@ -147,7 +138,7 @@ const ToastViewport = ({
             exit="exit"
             role="alert"
             aria-live={toast.tone === "error" ? "assertive" : "polite"}
-            className={`${TONE_CLASS[toast.tone]} max-w-sm`}
+            className={`${alertToneClass(toast.tone)} max-w-sm`}
           >
             <span className="text-sm">{toast.message}</span>
             <Button

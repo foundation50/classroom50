@@ -30,7 +30,7 @@ export { FormField, HelpTooltip } from "./FormField"
 export { Modal } from "./Modal"
 export type { ModalProps, ModalSize } from "./Modal"
 
-export { Alert } from "./Alert"
+export { Alert, alertToneClass } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"
 
 export { Spinner } from "@/components/Spinner"

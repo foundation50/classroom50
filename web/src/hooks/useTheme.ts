@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 // Client-side theme preference. Mirrors the `classroom50:sidebar-collapsed`
 // pattern: one localStorage key, applied by toggling `data-theme` on <html>.
@@ -58,26 +58,22 @@ function applyThemeAnimated(theme: Theme) {
 export function useTheme() {
   const [theme, setThemeState] = useState<Theme>(resolveInitialTheme)
 
-  // Apply the active theme to <html>. Persistence is deliberately NOT done here:
-  // writing on mount would freeze a first-visit OS default into a locked explicit
-  // choice, so "follow the OS" could never recover. We persist only on an
-  // explicit user action (setTheme/toggleTheme) below.
-  //
-  // The first run only re-asserts what the anti-flash script already painted, so
-  // it must NOT animate; every later change (toggle, OS, cross-tab) cross-fades
-  // via the View Transitions API.
-  const firstApply = useRef(true)
+  // Only an explicit user toggle cross-fades. Apply the active theme to <html>
+  // here without animating: the first run re-asserts what the anti-flash script
+  // already painted, and OS/cross-tab changes are external — cross-fading either
+  // would abort a user's in-flight transition (a non-user event landing inside
+  // the ~600ms fade re-snapshots the page) and animate motion the user didn't
+  // ask for. Persistence is deliberately NOT done here: writing on mount would
+  // freeze a first-visit OS default into a locked explicit choice, so "follow
+  // the OS" could never recover. We persist (and animate) only on an explicit
+  // user action (setTheme/toggleTheme) below.
   useEffect(() => {
-    if (firstApply.current) {
-      firstApply.current = false
-      applyTheme(theme)
-    } else {
-      applyThemeAnimated(theme)
-    }
+    applyTheme(theme)
   }, [theme])
 
   // While the user has made no explicit choice, follow the OS and any choice
-  // made in another tab. Both listeners are no-ops once a value is stored.
+  // made in another tab. Both listeners are no-ops once a value is stored, so a
+  // tab holding an explicit choice ignores cross-tab writes too.
   useEffect(() => {
     if (typeof window === "undefined") return
 
@@ -102,6 +98,10 @@ export function useTheme() {
   }, [])
 
   const persist = useCallback((next: Theme) => {
+    // A user toggle is the only path that cross-fades; state still holds the new
+    // theme, but painting it through the View Transition here (rather than in the
+    // [theme] effect) keeps OS/cross-tab-driven changes instant.
+    applyThemeAnimated(next)
     setThemeState(next)
     if (typeof window !== "undefined") {
       window.localStorage.setItem(THEME_STORAGE_KEY, next)
