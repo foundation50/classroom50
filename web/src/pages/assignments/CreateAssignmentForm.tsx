@@ -509,62 +509,39 @@ const CreateAssignmentForm = ({
               )}
             </div>
 
-            <form.Subscribe
-              selector={(state) => [
-                Boolean(state.values.template_repo),
-                Boolean(state.values.description),
-              ]}
-            >
-              {([hasTemplate, hasDescription]) => (
-                <details
-                  className="group mt-4"
-                  open={hasTemplate || hasDescription}
-                >
-                  <summary className="cursor-pointer label font-bold marker:content-none flex items-center gap-2">
-                    <span className="transition-transform group-open:rotate-90">
-                      ▶
+            <form.Field name="description">
+              {(field) => (
+                <div className="mt-4">
+                  <label htmlFor={field.name} className="label font-bold mb-2">
+                    {t("assignments.form.description")}
+                    <span className="ml-1.5 font-normal text-base-content/60">
+                      ({t("assignments.form.optional")})
                     </span>
-                    {t("assignments.form.optionalSection")}
-                  </summary>
-
-                  <div className="mt-3">
-                    <form.Field name="template_repo">
-                      {(field) => (
-                        <TemplateField
-                          field={field}
-                          org={org}
-                          classroom={classroom}
-                        />
-                      )}
-                    </form.Field>
-                  </div>
-
-                  <form.Field name="description">
-                    {(field) => (
-                      <div className="mt-4">
-                        <label
-                          htmlFor={field.name}
-                          className="label font-bold mb-2"
-                        >
-                          {t("assignments.form.description")}
-                        </label>
-                        <textarea
-                          id={field.name}
-                          name={field.name}
-                          className="textarea w-full"
-                          placeholder={t(
-                            "assignments.form.descriptionPlaceholder",
-                          )}
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                        />
-                      </div>
-                    )}
-                  </form.Field>
-                </details>
+                  </label>
+                  <textarea
+                    id={field.name}
+                    name={field.name}
+                    className="textarea w-full"
+                    placeholder={t("assignments.form.descriptionPlaceholder")}
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                </div>
               )}
-            </form.Subscribe>
+            </form.Field>
+
+            <div className="mt-4">
+              <form.Field name="template_repo">
+                {(field) => (
+                  <TemplateField
+                    field={field}
+                    org={org}
+                    classroom={classroom}
+                  />
+                )}
+              </form.Field>
+            </div>
 
             <div className="divider my-2" />
             <h3 className="text-lg font-bold pb-2">

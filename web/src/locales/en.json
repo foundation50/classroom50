@@ -571,7 +571,7 @@
     "form": {
       "detailsSection": "Details",
       "settingsSection": "Settings",
-      "optionalSection": "Template & description (optional)",
+      "optional": "optional",
       "name": "Assignment Name",
       "namePlaceholder": "e.g., Loops Assignment",
       "slug": "Assignment Slug",

@@ -121,6 +121,9 @@ export const TemplateField = ({
           className="size-4 text-base-content/30 opacity-70"
         />
         {t("assignments.template.label")}
+        <span className="font-normal text-base-content/60">
+          ({t("assignments.form.optional")})
+        </span>
         <HelpTooltip help={t("assignments.template.help")} />
       </label>
       <input
