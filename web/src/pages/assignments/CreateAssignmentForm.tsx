@@ -5,7 +5,7 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import { AlertTriangle } from "lucide-react"
 import AutogradingTestsPane from "./AutogradingTestsPane"
-import { Button, Card, Select } from "@/components/ui"
+import { Button, Card } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   testToDraft,
@@ -571,170 +571,187 @@ const CreateAssignmentForm = ({
               {t("assignments.form.settingsSection")}
             </h3>
 
-            <div className="grid grid-cols-1 gap-x-8 gap-y-4 sm:grid-cols-2 sm:items-start">
-              <form.Field name="mode">
-                {(field) => (
-                  <div>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
+              <div className="flex flex-col gap-4">
+                <form.Field name="mode">
+                  {(field) => (
+                    <fieldset>
+                      <legend className="label font-bold mb-2">
+                        {t("assignments.form.type")}
+                      </legend>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        <label
+                          htmlFor={`${field.name}-individual`}
+                          className="label cursor-pointer gap-2 p-0"
+                        >
+                          <input
+                            id={`${field.name}-individual`}
+                            type="radio"
+                            className="radio"
+                            name={field.name}
+                            value="individual"
+                            checked={field.state.value === "individual"}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange("individual")}
+                          />
+                          {t("assignments.form.typeIndividual")}
+                        </label>
+                        <label
+                          htmlFor={`${field.name}-group`}
+                          className="label cursor-pointer gap-2 p-0"
+                        >
+                          <input
+                            id={`${field.name}-group`}
+                            type="radio"
+                            className="radio"
+                            name={field.name}
+                            value="group"
+                            checked={field.state.value === "group"}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange("group")}
+                          />
+                          {t("assignments.form.typeGroup")}
+                        </label>
+                      </div>
+                    </fieldset>
+                  )}
+                </form.Field>
+
+                <form.Subscribe selector={(state) => state.values.mode}>
+                  {(modeValue) =>
+                    modeValue === "group" && (
+                      <form.Field name="max_group_size">
+                        {(field) => (
+                          <div>
+                            <label
+                              htmlFor={field.name}
+                              className="label font-bold mb-2"
+                            >
+                              {t("assignments.form.maxGroupSize")}
+                            </label>
+                            <input
+                              id={field.name}
+                              name={field.name}
+                              type="number"
+                              className="input validator w-full sm:max-w-xs"
+                              placeholder="#"
+                              min={GROUP_SIZE_MIN}
+                              max={GROUP_SIZE_MAX}
+                              step="1"
+                              title={t("assignments.form.maxGroupSizeTitle", {
+                                min: GROUP_SIZE_MIN,
+                                max: GROUP_SIZE_MAX,
+                              })}
+                              value={
+                                Number.isFinite(field.state.value)
+                                  ? field.state.value
+                                  : ""
+                              }
+                              onBlur={() => {
+                                // Snap to a valid whole number on blur so the CLI
+                                // never sees a non-integer or out-of-range size.
+                                const raw = field.state.value
+                                const next = Number.isFinite(raw)
+                                  ? Math.min(
+                                      Math.max(Math.floor(raw), GROUP_SIZE_MIN),
+                                      GROUP_SIZE_MAX,
+                                    )
+                                  : GROUP_SIZE_MIN
+                                if (next !== raw) field.handleChange(next)
+                                field.handleBlur()
+                              }}
+                              onChange={(e) =>
+                                field.handleChange(e.target.valueAsNumber)
+                              }
+                            />
+                          </div>
+                        )}
+                      </form.Field>
+                    )
+                  }
+                </form.Subscribe>
+              </div>
+
+              <div className="flex flex-col gap-4">
+                <form.Field name="feedback_pr">
+                  {(field) => (
                     <label
                       htmlFor={field.name}
-                      className="label font-bold mb-2"
-                    >
-                      {t("assignments.form.type")}
-                    </label>
-                    <Select
-                      id={field.name}
-                      name={field.name}
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) =>
-                        field.handleChange(
-                          e.target.value as "individual" | "group",
-                        )
-                      }
-                    >
-                      <option value="individual">
-                        {t("assignments.form.typeIndividual")}
-                      </option>
-                      <option value="group">
-                        {t("assignments.form.typeGroup")}
-                      </option>
-                    </Select>
-                  </div>
-                )}
-              </form.Field>
-
-              <form.Subscribe selector={(state) => state.values.mode}>
-                {(modeValue) =>
-                  modeValue === "group" && (
-                    <form.Field name="max_group_size">
-                      {(field) => (
-                        <div>
-                          <label
-                            htmlFor={field.name}
-                            className="label font-bold mb-2"
-                          >
-                            {t("assignments.form.maxGroupSize")}
-                          </label>
-                          <input
-                            id={field.name}
-                            name={field.name}
-                            type="number"
-                            className="input validator w-full"
-                            placeholder="#"
-                            min={GROUP_SIZE_MIN}
-                            max={GROUP_SIZE_MAX}
-                            step="1"
-                            title={t("assignments.form.maxGroupSizeTitle", {
-                              min: GROUP_SIZE_MIN,
-                              max: GROUP_SIZE_MAX,
-                            })}
-                            value={
-                              Number.isFinite(field.state.value)
-                                ? field.state.value
-                                : ""
-                            }
-                            onBlur={() => {
-                              // Snap to a valid whole number on blur so the CLI
-                              // never sees a non-integer or out-of-range size.
-                              const raw = field.state.value
-                              const next = Number.isFinite(raw)
-                                ? Math.min(
-                                    Math.max(Math.floor(raw), GROUP_SIZE_MIN),
-                                    GROUP_SIZE_MAX,
-                                  )
-                                : GROUP_SIZE_MIN
-                              if (next !== raw) field.handleChange(next)
-                              field.handleBlur()
-                            }}
-                            onChange={(e) =>
-                              field.handleChange(e.target.valueAsNumber)
-                            }
-                          />
-                        </div>
-                      )}
-                    </form.Field>
-                  )
-                }
-              </form.Subscribe>
-            </div>
-
-            <div className="divider my-2" />
-
-            <div className="flex flex-col gap-4">
-              <form.Field name="feedback_pr">
-                {(field) => (
-                  <label
-                    htmlFor={field.name}
-                    className="flex cursor-pointer items-center gap-3"
-                  >
-                    <input
-                      id={field.name}
-                      type="checkbox"
-                      className="toggle toggle-primary"
-                      name={field.name}
-                      checked={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.checked)}
-                    />
-                    <span className="label font-bold">
-                      {t("assignments.form.feedbackPr")}
-                    </span>
-                    <HelpTooltip help={t("assignments.form.feedbackPrHelp")} />
-                  </label>
-                )}
-              </form.Field>
-
-              <form.Field name="due_date">
-                {(field) => (
-                  <div>
-                    <label
-                      htmlFor={`${field.name}-enabled`}
                       className="flex cursor-pointer items-center gap-3"
                     >
                       <input
-                        id={`${field.name}-enabled`}
+                        id={field.name}
                         type="checkbox"
                         className="toggle toggle-primary"
-                        checked={dueDateEnabled}
-                        onChange={(e) => {
-                          setDueDateEnabled(e.target.checked)
-                          // Unchecking clears the value so the write path omits
-                          // the due date entirely (#195).
-                          if (!e.target.checked) field.handleChange("")
-                        }}
+                        name={field.name}
+                        checked={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => field.handleChange(e.target.checked)}
                       />
                       <span className="label font-bold">
-                        {t("assignments.form.setDueDate")}
+                        {t("assignments.form.feedbackPr")}
                       </span>
-                      <HelpTooltip help={t("assignments.form.setDueDateTip")} />
+                      <HelpTooltip
+                        help={t("assignments.form.feedbackPrHelp")}
+                      />
                     </label>
-                    {dueDateEnabled ? (
-                      <div className="mt-2 ml-[3.75rem]">
+                  )}
+                </form.Field>
+
+                <form.Field name="due_date">
+                  {(field) => (
+                    <div>
+                      <label
+                        htmlFor={`${field.name}-enabled`}
+                        className="flex cursor-pointer items-center gap-3"
+                      >
                         <input
-                          id={field.name}
-                          name={field.name}
-                          type="datetime-local"
-                          className="input w-full sm:max-w-xs"
-                          aria-label={t("assignments.form.dueDate", {
-                            tz: tzShort,
-                          })}
-                          value={field.state.value}
-                          onBlur={(e) => {
-                            // Clearing the picker retires the due date: hide it
-                            // and uncheck the box (value is already "").
-                            if (!e.target.value) setDueDateEnabled(false)
-                            field.handleBlur()
+                          id={`${field.name}-enabled`}
+                          type="checkbox"
+                          className="toggle toggle-primary"
+                          checked={dueDateEnabled}
+                          onChange={(e) => {
+                            setDueDateEnabled(e.target.checked)
+                            // Unchecking clears the value so the write path omits
+                            // the due date entirely (#195).
+                            if (!e.target.checked) field.handleChange("")
                           }}
-                          onChange={(e) => field.handleChange(e.target.value)}
                         />
-                        <p className="mt-1.5 text-sm text-base-content/70">
-                          {t("assignments.form.dueDateTz", { tz: tzShort })}
-                        </p>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </form.Field>
+                        <span className="label font-bold">
+                          {t("assignments.form.setDueDate")}
+                        </span>
+                        <HelpTooltip
+                          help={t("assignments.form.setDueDateTip")}
+                        />
+                      </label>
+                      {dueDateEnabled ? (
+                        <div className="mt-2 ml-[3.75rem]">
+                          <input
+                            id={field.name}
+                            name={field.name}
+                            type="datetime-local"
+                            className="input w-full sm:max-w-xs"
+                            aria-label={t("assignments.form.dueDate", {
+                              tz: tzShort,
+                            })}
+                            value={field.state.value}
+                            onBlur={(e) => {
+                              // Clearing the picker retires the due date: hide it
+                              // and uncheck the box (value is already "").
+                              if (!e.target.value) setDueDateEnabled(false)
+                              field.handleBlur()
+                            }}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                          />
+                          <p className="mt-1.5 text-sm text-base-content/70">
+                            {t("assignments.form.dueDateTz", { tz: tzShort })}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </form.Field>
+              </div>
             </div>
           </Card.Body>
           <FormErrors form={form} />
