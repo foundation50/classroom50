@@ -69,6 +69,9 @@ import {
   outOfOrgTemplateError,
 } from "@/util/templateAccessError"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:assignments")
 
 // Kept byte-identical with the CLI's `gh student accept` (via prefixCommit) per
 // the synchronized-release rule. Carries no contract — the runner keys the
@@ -146,7 +149,7 @@ async function withAcceptStep<T>(
       throw err
     }
     if (err instanceof GitHubAPIError) {
-      console.error(`Accept step "${label}" failed:`, err)
+      log.error(`Accept step "${label}" failed`, { err })
 
       if (err.isRateLimited) {
         fail(
@@ -945,7 +948,7 @@ async function tryGrantTeamTemplateRead(
   } catch (err) {
     // Log the raw error so a dev-time bug isn't fully hidden behind the
     // user-facing warning string.
-    console.error("grantTeamTemplateRead failed (assignment saved):", err)
+    log.error("grantTeamTemplateRead failed (assignment saved)", { err })
     const detail = getErrorMessage(err)
     return (
       `Assignment "${slug}" was saved, but granting the classroom team read on ` +

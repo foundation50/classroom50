@@ -32,11 +32,13 @@ export default defineConfig([
       // refactors. Revisit case-by-case.
       "react-hooks/set-state-in-effect": "warn",
       "react-hooks/exhaustive-deps": "warn",
-      // Stop stray debug `console.log` from shipping (a recurring source of
-      // GitHub API response bodies leaking to the production console). Allow
-      // `console.warn`/`console.error` for genuine diagnostics; DEV-only debug
-      // logging should be guarded by `import.meta.env.DEV`.
-      "no-console": ["warn", { allow: ["warn", "error"] }],
+      // Route all console output through `src/lib/logger.ts` (leveled,
+      // timestamped, scoped, call-site tagged). Raw `console` is forbidden
+      // everywhere else — the wrapper centralises formatting AND the privacy
+      // contract (a recurring source of GitHub API response bodies leaking to
+      // the production console). The logger module and the deliberate release
+      // banner in main.tsx are the only exceptions (per-file overrides below).
+      "no-console": "error",
       // Keep the accessibility invariants self-checking. Advisory
       // (warn) so the plugin's stricter defaults don't block the build on
       // pre-existing markup, but new violations (missing alt/label, invalid
@@ -91,6 +93,16 @@ export default defineConfig([
             'Prefer the accessible <Spinner> component over a bare `loading loading-spinner` span (it adds role="status" + an sr-only label). In-button spinners may stay inline if the button already has an accessible name.',
         },
       ],
+    },
+  },
+  // The only files allowed to touch `console` directly: the logger wrapper
+  // (it IS the console centralisation point) and the main.tsx release banner
+  // (a deliberate always-on marker so the deployed build is identifiable from
+  // the console — it must print even in prod, outside the leveled model).
+  {
+    files: ["src/lib/logger.ts", "src/main.tsx"],
+    rules: {
+      "no-console": "off",
     },
   },
   // Last: turn off ESLint rules that conflict with Prettier (formatting is

@@ -18,6 +18,9 @@ import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvi
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("CreateAssignmentPage")
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type {
@@ -61,7 +64,7 @@ const CreateAssignmentPage = () => {
             break
         }
       } else {
-        console.error("non-GitHub API error:", err)
+        log.error("non-GitHub API error", { err, record: true })
       }
       setErrorMessage(err.message)
       window.scrollTo({ top: 0, behavior: "smooth" })

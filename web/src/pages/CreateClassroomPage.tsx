@@ -13,6 +13,9 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("CreateClassroomPage")
 import RequireTeacher from "@/components/RequireTeacher"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 import { githubKeys } from "@/hooks/github/queries"
@@ -51,7 +54,7 @@ const CreateClassroomPage = () => {
             break
         }
       } else {
-        console.error("non-GitHub API error:", err)
+        log.error("non-GitHub API error", { err, record: true })
       }
       notify({
         tone: "error",

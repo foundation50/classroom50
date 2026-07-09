@@ -23,6 +23,9 @@ import {
   type BulkResultView,
 } from "@/components/bulk/resultView"
 import type { TeamRosterRow } from "@/util/teamRoster"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("students:RosterBulkActionsBar")
 
 // The three "add students" affordances the toolbar surfaces (when nothing is
 // selected). The page owns the modals; the bar just triggers them, keeping the
@@ -183,7 +186,7 @@ const RosterBulkActionsBar = ({
       setPhase("complete")
       onDone("unenroll")
     } catch (err) {
-      console.error(err)
+      log.error("bulk unenroll failed", { err, record: true })
       setError(getErrorMessage(err))
       setPhase("error")
     }

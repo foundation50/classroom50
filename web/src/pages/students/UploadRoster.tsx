@@ -12,6 +12,9 @@ import {
   type BulkImportResult,
   type ImportRosterRow,
 } from "@/api/mutations/students"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("students:UploadRoster")
 
 // Parse an uploaded roster into metadata rows. A CSV with a `username` header
 // column also honors first_name/last_name/name/email/section columns (case- and
@@ -226,7 +229,7 @@ const UploadRoster = ({
       setPhase("complete")
       onSuccess?.(importResult)
     } catch (err) {
-      console.error(err)
+      log.error("roster import failed", { err, record: true })
       setError(err instanceof Error ? err.message : t("students.importFailed"))
       setPhase("error")
     }

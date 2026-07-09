@@ -16,12 +16,15 @@ import {
   type BulkRemoveFromClassroomResult,
 } from "@/pages/orgMembers/bulkRemoveFromClassroom"
 import { ConfirmModal } from "@/components/modals"
+import { logger } from "@/lib/logger"
 import {
   BulkResultSection,
   type BulkPhase,
   type BulkProgress,
   type BulkResultView,
 } from "@/components/bulk/resultView"
+
+const log = logger.scope("orgMembers:BulkActionsBar")
 
 // A classroom option for the picker (the config-repo dir name/path).
 export type BulkClassroomOption = { name: string; path: string }
@@ -257,7 +260,7 @@ const BulkActionsBar = ({
       }
       setPhase("complete")
     } catch (err) {
-      console.error(err)
+      log.error("bulk action failed", { err, record: true })
       setError(
         err instanceof Error ? err.message : t("orgMembers.somethingWrong"),
       )

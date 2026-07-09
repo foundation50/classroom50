@@ -34,6 +34,9 @@ import { mapWithConcurrency } from "@/util/concurrency"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { prefixCommit } from "@/util/commit"
 import { type Student } from "@/types/classroom"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:students")
 
 // Slug is authoritative in classroom.json: GitHub may assign a non-derived slug
 // on name collision. Only derive on 404/missing team block; propagate transient
@@ -123,7 +126,7 @@ async function tryAddUserToTeam(
     })
     return { ok: true }
   } catch (err) {
-    console.error(`team add failed (${context}):`, err)
+    log.error(`team add failed (${context})`, { err })
     return { ok: false, detail: getErrorMessage(err) }
   }
 }
@@ -444,7 +447,7 @@ export async function inviteByEmail(
           `If they should be on this classroom, add them by GitHub username.`,
       }
     }
-    console.error("org email invite failed:", err)
+    log.error("org email invite failed", { err })
     return {
       inviteWarning:
         `Sending the organization invite to ${normalizedEmail} failed ` +
@@ -511,7 +514,7 @@ export async function enrollStudentInClassroom(
         teamIds: teamId ? [teamId] : undefined,
       })
     } catch (err) {
-      console.error("org invite failed (student enrolled):", err)
+      log.error("org invite failed (student enrolled)", { err })
       const detail = getErrorMessage(err)
       warnings.push(
         `${result.student.username} was added to the roster, but sending their ` +
@@ -533,7 +536,7 @@ export async function enrollStudentInClassroom(
     if (!added.ok) enrollTeamFailed = added.detail
   } catch (err) {
     // Slug resolution failed (not the add itself).
-    console.error("team resolve failed (student enrolled):", err)
+    log.error("team resolve failed (student enrolled)", { err })
     enrollTeamFailed = getErrorMessage(err)
   }
   if (enrollTeamFailed) {
@@ -1376,7 +1379,7 @@ export async function unenrollStudent(
         username: normalizedUsername,
       })
     } catch (err) {
-      console.error("team removal failed (student unenrolled):", err)
+      log.error("team removal failed (student unenrolled)", { err })
       const detail = getErrorMessage(err)
       warnings.push(
         `${toRemoveStudent.username} was removed from the roster, but removing ` +
@@ -1409,7 +1412,7 @@ export async function unenrollStudent(
     try {
       await removeOrgMembership(client, { org, username: normalizedUsername })
     } catch (err) {
-      console.error("org invite cancellation failed (student unenrolled):", err)
+      log.error("org invite cancellation failed (student unenrolled)", { err })
       const detail = getErrorMessage(err)
       warnings.push(
         `${toRemoveStudent.username} was removed from the roster, but ` +

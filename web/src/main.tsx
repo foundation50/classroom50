@@ -40,8 +40,9 @@ installDiagnosticsHandlers()
 
 // Make the deployed release identifiable from the browser console (a static SPA
 // has no version in the URL or a server header). Deliberate release diagnostic,
-// not stray debug logging — hence the no-console exception.
-// eslint-disable-next-line no-console
+// not stray debug logging — it must print even in prod, so it stays a direct
+// console call (allowed for main.tsx in eslint.config.js) rather than going
+// through the DEV-gated logger.
 console.info(
   `Classroom 50 — ${formatAppVersion()} — built ${appVersion.buildDate}`,
 )
