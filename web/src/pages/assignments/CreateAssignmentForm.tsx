@@ -5,7 +5,7 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import { AlertTriangle } from "lucide-react"
 import AutogradingTestsPane from "./AutogradingTestsPane"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, Select } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   testToDraft,
@@ -427,40 +427,12 @@ const CreateAssignmentForm = ({
               {t("assignments.form.detailsSection")}
             </h3>
 
-            <form.Field name="name">
-              {(field) => (
-                <>
-                  <label htmlFor={field.name} className="label font-bold">
-                    {t("assignments.form.name")}
-                    <span className="text-error">*</span>
-                  </label>
-                  <input
-                    id={field.name}
-                    name={field.name}
-                    type="text"
-                    required
-                    aria-required="true"
-                    className="input w-full mb-4"
-                    placeholder={t("assignments.form.namePlaceholder")}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => {
-                      field.handleChange(e.target.value)
-                      if (!edit && !slugTouched) {
-                        form.setFieldValue("slug", slugify(e.target.value))
-                      }
-                    }}
-                  />
-                </>
-              )}
-            </form.Field>
-
-            {!edit && (
-              <form.Field name="slug">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <form.Field name="name">
                 {(field) => (
-                  <>
+                  <div className={edit ? "sm:col-span-2" : undefined}>
                     <label htmlFor={field.name} className="label font-bold">
-                      {t("assignments.form.slug")}
+                      {t("assignments.form.name")}
                       <span className="text-error">*</span>
                     </label>
                     <input
@@ -469,79 +441,130 @@ const CreateAssignmentForm = ({
                       type="text"
                       required
                       aria-required="true"
-                      aria-invalid={field.state.meta.errors.length > 0}
-                      aria-describedby={
-                        field.state.meta.errors.length > 0
-                          ? `${field.name}-error`
-                          : undefined
-                      }
                       className="input w-full"
-                      placeholder={t("assignments.form.slugPlaceholder")}
+                      placeholder={t("assignments.form.namePlaceholder")}
                       value={field.state.value}
-                      onBlur={(e) => {
-                        // Normalize on blur so what the teacher sees is what's
-                        // saved (the repo path segment).
-                        field.handleChange(slugify(e.target.value))
-                        field.handleBlur()
-                      }}
+                      onBlur={field.handleBlur}
                       onChange={(e) => {
-                        setSlugTouched(true)
                         field.handleChange(e.target.value)
+                        if (!edit && !slugTouched) {
+                          form.setFieldValue("slug", slugify(e.target.value))
+                        }
                       }}
                     />
-                    <p className="mt-1.5 mb-4 text-sm text-base-content/70">
-                      {t("assignments.form.slugHelp")}
-                    </p>
-                    {field.state.meta.errors.length > 0 && (
-                      <p
-                        id={`${field.name}-error`}
-                        className="text-error text-sm mb-4"
-                        role="alert"
-                      >
-                        {String(field.state.meta.errors[0])}
-                      </p>
-                    )}
-                  </>
+                  </div>
                 )}
               </form.Field>
-            )}
 
-            <form.Field name="description">
-              {(field) => (
+              {!edit && (
+                <form.Field name="slug">
+                  {(field) => (
+                    <div>
+                      <label
+                        htmlFor={field.name}
+                        className="label font-bold flex items-center gap-1.5"
+                      >
+                        {t("assignments.form.slug")}
+                        <span className="text-error">*</span>
+                        <HelpTooltip help={t("assignments.form.slugHelp")} />
+                      </label>
+                      <input
+                        id={field.name}
+                        name={field.name}
+                        type="text"
+                        required
+                        aria-required="true"
+                        aria-invalid={field.state.meta.errors.length > 0}
+                        aria-describedby={
+                          field.state.meta.errors.length > 0
+                            ? `${field.name}-error`
+                            : undefined
+                        }
+                        className="input w-full"
+                        placeholder={t("assignments.form.slugPlaceholder")}
+                        value={field.state.value}
+                        onBlur={(e) => {
+                          // Normalize on blur so what the teacher sees is what's
+                          // saved (the repo path segment).
+                          field.handleChange(slugify(e.target.value))
+                          field.handleBlur()
+                        }}
+                        onChange={(e) => {
+                          setSlugTouched(true)
+                          field.handleChange(e.target.value)
+                        }}
+                      />
+                      {field.state.meta.errors.length > 0 && (
+                        <p
+                          id={`${field.name}-error`}
+                          className="text-error text-sm mt-1.5"
+                          role="alert"
+                        >
+                          {String(field.state.meta.errors[0])}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </form.Field>
+              )}
+            </div>
+
+            <form.Subscribe
+              selector={(state) => [
+                Boolean(state.values.template_repo),
+                Boolean(state.values.description),
+              ]}
+            >
+              {([hasTemplate, hasDescription]) => (
                 <details
-                  className="group mb-4"
-                  open={Boolean(field.state.value)}
+                  className="group mt-4"
+                  open={hasTemplate || hasDescription}
                 >
                   <summary className="cursor-pointer label font-bold marker:content-none flex items-center gap-2">
                     <span className="transition-transform group-open:rotate-90">
                       ▶
                     </span>
-                    {t("assignments.form.descriptionOptional")}
+                    {t("assignments.form.optionalSection")}
                   </summary>
-                  <textarea
-                    id={field.name}
-                    name={field.name}
-                    className="textarea w-full mt-2"
-                    placeholder={t("assignments.form.descriptionPlaceholder")}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
+
+                  <div className="mt-3">
+                    <form.Field name="template_repo">
+                      {(field) => (
+                        <TemplateField
+                          field={field}
+                          org={org}
+                          classroom={classroom}
+                        />
+                      )}
+                    </form.Field>
+                  </div>
+
+                  <form.Field name="description">
+                    {(field) => (
+                      <div className="mt-4">
+                        <label
+                          htmlFor={field.name}
+                          className="label font-bold mb-2"
+                        >
+                          {t("assignments.form.description")}
+                        </label>
+                        <textarea
+                          id={field.name}
+                          name={field.name}
+                          className="textarea w-full"
+                          placeholder={t(
+                            "assignments.form.descriptionPlaceholder",
+                          )}
+                          value={field.state.value}
+                          onBlur={field.handleBlur}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </form.Field>
                 </details>
               )}
-            </form.Field>
-
-            <div className="mb-2">
-              <form.Field name="template_repo">
-                {(field) => (
-                  <TemplateField
-                    field={field}
-                    org={org}
-                    classroom={classroom}
-                  />
-                )}
-              </form.Field>
-            </div>
+            </form.Subscribe>
 
             <div className="divider my-2" />
             <h3 className="text-lg font-bold pb-2">
@@ -552,45 +575,32 @@ const CreateAssignmentForm = ({
               <div>
                 <form.Field name="mode">
                   {(field) => (
-                    <fieldset>
-                      <legend className="label font-bold mb-2">
+                    <>
+                      <label
+                        htmlFor={field.name}
+                        className="label font-bold mb-2"
+                      >
                         {t("assignments.form.type")}
-                      </legend>
-                      <div className="flex flex-wrap gap-x-6 gap-y-2">
-                        <label
-                          htmlFor={`${field.name}-individual`}
-                          className="label cursor-pointer gap-2 p-0"
-                        >
-                          <input
-                            id={`${field.name}-individual`}
-                            type="radio"
-                            className="radio"
-                            name={field.name}
-                            value="individual"
-                            checked={field.state.value === "individual"}
-                            onBlur={field.handleBlur}
-                            onChange={() => field.handleChange("individual")}
-                          />
+                      </label>
+                      <Select
+                        id={field.name}
+                        name={field.name}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) =>
+                          field.handleChange(
+                            e.target.value as "individual" | "group",
+                          )
+                        }
+                      >
+                        <option value="individual">
                           {t("assignments.form.typeIndividual")}
-                        </label>
-                        <label
-                          htmlFor={`${field.name}-group`}
-                          className="label cursor-pointer gap-2 p-0"
-                        >
-                          <input
-                            id={`${field.name}-group`}
-                            type="radio"
-                            className="radio"
-                            name={field.name}
-                            value="group"
-                            checked={field.state.value === "group"}
-                            onBlur={field.handleBlur}
-                            onChange={() => field.handleChange("group")}
-                          />
+                        </option>
+                        <option value="group">
                           {t("assignments.form.typeGroup")}
-                        </label>
-                      </div>
-                    </fieldset>
+                        </option>
+                      </Select>
+                    </>
                   )}
                 </form.Field>
 
@@ -655,6 +665,32 @@ const CreateAssignmentForm = ({
                 </form.Subscribe>
               </div>
 
+              <form.Field name="feedback_pr">
+                {(field) => (
+                  <div className="flex items-start gap-3">
+                    <input
+                      id={field.name}
+                      type="checkbox"
+                      className="toggle toggle-primary mt-0.5"
+                      name={field.name}
+                      checked={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.checked)}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5">
+                        <label htmlFor={field.name} className="label font-bold">
+                          {t("assignments.form.feedbackPr")}
+                        </label>
+                        <HelpTooltip
+                          help={t("assignments.form.feedbackPrHelp")}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </form.Field>
+
               <form.Field name="due_date">
                 {(field) => (
                   <div className="flex items-start gap-3">
@@ -706,32 +742,6 @@ const CreateAssignmentForm = ({
                           </p>
                         </>
                       ) : null}
-                    </div>
-                  </div>
-                )}
-              </form.Field>
-
-              <form.Field name="feedback_pr">
-                {(field) => (
-                  <div className="flex items-start gap-3">
-                    <input
-                      id={field.name}
-                      type="checkbox"
-                      className="toggle toggle-primary mt-0.5"
-                      name={field.name}
-                      checked={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => field.handleChange(e.target.checked)}
-                    />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-1.5">
-                        <label htmlFor={field.name} className="label font-bold">
-                          {t("assignments.form.feedbackPr")}
-                        </label>
-                        <HelpTooltip
-                          help={t("assignments.form.feedbackPrHelp")}
-                        />
-                      </div>
                     </div>
                   </div>
                 )}
