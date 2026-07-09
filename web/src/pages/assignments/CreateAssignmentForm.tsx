@@ -525,69 +525,72 @@ const CreateAssignmentForm = ({
               )}
             </form.Field>
 
-            <div className="grid grid-cols-1 gap-4 mb-4 sm:grid-cols-2 sm:items-start">
-              <div>
-                <form.Field name="template_repo">
-                  {(field) => (
-                    <TemplateField
-                      field={field}
-                      org={org}
-                      classroom={classroom}
-                    />
-                  )}
-                </form.Field>
-              </div>
-              <div>
-                <form.Field name="due_date">
-                  {(field) => (
-                    <>
-                      <label className="label cursor-pointer justify-start gap-3 p-0 font-bold mb-2">
-                        <input
-                          type="checkbox"
-                          className="toggle toggle-sm"
-                          checked={dueDateEnabled}
-                          onChange={(e) => {
-                            setDueDateEnabled(e.target.checked)
-                            // Unchecking clears the value so the write path omits
-                            // the due date entirely (#195).
-                            if (!e.target.checked) field.handleChange("")
-                          }}
-                        />
-                        {t("assignments.form.setDueDate")}
-                      </label>
-                      {dueDateEnabled ? (
-                        <>
-                          <label
-                            htmlFor={field.name}
-                            className="label text-sm text-base-content/70 mb-1"
-                          >
-                            {t("assignments.form.dueDate", { tz: tzShort })}
-                          </label>
-                          <input
-                            id={field.name}
-                            name={field.name}
-                            type="datetime-local"
-                            className="input w-full"
-                            value={field.state.value}
-                            onBlur={(e) => {
-                              // Clearing the picker retires the due date: hide it
-                              // and uncheck the box (value is already "").
-                              if (!e.target.value) setDueDateEnabled(false)
-                              field.handleBlur()
-                            }}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                          />
-                        </>
-                      ) : (
-                        <p className="text-sm text-base-content/70">
-                          {t("assignments.form.noDueDateHelp")}
-                        </p>
-                      )}
-                    </>
-                  )}
-                </form.Field>
-              </div>
+            <div className="mb-4">
+              <form.Field name="template_repo">
+                {(field) => (
+                  <TemplateField
+                    field={field}
+                    org={org}
+                    classroom={classroom}
+                  />
+                )}
+              </form.Field>
             </div>
+
+            <form.Field name="due_date">
+              {(field) => (
+                <div className="mb-4 flex items-start gap-3">
+                  <input
+                    id={`${field.name}-enabled`}
+                    type="checkbox"
+                    className="toggle toggle-primary mt-0.5"
+                    checked={dueDateEnabled}
+                    onChange={(e) => {
+                      setDueDateEnabled(e.target.checked)
+                      // Unchecking clears the value so the write path omits the
+                      // due date entirely (#195).
+                      if (!e.target.checked) field.handleChange("")
+                    }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <label
+                      htmlFor={`${field.name}-enabled`}
+                      className="label font-bold"
+                    >
+                      {t("assignments.form.setDueDate")}
+                    </label>
+                    {dueDateEnabled ? (
+                      <>
+                        <input
+                          id={field.name}
+                          name={field.name}
+                          type="datetime-local"
+                          className="input mt-2 w-full sm:max-w-xs"
+                          aria-label={t("assignments.form.dueDate", {
+                            tz: tzShort,
+                          })}
+                          value={field.state.value}
+                          onBlur={(e) => {
+                            // Clearing the picker retires the due date: hide it
+                            // and uncheck the box (value is already "").
+                            if (!e.target.value) setDueDateEnabled(false)
+                            field.handleBlur()
+                          }}
+                          onChange={(e) => field.handleChange(e.target.value)}
+                        />
+                        <p className="mt-1.5 text-sm text-base-content/70">
+                          {t("assignments.form.dueDateTz", { tz: tzShort })}
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-base-content/70">
+                        {t("assignments.form.noDueDateHelp")}
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </form.Field>
 
             <div>
               <form.Field name="mode">
