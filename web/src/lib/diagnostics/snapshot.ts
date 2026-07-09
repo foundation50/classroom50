@@ -12,7 +12,8 @@ import { readActivity, type ActivityEntry } from "@/lib/activity/activityStore"
 import { readObservedContext } from "./observed"
 
 export type SnapshotInput = {
-  // The org currently in view, if any. Falls back to the last observed org.
+  // The org currently in view, if any (threaded from the route). Absent renders
+  // an explicit "(none)" org line.
   org?: string | null
   // The org's plan.name from GET /orgs/{org}, when the user can see it (owners
   // only). Undefined/absent renders an explicit "unknown" line, never "free".
@@ -21,7 +22,7 @@ export type SnapshotInput = {
 
 export function buildDiagnostics(input: SnapshotInput = {}): string {
   const ctx = readObservedContext()
-  const org = input.org ?? ctx.org
+  const org = input.org ?? null
   const lines: string[] = []
 
   lines.push(`Classroom 50 diagnostics`)

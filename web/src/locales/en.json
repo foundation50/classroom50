@@ -1619,6 +1619,10 @@
       "running": "Running",
       "info": ""
     },
+    "detail": {
+      "source": "at {{location}}",
+      "status": "HTTP {{code}}"
+    },
     "empty": {
       "title": "No activity yet",
       "body": "Config changes, workflow runs, and this session's errors will appear here."

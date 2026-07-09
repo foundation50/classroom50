@@ -31,6 +31,7 @@ import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
+import { escapeCsvFormulaInjection } from "@/util/csv"
 import { prefixCommit } from "@/util/commit"
 import { type Student } from "@/types/classroom"
 
@@ -234,34 +235,24 @@ function tooFewFieldsAreTrailingOnly(
     )
 }
 
-// Neutralize spreadsheet formula injection (OWASP CSV injection) in free-text
-// fields a teacher OR a GitHub member can influence. A value starting with
-// = + - @ (or a leading tab/CR a spreadsheet treats as a formula lead) is
-// prefixed with a single quote so Excel/Sheets render it as text. Idempotent.
-// Applied to name/section free text AND email — email is a member-controlled
-// GitHub profile field written verbatim by syncRosterFromTeam/bulk import, so a
-// formula-leading verified email (e.g. `=1+1@evil.com`) would otherwise reach
-// students.csv and execute on open. NOT applied to
-// github_id/tokens/hashes/timestamps, which must round-trip byte-exact.
+// Which student fields to defang. Applied to name/section free text AND email —
+// email is a member-controlled GitHub profile field written verbatim by
+// syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
+// `=1+1@evil.com`) would otherwise reach students.csv and execute on open. NOT
+// applied to github_id/tokens/hashes/timestamps, which must round-trip
+// byte-exact.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
 // students.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
 // these fields. The Go writer defangs the same set; keep them in lockstep.
 // Email matching keys on the normalized (trim+lowercase) email, so guarding the
 // cell doesn't affect match-by-email.
-const FORMULA_LEAD = /^[=+\-@\t\r]/
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
   "last_name",
   "section",
   "email",
 ] as const
-
-function escapeFormulaInjection(value: string): string {
-  if (!value) return value
-  if (value.startsWith("'") && FORMULA_LEAD.test(value.slice(1))) return value
-  return FORMULA_LEAD.test(value) ? `'${value}` : value
-}
 
 function stringifyStudentsCsv(rows: StudentCsvRow[]) {
   const normalizedRows = rows
@@ -270,7 +261,7 @@ function stringifyStudentsCsv(rows: StudentCsvRow[]) {
     .map((row) => {
       const guarded = { ...row }
       for (const field of FORMULA_GUARDED_FIELDS) {
-        guarded[field] = escapeFormulaInjection(guarded[field])
+        guarded[field] = escapeCsvFormulaInjection(guarded[field])
       }
       return guarded
     })

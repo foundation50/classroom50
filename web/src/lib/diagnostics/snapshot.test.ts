@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { clearActivity, recordError } from "@/lib/activity/activityStore"
-import { clearObservedContext, observeOrg, observeResponse } from "./observed"
+import { clearObservedContext, observeResponse } from "./observed"
 import { buildDiagnostics } from "./snapshot"
 
 afterEach(() => {
@@ -50,11 +50,6 @@ describe("buildDiagnostics", () => {
   it("reports a known plan with its category", () => {
     const text = buildDiagnostics({ org: "acme", planName: "team" })
     expect(text).toContain("plan: team (supported)")
-  })
-
-  it("falls back to the observed org when none is passed", () => {
-    observeOrg("observed-org")
-    expect(buildDiagnostics()).toContain("Org: observed-org")
   })
 
   it("summarizes recent errors with request id and status, never the raw body or SSO header", () => {

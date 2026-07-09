@@ -126,6 +126,25 @@ describe("dedup", () => {
     expect(readActivity()).toHaveLength(1)
     expect(readActivity()[0].label).toBe("Something went wrong")
   })
+
+  it("does NOT suppress an unrelated toast fired near a different structural error", () => {
+    // A failed mutation records structurally; a genuinely-different error toast
+    // fires within the window. It must still record — suppression is keyed to
+    // the SAME failure's message, not a bare global timestamp.
+    recordError(new Error("Create classroom failed"), {
+      dedupKey: "mutation-7",
+    })
+    recordErrorToast("Score collection could not be started")
+    expect(readActivity()).toHaveLength(2)
+  })
+
+  it("does NOT arm toast suppression from a structural error with no paired toast (bare rejection)", () => {
+    // A window unhandledrejection records via recordError WITHOUT a dedupKey, so
+    // it must not silence an unrelated toast that follows.
+    recordError(new Error("Unhandled rejection: boom"))
+    recordErrorToast("Something else the user saw")
+    expect(readActivity()).toHaveLength(2)
+  })
 })
 
 describe("orgFromApiUrl", () => {

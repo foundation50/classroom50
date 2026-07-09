@@ -144,11 +144,14 @@ describe("sessionToItems", () => {
     expect(items[1]).toMatchObject({ type: "action", status: "info" })
   })
 
-  it("prefers endpoint, then source, then HTTP status for detail", () => {
-    expect(sessionToItems([entry({ source: "foo.tsx:1" })])[0].detail).toBe(
-      "at foo.tsx:1",
-    )
-    expect(sessionToItems([entry({ status: 404 })])[0].detail).toBe("HTTP 404")
+  it("prefers endpoint, then source, then HTTP status for detail (raw value + kind; prefix is localized in the row)", () => {
+    const bySource = sessionToItems([entry({ source: "foo.tsx:1" })])[0]
+    expect(bySource.detail).toBe("foo.tsx:1")
+    expect(bySource.detailKind).toBe("source")
+
+    const byStatus = sessionToItems([entry({ status: 404 })])[0]
+    expect(byStatus.detail).toBe("404")
+    expect(byStatus.detailKind).toBe("status")
   })
 })
 
@@ -248,5 +251,25 @@ describe("timelineToCsvRows", () => {
       detail: "",
       link: "",
     })
+  })
+
+  it("neutralizes spreadsheet formula injection in attacker-controlled cells", () => {
+    // label/actor/detail come from commit messages and GitHub logins, so a
+    // formula-leading value must be quote-prefixed before it can execute on open.
+    const rows = timelineToCsvRows([
+      {
+        id: "x",
+        source: "commit",
+        type: "config",
+        label: '=HYPERLINK("http://evil","click")',
+        actor: "+attacker",
+        detail: "@SUM(A1)",
+        at: 0,
+        status: "info",
+      },
+    ])
+    expect(rows[0].label).toBe('\'=HYPERLINK("http://evil","click")')
+    expect(rows[0].actor).toBe("'+attacker")
+    expect(rows[0].detail).toBe("'@SUM(A1)")
   })
 })

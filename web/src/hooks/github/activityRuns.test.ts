@@ -1,6 +1,10 @@
 import { describe, expect, it, vi } from "vitest"
 
-import { listWorkflowRunsPage, workflowRunsPageKey } from "./activityRuns"
+import {
+  listActiveAndRecentRuns,
+  listWorkflowRunsPage,
+  workflowRunsPageKey,
+} from "./activityRuns"
 import { GitHubAPIError } from "./errors"
 import type { GitHubClient } from "./client"
 import type { GitHubWorkflowRun } from "./types"
@@ -82,5 +86,57 @@ describe("listWorkflowRunsPage", () => {
       "/repos/acme/classroom50/actions/runs?per_page=25&page=3",
       expect.objectContaining({ method: "GET" }),
     )
+  })
+})
+
+describe("listActiveAndRecentRuns", () => {
+  it("unwraps workflow_runs and sorts newest-first", async () => {
+    const request = vi
+      .fn()
+      .mockResolvedValue({ workflow_runs: [run(1), run(3), run(2)] })
+    const runs = await listActiveAndRecentRuns(
+      { request } as unknown as GitHubClient,
+      "acme",
+    )
+    expect(runs.map((r) => r.id)).toEqual([3, 2, 1])
+  })
+
+  it("tolerates a missing workflow_runs body", async () => {
+    const request = vi.fn().mockResolvedValue({})
+    await expect(
+      listActiveAndRecentRuns({ request } as unknown as GitHubClient, "acme"),
+    ).resolves.toEqual([])
+  })
+
+  it("returns [] on 404 (repo missing / not a classroom50 org)", async () => {
+    const request = vi.fn().mockRejectedValue(apiError(404))
+    await expect(
+      listActiveAndRecentRuns({ request } as unknown as GitHubClient, "acme"),
+    ).resolves.toEqual([])
+  })
+
+  // Transient/permission failures MUST propagate so React Query marks the query
+  // errored — else the activity banner shows a false "all clear".
+  it.each([403, 429, 500])(
+    "rethrows a %i so the banner errors",
+    async (status) => {
+      const request = vi.fn().mockRejectedValue(apiError(status))
+      await expect(
+        listActiveAndRecentRuns({ request } as unknown as GitHubClient, "acme"),
+      ).rejects.toThrow()
+    },
+  )
+
+  it("rethrows when the signal is aborted, even for a 404-shaped error", async () => {
+    const request = vi.fn().mockRejectedValue(apiError(404))
+    const controller = new AbortController()
+    controller.abort()
+    await expect(
+      listActiveAndRecentRuns(
+        { request } as unknown as GitHubClient,
+        "acme",
+        controller.signal,
+      ),
+    ).rejects.toThrow()
   })
 })

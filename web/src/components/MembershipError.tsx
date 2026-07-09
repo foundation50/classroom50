@@ -1,8 +1,8 @@
-import { AlertTriangle, Check, ClipboardCopy, UserPlus } from "lucide-react"
+import { AlertTriangle, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Button, Card } from "@/components/ui"
+import { Card, CopyableDetails, Button } from "@/components/ui"
 
 // Distinct membership-failure causes the student flow (onboarding + accept) can
 // hit; each maps to a title/body and at least one recovery action.
@@ -67,7 +67,7 @@ export function classifyMembershipError(
   return { cause: "generic", ssoUrl: null, details: base }
 }
 
-const CopyableDetails = ({
+const MembershipDetails = ({
   details,
 }: {
   details: MembershipErrorInfo["details"]
@@ -98,27 +98,16 @@ const CopyableDetails = ({
   const { copied, copy } = useCopyToClipboard(text)
 
   return (
-    <details className="mt-4 rounded-xl border border-base-300 bg-base-200/40 p-4 text-sm">
-      <summary className="cursor-pointer font-medium text-base-content">
-        {t("membership.showDetails")}
-      </summary>
-      <div className="mt-3 space-y-3">
-        <pre className="overflow-x-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap">
-          {text}
-        </pre>
-        <Button variant="outline" size="sm" onClick={() => void copy()}>
-          {copied ? (
-            <Check aria-hidden="true" className="size-4" />
-          ) : (
-            <ClipboardCopy aria-hidden="true" className="size-4" />
-          )}
-          {copied ? t("membership.copied") : t("membership.copyDetails")}
-        </Button>
-        <span aria-live="polite" className="sr-only">
-          {copied ? t("membership.copied") : ""}
-        </span>
-      </div>
-    </details>
+    <CopyableDetails
+      text={text}
+      copied={copied}
+      onCopy={() => void copy()}
+      summaryLabel={t("membership.showDetails")}
+      copyLabel={t("membership.copyDetails")}
+      copiedLabel={t("membership.copied")}
+      className="mt-4"
+      preClassName="overflow-x-auto"
+    />
   )
 }
 
@@ -215,7 +204,7 @@ export const MembershipError = ({
         </div>
       </div>
 
-      <CopyableDetails details={details} />
+      <MembershipDetails details={details} />
     </Card.Body>
   )
 }

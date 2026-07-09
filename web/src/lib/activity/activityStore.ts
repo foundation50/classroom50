@@ -86,7 +86,15 @@ function persist(): void {
   try {
     window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(entries))
   } catch {
-    // Best-effort; in-memory tracking still works this mount.
+    // Quota/private-mode failure: drop the oldest half and retry once so a
+    // burst degrades to the most-recent entries rather than dropping the write
+    // wholesale. In-memory tracking still holds the full set this mount.
+    try {
+      const trimmed = entries.slice(Math.ceil(entries.length / 2))
+      window.sessionStorage.setItem(STORAGE_KEY, JSON.stringify(trimmed))
+    } catch {
+      // Still failing — best-effort; give up on persistence this write.
+    }
   }
 }
 
@@ -168,13 +176,20 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
     const dup = recentByKey.find((r) => r.key === dedupKey)
     if (dup) {
       // Replace the earlier entry in place (idempotent re-record of one op).
-      entries = entries.map((e) =>
-        e.id === dup.id ? { ...entry, id: e.id } : e,
-      )
-      dup.at = now
-      persist()
-      emit()
-      return
+      // If it was already evicted (TTL / MAX_ENTRIES) while its dedup record
+      // still lives inside the window, `map` matches nothing — fall through to
+      // append below rather than silently dropping the re-record.
+      const replaced = entries.some((e) => e.id === dup.id)
+      if (replaced) {
+        entries = entries.map((e) =>
+          e.id === dup.id ? { ...entry, id: e.id } : e,
+        )
+        dup.at = now
+        persist()
+        emit()
+        return
+      }
+      recentByKey = recentByKey.filter((r) => r !== dup)
     }
     recentByKey.push({ key: dedupKey, at: now, id: entry.id })
   }
@@ -187,17 +202,26 @@ function pushEntry(entry: ActivityEntry, dedupKey?: string): void {
   emit()
 }
 
-// When the last "structural" error (MutationCache/global handler) was recorded.
-// A follow-up error toast for the SAME failure fires microseconds later at its
-// mutation's onError call site; we suppress that toast record so one failure is
-// listed once. Structural capture is preferred because it carries the
-// GitHubAPIError fields (status/requestId/scopeGap); the toast is a translated
-// summary. Non-mutation error toasts (no preceding structural error in the
-// window) still record — preserving the "capture what the user saw" path.
-let lastStructuralErrorAt = 0
+// Structural errors (a failed mutation) recorded within the dedup window, kept
+// as {message, at} so a follow-up error toast can be matched to the SAME failure
+// rather than any recent one. A single global timestamp would let one failure
+// silence an unrelated toast fired seconds later; matching on the message (and
+// only arming for structural sources that actually emit a paired toast) scopes
+// suppression to the real duplicate. The toast shows a translated summary while
+// the mutation records error.message, so the match is a containment check.
+type RecentStructural = { message: string; at: number }
+let recentStructural: RecentStructural[] = []
+
+function normalizeForMatch(s: string): string {
+  return s.trim().toLowerCase()
+}
 
 // Record a caught/thrown error as an error-kind activity entry. Used by the
-// MutationCache and the global window handlers (the "structural" sources).
+// MutationCache and the global window handlers (the "structural" sources). A
+// dedupKey marks a source with a paired follow-up toast (the MutationCache),
+// arming toast-suppression for this specific failure; a bare window handler
+// (uncaught error / unhandled rejection) has no paired toast, so it does not arm
+// the window and can't silence an unrelated toast.
 export function recordError(
   error: unknown,
   context?: {
@@ -207,14 +231,35 @@ export function recordError(
     source?: string
   },
 ): void {
-  lastStructuralErrorAt = Date.now()
-  pushEntry(toActivityEntry(error, context), context?.dedupKey)
+  const entry = toActivityEntry(error, context)
+  if (context?.dedupKey) {
+    recentStructural = recentStructural.filter(
+      (r) => r.at >= entry.at - DEDUP_WINDOW_MS,
+    )
+    recentStructural.push({
+      message: normalizeForMatch(entry.label),
+      at: entry.at,
+    })
+  }
+  pushEntry(entry, context?.dedupKey)
 }
 
-// Record a user-facing error toast, unless it's the follow-up toast of a
-// structural error just recorded (same failure). See lastStructuralErrorAt.
+// Record a user-facing error toast, unless it's the follow-up toast of the SAME
+// structural error just recorded (a failed mutation shows a toast microseconds
+// after MutationCache.onError). The toast message is a translated summary and
+// the structural entry is the raw error.message, so match by containment either
+// way. An unrelated toast — or one with no matching recent structural error —
+// still records.
 export function recordErrorToast(message: string): void {
-  if (Date.now() - lastStructuralErrorAt <= DEDUP_WINDOW_MS) return
+  const now = Date.now()
+  recentStructural = recentStructural.filter(
+    (r) => r.at >= now - DEDUP_WINDOW_MS,
+  )
+  const norm = normalizeForMatch(message)
+  const isFollowUp = recentStructural.some(
+    (r) => r.message.includes(norm) || norm.includes(r.message),
+  )
+  if (isFollowUp) return
   pushEntry(toActivityEntry(new Error(message)))
 }
 
@@ -244,7 +289,7 @@ export function activityForOrg(org: string | undefined): ActivityEntry[] {
 export function clearActivity(): void {
   entries = []
   recentByKey = []
-  lastStructuralErrorAt = 0
+  recentStructural = []
   persist()
   emit()
 }

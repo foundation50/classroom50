@@ -8,6 +8,7 @@
 import type { ActivityEntry } from "@/lib/activity/activityStore"
 import type { GitHubCommit, GitHubWorkflowRun } from "@/hooks/github/types"
 import { COMMIT_PREFIX } from "@/util/commit"
+import { escapeCsvFormulaInjection } from "@/util/csv"
 import { runTimes, trackerPhase, workflowFile } from "@/util/actionActivity"
 
 export type TimelineSource = "session" | "commit" | "run"
@@ -25,6 +26,13 @@ export type TimelineType =
 
 export type TimelineStatus = "ok" | "error" | "running" | "info"
 
+// How to render `detail`: "endpoint"/"sha"/"event" are shown verbatim; "source"
+// and "status" carry a human prefix ("at <loc>", "HTTP <code>") that must be
+// translated, so the prefix is applied in the component via t(), not baked into
+// this React-free model.
+export type TimelineDetailKind =
+  "endpoint" | "sha" | "event" | "source" | "status"
+
 export type TimelineItem = {
   id: string
   source: TimelineSource
@@ -33,6 +41,9 @@ export type TimelineItem = {
   label: string
   // Optional secondary line (endpoint, source location, workflow file, sha).
   detail?: string
+  // Classifies `detail` so the row can localize prefixed kinds. Absent when
+  // there is no detail.
+  detailKind?: TimelineDetailKind
   // Who caused it, when known (commit author / run actor). Session items have none.
   actor?: string
   // Epoch ms for sorting + display.
@@ -66,9 +77,14 @@ function firstLine(message: string): string {
   return message.split("\n")[0].trim()
 }
 
+// Commit author date in epoch ms. GitHub returns config-repo commits
+// newest-first and always stamps author.date, so a missing/unparseable date is
+// an anomaly (a hand-crafted or malformed commit); float it to "now" so a recent
+// change stays near the top of the newest-first timeline rather than sinking to
+// the epoch floor and vanishing at the bottom.
 function commitTimeMs(commit: GitHubCommit): number {
   const parsed = Date.parse(commit.commit.author?.date ?? "")
-  return Number.isNaN(parsed) ? 0 : parsed
+  return Number.isNaN(parsed) ? Date.now() : parsed
 }
 
 export function commitToItem(commit: GitHubCommit): TimelineItem {
@@ -79,6 +95,7 @@ export function commitToItem(commit: GitHubCommit): TimelineItem {
     type: classifyConfigCommit(message),
     label: firstLine(stripPrefix(message)),
     detail: commit.sha.slice(0, 7),
+    detailKind: "sha",
     actor: commit.author?.login ?? commit.commit.author?.name,
     at: commitTimeMs(commit),
     href: commit.html_url,
@@ -109,6 +126,7 @@ export function runToItem(
     type: "run",
     label: labelForFile(workflowFile(run), run.display_title ?? run.name),
     detail: run.event,
+    detailKind: "event",
     actor: run.triggering_actor?.login,
     at: startedAtMs ?? (Number.isNaN(createdMs) ? 0 : createdMs),
     href: run.html_url,
@@ -117,23 +135,34 @@ export function runToItem(
 }
 
 export function sessionToItems(entries: ActivityEntry[]): TimelineItem[] {
-  return entries.map((e) => ({
-    id: `session-${e.id}`,
-    source: "session" as const,
-    type: e.kind === "error" ? ("error" as const) : ("action" as const),
-    label: e.label,
-    detail: sessionDetail(e),
-    at: e.at,
-    href: undefined,
-    status: e.kind === "error" ? ("error" as const) : ("info" as const),
-  }))
+  return entries.map((e) => {
+    const { detail, detailKind } = sessionDetail(e)
+    return {
+      id: `session-${e.id}`,
+      source: "session" as const,
+      type: e.kind === "error" ? ("error" as const) : ("action" as const),
+      label: e.label,
+      detail,
+      detailKind,
+      at: e.at,
+      href: undefined,
+      status: e.kind === "error" ? ("error" as const) : ("info" as const),
+    }
+  })
 }
 
-function sessionDetail(e: ActivityEntry): string | undefined {
-  if (e.endpoint) return e.endpoint
-  if (e.source) return `at ${e.source}`
-  if (e.status !== undefined) return `HTTP ${e.status}`
-  return undefined
+// The raw detail value + its kind; the human prefix for "source"/"status" is
+// applied in TimelineRow via t() so it stays translatable (this module is
+// React-free). endpoint is already a bare URL, shown verbatim.
+function sessionDetail(e: ActivityEntry): {
+  detail?: string
+  detailKind?: TimelineDetailKind
+} {
+  if (e.endpoint) return { detail: e.endpoint, detailKind: "endpoint" }
+  if (e.source) return { detail: e.source, detailKind: "source" }
+  if (e.status !== undefined)
+    return { detail: String(e.status), detailKind: "status" }
+  return {}
 }
 
 export type TimelineFilters = {
@@ -170,7 +199,9 @@ export function matchesQuery(item: TimelineItem, query: string): boolean {
 
 // Rows for a CSV export of the timeline (feed to Papa.unparse with header:true).
 // ISO timestamp so the export is locale-independent and sortable in a
-// spreadsheet; the human columns mirror what the row shows.
+// spreadsheet; the human columns mirror what the row shows. Free-text cells
+// (label, actor, detail) carry attacker-influenceable text — commit messages and
+// GitHub logins — so they're formula-guarded (OWASP CSV injection) before export.
 export type TimelineCsvRow = {
   time: string
   source: TimelineSource
@@ -188,9 +219,9 @@ export function timelineToCsvRows(items: TimelineItem[]): TimelineCsvRow[] {
     source: i.source,
     type: i.type,
     status: i.status,
-    label: i.label,
-    actor: i.actor ?? "",
-    detail: i.detail ?? "",
+    label: escapeCsvFormulaInjection(i.label),
+    actor: escapeCsvFormulaInjection(i.actor ?? ""),
+    detail: escapeCsvFormulaInjection(i.detail ?? ""),
     link: i.href ?? "",
   }))
 }

@@ -36,6 +36,9 @@ export type { AlertProps, AlertTone } from "./Alert"
 export { CopyableCode } from "./CopyableCode"
 export type { CopyableCodeProps } from "./CopyableCode"
 
+export { CopyableDetails } from "./CopyableDetails"
+export type { CopyableDetailsProps } from "./CopyableDetails"
+
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 

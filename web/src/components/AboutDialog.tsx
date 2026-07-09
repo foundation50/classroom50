@@ -1,8 +1,8 @@
 import { forwardRef } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, Check, ClipboardCopy } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 
-import { Button, Modal } from "@/components/ui"
+import { CopyableDetails, Modal } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
@@ -45,8 +45,7 @@ function SupportLink({
 }
 
 // Collapsible "Copy diagnostics" block: an allow-listed snapshot the user can
-// paste into a bug report. Mirrors MembershipError's CopyableDetails. Nothing
-// is sent anywhere — copy-to-clipboard only.
+// paste into a bug report. Nothing is sent anywhere — copy-to-clipboard only.
 function CopyableDiagnostics({
   org,
   planName,
@@ -59,29 +58,16 @@ function CopyableDiagnostics({
   const { copied, copy } = useCopyToClipboard(text)
 
   return (
-    <details className="mt-2 rounded-lg border border-base-300 bg-base-200/40 p-3 text-sm">
-      <summary className="cursor-pointer font-medium text-base-content">
-        {t("nav.aboutDiagnosticsShow")}
-      </summary>
-      <div className="mt-3 space-y-3">
-        <pre className="max-h-48 overflow-auto rounded-lg bg-base-100 p-3 text-xs whitespace-pre-wrap">
-          {text}
-        </pre>
-        <Button variant="outline" size="sm" onClick={() => void copy()}>
-          {copied ? (
-            <Check aria-hidden="true" className="size-4" />
-          ) : (
-            <ClipboardCopy aria-hidden="true" className="size-4" />
-          )}
-          {copied
-            ? t("nav.aboutDiagnosticsCopied")
-            : t("nav.aboutDiagnosticsCopy")}
-        </Button>
-        <span aria-live="polite" className="sr-only">
-          {copied ? t("nav.aboutDiagnosticsCopied") : ""}
-        </span>
-      </div>
-    </details>
+    <CopyableDetails
+      text={text}
+      copied={copied}
+      onCopy={() => void copy()}
+      summaryLabel={t("nav.aboutDiagnosticsShow")}
+      copyLabel={t("nav.aboutDiagnosticsCopy")}
+      copiedLabel={t("nav.aboutDiagnosticsCopied")}
+      className="mt-2"
+      preClassName="max-h-48"
+    />
   )
 }
 
