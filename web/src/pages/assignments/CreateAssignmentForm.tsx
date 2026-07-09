@@ -424,7 +424,7 @@ const CreateAssignmentForm = ({
         <Card bordered={false} className="w-full mb-6">
           <Card.Body>
             <h3 className="text-lg font-bold pb-4">
-              {t("assignments.form.basicInfo")}
+              {t("assignments.form.detailsSection")}
             </h3>
 
             <form.Field name="name">
@@ -525,7 +525,7 @@ const CreateAssignmentForm = ({
               )}
             </form.Field>
 
-            <div className="mb-4">
+            <div className="mb-2">
               <form.Field name="template_repo">
                 {(field) => (
                   <TemplateField
@@ -537,166 +537,177 @@ const CreateAssignmentForm = ({
               </form.Field>
             </div>
 
-            <form.Field name="due_date">
-              {(field) => (
-                <div className="mb-4 flex items-start gap-3">
-                  <input
-                    id={`${field.name}-enabled`}
-                    type="checkbox"
-                    className="toggle toggle-primary mt-0.5"
-                    checked={dueDateEnabled}
-                    onChange={(e) => {
-                      setDueDateEnabled(e.target.checked)
-                      // Unchecking clears the value so the write path omits the
-                      // due date entirely (#195).
-                      if (!e.target.checked) field.handleChange("")
-                    }}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <label
-                      htmlFor={`${field.name}-enabled`}
-                      className="label font-bold"
-                    >
-                      {t("assignments.form.setDueDate")}
-                    </label>
-                    {dueDateEnabled ? (
-                      <>
-                        <input
-                          id={field.name}
-                          name={field.name}
-                          type="datetime-local"
-                          className="input mt-2 w-full sm:max-w-xs"
-                          aria-label={t("assignments.form.dueDate", {
-                            tz: tzShort,
-                          })}
-                          value={field.state.value}
-                          onBlur={(e) => {
-                            // Clearing the picker retires the due date: hide it
-                            // and uncheck the box (value is already "").
-                            if (!e.target.value) setDueDateEnabled(false)
-                            field.handleBlur()
-                          }}
-                          onChange={(e) => field.handleChange(e.target.value)}
-                        />
-                        <p className="mt-1.5 text-sm text-base-content/70">
-                          {t("assignments.form.dueDateTz", { tz: tzShort })}
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-sm text-base-content/70">
-                        {t("assignments.form.noDueDateHelp")}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
-            </form.Field>
+            <div className="divider my-2" />
+            <h3 className="text-lg font-bold pb-2">
+              {t("assignments.form.settingsSection")}
+            </h3>
 
-            <div>
-              <form.Field name="mode">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
+              <div>
+                <form.Field name="mode">
+                  {(field) => (
+                    <fieldset>
+                      <legend className="label font-bold mb-2">
+                        {t("assignments.form.type")}
+                      </legend>
+                      <div className="flex flex-wrap gap-x-6 gap-y-2">
+                        <label
+                          htmlFor={`${field.name}-individual`}
+                          className="label cursor-pointer gap-2 p-0"
+                        >
+                          <input
+                            id={`${field.name}-individual`}
+                            type="radio"
+                            className="radio"
+                            name={field.name}
+                            value="individual"
+                            checked={field.state.value === "individual"}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange("individual")}
+                          />
+                          {t("assignments.form.typeIndividual")}
+                        </label>
+                        <label
+                          htmlFor={`${field.name}-group`}
+                          className="label cursor-pointer gap-2 p-0"
+                        >
+                          <input
+                            id={`${field.name}-group`}
+                            type="radio"
+                            className="radio"
+                            name={field.name}
+                            value="group"
+                            checked={field.state.value === "group"}
+                            onBlur={field.handleBlur}
+                            onChange={() => field.handleChange("group")}
+                          />
+                          {t("assignments.form.typeGroup")}
+                        </label>
+                      </div>
+                    </fieldset>
+                  )}
+                </form.Field>
+
+                <form.Subscribe selector={(state) => state.values.mode}>
+                  {(modeValue) =>
+                    modeValue === "group" && (
+                      <div className="mt-4">
+                        <form.Field name="max_group_size">
+                          {(field) => (
+                            <>
+                              <label
+                                htmlFor={field.name}
+                                className="label font-bold mb-2"
+                              >
+                                {t("assignments.form.maxGroupSize")}
+                              </label>
+                              <input
+                                id={field.name}
+                                name={field.name}
+                                type="number"
+                                className="input validator w-full sm:max-w-xs"
+                                placeholder="#"
+                                min={GROUP_SIZE_MIN}
+                                max={GROUP_SIZE_MAX}
+                                step="1"
+                                title={t("assignments.form.maxGroupSizeTitle", {
+                                  min: GROUP_SIZE_MIN,
+                                  max: GROUP_SIZE_MAX,
+                                })}
+                                value={
+                                  Number.isFinite(field.state.value)
+                                    ? field.state.value
+                                    : ""
+                                }
+                                onBlur={() => {
+                                  // Snap to a valid whole number on blur so the
+                                  // CLI never sees a non-integer or out-of-range
+                                  // size.
+                                  const raw = field.state.value
+                                  const next = Number.isFinite(raw)
+                                    ? Math.min(
+                                        Math.max(
+                                          Math.floor(raw),
+                                          GROUP_SIZE_MIN,
+                                        ),
+                                        GROUP_SIZE_MAX,
+                                      )
+                                    : GROUP_SIZE_MIN
+                                  if (next !== raw) field.handleChange(next)
+                                  field.handleBlur()
+                                }}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.valueAsNumber)
+                                }
+                              />
+                            </>
+                          )}
+                        </form.Field>
+                      </div>
+                    )
+                  }
+                </form.Subscribe>
+              </div>
+
+              <form.Field name="due_date">
                 {(field) => (
-                  <fieldset>
-                    <legend className="label font-bold mb-2">
-                      {t("assignments.form.type")}
-                    </legend>
+                  <div className="flex items-start gap-3">
                     <input
-                      id={`${field.name}-individual`}
-                      type="radio"
-                      className="radio"
-                      name={field.name}
-                      value="individual"
-                      checked={field.state.value === "individual"}
-                      onBlur={field.handleBlur}
-                      onChange={() => field.handleChange("individual")}
+                      id={`${field.name}-enabled`}
+                      type="checkbox"
+                      className="toggle toggle-primary mt-0.5"
+                      checked={dueDateEnabled}
+                      onChange={(e) => {
+                        setDueDateEnabled(e.target.checked)
+                        // Unchecking clears the value so the write path omits the
+                        // due date entirely (#195).
+                        if (!e.target.checked) field.handleChange("")
+                      }}
                     />
-                    <label
-                      htmlFor={`${field.name}-individual`}
-                      className="label pl-2"
-                    >
-                      {t("assignments.form.typeIndividual")}
-                    </label>
-                    <input
-                      id={`${field.name}-group`}
-                      type="radio"
-                      className="radio ml-6"
-                      name={field.name}
-                      value="group"
-                      checked={field.state.value === "group"}
-                      onBlur={field.handleBlur}
-                      onChange={() => field.handleChange("group")}
-                    />
-                    <label
-                      htmlFor={`${field.name}-group`}
-                      className="label pl-2"
-                    >
-                      {t("assignments.form.typeGroup")}
-                    </label>
-                  </fieldset>
+                    <div className="min-w-0 flex-1">
+                      <label
+                        htmlFor={`${field.name}-enabled`}
+                        className="label font-bold"
+                      >
+                        {t("assignments.form.setDueDate")}
+                      </label>
+                      {dueDateEnabled ? (
+                        <>
+                          <input
+                            id={field.name}
+                            name={field.name}
+                            type="datetime-local"
+                            className="input mt-2 w-full"
+                            aria-label={t("assignments.form.dueDate", {
+                              tz: tzShort,
+                            })}
+                            value={field.state.value}
+                            onBlur={(e) => {
+                              // Clearing the picker retires the due date: hide it
+                              // and uncheck the box (value is already "").
+                              if (!e.target.value) setDueDateEnabled(false)
+                              field.handleBlur()
+                            }}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                          />
+                          <p className="mt-1.5 text-sm text-base-content/70">
+                            {t("assignments.form.dueDateTz", { tz: tzShort })}
+                          </p>
+                        </>
+                      ) : (
+                        <p className="text-sm text-base-content/70">
+                          {t("assignments.form.noDueDateHelp")}
+                        </p>
+                      )}
+                    </div>
+                  </div>
                 )}
               </form.Field>
             </div>
 
-            <form.Subscribe selector={(state) => state.values.mode}>
-              {(modeValue) =>
-                modeValue === "group" && (
-                  <div>
-                    <form.Field name="max_group_size">
-                      {(field) => (
-                        <>
-                          <div>
-                            <label
-                              htmlFor={field.name}
-                              className="label font-bold mb-2"
-                            >
-                              {t("assignments.form.maxGroupSize")}
-                            </label>
-                          </div>
-                          <input
-                            id={field.name}
-                            name={field.name}
-                            type="number"
-                            className="input validator"
-                            placeholder="#"
-                            min={GROUP_SIZE_MIN}
-                            max={GROUP_SIZE_MAX}
-                            step="1"
-                            title={t("assignments.form.maxGroupSizeTitle", {
-                              min: GROUP_SIZE_MIN,
-                              max: GROUP_SIZE_MAX,
-                            })}
-                            value={
-                              Number.isFinite(field.state.value)
-                                ? field.state.value
-                                : ""
-                            }
-                            onBlur={() => {
-                              // Snap to a valid whole number on blur so the CLI
-                              // never sees a non-integer or out-of-range size.
-                              const raw = field.state.value
-                              const next = Number.isFinite(raw)
-                                ? Math.min(
-                                    Math.max(Math.floor(raw), GROUP_SIZE_MIN),
-                                    GROUP_SIZE_MAX,
-                                  )
-                                : GROUP_SIZE_MIN
-                              if (next !== raw) field.handleChange(next)
-                              field.handleBlur()
-                            }}
-                            onChange={(e) =>
-                              field.handleChange(e.target.valueAsNumber)
-                            }
-                          />
-                        </>
-                      )}
-                    </form.Field>
-                  </div>
-                )
-              }
-            </form.Subscribe>
-
             <form.Field name="feedback_pr">
               {(field) => (
-                <div className="mt-4 flex items-start gap-3">
+                <div className="mt-6 flex items-start gap-3">
                   <input
                     id={field.name}
                     type="checkbox"

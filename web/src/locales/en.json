@@ -569,7 +569,8 @@
     "missingOrgOrClassroom": "Missing organization or classroom.",
     "goToAssignments": "Go to assignments",
     "form": {
-      "basicInfo": "Basic Information",
+      "detailsSection": "Details",
+      "settingsSection": "Settings",
       "name": "Assignment Name",
       "namePlaceholder": "e.g., Loops Assignment",
       "slug": "Assignment Slug",
