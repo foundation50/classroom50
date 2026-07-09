@@ -580,6 +580,11 @@ export async function editAssignment(
   const { entry: editedAssignment, needsTeamGrant } =
     await buildAssignmentEntry(client, input, targetAssignment.template)
 
+  // Renaming isn't supported: the slug is the assignment's repo-path identity
+  // and its lookup key here. Pin the written slug to the stored one so the edit
+  // can never rename an assignment, regardless of what the caller passed.
+  editedAssignment.slug = targetAssignment.slug
+
   // The form rebuilds only the fields it manages; carry forward the rest
   // (e.g. `migrated_from`, unknown future keys) so an edit doesn't drop them.
   const preservedEntry = preserveUnmanagedAssignmentKeys(

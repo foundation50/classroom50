@@ -446,6 +446,30 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(edited.due).toBeUndefined()
   })
 
+  it("pins the written slug to the stored assignment (no rename on edit)", async () => {
+    const { client, committedContent } = makeClient()
+
+    await editAssignment(client, editInput())
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    // Exactly one entry, and its slug is the stored identity — the edit rebuilds
+    // the entry but can never change the slug (it's the repo-path identity and
+    // the lookup key). Guards the explicit slug pin in editAssignment.
+    expect(written.assignments).toHaveLength(1)
+    expect(written.assignments[0].slug).toBe(SLUG)
+    expect(written.assignments[0].name).toBe("Homework 1 (edited)")
+  })
+
+  it("throws when the target slug does not exist (edit is slug-keyed)", async () => {
+    const { client } = makeClient()
+
+    await expect(
+      editAssignment(client, editInput({ slug: "does-not-exist" })),
+    ).rejects.toThrow(/does-not-exist/)
+  })
+
   it("writes language runtimes and drops an unknown runtime sub-key on edit", async () => {
     // Existing entry with language toolchains + apt AND a foreign runtime
     // sub-key (`rust`). `runtime` is a CLOSED contract object — the CLI decodes

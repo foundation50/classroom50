@@ -157,3 +157,78 @@ describe("Set a due date toggle (issue #195)", () => {
     expect(onSubmit.mock.calls[0][0].due_date).toBe("")
   })
 })
+
+// The slug field: auto-fills from the name in create mode until the teacher
+// edits it, re-arms when they clear it, and is shown read-only in edit mode.
+describe("assignment slug field", () => {
+  const renderForm = (ui: ReactElement) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        {ui}
+      </QueryClientProvider>,
+    )
+
+  const slugInput = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("#slug")!
+  const nameInput = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("#name")!
+
+  it("create: auto-fills the slug from the name", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops Assignment")
+    expect(slugInput(container).value).toBe("loops-assignment")
+  })
+
+  it("create: editing the slug stops auto-fill from the name", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    await user.type(slugInput(container), "custom")
+    await user.type(nameInput(container), "Loops Assignment")
+    // A deliberate slug isn't clobbered by later name edits.
+    expect(slugInput(container).value).toBe("custom")
+  })
+
+  it("create: clearing the slug resumes auto-fill from the name", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    // Latch off with a manual slug, then clear it to re-arm sync.
+    await user.type(slugInput(container), "custom")
+    await user.clear(slugInput(container))
+    await user.type(nameInput(container), "Loops Assignment")
+    expect(slugInput(container).value).toBe("loops-assignment")
+  })
+
+  it("create: blurring an emptied slug restores the name-derived default", async () => {
+    const user = userEvent.setup()
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    await user.type(nameInput(container), "Loops Assignment")
+    // Override the auto-filled slug, then clear it and focus away.
+    await user.clear(slugInput(container))
+    await user.type(slugInput(container), "custom")
+    await user.clear(slugInput(container))
+    await user.tab()
+    expect(slugInput(container).value).toBe("loops-assignment")
+  })
+
+  it("edit: shows the stored slug read-only", () => {
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues(baseAssignment)}
+        onSubmit={() => {}}
+      />,
+    )
+    const slug = slugInput(container)
+    expect(slug.value).toBe("hw1")
+    expect(slug.disabled).toBe(true)
+  })
+})

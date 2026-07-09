@@ -577,6 +577,7 @@
       "slug": "Assignment Slug",
       "slugPlaceholder": "e.g., loops-assignment",
       "slugHelp": "Used in the assignment's repository names. Auto-filled from the name; edit it if you like. Must be unique in this classroom.",
+      "slugEditHelp": "The slug is part of the assignment's repository names and can't be changed after creation.",
       "description": "Description",
       "descriptionPlaceholder": "Describe the assignment objectives...",
       "dueDate": "Due Date ({{tz}})",

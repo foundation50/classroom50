@@ -346,6 +346,7 @@ export const assignmentToFormValues = (
 
   return {
     name: assignment.name,
+    slug: assignment.slug,
     description: assignment.description ?? "",
     mode: assignment.mode === "group" ? "group" : "individual",
     template_repo: assignment.template
@@ -431,7 +432,7 @@ const CreateAssignmentForm = ({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <form.Field name="name">
                 {(field) => (
-                  <div className={edit ? "sm:col-span-2" : undefined}>
+                  <div>
                     <label htmlFor={field.name} className="label font-bold">
                       {t("assignments.form.name")}
                       <span className="text-error">*</span>
@@ -457,57 +458,72 @@ const CreateAssignmentForm = ({
                 )}
               </form.Field>
 
-              {!edit && (
-                <form.Field name="slug">
-                  {(field) => (
-                    <div>
-                      <label
-                        htmlFor={field.name}
-                        className="label font-bold flex items-center gap-1.5"
-                      >
-                        {t("assignments.form.slug")}
-                        <span className="text-error">*</span>
-                        <HelpTooltip help={t("assignments.form.slugHelp")} />
-                      </label>
-                      <input
-                        id={field.name}
-                        name={field.name}
-                        type="text"
-                        required
-                        aria-required="true"
-                        aria-invalid={field.state.meta.errors.length > 0}
-                        aria-describedby={
-                          field.state.meta.errors.length > 0
-                            ? `${field.name}-error`
-                            : undefined
-                        }
-                        className="input w-full"
-                        placeholder={t("assignments.form.slugPlaceholder")}
-                        value={field.state.value}
-                        onBlur={(e) => {
-                          // Normalize on blur so what the teacher sees is what's
-                          // saved (the repo path segment).
-                          field.handleChange(slugify(e.target.value))
-                          field.handleBlur()
-                        }}
-                        onChange={(e) => {
-                          setSlugTouched(true)
-                          field.handleChange(e.target.value)
-                        }}
+              <form.Field name="slug">
+                {(field) => (
+                  <div>
+                    <label
+                      htmlFor={field.name}
+                      className="label font-bold flex items-center gap-1.5"
+                    >
+                      {t("assignments.form.slug")}
+                      {!edit && <span className="text-error">*</span>}
+                      <HelpTooltip
+                        help={t(
+                          edit
+                            ? "assignments.form.slugEditHelp"
+                            : "assignments.form.slugHelp",
+                        )}
                       />
-                      {field.state.meta.errors.length > 0 && (
-                        <p
-                          id={`${field.name}-error`}
-                          className="text-error text-sm mt-1.5"
-                          role="alert"
-                        >
-                          {String(field.state.meta.errors[0])}
-                        </p>
-                      )}
-                    </div>
-                  )}
-                </form.Field>
-              )}
+                    </label>
+                    <input
+                      id={field.name}
+                      name={field.name}
+                      type="text"
+                      required={!edit}
+                      aria-required={!edit}
+                      // The slug is the assignment's repo-path identity; renaming
+                      // isn't supported, so it's shown read-only in edit mode.
+                      disabled={edit}
+                      aria-invalid={!edit && field.state.meta.errors.length > 0}
+                      aria-describedby={
+                        !edit && field.state.meta.errors.length > 0
+                          ? `${field.name}-error`
+                          : undefined
+                      }
+                      className="input w-full"
+                      placeholder={t("assignments.form.slugPlaceholder")}
+                      value={field.state.value}
+                      onBlur={(e) => {
+                        // Normalize on blur so what the teacher sees is what's
+                        // saved (the repo path segment). An emptied slug falls
+                        // back to the name-derived default, so leaving the field
+                        // blank restores the auto-generated slug.
+                        const normalized = slugify(e.target.value)
+                        field.handleChange(
+                          normalized || slugify(form.state.values.name),
+                        )
+                        field.handleBlur()
+                      }}
+                      onChange={(e) => {
+                        // Clearing the slug re-arms auto-fill from the name;
+                        // any non-empty edit latches it off so a deliberate
+                        // slug isn't clobbered by later name edits.
+                        setSlugTouched(e.target.value.trim() !== "")
+                        field.handleChange(e.target.value)
+                      }}
+                    />
+                    {!edit && field.state.meta.errors.length > 0 && (
+                      <p
+                        id={`${field.name}-error`}
+                        className="text-error text-sm mt-1.5"
+                        role="alert"
+                      >
+                        {String(field.state.meta.errors[0])}
+                      </p>
+                    )}
+                  </div>
+                )}
+              </form.Field>
             </div>
 
             <form.Field name="description">
