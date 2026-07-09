@@ -92,10 +92,8 @@ export type ButtonProps = CommonProps &
     rel?: string
     download?: AnchorHTMLAttributes<HTMLAnchorElement>["download"]
     ref?: Ref<HTMLButtonElement | HTMLAnchorElement>
-    // Defaults to "button" (unlike a bare <button>, which defaults to "submit"
-    // inside a form). A submit button must pass type="submit" explicitly, or the
-    // eslint-plugin-react `button-has-type` rule / the form-submit test will flag
-    // the silent no-op.
+    // Defaults to "button" (a bare <button> defaults to "submit" inside a
+    // form); a submit button must pass type="submit" explicitly.
     type?: ButtonHTMLAttributes<HTMLButtonElement>["type"]
   }
 

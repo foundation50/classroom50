@@ -85,10 +85,8 @@ describe("Button", () => {
     ).toBe("submit")
   })
 
-  // The type default is a footgun: a bare <button> in a <form> implicitly
-  // submits, but Button defaults to type="button". These lock the contract so a
-  // migration can't silently strip a form's submit — type="submit" fires
-  // onSubmit on click and Enter; the default does not.
+  // Lock the contract so a migration can't silently strip a form's submit:
+  // type="submit" fires onSubmit on click/Enter; the "button" default does not.
   it("fires the form onSubmit on click when type=submit", async () => {
     const onSubmit = vi.fn((e) => e.preventDefault())
     render(
@@ -116,9 +114,8 @@ describe("Button", () => {
     const onSubmit = vi.fn((e) => e.preventDefault())
     render(
       <form onSubmit={onSubmit}>
-        {/* Intentionally no `type`: proving the default is "button" (no submit).
-            The no-restricted-syntax guard flags exactly this shape, so disable
-            it for the one line that asserts the footgun it guards against. */}
+        {/* Intentionally no `type`: asserting the "button" default (no submit)
+            — the exact shape the guard flags. */}
         {/* eslint-disable-next-line no-restricted-syntax */}
         <Button>Go</Button>
       </form>,

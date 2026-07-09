@@ -71,8 +71,7 @@ export function Modal({
 
   // Keep the native dialog in sync with `open` (controlled mode). Skipped when
   // the caller drives the dialog through `dialogRef` and never passes `open`.
-  // `closeDisabled` holds the dialog open against a parent that flips
-  // `open=false` mid-submit — the same lock that vetoes user dismissal.
+  // Don't close while `closeDisabled` — a parent may flip open=false mid-submit.
   useEffect(() => {
     if (open === undefined) return
     const dialog = dialogRef?.current ?? internalRef.current

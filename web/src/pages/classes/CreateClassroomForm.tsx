@@ -268,6 +268,7 @@ const CreateClassroomForm = ({
                               }
                             />
                             <Button
+                              type="button"
                               variant="ghost"
                               onClick={() =>
                                 secretField.handleChange(
