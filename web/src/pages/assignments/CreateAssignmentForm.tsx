@@ -600,18 +600,16 @@ const CreateAssignmentForm = ({
                     modeValue === "group" && (
                       <form.Field name="max_group_size">
                         {(field) => (
-                          <div>
-                            <label
+                          <div className="border-l-2 border-base-300 pl-4">
+                            <FieldLabel
                               htmlFor={field.name}
-                              className="label font-bold mb-2"
-                            >
-                              {t("assignments.form.maxGroupSize")}
-                            </label>
+                              label={t("assignments.form.maxGroupSize")}
+                            />
                             <input
                               id={field.name}
                               name={field.name}
                               type="number"
-                              className="input validator w-full sm:max-w-xs"
+                              className="input validator w-full sm:max-w-[8rem]"
                               placeholder="#"
                               min={GROUP_SIZE_MIN}
                               max={GROUP_SIZE_MAX}
