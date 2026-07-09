@@ -1,9 +1,34 @@
-import { describe, expect, it } from "vitest"
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { render, screen, cleanup } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { ReactElement } from "react"
 
-import { assignmentToFormValues } from "./CreateAssignmentForm"
+// Match on stable i18n keys rather than English copy; keep the rest of
+// react-i18next real so transitive setup still loads.
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>()
+  return {
+    ...actual,
+    useTranslation: () => ({ t: (key: string) => key }),
+  }
+})
+
+// TemplateField needs a GitHubAuthProvider; it's irrelevant to the due-date
+// toggle under test, so stub it out to keep the render provider-free.
+vi.mock("./TemplateField", () => ({
+  TemplateField: () => null,
+}))
+
+import CreateAssignmentForm, {
+  assignmentToFormValues,
+} from "./CreateAssignmentForm"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
 import * as formFieldHelpers from "./formFieldHelpers"
 import type { Assignment } from "@/types/classroom"
+
+afterEach(cleanup)
 
 const baseAssignment: Assignment = {
   slug: "hw1",
@@ -60,5 +85,75 @@ describe("assignment due-date default (issue #195)", () => {
       due: "2026-09-01T23:59:00Z",
     }
     expect(Boolean(assignmentToFormValues(withDue).due_date)).toBe(true)
+  })
+})
+
+// End-to-end (rendered) coverage of the opt-in toggle: proves the toggle wiring
+// actually drives what the write path receives, not just the helper defaults
+// above. The submit-path omit is unit-tested at the mutation layer; these guard
+// the form -> onSubmit boundary so a broken toggle can't silently regress #195.
+describe("Set a due date toggle (issue #195)", () => {
+  const withDue: Partial<Assignment> = {
+    ...baseAssignment,
+    due: "2026-09-01T23:59:00Z",
+  }
+
+  // The Advanced Settings pane mounts RunnerField (a useQuery), so a
+  // QueryClient must be in context even though no query fires without an org.
+  const renderForm = (ui: ReactElement) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        {ui}
+      </QueryClientProvider>,
+    )
+
+  it("edit-with-due opens checked and shows the picker", () => {
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues(withDue as Assignment)}
+        onSubmit={() => {}}
+      />,
+    )
+    const toggle =
+      container.querySelector<HTMLInputElement>("#due_date-enabled")
+    expect(toggle?.checked).toBe(true)
+    // The datetime-local picker is revealed with the stored value.
+    expect(screen.getByLabelText("assignments.form.dueDate")).not.toBeNull()
+  })
+
+  it("create opens unchecked with no picker (opt-in)", () => {
+    const { container } = renderForm(
+      <CreateAssignmentForm onSubmit={() => {}} />,
+    )
+    const toggle =
+      container.querySelector<HTMLInputElement>("#due_date-enabled")
+    expect(toggle?.checked).toBe(false)
+    expect(screen.queryByLabelText("assignments.form.dueDate")).toBeNull()
+  })
+
+  it("unchecking the toggle submits an empty due_date (the #195 opt-out)", async () => {
+    const user = userEvent.setup()
+    const onSubmit = vi.fn()
+    const { container } = renderForm(
+      <CreateAssignmentForm
+        edit
+        defaultValues={assignmentToFormValues(withDue as Assignment)}
+        onSubmit={onSubmit}
+      />,
+    )
+
+    const toggle =
+      container.querySelector<HTMLInputElement>("#due_date-enabled")
+    await user.click(toggle!)
+    // Unchecking hides the picker and clears the value.
+    expect(screen.queryByLabelText("assignments.form.dueDate")).toBeNull()
+
+    await user.click(
+      screen.getByRole("button", { name: "assignments.form.saveChanges" }),
+    )
+
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onSubmit.mock.calls[0][0].due_date).toBe("")
   })
 })

@@ -32,7 +32,7 @@ export const normalizeOnBlur = (
 }
 
 // Format a Date as a `datetime-local` input value (local wall-clock, no zone).
-export const toDatetimeLocalValue = (date: Date) => {
+const toDatetimeLocalValue = (date: Date) => {
   const pad = (value: number) => String(value).padStart(2, "0")
 
   const year = date.getFullYear()

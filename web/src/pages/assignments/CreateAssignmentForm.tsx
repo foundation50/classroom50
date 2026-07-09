@@ -33,6 +33,7 @@ import { TemplateField } from "./TemplateField"
 import {
   FieldLabel,
   HelpTooltip,
+  ToggleRow,
   RunnerField,
   LanguageVersionField,
   ContainerFields,
@@ -652,55 +653,32 @@ const CreateAssignmentForm = ({
               <div className="flex flex-col gap-4">
                 <form.Field name="feedback_pr">
                   {(field) => (
-                    <label
-                      htmlFor={field.name}
-                      className="flex cursor-pointer items-center gap-3"
-                    >
-                      <input
-                        id={field.name}
-                        type="checkbox"
-                        className="toggle toggle-primary"
-                        name={field.name}
-                        checked={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.checked)}
-                      />
-                      <span className="label font-bold">
-                        {t("assignments.form.feedbackPr")}
-                      </span>
-                      <HelpTooltip
-                        help={t("assignments.form.feedbackPrHelp")}
-                      />
-                    </label>
+                    <ToggleRow
+                      id={field.name}
+                      checked={field.state.value}
+                      onChange={(checked) => field.handleChange(checked)}
+                      onBlur={field.handleBlur}
+                      label={t("assignments.form.feedbackPr")}
+                      help={t("assignments.form.feedbackPrHelp")}
+                    />
                   )}
                 </form.Field>
 
                 <form.Field name="due_date">
                   {(field) => (
                     <div>
-                      <label
-                        htmlFor={`${field.name}-enabled`}
-                        className="flex cursor-pointer items-center gap-3"
-                      >
-                        <input
-                          id={`${field.name}-enabled`}
-                          type="checkbox"
-                          className="toggle toggle-primary"
-                          checked={dueDateEnabled}
-                          onChange={(e) => {
-                            setDueDateEnabled(e.target.checked)
-                            // Unchecking clears the value so the write path omits
-                            // the due date entirely (#195).
-                            if (!e.target.checked) field.handleChange("")
-                          }}
-                        />
-                        <span className="label font-bold">
-                          {t("assignments.form.setDueDate")}
-                        </span>
-                        <HelpTooltip
-                          help={t("assignments.form.setDueDateTip")}
-                        />
-                      </label>
+                      <ToggleRow
+                        id={`${field.name}-enabled`}
+                        checked={dueDateEnabled}
+                        onChange={(checked) => {
+                          setDueDateEnabled(checked)
+                          // Unchecking clears the value so the write path omits
+                          // the due date entirely (#195).
+                          if (!checked) field.handleChange("")
+                        }}
+                        label={t("assignments.form.setDueDate")}
+                        help={t("assignments.form.setDueDateTip")}
+                      />
                       {dueDateEnabled ? (
                         <div className="mt-2 ml-[3.75rem]">
                           <input
