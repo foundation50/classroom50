@@ -88,9 +88,8 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       if (tone === "error" && typeof message === "string") {
         recordErrorToast(message)
       } else {
-        // Error toasts are already recorded above; trace the rest at debug so a
-        // shown notification is visible in the log. Only a string message is
-        // logged (JSX has no clean label).
+        // Non-error toasts: trace at debug so a shown notification is visible
+        // in the log.
         log.debug("toast shown", {
           tone,
           message: typeof message === "string" ? message : undefined,

@@ -29,9 +29,10 @@ const RootComponent = () => {
 // this screen instead of a blank white page.
 const RootErrorComponent = ({ error }: { error: Error }) => {
   const { t } = useTranslation()
-  // Log once per distinct error (not per re-render). This is the app-wide
-  // boundary, and it's reached outside any useMutation, so record it into the
-  // diagnostics snapshot too.
+  // Log once per distinct error (effect deps [error]); the logger's record path
+  // dedups repeat records of the same message within its window, so StrictMode's
+  // double-invoke and re-renders collapse to one diagnostics entry. Reached
+  // outside any useMutation, so record it into the snapshot too.
   useEffect(() => {
     log.error("route error boundary triggered", { error, record: true })
   }, [error])

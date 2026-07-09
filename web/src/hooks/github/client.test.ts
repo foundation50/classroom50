@@ -126,7 +126,9 @@ describe("createGitHubClient request logging", () => {
     expect(apiError).toBeTruthy()
     // The status is in the context; the raw body's non-message fields are not.
     expect(JSON.stringify(apiError)).toContain("404")
-    expect(JSON.stringify(apiError)).not.toContain("should-not-log")
+    // The raw response body must not appear in ANY logged call — not just the
+    // scrubbed `api error` line. Guards against a stray site logging `{ body }`.
+    expect(JSON.stringify(debug.mock.calls)).not.toContain("should-not-log")
 
     debug.mockRestore()
   })

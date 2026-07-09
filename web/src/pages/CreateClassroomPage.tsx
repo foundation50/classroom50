@@ -14,8 +14,6 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import { logger } from "@/lib/logger"
-
-const log = logger.scope("CreateClassroomPage")
 import RequireTeacher from "@/components/RequireTeacher"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 import { githubKeys } from "@/hooks/github/queries"
@@ -23,6 +21,8 @@ import type {
   CreateClassroomInput,
   CreateClassroomResult,
 } from "@/api/mutations/classrooms"
+
+const log = logger.scope("CreateClassroomPage")
 
 const CreateClassroomPage = () => {
   const { t } = useTranslation()

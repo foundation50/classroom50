@@ -1,8 +1,9 @@
 import { GitHubAPIError, readGitHubRateLimitHeaders } from "./errors"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 import { countApiCall, publishRateLimit } from "@/lib/diagnostics/rateLimit"
 
-const log = logger.scope("github:client")
+const log = logger.scope(LOG_SCOPE_GITHUB_CLIENT)
 
 // Bound every request so a half-open GitHub connection can't pin a poll or
 // mutation forever (React Query imposes no request timeout; the banner uses
@@ -128,8 +129,6 @@ export function createGitHubClient(args: {
       } catch {
         body = text
       }
-
-      log.debug("body when request fail", { body })
 
       const message =
         typeof body === "object" &&

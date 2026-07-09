@@ -79,6 +79,39 @@ function splitContext(context?: LogContext): {
   return { record: Boolean(record), org, rest }
 }
 
+// Error-shaped context values (a stray `{ err }`) carry sensitive fields the
+// privacy contract forbids in a log line: a GitHubAPIError exposes the raw
+// response `body` and the `ssoHeader` (an authorization_request token). Project
+// to an ALLOW-LIST of known non-sensitive scalar fields (matching the Activity
+// store's allow-list philosophy) so a caller can't leak by handing us the raw
+// error — anything not explicitly listed is dropped. Both the console sink and
+// the record path consume the sanitized context.
+const SAFE_ERROR_KEYS = new Set(["status", "requestId"])
+
+function sanitizeValue(value: unknown): unknown {
+  if (!(value instanceof Error)) return value
+  const safe: Record<string, unknown> = {
+    name: value.name,
+    message: value.message,
+  }
+  for (const [key, v] of Object.entries(value)) {
+    if (!SAFE_ERROR_KEYS.has(key)) continue
+    // Only scalars — never a nested object/array (could carry a body/header).
+    if (v === null || typeof v !== "object") safe[key] = v
+  }
+  return safe
+}
+
+function sanitizeContext(
+  rest: Record<string, unknown>,
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(rest)) {
+    out[key] = sanitizeValue(value)
+  }
+  return out
+}
+
 function emit(
   level: LogLevel,
   scope: string | undefined,
@@ -89,6 +122,7 @@ function emit(
 
   const { record, org, rest } = splitContext(context)
   const site = callSite()
+  const safeRest = sanitizeContext(rest)
 
   const prefix = [
     new Date().toISOString(),
@@ -100,13 +134,13 @@ function emit(
     .join(" ")
 
   const line = `${prefix} ${message}`
-  const hasContext = Object.keys(rest).length > 0
+  const hasContext = Object.keys(safeRest).length > 0
   // Looked up lazily (not bound at module load) so it respects a console the
   // host swaps out — a test spy, or a wrapper installed after this module
   // loaded. `console.debug` exists in every target browser + node.
   const sink = console[CONSOLE_METHOD[level]]
   if (hasContext) {
-    sink(line, rest)
+    sink(line, safeRest)
   } else {
     sink(line)
   }
@@ -115,10 +149,24 @@ function emit(
   // snapshot reflects this line. Only meaningful for warn/error (the store is
   // an error/action record); label is the scope-qualified message.
   if (record && (level === "error" || level === "warn")) {
-    recordError(new Error(message), {
+    // Strip this module's frames from the fresh error's stack so the recorded
+    // entry's `source` resolves to the real caller (the same frame as `site`),
+    // not logger.ts — toActivityEntry prefers the error's own stack.
+    const recordErr = new Error(message)
+    if (recordErr.stack) {
+      recordErr.stack = recordErr.stack
+        .split("\n")
+        .filter((l) => !/logger\.(?:ts|js)/.test(l))
+        .join("\n")
+    }
+    recordError(recordErr, {
       org,
       label: scope ? `[${scope}] ${message}` : message,
       source: site,
+      // Collapse a burst of identical recorded lines (e.g. one warn per 401 in
+      // a multi-org read) into one Activity entry so the ring doesn't evict
+      // genuine errors — same window the mutation/toast paths use.
+      dedupKey: scope ? `log-${scope}-${message}` : `log-${message}`,
     })
   }
 }

@@ -1,9 +1,13 @@
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 
 // Lazy so this module can be imported by logger.ts's dependency graph without a
-// top-level circular-init hazard (errors -> logger -> activityStore -> errors).
+// top-level circular-init hazard: logger.ts -> activityStore.ts -> errors.ts,
+// so at errors.ts eval time the `logger` export is still undefined. Verified:
+// an eager `logger.scope(...)` here throws "Cannot read properties of undefined
+// (reading 'scope')" on import. Keep lazy.
 let logInstance: ReturnType<typeof logger.scope> | null = null
-const log = () => (logInstance ??= logger.scope("github:client"))
+const log = () => (logInstance ??= logger.scope(LOG_SCOPE_GITHUB_CLIENT))
 
 export type GitHubRateLimit = {
   limit: number | null

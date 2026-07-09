@@ -61,6 +61,9 @@ export function RateLimitOverlay() {
   // The total-call count captured when the current view loaded; per-view calls
   // are the delta since. Kept in state (not a ref) and rebased via the "derive
   // state during render" pattern so a route change resets it without an effect.
+  // Approximate ("~"): baseline (totalCalls) and pathname come from independent
+  // stores, so a call firing across a route change can land in either bucket —
+  // fine for a dev glance, not an accounting figure.
   const [view, setView] = useState({ path: pathname, baseline: totalCalls })
   if (view.path !== pathname) {
     setView({ path: pathname, baseline: totalCalls })
@@ -94,7 +97,7 @@ export function RateLimitOverlay() {
           title="Toggle GitHub rate-limit details"
         >
           <span className="opacity-60">this view</span>
-          <span>{callsThisView} calls</span>
+          <span>~{callsThisView} calls</span>
           <span className="opacity-40">{collapsed ? "▸" : "▾"}</span>
         </button>
         {!collapsed && (

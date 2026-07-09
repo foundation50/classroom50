@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { logger } from "./logger"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import { clearActivity, readActivity } from "@/lib/activity/activityStore"
 
 // Under Vitest import.meta.env.DEV === true, so the module's MIN_LEVEL is
@@ -106,6 +107,53 @@ describe("logger", () => {
 
   it("records a warn when record:true", () => {
     logger.warn("read-back failed", { record: true, org: "acme" })
+    expect(readActivity()).toHaveLength(1)
+  })
+})
+
+describe("logger privacy + record path", () => {
+  it("never leaks a GitHubAPIError's body or ssoHeader passed as { err } context", () => {
+    const err = new GitHubAPIError({
+      status: 403,
+      url: "https://api.github.com/orgs/acme/repos",
+      message: "Forbidden",
+      body: { message: "Forbidden", secret: "should-not-log" },
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+      ssoHeader:
+        "required; url=https://github.com/orgs/acme/sso?authorization_request=leaky-token",
+    })
+    logger.error("request failed", { err })
+    // The raw body and the SSO authorization_request token must not reach the
+    // console sink through a stray raw-error context value.
+    const serialized = JSON.stringify(spies.error.mock.calls)
+    expect(serialized).not.toContain("should-not-log")
+    expect(serialized).not.toContain("leaky-token")
+    // The safe, allow-listed fields still come through so the line is useful.
+    const [, ctx] = spies.error.mock.calls[0] ?? []
+    expect(JSON.stringify(ctx)).toContain("403")
+  })
+
+  it("attributes a recorded entry's source to the caller, not logger.ts", () => {
+    logger.scope("github:client").error("boom", { record: true })
+    const [entry] = readActivity()
+    expect(entry.source ?? "").not.toContain("logger.ts")
+    expect(entry.source ?? "").toMatch(/logger\.test\.ts:\d+/)
+  })
+
+  it("collapses a burst of identical recorded warns into one Activity entry", () => {
+    const log = logger.scope("github:client")
+    for (let i = 0; i < 5; i++) {
+      log.warn("session expired (401)", { record: true, org: "acme" })
+    }
+    // Same scope+message within the dedup window -> one entry, so a 401 burst
+    // can't evict genuine errors from the ring.
     expect(readActivity()).toHaveLength(1)
   })
 })

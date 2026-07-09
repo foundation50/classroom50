@@ -19,14 +19,14 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
 import { logger } from "@/lib/logger"
-
-const log = logger.scope("CreateAssignmentPage")
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import type {
   CreateAssignmentInput,
   CreateAssignmentResult,
 } from "@/api/mutations/assignments"
+
+const log = logger.scope("CreateAssignmentPage")
 
 const CreateAssignmentPage = () => {
   const { t } = useTranslation()
