@@ -85,7 +85,15 @@ export function GitHubAuthCard() {
                 void auth.startWebFlow()
               }}
             >
-              {auth.error ? (
+              {!auth.isOnline ? (
+                <Alert tone="warning" className="items-start text-sm">
+                  <AlertTriangle
+                    aria-hidden="true"
+                    className="size-4 shrink-0"
+                  />
+                  <span>{t("auth.offlineHold")}</span>
+                </Alert>
+              ) : auth.error ? (
                 <Alert tone="error" className="items-start text-sm">
                   <AlertTriangle
                     aria-hidden="true"

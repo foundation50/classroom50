@@ -11,7 +11,7 @@ import { logger } from "@/lib/logger"
 const log = logger.scope("app")
 
 export function App() {
-  const { status, token, user } = useGithubAuth()
+  const { status, token, user, isOnline } = useGithubAuth()
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -44,9 +44,14 @@ export function App() {
   }, [sessionEndedOnAuthedRoute])
 
   if (status === "loading" || sessionEndedOnAuthedRoute) {
+    // Offline with a stored token that can't be validated yet: explain the hold
+    // rather than showing a bare, indefinite "loading" spinner (the session is
+    // preserved and resumes when connectivity returns).
+    const label =
+      !isOnline && token ? t("auth.offlineHold") : t("common.loadingApp")
     return (
       <div className="min-h-screen grid place-items-center">
-        <Spinner size="lg" label={t("common.loadingApp")} />
+        <Spinner size="lg" label={label} />
       </div>
     )
   }

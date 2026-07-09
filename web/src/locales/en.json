@@ -149,6 +149,8 @@
     "patCancel": "Cancel",
     "errorNetwork": "Network error reaching {{target}}; it may be down or unreachable.",
     "errorNetworkProxyTarget": "the Cloudflare Worker proxy",
+    "errorOffline": "You appear to be offline. Check your connection and try again — signing in needs a network connection.",
+    "offlineHold": "You're offline. Waiting for a connection to restore your session…",
     "errorStateMismatch": "State mismatch -- possible CSRF. Please try signing in again.",
     "errorMissingPkce": "Missing PKCE verifier or client ID. Please try signing in again.",
     "errorClientIdMissing": "GitHub OAuth client ID is not configured (VITE_GITHUB_CLIENT_ID).",
@@ -1133,6 +1135,10 @@
     "title": "A new version of Classroom 50 is available",
     "body": "Reload the page to get the latest version.",
     "action": "Reload now"
+  },
+  "offline": {
+    "title": "You're offline",
+    "body": "Classroom 50 works with live data from GitHub, so it needs a connection. This banner clears automatically when you're back online."
   },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",

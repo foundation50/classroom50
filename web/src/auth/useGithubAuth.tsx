@@ -28,6 +28,7 @@ import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import { missingScopes } from "./scopes"
+import { useOnlineStatus } from "@/hooks/useOnlineStatus"
 import {
   clearGithubToken,
   consumeOAuthSession,
@@ -64,6 +65,11 @@ function formatError(
     message.toLowerCase().includes("failed to fetch") ||
     message.toLowerCase().includes("networkerror")
   ) {
+    // A fetch failure while the browser reports no network is the client being
+    // offline, not our proxy/GitHub being down — don't misattribute blame.
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      return t("auth.errorOffline")
+    }
     return t("auth.errorNetwork", { target: networkTarget })
   }
 
@@ -79,6 +85,43 @@ function formatError(
 // apart), so both are preserved.
 export function shouldExpireOnUserError(error: unknown): boolean {
   return error instanceof GitHubUserFetchError && error.status === 401
+}
+
+// State the auth status verdict depends on — structural so the decision stays a
+// pure, testable function (mirrors the repo's resolve* pattern).
+export type AuthStatusInput = {
+  hasLoadedStoredAuth: boolean
+  hasToken: boolean
+  isOnline: boolean
+  userQueryPending: boolean
+  userQueryErrored: boolean
+  hasUser: boolean
+}
+
+// Resolve the auth status for the router guard.
+//
+// Two offline cases, deliberately split:
+//   - Already validated this session (hasUser): stay "authenticated" even when
+//     offline. The app stays mounted on cached data and the OfflineBanner (in
+//     the _authed layout) explains the state — don't collapse a working session
+//     to a full-screen spinner on a network blip.
+//   - Not yet validated + offline (cold reload, no cached user): hold at
+//     "loading". The GET /user validation can't run offline, so an
+//     error/absent-user must NOT report "unauthenticated" and bounce a
+//     still-valid session to /login. We hold until connectivity returns and the
+//     query resolves.
+//
+// A genuine 401 tears the token down elsewhere (shouldExpireOnUserError),
+// clearing both `hasToken` and the cached user, so neither branch can mask a
+// truly dead token.
+export function resolveAuthStatus(input: AuthStatusInput): AuthStatus {
+  if (!input.hasLoadedStoredAuth) return "loading"
+  if (!input.hasToken) return "unauthenticated"
+  if (input.hasUser) return "authenticated"
+  if (!input.isOnline) return "loading"
+  if (input.userQueryPending) return "loading"
+  if (input.userQueryErrored) return "unauthenticated"
+  return "authenticated"
 }
 
 // Recover a stranded "exchanging" screen: with no ?code to exchange (fresh
@@ -130,6 +173,7 @@ function sleep(ms: number, signal: AbortSignal) {
 function useGithubAuthState() {
   const queryClient = useQueryClient()
   const { t } = useTranslation()
+  const isOnline = useOnlineStatus()
   const abortRef = useRef<AbortController | null>(null)
   // Deep link (#71) stashed at code-exchange, consumed by the status-driven
   // effect below so navigation runs against an authenticated router context.
@@ -688,32 +732,27 @@ function useGithubAuthState() {
     }
   }, [device, now])
 
-  const status = useMemo<AuthStatus>(() => {
-    if (!hasLoadedStoredAuth) {
-      return "loading"
-    }
-
-    if (!token) {
-      return "unauthenticated"
-    }
-
-    if (githubUserQuery.isLoading || githubUserQuery.isPending) {
-      return "loading"
-    }
-
-    if (githubUserQuery.isError || !githubUserQuery.data) {
-      return "unauthenticated"
-    }
-
-    return "authenticated"
-  }, [
-    hasLoadedStoredAuth,
-    token,
-    githubUserQuery.isLoading,
-    githubUserQuery.isPending,
-    githubUserQuery.isError,
-    githubUserQuery.data,
-  ])
+  const status = useMemo<AuthStatus>(
+    () =>
+      resolveAuthStatus({
+        hasLoadedStoredAuth,
+        hasToken: Boolean(token),
+        isOnline,
+        userQueryPending:
+          githubUserQuery.isLoading || githubUserQuery.isPending,
+        userQueryErrored: githubUserQuery.isError,
+        hasUser: Boolean(githubUserQuery.data),
+      }),
+    [
+      hasLoadedStoredAuth,
+      token,
+      isOnline,
+      githubUserQuery.isLoading,
+      githubUserQuery.isPending,
+      githubUserQuery.isError,
+      githubUserQuery.data,
+    ],
+  )
 
   // Navigate to the stashed deep link once status is "authenticated", so the
   // target _authed guard sees an authenticated context instead of bouncing
@@ -759,6 +798,7 @@ function useGithubAuthState() {
     expireSession,
     sessionExpired,
     status,
+    isOnline,
   }
 }
 

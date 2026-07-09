@@ -3,7 +3,9 @@ import { describe, expect, it } from "vitest"
 import {
   classifyPatResult,
   recoverStrandedExchange,
+  resolveAuthStatus,
   shouldExpireOnUserError,
+  type AuthStatusInput,
 } from "./useGithubAuth"
 import { GitHubUserFetchError } from "./github-user-api"
 
@@ -87,5 +89,82 @@ describe("classifyPatResult", () => {
   it("accepts a comma+space delimited header the same as a space-delimited one", () => {
     const granted = "read:user, repo, workflow, admin:org, delete_repo"
     expect(classifyPatResult(granted)).toEqual({ kind: "ok", scopes: granted })
+  })
+})
+
+// The auth-status verdict for the router guard. Two headline invariants (#185):
+//   - An offline cold reload with a stored token but no cached user HOLDS at
+//     "loading" (session preserved) rather than bouncing to /login.
+//   - An already-validated session (cached user) stays "authenticated" while
+//     offline, so the app stays mounted and the OfflineBanner shows — a blip
+//     must not collapse a working session to a spinner.
+describe("resolveAuthStatus", () => {
+  const authed: AuthStatusInput = {
+    hasLoadedStoredAuth: true,
+    hasToken: true,
+    isOnline: true,
+    userQueryPending: false,
+    userQueryErrored: false,
+    hasUser: true,
+  }
+
+  it("is 'loading' until stored auth has been read", () => {
+    expect(resolveAuthStatus({ ...authed, hasLoadedStoredAuth: false })).toBe(
+      "loading",
+    )
+  })
+
+  it("is 'unauthenticated' with no token (even offline)", () => {
+    expect(
+      resolveAuthStatus({ ...authed, hasToken: false, isOnline: false }),
+    ).toBe("unauthenticated")
+  })
+
+  it("STAYS 'authenticated' when offline with a cached user (keep the app mounted, show the banner)", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        isOnline: false,
+        userQueryErrored: true,
+      }),
+    ).toBe("authenticated")
+  })
+
+  it("HOLDS at 'loading' when offline with a token but no cached user yet (cold reload — don't bounce to /login)", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        isOnline: false,
+        hasUser: false,
+        userQueryPending: true,
+      }),
+    ).toBe("loading")
+  })
+
+  it("also HOLDS at 'loading' when offline with no user and the paused query errored", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        isOnline: false,
+        hasUser: false,
+        userQueryErrored: true,
+      }),
+    ).toBe("loading")
+  })
+
+  it("is 'loading' while the user query is pending (online, first validation)", () => {
+    expect(
+      resolveAuthStatus({ ...authed, hasUser: false, userQueryPending: true }),
+    ).toBe("loading")
+  })
+
+  it("is 'unauthenticated' when online with a token but the first validation errored (e.g. a definitive 401 upstream)", () => {
+    expect(
+      resolveAuthStatus({ ...authed, hasUser: false, userQueryErrored: true }),
+    ).toBe("unauthenticated")
+  })
+
+  it("is 'authenticated' when online with a token and a resolved user", () => {
+    expect(resolveAuthStatus(authed)).toBe("authenticated")
   })
 })

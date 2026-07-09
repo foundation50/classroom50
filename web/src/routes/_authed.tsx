@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
+import { OfflineBanner } from "@/components/OfflineBanner"
 import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Spinner } from "@/components/Spinner"
@@ -52,6 +53,7 @@ function AuthedLayout() {
 
   return (
     <>
+      <OfflineBanner />
       <ScopeWarningBanner />
       <SkeletonDriftBanner />
       <UpdateAvailableBanner />
