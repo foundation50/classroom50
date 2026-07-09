@@ -10,8 +10,9 @@ import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
 import { Button } from "@/components/ui"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 
-const log = logger.scope("router")
+const log = logger.scope(LOG_SCOPE_ROUTER)
 
 const RootComponent = () => {
   // Scope "view as" to the current org (reset across orgs via the key); the

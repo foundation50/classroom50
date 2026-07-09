@@ -1,7 +1,8 @@
 import type { GitHubUser } from "@/hooks/github/types"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 
-const log = logger.scope("auth")
+const log = logger.scope(LOG_SCOPE_AUTH)
 
 // Carries the HTTP status so callers can branch on auth failures (401) without
 // string-matching the message — e.g. the session-expiry effect in useGithubAuth.

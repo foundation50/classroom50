@@ -25,6 +25,7 @@ import {
 import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import router from "@/router"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import { missingScopes } from "./scopes"
 import {
@@ -44,7 +45,7 @@ import type { AuthStatus } from "@/types/router"
 // react-i18next's `t` we rely on (key + optional interpolation values).
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
-const log = logger.scope("auth")
+const log = logger.scope(LOG_SCOPE_AUTH)
 
 function formatError(
   t: Translate,

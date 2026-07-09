@@ -6,8 +6,9 @@ import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Spinner } from "@/components/Spinner"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_ROUTER } from "@/lib/logScopes"
 
-const log = logger.scope("router")
+const log = logger.scope(LOG_SCOPE_ROUTER)
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context, location }) => {

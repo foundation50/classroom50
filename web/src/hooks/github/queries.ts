@@ -30,8 +30,9 @@ import { classroomPagesSegment } from "@/util/secret"
 import type { GetAssignmentsFileInput } from "@/api/queries/assignments"
 import type { OrgRunner, OrgRunnersResult } from "@/util/runners"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 
-const log = logger.scope("queries")
+const log = logger.scope(LOG_SCOPE_QUERIES)
 
 export const githubKeys = {
   all: ["github"] as const,

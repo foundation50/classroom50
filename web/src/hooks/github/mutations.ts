@@ -23,9 +23,10 @@ import { repairRulesets } from "./rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
 import { bytesToHex } from "@/util/hex"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 
 const logWorkflows = logger.scope("github:workflows")
-const logSetup = logger.scope("github:setup")
+const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
 const ASSIGNMENTS_TEMPLATE = {
   schema: "classroom50/assignments/v1",

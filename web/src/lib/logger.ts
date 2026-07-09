@@ -28,15 +28,6 @@ const LEVEL_WEIGHT: Record<LogLevel, number> = {
   error: 40,
 }
 
-// Each level maps to its own console method, so browser devtools can filter by
-// severity (Verbose/Info/Warnings/Errors) and errors get a captured stack.
-const CONSOLE_METHOD: Record<LogLevel, "debug" | "info" | "warn" | "error"> = {
-  debug: "debug",
-  info: "info",
-  warn: "warn",
-  error: "error",
-}
-
 // In a production build only warn/error print (matches the app's existing
 // DEV-gating of verbose console output); dev prints everything. `import.meta`
 // env is read once at module load — it's a compile-time constant under Vite.
@@ -55,18 +46,23 @@ export type LogContext = {
   [key: string]: unknown
 }
 
-// First app frame of the CURRENT call, so a line prints "where it came from"
-// even when no Error is passed. Reuses the activity store's frame extractor so
-// there's one notion of "app-origin frame". We drop the top frames that are
-// inside this module (logger.ts) to point at the real caller.
-function callSite(): string | undefined {
-  const stack = new Error().stack
-  if (!stack) return undefined
-  const external = stack
+// Drop this module's own frames from a stack so an origin resolves to the real
+// caller, not logger.ts. Shared by callSite() and the record path so the two
+// stay in lockstep.
+function stripLoggerFrames(stack: string): string {
+  return stack
     .split("\n")
     .filter((line) => !/logger\.(?:ts|js)/.test(line))
     .join("\n")
-  return sourceFromStack(external)
+}
+
+// First app frame of the CURRENT call, so a line prints "where it came from"
+// even when no Error is passed. Reuses the activity store's frame extractor so
+// there's one notion of "app-origin frame".
+function callSite(): string | undefined {
+  const stack = new Error().stack
+  if (!stack) return undefined
+  return sourceFromStack(stripLoggerFrames(stack))
 }
 
 function splitContext(context?: LogContext): {
@@ -135,10 +131,12 @@ function emit(
 
   const line = `${prefix} ${message}`
   const hasContext = Object.keys(safeRest).length > 0
-  // Looked up lazily (not bound at module load) so it respects a console the
-  // host swaps out — a test spy, or a wrapper installed after this module
-  // loaded. `console.debug` exists in every target browser + node.
-  const sink = console[CONSOLE_METHOD[level]]
+  // Indexed by level (which IS the console method name) and looked up lazily
+  // (not bound at module load) so it respects a console the host swaps out — a
+  // test spy, or a wrapper installed after this module loaded. Each level maps
+  // to its matching method so devtools can filter by severity. `console.debug`
+  // exists in every target browser + node.
+  const sink = console[level]
   if (hasContext) {
     sink(line, safeRest)
   } else {
@@ -154,10 +152,7 @@ function emit(
     // not logger.ts — toActivityEntry prefers the error's own stack.
     const recordErr = new Error(message)
     if (recordErr.stack) {
-      recordErr.stack = recordErr.stack
-        .split("\n")
-        .filter((l) => !/logger\.(?:ts|js)/.test(l))
-        .join("\n")
+      recordErr.stack = stripLoggerFrames(recordErr.stack)
     }
     recordError(recordErr, {
       org,

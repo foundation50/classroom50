@@ -3,8 +3,9 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "./github/queries"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 
-const log = logger.scope("queries")
+const log = logger.scope(LOG_SCOPE_QUERIES)
 
 // Canonical <classroom>/scores.json shape (classroom50/scores/v1), written by
 // the CLI's collect_scores.py — the GUI is a pure consumer. Keyed by slug →

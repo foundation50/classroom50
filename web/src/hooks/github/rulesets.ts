@@ -9,8 +9,9 @@ import { paginateAll } from "./queries"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
 import { logger } from "@/lib/logger"
+import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 
-const log = logger.scope("github:setup")
+const log = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
 const FEEDBACK_BASE_BRANCH = "feedback"
 

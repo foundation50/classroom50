@@ -70,19 +70,20 @@ export function RateLimitOverlay() {
   }
   const callsThisView = totalCalls - view.baseline
 
-  // Tick once a second only while there's a reset to count down toward.
+  // Tick once a second only while there's a snapshot to count down toward. Keyed
+  // on whether a snapshot exists (not its identity) so a new snapshot object on
+  // every response doesn't tear down and re-arm the interval each time.
+  const hasSnapshot = snapshot !== null
   useEffect(() => {
-    if (!snapshot) return
+    if (!hasSnapshot) return
     const id = setInterval(() => setNow(Date.now()), 1000)
     return () => clearInterval(id)
-  }, [snapshot])
+  }, [hasSnapshot])
 
   const rateLimit = snapshot?.rateLimit ?? null
   const resetIn = secondsUntil(rateLimit?.reset ?? null, now)
   const tone = toneClass(rateLimit?.remaining ?? null, rateLimit?.limit ?? null)
 
-  // Portal to body so the bar is never inside the app's React root subtree —
-  // the app can't detect it via layout, scroll, or CSS descendant selectors.
   return createPortal(
     <div
       className="pointer-events-none fixed inset-x-0 bottom-0 z-[9999] flex justify-center"
