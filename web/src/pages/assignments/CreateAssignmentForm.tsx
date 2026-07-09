@@ -508,20 +508,26 @@ const CreateAssignmentForm = ({
 
             <form.Field name="description">
               {(field) => (
-                <>
-                  <label htmlFor={field.name} className="label font-bold">
-                    {t("assignments.form.description")}
-                  </label>
+                <details
+                  className="group mb-4"
+                  open={Boolean(field.state.value)}
+                >
+                  <summary className="cursor-pointer label font-bold marker:content-none flex items-center gap-2">
+                    <span className="transition-transform group-open:rotate-90">
+                      ▶
+                    </span>
+                    {t("assignments.form.descriptionOptional")}
+                  </summary>
                   <textarea
                     id={field.name}
                     name={field.name}
-                    className="textarea w-full mb-4"
+                    className="textarea w-full mt-2"
                     placeholder={t("assignments.form.descriptionPlaceholder")}
                     value={field.state.value}
                     onBlur={field.handleBlur}
                     onChange={(e) => field.handleChange(e.target.value)}
                   />
-                </>
+                </details>
               )}
             </form.Field>
 
@@ -542,7 +548,7 @@ const CreateAssignmentForm = ({
               {t("assignments.form.settingsSection")}
             </h3>
 
-            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-2 sm:items-start">
+            <div className="grid grid-cols-1 gap-x-8 gap-y-6 sm:grid-cols-3 sm:items-start">
               <div>
                 <form.Field name="mode">
                   {(field) => (
@@ -703,44 +709,31 @@ const CreateAssignmentForm = ({
                   </div>
                 )}
               </form.Field>
-            </div>
 
-            <form.Field name="feedback_pr">
-              {(field) => (
-                <div className="mt-6 flex items-start gap-3">
-                  <input
-                    id={field.name}
-                    type="checkbox"
-                    className="toggle toggle-primary mt-0.5"
-                    name={field.name}
-                    checked={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.checked)}
-                  />
-                  <div>
-                    <div className="flex items-center gap-2">
+              <form.Field name="feedback_pr">
+                {(field) => (
+                  <div className="flex items-start gap-3">
+                    <input
+                      id={field.name}
+                      type="checkbox"
+                      className="toggle toggle-primary mt-0.5"
+                      name={field.name}
+                      checked={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.checked)}
+                    />
+                    <div className="min-w-0 flex-1">
                       <label htmlFor={field.name} className="label font-bold">
                         {t("assignments.form.feedbackPr")}
                       </label>
-                      <span
-                        className={`badge badge-sm ${
-                          field.state.value
-                            ? "badge-success badge-soft"
-                            : "badge-ghost"
-                        }`}
-                      >
-                        {field.state.value
-                          ? t("assignments.form.enabled")
-                          : t("assignments.form.disabled")}
-                      </span>
+                      <p className="text-sm text-base-content/70">
+                        {t("assignments.form.feedbackPrHelp")}
+                      </p>
                     </div>
-                    <p className="text-sm text-base-content/70">
-                      {t("assignments.form.feedbackPrHelp")}
-                    </p>
                   </div>
-                </div>
-              )}
-            </form.Field>
+                )}
+              </form.Field>
+            </div>
           </Card.Body>
           <FormErrors form={form} />
         </Card>
