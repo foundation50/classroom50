@@ -48,4 +48,17 @@ describe("assignment due-date default (issue #195)", () => {
       (formFieldHelpers as Record<string, unknown>).sevenDaysFromNow,
     ).toBeUndefined()
   })
+
+  // The "Set a due date" checkbox seeds its checked state from whether a due
+  // date is present: an assignment with a stored due opens with the picker
+  // shown; a new or no-due assignment opens unchecked (opt-in). This mirrors the
+  // Boolean(due_date) seed in CreateAssignmentForm.
+  it("derives the due-date checkbox seed from presence of a due value", () => {
+    expect(Boolean(assignmentToFormValues(baseAssignment).due_date)).toBe(false)
+    const withDue: Assignment = {
+      ...baseAssignment,
+      due: "2026-09-01T23:59:00Z",
+    }
+    expect(Boolean(assignmentToFormValues(withDue).due_date)).toBe(true)
+  })
 })

@@ -399,6 +399,12 @@ const CreateAssignmentForm = ({
   // Auto-prefill slug from name until the teacher edits it directly, so a
   // deliberate slug isn't clobbered by later name edits.
   const [slugTouched, setSlugTouched] = useState(false)
+  // Whether the due-date picker is shown. Seeded from the initial value (Edit of
+  // an assignment with a due starts checked); a due date is opt-in otherwise.
+  // Unchecking clears due_date so the write path omits it (#195).
+  const [dueDateEnabled, setDueDateEnabled] = useState(
+    Boolean(form.state.values.due_date),
+  )
   const tzShort = new Intl.DateTimeFormat(undefined, {
     timeZoneName: "short",
   })
@@ -535,24 +541,48 @@ const CreateAssignmentForm = ({
                 <form.Field name="due_date">
                   {(field) => (
                     <>
-                      <label
-                        htmlFor={field.name}
-                        className="label font-bold mb-2"
-                      >
-                        {t("assignments.form.dueDate", { tz: tzShort })}
+                      <label className="label cursor-pointer justify-start gap-3 p-0 font-bold mb-2">
+                        <input
+                          type="checkbox"
+                          className="toggle toggle-sm"
+                          checked={dueDateEnabled}
+                          onChange={(e) => {
+                            setDueDateEnabled(e.target.checked)
+                            // Unchecking clears the value so the write path omits
+                            // the due date entirely (#195).
+                            if (!e.target.checked) field.handleChange("")
+                          }}
+                        />
+                        {t("assignments.form.setDueDate")}
                       </label>
-                      <input
-                        id={field.name}
-                        name={field.name}
-                        type="datetime-local"
-                        className="input w-full"
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                      <p className="mt-1.5 text-sm text-base-content/70">
-                        {t("assignments.form.dueDateHelp")}
-                      </p>
+                      {dueDateEnabled ? (
+                        <>
+                          <label
+                            htmlFor={field.name}
+                            className="label text-sm text-base-content/70 mb-1"
+                          >
+                            {t("assignments.form.dueDate", { tz: tzShort })}
+                          </label>
+                          <input
+                            id={field.name}
+                            name={field.name}
+                            type="datetime-local"
+                            className="input w-full"
+                            value={field.state.value}
+                            onBlur={(e) => {
+                              // Clearing the picker retires the due date: hide it
+                              // and uncheck the box (value is already "").
+                              if (!e.target.value) setDueDateEnabled(false)
+                              field.handleBlur()
+                            }}
+                            onChange={(e) => field.handleChange(e.target.value)}
+                          />
+                        </>
+                      ) : (
+                        <p className="text-sm text-base-content/70">
+                          {t("assignments.form.noDueDateHelp")}
+                        </p>
+                      )}
                     </>
                   )}
                 </form.Field>
