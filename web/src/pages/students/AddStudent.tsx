@@ -355,7 +355,12 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
         </div>
 
         <div className="modal-action">
-          <Button variant="ghost" disabled={submitting} onClick={closeDialog}>
+          <Button
+            type="button"
+            variant="ghost"
+            disabled={submitting}
+            onClick={closeDialog}
+          >
             {t("common.close")}
           </Button>
           <form.Subscribe

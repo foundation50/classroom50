@@ -250,7 +250,12 @@ const EditStudentForm = ({
       </AnimatedAlert>
 
       <div className="modal-action">
-        <Button variant="ghost" disabled={submitting} onClick={onCancel}>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={submitting}
+          onClick={onCancel}
+        >
           {t("common.cancel")}
         </Button>
         <form.Subscribe

@@ -40,8 +40,9 @@ export type ModalProps = {
   // Hide the built-in top-right close X (some modals render their own header
   // affordance or must block dismissal while submitting).
   hideCloseButton?: boolean
-  // Disable the close X + backdrop close, and block Esc-dismiss, while a submit
-  // is in flight (see the onCancel guard below).
+  // Block dismissal while a submit is in flight: disables the close X + backdrop
+  // close, vetoes Esc (see the onCancel guard below), and holds the dialog open
+  // against a controlled `open=false` transition (see the open-sync effect).
   closeDisabled?: boolean
   "aria-labelledby"?: string
   "aria-label"?: string
@@ -70,13 +71,15 @@ export function Modal({
 
   // Keep the native dialog in sync with `open` (controlled mode). Skipped when
   // the caller drives the dialog through `dialogRef` and never passes `open`.
+  // `closeDisabled` holds the dialog open against a parent that flips
+  // `open=false` mid-submit — the same lock that vetoes user dismissal.
   useEffect(() => {
     if (open === undefined) return
     const dialog = dialogRef?.current ?? internalRef.current
     if (!dialog) return
     if (open && !dialog.open) dialog.showModal()
-    if (!open && dialog.open) dialog.close()
-  }, [open, dialogRef])
+    if (!open && dialog.open && !closeDisabled) dialog.close()
+  }, [open, dialogRef, closeDisabled])
 
   const setRefs = (node: HTMLDialogElement | null) => {
     internalRef.current = node

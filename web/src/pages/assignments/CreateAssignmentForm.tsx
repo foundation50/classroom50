@@ -955,7 +955,12 @@ const CreateAssignmentForm = ({
       <div className="divider" />
       <div className="card-actions justify-end p-2">
         {onCancel && (
-          <Button variant="ghost" onClick={onCancel} disabled={loading}>
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={onCancel}
+            disabled={loading}
+          >
             {readOnly ? t("assignments.form.back") : t("common.cancel")}
           </Button>
         )}

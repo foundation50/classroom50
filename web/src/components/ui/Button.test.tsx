@@ -85,6 +85,48 @@ describe("Button", () => {
     ).toBe("submit")
   })
 
+  // The type default is a footgun: a bare <button> in a <form> implicitly
+  // submits, but Button defaults to type="button". These lock the contract so a
+  // migration can't silently strip a form's submit — type="submit" fires
+  // onSubmit on click and Enter; the default does not.
+  it("fires the form onSubmit on click when type=submit", async () => {
+    const onSubmit = vi.fn((e) => e.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        <Button type="submit">Go</Button>
+      </form>,
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Go" }))
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it("fires the form onSubmit on Enter in a field when type=submit", async () => {
+    const onSubmit = vi.fn((e) => e.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        <input aria-label="field" />
+        <Button type="submit">Go</Button>
+      </form>,
+    )
+    await userEvent.type(screen.getByLabelText("field"), "hi{Enter}")
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not submit the form on click with the default type", async () => {
+    const onSubmit = vi.fn((e) => e.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        {/* Intentionally no `type`: proving the default is "button" (no submit).
+            The no-restricted-syntax guard flags exactly this shape, so disable
+            it for the one line that asserts the footgun it guards against. */}
+        {/* eslint-disable-next-line no-restricted-syntax */}
+        <Button>Go</Button>
+      </form>,
+    )
+    await userEvent.click(screen.getByRole("button", { name: "Go" }))
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("renders an anchor with the same recipe when given href", () => {
     render(
       <Button href="https://example.com" variant="ghost" size="sm">

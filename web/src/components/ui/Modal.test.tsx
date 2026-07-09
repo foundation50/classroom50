@@ -100,6 +100,35 @@ describe("Modal", () => {
     expect(cancel.defaultPrevented).toBe(false)
   })
 
+  it("holds the dialog open against open=false while closeDisabled, then closes when the lock releases", () => {
+    const { container, rerender } = render(
+      <Modal open closeDisabled aria-label="dlg">
+        x
+      </Modal>,
+    )
+    const dialog = container.querySelector("dialog") as HTMLDialogElement
+    expect(dialog.open).toBe(true)
+
+    // A parent flipping open=false mid-submit must not dismiss the guarded
+    // dialog — the lock covers the programmatic close path, not just user
+    // dismissal.
+    rerender(
+      <Modal open={false} closeDisabled aria-label="dlg">
+        x
+      </Modal>,
+    )
+    expect(dialog.open).toBe(true)
+
+    // Once the submit finishes and the lock releases, the pending open=false
+    // takes effect and the dialog closes.
+    rerender(
+      <Modal open={false} aria-label="dlg">
+        x
+      </Modal>,
+    )
+    expect(dialog.open).toBe(false)
+  })
+
   it("stays closed in ref-driven mode until opened imperatively, and wires dialogRef", () => {
     const onClose = vi.fn()
     const dialogRef = createRef<HTMLDialogElement | null>()
