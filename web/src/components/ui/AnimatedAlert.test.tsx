@@ -42,4 +42,21 @@ describe("AnimatedAlert", () => {
     expect(el.className).toContain("mt-4")
     expect(el.className).toContain("text-sm")
   })
+
+  it("keeps the exiting content when show flips false and children clear", () => {
+    // Callers usually clear the message string in the same render that flips
+    // `show` off. AnimatePresence animates out the snapshot it last rendered, so
+    // the text must not blank mid-collapse.
+    const { rerender } = render(
+      <AnimatedAlert tone="error" show>
+        original message
+      </AnimatedAlert>,
+    )
+    rerender(
+      <AnimatedAlert tone="error" show={false}>
+        {""}
+      </AnimatedAlert>,
+    )
+    expect(screen.getByRole("alert").textContent).toBe("original message")
+  })
 })
