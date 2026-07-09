@@ -38,12 +38,7 @@ import {
   ContainerFields,
   AptField,
 } from "./AdvancedRuntimeFields"
-import {
-  normalizeOnBlur,
-  toDatetimeLocalValue,
-  sevenDaysFromNow,
-  utcIsoToDatetimeLocalValue,
-} from "./formFieldHelpers"
+import { normalizeOnBlur, utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
 import type { Assignment } from "@/types/classroom"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
 import {
@@ -115,9 +110,7 @@ const useAssignmentForm = (
       description: defaultValues?.description || "",
       mode: defaultValues?.mode || "individual",
       template_repo: defaultValues?.template_repo || "",
-      due_date:
-        utcIsoToDatetimeLocalValue(defaultValues?.due_date) ||
-        toDatetimeLocalValue(sevenDaysFromNow()),
+      due_date: utcIsoToDatetimeLocalValue(defaultValues?.due_date),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
       runtime_env: defaultValues?.runtime_env || "hosted",
@@ -557,6 +550,9 @@ const CreateAssignmentForm = ({
                         onBlur={field.handleBlur}
                         onChange={(e) => field.handleChange(e.target.value)}
                       />
+                      <p className="mt-1.5 text-sm text-base-content/70">
+                        {t("assignments.form.dueDateHelp")}
+                      </p>
                     </>
                   )}
                 </form.Field>

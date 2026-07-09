@@ -578,6 +578,7 @@
       "description": "Description",
       "descriptionPlaceholder": "Describe the assignment objectives...",
       "dueDate": "Due Date ({{tz}})",
+      "dueDateHelp": "Optional. Leave blank for no due date.",
       "type": "Assignment Type",
       "typeIndividual": "Individual",
       "typeGroup": "Group Project",

@@ -44,14 +44,6 @@ export const toDatetimeLocalValue = (date: Date) => {
   return `${year}-${month}-${day}T${hours}:${minutes}`
 }
 
-// Create-mode default: a week out gives students a sensible runway and avoids
-// the form defaulting to an already-overdue "now".
-export const sevenDaysFromNow = () => {
-  const date = new Date()
-  date.setDate(date.getDate() + 7)
-  return date
-}
-
 // Parse a stored UTC ISO instant into a `datetime-local` value; "" when absent
 // or unparseable.
 export const utcIsoToDatetimeLocalValue = (value?: string) => {
