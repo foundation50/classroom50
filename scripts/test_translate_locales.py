@@ -1,7 +1,8 @@
-"""Unit tests for the pure helpers in translate_locales.py.
+"""Unit tests for translate_locales.py.
 
 These cover the regression-prone parsing/validation logic without touching
-Bedrock: model-JSON fence stripping, response-text extraction, and key parity.
+Bedrock (model-JSON fence stripping, response-text extraction, key parity) plus
+the `invoke_model` retry/backoff loop against a fake Bedrock client.
 
 Run from the repo root (needs scripts/requirements.txt installed for boto3,
 which translate_locales imports at module load):
@@ -11,9 +12,11 @@ which translate_locales imports at module load):
 
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
+from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError
 
 import translate_locales
 from translate_locales import (
@@ -24,11 +27,112 @@ from translate_locales import (
     extract_text,
     flatten,
     get_nested,
+    invoke_model,
     parse_model_json,
     plural_group_keys,
     set_nested,
     translate_keys,
 )
+
+
+def _ok_response(text: str = "hi"):
+    """A Bedrock response whose body reads back an Anthropic Messages payload."""
+    payload = json.dumps({"content": [{"text": text}]}).encode("utf-8")
+    return {"body": io.BytesIO(payload)}
+
+
+def _client_error(code: str) -> ClientError:
+    return ClientError(
+        {"Error": {"Code": code, "Message": "boom"}}, "InvokeModel"
+    )
+
+
+class _FakeClient:
+    """Bedrock stand-in whose invoke_model plays back a scripted sequence.
+
+    Each queued item is either an Exception (raised) or a response dict
+    (returned). Records the call count so tests can assert retry attempts.
+    """
+
+    def __init__(self, script: list):
+        self._script = list(script)
+        self.calls = 0
+
+    def invoke_model(self, **_kwargs):
+        self.calls += 1
+        item = self._script.pop(0)
+        if isinstance(item, Exception):
+            raise item
+        return item
+
+
+class TestInvokeModel:
+    """The retry/backoff loop is the only place Bedrock errors are handled;
+    every other test monkeypatches invoke_model away, so exercise it directly
+    against a fake client. time.sleep is patched off so backoff adds no delay.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _no_sleep(self, monkeypatch):
+        monkeypatch.setattr(translate_locales.time, "sleep", lambda _s: None)
+
+    def test_returns_text_on_first_success(self):
+        client = _FakeClient([_ok_response("translated")])
+        assert invoke_model(client, "model", "sys", "msg") == "translated"
+        assert client.calls == 1
+
+    def test_retries_retryable_client_error_then_succeeds(self):
+        client = _FakeClient(
+            [_client_error("ThrottlingException"), _ok_response("ok")]
+        )
+        assert invoke_model(client, "model", "sys", "msg") == "ok"
+        assert client.calls == 2
+
+    def test_reraises_non_retryable_client_error_immediately(self):
+        client = _FakeClient([_client_error("AccessDeniedException")])
+        with pytest.raises(ClientError) as excinfo:
+            invoke_model(client, "model", "sys", "msg")
+        assert excinfo.value.response["Error"]["Code"] == "AccessDeniedException"
+        assert client.calls == 1
+
+    def test_reraises_after_exhausting_attempts_on_retryable_error(self):
+        script = [_client_error("ThrottlingException")] * translate_locales.MAX_ATTEMPTS
+        client = _FakeClient(script)
+        with pytest.raises(ClientError):
+            invoke_model(client, "model", "sys", "msg")
+        assert client.calls == translate_locales.MAX_ATTEMPTS
+
+    def test_retries_transport_timeout_then_succeeds(self):
+        client = _FakeClient(
+            [
+                ReadTimeoutError(endpoint_url="https://bedrock"),
+                ConnectTimeoutError(endpoint_url="https://bedrock"),
+                _ok_response("recovered"),
+            ]
+        )
+        assert invoke_model(client, "model", "sys", "msg") == "recovered"
+        assert client.calls == 3
+
+    def test_reraises_transport_timeout_after_exhausting_attempts(self):
+        script = [
+            ReadTimeoutError(endpoint_url="https://bedrock")
+        ] * translate_locales.MAX_ATTEMPTS
+        client = _FakeClient(script)
+        with pytest.raises(ReadTimeoutError):
+            invoke_model(client, "model", "sys", "msg")
+        assert client.calls == translate_locales.MAX_ATTEMPTS
+
+    def test_backoff_is_exponential(self, monkeypatch):
+        delays: list[float] = []
+        monkeypatch.setattr(
+            translate_locales.time, "sleep", lambda s: delays.append(s)
+        )
+        client = _FakeClient(
+            [_client_error("ThrottlingException")] * 2 + [_ok_response("ok")]
+        )
+        invoke_model(client, "model", "sys", "msg")
+        base = translate_locales.BASE_BACKOFF_SECONDS
+        assert delays == [base, base * 2]
 
 
 class TestParseModelJson:
