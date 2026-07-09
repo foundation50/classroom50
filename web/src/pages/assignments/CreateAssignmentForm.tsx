@@ -671,12 +671,17 @@ const CreateAssignmentForm = ({
                       }}
                     />
                     <div className="min-w-0 flex-1">
-                      <label
-                        htmlFor={`${field.name}-enabled`}
-                        className="label font-bold"
-                      >
-                        {t("assignments.form.setDueDate")}
-                      </label>
+                      <div className="flex items-center gap-1.5">
+                        <label
+                          htmlFor={`${field.name}-enabled`}
+                          className="label font-bold"
+                        >
+                          {t("assignments.form.setDueDate")}
+                        </label>
+                        <HelpTooltip
+                          help={t("assignments.form.setDueDateTip")}
+                        />
+                      </div>
                       {dueDateEnabled ? (
                         <>
                           <input
@@ -700,11 +705,7 @@ const CreateAssignmentForm = ({
                             {t("assignments.form.dueDateTz", { tz: tzShort })}
                           </p>
                         </>
-                      ) : (
-                        <p className="text-sm text-base-content/70">
-                          {t("assignments.form.noDueDateHelp")}
-                        </p>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 )}
@@ -723,12 +724,14 @@ const CreateAssignmentForm = ({
                       onChange={(e) => field.handleChange(e.target.checked)}
                     />
                     <div className="min-w-0 flex-1">
-                      <label htmlFor={field.name} className="label font-bold">
-                        {t("assignments.form.feedbackPr")}
-                      </label>
-                      <p className="text-sm text-base-content/70">
-                        {t("assignments.form.feedbackPrHelp")}
-                      </p>
+                      <div className="flex items-center gap-1.5">
+                        <label htmlFor={field.name} className="label font-bold">
+                          {t("assignments.form.feedbackPr")}
+                        </label>
+                        <HelpTooltip
+                          help={t("assignments.form.feedbackPrHelp")}
+                        />
+                      </div>
                     </div>
                   </div>
                 )}
