@@ -14,6 +14,9 @@ import {
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { missingScopes } from "@/auth/scopes"
 import { observeResponse } from "@/lib/diagnostics/observed"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("context:github")
 
 const GitHubClientContext = createContext<GitHubClient | null>(null)
 
@@ -44,6 +47,9 @@ export function GitHubProvider({
       // the guard redirects to /login instead of stranding the user on a dead
       // authed page. expireSession() no-ops once the token is cleared.
       if (signal.status === 401) {
+        log.warn("live 401 on API response, tearing down session", {
+          record: true,
+        })
         expireSession()
         return
       }
@@ -64,6 +70,7 @@ export function GitHubProvider({
 
   const client = useMemo(() => {
     if (!token) return null
+    log.debug("creating GitHub client for new token")
     return createGitHubClient({ token, onResponse })
   }, [token, onResponse])
 
@@ -105,6 +112,10 @@ export function useMissingScopes(): string[] {
 
   return useMemo(() => {
     if (!granted) return []
-    return missingScopes(granted)
+    const missing = missingScopes(granted)
+    if (missing.length > 0) {
+      log.debug("token is missing required scopes", { missing })
+    }
+    return missing
   }, [granted])
 }

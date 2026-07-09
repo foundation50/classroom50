@@ -1,6 +1,9 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { getPendingOrgInvite } from "@/hooks/github/mutations"
 import type { GitHubOrgMembership } from "@/hooks/github/types"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:users")
 
 // Accept a pending org invitation for the authenticated user. Returns whether
 // the PATCH succeeded so callers can tell "now active" from a transient failure
@@ -13,7 +16,8 @@ export async function acceptPendingOrgInvite(
   try {
     await acceptPendingOrgInviteOrThrow(client, org)
     return { ok: true }
-  } catch {
+  } catch (err) {
+    log.debug("best-effort accept of pending org invite failed", { org, err })
     return { ok: false }
   }
 }

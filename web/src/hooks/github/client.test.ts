@@ -78,3 +78,56 @@ describe("createGitHubClient request timeout", () => {
     expect(DEFAULT_REQUEST_TIMEOUT_MS).toBe(15000)
   })
 })
+
+describe("createGitHubClient request logging", () => {
+  function stubJsonFetch(status = 200, body: unknown = { ok: true }): void {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(JSON.stringify(body), {
+          status,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    )
+  }
+
+  it("logs request + response debug lines with method/path, never the token", async () => {
+    stubJsonFetch()
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+    const client = createGitHubClient({ token: "super-secret-token" })
+
+    await client.request("/rate_limit", { method: "GET" })
+
+    const lines = debug.mock.calls.map((c) => String(c[0]))
+    // A scoped request line and a scoped response line both fire.
+    expect(lines.some((l) => /\[github:client\].*request\b/.test(l))).toBe(true)
+    expect(lines.some((l) => /\[github:client\].*response\b/.test(l))).toBe(
+      true,
+    )
+    // The token must never appear in any logged line OR its context arg.
+    const serialized = JSON.stringify(debug.mock.calls)
+    expect(serialized).not.toContain("super-secret-token")
+
+    debug.mockRestore()
+  })
+
+  it("logs an api-error debug line (status/path, no body) on a failed response", async () => {
+    stubJsonFetch(404, { message: "Not Found", secret: "should-not-log" })
+    const debug = vi.spyOn(console, "debug").mockImplementation(() => {})
+    const client = createGitHubClient({ token: "t" })
+
+    await expect(
+      client.request("/missing", { method: "GET" }),
+    ).rejects.toThrow()
+
+    const apiError = debug.mock.calls.find((c) =>
+      /\[github:client\].*api error/.test(String(c[0])),
+    )
+    expect(apiError).toBeTruthy()
+    // The status is in the context; the raw body's non-message fields are not.
+    expect(JSON.stringify(apiError)).toContain("404")
+    expect(JSON.stringify(apiError)).not.toContain("should-not-log")
+
+    debug.mockRestore()
+  })
+})

@@ -222,6 +222,7 @@ export async function checkWorkflowPermissions(
         }
       }
     } catch {
+      log.warn("org workflow-permissions policy unreadable, treating as drift")
       // Org policy unreadable — treat the repo "read" as drift.
     }
 

@@ -5,9 +5,13 @@ import {
 } from "@tanstack/react-router"
 import type { RouterContext } from "@/types/router"
 import { TriangleAlert } from "lucide-react"
+import { useEffect } from "react"
 import { useTranslation } from "react-i18next"
 import { RoleViewProvider } from "@/context/roleView/RoleViewProvider"
 import { Button } from "@/components/ui"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("router")
 
 const RootComponent = () => {
   // Scope "view as" to the current org (reset across orgs via the key); the
@@ -25,6 +29,12 @@ const RootComponent = () => {
 // this screen instead of a blank white page.
 const RootErrorComponent = ({ error }: { error: Error }) => {
   const { t } = useTranslation()
+  // Log once per distinct error (not per re-render). This is the app-wide
+  // boundary, and it's reached outside any useMutation, so record it into the
+  // diagnostics snapshot too.
+  useEffect(() => {
+    log.error("route error boundary triggered", { error, record: true })
+  }, [error])
   return (
     <div className="flex min-h-screen flex-col items-center justify-center gap-4 p-10 text-center">
       <div className="flex size-16 items-center justify-center rounded-2xl bg-error/10 text-error">

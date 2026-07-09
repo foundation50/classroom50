@@ -8,6 +8,9 @@ import type { GitHubClient } from "./client"
 import { paginateAll } from "./queries"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("github:setup")
 
 const FEEDBACK_BASE_BRANCH = "feedback"
 
@@ -140,7 +143,11 @@ export async function repairRulesets(
   let existing: Map<string, number>
   try {
     existing = await listOrgRulesets(client, org)
-  } catch {
+  } catch (err) {
+    log.warn("could not list org rulesets; skipping ruleset repair", {
+      org,
+      err,
+    })
     return {
       status: "warning",
       message: `${org}: could not list org rulesets; apply Feedback PR branch protections manually.`,
@@ -166,7 +173,8 @@ export async function repairRulesets(
         })
         created.push(body.name)
       }
-    } catch {
+    } catch (err) {
+      log.warn("ruleset apply failed", { org, ruleset: body.name, err })
       failed.push(body.name)
     }
   }

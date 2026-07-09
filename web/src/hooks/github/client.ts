@@ -78,14 +78,31 @@ export function createGitHubClient(args: {
         ? AbortSignal.any([options.signal, timeoutSignal])
         : (options.signal ?? timeoutSignal)
 
-    const res = await fetch(url, {
-      method: options.method ?? "GET",
-      headers,
-      body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
-      signal,
-      cache: options.method === "GET" ? "no-store" : undefined,
-    })
+    const method = options.method ?? "GET"
+    log.debug("request", { method, path })
+
+    let res: Response
+    try {
+      res = await fetch(url, {
+        method,
+        headers,
+        body:
+          options.body === undefined ? undefined : JSON.stringify(options.body),
+        signal,
+        cache: options.method === "GET" ? "no-store" : undefined,
+      })
+    } catch (err) {
+      // A rejected fetch is an abort (caller cancel or our timeout) or a network
+      // failure. Distinguish so a timeout doesn't read as a mystery error; never
+      // log the token/headers/body — just method + path.
+      const aborted = err instanceof DOMException && err.name === "AbortError"
+      if (aborted) {
+        log.debug("request aborted", { method, path })
+      } else {
+        log.warn("request network error", { method, path })
+      }
+      throw err
+    }
 
     // Report the token's live state to the provider before any throw, so the
     // 401/403 revocation path still surfaces. `scopes` is the X-OAuth-Scopes
@@ -122,6 +139,15 @@ export function createGitHubClient(args: {
           ? body.message
           : `GitHub API request failed with ${res.status}`
 
+      // Trace the failure with non-sensitive fields only (never the body): the
+      // status, the endpoint, and GitHub's request id for support correlation.
+      log.debug("api error", {
+        method,
+        path,
+        status: res.status,
+        requestId: res.headers.get("x-github-request-id"),
+      })
+
       throw new GitHubAPIError({
         status: res.status,
         url,
@@ -135,6 +161,7 @@ export function createGitHubClient(args: {
       })
     }
 
+    log.debug("response", { method, path, status: res.status })
     return res
   }
 

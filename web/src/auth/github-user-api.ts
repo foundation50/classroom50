@@ -1,4 +1,7 @@
 import type { GitHubUser } from "@/hooks/github/types"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("auth")
 
 // Carries the HTTP status so callers can branch on auth failures (401) without
 // string-matching the message — e.g. the session-expiry effect in useGithubAuth.
@@ -21,6 +24,7 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
   })
 
   if (!res.ok) {
+    log.warn("GET /user failed", { status: res.status })
     throw new GitHubUserFetchError(res.status)
   }
 
@@ -43,6 +47,7 @@ export async function fetchGithubUserWithScopes(
   })
 
   if (!res.ok) {
+    log.warn("GET /user (PAT validation) failed", { status: res.status })
     throw new GitHubUserFetchError(res.status)
   }
 

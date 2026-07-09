@@ -7,6 +7,10 @@ import {
   type PropsWithChildren,
 } from "react"
 
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("context:actions")
+
 // A teacher action this session that triggered a workflow; the banner turns each
 // into a tracker bound to its run. Attribution anchors:
 //  - "sha":        a push run (publish-pages), matched by head_sha.
@@ -76,6 +80,7 @@ const loadState = (): PersistedState => {
       : []
     return { ops, dismissed }
   } catch {
+    log.warn("failed to load persisted action activity (corrupt storage)")
     return { ops: [], dismissed: [] }
   }
 }
@@ -84,6 +89,7 @@ const saveState = (state: PersistedState) => {
   try {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(state))
   } catch {
+    log.warn("failed to persist action activity (storage quota/write)")
     // Best-effort; in-memory tracking still works this mount.
   }
 }
@@ -101,6 +107,11 @@ export function ActionActivityProvider({ children }: PropsWithChildren) {
         id: nextOpId(),
         startedAt: Date.now(),
       }
+      log.info("action registered for run tracking", {
+        org: op.org,
+        label: op.label,
+        anchor: op.anchor.kind,
+      })
       setState((prev) => {
         const cutoff = Date.now() - OP_TTL_MS
         const ops = [...prev.ops.filter((o) => o.startedAt >= cutoff), full]

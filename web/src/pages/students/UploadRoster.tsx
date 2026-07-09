@@ -198,6 +198,7 @@ const UploadRoster = ({
       })
       setPhase("preview")
     } catch (err) {
+      log.warn("roster file read/parse failed", { err, record: true })
       setError(
         err instanceof Error ? err.message : t("students.couldNotReadFile"),
       )

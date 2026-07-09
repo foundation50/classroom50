@@ -6,6 +6,9 @@ import router from "./router"
 import { Spinner } from "@/components/Spinner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("app")
 
 export function App() {
   const { status, token, user } = useGithubAuth()
@@ -13,6 +16,7 @@ export function App() {
 
   useEffect(() => {
     if (status === "loading") return
+    log.debug("auth status settled, invalidating router", { status })
     void router.invalidate()
   }, [status, token])
 
@@ -30,9 +34,11 @@ export function App() {
 
   useEffect(() => {
     if (!sessionEndedOnAuthedRoute) return
+    log.info("session ended on authed route, redirecting to /login")
     // Hard-redirect fallback: a rejected navigate() would leave the spinner up
     // forever (the effect won't re-run — its only dep is unchanged).
     router.navigate({ to: "/login" }).catch(() => {
+      log.warn("navigate to /login failed, hard-redirecting", { record: true })
       window.location.assign(`${BASE_PATH}/login`)
     })
   }, [sessionEndedOnAuthedRoute])

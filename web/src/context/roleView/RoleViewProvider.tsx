@@ -9,6 +9,9 @@ import {
   type PropsWithChildren,
 } from "react"
 import type { ViewAsRole } from "@/hooks/useClassroomRole"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("context:roleView")
 
 // "View as" preview: a client-side lens letting an instructor/owner preview the
 // app as a TA or student. Persisted per org+classroom in sessionStorage and
@@ -71,6 +74,11 @@ export function RoleViewProvider({
 
   const setViewAs = useCallback(
     (next: ViewAsRole | null) => {
+      log.info("view-as role changed", {
+        org,
+        classroom,
+        viewAs: next ?? "self",
+      })
       setViewAsState(next)
       if (typeof window === "undefined") return
       const key = keyFor(org, classroom)

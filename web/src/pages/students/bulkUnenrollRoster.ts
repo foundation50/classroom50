@@ -3,6 +3,9 @@ import { bulkUnenrollStudents } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
 import { studentKey } from "@/util/identity"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("students:bulkUnenrollRoster")
 
 export type BulkUnenrollRosterProgress = {
   processed: number
@@ -80,6 +83,12 @@ export async function bulkUnenrollRoster(
   } catch (err) {
     // A hard failure of the single roster write fails the whole batch (nothing
     // committed). Report each row as failed.
+    log.warn("bulk unenroll roster failed (whole batch)", {
+      org,
+      classroom,
+      count: byStudent.length,
+      err,
+    })
     const detail = getErrorMessage(err)
     const outcomes: BulkUnenrollRosterOutcome[] = byStudent.map(({ row }) => ({
       key: row.key,

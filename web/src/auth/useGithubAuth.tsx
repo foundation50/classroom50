@@ -24,6 +24,7 @@ import {
 } from "./github-user-api"
 import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import router from "@/router"
+import { logger } from "@/lib/logger"
 import { deriveChallenge, generateVerifier, randomBase64Url } from "./pkce"
 import { missingScopes } from "./scopes"
 import {
@@ -43,6 +44,8 @@ import type { AuthStatus } from "@/types/router"
 // react-i18next's `t` we rely on (key + optional interpolation values).
 type Translate = (key: string, options?: Record<string, unknown>) => string
 
+const log = logger.scope("auth")
+
 function formatError(
   t: Translate,
   err: unknown,
@@ -53,6 +56,8 @@ function formatError(
   networkTarget: string = t("auth.errorNetworkProxyTarget"),
 ) {
   const message = err instanceof Error ? err.message : String(err)
+
+  log.debug("formatting auth error for display", { message })
 
   if (
     message.toLowerCase().includes("failed to fetch") ||
@@ -184,6 +189,7 @@ function useGithubAuthState() {
   // card shows a spinner (no interstitial success splash).
   const completeSignIn = useCallback(
     (data: { access_token: string; scope?: string }) => {
+      log.info("sign-in complete, token acquired")
       persistGithubToken(data.access_token, data.scope || "")
       setToken(data.access_token)
       setTokenScope(data.scope || "")
@@ -220,6 +226,7 @@ function useGithubAuthState() {
     setTokenScope(storedScope)
 
     if (storedToken) {
+      log.info("restored stored session")
       setToken(storedToken)
       setScreen("authed")
     }
@@ -260,17 +267,24 @@ function useGithubAuthState() {
     } = consumeOAuthSession()
 
     if (!returnedState || returnedState !== expectedState) {
+      log.error("OAuth state mismatch — possible CSRF, aborting sign-in", {
+        record: true,
+      })
       setError(t("auth.errorStateMismatch"))
       setScreen("config")
       return
     }
 
     if (!verifier || !callbackClientId) {
+      log.error("OAuth callback missing PKCE verifier/clientId", {
+        record: true,
+      })
       setError(t("auth.errorMissingPkce"))
       setScreen("config")
       return
     }
 
+    log.info("OAuth callback received, exchanging code")
     setClientId(callbackClientId)
     persistGithubClientId(callbackClientId)
 
@@ -292,6 +306,7 @@ function useGithubAuthState() {
           pendingReturnToRef.current = returnTo
         },
         onError: (err) => {
+          log.error("OAuth code exchange failed", { err, record: true })
           setError(formatError(t, err))
           setScreen("config")
         },
@@ -333,6 +348,7 @@ function useGithubAuthState() {
     const config = validateConfig()
     if (!config) return
 
+    log.info("starting web (PKCE) sign-in flow")
     setScreen("exchanging")
 
     const verifier = generateVerifier()
@@ -360,6 +376,7 @@ function useGithubAuthState() {
   }, [validateConfig])
 
   const failDeviceFlow = useCallback((message: string) => {
+    log.warn("device flow failed", { record: true })
     abortRef.current?.abort()
     abortRef.current = null
     setError(message)
@@ -430,6 +447,9 @@ function useGithubAuthState() {
         if (data.error === "authorization_pending") continue
 
         if (data.error === "slow_down") {
+          log.debug("device poll: slow_down, backing off", {
+            intervalSeconds: intervalSeconds + 5,
+          })
           intervalSeconds += 5
           continue
         }
@@ -466,10 +486,12 @@ function useGithubAuthState() {
     const config = validateConfig()
     if (!config) return
 
+    log.info("starting device sign-in flow")
     setError(null)
 
     requestDeviceCodeMutation.mutate(config, {
       onSuccess: (data) => {
+        log.info("device code issued, awaiting authorization")
         const intervalSeconds = data.interval || 5
         const expiresAt = Date.now() + data.expires_in! * 1000
 
@@ -552,6 +574,7 @@ function useGithubAuthState() {
 
       setPatError(null)
 
+      log.info("validating personal access token")
       validatePatMutation.mutate(token, {
         onSuccess: ({ scopes }) => {
           const result = classifyPatResult(scopes)
@@ -561,11 +584,15 @@ function useGithubAuthState() {
           // mid-operation, so block it at entry rather than sign in on a token
           // we can't vet.
           if (result.kind === "fine-grained") {
+            log.warn("PAT rejected: fine-grained (unverifiable scopes)")
             setPatError(t("auth.errorPatFineGrained"))
             return
           }
 
           if (result.kind === "missing") {
+            log.warn("PAT rejected: missing required scopes", {
+              missing: result.missing,
+            })
             setPatError(
               t("auth.errorPatMissingScopes", {
                 scopes: result.missing.join(", "),
@@ -578,9 +605,11 @@ function useGithubAuthState() {
         },
         onError: (err) => {
           if (err instanceof GitHubUserFetchError && err.status === 401) {
+            log.warn("PAT rejected: 401 (invalid token)")
             setPatError(t("auth.errorPatRejected401"))
             return
           }
+          log.error("PAT validation failed", { err, record: true })
           setPatError(formatError(t, err, "api.github.com"))
         },
       })
@@ -592,6 +621,13 @@ function useGithubAuthState() {
   // `expired` flags the involuntary case so /login can explain the redirect.
   const clearSession = useCallback(
     (expired: boolean) => {
+      if (expired) {
+        // Involuntary teardown (a live 401): warn + record so a user's
+        // diagnostics reflect why they were kicked out.
+        log.warn("session expired, signing out", { record: true })
+      } else {
+        log.info("signing out")
+      }
       abortRef.current?.abort()
       clearGithubToken()
       setToken(null)
@@ -690,6 +726,9 @@ function useGithubAuthState() {
     try {
       router.history.push(returnTo)
     } catch {
+      log.warn("invalid return-to path, falling back to home", {
+        record: true,
+      })
       router.history.push("/")
     }
   }, [status])

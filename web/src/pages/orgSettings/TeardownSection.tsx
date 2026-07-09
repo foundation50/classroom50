@@ -19,6 +19,9 @@ import {
 } from "@/api/mutations/teardown"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("orgSettings:TeardownSection")
 
 // Teardown / org reset: deletes ALL repos in the org (mirroring the CLI's
 // `gh teacher teardown`), marker-gated and behind a typed-org-name confirmation.
@@ -45,6 +48,7 @@ const TeardownSection = ({ org }: { org: string }) => {
       setOpen(true)
     },
     onError: (err) => {
+      log.warn("teardown plan failed", { org, err })
       setError(
         err instanceof TeardownMarkerError
           ? err.message

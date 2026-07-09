@@ -6,6 +6,9 @@ import { isActiveMember } from "@/hooks/github/mutations"
 import { parseGitHubId } from "@/util/students"
 import type { GitHubUser } from "@/hooks/github/types"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("orgMembers:bulkAddToClassroom")
 
 // Per-row outcome of resolving a selection to a placeable current login BEFORE
 // the enroll engine runs. `skipped` = rows we intentionally don't send (not a
@@ -139,7 +142,8 @@ export async function bulkAddToClassroom(
     let login: string
     try {
       login = (await getUserById(client, id)).login
-    } catch {
+    } catch (err) {
+      log.debug("bulk add: id resolve failed, skipping row", { id, err })
       preSkipped.push({
         key: row.key,
         label: labelFor(row),

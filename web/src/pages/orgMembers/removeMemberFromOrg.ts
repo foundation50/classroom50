@@ -6,6 +6,9 @@ import { getAuthenticatedUser } from "@/api/queries/users"
 import { isSameGitHubUser } from "@/util/students"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("orgMembers:removeMemberFromOrg")
 
 export type RemoveFromOrgResult = {
   // Classrooms the student was unenrolled from before org removal.
@@ -40,6 +43,11 @@ export async function removeMemberFromOrg(
   const student = rowToStudent(row)
   const unenrolledClassrooms: string[] = []
   const warnings: string[] = []
+
+  log.info("remove member from org: started", {
+    org,
+    classrooms: row.classrooms.length,
+  })
 
   // Defense-in-depth self-guard: the Members page hides this action for the
   // viewer, but that guard is UI-only and depends on the viewer query loading.
@@ -103,6 +111,11 @@ export async function removeMemberFromOrg(
       })
       unenrolledClassrooms.push(access.classroom)
     } catch (err) {
+      log.warn("remove member: per-classroom unenroll failed", {
+        org,
+        classroom: access.classroom,
+        err,
+      })
       warnings.push(
         t
           ? t("orgMembers.warnUnenrollFailed", {
@@ -122,12 +135,24 @@ export async function removeMemberFromOrg(
     await removeOrgMembership(client, { org, username: row.username })
     removed = true
   } catch (err) {
+    log.error("remove member: org membership DELETE failed", {
+      org,
+      err,
+      record: true,
+    })
     warnings.push(
       `Removing ${row.username} from the organization failed (${getErrorMessage(
         err,
       )}); retry from the organization's people page.`,
     )
   }
+
+  log.info("remove member from org: completed", {
+    org,
+    unenrolled: unenrolledClassrooms.length,
+    removed,
+    warnings: warnings.length,
+  })
 
   return { unenrolledClassrooms, warnings, removed }
 }

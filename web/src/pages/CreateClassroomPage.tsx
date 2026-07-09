@@ -43,16 +43,11 @@ const CreateClassroomPage = () => {
     mutationFn: (input) => createClassroomFilesWithConflictRetry(client, input),
     onError: (err) => {
       if (err instanceof GitHubAPIError) {
-        switch (err.status) {
-          case 409:
-            break
-          case 404:
-            break
-          case 422:
-            break
-          default:
-            break
-        }
+        // Console-only trace (MutationCache already recorded this failure).
+        log.error("create classroom failed", {
+          status: err.status,
+          requestId: err.requestId,
+        })
       } else {
         log.error("non-GitHub API error", { err, record: true })
       }

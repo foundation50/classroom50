@@ -237,6 +237,7 @@ const RosterBulkActionsBar = ({
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })
       } catch (err) {
+        log.debug("bulk resend: per-row invite failed", { err })
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
         if (err instanceof GitHubAPIError && err.isRateLimited) {
           rateLimited = true

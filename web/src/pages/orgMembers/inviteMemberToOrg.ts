@@ -3,6 +3,9 @@ import { createOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { getUserById } from "@/hooks/github/queries"
 import { parseGitHubId } from "@/util/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("orgMembers:inviteMemberToOrg")
 
 export type InviteToOrgResult = {
   // The current GitHub login resolved from the immutable id; undefined if the
@@ -28,10 +31,15 @@ export async function inviteMemberToOrg(
   let currentUsername: string | undefined
   try {
     currentUsername = (await getUserById(client, inviteeId)).login
-  } catch {
+  } catch (err) {
+    log.debug("invite: current-login lookup failed (inviting by id anyway)", {
+      org,
+      err,
+    })
     currentUsername = undefined
   }
 
+  log.info("inviting member to org", { org, inviteeId })
   try {
     await createOrgInvitation(client, { org, invitee_id: inviteeId })
   } catch (err) {

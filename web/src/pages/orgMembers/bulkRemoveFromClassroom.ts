@@ -4,6 +4,9 @@ import { getErrorMessage } from "@/hooks/github/mutations"
 import { studentKey } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("orgMembers:bulkRemoveFromClassroom")
 
 export type BulkRemoveProgress = {
   processed: number
@@ -131,6 +134,12 @@ export async function bulkRemoveFromClassroom(
   } catch (err) {
     // A hard failure of the single roster write fails the whole batch (nothing
     // committed). Report each eligible row as failed.
+    log.warn("bulk remove from classroom failed (whole batch)", {
+      org,
+      classroom,
+      count: byStudent.length,
+      err,
+    })
     const detail = getErrorMessage(err)
     for (const { row } of byStudent) {
       outcomes.push({

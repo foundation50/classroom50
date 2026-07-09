@@ -132,10 +132,12 @@ async function withAcceptStep<T>(
 ): Promise<T> {
   const { id, label, actions, onStepUpdate, doneMessage } = params
 
+  log.info(`accept step: ${id} started`, { step: id })
   onStepUpdate?.({ id, status: "running", message: label })
 
   try {
     const result = await fn()
+    log.info(`accept step: ${id} complete`, { step: id })
     onStepUpdate?.({ id, status: "complete", message: doneMessage ?? label })
     return result
   } catch (err) {
@@ -145,6 +147,7 @@ async function withAcceptStep<T>(
     }
 
     if (err instanceof TemplateAccessError || err instanceof AcceptStepError) {
+      log.warn(`accept step "${label}" failed (typed)`, { step: id })
       onStepUpdate?.({ id, status: "error", error: err.message })
       throw err
     }
@@ -167,6 +170,7 @@ async function withAcceptStep<T>(
     }
     // Unexpected non-GitHub error (network/parse/etc.): surface it so the
     // checklist row leaves "running" instead of spinning forever.
+    log.error(`accept step "${label}" failed (unexpected)`, { err })
     onStepUpdate?.({
       id,
       status: "error",
@@ -544,6 +548,8 @@ export async function editAssignment(
   input: CreateAssignmentInput,
 ): Promise<CreateAssignmentResult> {
   const { org, classroom, slug } = input
+
+  log.info("edit assignment: started", { org, classroom, slug })
 
   // The archive guard is independent of the org ref read, so run them
   // concurrently — Promise.all rejects on the first rejection, so an archived
@@ -969,6 +975,11 @@ export async function createAssignment(
   client: GitHubClient,
   input: CreateAssignmentInput,
 ): Promise<CreateAssignmentResult> {
+  log.info("create assignment: started", {
+    org: input.org,
+    classroom: input.classroom,
+    slug: input.slug,
+  })
   // The archive guard, entry build, and org ref read are independent, so run
   // them concurrently — Promise.all rejects on the first rejection, so an
   // archived classroom still fails closed before any write.
@@ -1401,6 +1412,12 @@ export async function copyAssignmentToClassroom(
 ): Promise<CreateAssignmentResult> {
   const { org, source, targetClassroom } = input
 
+  log.info("copy assignment: started", {
+    org,
+    targetClassroom,
+    sourceSlug: source.slug,
+  })
+
   const entry = buildReusedEntry(source, {
     slug: input.targetSlug ?? source.slug,
     name: input.targetName ?? source.name,
@@ -1622,6 +1639,8 @@ export async function deleteAssignment(
   input: DeleteAssignmentInput,
 ) {
   const { org, classroom, assignment: slug } = input
+
+  log.info("delete assignment: started", { org, classroom, slug })
 
   // Refuse a delete into an archived classroom (write-path guard); run the
   // check concurrently with the ref read.
@@ -1937,6 +1956,8 @@ export async function acceptAssignment(params: {
   const { client, org, classroom, assignmentSlug, secret, onStepUpdate } =
     params
 
+  log.info("accept assignment: started", { org, classroom, assignmentSlug })
+
   const user = await withAcceptStep(
     {
       id: "account",
@@ -1988,7 +2009,11 @@ export async function acceptAssignment(params: {
   if (sourceOwner) {
     try {
       sourceOwnerId = (await getUser(client, sourceOwner)).id
-    } catch {
+    } catch (err) {
+      log.debug("accept: template owner id lookup failed (non-fatal)", {
+        sourceOwner,
+        err,
+      })
       sourceOwnerId = null
     }
   }
@@ -2131,6 +2156,12 @@ export async function acceptAssignment(params: {
     onStepUpdate,
   })
 
+  log.info("accept assignment: completed", {
+    org,
+    classroom,
+    assignmentSlug,
+    status: "created",
+  })
   return {
     status: "created",
     repo,

@@ -21,6 +21,9 @@ import {
   type StaffTeamRefs,
 } from "@/hooks/github/mutations"
 import { prefixCommit } from "@/util/commit"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:classrooms")
 
 export type CreateClassroomResult = {
   previousCommitSha: string
@@ -33,6 +36,10 @@ export async function createClassroomFiles(
   client: GitHubClient,
   input: CreateClassroomInput,
 ): Promise<CreateClassroomResult> {
+  log.info("create classroom: started", {
+    org: input.org,
+    classroom: input.classroom,
+  })
   // Create (or adopt) the teams BEFORE scaffolding so their { id, slug } land in
   // classroom.json (mirrors the CLI). The students team grants rostered students
   // read on private org templates; the staff teams (instructor, ta) get
@@ -60,6 +67,11 @@ export async function createClassroomFiles(
         role: "maintainer",
       })
     } catch {
+      log.warn("create classroom: seeding creator as instructor failed", {
+        org: input.org,
+        classroom: input.classroom,
+        creator: input.creator,
+      })
       // Non-fatal; surface nothing — the classroom still scaffolds.
     }
   }
@@ -88,6 +100,11 @@ export async function createClassroomFiles(
     updatedRef = await updateRef(client, input.org, newCommit.sha)
   } catch (err) {
     if (!(err instanceof GitHubAPIError && err.status === 409)) {
+      log.warn("create classroom: scaffolding failed, rolling back teams", {
+        org: input.org,
+        classroom: input.classroom,
+        err,
+      })
       await rollbackCreatedTeams(client, input.org, {
         students: teamCreated ? team : undefined,
         staff: teams,
@@ -96,6 +113,11 @@ export async function createClassroomFiles(
     }
     throw err
   }
+
+  log.info("create classroom: completed", {
+    org: input.org,
+    classroom: input.classroom,
+  })
 
   return {
     previousCommitSha: ref.object.sha,
@@ -126,6 +148,10 @@ async function rollbackCreatedTeams(
     try {
       await deleteClassroomTeam(client, org, t)
     } catch {
+      log.warn("rollback: team delete failed (best-effort)", {
+        org,
+        teamSlug: t.slug,
+      })
       // Best-effort cleanup; surface the original scaffolding error.
     }
   }
@@ -148,6 +174,7 @@ export async function withGitConflictRetry<T>(
       if (!isConflict || attempt === attempts) {
         throw err
       }
+      log.debug("git conflict, retrying commit", { attempt })
       await sleep(300 * attempt + Math.random() * 400)
     }
   }
@@ -281,6 +308,11 @@ async function deleteClassroomTeamWithRetry(
       if (!isTransientDeleteError(err) || attempt === attempts) {
         throw err
       }
+      log.debug("team delete transient failure, retrying", {
+        org,
+        teamSlug: team.slug,
+        attempt,
+      })
       await sleep(300 * attempt + Math.random() * 400)
     }
   }
@@ -293,6 +325,8 @@ export async function deleteClassroom(
 ) {
   const { org, classroom, branch = "main" } = input
   const prefix = `${classroom}/`
+
+  log.info("delete classroom: started", { org, classroom })
 
   // Resolve the team refs from classroom.json BEFORE the deletion commit
   // removes the file. No team block (pre-feature) or a read failure yields no
@@ -309,6 +343,13 @@ export async function deleteClassroom(
     team = classroomJson.team
     staffTeams = classroomJson.teams ?? {}
   } catch {
+    log.debug(
+      "delete classroom: classroom.json unreadable, no teams to remove",
+      {
+        org,
+        classroom,
+      },
+    )
     team = undefined
     staffTeams = {}
   }
@@ -393,7 +434,13 @@ export async function deleteClassroom(
   for (const teamRef of refsToDelete) {
     try {
       await deleteClassroomTeamWithRetry(client, org, teamRef)
-    } catch {
+    } catch (err) {
+      log.warn("delete classroom: team delete failed", {
+        org,
+        teamSlug: teamRef.slug,
+        err,
+        record: true,
+      })
       failedTeamSlugs.push(teamRef.slug)
     }
   }
@@ -407,6 +454,13 @@ export async function deleteClassroom(
             ", ",
           )}; delete by hand at https://github.com/orgs/${org}/teams if they linger.`
       : undefined
+
+  log.info("delete classroom: completed", {
+    org,
+    classroom,
+    deletedPaths: entriesToDelete.length,
+    teamsFailed: failedTeamSlugs.length,
+  })
 
   return {
     deleted: true,

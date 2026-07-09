@@ -24,6 +24,9 @@ import {
 } from "@/hooks/github/queries"
 import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { mapWithConcurrency } from "@/util/concurrency"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("mutations:teardown")
 
 export class TeardownScopeError extends Error {
   constructor(message: string) {
@@ -77,6 +80,12 @@ async function collectClassroomTeams(
   try {
     dirs = await listClassroomDirs(client, org)
   } catch {
+    log.debug(
+      "teardown: no readable classroom dirs, skipping team collection",
+      {
+        org,
+      },
+    )
     // No readable classroom dirs (e.g. marker already partially gone) — nothing
     // to resolve; let the repo flow proceed.
     return []
@@ -97,6 +106,10 @@ async function collectClassroomTeams(
         }
       }
     } catch {
+      log.debug("teardown: classroom.json unreadable, no team ref", {
+        org,
+        classroom: dir.name,
+      })
       // Missing/unreadable classroom.json or no team block: contributes nothing.
     }
   })
@@ -209,6 +222,10 @@ async function withDeleteRetry(
         err.rateLimit.retryAfter !== null ? err.rateLimit.retryAfter * 1000 : 0
       const backoffMs = Math.min(8000, 500 * 2 ** attempt)
       const jitterMs = Math.floor(Math.random() * 250)
+      log.debug("teardown: delete retry backoff", {
+        attempt,
+        rateLimited: isRateLimited,
+      })
       await sleep(Math.max(retryAfterMs, backoffMs) + jitterMs)
     }
   }
@@ -303,6 +320,13 @@ export async function executeTeardown(
   const nonMarker = current.repoNames.filter((n) => n !== CONFIG_REPO)
   const marker = current.repoNames.filter((n) => n === CONFIG_REPO)
 
+  log.warn("teardown: STARTED (destructive, irreversible)", {
+    org: plan.org,
+    repos: nonMarker.length,
+    teams: current.teams.length,
+    record: true,
+  })
+
   let scopeWall = false
   let rateLimited = false
 
@@ -310,12 +334,18 @@ export async function executeTeardown(
     try {
       const outcome = await deleteRepoWithRetry(client, plan.org, repo)
       if (outcome === "deleted") {
+        log.info("teardown: repo deleted", { org: plan.org, repo })
         deleted.push(repo)
       } else {
         // Retries exhausted: a throttle is retryable; other transient failures
         // (5xx) go to `failed` so the marker is preserved (re-runnable). Repos
         // never see "permanent-failed" — a scope 403 rethrows below instead.
         if (outcome === "rate-limited") rateLimited = true
+        log.warn("teardown: repo delete failed", {
+          org: plan.org,
+          repo,
+          outcome,
+        })
         failed.push(repo)
       }
     } catch (err) {
@@ -323,6 +353,11 @@ export async function executeTeardown(
       if (err instanceof GitHubAPIError && err.isForbidden) {
         scopeWall = true
       }
+      log.error("teardown: repo delete errored", {
+        org: plan.org,
+        repo,
+        err,
+      })
       failed.push(repo)
     }
   }
@@ -332,8 +367,24 @@ export async function executeTeardown(
   // A scope 403 is unrecoverable; a throttle is retryable. Both abort before
   // the marker so the run stays re-runnable.
   const abortIfBlocked = () => {
-    if (scopeWall) throw new TeardownScopeError(DELETE_SCOPE_MESSAGE)
-    if (rateLimited) throw new TeardownRateLimitError(deleted, failed)
+    if (scopeWall) {
+      log.error("teardown aborted: missing delete_repo scope", {
+        org: plan.org,
+        deleted: deleted.length,
+        failed: failed.length,
+        record: true,
+      })
+      throw new TeardownScopeError(DELETE_SCOPE_MESSAGE)
+    }
+    if (rateLimited) {
+      log.warn("teardown aborted: rate limited (re-runnable)", {
+        org: plan.org,
+        deleted: deleted.length,
+        failed: failed.length,
+        record: true,
+      })
+      throw new TeardownRateLimitError(deleted, failed)
+    }
   }
 
   abortIfBlocked()
@@ -360,7 +411,20 @@ export async function executeTeardown(
     }
     abortIfBlocked()
     markerDeleted = deleted.includes(CONFIG_REPO)
+    if (markerDeleted) {
+      log.info("teardown: marker repo deleted", { org: plan.org })
+    }
   }
+
+  log.warn("teardown: completed", {
+    org: plan.org,
+    deleted: deleted.length,
+    failed: failed.length,
+    teamsDeleted: teamsDeleted.length,
+    teamsFailed: teamsFailed.length,
+    markerDeleted,
+    record: true,
+  })
 
   return { deleted, failed, teamsDeleted, teamsFailed, markerDeleted }
 }

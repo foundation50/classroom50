@@ -5,6 +5,9 @@ import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
 import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Spinner } from "@/components/Spinner"
+import { logger } from "@/lib/logger"
+
+const log = logger.scope("router")
 
 export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context, location }) => {
@@ -16,6 +19,9 @@ export const Route = createFileRoute("/_authed")({
       // round-tripping.
       const returnTo = location.pathname + location.searchStr
       const isRoot = location.pathname === "/"
+      log.info("auth guard: unauthenticated, redirecting to /login", {
+        from: location.pathname,
+      })
       throw redirect({
         to: "/login",
         search: isRoot ? undefined : { redirect: returnTo },

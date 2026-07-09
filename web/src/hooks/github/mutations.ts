@@ -22,6 +22,10 @@ import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "./rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
 import { bytesToHex } from "@/util/hex"
+import { logger } from "@/lib/logger"
+
+const logWorkflows = logger.scope("github:workflows")
+const logSetup = logger.scope("github:setup")
 
 const ASSIGNMENTS_TEMPLATE = {
   schema: "classroom50/assignments/v1",
@@ -977,6 +981,7 @@ async function tryStep<T>({
 }): Promise<T | StepOutcome> {
   const { warningCodes } = options || {}
 
+  logSetup.info(`setup step: ${id} started`, { step: id })
   onStepUpdate?.({
     id,
     status: "running",
@@ -993,6 +998,12 @@ async function tryStep<T>({
         ? result.status
         : "complete"
 
+    logSetup.info(
+      `setup step: ${id} ${maybeStatus === "warning" ? "warning" : "complete"}`,
+      {
+        step: id,
+      },
+    )
     onStepUpdate?.({
       id,
       status: maybeStatus === "warning" ? "warning" : "complete",
@@ -1012,6 +1023,10 @@ async function tryStep<T>({
       err instanceof GitHubAPIError &&
       warningCodes?.some((code) => err.status === code)
     ) {
+      logSetup.warn(`setup step: ${id} warning`, {
+        step: id,
+        status: err.status,
+      })
       onStepUpdate?.({
         id,
         status: "warning",
@@ -1024,6 +1039,7 @@ async function tryStep<T>({
     }
 
     const message = err instanceof Error ? err.message : "Unknown error"
+    logSetup.error(`setup step: ${id} failed`, { step: id, err })
     onStepUpdate?.({
       id,
       status: "error",
@@ -1803,6 +1819,9 @@ export async function validateServiceToken(
   const trimmed = token.trim()
   if (!trimmed) throw new Error("Enter a token before saving.")
 
+  // NEVER log the token value — only the action + org.
+  logSetup.info("validating service token", { org })
+
   const tokenClient = createGitHubClient({ token: trimmed })
 
   const scopeHint =
@@ -1956,6 +1975,7 @@ export async function triggerScoreCollection(
     },
   )
 
+  logWorkflows.info("dispatched collect-scores", { org, classroom, sinceRunId })
   return { sinceRunId }
 }
 
@@ -2022,6 +2042,13 @@ export async function triggerRegrade(
     },
   )
 
+  logWorkflows.info("dispatched regrade", {
+    org,
+    classroom,
+    assignment,
+    owner: owner ?? "(all)",
+    sinceRunId,
+  })
   return { sinceRunId }
 }
 
@@ -2033,6 +2060,7 @@ export async function rerunFailedRun(
   org: string,
   runId: number,
 ): Promise<void> {
+  logWorkflows.info("re-running failed jobs", { org, runId })
   await client.request(
     `/repos/${org}/classroom50/actions/runs/${runId}/rerun-failed-jobs`,
     { method: "POST" },
@@ -2053,6 +2081,9 @@ export async function putRepoSecret(
   }>(`/repos/${owner}/${repo}/actions/secrets/public-key`)
 
   const encryptedValue = await encryptSecret(key.key, plaintext)
+
+  // Log the write, never the plaintext/encrypted value.
+  logSetup.info("writing repo Actions secret", { owner, repo, name })
 
   await client.request(`/repos/${owner}/${repo}/actions/secrets/${name}`, {
     method: "PUT",
@@ -2351,6 +2382,8 @@ export async function initClassroom50({
 }) {
   const results: Partial<Record<InitStepId, unknown>> = {}
 
+  logSetup.info("org setup: started", { org, plan })
+
   const buildResult = (status: "error" | "complete") => ({
     org,
     repo: "classroom50",
@@ -2403,6 +2436,7 @@ export async function initClassroom50({
   // continuing only cascades 404s and would report success on a
   // half-initialized org. Stop here.
   if (stepFailed(results.configRepo)) {
+    logSetup.error("org setup: aborted (config repo step failed)", { org })
     return buildResult("error")
   }
 
@@ -2414,6 +2448,7 @@ export async function initClassroom50({
 
   // skeleton (workflows + scripts) — same hard-prerequisite gate.
   if (stepFailed(results.skeleton)) {
+    logSetup.error("org setup: aborted (skeleton step failed)", { org })
     return buildResult("error")
   }
 
@@ -2447,6 +2482,7 @@ export async function initClassroom50({
     fn: () => repairRulesets(client, org),
   })
 
+  logSetup.info("org setup: completed", { org })
   return buildResult("complete")
 }
 
