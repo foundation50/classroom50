@@ -141,3 +141,13 @@ export function trackerPhase(run: GitHubWorkflowRun | null): TrackerPhase {
   if (isRunning(run)) return "running"
   return isFailureConclusion(run.conclusion) ? "failed" : "success"
 }
+
+// The i18n key that wraps a base action label for a given phase, so the banner
+// text (and thus the aria-live announcement) reflects state, not just the icon
+// — a screen-reader user hears "…done" / "…failed", not the same string twice.
+export const PHASE_LABEL_KEY: Record<TrackerPhase, string> = {
+  pending: "actionsBanner.state.pending",
+  running: "actionsBanner.state.running",
+  success: "actionsBanner.state.success",
+  failed: "actionsBanner.state.failed",
+}

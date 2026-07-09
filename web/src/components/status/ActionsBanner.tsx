@@ -114,7 +114,9 @@ const TrackerRow = ({
       }`}
     >
       <StatusIcon phase={tracker.phase} tinted={!compact} />
-      <span className="min-w-0 flex-1 truncate text-sm">{tracker.label}</span>
+      <span className="min-w-0 flex-1 truncate text-sm">
+        {tracker.displayLabel}
+      </span>
       <ElapsedLabel tracker={tracker} now={now} />
       {tracker.htmlUrl && (
         <a
@@ -212,7 +214,7 @@ const BannerBody = ({
       >
         <StatusIcon phase={primaryPhase} />
         <span className="min-w-0 flex-1 truncate text-sm font-medium">
-          {primary?.label}
+          {primary?.displayLabel}
         </span>
         {attentionCount > 0 && (
           <span
@@ -241,27 +243,38 @@ const BannerBody = ({
         />
       </button>
 
-      {showList && (
-        <ul className="flex w-full flex-col gap-1 bg-base-100 p-2 text-base-content">
-          {trackers.map((tracker) => (
-            <li key={tracker.id}>
-              <TrackerRow
-                tracker={tracker}
-                onDismiss={dismiss}
-                onRetry={retry}
-                retrying={retrying.has(tracker.id)}
-                now={now}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+      <AnimatePresence initial={false}>
+        {showList && (
+          <motion.ul
+            key="list"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: DURATION.base, ease: EASE_OUT }}
+            className="flex w-full flex-col gap-1 overflow-hidden bg-base-100 p-2 text-base-content"
+          >
+            {trackers.map((tracker) => (
+              <li key={tracker.id}>
+                <TrackerRow
+                  tracker={tracker}
+                  onDismiss={dismiss}
+                  onRetry={retry}
+                  retrying={retrying.has(tracker.id)}
+                  now={now}
+                />
+              </li>
+            ))}
+          </motion.ul>
+        )}
+      </AnimatePresence>
     </>
   )
 }
 
 export function ActionsBanner() {
-  const { trackers, anyFailed, dismiss, retry, retrying } = useActionActivity()
+  const { trackers, anyFailed, pollError, dismiss, retry, retrying } =
+    useActionActivity()
+  const { t } = useTranslation()
   const [expanded, setExpanded] = useState(false)
 
   // Shared 1s clock so running rows tick in step. Runs only while something is
@@ -360,19 +373,27 @@ export function ActionsBanner() {
   }
 
   const body = (
-    <BannerBody
-      trackers={trackers}
-      primary={primary}
-      primaryPhase={primaryPhase}
-      attentionCount={attentionCount}
-      single={single}
-      showList={showList}
-      setExpanded={setExpanded}
-      dismiss={dismiss}
-      retry={retry}
-      retrying={retrying}
-      now={now}
-    />
+    <>
+      <BannerBody
+        trackers={trackers}
+        primary={primary}
+        primaryPhase={primaryPhase}
+        attentionCount={attentionCount}
+        single={single}
+        showList={showList}
+        setExpanded={setExpanded}
+        dismiss={dismiss}
+        retry={retry}
+        retrying={retrying}
+        now={now}
+      />
+      {pollError && (
+        <div className="flex items-center gap-2 border-t border-current/20 px-4 py-1.5 text-xs opacity-80">
+          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          <span>{t("actionsBanner.pollError")}</span>
+        </div>
+      )}
+    </>
   )
 
   return (

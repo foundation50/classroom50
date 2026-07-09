@@ -15,6 +15,7 @@ import { useActiveOrg } from "@/hooks/useActiveOrg"
 import {
   isRunning,
   nowMs,
+  PHASE_LABEL_KEY,
   resolveOpRun,
   runTimes,
   runUrl,
@@ -42,6 +43,12 @@ const PENDING_TTL_MS = 5 * 60_000
 // the re-run as in_progress.
 const RETRY_OPTIMISTIC_MS = 20_000
 
+// Once EVERY tracker has succeeded (no failures, nothing running), briefly show
+// the all-green state, then auto-dismiss so the banner disappears on its own. A
+// failure present anywhere cancels this — failures stay until dismissed so the
+// teacher (and the Retry affordance) aren't hidden.
+const ALL_SUCCESS_DISMISS_MS = 8000
+
 // Generic label for a discovered run (cron, another teacher) matching no op.
 const WORKFLOW_LABEL_KEY: Record<string, string> = {
   "publish-pages.yaml": "actionsBanner.workflow.publishPages",
@@ -53,7 +60,11 @@ const WORKFLOW_LABEL_KEY: Record<string, string> = {
 export type Tracker = {
   // Session op id, or `run-<id>` for a discovered run.
   id: string
+  // Base action label (the "what"), e.g. "Collecting scores".
   label: string
+  // Phase-wrapped label for display + aria-live, e.g. "Collecting scores…" ->
+  // "Collecting scores — done". Announces state, not just the icon.
+  displayLabel: string
   phase: TrackerPhase
   // Run's GitHub URL; absent only for a still-pending op.
   htmlUrl?: string
@@ -73,6 +84,10 @@ export type ActionActivity = {
   org: string | undefined
   trackers: Tracker[]
   anyFailed: boolean
+  // True when the status poll is failing (rate limit, lost Actions read) while
+  // trackers are still shown — so the banner can say "retrying" instead of
+  // spinning silently forever.
+  pollError: boolean
   dismiss: (id: string) => void
   retry: (id: string) => void
   // Tracker ids with a retry in flight (spinner / disabled X).
@@ -85,6 +100,12 @@ export type ActionActivity = {
 // Terminal trackers persist as history until dismissed.
 export function useActionActivity(): ActionActivity {
   const { t } = useTranslation()
+  // Wrap a base label with its phase so display text reflects state.
+  const phaseLabel = useCallback(
+    (label: string, phase: TrackerPhase) =>
+      t(PHASE_LABEL_KEY[phase], { label }),
+    [t],
+  )
   const org = useActiveOrg()
   const client = useOptionalGitHubClient()
   const { operationsForOrg, lastRegisteredAt, isDismissed, dismiss, clearOp } =
@@ -333,6 +354,7 @@ export function useActionActivity(): ActionActivity {
       return {
         id: op.id,
         label: op.label,
+        displayLabel: phaseLabel(op.label, phase),
         phase,
         htmlUrl:
           run?.html_url ??
@@ -363,6 +385,7 @@ export function useActionActivity(): ActionActivity {
       return {
         id: `run-${r.id}`,
         label,
+        displayLabel: phaseLabel(label, "running"),
         phase: "running" as TrackerPhase,
         htmlUrl: r.html_url,
         runId: r.id,
@@ -459,10 +482,39 @@ export function useActionActivity(): ActionActivity {
 
   const anyFailed = trackers.some((tr) => tr.phase === "failed")
 
+  // All-green auto-dismiss: when every tracker has succeeded (no failed,
+  // running, or pending — discovered runs are always "running", so they gate
+  // this too, and every id here is a session op), flash the green state
+  // briefly, then clearOp each so the banner clears itself. clearOp (not
+  // dismiss) forgets the op entirely — it's terminal history the teacher never
+  // needs again — which also drops it from operationsForOrg so the idle poll
+  // can stop instead of ticking until the op's TTL. Keyed off the phase
+  // signature so a new/failed action cancels the pending timer.
+  const allSucceeded =
+    trackers.length > 0 && trackers.every((tr) => tr.phase === "success")
+  const successIds = allSucceeded ? trackers.map((tr) => tr.id) : []
+  const successSignature = successIds.join(",")
+  useEffect(() => {
+    if (successSignature === "") return
+    const ids = successSignature.split(",")
+    const timer = window.setTimeout(() => {
+      for (const id of ids) clearOp(id)
+    }, ALL_SUCCESS_DISMISS_MS)
+    return () => window.clearTimeout(timer)
+  }, [successSignature, clearOp])
+
+  // Poll is failing (403/429/5xx propagate from the fetch layer) and we have
+  // something on screen to keep fresh. Require >= 2 consecutive failures so a
+  // single transient blip doesn't flash the "retrying" hint. React Query keeps
+  // retrying on the poll interval, so it clears on its own once a fetch lands.
+  const pollError =
+    runsQuery.isError && runsQuery.failureCount >= 2 && trackers.length > 0
+
   return {
     org,
     trackers,
     anyFailed,
+    pollError,
     dismiss,
     retry,
     retrying,

@@ -7,9 +7,17 @@
     "viewRun": "View run",
     "retry": "Retry",
     "retryFailed": "Couldn't re-run the action: {{detail}}",
+    "pollError": "Couldn't check status — retrying…",
     "dismiss": "Dismiss",
+    "state": {
+      "pending": "{{label}} — starting…",
+      "running": "{{label}}…",
+      "success": "{{label}} — done",
+      "failed": "{{label}} — failed"
+    },
     "workflow": {
       "publishPages": "Publishing to student site",
+      "publishClassroom": "Publishing “{{name}}” settings",
       "collectScores": "Collecting scores",
       "regrade": "Regrading",
       "generic": "GitHub Actions workflow"

@@ -77,7 +77,9 @@ const EditClassroomContent = ({
       if (org && result?.newCommitSha) {
         register({
           org,
-          label: t("actionsBanner.workflow.publishPages"),
+          label: t("actionsBanner.workflow.publishClassroom", {
+            name: cl?.name ?? classroom,
+          }),
           anchor: { kind: "sha", sha: result.newCommitSha },
         })
       }

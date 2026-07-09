@@ -4,6 +4,7 @@ import {
   isFailureConclusion,
   isRunning,
   orgFromPathname,
+  PHASE_LABEL_KEY,
   resolveOpRun,
   runMatchesOp,
   runTimes,
@@ -13,6 +14,8 @@ import {
 } from "./actionActivity"
 import type { GitHubWorkflowRun } from "@/hooks/github/types"
 import type { ActionOperation } from "@/context/actions/ActionActivityProvider"
+import en from "@/locales/en.json"
+import { flattenBundle } from "@/i18n/customLocale"
 
 const run = (over: Partial<GitHubWorkflowRun>): GitHubWorkflowRun =>
   ({
@@ -295,6 +298,26 @@ describe("isFailureConclusion", () => {
   it("treats success/skipped/neutral and null as non-failures", () => {
     for (const c of ["success", "skipped", "neutral", null] as const) {
       expect(isFailureConclusion(c)).toBe(false)
+    }
+  })
+})
+
+describe("PHASE_LABEL_KEY", () => {
+  const baseKeys = flattenBundle(en)
+
+  it("maps every tracker phase to a distinct actionsBanner.state key", () => {
+    const keys = Object.values(PHASE_LABEL_KEY)
+    expect(new Set(keys).size).toBe(keys.length)
+  })
+
+  it("resolves every phase key to an en.json template carrying {{label}}", () => {
+    for (const phase of ["pending", "running", "success", "failed"] as const) {
+      const key = PHASE_LABEL_KEY[phase]
+      // Guards the dynamic t(PHASE_LABEL_KEY[phase], { label }) call site the
+      // static key audit skips: a rename/removal in en.json must fail here,
+      // not ship green and render a raw key to screen readers.
+      expect(baseKeys).toHaveProperty(key)
+      expect(baseKeys[key]).toContain("{{label}}")
     }
   })
 })
