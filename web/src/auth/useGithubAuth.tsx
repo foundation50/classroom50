@@ -87,6 +87,21 @@ export function shouldExpireOnUserError(error: unknown): boolean {
   return error instanceof GitHubUserFetchError && error.status === 401
 }
 
+// A /user validation error that should self-heal on refetch/reconnect: a network
+// failure (no status — a TypeError from fetch, incl. a captive portal) or a
+// non-definitive GitHub status (5xx / 429). A definitive GitHub status
+// (401/403/404 per isDefinitiveGitHubStatus) is NOT transient — retrying can't
+// change it — so it must not hold at "loading" forever. `undefined`/`null` (no
+// error) is not transient.
+export function isTransientUserError(error: unknown): boolean {
+  if (!error) return false
+  if (error instanceof GitHubUserFetchError) {
+    return !isDefinitiveGitHubStatus(error.status)
+  }
+  // A non-GitHubUserFetchError reaching here is a fetch/network failure.
+  return true
+}
+
 // State the auth status verdict depends on — structural so the decision stays a
 // pure, testable function (mirrors the repo's resolve* pattern).
 export type AuthStatusInput = {
@@ -95,6 +110,15 @@ export type AuthStatusInput = {
   isOnline: boolean
   userQueryPending: boolean
   userQueryErrored: boolean
+  // The /user validation failed with a definitive 401 — the token is genuinely
+  // revoked/expired (shouldExpireOnUserError). Distinct from `userQueryErrored`,
+  // which is true for any failure including recoverable ones.
+  userErrorExpiresToken: boolean
+  // The error is transient (5xx / network / captive-portal / 429) rather than a
+  // definitive GitHub status — it should self-heal on refetch/reconnect, so we
+  // hold. A definitive non-401 (403 SSO/blocked, 404) is NOT transient: it won't
+  // clear on its own, so holding would strand the user on a spinner forever.
+  userErrorIsTransient: boolean
   hasUser: boolean
 }
 
@@ -108,19 +132,28 @@ export type AuthStatusInput = {
 //   - Not yet validated + offline (cold reload, no cached user): hold at
 //     "loading". The GET /user validation can't run offline, so an
 //     error/absent-user must NOT report "unauthenticated" and bounce a
-//     still-valid session to /login. We hold until connectivity returns and the
-//     query resolves.
+//     still-valid session to /login. We hold until connectivity returns.
 //
-// A genuine 401 tears the token down elsewhere (shouldExpireOnUserError),
-// clearing both `hasToken` and the cached user, so neither branch can mask a
-// truly dead token.
+// First-validation error triage (token present, no cached user yet):
+//   - Definitive 401 (userErrorExpiresToken): the token is dead — sign out.
+//   - Transient (5xx / network / captive-portal / 429): recoverable — hold at
+//     "loading" and let the refetch self-heal, rather than bouncing a still-
+//     valid session to /login (#185's regression).
+//   - Definitive non-401 (403 SSO/blocked, 404): the token is valid but this
+//     won't clear on its own; resolve to "authenticated" so the app mounts and
+//     its per-resource gates (scope/SSO banners) handle it — holding would
+//     strand the user on a spinner forever.
+//
+// The matching 401 teardown elsewhere clears `hasToken` + the cached user, so
+// no branch can mask a truly dead token.
 export function resolveAuthStatus(input: AuthStatusInput): AuthStatus {
   if (!input.hasLoadedStoredAuth) return "loading"
   if (!input.hasToken) return "unauthenticated"
   if (input.hasUser) return "authenticated"
+  if (input.userErrorExpiresToken) return "unauthenticated"
   if (!input.isOnline) return "loading"
   if (input.userQueryPending) return "loading"
-  if (input.userQueryErrored) return "unauthenticated"
+  if (input.userQueryErrored && input.userErrorIsTransient) return "loading"
   return "authenticated"
 }
 
@@ -741,6 +774,8 @@ function useGithubAuthState() {
         userQueryPending:
           githubUserQuery.isLoading || githubUserQuery.isPending,
         userQueryErrored: githubUserQuery.isError,
+        userErrorExpiresToken: shouldExpireOnUserError(githubUserQuery.error),
+        userErrorIsTransient: isTransientUserError(githubUserQuery.error),
         hasUser: Boolean(githubUserQuery.data),
       }),
     [
@@ -750,6 +785,7 @@ function useGithubAuthState() {
       githubUserQuery.isLoading,
       githubUserQuery.isPending,
       githubUserQuery.isError,
+      githubUserQuery.error,
       githubUserQuery.data,
     ],
   )

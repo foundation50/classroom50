@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   classifyPatResult,
+  isTransientUserError,
   recoverStrandedExchange,
   resolveAuthStatus,
   shouldExpireOnUserError,
@@ -92,12 +93,15 @@ describe("classifyPatResult", () => {
   })
 })
 
-// The auth-status verdict for the router guard. Two headline invariants (#185):
+// The auth-status verdict for the router guard. Headline invariants (#185, #187):
 //   - An offline cold reload with a stored token but no cached user HOLDS at
 //     "loading" (session preserved) rather than bouncing to /login.
 //   - An already-validated session (cached user) stays "authenticated" while
-//     offline, so the app stays mounted and the OfflineBanner shows — a blip
-//     must not collapse a working session to a spinner.
+//     offline, so the app stays mounted and the OfflineBanner shows.
+//   - Only a definitive 401 signs the user out; a transient first-validation
+//     error (5xx / network / captive portal) HOLDS instead of bouncing a still-
+//     valid session to /login; a definitive non-401 (403 SSO/rate-limit) lets
+//     the app mount so its per-resource gates handle it (never an infinite hold).
 describe("resolveAuthStatus", () => {
   const authed: AuthStatusInput = {
     hasLoadedStoredAuth: true,
@@ -105,6 +109,8 @@ describe("resolveAuthStatus", () => {
     isOnline: true,
     userQueryPending: false,
     userQueryErrored: false,
+    userErrorExpiresToken: false,
+    userErrorIsTransient: false,
     hasUser: true,
   }
 
@@ -126,6 +132,7 @@ describe("resolveAuthStatus", () => {
         ...authed,
         isOnline: false,
         userQueryErrored: true,
+        userErrorIsTransient: true,
       }),
     ).toBe("authenticated")
   })
@@ -148,6 +155,7 @@ describe("resolveAuthStatus", () => {
         isOnline: false,
         hasUser: false,
         userQueryErrored: true,
+        userErrorIsTransient: true,
       }),
     ).toBe("loading")
   })
@@ -158,13 +166,104 @@ describe("resolveAuthStatus", () => {
     ).toBe("loading")
   })
 
-  it("is 'unauthenticated' when online with a token but the first validation errored (e.g. a definitive 401 upstream)", () => {
+  it("is 'unauthenticated' when the first validation is a definitive 401 (revoked/expired token)", () => {
     expect(
-      resolveAuthStatus({ ...authed, hasUser: false, userQueryErrored: true }),
+      resolveAuthStatus({
+        ...authed,
+        hasUser: false,
+        userQueryErrored: true,
+        userErrorExpiresToken: true,
+      }),
     ).toBe("unauthenticated")
+  })
+
+  it("a 401 signs out even offline (a known-dead token isn't worth holding for)", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        isOnline: false,
+        hasUser: false,
+        userQueryErrored: true,
+        userErrorExpiresToken: true,
+      }),
+    ).toBe("unauthenticated")
+  })
+
+  it("HOLDS at 'loading' on a transient online error (5xx/network) — don't bounce a still-valid session to /login (#187)", () => {
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        hasUser: false,
+        userQueryErrored: true,
+        userErrorIsTransient: true,
+      }),
+    ).toBe("loading")
+  })
+
+  it("also HOLDS on a captive-portal error (navigator.onLine true, network fetch failed) rather than bouncing to /login (#187)", () => {
+    // A captive portal reads as online, so isOnline is true; the fetch failure
+    // is transient (not a definitive GitHub status), so we hold, not bounce.
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        isOnline: true,
+        hasUser: false,
+        userQueryErrored: true,
+        userErrorIsTransient: true,
+      }),
+    ).toBe("loading")
+  })
+
+  it("resolves 'authenticated' on a definitive non-401 error (403 SSO/rate-limit) so the app mounts and its per-resource gates handle it (never an infinite hold) (#187)", () => {
+    // Token is valid (not a 401), but the error won't self-heal, so holding
+    // would strand the user on a spinner. Let them into the app instead.
+    expect(
+      resolveAuthStatus({
+        ...authed,
+        hasUser: false,
+        userQueryErrored: true,
+        userErrorExpiresToken: false,
+        userErrorIsTransient: false,
+      }),
+    ).toBe("authenticated")
   })
 
   it("is 'authenticated' when online with a token and a resolved user", () => {
     expect(resolveAuthStatus(authed)).toBe("authenticated")
+  })
+})
+
+// Transient-vs-definitive classification for the /user validation error. A
+// definitive GitHub status (401/403/404) is NOT transient (retrying can't fix
+// it); a 5xx/429 or a bare network failure (no status) IS transient and should
+// self-heal on refetch/reconnect (#187 hold behavior).
+describe("isTransientUserError", () => {
+  it("treats a network error (non-GitHubUserFetchError) as transient", () => {
+    expect(isTransientUserError(new TypeError("Failed to fetch"))).toBe(true)
+  })
+
+  it("treats a 5xx as transient", () => {
+    expect(isTransientUserError(new GitHubUserFetchError(503))).toBe(true)
+  })
+
+  it("treats a 429 (rate limit) as transient", () => {
+    expect(isTransientUserError(new GitHubUserFetchError(429))).toBe(true)
+  })
+
+  it("does NOT treat a definitive 401 as transient", () => {
+    expect(isTransientUserError(new GitHubUserFetchError(401))).toBe(false)
+  })
+
+  it("does NOT treat a definitive 403 (SSO/blocked) as transient", () => {
+    expect(isTransientUserError(new GitHubUserFetchError(403))).toBe(false)
+  })
+
+  it("does NOT treat a definitive 404 as transient", () => {
+    expect(isTransientUserError(new GitHubUserFetchError(404))).toBe(false)
+  })
+
+  it("is false when there is no error", () => {
+    expect(isTransientUserError(undefined)).toBe(false)
+    expect(isTransientUserError(null)).toBe(false)
   })
 })

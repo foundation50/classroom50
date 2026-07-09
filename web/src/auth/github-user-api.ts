@@ -1,4 +1,5 @@
 import type { GitHubUser } from "@/hooks/github/types"
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "@/hooks/github/client"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 
@@ -22,6 +23,12 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
     },
+    // Bare fetch has no built-in timeout: without this a hung/half-open
+    // connection (e.g. on reconnect) never settles, pinning the session-
+    // validation query "pending" and stranding the app on its loading spinner.
+    // A timeout aborts to a rejected fetch, which the query treats as a
+    // transient error and retries.
+    signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
   })
 
   if (!res.ok) {
@@ -45,6 +52,7 @@ export async function fetchGithubUserWithScopes(
       Authorization: `Bearer ${token}`,
       Accept: "application/vnd.github+json",
     },
+    signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS),
   })
 
   if (!res.ok) {

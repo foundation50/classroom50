@@ -24,6 +24,23 @@ function LoadingScreen({ label }: { label: string }) {
   )
 }
 
+// Which alert the sign-in form shows, in precedence order. Offline wins: the
+// user never signed out, so a stale error or expiry notice would misexplain the
+// state. Then a live sign-in error, then the involuntary-expiry notice. Pure so
+// the precedence is unit-testable without rendering the whole card.
+export type LoginAlertKind = "offline" | "error" | "expired" | null
+
+export function resolveLoginAlert(input: {
+  isOnline: boolean
+  error: string | null
+  sessionExpired: boolean
+}): LoginAlertKind {
+  if (!input.isOnline) return "offline"
+  if (input.error) return "error"
+  if (input.sessionExpired) return "expired"
+  return null
+}
+
 export function GitHubAuthCard() {
   const { t } = useTranslation()
   useDocumentTitle(t("auth.signInTitle"))
@@ -85,31 +102,30 @@ export function GitHubAuthCard() {
                 void auth.startWebFlow()
               }}
             >
-              {!auth.isOnline ? (
-                <Alert tone="warning" className="items-start text-sm">
-                  <AlertTriangle
-                    aria-hidden="true"
-                    className="size-4 shrink-0"
-                  />
-                  <span>{t("auth.offlineHold")}</span>
-                </Alert>
-              ) : auth.error ? (
-                <Alert tone="error" className="items-start text-sm">
-                  <AlertTriangle
-                    aria-hidden="true"
-                    className="size-4 shrink-0"
-                  />
-                  <span>{auth.error}</span>
-                </Alert>
-              ) : auth.sessionExpired ? (
-                <Alert tone="warning" className="items-start text-sm">
-                  <AlertTriangle
-                    aria-hidden="true"
-                    className="size-4 shrink-0"
-                  />
-                  <span>Your session expired — sign in again to continue.</span>
-                </Alert>
-              ) : null}
+              {(() => {
+                const alert = resolveLoginAlert({
+                  isOnline: auth.isOnline,
+                  error: auth.error,
+                  sessionExpired: auth.sessionExpired,
+                })
+                if (!alert) return null
+                const tone = alert === "error" ? "error" : "warning"
+                const message =
+                  alert === "offline"
+                    ? t("auth.offlineHold")
+                    : alert === "error"
+                      ? auth.error
+                      : "Your session expired — sign in again to continue."
+                return (
+                  <Alert tone={tone} className="items-start text-sm">
+                    <AlertTriangle
+                      aria-hidden="true"
+                      className="size-4 shrink-0"
+                    />
+                    <span>{message}</span>
+                  </Alert>
+                )
+              })()}
 
               <div className="space-y-3">
                 <Button
