@@ -3,7 +3,7 @@ import { useEffect, useId, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
-import { Alert, Button, Modal } from "@/components/ui"
+import { AnimatedAlert, Button, Modal } from "@/components/ui"
 
 // Shared chrome for the two reuse modals — close button, header, error/warning
 // alerts, Cancel/Reuse footer — so each supplies only its title, description,
@@ -66,18 +66,22 @@ export const ReuseModalShell = ({
 
       {children}
 
-      {errorMessage ? (
-        <Alert tone="error" className="mt-4 text-sm">
-          {errorMessage}
-        </Alert>
-      ) : null}
+      <AnimatedAlert
+        tone="error"
+        show={!!errorMessage}
+        className="mt-4 text-sm"
+      >
+        {errorMessage}
+      </AnimatedAlert>
 
-      {warning ? (
-        <Alert tone="warning" className="mt-4 items-start text-sm">
-          <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
-          <span>{warning}</span>
-        </Alert>
-      ) : null}
+      <AnimatedAlert
+        tone="warning"
+        show={!!warning}
+        className="mt-4 items-start text-sm"
+      >
+        <TriangleAlert aria-hidden="true" className="size-4 shrink-0" />
+        <span>{warning}</span>
+      </AnimatedAlert>
 
       <div className="modal-action">
         <Button variant="ghost" disabled={isPending} onClick={closeDialog}>

@@ -5,7 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import Papa from "papaparse"
 import { Activity } from "lucide-react"
 
-import { Alert, Card, Spinner, Button } from "@/components/ui"
+import { AnimatedAlert, Card, Spinner, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { EmptyState } from "@/components/list"
@@ -154,11 +154,14 @@ const OrgActivityPage = () => {
           planName={orgPlanDetails?.plan?.name}
         />
 
-        {sourceError && (
-          <Alert tone="warning" className="mt-4 text-sm" role="status">
-            <span>{t("orgActivity.partialError")}</span>
-          </Alert>
-        )}
+        <AnimatedAlert
+          tone="warning"
+          show={!!sourceError}
+          className="mt-4 text-sm"
+          role="status"
+        >
+          <span>{t("orgActivity.partialError")}</span>
+        </AnimatedAlert>
 
         {items.length === 0 ? (
           loading ? (

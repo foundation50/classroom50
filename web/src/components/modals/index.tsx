@@ -2,7 +2,7 @@ import { AlertTriangle } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Alert, type ButtonVariant } from "@/components/ui"
+import { Button, AnimatedAlert, type ButtonVariant } from "@/components/ui"
 
 type ConfirmModalProps = {
   open: boolean
@@ -169,11 +169,9 @@ export function ConfirmModal({
               </div>
             ) : null}
 
-            {error ? (
-              <Alert tone="error" className="mt-4 text-sm">
-                {error}
-              </Alert>
-            ) : null}
+            <AnimatedAlert tone="error" show={!!error} className="mt-4 text-sm">
+              {error}
+            </AnimatedAlert>
 
             <div className="modal-action">
               <Button
@@ -238,11 +236,9 @@ export function ConfirmModal({
                 }}
               />
 
-              {error ? (
-                <Alert tone="error" className="text-sm">
-                  {error}
-                </Alert>
-              ) : null}
+              <AnimatedAlert tone="error" show={!!error} className="text-sm">
+                {error}
+              </AnimatedAlert>
             </div>
 
             <div className="modal-action">

@@ -33,6 +33,9 @@ export type { ModalProps, ModalSize } from "./Modal"
 export { Alert, alertToneClass } from "./Alert"
 export type { AlertProps, AlertTone } from "./Alert"
 
+export { AnimatedAlert } from "./AnimatedAlert"
+export type { AnimatedAlertProps } from "./AnimatedAlert"
+
 export { CopyableCode } from "./CopyableCode"
 export type { CopyableCodeProps } from "./CopyableCode"
 

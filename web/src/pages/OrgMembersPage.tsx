@@ -10,7 +10,7 @@ import {
   UserPlus,
 } from "lucide-react"
 
-import { Alert, Button, Card, Spinner } from "@/components/ui"
+import { AnimatedAlert, Button, Card, Spinner } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -398,20 +398,26 @@ const OrgMembersPage = () => {
             }
           />
 
-          {notes.length > 0 ? (
-            <Alert tone="warning" className="mt-6 text-sm" role="status">
-              <span>{notes.join(" ")}</span>
-            </Alert>
-          ) : null}
+          <AnimatedAlert
+            tone="warning"
+            show={notes.length > 0}
+            className="mt-6 text-sm"
+            role="status"
+          >
+            <span>{notes.join(" ")}</span>
+          </AnimatedAlert>
 
-          {discrepancyCount > 0 ? (
-            <Alert tone="error" className="mt-6 text-sm" role="status">
-              <AlertTriangle className="size-4" aria-hidden="true" />
-              <span>
-                {t("orgMembers.discrepancy", { count: discrepancyCount })}
-              </span>
-            </Alert>
-          ) : null}
+          <AnimatedAlert
+            tone="error"
+            show={discrepancyCount > 0}
+            className="mt-6 text-sm"
+            role="status"
+          >
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <span>
+              {t("orgMembers.discrepancy", { count: discrepancyCount })}
+            </span>
+          </AnimatedAlert>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
             <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">

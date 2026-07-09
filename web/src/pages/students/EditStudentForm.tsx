@@ -12,7 +12,7 @@ import { isValidEmail } from "@/util/orgMembership"
 import { studentKey } from "@/util/roster"
 import type { Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/api/mutations/students"
-import { Alert, Button, Input } from "@/components/ui"
+import { AnimatedAlert, Button, Input } from "@/components/ui"
 
 export type EditStudentFormValues = {
   first_name: string
@@ -245,11 +245,9 @@ const EditStudentForm = ({
         ) : null}
       </div>
 
-      {error ? (
-        <Alert tone="error" className="mt-4 text-sm">
-          {error}
-        </Alert>
-      ) : null}
+      <AnimatedAlert tone="error" show={!!error} className="mt-4 text-sm">
+        {error}
+      </AnimatedAlert>
 
       <div className="modal-action">
         <Button variant="ghost" disabled={submitting} onClick={onCancel}>

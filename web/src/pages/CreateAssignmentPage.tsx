@@ -6,7 +6,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
 import RequireTeacher from "@/components/RequireTeacher"
-import { Alert, Button } from "@/components/ui"
+import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -120,25 +120,27 @@ const CreateAssignmentPage = () => {
             hasRosterRows={emptyRoster.hasRosterRows}
           />
         ) : null}
-        {errorMessage ? <Alert tone="error">{errorMessage}</Alert> : <></>}
-        {warningMessage ? (
-          <Alert tone="warning" className="flex flex-col items-start gap-2">
-            <span>{warningMessage}</span>
-            <Button
-              size="sm"
-              onClick={() =>
-                navigate({
-                  to: "/$org/$classroom/assignments",
-                  params: { org, classroom },
-                })
-              }
-            >
-              {t("assignments.goToAssignments")}
-            </Button>
-          </Alert>
-        ) : (
-          <></>
-        )}
+        <AnimatedAlert tone="error" show={!!errorMessage}>
+          {errorMessage}
+        </AnimatedAlert>
+        <AnimatedAlert
+          tone="warning"
+          show={!!warningMessage}
+          className="flex flex-col items-start gap-2"
+        >
+          <span>{warningMessage}</span>
+          <Button
+            size="sm"
+            onClick={() =>
+              navigate({
+                to: "/$org/$classroom/assignments",
+                params: { org, classroom },
+              })
+            }
+          >
+            {t("assignments.goToAssignments")}
+          </Button>
+        </AnimatedAlert>
         <CreateAssignmentForm
           loading={createClassroomMutation.isPending}
           org={org}

@@ -5,7 +5,7 @@ import { Plus, Trash2, UsersRound } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, AnimatedAlert, Button, Modal } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -412,17 +412,17 @@ export function GroupCollaboratorsModal({
         </div>
       ) : (
         <>
-          {saved && (
-            <Alert tone="success" className="mt-4 text-sm">
-              {t("components.modals.groupCollaborators.saved")}
-            </Alert>
-          )}
+          <AnimatedAlert tone="success" show={saved} className="mt-4 text-sm">
+            {t("components.modals.groupCollaborators.saved")}
+          </AnimatedAlert>
 
-          {submitError && (
-            <Alert tone="error" className="mt-4 text-sm">
-              {submitError}
-            </Alert>
-          )}
+          <AnimatedAlert
+            tone="error"
+            show={!!submitError}
+            className="mt-4 text-sm"
+          >
+            {submitError}
+          </AnimatedAlert>
 
           {!canManage && (
             <Alert tone="error" className="mt-4 text-sm">

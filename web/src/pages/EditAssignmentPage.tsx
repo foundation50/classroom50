@@ -6,7 +6,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card } from "@/components/ui"
+import { Alert, AnimatedAlert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
@@ -181,11 +181,15 @@ const EditAssignmentPage = () => {
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("documentTitle.assignmentSettings")} />
-      {editError && <Alert tone="error">{editError}</Alert>}
-      {editSuccess && (
-        <Alert tone="success">{t("assignmentSettings.editSuccess")}</Alert>
-      )}
-      {editWarning && <Alert tone="warning">{editWarning}</Alert>}
+      <AnimatedAlert tone="error" show={!!editError}>
+        {editError}
+      </AnimatedAlert>
+      <AnimatedAlert tone="success" show={editSuccess}>
+        {t("assignmentSettings.editSuccess")}
+      </AnimatedAlert>
+      <AnimatedAlert tone="warning" show={!!editWarning}>
+        {editWarning}
+      </AnimatedAlert>
       <PageHeader title={t("assignmentSettings.heading")} />
       {isTeacher && archived && (
         <ArchivedClassroomNotice>

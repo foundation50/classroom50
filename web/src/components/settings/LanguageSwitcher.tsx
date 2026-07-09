@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button } from "@/components/ui"
+import { AnimatedAlert, Button } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -490,11 +490,9 @@ export const LanguageSwitcher = ({
         </div>
       )}
 
-      {error && (
-        <Alert tone="error">
-          <span className="text-sm">{error}</span>
-        </Alert>
-      )}
+      <AnimatedAlert tone="error" show={!!error}>
+        <span className="text-sm">{error}</span>
+      </AnimatedAlert>
     </div>
   )
 }

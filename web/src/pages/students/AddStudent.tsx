@@ -22,7 +22,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { isValidEmail } from "@/util/orgMembership"
 import { splitName, toStudent } from "@/util/roster"
-import { Alert, Button, Modal } from "@/components/ui"
+import { AnimatedAlert, Button, Modal } from "@/components/ui"
 
 type AddStudentProps = {
   org: string
@@ -225,17 +225,13 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
           form.handleSubmit()
         }}
       >
-        {warning && (
-          <Alert tone="warning" className="mt-4 text-sm">
-            {warning}
-          </Alert>
-        )}
+        <AnimatedAlert tone="warning" show={!!warning} className="mt-4 text-sm">
+          {warning}
+        </AnimatedAlert>
 
-        {success && (
-          <Alert tone="success" className="mt-4 text-sm">
-            {success}
-          </Alert>
-        )}
+        <AnimatedAlert tone="success" show={!!success} className="mt-4 text-sm">
+          {success}
+        </AnimatedAlert>
 
         <div className="mt-4 flex flex-col gap-3">
           <form.Field name="name">

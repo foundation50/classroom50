@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 
 import { nameFromParts } from "@/util/students"
-import { Alert, Button, Card, Spinner } from "@/components/ui"
+import { Alert, AnimatedAlert, Button, Card, Spinner } from "@/components/ui"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -538,37 +538,41 @@ const EnrolledStudents = ({
       {/* Pending-invites banner: clicking "Review" filters to pending so the
           teacher can select rows and bulk-resend (cancel + re-send).
           Dismissable for the session. */}
-      {!isLoading &&
-      !isError &&
-      !pendingHidden &&
-      !pendingDismissed &&
-      counts.pending > 0 ? (
-        <Alert tone="info" className="flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2 text-sm">
-            <Send aria-hidden="true" className="size-4 shrink-0" />
-            {t("students.pendingBanner", { count: counts.pending })}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => setStatusFilter("pending")}
-            >
-              {t("students.pendingReview")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              shape="square"
-              aria-label={t("students.dismiss")}
-              title={t("students.dismiss")}
-              onClick={() => setPendingDismissed(true)}
-            >
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        </Alert>
-      ) : null}
+      <AnimatedAlert
+        tone="info"
+        show={
+          !isLoading &&
+          !isError &&
+          !pendingHidden &&
+          !pendingDismissed &&
+          counts.pending > 0
+        }
+        className="flex items-center justify-between gap-3"
+      >
+        <span className="flex items-center gap-2 text-sm">
+          <Send aria-hidden="true" className="size-4 shrink-0" />
+          {t("students.pendingBanner", { count: counts.pending })}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => setStatusFilter("pending")}
+          >
+            {t("students.pendingReview")}
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            shape="square"
+            aria-label={t("students.dismiss")}
+            title={t("students.dismiss")}
+            onClick={() => setPendingDismissed(true)}
+          >
+            <X aria-hidden="true" className="size-4" />
+          </Button>
+        </div>
+      </AnimatedAlert>
 
       {/* Non-owner: pending invites are owner-only. */}
       {!isLoading && !isError && pendingHidden ? (
