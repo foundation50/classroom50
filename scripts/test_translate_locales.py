@@ -16,7 +16,13 @@ import io
 import json
 
 import pytest
-from botocore.exceptions import ClientError, ConnectTimeoutError, ReadTimeoutError
+from botocore.exceptions import (
+    ClientError,
+    ConnectionError as BotoConnectionError,
+    ConnectTimeoutError,
+    EndpointConnectionError,
+    ReadTimeoutError,
+)
 
 import translate_locales
 from translate_locales import (
@@ -47,19 +53,36 @@ def _client_error(code: str) -> ClientError:
     )
 
 
+# One factory per transport-transient type invoke_model catches, so the tests
+# below can be parametrized over the full tuple (dropping any from the except
+# clause then fails a case instead of passing green).
+_TRANSPORT_ERRORS = {
+    "read_timeout": lambda: ReadTimeoutError(endpoint_url="https://bedrock"),
+    "connect_timeout": lambda: ConnectTimeoutError(endpoint_url="https://bedrock"),
+    "endpoint_connection": lambda: EndpointConnectionError(endpoint_url="https://bedrock"),
+    "connection": lambda: BotoConnectionError(error="boom"),
+}
+
+
 class _FakeClient:
     """Bedrock stand-in whose invoke_model plays back a scripted sequence.
 
     Each queued item is either an Exception (raised) or a response dict
-    (returned). Records the call count so tests can assert retry attempts.
+    (returned). Records the call count so tests can assert retry attempts, and
+    the last call's kwargs so a test can pin the modelId=/body= call shape (a
+    rename or malformed body would make real boto3 raise, not silently pass).
     """
 
     def __init__(self, script: list):
         self._script = list(script)
         self.calls = 0
+        self.last_kwargs: dict | None = None
 
-    def invoke_model(self, **_kwargs):
+    # Keyword-only so a production rename away from modelId=/body= is a hard
+    # TypeError here, mirroring boto3's ParamValidationError rather than passing.
+    def invoke_model(self, *, modelId, body):
         self.calls += 1
+        self.last_kwargs = {"modelId": modelId, "body": body}
         item = self._script.pop(0)
         if isinstance(item, Exception):
             raise item
@@ -78,13 +101,22 @@ class TestInvokeModel:
 
     def test_returns_text_on_first_success(self):
         client = _FakeClient([_ok_response("translated")])
-        assert invoke_model(client, "model", "sys", "msg") == "translated"
+        assert invoke_model(client, "model-x", "sys", "msg") == "translated"
         assert client.calls == 1
+        # Pin the request shape: a production rename or a malformed body would
+        # make real boto3 raise, so assert the kwargs + JSON envelope here.
+        assert client.last_kwargs is not None
+        assert client.last_kwargs["modelId"] == "model-x"
+        sent = json.loads(client.last_kwargs["body"])
+        assert set(sent) >= {"anthropic_version", "max_tokens", "system", "messages"}
+        assert sent["system"] == "sys"
+        assert sent["messages"] == [{"role": "user", "content": "msg"}]
 
-    def test_retries_retryable_client_error_then_succeeds(self):
-        client = _FakeClient(
-            [_client_error("ThrottlingException"), _ok_response("ok")]
-        )
+    @pytest.mark.parametrize("code", sorted(translate_locales.RETRYABLE_ERROR_CODES))
+    def test_retries_every_retryable_client_error_then_succeeds(self, code):
+        # Iterate the real set so shrinking RETRYABLE_ERROR_CODES fails a case
+        # rather than silently flipping that code to immediate re-raise.
+        client = _FakeClient([_client_error(code), _ok_response("ok")])
         assert invoke_model(client, "model", "sys", "msg") == "ok"
         assert client.calls == 2
 
@@ -102,23 +134,16 @@ class TestInvokeModel:
             invoke_model(client, "model", "sys", "msg")
         assert client.calls == translate_locales.MAX_ATTEMPTS
 
-    def test_retries_transport_timeout_then_succeeds(self):
-        client = _FakeClient(
-            [
-                ReadTimeoutError(endpoint_url="https://bedrock"),
-                ConnectTimeoutError(endpoint_url="https://bedrock"),
-                _ok_response("recovered"),
-            ]
-        )
+    @pytest.mark.parametrize("make_error", _TRANSPORT_ERRORS.values(), ids=_TRANSPORT_ERRORS.keys())
+    def test_retries_transport_transient_then_succeeds(self, make_error):
+        client = _FakeClient([make_error(), _ok_response("recovered")])
         assert invoke_model(client, "model", "sys", "msg") == "recovered"
-        assert client.calls == 3
+        assert client.calls == 2
 
-    def test_reraises_transport_timeout_after_exhausting_attempts(self):
-        script = [
-            ReadTimeoutError(endpoint_url="https://bedrock")
-        ] * translate_locales.MAX_ATTEMPTS
-        client = _FakeClient(script)
-        with pytest.raises(ReadTimeoutError):
+    @pytest.mark.parametrize("make_error", _TRANSPORT_ERRORS.values(), ids=_TRANSPORT_ERRORS.keys())
+    def test_reraises_transport_transient_after_exhausting_attempts(self, make_error):
+        client = _FakeClient([make_error() for _ in range(translate_locales.MAX_ATTEMPTS)])
+        with pytest.raises(type(make_error())):
             invoke_model(client, "model", "sys", "msg")
         assert client.calls == translate_locales.MAX_ATTEMPTS
 
