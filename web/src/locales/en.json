@@ -1370,8 +1370,6 @@
   "submissions": {
     "missingParams": "Missing organization, classroom, or assignment in the URL.",
     "dueDate": "Due {{date}}",
-    "dueIn": "Due {{date}} · {{relative}}",
-    "dueOverdue": "Due {{date}} · {{relative}}",
     "noDueDate": "No due date",
     "lateBadge_one": "{{count}} late",
     "lateBadge_other": "{{count}} late",

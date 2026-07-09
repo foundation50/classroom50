@@ -2,13 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
-import {
-  BarChart3,
-  CalendarClock,
-  Info,
-  LinkIcon,
-  RefreshCw,
-} from "lucide-react"
+import { BarChart3, Info, LinkIcon, RefreshCw } from "lucide-react"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -482,22 +476,22 @@ const SubmissionsPageContent = () => {
         subtitle={
           <div className="flex flex-wrap items-center gap-2">
             {dueDate ? (
-              <Badge
-                tone={dueOverdue ? "error" : "info"}
-                size="md"
-                title={formatDueDateTime(dueDate)}
-              >
-                <CalendarClock aria-hidden="true" className="size-3.5" />
-                {dueOverdue
-                  ? t("submissions.dueOverdue", {
-                      date: formatDueDateTime(dueDate),
-                      relative: dueRelative,
-                    })
-                  : t("submissions.dueIn", {
-                      date: formatDueDateTime(dueDate),
-                      relative: dueRelative,
-                    })}
-              </Badge>
+              <>
+                <Badge
+                  tone={dueOverdue ? "error" : "info"}
+                  size="md"
+                  title={formatDueDateTime(dueDate)}
+                >
+                  {t("submissions.dueDate", {
+                    date: formatDueDateTime(dueDate),
+                  })}
+                </Badge>
+                {dueRelative && (
+                  <Badge tone={dueOverdue ? "error" : "warning"} size="md">
+                    {dueRelative}
+                  </Badge>
+                )}
+              </>
             ) : (
               <span>{t("submissions.noDueDate")}</span>
             )}
