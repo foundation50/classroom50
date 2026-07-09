@@ -17,6 +17,33 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.3.0](https://github.com/foundation50/classroom50/compare/web-v1.2.0...web-v1.3.0) (2026-07-09)
+
+
+### Features
+
+* **web:** add personal access token sign-in ([#161](https://github.com/foundation50/classroom50/issues/161)) ([d289762](https://github.com/foundation50/classroom50/commit/d2897625af5fc647ba371202c4bb6fef8f7ad595))
+* **web:** client-side diagnostics and a unified org activity view ([#182](https://github.com/foundation50/classroom50/issues/182)) ([6d3f4df](https://github.com/foundation50/classroom50/commit/6d3f4df8b54150d5679778b84939e534a888d107))
+* **web:** detect offline and stop bouncing a valid session to /login ([#187](https://github.com/foundation50/classroom50/issues/187)) ([a80329a](https://github.com/foundation50/classroom50/commit/a80329a4c012b30988ebcd0aded985afa48d7bf0))
+* **web:** link assignment to its source repository ([#148](https://github.com/foundation50/classroom50/issues/148)) ([1040514](https://github.com/foundation50/classroom50/commit/104051451878aaaa57681a618b13f45d606fcb41))
+* **web:** list registry languages in the language dropdown ([#151](https://github.com/foundation50/classroom50/issues/151)) ([d47ddd8](https://github.com/foundation50/classroom50/commit/d47ddd803abfa1355a7e1cb3bbd2603e568f19b1))
+* **web:** list the specific settings needing a manual fix at setup ([#152](https://github.com/foundation50/classroom50/issues/152)) ([bb86196](https://github.com/foundation50/classroom50/commit/bb86196ea247fe1dfb69e67598463bc1e17bea59))
+* **web:** make the sidebar account button more compact ([#188](https://github.com/foundation50/classroom50/issues/188)) ([467d954](https://github.com/foundation50/classroom50/commit/467d95474f6b2bbf84b6e4cfedc51350bc3c8c34))
+* **web:** prompt users to reload when a new version is deployed ([#168](https://github.com/foundation50/classroom50/issues/168)) ([d46354b](https://github.com/foundation50/classroom50/commit/d46354b17a59b741fa99a17b4de983955ac25607))
+* **web:** redesign the assignment submissions page ([#176](https://github.com/foundation50/classroom50/issues/176)) ([1b1a3ed](https://github.com/foundation50/classroom50/commit/1b1a3ed0b4292183e60d62105472ff03afe79483))
+* **web:** redesign the My Classrooms page (unified toolbar, richer cards, card actions) ([#157](https://github.com/foundation50/classroom50/issues/157)) ([559af45](https://github.com/foundation50/classroom50/commit/559af45d18752840ba4d046c1f648ac986e877c6))
+* **web:** redesign the organization homepage (search, views, sort, setup modal) ([#154](https://github.com/foundation50/classroom50/issues/154)) ([15dfaae](https://github.com/foundation50/classroom50/commit/15dfaaef4b20f03dedcf90ddff318f6cd368735c))
+* **web:** standardized client-side logger, dev rate-limit overlay, and app-wide logging coverage ([#184](https://github.com/foundation50/classroom50/issues/184)) ([6e1183e](https://github.com/foundation50/classroom50/commit/6e1183e08bcbaf1c455b5714c89892f58aa340bc))
+* **web:** sumi theme redesign and shared UI component standardization ([#169](https://github.com/foundation50/classroom50/issues/169)) ([3c4be5d](https://github.com/foundation50/classroom50/commit/3c4be5dbca690ece7e067ddd37a08b16d7a01178))
+
+
+### Bug Fixes
+
+* stop enforcing private-repo forking org policy ([#179](https://github.com/foundation50/classroom50/issues/179)) ([898156a](https://github.com/foundation50/classroom50/commit/898156a12b0b86bd90825fb0017f5ff83ddc120a)), closes [#109](https://github.com/foundation50/classroom50/issues/109)
+* **web:** flag and persist audit fixes that couldn't complete automatically ([#180](https://github.com/foundation50/classroom50/issues/180)) ([78c6fdf](https://github.com/foundation50/classroom50/commit/78c6fdf11e1182fad7610b610e458615562d48bf))
+* **web:** split assignment due badge into date and countdown ([#186](https://github.com/foundation50/classroom50/issues/186)) ([484f58d](https://github.com/foundation50/classroom50/commit/484f58d27d6ee327e55636f91ffa33461cd183ff))
+* **web:** verify classroom50 config repo before listing an org ([#171](https://github.com/foundation50/classroom50/issues/171)) ([9f832bd](https://github.com/foundation50/classroom50/commit/9f832bd24cb03d99a823e6e66a9a9f71d230ec76))
+
 ## [1.2.0](https://github.com/foundation50/classroom50/compare/web-v1.1.0...web-v1.2.0) (2026-07-06)
 
 
