@@ -60,8 +60,6 @@ const WORKFLOW_LABEL_KEY: Record<string, string> = {
 export type Tracker = {
   // Session op id, or `run-<id>` for a discovered run.
   id: string
-  // Base action label (the "what"), e.g. "Collecting scores".
-  label: string
   // Phase-wrapped label for display + aria-live, e.g. "Collecting scores…" ->
   // "Collecting scores — done". Announces state, not just the icon.
   displayLabel: string
@@ -353,7 +351,6 @@ export function useActionActivity(): ActionActivity {
       const times = run ? runTimes(run) : {}
       return {
         id: op.id,
-        label: op.label,
         displayLabel: phaseLabel(op.label, phase),
         phase,
         htmlUrl:
@@ -384,7 +381,6 @@ export function useActionActivity(): ActionActivity {
       const times = runTimes(r)
       return {
         id: `run-${r.id}`,
-        label,
         displayLabel: phaseLabel(label, "running"),
         phase: "running" as TrackerPhase,
         htmlUrl: r.html_url,

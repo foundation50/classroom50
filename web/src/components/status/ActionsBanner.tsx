@@ -17,7 +17,7 @@ import {
 import { useTranslation } from "react-i18next"
 
 import { useActionActivity, type Tracker } from "@/hooks/useActionActivity"
-import { DURATION, EASE_OUT } from "@/lib/motion"
+import { collapseVariants, DURATION, EASE_OUT } from "@/lib/motion"
 
 // Compact elapsed duration ("8s", "1m 12s", "3m", "1h 5m"); "" for non-positive.
 function formatElapsed(ms: number): string {
@@ -247,10 +247,10 @@ const BannerBody = ({
         {showList && (
           <motion.ul
             key="list"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: "auto", opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: DURATION.base, ease: EASE_OUT }}
+            variants={collapseVariants}
+            initial="initial"
+            animate="animate"
+            exit="exit"
             className="flex w-full flex-col gap-1 overflow-hidden bg-base-100 p-2 text-base-content"
           >
             {trackers.map((tracker) => (
