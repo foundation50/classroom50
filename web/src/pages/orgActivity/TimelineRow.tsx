@@ -71,6 +71,8 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
   const tone = itemTone(item)
   const icon = itemIcon(item)
   const detail = formatDetail(item, t)
+  const at = new Date(item.at)
+  const atLocal = at.toLocaleString()
 
   return (
     <li className="flex items-start gap-3 px-6 py-4">
@@ -114,10 +116,10 @@ export function TimelineRow({ item }: { item: TimelineItem }) {
         </Badge>
         <time
           className="text-xs text-base-content/50 tabular-nums"
-          dateTime={new Date(item.at).toISOString()}
-          title={new Date(item.at).toLocaleString()}
+          dateTime={at.toISOString()}
+          title={atLocal}
         >
-          {new Date(item.at).toLocaleString()}
+          {atLocal}
         </time>
       </div>
     </li>

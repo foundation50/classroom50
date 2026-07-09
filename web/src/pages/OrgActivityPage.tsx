@@ -34,6 +34,14 @@ import {
 } from "./orgActivity/ActivityToolbar"
 import { TimelineRow } from "./orgActivity/TimelineRow"
 
+// Workflow file -> i18n label key, reused from the actions banner. Module-level
+// so the map isn't reallocated per render / per run item.
+const WORKFLOW_LABEL_KEY: Record<string, string> = {
+  "publish-pages.yaml": "actionsBanner.workflow.publishPages",
+  "collect-scores.yaml": "actionsBanner.workflow.collectScores",
+  "regrade.yaml": "actionsBanner.workflow.regrade",
+}
+
 // Unified, owner-only org Activity view. Merges three sources into one filterable,
 // newest-first timeline:
 //   - session activity (ephemeral, this-tab errors/actions)
@@ -62,12 +70,7 @@ const OrgActivityPage = () => {
 
   // Reuse the banner's i18n workflow labels; fall back to the run's own title.
   const runLabel = (file: string | undefined, fallback: string | undefined) => {
-    const key: Record<string, string> = {
-      "publish-pages.yaml": "actionsBanner.workflow.publishPages",
-      "collect-scores.yaml": "actionsBanner.workflow.collectScores",
-      "regrade.yaml": "actionsBanner.workflow.regrade",
-    }
-    if (file && key[file]) return t(key[file])
+    if (file && WORKFLOW_LABEL_KEY[file]) return t(WORKFLOW_LABEL_KEY[file])
     return fallback ?? t("actionsBanner.workflow.generic")
   }
 

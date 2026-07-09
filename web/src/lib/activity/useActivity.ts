@@ -1,7 +1,7 @@
-import { useCallback, useMemo, useSyncExternalStore } from "react"
+import { useMemo, useSyncExternalStore } from "react"
 
 import {
-  clearActivity,
+  activityForOrg,
   getActivitySnapshot,
   subscribeActivity,
   type ActivityEntry,
@@ -14,20 +14,19 @@ import {
 // subtree.
 export function useActivity(org: string | undefined): {
   entries: ActivityEntry[]
-  clear: () => void
 } {
   const snapshot = useSyncExternalStore(subscribeActivity, getActivitySnapshot)
 
-  // Most-recent-first, org-scoped view derived from the raw snapshot.
-  const entries = useMemo(() => {
-    if (!org) return []
-    return snapshot
-      .filter((e) => e.org === org)
-      .slice()
-      .reverse()
-  }, [snapshot, org])
+  // Newest-first, org-scoped, TTL-applied view. Derives from activityForOrg so
+  // the reactive timeline uses the SAME filter+TTL contract as readActivity()
+  // and the diagnostics snapshot. `snapshot` is the store's live entries array
+  // (same reference activityForOrg reads); depending on it re-derives on every
+  // store mutation. activityForOrg returns most-recent-last, so reverse.
+  const entries = useMemo(
+    () => activityForOrg(org).slice().reverse(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [snapshot, org],
+  )
 
-  const clear = useCallback(() => clearActivity(), [])
-
-  return { entries, clear }
+  return { entries }
 }
