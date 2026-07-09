@@ -752,7 +752,7 @@ export const SidebarFooter = () => {
       ) : null}
       <div
         ref={footerRef}
-        className={`relative cursor-pointer border-t border-neutral-content/20 py-4 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
+        className={`relative cursor-pointer border-t border-neutral-content/20 py-3 transition-colors hover:bg-[var(--sidebar-surface)]/60 ${org ? "" : "mt-auto"}`}
         onClick={() => setMenuOpen((open) => !open)}
         role="button"
         tabIndex={0}
@@ -918,26 +918,26 @@ export const SidebarFooter = () => {
         </div>
 
         <div
-          className={`flex w-full items-center gap-3 text-left ${collapsed ? "justify-center" : "justify-start"}`}
+          className={`flex w-full items-center gap-2.5 text-left ${collapsed ? "justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">
             <img
               src={avatar_img}
               alt={t("nav.avatarAlt", { name })}
-              className={`rounded-full ${collapsed ? "w-8" : "w-9"}`}
+              className={`rounded-full ${collapsed ? "w-7" : "w-8"}`}
             />
           </div>
 
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <div className="truncate font-medium text-neutral-content">
+              <div className="truncate text-sm font-medium text-neutral-content">
                 {name}
               </div>
 
               {org ? (
                 <div className="flex items-center gap-1.5">
-                  <span className="text-neutral-content/60">
+                  <span className="text-xs text-neutral-content/60">
                     {labelPending ? (
                       <span className="skeleton inline-block h-3 w-16 align-middle bg-neutral-content/10" />
                     ) : (
