@@ -10,8 +10,9 @@ import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { EmptyState } from "@/components/list"
 import RequireTeacher from "@/components/RequireTeacher"
+import { DiagnosticsDialog } from "@/components/DiagnosticsDialog"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
+import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { configCommitsQuery } from "@/hooks/github/queries"
 import {
@@ -27,7 +28,6 @@ import {
   sessionToItems,
   timelineToCsvRows,
 } from "@/lib/activity/timeline"
-import { buildDiagnostics } from "@/lib/diagnostics/snapshot"
 import {
   ActivityToolbar,
   type ActivityFilterState,
@@ -57,6 +57,10 @@ const OrgActivityPage = () => {
   const client = useOptionalGitHubClient()
 
   const { entries } = useActivity(org)
+  // Org plan for the diagnostics snapshot (owners only; undefined otherwise —
+  // the snapshot then reports "unknown" with a reason). Same source the About
+  // dialog threads in, so both snapshots agree.
+  const { data: orgPlanDetails } = useGetOrgPlanDetails(org)
   // "Load older" grows the page window rather than paging, so a single query
   // holds the whole accumulated window (avoids infinite-query plumbing and the
   // append/replace bug of bumping `page`). Capped at GitHub's per_page max.
@@ -67,6 +71,7 @@ const OrgActivityPage = () => {
     sources: new Set(),
     types: new Set(),
   })
+  const [diagnosticsOpen, setDiagnosticsOpen] = useState(false)
 
   // Reuse the banner's i18n workflow labels; fall back to the run's own title.
   const runLabel = (file: string | undefined, fallback: string | undefined) => {
@@ -105,9 +110,6 @@ const OrgActivityPage = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [entries, commits.data, runs.data, filters, query])
 
-  const diagnostics = buildDiagnostics({ org })
-  const { copied, copy } = useCopyToClipboard(diagnostics)
-
   // Export the currently-shown (filtered + searched) timeline as a CSV download.
   const exportCsv = () => {
     const csv = Papa.unparse(timelineToCsvRows(items), { header: true })
@@ -141,9 +143,15 @@ const OrgActivityPage = () => {
           filters={filters}
           onFiltersChange={setFilters}
           onExportCsv={exportCsv}
-          onCopyDiagnostics={() => void copy()}
-          copied={copied}
+          onShowDiagnostics={() => setDiagnosticsOpen(true)}
           resultCount={items.length}
+        />
+
+        <DiagnosticsDialog
+          open={diagnosticsOpen}
+          onClose={() => setDiagnosticsOpen(false)}
+          org={org}
+          planName={orgPlanDetails?.plan?.name}
         />
 
         {sourceError && (

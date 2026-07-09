@@ -85,7 +85,7 @@ export const AboutDialog = forwardRef<
   return (
     <Modal
       ref={ref}
-      size="md"
+      size="2xl"
       boxClassName="flex max-h-[85vh] flex-col overflow-y-auto text-base-content"
       aria-labelledby={titleId}
     >

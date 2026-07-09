@@ -28,7 +28,11 @@ vi.mock("react-i18next", async (importActual) => {
 })
 vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => null,
+  useGitHubClient: () => null,
 }))
+// useGetOrgPlanDetails runs a useQuery under the hood; the generic useQuery
+// mock below makes it inert (returns { data: [] }), so no plan is threaded —
+// exactly the non-owner "unknown plan" path, which is fine for this unit.
 // With a null client both persistent queries are disabled; make useQuery inert
 // so the page renders from the session store alone.
 vi.mock("@tanstack/react-query", async (importActual) => {

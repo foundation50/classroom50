@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Check, ClipboardCopy, Download, Search, X } from "lucide-react"
+import { Download, FileText, Search, X } from "lucide-react"
 
 import { Button, Input, LabeledControl, Select } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"
@@ -49,7 +49,7 @@ function toSet<T extends string>(value: string): Set<T> {
 }
 
 // The unified Activity toolbar: one wrapping bar with search + Source/Type
-// filters on the left and the Export CSV / Copy diagnostics actions pushed right
+// filters on the left and the Export CSV / Show diagnostics actions pushed right
 // — the same shape as the org home and submissions toolbars.
 export function ActivityToolbar({
   query,
@@ -57,8 +57,7 @@ export function ActivityToolbar({
   filters,
   onFiltersChange,
   onExportCsv,
-  onCopyDiagnostics,
-  copied,
+  onShowDiagnostics,
   resultCount,
 }: {
   query: string
@@ -66,8 +65,7 @@ export function ActivityToolbar({
   filters: ActivityFilterState
   onFiltersChange: (next: ActivityFilterState) => void
   onExportCsv: () => void
-  onCopyDiagnostics: () => void
-  copied: boolean
+  onShowDiagnostics: () => void
   resultCount: number
 }) {
   const { t } = useTranslation()
@@ -144,13 +142,9 @@ export function ActivityToolbar({
           <Download aria-hidden="true" className="size-4" />
           {t("orgActivity.exportCsv")}
         </Button>
-        <Button variant="outline" size="sm" onClick={onCopyDiagnostics}>
-          {copied ? (
-            <Check aria-hidden="true" className="size-4" />
-          ) : (
-            <ClipboardCopy aria-hidden="true" className="size-4" />
-          )}
-          {copied ? t("orgActivity.copied") : t("orgActivity.copyDiagnostics")}
+        <Button variant="outline" size="sm" onClick={onShowDiagnostics}>
+          <FileText aria-hidden="true" className="size-4" />
+          {t("orgActivity.showDiagnostics")}
         </Button>
       </div>
     </div>

@@ -1582,8 +1582,13 @@
   "orgActivity": {
     "heading": "Activity",
     "subtitle": "Config changes, workflow runs, and this session's errors for the organization, newest first.",
-    "copyDiagnostics": "Copy diagnostics",
-    "copied": "Copied",
+    "showDiagnostics": "Show diagnostics",
+    "diagnostics": {
+      "title": "Diagnostics",
+      "description": "Technical details you can paste into a bug report or support thread. Nothing is sent anywhere — this only fills your clipboard.",
+      "copy": "Copy to clipboard",
+      "copied": "Copied"
+    },
     "clear": "Clear",
     "exportCsv": "Export CSV",
     "searchPlaceholder": "Search activity...",
