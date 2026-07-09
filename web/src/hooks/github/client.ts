@@ -1,5 +1,6 @@
 import { GitHubAPIError, readGitHubRateLimitHeaders } from "./errors"
 import { logger } from "@/lib/logger"
+import { countApiCall, publishRateLimit } from "@/lib/diagnostics/rateLimit"
 
 const log = logger.scope("github:client")
 
@@ -48,6 +49,10 @@ export function createGitHubClient(args: {
     path: string,
     options: GitHubRequestOptions = { method: "GET" },
   ): Promise<Response> {
+    // Count every outbound call at the single choke point (covers request +
+    // requestRaw) — before the fetch, so a thrown/timed-out call still counts.
+    countApiCall()
+
     const url = path.startsWith("http")
       ? path
       : `${apiBaseUrl}${path.startsWith("/") ? path : `/${path}`}`
@@ -93,7 +98,9 @@ export function createGitHubClient(args: {
     })
 
     const rateLimit = readGitHubRateLimitHeaders(res)
-    log.debug("rate limit headers", { rateLimit })
+    // Publish to the dev rate-limit overlay instead of logging per-response
+    // (that flooded the console). No-op in prod (nothing subscribes).
+    publishRateLimit(rateLimit)
 
     if (!res.ok) {
       let body: unknown

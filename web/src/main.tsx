@@ -20,6 +20,7 @@ import App from "./App"
 import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
 import { recordError } from "./lib/activity/activityStore"
+import { RateLimitOverlay } from "./components/dev/RateLimitOverlay"
 
 // Record every failed mutation as session activity. Mutations are the app's
 // real write operations (create/delete/dispatch/enroll), so a rejection here is
@@ -61,7 +62,10 @@ createRoot(document.getElementById("root")!).render(
               </NotificationProvider>
             </ActionActivityProvider>
             {import.meta.env.DEV && (
-              <ReactQueryDevtools initialIsOpen={false} />
+              <>
+                <ReactQueryDevtools initialIsOpen={false} />
+                <RateLimitOverlay />
+              </>
             )}
           </GitHubClientProviderFromAuth>
         </GitHubAuthProvider>
