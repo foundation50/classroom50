@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, ReactNode, Ref } from "react"
 
-import { cx } from "./cx"
+import { cx, hasUtility } from "./cx"
 
 // The canonical text input. Wraps daisyUI `input input-bordered w-full` so the
 // two competing conventions (`input w-full` vs `input input-bordered`) converge
@@ -42,7 +42,7 @@ export function Input({
   // trailing `w-full` in the recipe would otherwise beat a per-site `w-32` (cx
   // doesn't merge Tailwind classes, and same-property source order is
   // unspecified).
-  const hasWidth = className ? /(?:^|\s)w-/.test(className) : false
+  const hasWidth = hasUtility("w-", className)
 
   // With a leading icon, the border lives on the wrapping <label> (daisyUI's
   // documented pattern) and the <input> is a bare grower — a single border

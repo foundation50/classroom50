@@ -1,17 +1,14 @@
 import { Search } from "lucide-react"
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 
-import { cx } from "./cx"
+import { cx, hasUtility } from "./cx"
 import { Input, type InputSize } from "./Input"
 import { LabeledControl } from "./LabeledControl"
 import { Select, type SelectSize } from "./Select"
 
-// The shared toolbar shell + slots. One source for the filter/action-bar recipes
-// each page used to hand-roll: the `flex flex-wrap items-center gap-2` container,
-// the search input, the labelled select, the `ml-auto` trailing group, and the
-// selection-aware bulk-actions region. Pages compose the slots they need; the
-// shell stays presentational. `header` switches to the table-header chrome the
-// bulk bars use (border + wider gap) so both species share one shell.
+// The shared toolbar shell + slots that replace the per-page hand-rolled bars.
+// `header` swaps the filter-bar chrome for the bulk-bar table-header chrome so
+// both species share one shell.
 
 export type ToolbarProps = {
   header?: boolean
@@ -24,10 +21,9 @@ export function Toolbar({
   children,
   ...props
 }: ToolbarProps) {
-  // Let a caller override the default gap (mirrors Input/Select's width guard):
-  // cx doesn't merge Tailwind classes, so a stray default `gap-2` would beat a
-  // per-site `gap-3`.
-  const hasGap = className ? /(?:^|\s)gap-/.test(className) : false
+  // A caller gap (e.g. gap-3) overrides the default; without the guard cx would
+  // emit both, and Tailwind source order is unspecified.
+  const hasGap = hasUtility("gap-", className)
   return (
     <div
       className={cx(

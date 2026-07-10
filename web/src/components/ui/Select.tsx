@@ -1,6 +1,6 @@
 import type { ComponentPropsWithoutRef, Ref } from "react"
 
-import { cx } from "./cx"
+import { cx, hasUtility } from "./cx"
 
 // The canonical select. Wraps daisyUI `select select-bordered w-full` to match
 // the Input convention. `invalid` adds `select-error`; `selectSize` maps size
@@ -27,7 +27,7 @@ export function Select({
   children,
   ...props
 }: SelectProps) {
-  const hasWidth = className ? /(?:^|\s)w-/.test(className) : false
+  const hasWidth = hasUtility("w-", className)
   return (
     <select
       className={cx(
