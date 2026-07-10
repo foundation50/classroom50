@@ -1,8 +1,8 @@
-import { Search, X } from "lucide-react"
+import { X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Input, LabeledControl, Select } from "@/components/ui"
+import { Button, Toolbar } from "@/components/ui"
 import type {
   StatusSelectValue,
   SubmissionFilters,
@@ -13,29 +13,6 @@ import {
   applyStatusSelection,
   statusSelectValue,
 } from "@/pages/submissions/dashboard"
-
-// A select glued to a labelled prefix (the org/classroom toolbar convention)
-// via the shared LabeledControl primitive, so each dropdown reads as
-// "Status: All" and its purpose is clear at a glance.
-const LabeledSelect = ({
-  label,
-  className,
-  children,
-  ...props
-}: {
-  label: string
-  className?: string
-} & React.ComponentPropsWithoutRef<"select">) => (
-  <LabeledControl label={label}>
-    <Select
-      selectSize="sm"
-      className={`join-item w-auto min-w-0${className ? ` ${className}` : ""}`}
-      {...props}
-    >
-      {children}
-    </Select>
-  </LabeledControl>
-)
 
 // Search + sort + filter controls for the assignment overview dashboard.
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The
@@ -91,26 +68,20 @@ const SubmissionsControls = ({
     onFiltersChange(applyStatusSelection(filters, value))
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input
-        type="search"
-        inputSize="sm"
-        className="min-w-[12rem] flex-1 sm:max-w-xs"
-        leadingIcon={
-          <Search aria-hidden="true" className="size-4 opacity-60" />
-        }
+    <Toolbar>
+      <Toolbar.Search
         placeholder={
           isGroup
             ? t("submissions.filters.searchGroupPlaceholder")
             : t("submissions.filters.searchStudentPlaceholder")
         }
         value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        aria-label={t("submissions.filters.searchAria")}
+        onChange={onQueryChange}
+        ariaLabel={t("submissions.filters.searchAria")}
       />
 
       {sections.length > 0 && (
-        <LabeledSelect
+        <Toolbar.FilterSelect
           label={t("submissions.filters.sectionLabel")}
           className="max-w-[10rem]"
           value={filters.section}
@@ -125,10 +96,10 @@ const SubmissionsControls = ({
               {section}
             </option>
           ))}
-        </LabeledSelect>
+        </Toolbar.FilterSelect>
       )}
 
-      <LabeledSelect
+      <Toolbar.FilterSelect
         label={t("submissions.filters.submissionLabel")}
         value={statusValue}
         onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
@@ -156,10 +127,10 @@ const SubmissionsControls = ({
             </option>
           </>
         )}
-      </LabeledSelect>
+      </Toolbar.FilterSelect>
 
       {passingAvailable && (
-        <LabeledSelect
+        <Toolbar.FilterSelect
           label={t("submissions.filters.passingLabel")}
           value={filters.passing}
           // Disabled when filtering to non-submitters: they have no grade, so a
@@ -176,7 +147,7 @@ const SubmissionsControls = ({
           <option value="all">{t("submissions.filters.allGrades")}</option>
           <option value="passing">{t("submissions.filters.passing")}</option>
           <option value="failing">{t("submissions.filters.failing")}</option>
-        </LabeledSelect>
+        </Toolbar.FilterSelect>
       )}
 
       {hasActiveFilter && (
@@ -186,8 +157,8 @@ const SubmissionsControls = ({
         </Button>
       )}
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        <LabeledSelect
+      <Toolbar.Trailing>
+        <Toolbar.FilterSelect
           label={t("submissions.filters.sortLabel")}
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
@@ -201,10 +172,10 @@ const SubmissionsControls = ({
           <option value="name-desc">
             {t("submissions.filters.sortNameDesc")}
           </option>
-        </LabeledSelect>
+        </Toolbar.FilterSelect>
         {trailing}
-      </div>
-    </div>
+      </Toolbar.Trailing>
+    </Toolbar>
   )
 }
 

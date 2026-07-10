@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
-import { Download, FileText, Search, X } from "lucide-react"
+import { Download, FileText, X } from "lucide-react"
 
-import { Button, Input, LabeledControl, Select } from "@/components/ui"
+import { Button, Toolbar } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"
 
 export type ActivityFilterState = {
@@ -22,21 +22,6 @@ const TYPE_ORDER: TimelineType[] = [
   "error",
   "action",
 ]
-
-// A labeled single-select in the shared toolbar prefix style ("Source: All").
-const LabeledSelect = ({
-  label,
-  children,
-  ...props
-}: {
-  label: string
-} & React.ComponentPropsWithoutRef<"select">) => (
-  <LabeledControl label={label}>
-    <Select selectSize="sm" className="join-item w-auto min-w-0" {...props}>
-      {children}
-    </Select>
-  </LabeledControl>
-)
 
 // Read/write a single-select value backed by a Set: "" = all (empty set), else a
 // one-element set.
@@ -79,21 +64,15 @@ export function ActivityToolbar({
   }
 
   return (
-    <div className="mt-6 flex flex-wrap items-center gap-2">
-      <Input
-        type="search"
-        inputSize="sm"
-        className="min-w-[12rem] flex-1 sm:max-w-xs"
-        leadingIcon={
-          <Search aria-hidden="true" className="size-4 opacity-60" />
-        }
+    <Toolbar className="mt-6">
+      <Toolbar.Search
         placeholder={t("orgActivity.searchPlaceholder")}
-        aria-label={t("orgActivity.searchLabel")}
+        ariaLabel={t("orgActivity.searchLabel")}
         value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
+        onChange={onQueryChange}
       />
 
-      <LabeledSelect
+      <Toolbar.FilterSelect
         label={t("orgActivity.filters.source")}
         value={selectValue(filters.sources)}
         aria-label={t("orgActivity.filters.source")}
@@ -107,9 +86,9 @@ export function ActivityToolbar({
             {t(`orgActivity.source.${s}`)}
           </option>
         ))}
-      </LabeledSelect>
+      </Toolbar.FilterSelect>
 
-      <LabeledSelect
+      <Toolbar.FilterSelect
         label={t("orgActivity.filters.type")}
         value={selectValue(filters.types)}
         aria-label={t("orgActivity.filters.type")}
@@ -123,7 +102,7 @@ export function ActivityToolbar({
             {t(`orgActivity.type.${ty}`)}
           </option>
         ))}
-      </LabeledSelect>
+      </Toolbar.FilterSelect>
 
       {hasActiveFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll}>
@@ -132,7 +111,7 @@ export function ActivityToolbar({
         </Button>
       )}
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
+      <Toolbar.Trailing>
         <Button
           variant="outline"
           size="sm"
@@ -146,7 +125,7 @@ export function ActivityToolbar({
           <FileText aria-hidden="true" className="size-4" />
           {t("orgActivity.showDiagnostics")}
         </Button>
-      </div>
-    </div>
+      </Toolbar.Trailing>
+    </Toolbar>
   )
 }

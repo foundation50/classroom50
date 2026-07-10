@@ -1,35 +1,12 @@
-import { Search, X } from "lucide-react"
+import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button, Input, LabeledControl, Select } from "@/components/ui"
+import { Button, Toolbar } from "@/components/ui"
 import {
   DEFAULT_FILTERS,
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-
-// A select glued to a labelled prefix (the org/classroom toolbar convention)
-// via the shared LabeledControl primitive, so each dropdown reads as
-// "Type: All" and its purpose is clear at a glance.
-const LabeledSelect = ({
-  label,
-  className,
-  children,
-  ...props
-}: {
-  label: string
-  className?: string
-} & React.ComponentPropsWithoutRef<"select">) => (
-  <LabeledControl label={label}>
-    <Select
-      selectSize="sm"
-      className={`join-item w-auto min-w-0${className ? ` ${className}` : ""}`}
-      {...props}
-    >
-      {children}
-    </Select>
-  </LabeledControl>
-)
 
 // Search + type/due filters + sort for the teacher assignments table.
 // Controlled by TeacherAssignmentsView; emits query/filter/sort changes.
@@ -58,21 +35,15 @@ const AssignmentsToolbar = ({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <Input
-        type="search"
-        inputSize="sm"
-        className="min-w-[12rem] flex-1 sm:max-w-xs"
-        leadingIcon={
-          <Search aria-hidden="true" className="size-4 opacity-60" />
-        }
+    <Toolbar>
+      <Toolbar.Search
         placeholder={t("assignments.toolbar.searchPlaceholder")}
         value={query}
-        onChange={(e) => onQueryChange(e.target.value)}
-        aria-label={t("assignments.toolbar.searchAria")}
+        onChange={onQueryChange}
+        ariaLabel={t("assignments.toolbar.searchAria")}
       />
 
-      <LabeledSelect
+      <Toolbar.FilterSelect
         label={t("assignments.toolbar.typeLabel")}
         value={filters.type}
         onChange={(e) =>
@@ -88,9 +59,9 @@ const AssignmentsToolbar = ({
           {t("assignments.toolbar.typeIndividual")}
         </option>
         <option value="group">{t("assignments.toolbar.typeGroup")}</option>
-      </LabeledSelect>
+      </Toolbar.FilterSelect>
 
-      <LabeledSelect
+      <Toolbar.FilterSelect
         label={t("assignments.toolbar.dueLabel")}
         value={filters.due}
         onChange={(e) =>
@@ -105,7 +76,7 @@ const AssignmentsToolbar = ({
         <option value="has-due">{t("assignments.toolbar.dueHas")}</option>
         <option value="no-due">{t("assignments.toolbar.dueNone")}</option>
         <option value="overdue">{t("assignments.toolbar.dueOverdue")}</option>
-      </LabeledSelect>
+      </Toolbar.FilterSelect>
 
       {hasActiveFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll}>
@@ -114,8 +85,8 @@ const AssignmentsToolbar = ({
         </Button>
       )}
 
-      <div className="ml-auto flex flex-wrap items-center gap-2">
-        <LabeledSelect
+      <Toolbar.Trailing>
+        <Toolbar.FilterSelect
           label={t("assignments.toolbar.sortLabel")}
           value={sort}
           onChange={(e) => onSortChange(e.target.value as AssignmentSort)}
@@ -132,9 +103,9 @@ const AssignmentsToolbar = ({
             {t("assignments.toolbar.sortDueDesc")}
           </option>
           <option value="type">{t("assignments.toolbar.sortType")}</option>
-        </LabeledSelect>
-      </div>
-    </div>
+        </Toolbar.FilterSelect>
+      </Toolbar.Trailing>
+    </Toolbar>
   )
 }
 
