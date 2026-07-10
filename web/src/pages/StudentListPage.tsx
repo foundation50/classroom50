@@ -41,18 +41,20 @@ const StudentListContent = ({
   const [inviteOpen, setInviteOpen] = useState(false)
 
   // Counts from the team roster (same source as EnrolledStudents), so header
-  // and list agree. Enrollment is team membership, not the CSV. roleCounts is
-  // by role so the header reports students separately from staff (the enrolled
-  // total includes instructors/TAs, which would overcount "students").
+  // and list agree. Enrollment is team membership, not the CSV. The header shows
+  // one union total (distinct enrolled people across the student + staff teams —
+  // counts.enrolled, already de-duplicated per person) followed by a per-role
+  // breakdown (roleCounts tallies each role a person holds).
   const {
+    counts,
     roleCounts,
     isLoading: rosterLoading,
     isError: rosterError,
   } = useTeamRoster(org, classroom, students)
   const countReady = !rosterLoading && !rosterError
-  // Staff head counts appear independently, each shown only when the class has
-  // at least one enrolled member in that role — so an instructor-only class
-  // still surfaces its instructor count (a TA-less class no longer hides it).
+  // Per-role breakdown badges after the member total; each shown only when the
+  // class has at least one enrolled member in that role.
+  const showStudentCount = roleCounts.student > 0
   const showInstructorCount = roleCounts.instructor > 0
   const showTaCount = roleCounts.ta > 0
 
@@ -64,13 +66,22 @@ const StudentListContent = ({
           <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
             {countReady ? (
               <>
-                <Badge
-                  tone={ROLE_BADGE_TONE.student}
-                  ghost
-                  className="shrink-0"
-                >
-                  {t("students.enrolledCount", { count: roleCounts.student })}
+                <Badge tone="neutral" ghost className="shrink-0">
+                  {t("students.membersEnrolledCount", {
+                    count: counts.enrolled,
+                  })}
                 </Badge>
+                {showStudentCount ? (
+                  <Badge
+                    tone={ROLE_BADGE_TONE.student}
+                    ghost
+                    className="shrink-0"
+                  >
+                    {t("students.roleStudentCount", {
+                      count: roleCounts.student,
+                    })}
+                  </Badge>
+                ) : null}
                 {showInstructorCount ? (
                   <Badge tone={ROLE_BADGE_TONE.instructor} className="shrink-0">
                     {t("students.instructorCount", {

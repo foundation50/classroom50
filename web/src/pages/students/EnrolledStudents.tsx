@@ -40,6 +40,7 @@ import {
   ROLE_LABEL_KEY,
   ROLE_BADGE_TONE,
   hasStudentEnrollment,
+  primaryRole,
 } from "@/util/rosterRoles"
 import {
   filterRosterRows,
@@ -496,11 +497,14 @@ const EnrolledStudents = ({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {row.roles
-            .filter((role) => role !== "student" || row.roles.length === 1)
-            .map((role) => (
+          {(() => {
+            // Show only the person's highest-precedence role (instructor > ta >
+            // student), so a member on multiple teams reads as one primary role
+            // rather than a stack of chips. The student chip uses the neutral
+            // ghost style; staff roles use their tone.
+            const role = primaryRole(row)
+            return (
               <Badge
-                key={role}
                 size="sm"
                 tone={ROLE_BADGE_TONE[role]}
                 ghost={role === "student"}
@@ -508,7 +512,8 @@ const EnrolledStudents = ({
               >
                 {t(ROLE_LABEL_KEY[role])}
               </Badge>
-            ))}
+            )
+          })()}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
               {row.section.trim()}
