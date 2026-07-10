@@ -1,10 +1,19 @@
 import { Link, useParams } from "@tanstack/react-router"
 import { ChevronDown, Copy, Plus } from "lucide-react"
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import AssignmentsTable from "@/pages/assignments/AssignmentsTable"
+import AssignmentsToolbar from "@/pages/assignments/AssignmentsToolbar"
+import {
+  DEFAULT_FILTERS,
+  DEFAULT_SORT,
+  filterAndSortAssignments,
+  type AssignmentFilters,
+  type AssignmentSort,
+} from "@/pages/assignments/assignmentList"
 import { Button } from "@/components/ui"
+import { NoSearchResults } from "@/components/list"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
@@ -112,6 +121,25 @@ const TeacherAssignmentsView = ({
   const archived = isClassroomArchived(classroomData ?? {})
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
+  const [query, setQuery] = useState("")
+  const [filters, setFilters] = useState<AssignmentFilters>(DEFAULT_FILTERS)
+  const [sort, setSort] = useState<AssignmentSort>(DEFAULT_SORT)
+
+  const sourceAssignments = classData?.assignments
+  const visible = useMemo(
+    () =>
+      filterAndSortAssignments(sourceAssignments ?? [], {
+        query,
+        filters,
+        sort,
+      }),
+    [sourceAssignments, query, filters, sort],
+  )
+
+  const hasAssignments = (sourceAssignments?.length ?? 0) > 0
+  const showToolbar = !assignmentsLoading && hasAssignments
+  const showNoResults = showToolbar && visible.length === 0
+
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
@@ -163,14 +191,36 @@ const TeacherAssignmentsView = ({
           hasRosterRows={emptyRoster.hasRosterRows}
         />
       ) : null}
-      <AssignmentsTable
-        org={org}
-        classroom={classroom}
-        assignments={classData?.assignments}
-        students={students}
-        loading={assignmentsLoading}
-        archived={archived}
-      />
+      {showToolbar && (
+        <AssignmentsToolbar
+          query={query}
+          onQueryChange={setQuery}
+          filters={filters}
+          onFiltersChange={setFilters}
+          sort={sort}
+          onSortChange={setSort}
+        />
+      )}
+      {showNoResults ? (
+        <NoSearchResults
+          title={t("assignments.toolbar.noResultsTitle")}
+          body={t("assignments.toolbar.noResultsBody")}
+          clearLabel={t("assignments.toolbar.clear")}
+          onClear={() => {
+            setQuery("")
+            setFilters({ ...DEFAULT_FILTERS })
+          }}
+        />
+      ) : (
+        <AssignmentsTable
+          org={org}
+          classroom={classroom}
+          assignments={hasAssignments ? visible : sourceAssignments}
+          students={students}
+          loading={assignmentsLoading}
+          archived={archived}
+        />
+      )}
     </div>
   )
 }

@@ -111,9 +111,9 @@ describe("filterAndSortAssignments — due filter", () => {
   })
 
   it("overdue returns only past-due with injected now", () => {
-    expect(
-      names(run(list, { filters: { due: "overdue" }, now: NOW })),
-    ).toEqual(["Past"])
+    expect(names(run(list, { filters: { due: "overdue" }, now: NOW }))).toEqual(
+      ["Past"],
+    )
   })
 
   it("treats a bare date as end-of-local-day, not UTC midnight", () => {
@@ -178,10 +178,7 @@ describe("filterAndSortAssignments — sort", () => {
 
 describe("filterAndSortAssignments — invariants", () => {
   it("does not mutate the input array", () => {
-    const list = [
-      assignment({ name: "Beta" }),
-      assignment({ name: "Alpha" }),
-    ]
+    const list = [assignment({ name: "Beta" }), assignment({ name: "Alpha" })]
     filterAndSortAssignments(list, {
       query: "",
       filters: DEFAULT_FILTERS,

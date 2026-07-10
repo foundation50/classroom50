@@ -6,11 +6,7 @@ import type { Assignment } from "@/types/classroom"
 import { dueDeadlineInstant } from "@/util/formatDate"
 
 export type AssignmentSort =
-  | "name-asc"
-  | "name-desc"
-  | "due-asc"
-  | "due-desc"
-  | "type"
+  "name-asc" | "name-desc" | "due-asc" | "due-desc" | "type"
 
 export type TypeFilter = "all" | "individual" | "group"
 export type DueFilter = "all" | "has-due" | "no-due" | "overdue"
@@ -75,8 +71,7 @@ const sortAssignments = (
   sort: AssignmentSort,
 ): Assignment[] => {
   const list = [...assignments]
-  const byName = (a: Assignment, b: Assignment) =>
-    a.name.localeCompare(b.name)
+  const byName = (a: Assignment, b: Assignment) => a.name.localeCompare(b.name)
 
   const byDue = (a: Assignment, b: Assignment, dir: 1 | -1) => {
     const ta = dueInstant(a)?.getTime() ?? null
@@ -97,9 +92,7 @@ const sortAssignments = (
     case "due-desc":
       return list.sort((a, b) => byDue(a, b, -1))
     case "type":
-      return list.sort(
-        (a, b) => a.mode.localeCompare(b.mode) || byName(a, b),
-      )
+      return list.sort((a, b) => a.mode.localeCompare(b.mode) || byName(a, b))
   }
 }
 
