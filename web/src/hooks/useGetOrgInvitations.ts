@@ -5,10 +5,13 @@ import {
   getOrgInvitations,
   getOrgFailedInvitations,
 } from "./github/queries"
-import { GitHubAPIError } from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 
 // Owner-only endpoints; a non-owner token gets 403, surfaced as `isForbidden`
-// so the UI can explain why invite status is hidden.
+// so the UI can explain why invite status is hidden. 403/404 stay definitive
+// (no retry) so isForbidden resolves at once; a transient 5xx/429 self-heals
+// rather than silently rendering zero pending (the roster treats an empty
+// invitations list as authoritative).
 const useGetOrgInvitations = (org: string) => {
   const client = useGitHubClient()
 
@@ -17,7 +20,7 @@ const useGetOrgInvitations = (org: string) => {
     queryFn: () => getOrgInvitations(client, org),
     enabled: Boolean(org),
     staleTime: 60 * 1000,
-    retry: false,
+    retry: retryTransientGitHubError,
   })
 
   const failedQuery = useQuery({
@@ -25,7 +28,7 @@ const useGetOrgInvitations = (org: string) => {
     queryFn: () => getOrgFailedInvitations(client, org),
     enabled: Boolean(org),
     staleTime: 60 * 1000,
-    retry: false,
+    retry: retryTransientGitHubError,
   })
 
   const isForbidden = [invitationsQuery.error, failedQuery.error].some(

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   countByRole,
   enrolledCountsByRole,
-  isStudentOnly,
+  hasStudentEnrollment,
   sortRolesByRank,
 } from "./rosterRoles"
 import type {
@@ -28,16 +28,16 @@ const row = (
     avatar_url: "",
   }) as TeamRosterRow
 
-describe("isStudentOnly", () => {
+describe("hasStudentEnrollment", () => {
   it("is true for a sole student role", () => {
-    expect(isStudentOnly(row(["student"]))).toBe(true)
+    expect(hasStudentEnrollment(row(["student"]))).toBe(true)
   })
-  it("is false for a staff role", () => {
-    expect(isStudentOnly(row(["ta"]))).toBe(false)
-    expect(isStudentOnly(row(["instructor"]))).toBe(false)
+  it("is false for a pure staff role", () => {
+    expect(hasStudentEnrollment(row(["ta"]))).toBe(false)
+    expect(hasStudentEnrollment(row(["instructor"]))).toBe(false)
   })
-  it("is false for a student who is also staff", () => {
-    expect(isStudentOnly(row(["instructor", "student"]))).toBe(false)
+  it("is true for a student who is also staff (unenroll drops only the student side)", () => {
+    expect(hasStudentEnrollment(row(["instructor", "student"]))).toBe(true)
   })
 })
 

@@ -19,25 +19,18 @@ import {
   type TeamRosterRowState,
 } from "@/util/teamRoster"
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
-import { GitHubAPIError } from "@/hooks/github/errors"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
-// A GitHub 403 (owner-only endpoint) — the signal that pending invitations
-// can't be read. Exported for the pendingHidden unit test.
-export function isForbiddenError(err: unknown): boolean {
-  return err instanceof GitHubAPIError && err.isForbidden
-}
-
-// Pending is owner-only across ALL sources (org invitations + each staff team's
-// invitations require org-owner scope and move together). Hide pending if any
-// source is forbidden so the view shows one "owners only" note rather than a
-// partial pending list. A 404 (uncreated team) is not forbidden and never hides.
-export function computePendingHidden(
-  invitesForbidden: boolean,
-  staffInviteErrors: unknown[],
-): boolean {
-  return invitesForbidden || staffInviteErrors.some(isForbiddenError)
+// Pending is owner-only, and the ORG-level invitations endpoint is the
+// authoritative owner check: a non-owner gets 403 there and we hide all pending
+// behind one "owners only" note. A single STAFF team's 403 is NOT a hide-all
+// signal — when org invitations are readable the viewer is an owner, so a
+// per-team 403 (or any per-team error) just omits that one team's pending
+// (handled at the call site via `data ?? []`) rather than blacking out the
+// readable org + sibling-team pending too.
+export function computePendingHidden(invitesForbidden: boolean): boolean {
+  return invitesForbidden
 }
 
 export type UseTeamRosterResult = {
@@ -134,21 +127,24 @@ export function useTeamRoster(
   )
   const taInvitesQuery = useQuery(teamInvitationsQuery(client, org, taSlug))
 
-  const pendingHidden = computePendingHidden(invitesForbidden, [
-    instructorInvitesQuery.error,
-    taInvitesQuery.error,
-  ])
+  const pendingHidden = computePendingHidden(invitesForbidden)
 
   const rows = useMemo(
     () =>
       buildTeamRoster({
         members: members ?? [],
         // A non-owner can't read invitations; pass none rather than a partial.
+        // (org invitations forbidden => pendingHidden => the whole pending
+        // section collapses to the owners-only note.)
         invitations: pendingHidden ? [] : invitations,
         staffMembers: {
           instructor: instructorMembers ?? [],
           ta: taMembers ?? [],
         },
+        // Each staff team's pending is independent: an owner who can read org
+        // invitations but hits a per-team 403/error still sees the readable
+        // teams' pending — that team's `data` is undefined -> [] (omitted), not
+        // a hide-all. Zeroed wholesale only when pendingHidden (non-owner).
         staffInvitations: pendingHidden
           ? {}
           : {

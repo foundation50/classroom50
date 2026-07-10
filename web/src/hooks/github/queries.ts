@@ -18,7 +18,7 @@ import type {
 } from "./types"
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
-import { GitHubAPIError } from "./errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./errors"
 import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
@@ -1110,7 +1110,10 @@ export function teamInvitationsQuery(
     queryFn: () => listTeamInvitations(client, org, teamSlug),
     enabled: Boolean(org && teamSlug),
     staleTime: 60 * 1000,
-    retry: false,
+    // 403 (owner-only) / 404 stay definitive so pendingHidden / [] resolve at
+    // once; a transient 5xx/429 self-heals rather than silently rendering zero
+    // pending for the role with no retry (the query error isn't in isError).
+    retry: retryTransientGitHubError,
   })
 }
 

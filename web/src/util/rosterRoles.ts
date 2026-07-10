@@ -30,11 +30,17 @@ export const ROLE_BADGE_TONE: Record<RosterRole, BadgeTone> = {
   student: "neutral",
 }
 
-// A row is student-only when its sole role is "student". Staff (instructor/TA),
-// and staff who are also students, are NOT student-only. Drives bulk-select
-// eligibility (unenroll is a student-roster action) and the student count.
-export function isStudentOnly(row: Pick<TeamRosterRow, "roles">): boolean {
-  return row.roles.length === 1 && row.roles[0] === "student"
+// Whether a row carries a student enrollment (a students.csv row + student-team
+// membership). True for a plain student AND for a student who is also staff.
+// The single definition of "can be unenrolled": unenroll drops only the student
+// enrollment (CSV row + student-team membership), leaving any staff role intact,
+// so it applies to anyone with a student role — shared by the row modal's
+// unenroll gate and the bulk-select gate so the two can't diverge (a
+// student+instructor must be offered unenroll in BOTH surfaces, never one).
+export function hasStudentEnrollment(
+  row: Pick<TeamRosterRow, "roles">,
+): boolean {
+  return row.roles.includes("student")
 }
 
 // Per-role head counts across the roster. `student` counts every row carrying

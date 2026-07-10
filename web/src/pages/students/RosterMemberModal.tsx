@@ -24,6 +24,7 @@ import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
+import { hasStudentEnrollment } from "@/util/rosterRoles"
 import { Button, Modal } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
@@ -104,8 +105,9 @@ const RosterMemberModal = ({
   // students.csv row and isn't on the student team — the student-roster actions
   // (edit CSV metadata, unenroll) don't apply. Staff are managed in Settings. A
   // person who is BOTH staff and a student keeps the student actions (they do
-  // have a student enrollment), so gate on the student role, not isStudentOnly.
-  const staffOnly = !row.roles.includes("student")
+  // have a student enrollment), so gate on the student enrollment, not
+  // "student is the sole role" (hasStudentEnrollment — shared with the bulk gate).
+  const staffOnly = !hasStudentEnrollment(row)
   const canEdit = !staffOnly && row.state !== "pending"
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email

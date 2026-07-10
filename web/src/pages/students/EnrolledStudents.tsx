@@ -39,7 +39,7 @@ import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
   ROLE_BADGE_TONE,
-  isStudentOnly,
+  hasStudentEnrollment,
 } from "@/util/rosterRoles"
 import {
   filterRosterRows,
@@ -155,16 +155,21 @@ const EnrolledStudents = ({
     invalidateInviteQueriesForOrg(queryClient, org)
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
-  // yourself), mirroring Org Members' self-exclusion. Staff rows aren't
-  // bulk-selectable either: unenroll is a student-roster action (drops the CSV
-  // row + student-team membership), not a way to remove an instructor/TA.
+  // yourself), mirroring Org Members' self-exclusion. A pure staff row (no
+  // student enrollment) isn't selectable either: bulk-unenroll drops the CSV row
+  // + student-team membership, so it only applies to rows with a student
+  // enrollment. A student who is ALSO staff IS selectable — unenroll drops only
+  // their student side and leaves the staff role intact — matching the row
+  // modal's unenroll gate (both use hasStudentEnrollment) so the two never
+  // diverge (previously a student+instructor was removable in the modal but
+  // silently skipped by select-all).
   const isSelf = (row: TeamRosterRow) =>
     isSameGitHubUser(viewer ?? null, {
       github_id: row.github_id,
       username: row.username,
     })
   const isSelectable = (row: TeamRosterRow) =>
-    !isSelf(row) && isStudentOnly(row)
+    !isSelf(row) && hasStudentEnrollment(row)
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
