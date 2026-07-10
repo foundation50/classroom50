@@ -30,6 +30,7 @@ import {
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
+  rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
   showsNonSubmitters,
@@ -43,6 +44,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { rowToStudent } from "@/util/teamRoster"
+import { hasStudentEnrollment } from "@/util/rosterRoles"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
@@ -116,17 +118,25 @@ const SubmissionsPageContent = () => {
   // Team-driven usernames (Section 7): the classroom GitHub team is
   // authoritative for enrollment; students.csv enriches display only. The
   // dashboard consumes Student[], so map enrolled team rows into that shape.
+  // Restrict to rows carrying a STUDENT enrollment — a pure instructor/TA is an
+  // enrolled team member but not a gradee, and "Collect scores" already runs
+  // only against the student team, so excluding them keeps this roster in step
+  // with what's actually graded (a student who is also staff still counts).
   const { students: csvStudents } = useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
   // authoritative empty roster.
   const {
     rows: teamRows,
+    isLoading: rosterLoading,
     isError: rosterError,
     refetch: refetchRoster,
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
   const students: Student[] = useMemo(
-    () => teamRows.filter((r) => r.state === "enrolled").map(rowToStudent),
+    () =>
+      teamRows
+        .filter((r) => r.state === "enrolled" && hasStudentEnrollment(r))
+        .map(rowToStudent),
     [teamRows],
   )
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
@@ -169,10 +179,19 @@ const SubmissionsPageContent = () => {
     (a) => a.slug === assignment,
   )
   const isGroupAssignment = assignmentInfo?.mode === "group"
-  const scoresInfo = useMemo(
-    () => scoresData?.submissions?.[assignment ?? ""] || [],
-    [scoresData, assignment],
-  )
+  // Scores as written by the CLI collector, scoped to the CURRENT roster: a
+  // student unenrolled after a collect still has a record in scores.json (the
+  // collector never prunes and the web app doesn't mutate the file), so their
+  // stale grade would otherwise render here and skew the stats. Drop rows whose
+  // credited students are all off the roster — but only once it has resolved,
+  // so a transient load/permission failure can't blank a populated gradebook
+  // (the roster error surfaces its own retry above). `rosterScopedRows` keeps a
+  // group row with at least one still-enrolled member.
+  const rosterReady = !rosterLoading && !rosterError
+  const scoresInfo = useMemo(() => {
+    const rows = scoresData?.submissions?.[assignment ?? ""] || []
+    return rosterReady ? rosterScopedRows(rows, students) : rows
+  }, [scoresData, assignment, rosterReady, students])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.

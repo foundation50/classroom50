@@ -9,6 +9,35 @@ import type { BadgeTone } from "@/components/ui"
 import { getName } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 
+// Whether a row's grade still belongs to a current roster member. A row is
+// credited to `usernames` (group members, else [owner]); keep it when ANY
+// credited login is on the roster, so a group with at least one current member
+// still shows. Used to drop the grades of a since-unenrolled student: the CLI
+// collector writes scores.json and never prunes on unenroll, so the web app —
+// a pure consumer — filters the read against the live team roster rather than
+// mutating the file (grades stay intact on disk for history / re-enrollment).
+export function rowOnRoster(
+  row: SubmissionRow,
+  rosterLogins: Set<string>,
+): boolean {
+  return row.usernames.some((u) => rosterLogins.has(u.trim().toLowerCase()))
+}
+
+// Drop submission rows whose credited students are all off the current roster.
+// Single choke point so every downstream consumer (table, stats, average, late
+// count, CSV export) sees the same roster-scoped set.
+export function rosterScopedRows(
+  rows: SubmissionRow[],
+  students: Student[],
+): SubmissionRow[] {
+  const rosterLogins = new Set(
+    students
+      .map((s) => s.username.trim().toLowerCase())
+      .filter((u) => u.length > 0),
+  )
+  return rows.filter((row) => rowOnRoster(row, rosterLogins))
+}
+
 // `thresholdFraction` is the passing bar as a fraction of max, or `null` when
 // the assignment sets no threshold — then every row is "ungraded" (as is an
 // ungraded/zero-max row).

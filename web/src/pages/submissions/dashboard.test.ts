@@ -16,7 +16,9 @@ import {
   filterNonSubmitters,
   hasAccepted,
   nonSubmitterStatus,
+  rosterScopedRows,
   rowMatchesQuery,
+  rowOnRoster,
   rowPassState,
   scoreTone,
   selectActiveWorkflowAction,
@@ -56,6 +58,46 @@ const repo = (name: string): GitHubRepo => ({ name }) as GitHubRepo
 const filters = (over: Partial<SubmissionFilters> = {}): SubmissionFilters => ({
   ...DEFAULT_FILTERS,
   ...over,
+})
+
+describe("rowOnRoster / rosterScopedRows", () => {
+  const roster = [student({ username: "alice" }), student({ username: "bob" })]
+
+  it("keeps an individual row whose owner is on the roster", () => {
+    const logins = new Set(["alice", "bob"])
+    expect(rowOnRoster(row({ usernames: ["alice"] }), logins)).toBe(true)
+    expect(rowOnRoster(row({ usernames: ["carol"] }), logins)).toBe(false)
+  })
+
+  it("matches case-insensitively", () => {
+    expect(rowOnRoster(row({ usernames: ["ALICE"] }), new Set(["alice"]))).toBe(
+      true,
+    )
+  })
+
+  it("keeps a group row with at least one still-enrolled member", () => {
+    const logins = new Set(["alice"])
+    // bob unenrolled, alice still on the roster -> group stays visible.
+    expect(rowOnRoster(row({ usernames: ["alice", "bob"] }), logins)).toBe(true)
+    // all members unenrolled -> dropped.
+    expect(rowOnRoster(row({ usernames: ["bob", "carol"] }), logins)).toBe(
+      false,
+    )
+  })
+
+  it("drops rows credited only to since-unenrolled students", () => {
+    const rows = [
+      row({ owner: "alice", usernames: ["alice"] }),
+      row({ owner: "carol", usernames: ["carol"] }), // no longer on roster
+    ]
+    const out = rosterScopedRows(rows, roster)
+    expect(out.map((r) => r.owner)).toEqual(["alice"])
+  })
+
+  it("ignores blank roster usernames (never matches an empty login)", () => {
+    const rows = [row({ owner: "", usernames: [""] })]
+    expect(rosterScopedRows(rows, [student({ username: "" })])).toEqual([])
+  })
 })
 
 describe("rowPassState", () => {
