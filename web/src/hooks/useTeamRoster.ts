@@ -212,8 +212,17 @@ export function useTeamRoster(
     teamSlug,
     csvMissingCount,
     notInOrgUsernames: notInOrg,
+    // isError folds in the staff-member fetches too, so a retry must re-run
+    // every team-member query (student + instructor + ta), not just the
+    // student one — otherwise a staff-team failure stays stuck in error. Also
+    // refetch the staff invitation queries so a recovered permission/transient
+    // failure repopulates pending.
     refetch: () => {
       void refetchMembers()
+      void instructorMembersQuery.refetch()
+      void taMembersQuery.refetch()
+      void instructorInvitesQuery.refetch()
+      void taInvitesQuery.refetch()
     },
   }
 }

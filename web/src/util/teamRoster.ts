@@ -304,7 +304,14 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 // Add a role to a row's set (idempotent), keeping ROLE_RANK order.
 function addRole(row: TeamRosterRow, role: RosterRole): void {
   if (row.roles.includes(role)) return
-  row.roles = [...row.roles, role].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
+  row.roles = sortRolesByRank([...row.roles, role])
+}
+
+// Sort a role set by precedence (highest first). Pure; returns a new array.
+// Lives here beside ROLE_RANK (its only dependency) so the rank comparator has
+// a single home; rosterRoles re-exports it for UI callers.
+export function sortRolesByRank(roles: RosterRole[]): RosterRole[] {
+  return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
 // Display name for sorting: "Last, First" folded to a comparable string, else

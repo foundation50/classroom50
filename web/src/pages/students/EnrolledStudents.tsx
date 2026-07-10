@@ -134,6 +134,7 @@ const EnrolledStudents = ({
     teamSlug,
     csvMissingCount,
     notInOrgUsernames,
+    refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
 
   const notInOrg = useMemo(
@@ -738,15 +739,7 @@ const EnrolledStudents = ({
               <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
               {t("students.rosterLoadError")}
             </span>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() =>
-                void queryClient.invalidateQueries({
-                  queryKey: githubKeys.teamMembers(org, teamSlug),
-                })
-              }
-            >
+            <Button variant="ghost" size="sm" onClick={() => refetchRoster()}>
               <RefreshCw aria-hidden="true" className="size-4" />
               {t("students.rosterRetry")}
             </Button>

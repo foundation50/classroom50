@@ -1,7 +1,7 @@
 import type { BadgeTone } from "@/components/ui"
-import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_RANK,
+  sortRolesByRank,
   type RosterRole,
   type TeamRosterRow,
 } from "@/util/teamRoster"
@@ -9,9 +9,10 @@ import {
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
 // surfaces can't drift on tone or precedence (AGENTS.md: one recipe, one source).
-// ROLE_RANK itself lives in teamRoster (next to the row type it orders) and is
-// re-exported here so UI callers have one import for all role presentation.
-export { ROLE_RANK }
+// ROLE_RANK and sortRolesByRank live in teamRoster (next to the row type they
+// order) and are re-exported here so UI callers have one import for all role
+// presentation.
+export { ROLE_RANK, sortRolesByRank }
 
 // i18n key per role for row badges and filter labels.
 export const ROLE_LABEL_KEY: Record<RosterRole, string> = {
@@ -27,11 +28,6 @@ export const ROLE_BADGE_TONE: Record<RosterRole, BadgeTone> = {
   instructor: "primary",
   ta: "secondary",
   student: "neutral",
-}
-
-// Sort a role set by precedence (highest first). Pure; returns a new array.
-export function sortRolesByRank(roles: RosterRole[]): RosterRole[] {
-  return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
 // A row is student-only when its sole role is "student". Staff (instructor/TA),
@@ -62,7 +58,3 @@ export function countByRole(rows: TeamRosterRow[]): RoleCounts {
 export function enrolledCountsByRole(rows: TeamRosterRow[]): RoleCounts {
   return countByRole(rows.filter((r) => r.state === "enrolled"))
 }
-
-// Every staff role, in stable precedence order. Re-exported from the contract so
-// callers iterate the single source rather than a hand-synced copy.
-export const STAFF_ROLE_ORDER = STAFF_ROLES
