@@ -7,6 +7,7 @@ import {
   teamMembersMissingFromCsv,
 } from "./teamRoster"
 import type { Student } from "@/types/classroom"
+import { STAFF_ROLES } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
 const member = (id: number, login: string, over: Partial<GitHubUser> = {}) =>
@@ -335,6 +336,19 @@ describe("buildTeamRoster — roles (union across student + staff teams)", () =>
     })
     expect(rows[0]).toMatchObject({ state: "not_in_org", username: "ghost" })
     expect(rows[0].roles).toEqual(["student"])
+  })
+
+  it("includes every STAFF_ROLES role (guards STAFF_ROLES drift)", () => {
+    // One staff member per role; the roster must surface all of them. If a new
+    // staff role were added to STAFF_ROLES but the builder's fanout drifted,
+    // that role's member would be dropped and this fails.
+    const staffMembers = Object.fromEntries(
+      STAFF_ROLES.map((role, i) => [role, [member(100 + i, `staff-${role}`)]]),
+    )
+    const rows = buildTeamRoster({ members: [], staffMembers, students: [] })
+    const seen = new Set(rows.flatMap((r) => r.roles))
+    for (const role of STAFF_ROLES) expect(seen.has(role)).toBe(true)
+    expect(rows).toHaveLength(STAFF_ROLES.length)
   })
 })
 

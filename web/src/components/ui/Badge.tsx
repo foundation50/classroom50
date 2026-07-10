@@ -8,13 +8,14 @@ import { cx } from "./cx"
 // per-theme `.badge-soft` contrast nudge from index.css.
 
 export type BadgeTone =
-  "neutral" | "primary" | "info" | "success" | "warning" | "error"
+  "neutral" | "primary" | "secondary" | "info" | "success" | "warning" | "error"
 
 export type BadgeSize = "xs" | "sm" | "md"
 
 const TONE_CLASS: Record<BadgeTone, string> = {
   neutral: "",
   primary: "badge-primary",
+  secondary: "badge-secondary",
   info: "badge-info",
   success: "badge-success",
   warning: "badge-warning",

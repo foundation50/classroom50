@@ -38,15 +38,19 @@ const StudentListContent = ({
   const [uploadOpen, setUploadOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
 
-  // Count enrolled from the team roster (same source as EnrolledStudents), so
-  // header and list agree. Enrollment is team membership, not the CSV.
+  // Counts from the team roster (same source as EnrolledStudents), so header
+  // and list agree. Enrollment is team membership, not the CSV. roleCounts is
+  // by role so the header reports students separately from staff (the enrolled
+  // total includes instructors/TAs, which would overcount "students").
   const {
-    counts,
+    roleCounts,
     isLoading: rosterLoading,
     isError: rosterError,
   } = useTeamRoster(org, classroom, students)
   const countReady = !rosterLoading && !rosterError
-  const enrolledCount = counts.enrolled
+  // Show staff head counts alongside students only when the class actually has
+  // a TA (per the roster design — a TA-less class keeps the plain student line).
+  const showStaffCounts = roleCounts.ta > 0
 
   return (
     <>
@@ -56,9 +60,25 @@ const StudentListContent = ({
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
               {countReady
-                ? t("students.enrolledCount", { count: enrolledCount })
+                ? t("students.enrolledCount", { count: roleCounts.student })
                 : t("students.enrolledCountLoading")}
             </span>
+            {countReady && showStaffCounts ? (
+              <>
+                <span aria-hidden="true" className="text-base-content/30">
+                  ·
+                </span>
+                <span>
+                  {t("students.instructorCount", {
+                    count: roleCounts.instructor,
+                  })}
+                </span>
+                <span aria-hidden="true" className="text-base-content/30">
+                  ·
+                </span>
+                <span>{t("students.taCount", { count: roleCounts.ta })}</span>
+              </>
+            ) : null}
             <span aria-hidden="true" className="text-base-content/30">
               ·
             </span>

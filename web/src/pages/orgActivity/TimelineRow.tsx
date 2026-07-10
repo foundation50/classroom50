@@ -46,6 +46,7 @@ const CHIP_TONE_CLASS: Record<BadgeTone, string> = {
   info: "bg-info/10 text-info",
   success: "bg-success/10 text-success",
   primary: "bg-primary/10 text-primary",
+  secondary: "bg-secondary/10 text-secondary",
   neutral: "bg-base-300 text-base-content",
 }
 

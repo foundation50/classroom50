@@ -1,5 +1,5 @@
 import type { Student } from "@/types/classroom"
-import type { StaffRole } from "@/types/classroom"
+import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import { rosterClaimSet } from "@/util/identity"
 
@@ -32,7 +32,9 @@ export type TeamRosterRowState = "enrolled" | "pending" | "not_in_org"
 export type RosterRole = StaffRole | "student"
 
 // Precedence for the primary badge / role sort: instructor > ta > student.
-const ROLE_RANK: Record<RosterRole, number> = {
+// Exported so the shared role-presentation module (rosterRoles) re-exports it
+// rather than defining a second copy.
+export const ROLE_RANK: Record<RosterRole, number> = {
   instructor: 2,
   ta: 1,
   student: 0,
@@ -175,7 +177,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // person keeps their student metadata join, with staff roles unioned on.
   const roleMembers: Array<{ role: RosterRole; member: GitHubUser }> = [
     ...members.map((member) => ({ role: "student" as const, member })),
-    ...STAFF_MEMBER_ROLES.flatMap((role) =>
+    ...STAFF_ROLES.flatMap((role) =>
       (staffMembers[role] ?? []).map((member) => ({ role, member })),
     ),
   ]
@@ -210,7 +212,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   const roleInvites: Array<{ role: RosterRole; invite: GitHubOrgInvitation }> =
     [
       ...invitations.map((invite) => ({ role: "student" as const, invite })),
-      ...STAFF_MEMBER_ROLES.flatMap((role) =>
+      ...STAFF_ROLES.flatMap((role) =>
         (staffInvitations[role] ?? []).map((invite) => ({ role, invite })),
       ),
     ]
@@ -279,11 +281,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 
   return sortRows(rows)
 }
-
-// Every staff role in a stable order (instructor before ta), mirroring the
-// STAFF_ROLES contract. Kept here so the two role-fanout loops iterate the same
-// order without importing the array (which would widen this module's surface).
-const STAFF_MEMBER_ROLES: StaffRole[] = ["instructor", "ta"]
 
 // Add a role to a row's set (idempotent), keeping ROLE_RANK order.
 function addRole(row: TeamRosterRow, role: RosterRole): void {

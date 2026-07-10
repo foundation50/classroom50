@@ -8,10 +8,10 @@ import {
   X,
 } from "lucide-react"
 
-import { nameFromParts } from "@/util/students"
 import {
   Alert,
   AnimatedAlert,
+  Badge,
   Button,
   Card,
   Spinner,
@@ -34,8 +34,19 @@ import {
 } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
-import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
-import type { RosterRole } from "@/util/teamRoster"
+import type { TeamRosterRow, RosterRole } from "@/util/teamRoster"
+import { STAFF_ROLES } from "@/types/classroom"
+import {
+  ROLE_LABEL_KEY,
+  ROLE_BADGE_TONE,
+  isStudentOnly,
+} from "@/util/rosterRoles"
+import {
+  filterRosterRows,
+  NO_SECTION,
+  type RoleFilter,
+  type StatusFilter,
+} from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
 import { isSameGitHubUser } from "@/util/students"
 import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
@@ -60,7 +71,6 @@ import { useTranslation } from "react-i18next"
 
 // Group rows by `section`, sorted by name with the unlabeled ("No section")
 // bucket last. Generic over any row with a `section` field.
-const NO_SECTION = "No section"
 export function groupStudentsBySection<T extends { section?: string }>(
   students: T[],
 ): Array<{ section: string; students: T[] }> {
@@ -78,27 +88,6 @@ export function groupStudentsBySection<T extends { section?: string }>(
       return a.localeCompare(b, undefined, { numeric: true })
     })
     .map(([section, group]) => ({ section, students: group }))
-}
-
-// Status filter values for the unified list.
-type StatusFilter = "all" | TeamRosterRowState
-
-// Role filter values for the unified list.
-type RoleFilter = "all" | RosterRole
-
-// i18n key per role for the row badge and filter labels.
-const ROLE_LABEL_KEY: Record<RosterRole, string> = {
-  instructor: "students.roleInstructor",
-  ta: "students.roleTa",
-  student: "students.roleStudent",
-}
-
-// DaisyUI badge tone per role, distinct from the warning/error status badges so
-// role and enrollment state read as separate facets.
-const ROLE_BADGE_CLASS: Record<RosterRole, string> = {
-  instructor: "badge-primary",
-  ta: "badge-secondary",
-  student: "badge-ghost",
 }
 
 const EnrolledStudents = ({
@@ -172,8 +161,6 @@ const EnrolledStudents = ({
       github_id: row.github_id,
       username: row.username,
     })
-  const isStudentOnly = (row: TeamRosterRow) =>
-    row.roles.length === 1 && row.roles[0] === "student"
   const isSelectable = (row: TeamRosterRow) =>
     !isSelf(row) && isStudentOnly(row)
 
@@ -203,23 +190,36 @@ const EnrolledStudents = ({
       ? sectionFilter
       : "all"
 
-  // Text search over username/name/email + the status and section filters.
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase()
-    return rows.filter((row) => {
-      if (statusFilter !== "all" && row.state !== statusFilter) return false
-      if (roleFilter !== "all" && !row.roles.includes(roleFilter)) return false
-      if (effectiveSection !== "all") {
-        const section = row.section.trim() || NO_SECTION
-        if (section !== effectiveSection) return false
-      }
-      if (!q) return true
-      const name = nameFromParts(row.first_name, row.last_name)
-      return [row.username, name, row.email].some((field) =>
-        field.toLowerCase().includes(q),
-      )
-    })
-  }, [rows, query, statusFilter, roleFilter, effectiveSection])
+  // Role filter options: student is always offered; a staff role appears only
+  // when at least one row holds it (so a class with no TAs has no dead "TA"
+  // filter). Ordered student-first, then staff roles per the STAFF_ROLES source.
+  const roleFilterOptions = useMemo(() => {
+    const present = new Set<RosterRole>()
+    for (const row of rows) for (const role of row.roles) present.add(role)
+    return (["student", ...STAFF_ROLES] as RosterRole[]).filter((role) =>
+      present.has(role),
+    )
+  }, [rows])
+
+  // A stale role selection (the last instructor/TA was removed) falls back to
+  // "all" so the list never filters on a role no row carries.
+  const effectiveRole =
+    roleFilter !== "all" && roleFilterOptions.includes(roleFilter)
+      ? roleFilter
+      : "all"
+
+  // Text search over username/name/email + the status, role, and section
+  // filters (see filterRosterRows — extracted so the facets are unit-tested).
+  const filtered = useMemo(
+    () =>
+      filterRosterRows(rows, {
+        query,
+        statusFilter,
+        roleFilter: effectiveRole,
+        sectionFilter: effectiveSection,
+      }),
+    [rows, query, statusFilter, effectiveRole, effectiveSection],
+  )
 
   const hasSectionsInFiltered = useMemo(
     () => filtered.some((r) => r.section.trim()),
@@ -479,12 +479,15 @@ const EnrolledStudents = ({
           {row.roles
             .filter((role) => role !== "student" || row.roles.length === 1)
             .map((role) => (
-              <span
+              <Badge
                 key={role}
-                className={`badge badge-sm badge-soft shrink-0 ${ROLE_BADGE_CLASS[role]}`}
+                size="sm"
+                tone={ROLE_BADGE_TONE[role]}
+                ghost={role === "student"}
+                className="shrink-0"
               >
                 {t(ROLE_LABEL_KEY[role])}
-              </span>
+              </Badge>
             ))}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
@@ -649,18 +652,22 @@ const EnrolledStudents = ({
               </option>
             ))}
           </Toolbar.FilterSelect>
-          <Toolbar.FilterSelect
-            selectSize="md"
-            className="w-full sm:w-auto"
-            aria-label={t("students.filterByRoleLabel")}
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
-          >
-            <option value="all">{t("students.filterAllRoles")}</option>
-            <option value="instructor">{t("students.roleInstructor")}</option>
-            <option value="ta">{t("students.roleTa")}</option>
-            <option value="student">{t("students.roleStudent")}</option>
-          </Toolbar.FilterSelect>
+          {roleFilterOptions.some((r) => r !== "student") ? (
+            <Toolbar.FilterSelect
+              selectSize="md"
+              className="w-full sm:w-auto"
+              aria-label={t("students.filterByRoleLabel")}
+              value={effectiveRole}
+              onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
+            >
+              <option value="all">{t("students.filterAllRoles")}</option>
+              {roleFilterOptions.map((role) => (
+                <option key={role} value={role}>
+                  {t(ROLE_LABEL_KEY[role])}
+                </option>
+              ))}
+            </Toolbar.FilterSelect>
+          ) : null}
           {sectionOptions.length > 0 ? (
             <Toolbar.FilterSelect
               selectSize="md"

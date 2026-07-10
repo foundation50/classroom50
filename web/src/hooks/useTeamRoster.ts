@@ -18,19 +18,41 @@ import {
   type TeamRosterRow,
   type TeamRosterRowState,
 } from "@/util/teamRoster"
+import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
+// A GitHub 403 (owner-only endpoint) — the signal that pending invitations
+// can't be read. Exported for the pendingHidden unit test.
+export function isForbiddenError(err: unknown): boolean {
+  return err instanceof GitHubAPIError && err.isForbidden
+}
+
+// Pending is owner-only across ALL sources (org invitations + each staff team's
+// invitations require org-owner scope and move together). Hide pending if any
+// source is forbidden so the view shows one "owners only" note rather than a
+// partial pending list. A 404 (uncreated team) is not forbidden and never hides.
+export function computePendingHidden(
+  invitesForbidden: boolean,
+  staffInviteErrors: unknown[],
+): boolean {
+  return invitesForbidden || staffInviteErrors.some(isForbiddenError)
+}
+
 export type UseTeamRosterResult = {
   rows: TeamRosterRow[]
   counts: Record<TeamRosterRowState, number>
+  // Enrolled (active-member) head counts by role for the header: how many
+  // students, instructors, and TAs are actually on a team. A person on two
+  // teams counts toward each of their roles (tallies, not a partition).
+  roleCounts: RoleCounts
   // The team-member fetch (the enrolled source of truth) is still resolving.
   isLoading: boolean
-  // The team-member fetch (enrolled source of truth) failed for a reason other
-  // than a missing team (listTeamMembers swallows 404 -> []). When true, the
-  // view must show error+retry instead of the empty state, so a
-  // transient/permission failure isn't rendered as "nobody enrolled".
+  // The team-member fetch failed for a reason other than a missing team
+  // (listTeamMembers swallows 404 -> []). Covers the STUDENT team and the two
+  // STAFF teams, so a transient 5xx / 403 on any of them surfaces error+retry
+  // instead of silently rendering "nobody enrolled" / "no staff".
   isError: boolean
   // The classroom has zero team members AND zero pending invites — a brand-new
   // classroom nobody has joined yet.
@@ -89,11 +111,15 @@ export function useTeamRoster(
   })
 
   // Staff-team members. A missing team 404s -> [] (listTeamMembers), so an
-  // uncreated staff team reads as "no staff", never an error.
-  const { data: instructorMembers } = useQuery(
+  // uncreated staff team reads as "no staff". A non-404 failure (transient 5xx,
+  // 403) is a real error and is folded into isError below — staff data gets the
+  // same failure semantics as the student roster, never a silent "no staff".
+  const instructorMembersQuery = useQuery(
     teamMembersQuery(client, org, instructorSlug),
   )
-  const { data: taMembers } = useQuery(teamMembersQuery(client, org, taSlug))
+  const taMembersQuery = useQuery(teamMembersQuery(client, org, taSlug))
+  const instructorMembers = instructorMembersQuery.data
+  const taMembers = taMembersQuery.data
 
   const {
     invitations,
@@ -108,15 +134,10 @@ export function useTeamRoster(
   )
   const taInvitesQuery = useQuery(teamInvitationsQuery(client, org, taSlug))
 
-  const isForbidden = (err: unknown): boolean =>
-    err instanceof GitHubAPIError && err.isForbidden
-  // Pending is owner-only across all sources; hide it if ANY pending fetch is
-  // forbidden so the view shows the single "owners only" note rather than a
-  // partial pending list.
-  const pendingHidden =
-    invitesForbidden ||
-    isForbidden(instructorInvitesQuery.error) ||
-    isForbidden(taInvitesQuery.error)
+  const pendingHidden = computePendingHidden(invitesForbidden, [
+    instructorInvitesQuery.error,
+    taInvitesQuery.error,
+  ])
 
   const rows = useMemo(
     () =>
@@ -149,6 +170,8 @@ export function useTeamRoster(
   )
 
   const counts = useMemo(() => countByState(rows), [rows])
+  // Enrolled head counts by role for the header (students / instructors / TAs).
+  const roleCounts = useMemo(() => enrolledCountsByRole(rows), [rows])
 
   // CSV drift / reconcile are STUDENT-roster concepts: a staffer is never
   // synced into students.csv, so count only the student team against the CSV.
@@ -162,17 +185,29 @@ export function useTeamRoster(
   // key stays a stable string list rather than a fresh array every render.
   const notInOrg = useMemo(() => notInOrgUsernames(rows), [rows])
 
-  // Enrolled rows come from team membership (readable by non-owners), so the
-  // roster is usable even when invites are forbidden. Wait on the invite fetch
-  // only when it's readable.
-  const isLoading = membersLoading || (!pendingHidden && invitesLoading)
+  // Any team-member fetch (student or staff) failing for a non-404 reason is a
+  // real error — surface it rather than rendering a partial roster as "empty".
+  const isError =
+    membersError || instructorMembersQuery.isError || taMembersQuery.isError
+
+  // Wait on every team-member fetch (student + staff) so the roster appears
+  // atomically rather than flashing empty then popping staff in. The invite
+  // fetch is only awaited when readable (non-owners skip it). Staff member
+  // fetches 404 fast for an uncreated team, so this doesn't stall a class with
+  // no staff teams.
+  const isLoading =
+    membersLoading ||
+    instructorMembersQuery.isLoading ||
+    taMembersQuery.isLoading ||
+    (!pendingHidden && invitesLoading)
 
   return {
     rows,
     counts,
+    roleCounts,
     isLoading,
-    isError: membersError,
-    isEmpty: !isLoading && !membersError && rows.length === 0,
+    isError,
+    isEmpty: !isLoading && !isError && rows.length === 0,
     pendingHidden,
     teamSlug,
     csvMissingCount,
