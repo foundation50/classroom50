@@ -5,6 +5,7 @@ import {
   selectableRows,
   selectAllState,
   selectRange,
+  shouldWarnNoneSelectable,
   toggleRow,
   toggleSelectAll,
 } from "./selection"
@@ -127,6 +128,18 @@ describe("selection helpers", () => {
         () => true,
       )
       expect([...gone]).toEqual(["a"])
+    })
+  })
+
+  describe("shouldWarnNoneSelectable", () => {
+    it("warns when the view has rows but none are selectable (e.g. all staff)", () => {
+      expect(shouldWarnNoneSelectable(3, 0)).toBe(true)
+    })
+    it("does not warn on an empty view (no rows to select)", () => {
+      expect(shouldWarnNoneSelectable(0, 0)).toBe(false)
+    })
+    it("does not warn when at least one row is selectable", () => {
+      expect(shouldWarnNoneSelectable(3, 1)).toBe(false)
     })
   })
 })

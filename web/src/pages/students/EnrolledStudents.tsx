@@ -54,6 +54,7 @@ import {
   resolveSelectedRows,
   selectableRows,
   selectAllState,
+  shouldWarnNoneSelectable,
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
@@ -250,8 +251,21 @@ const EnrolledStudents = ({
     selectableFiltered,
     selectedKeys,
   )
-  const handleToggleSelectAll = () =>
+  const handleToggleSelectAll = () => {
+    // Select-all only ever targets selectable (student-only) rows. When the
+    // current view has rows but none are selectable — e.g. filtered to staff —
+    // the click would silently no-op, so explain why instead.
+    if (shouldWarnNoneSelectable(filtered.length, selectableFiltered.length)) {
+      notify({
+        tone: "info",
+        durationMs: 6000,
+        message: t("students.bulk.noneSelectable"),
+      })
+      return
+    }
+    if (selectableFiltered.length === 0) return
     setSelectedKeys((prev) => toggleSelectAll(selectableFiltered, prev))
+  }
 
   // group-by-section reorders rows into buckets, so a shift-range must span
   // that rendered order, not the flat filtered list.

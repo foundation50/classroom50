@@ -84,6 +84,16 @@ export function selectRange<T extends Keyed>(
   return next
 }
 
+// Whether a "select all" click should warn instead of selecting: the view has
+// rows, but none are selectable (e.g. filtered to staff, who can't be
+// bulk-acted). A no-op click needs feedback; an empty view (no rows) does not.
+export function shouldWarnNoneSelectable(
+  filteredCount: number,
+  selectableCount: number,
+): boolean {
+  return filteredCount > 0 && selectableCount === 0
+}
+
 // Rows backing the current selection across the FULL set (a selected row hidden
 // by search is still acted on), with non-selectable rows (self) excluded so a
 // stale selection can't target them.

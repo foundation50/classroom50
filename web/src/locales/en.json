@@ -302,6 +302,7 @@
       "selectAll": "Select all students",
       "selectRow": "Select {{label}}",
       "selfNotSelectable": "You can't bulk-unenroll yourself.",
+      "noneSelectable": "Nothing to select here — bulk actions (unenroll, invite) apply to students only. Instructors and TAs are managed in classroom Settings.",
       "selectedCount_one": "{{count}} selected",
       "selectedCount_other": "{{count}} selected",
       "memberCount_one": "{{count}} member",
