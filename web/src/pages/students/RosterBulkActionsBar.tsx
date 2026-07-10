@@ -116,8 +116,13 @@ const RosterBulkActionsBar = ({
   onToggleSelectAll: () => void
   onClearSelection: () => void
   // Called after a run completes so the page can invalidate roster + invite
-  // caches. `action` distinguishes what changed.
-  onDone: (action: "unenroll" | "invite") => void
+  // caches. `action` distinguishes what changed; on an unenroll run the removed
+  // rows are passed so the page can suppress the automatic backfills from
+  // re-adding them.
+  onDone: (
+    action: "unenroll" | "invite",
+    removed?: Array<Pick<TeamRosterRow, "username">>,
+  ) => void
   // The "add students" triggers shown on the right when nothing is selected.
   addActions?: AddStudentActions
   // Group-by-section toggle, rendered in the header next to the count. Shown
@@ -184,7 +189,13 @@ const RosterBulkActionsBar = ({
       })
       setResult(buildUnenrollResult(res, t))
       setPhase("complete")
-      onDone("unenroll")
+      // Pass the targeted rows so the page suppresses the automatic backfills
+      // from re-adding them (a still-active org member left by a
+      // classroom-scoped unenroll would otherwise be team-added back).
+      onDone(
+        "unenroll",
+        selectedRows.map((r) => ({ username: r.username })),
+      )
     } catch (err) {
       log.error("bulk unenroll failed", { err, record: true })
       setError(getErrorMessage(err))

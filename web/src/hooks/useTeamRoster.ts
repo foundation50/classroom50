@@ -61,6 +61,9 @@ export type UseTeamRosterResult = {
   // can sync (auto-synced on open). Opposite direction from `not_in_org` (on
   // CSV, not on team), which sync can't fix.
   csvMissingCount: number
+  // Lowercased logins of team members with no students.csv row — used to skip a
+  // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
+  csvMissingLogins: string[]
   // Rostered students who are `not_in_org` (on students.csv with a username but
   // not a team/org member and not a pending invite) — the usernames
   // auto-reconcile feeds to reconcileTeamFromOrgMembers. It team-adds the ones
@@ -171,9 +174,17 @@ export function useTeamRoster(
 
   // CSV drift / reconcile are STUDENT-roster concepts: a staffer is never
   // synced into students.csv, so count only the student team against the CSV.
-  const csvMissingCount = useMemo(
-    () => teamMembersMissingFromCsv(members ?? [], students).length,
+  const csvMissing = useMemo(
+    () => teamMembersMissingFromCsv(members ?? [], students),
     [members, students],
+  )
+  const csvMissingCount = csvMissing.length
+  // Lowercased logins of those csv-missing team members, so the view can skip a
+  // just-unenrolled member (whose best-effort team-drop failed) from the
+  // automatic backfill rather than re-appending the student it just removed.
+  const csvMissingLogins = useMemo(
+    () => csvMissing.map((m) => m.login.toLowerCase()),
+    [csvMissing],
   )
 
   // Rostered `not_in_org` usernames — what auto-reconcile tries to team-add
@@ -207,6 +218,7 @@ export function useTeamRoster(
     pendingHidden,
     teamSlug,
     csvMissingCount,
+    csvMissingLogins,
     notInOrgUsernames: notInOrg,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the
