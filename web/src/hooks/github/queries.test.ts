@@ -7,6 +7,7 @@ import {
   listAllOrgMembers,
   listOrgAdmins,
   listOrgTeams,
+  listTeamInvitations,
   releasesQuery,
   verifyClassroom50ConfigRepo,
 } from "./queries"
@@ -176,6 +177,65 @@ describe("listOrgTeams (org teams fallback)", () => {
     } as unknown as GitHubClient
     const teams = await listOrgTeams(client, "acme")
     expect(teams.map((tm) => tm.slug)).toEqual(["classroom50-cs101"])
+  })
+})
+
+describe("listTeamInvitations (team-scoped pending, role attribution)", () => {
+  const apiError = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/orgs/acme/teams/classroom50-cs101-ta/invitations",
+      message: status === 404 ? "Not Found" : `boom ${status}`,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  const rejectingClient = (status: number) =>
+    ({
+      request: vi.fn().mockRejectedValue(apiError(status)),
+    }) as unknown as GitHubClient
+
+  it("returns [] on 404 (team not created yet)", async () => {
+    await expect(
+      listTeamInvitations(rejectingClient(404), "acme", "classroom50-cs101-ta"),
+    ).resolves.toEqual([])
+  })
+
+  it("rethrows 403 (owner-only) so callers can hide pending", async () => {
+    await expect(
+      listTeamInvitations(rejectingClient(403), "acme", "classroom50-cs101-ta"),
+    ).rejects.toThrow(GitHubAPIError)
+  })
+
+  it("paginates and preserves an email-only invite (login null)", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({
+      id: i + 1,
+      login: `u${i + 1}`,
+      email: null,
+      role: "direct_member",
+    }))
+    const page2 = [
+      { id: 101, login: null, email: "invitee@x.edu", role: "direct_member" },
+    ]
+    const request = vi
+      .fn()
+      .mockResolvedValueOnce(page1)
+      .mockResolvedValueOnce(page2)
+    const client = { request } as unknown as GitHubClient
+    const invites = await listTeamInvitations(
+      client,
+      "acme",
+      "classroom50-cs101-ta",
+    )
+    expect(invites).toHaveLength(101)
+    expect(invites[100]).toMatchObject({ login: null, email: "invitee@x.edu" })
   })
 })
 
