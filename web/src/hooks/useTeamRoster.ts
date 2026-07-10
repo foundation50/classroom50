@@ -3,7 +3,12 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
-import { githubKeys, teamMembersQuery } from "@/hooks/github/queries"
+import {
+  githubKeys,
+  teamMembersQuery,
+  teamInvitationsQuery,
+} from "@/hooks/github/queries"
+import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
@@ -13,6 +18,7 @@ import {
   type TeamRosterRow,
   type TeamRosterRowState,
 } from "@/util/teamRoster"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
@@ -65,6 +71,13 @@ export function useTeamRoster(
   const { data: classroomJson } = useGetClassroom(org, classroom)
   const teamSlug =
     classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
+  // Staff team slugs: prefer the classroom's stored slug, else the heuristic
+  // (same precedence as the student slug above).
+  const instructorSlug =
+    classroomJson?.teams?.instructor?.slug ||
+    staffTeamName(classroom, "instructor")
+  const taSlug =
+    classroomJson?.teams?.ta?.slug || staffTeamName(classroom, "ta")
 
   const {
     data: members,
@@ -75,26 +88,70 @@ export function useTeamRoster(
     ...teamMembersQuery(client, org, teamSlug),
   })
 
+  // Staff-team members. A missing team 404s -> [] (listTeamMembers), so an
+  // uncreated staff team reads as "no staff", never an error.
+  const { data: instructorMembers } = useQuery(
+    teamMembersQuery(client, org, instructorSlug),
+  )
+  const { data: taMembers } = useQuery(teamMembersQuery(client, org, taSlug))
+
   const {
     invitations,
     isLoading: invitesLoading,
     isForbidden: invitesForbidden,
   } = useGetOrgInvitations(org)
 
+  // Team-scoped pending invitations for the staff teams (owner-only, like org
+  // invitations). 403 marks pending hidden; 404 (uncreated team) -> [].
+  const instructorInvitesQuery = useQuery(
+    teamInvitationsQuery(client, org, instructorSlug),
+  )
+  const taInvitesQuery = useQuery(teamInvitationsQuery(client, org, taSlug))
+
+  const isForbidden = (err: unknown): boolean =>
+    err instanceof GitHubAPIError && err.isForbidden
+  // Pending is owner-only across all sources; hide it if ANY pending fetch is
+  // forbidden so the view shows the single "owners only" note rather than a
+  // partial pending list.
+  const pendingHidden =
+    invitesForbidden ||
+    isForbidden(instructorInvitesQuery.error) ||
+    isForbidden(taInvitesQuery.error)
+
   const rows = useMemo(
     () =>
       buildTeamRoster({
         members: members ?? [],
         // A non-owner can't read invitations; pass none rather than a partial.
-        invitations: invitesForbidden ? [] : invitations,
+        invitations: pendingHidden ? [] : invitations,
+        staffMembers: {
+          instructor: instructorMembers ?? [],
+          ta: taMembers ?? [],
+        },
+        staffInvitations: pendingHidden
+          ? {}
+          : {
+              instructor: instructorInvitesQuery.data ?? [],
+              ta: taInvitesQuery.data ?? [],
+            },
         students,
       }),
-    [members, invitations, invitesForbidden, students],
+    [
+      members,
+      instructorMembers,
+      taMembers,
+      invitations,
+      instructorInvitesQuery.data,
+      taInvitesQuery.data,
+      pendingHidden,
+      students,
+    ],
   )
 
   const counts = useMemo(() => countByState(rows), [rows])
 
-  // Team members absent from students.csv — what "Sync roster" would append.
+  // CSV drift / reconcile are STUDENT-roster concepts: a staffer is never
+  // synced into students.csv, so count only the student team against the CSV.
   const csvMissingCount = useMemo(
     () => teamMembersMissingFromCsv(members ?? [], students).length,
     [members, students],
@@ -108,7 +165,7 @@ export function useTeamRoster(
   // Enrolled rows come from team membership (readable by non-owners), so the
   // roster is usable even when invites are forbidden. Wait on the invite fetch
   // only when it's readable.
-  const isLoading = membersLoading || (!invitesForbidden && invitesLoading)
+  const isLoading = membersLoading || (!pendingHidden && invitesLoading)
 
   return {
     rows,
@@ -116,7 +173,7 @@ export function useTeamRoster(
     isLoading,
     isError: membersError,
     isEmpty: !isLoading && !membersError && rows.length === 0,
-    pendingHidden: invitesForbidden,
+    pendingHidden,
     teamSlug,
     csvMissingCount,
     notInOrgUsernames: notInOrg,
