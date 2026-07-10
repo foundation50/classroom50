@@ -179,14 +179,9 @@ const SubmissionsPageContent = () => {
     (a) => a.slug === assignment,
   )
   const isGroupAssignment = assignmentInfo?.mode === "group"
-  // Scores as written by the CLI collector, scoped to the CURRENT roster: a
-  // student unenrolled after a collect still has a record in scores.json (the
-  // collector never prunes and the web app doesn't mutate the file), so their
-  // stale grade would otherwise render here and skew the stats. Drop rows whose
-  // credited students are all off the roster — but only once it has resolved,
-  // so a transient load/permission failure can't blank a populated gradebook
-  // (the roster error surfaces its own retry above). `rosterScopedRows` keeps a
-  // group row with at least one still-enrolled member.
+  // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
+  // Gate on a resolved roster so a transient load/permission failure falls back
+  // to unscoped rows rather than blanking a populated gradebook.
   const rosterReady = !rosterLoading && !rosterError
   const scoresInfo = useMemo(() => {
     const rows = scoresData?.submissions?.[assignment ?? ""] || []

@@ -29,6 +29,9 @@ type AddStudentProps = {
   classroom: string
   open: boolean
   onClose: () => void
+  // Called with the enrolled GitHub login on a successful username enrollment,
+  // so the parent can clear any session-unenroll suppression for that login.
+  onEnrolled?: (username: string) => void
 }
 
 type AddStudentFormValues = {
@@ -42,7 +45,13 @@ type AddStudentFormValues = {
 // send org invite) and stores the email; email-only sends an email invite.
 // Either way the student joins the classroom team on accepting the invite. The
 // form collects every students.csv field (name, username, email, section).
-const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
+const AddStudent = ({
+  org,
+  classroom,
+  open,
+  onClose,
+  onEnrolled,
+}: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const queryClient = useQueryClient()
   const githubClient = useGitHubClient()
@@ -118,6 +127,9 @@ const AddStudent = ({ org, classroom, open, onClose }: AddStudentProps) => {
       if (result.kind === "username") {
         // Show the new row immediately (see useUpdateRosterCache).
         updateRosterCache((current) => [...current, result.student])
+        // Clear any earlier unenroll suppression for this login so the roster's
+        // auto-backfills treat the re-added student as enrolled again.
+        onEnrolled?.(result.student.username)
         // Enrolled member -> seed the team-members cache so the row shows
         // enrolled at once; the invited path already shows a pending invite, so
         // just invalidate.

@@ -189,12 +189,18 @@ const RosterBulkActionsBar = ({
       })
       setResult(buildUnenrollResult(res, t))
       setPhase("complete")
-      // Pass the targeted rows so the page suppresses the automatic backfills
-      // from re-adding them (a still-active org member left by a
-      // classroom-scoped unenroll would otherwise be team-added back).
+      // Pass only the CONFIRMED-removed rows so the page suppresses the
+      // automatic backfills for exactly those (a still-active org member left by
+      // a classroom-scoped unenroll would otherwise be team-added back). Rows
+      // that matched nothing (already gone) are not suppressed.
+      const removedKeys = new Set(
+        res.outcomes.filter((o) => o.status === "removed").map((o) => o.key),
+      )
       onDone(
         "unenroll",
-        selectedRows.map((r) => ({ username: r.username })),
+        selectedRows
+          .filter((r) => removedKeys.has(r.key))
+          .map((r) => ({ username: r.username })),
       )
     } catch (err) {
       log.error("bulk unenroll failed", { err, record: true })

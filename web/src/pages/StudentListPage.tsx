@@ -13,6 +13,7 @@ import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import useGetStudents, { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
@@ -34,6 +35,11 @@ const StudentListContent = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
+  // Session-unenrolled logins, owned here so both the roster (which remembers on
+  // unenroll and skips them in the auto-backfills) and the Add modal (which
+  // forgets a login on a successful re-enroll) share one set — otherwise a
+  // re-added student would stay suppressed until reload.
+  const suppressedLogins = useSuppressedLogins()
 
   // Which add-students affordance is open (all mutually exclusive modals).
   const [addOpen, setAddOpen] = useState(false)
@@ -114,6 +120,7 @@ const StudentListContent = ({
         students={students}
         org={org}
         classroom={classroom}
+        suppressedLogins={suppressedLogins}
         addActions={{
           onAddStudent: () => setAddOpen(true),
           onUploadRoster: () => setUploadOpen(true),
@@ -126,6 +133,10 @@ const StudentListContent = ({
         classroom={classroom}
         open={addOpen}
         onClose={() => setAddOpen(false)}
+        // A re-enroll must clear any earlier session-unenroll suppression for
+        // this login, else the auto-backfills would keep skipping the student
+        // the teacher just re-added.
+        onEnrolled={(username) => suppressedLogins.forget([username])}
       />
       <UploadRoster
         org={org}
@@ -140,6 +151,8 @@ const StudentListContent = ({
               ...current,
               ...result.addedStudents.map(toStudent),
             ])
+            // A re-uploaded student clears their earlier unenroll suppression.
+            suppressedLogins.forget(result.addedStudents.map((s) => s.username))
           }
           invalidateInviteQueries(queryClient, org)
         }}

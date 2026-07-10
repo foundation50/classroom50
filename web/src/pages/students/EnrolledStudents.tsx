@@ -34,6 +34,10 @@ import {
 } from "@/hooks/github/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
+import {
+  dropSuppressed,
+  type SuppressedLogins,
+} from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, RosterRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
@@ -97,11 +101,16 @@ const EnrolledStudents = ({
   org,
   classroom,
   addActions,
+  suppressedLogins,
 }: {
   students: Student[]
   org: string
   classroom: string
   addActions?: AddStudentActions
+  // Session-unenrolled logins, owned by the parent so a re-enroll from the Add
+  // modal can clear a login this view suppressed. Shared, not local, so the two
+  // surfaces can't disagree on who's suppressed.
+  suppressedLogins: SuppressedLogins
 }) => {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -331,52 +340,17 @@ const EnrolledStudents = ({
     },
   })
 
-  // Identities the teacher unenrolled this session (studentKey + lowercased
-  // username), so the automatic backfills below never re-add someone they just
-  // removed. Unenroll is classroom-scoped: it drops the CSV row + classroom-team
-  // membership but deliberately leaves ACTIVE org membership intact. That leaves
-  // a window where the student is a still-active org member with no team seat —
-  // which auto-reconcile would otherwise "fix" by team-adding them straight back
-  // (flipping them from removed to enrolled again, and their submissions from
-  // 0/0 to 0/1). The CSV Contents API is also eventually consistent, so a
-  // refetch right after the delete can resurface the row as not_in_org and feed
-  // that same loop. A ref (not state) so mutating it doesn't re-render; it
-  // persists across the re-navigation the loop rides on. A full page reload
-  // legitimately re-derives state and clears it (matching the drift-banner
-  // dismissal), so a genuinely still-drifted student is one refresh — or the
-  // explicit Sync/Reconcile — away.
-  const unenrolledRef = useRef<{ keys: Set<string>; logins: Set<string> }>({
-    keys: new Set(),
-    logins: new Set(),
-  })
-  const rememberUnenrolled = (
-    removed: Array<Pick<TeamRosterRow, "username">>,
-  ) => {
-    for (const row of removed) {
-      const login = row.username.trim().toLowerCase()
-      if (login) unenrolledRef.current.logins.add(login)
-    }
-  }
-  const rememberUnenrolledKey = (rowKey: string, username: string) => {
-    if (rowKey) unenrolledRef.current.keys.add(rowKey)
-    const login = username.trim().toLowerCase()
-    if (login) unenrolledRef.current.logins.add(login)
-  }
-
   // Auto-sync on open: append team members lacking a CSV row (fire once per
-  // drift episode; re-arm when count returns to 0). The effect filters out any
+  // drift episode; re-arm when count returns to 0). dropSuppressed skips any
   // csv-missing member the teacher just unenrolled whose best-effort team-drop
   // failed — otherwise auto-sync would re-append the student it just removed.
-  // (The unenrolled set is read in the effect, not during render, so a ref is
-  // safe here; syncRosterFromTeam re-derives the authoritative set server-side.)
+  // (suppressedLogins is read in the effect, not during render;
+  // syncRosterFromTeam re-derives the authoritative set server-side.)
   const autoSyncedRef = useRef(false)
   const csvMissingKey = csvMissingLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
-    const pending = csvMissingLogins.filter(
-      (login) => !unenrolledRef.current.logins.has(login),
-    )
-    if (pending.length === 0) {
+    if (dropSuppressed(csvMissingLogins, suppressedLogins).length === 0) {
       autoSyncedRef.current = false
       return
     }
@@ -419,15 +393,13 @@ const EnrolledStudents = ({
   })
 
   const autoReconciledRef = useRef(false)
-  // The unenrolled filter runs in the effect (ref read after render) so a
-  // teacher's leftover active org membership isn't silently promoted back onto
-  // the team — the root of the "unenrolled student keeps coming back" loop.
+  // dropSuppressed runs in the effect (read after render) so a teacher's
+  // leftover active org membership isn't silently promoted back onto the team —
+  // the root of the "unenrolled student keeps coming back" loop.
   const notInOrgKey = notInOrgUsernames.join(",")
   useEffect(() => {
     if (isLoading || isError) return
-    const targets = notInOrgUsernames.filter(
-      (u) => !unenrolledRef.current.logins.has(u.trim().toLowerCase()),
-    )
+    const targets = dropSuppressed(notInOrgUsernames, suppressedLogins)
     if (targets.length === 0) {
       autoReconciledRef.current = false
       return
@@ -451,12 +423,12 @@ const EnrolledStudents = ({
 
   const onRowUnenrolled = (rowKey: string, teamWarning?: string) => {
     if (teamWarning) setWarning(rowKey, teamWarning)
-    // Remember this identity so the automatic backfills (auto-sync,
-    // auto-reconcile) don't re-add the student the teacher just removed — e.g.
-    // when a best-effort team-drop failed, or the CSV delete hasn't propagated
-    // and they resurface as not_in_org while still an active org member.
+    // Remember this login so the automatic backfills (auto-sync, auto-reconcile)
+    // don't re-add the student the teacher just removed — e.g. when a
+    // best-effort team-drop failed, or the CSV delete hasn't propagated and they
+    // resurface as not_in_org while still an active org member.
     const removed = rows.find((r) => r.key === rowKey)
-    rememberUnenrolledKey(rowKey, removed?.username ?? "")
+    if (removed?.username) suppressedLogins.remember([removed.username])
     updateRosterCache((current) =>
       current.filter((s) => studentKey(s) !== rowKey),
     )
@@ -480,9 +452,12 @@ const EnrolledStudents = ({
     // Unenroll changes team membership; invite changes org-invite state and may
     // team-add an already-active member — refresh the enrolled roster for both.
     invalidateTeamRoster()
-    // After a bulk unenroll, remember the removed identities so the automatic
-    // backfills don't re-add them (see rememberUnenrolled / the effects).
-    if (action === "unenroll" && removed) rememberUnenrolled(removed)
+    // After a bulk unenroll, remember the removed logins so the automatic
+    // backfills don't re-add them (see the effects). Only confirmed-removed rows
+    // are passed (not selection misses), so a still-enrolled row isn't
+    // suppressed by mistake.
+    if (action === "unenroll" && removed)
+      suppressedLogins.remember(removed.map((r) => r.username))
   }
 
   const renderRow = (row: TeamRosterRow) => {
@@ -754,8 +729,7 @@ const EnrolledStudents = ({
                 // Explicit backfill: clear the post-unenroll suppression so the
                 // teacher's deliberate Sync always runs (re-adding any drifted
                 // team members, even ones removed earlier this session).
-                unenrolledRef.current.logins.clear()
-                unenrolledRef.current.keys.clear()
+                suppressedLogins.clear()
                 syncMutation.mutate()
               }}
               aria-label={t("students.syncRosterTitle")}
