@@ -4,7 +4,7 @@ import { Plus, Send, Upload, UserMinus, X } from "lucide-react"
 
 import type { GitHubClient } from "@/hooks/github/client"
 import { ConfirmModal } from "@/components/modals"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import {
@@ -333,120 +333,117 @@ const RosterBulkActionsBar = ({
 
   return (
     <>
-      <div
-        className={`flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-base-300 px-6 py-3 transition-colors ${
-          hasSelection ? "bg-base-200/60" : ""
-        }`}
+      <Toolbar
+        header
+        className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
       >
-        <label className="flex cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
-            aria-label={t("students.bulk.selectAll")}
-            checked={allSelected}
-            ref={(el) => {
-              if (el) el.indeterminate = someSelected && !allSelected
-            }}
-            onChange={onToggleSelectAll}
-          />
-          <span className="text-sm font-medium tabular-nums">
-            {hasSelection
+        <Toolbar.Selection
+          allSelected={allSelected}
+          someSelected={someSelected}
+          onToggleSelectAll={onToggleSelectAll}
+          selectAllAriaLabel={t("students.bulk.selectAll")}
+          label={
+            hasSelection
               ? t("students.bulk.selectedCount", { count: selectedRows.length })
-              : t("students.bulk.studentCount", { count: totalCount })}
-          </span>
-        </label>
+              : t("students.bulk.studentCount", { count: totalCount })
+          }
+          aux={
+            canGroupBySection && onGroupBySectionChange ? (
+              <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
+                <input
+                  type="checkbox"
+                  className="toggle toggle-sm"
+                  checked={Boolean(groupBySection)}
+                  onChange={(e) => onGroupBySectionChange(e.target.checked)}
+                />
+                {t("students.groupBySection")}
+              </label>
+            ) : null
+          }
+          idleActions={
+            addActions ? (
+              <div className="join ml-auto">
+                <Button
+                  size="sm"
+                  className="join-item"
+                  aria-label={t("students.addTitle")}
+                  title={t("students.addTitle")}
+                  onClick={addActions.onAddStudent}
+                >
+                  <Plus aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  className="join-item"
+                  aria-label={t("students.uploadRosterTitle")}
+                  title={t("students.uploadRosterTitle")}
+                  onClick={addActions.onUploadRoster}
+                >
+                  <Upload aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  className="join-item"
+                  aria-label={t("students.inviteStudents")}
+                  title={t("students.inviteStudents")}
+                  onClick={addActions.onInviteLinks}
+                >
+                  <Send aria-hidden="true" className="size-4" />
+                </Button>
+              </div>
+            ) : null
+          }
+        >
+          {hasSelection ? (
+            <>
+              <div className="join">
+                <Button
+                  size="sm"
+                  className="join-item"
+                  disabled={invitableSelected === 0}
+                  title={
+                    invitableSelected === 0
+                      ? t("students.bulk.inviteNoneInvitable")
+                      : t("students.bulk.inviteSelected", {
+                          count: invitableSelected,
+                        })
+                  }
+                  onClick={() => setConfirmingInvite(true)}
+                >
+                  <Send aria-hidden="true" className="size-4" />
+                  {t("students.bulk.invite")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="join-item text-error hover:bg-error/10"
+                  aria-label={t("students.bulk.unenrollSelected", {
+                    count: selectedRows.length,
+                  })}
+                  title={t("students.bulk.unenrollSelected", {
+                    count: selectedRows.length,
+                  })}
+                  onClick={() => setConfirmingUnenroll(true)}
+                >
+                  <UserMinus aria-hidden="true" className="size-4" />
+                  {t("students.bulk.unenroll")}
+                </Button>
+              </div>
 
-        {canGroupBySection && onGroupBySectionChange ? (
-          <label className="flex shrink-0 cursor-pointer items-center gap-2 text-sm text-base-content/70">
-            <input
-              type="checkbox"
-              className="toggle toggle-sm"
-              checked={Boolean(groupBySection)}
-              onChange={(e) => onGroupBySectionChange(e.target.checked)}
-            />
-            {t("students.groupBySection")}
-          </label>
-        ) : null}
-
-        {hasSelection ? (
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <div className="join">
-              <Button
-                size="sm"
-                className="join-item"
-                disabled={invitableSelected === 0}
-                title={
-                  invitableSelected === 0
-                    ? t("students.bulk.inviteNoneInvitable")
-                    : t("students.bulk.inviteSelected", {
-                        count: invitableSelected,
-                      })
-                }
-                onClick={() => setConfirmingInvite(true)}
-              >
-                <Send aria-hidden="true" className="size-4" />
-                {t("students.bulk.invite")}
-              </Button>
               <Button
                 variant="ghost"
                 size="sm"
-                className="join-item text-error hover:bg-error/10"
-                aria-label={t("students.bulk.unenrollSelected", {
-                  count: selectedRows.length,
-                })}
-                title={t("students.bulk.unenrollSelected", {
-                  count: selectedRows.length,
-                })}
-                onClick={() => setConfirmingUnenroll(true)}
+                shape="square"
+                aria-label={t("students.bulk.clearSelection")}
+                title={t("students.bulk.clearSelection")}
+                onClick={onClearSelection}
               >
-                <UserMinus aria-hidden="true" className="size-4" />
-                {t("students.bulk.unenroll")}
+                <X aria-hidden="true" className="size-4" />
               </Button>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              shape="square"
-              aria-label={t("students.bulk.clearSelection")}
-              title={t("students.bulk.clearSelection")}
-              onClick={onClearSelection}
-            >
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        ) : addActions ? (
-          <div className="join ml-auto">
-            <Button
-              size="sm"
-              className="join-item"
-              aria-label={t("students.addTitle")}
-              title={t("students.addTitle")}
-              onClick={addActions.onAddStudent}
-            >
-              <Plus aria-hidden="true" className="size-4" />
-            </Button>
-            <Button
-              size="sm"
-              className="join-item"
-              aria-label={t("students.uploadRosterTitle")}
-              title={t("students.uploadRosterTitle")}
-              onClick={addActions.onUploadRoster}
-            >
-              <Upload aria-hidden="true" className="size-4" />
-            </Button>
-            <Button
-              size="sm"
-              className="join-item"
-              aria-label={t("students.inviteStudents")}
-              title={t("students.inviteStudents")}
-              onClick={addActions.onInviteLinks}
-            >
-              <Send aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        ) : null}
-      </div>
+            </>
+          ) : null}
+        </Toolbar.Selection>
+      </Toolbar>
 
       <ConfirmModal
         open={confirmingUnenroll}

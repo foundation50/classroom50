@@ -122,7 +122,12 @@ describe("Toolbar.Search", () => {
 describe("Toolbar.FilterSelect", () => {
   it("renders a labelled join select with the prefix", () => {
     render(
-      <Toolbar.FilterSelect label="Type" aria-label="Type filter" value="all" onChange={() => {}}>
+      <Toolbar.FilterSelect
+        label="Type"
+        aria-label="Type filter"
+        value="all"
+        onChange={() => {}}
+      >
         <option value="all">All</option>
         <option value="a" disabled>
           A
@@ -208,9 +213,7 @@ describe("Toolbar.Selection", () => {
   })
 
   it("sets indeterminate when partially selected", () => {
-    render(
-      <Toolbar.Selection {...base} allSelected={false} someSelected />,
-    )
+    render(<Toolbar.Selection {...base} allSelected={false} someSelected />)
     const checkbox = screen.getByLabelText("Select all") as HTMLInputElement
     expect(checkbox.indeterminate).toBe(true)
   })

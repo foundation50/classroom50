@@ -9,7 +9,14 @@ import {
 } from "lucide-react"
 
 import { nameFromParts } from "@/util/students"
-import { Alert, AnimatedAlert, Button, Card, Spinner, Toolbar } from "@/components/ui"
+import {
+  Alert,
+  AnimatedAlert,
+  Button,
+  Card,
+  Spinner,
+  Toolbar,
+} from "@/components/ui"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"

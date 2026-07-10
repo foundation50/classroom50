@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, UserMinus, X } from "lucide-react"
 
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/hooks/github/client"
 import type { GitHubUser } from "@/hooks/github/types"
 import type { StudentCsvRow } from "@/api/mutations/students"
@@ -275,105 +275,98 @@ const BulkActionsBar = ({
 
   return (
     <>
-      <div
-        className={`flex flex-wrap items-center gap-x-4 gap-y-3 border-b border-base-300 px-6 py-3 transition-colors ${
-          hasSelection ? "bg-base-200/60" : ""
-        }`}
+      <Toolbar
+        header
+        className={`transition-colors ${hasSelection ? "bg-base-200/60" : ""}`}
       >
-        <label className="flex cursor-pointer items-center gap-3">
-          <input
-            type="checkbox"
-            className="checkbox checkbox-sm"
-            aria-label={t("orgMembers.bulk.selectAll")}
-            checked={allSelected}
-            ref={(el) => {
-              if (el) el.indeterminate = someSelected && !allSelected
-            }}
-            onChange={onToggleSelectAll}
-          />
-          <span className="text-sm font-medium tabular-nums">
-            {hasSelection
+        <Toolbar.Selection
+          allSelected={allSelected}
+          someSelected={someSelected}
+          onToggleSelectAll={onToggleSelectAll}
+          selectAllAriaLabel={t("orgMembers.bulk.selectAll")}
+          label={
+            hasSelection
               ? t("orgMembers.bulk.selectedCount", {
                   count: selectedRows.length,
                 })
-              : t("orgMembers.bulk.memberCount", { count: totalCount })}
-          </span>
-        </label>
-
-        {hasSelection ? (
-          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
-            <label
-              htmlFor={`${titleId}-picker`}
-              className="text-sm text-base-content/60"
-            >
-              {t("orgMembers.bulk.classroomLabel")}
-            </label>
-            <select
-              id={`${titleId}-picker`}
-              className="select select-bordered select-sm max-w-[12rem]"
-              value={effectiveClassroom}
-              onChange={(e) => setClassroom(e.target.value)}
-              disabled={classrooms.length === 0}
-            >
-              {classrooms.length === 0 ? (
-                <option value="">{t("orgMembers.bulk.noClassrooms")}</option>
-              ) : (
-                classrooms.map((c) => (
-                  <option key={c.path} value={c.path}>
-                    {c.name}
-                  </option>
-                ))
-              )}
-            </select>
-
-            <div className="join">
-              <Button
-                variant="primary"
-                size="sm"
-                className="join-item"
-                disabled={!effectiveClassroom}
-                aria-label={t("orgMembers.bulk.addToClassroom", {
-                  classroom: effectiveClassroom,
-                })}
-                title={t("orgMembers.bulk.addToClassroom", {
-                  classroom: effectiveClassroom,
-                })}
-                onClick={() => setConfirmingAdd(true)}
+              : t("orgMembers.bulk.memberCount", { count: totalCount })
+          }
+        >
+          {hasSelection ? (
+            <>
+              <label
+                htmlFor={`${titleId}-picker`}
+                className="text-sm text-base-content/60"
               >
-                <Plus aria-hidden="true" className="size-4" />
-                {t("orgMembers.bulk.add")}
-              </Button>
+                {t("orgMembers.bulk.classroomLabel")}
+              </label>
+              <select
+                id={`${titleId}-picker`}
+                className="select select-bordered select-sm max-w-[12rem]"
+                value={effectiveClassroom}
+                onChange={(e) => setClassroom(e.target.value)}
+                disabled={classrooms.length === 0}
+              >
+                {classrooms.length === 0 ? (
+                  <option value="">{t("orgMembers.bulk.noClassrooms")}</option>
+                ) : (
+                  classrooms.map((c) => (
+                    <option key={c.path} value={c.path}>
+                      {c.name}
+                    </option>
+                  ))
+                )}
+              </select>
+
+              <div className="join">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  className="join-item"
+                  disabled={!effectiveClassroom}
+                  aria-label={t("orgMembers.bulk.addToClassroom", {
+                    classroom: effectiveClassroom,
+                  })}
+                  title={t("orgMembers.bulk.addToClassroom", {
+                    classroom: effectiveClassroom,
+                  })}
+                  onClick={() => setConfirmingAdd(true)}
+                >
+                  <Plus aria-hidden="true" className="size-4" />
+                  {t("orgMembers.bulk.add")}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="join-item text-error hover:bg-error/10"
+                  disabled={!effectiveClassroom}
+                  aria-label={t("orgMembers.bulk.removeFromClassroom", {
+                    classroom: effectiveClassroom,
+                  })}
+                  title={t("orgMembers.bulk.removeFromClassroom", {
+                    classroom: effectiveClassroom,
+                  })}
+                  onClick={() => setConfirmingRemove(true)}
+                >
+                  <UserMinus aria-hidden="true" className="size-4" />
+                  {t("orgMembers.bulk.remove")}
+                </Button>
+              </div>
+
               <Button
                 variant="ghost"
                 size="sm"
-                className="join-item text-error hover:bg-error/10"
-                disabled={!effectiveClassroom}
-                aria-label={t("orgMembers.bulk.removeFromClassroom", {
-                  classroom: effectiveClassroom,
-                })}
-                title={t("orgMembers.bulk.removeFromClassroom", {
-                  classroom: effectiveClassroom,
-                })}
-                onClick={() => setConfirmingRemove(true)}
+                shape="square"
+                aria-label={t("orgMembers.bulk.clearSelection")}
+                title={t("orgMembers.bulk.clearSelection")}
+                onClick={onClearSelection}
               >
-                <UserMinus aria-hidden="true" className="size-4" />
-                {t("orgMembers.bulk.remove")}
+                <X aria-hidden="true" className="size-4" />
               </Button>
-            </div>
-
-            <Button
-              variant="ghost"
-              size="sm"
-              shape="square"
-              aria-label={t("orgMembers.bulk.clearSelection")}
-              title={t("orgMembers.bulk.clearSelection")}
-              onClick={onClearSelection}
-            >
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        ) : null}
-      </div>
+            </>
+          ) : null}
+        </Toolbar.Selection>
+      </Toolbar>
 
       <ConfirmModal
         open={confirmingRemove}

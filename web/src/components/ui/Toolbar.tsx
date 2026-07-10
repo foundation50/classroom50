@@ -70,7 +70,9 @@ function ToolbarSearch({
       type="search"
       inputSize={inputSize}
       className={className}
-      leadingIcon={<Search aria-hidden="true" className={cx("size-4", iconClassName)} />}
+      leadingIcon={
+        <Search aria-hidden="true" className={cx("size-4", iconClassName)} />
+      }
       placeholder={placeholder}
       value={value}
       onChange={(e) => onChange(e.target.value)}
@@ -117,7 +119,11 @@ export type ToolbarTrailingProps = {
   children?: ReactNode
 } & ComponentPropsWithoutRef<"div">
 
-function ToolbarTrailing({ className, children, ...props }: ToolbarTrailingProps) {
+function ToolbarTrailing({
+  className,
+  children,
+  ...props
+}: ToolbarTrailingProps) {
   if (!children) return null
   return (
     <div
