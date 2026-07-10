@@ -574,38 +574,29 @@ const CreateAssignmentForm = ({
                         {t("assignments.form.type")}
                       </legend>
                       <div className="flex flex-wrap gap-x-6 gap-y-2">
-                        <label
-                          htmlFor={`${field.name}-individual`}
-                          className="label cursor-pointer gap-2 p-0"
-                        >
-                          <input
-                            id={`${field.name}-individual`}
-                            type="radio"
-                            className="radio"
-                            name={field.name}
-                            value="individual"
-                            checked={field.state.value === "individual"}
-                            onBlur={field.handleBlur}
-                            onChange={() => field.handleChange("individual")}
-                          />
-                          {t("assignments.form.typeIndividual")}
-                        </label>
-                        <label
-                          htmlFor={`${field.name}-group`}
-                          className="label cursor-pointer gap-2 p-0"
-                        >
-                          <input
-                            id={`${field.name}-group`}
-                            type="radio"
-                            className="radio"
-                            name={field.name}
-                            value="group"
-                            checked={field.state.value === "group"}
-                            onBlur={field.handleBlur}
-                            onChange={() => field.handleChange("group")}
-                          />
-                          {t("assignments.form.typeGroup")}
-                        </label>
+                        {(["individual", "group"] as const).map((value) => (
+                          <label
+                            key={value}
+                            htmlFor={`${field.name}-${value}`}
+                            className="label cursor-pointer gap-2 p-0"
+                          >
+                            <input
+                              id={`${field.name}-${value}`}
+                              type="radio"
+                              className="radio"
+                              name={field.name}
+                              value={value}
+                              checked={field.state.value === value}
+                              onBlur={field.handleBlur}
+                              onChange={() => field.handleChange(value)}
+                            />
+                            {t(
+                              value === "individual"
+                                ? "assignments.form.typeIndividual"
+                                : "assignments.form.typeGroup",
+                            )}
+                          </label>
+                        ))}
                       </div>
                     </fieldset>
                   )}
@@ -686,8 +677,6 @@ const CreateAssignmentForm = ({
                         checked={dueDateEnabled}
                         onChange={(checked) => {
                           setDueDateEnabled(checked)
-                          // Unchecking clears the value so the write path omits
-                          // the due date entirely (#195).
                           if (!checked) field.handleChange("")
                         }}
                         label={t("assignments.form.setDueDate")}
