@@ -48,6 +48,15 @@ export type { StatCardProps } from "./StatCard"
 export { LabeledControl } from "./LabeledControl"
 export type { LabeledControlProps } from "./LabeledControl"
 
+export { Toolbar } from "./Toolbar"
+export type {
+  ToolbarProps,
+  ToolbarSearchProps,
+  ToolbarFilterSelectProps,
+  ToolbarTrailingProps,
+  ToolbarSelectionProps,
+} from "./Toolbar"
+
 export { Spinner } from "@/components/Spinner"
 
 export { cx } from "./cx"
