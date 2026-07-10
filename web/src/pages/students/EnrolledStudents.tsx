@@ -3,14 +3,13 @@ import {
   ChevronRight,
   Plus,
   RefreshCw,
-  Search,
   Send,
   Upload,
   X,
 } from "lucide-react"
 
 import { nameFromParts } from "@/util/students"
-import { Alert, AnimatedAlert, Button, Card, Spinner } from "@/components/ui"
+import { Alert, AnimatedAlert, Button, Card, Spinner, Toolbar } from "@/components/ui"
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -584,20 +583,19 @@ const EnrolledStudents = ({
       {/* Toolbar: search + status filter (group-by-section lives in the table
           header next to the count). Sync pinned far-right when applicable. */}
       {!isLoading && !isError && !isEmpty ? (
-        <div className="flex flex-wrap items-center gap-3">
-          <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
-            <Search aria-hidden="true" className="size-4 opacity-50" />
-            <input
-              type="search"
-              className="grow"
-              placeholder={t("students.searchPlaceholder")}
-              aria-label={t("students.searchLabel")}
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-          </label>
-          <select
-            className="select select-bordered w-full sm:w-auto"
+        <Toolbar className="gap-3">
+          <Toolbar.Search
+            inputSize="md"
+            className="min-w-0 flex-1"
+            iconClassName="opacity-50"
+            placeholder={t("students.searchPlaceholder")}
+            ariaLabel={t("students.searchLabel")}
+            value={query}
+            onChange={setQuery}
+          />
+          <Toolbar.FilterSelect
+            selectSize="md"
+            className="w-full sm:w-auto"
             aria-label={t("students.filterByStatusLabel")}
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
@@ -607,10 +605,11 @@ const EnrolledStudents = ({
                 {o.label}
               </option>
             ))}
-          </select>
+          </Toolbar.FilterSelect>
           {sectionOptions.length > 0 ? (
-            <select
-              className="select select-bordered w-full sm:w-auto"
+            <Toolbar.FilterSelect
+              selectSize="md"
+              className="w-full sm:w-auto"
               aria-label={t("students.filterBySectionLabel")}
               value={effectiveSection}
               onChange={(e) => setSectionFilter(e.target.value)}
@@ -621,7 +620,7 @@ const EnrolledStudents = ({
                   {section === NO_SECTION ? t("students.noSection") : section}
                 </option>
               ))}
-            </select>
+            </Toolbar.FilterSelect>
           ) : null}
           {syncMutation.isPending || csvMissingCount > 0 ? (
             <Button
@@ -644,7 +643,7 @@ const EnrolledStudents = ({
               />
             </Button>
           ) : null}
-        </div>
+        </Toolbar>
       ) : null}
 
       {/* The list card. */}

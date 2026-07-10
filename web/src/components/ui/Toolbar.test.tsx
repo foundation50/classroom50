@@ -32,6 +32,17 @@ describe("Toolbar shell", () => {
     expect(cls).toContain("mt-6")
   })
 
+  it("lets a caller gap override the default gap-2", () => {
+    render(
+      <Toolbar data-testid="bar" className="gap-3">
+        <span>x</span>
+      </Toolbar>,
+    )
+    const cls = screen.getByTestId("bar").className
+    expect(cls).not.toContain("gap-2")
+    expect(cls).toContain("gap-3")
+  })
+
   it("switches to the header chrome and wider gap when header is set", () => {
     render(
       <Toolbar data-testid="bar" header>

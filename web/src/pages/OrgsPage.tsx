@@ -13,13 +13,12 @@ import {
   Lock,
   Plus,
   RefreshCw,
-  Search,
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -372,25 +371,19 @@ const OrgsPage = () => {
             />
 
             {hasAnyOrgs && (
-              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <label className="input input-bordered flex w-full items-center gap-2 sm:max-w-xs">
-                  <Search
-                    aria-hidden="true"
-                    className="size-4 text-base-content/50"
-                  />
-                  <input
-                    type="search"
-                    className="grow"
-                    placeholder={t("orgs.toolbar.searchPlaceholder")}
-                    aria-label={t("orgs.toolbar.searchLabel")}
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                  />
-                </label>
+              <Toolbar className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <Toolbar.Search
+                  inputSize="md"
+                  className="w-full sm:max-w-xs"
+                  iconClassName="text-base-content/50"
+                  placeholder={t("orgs.toolbar.searchPlaceholder")}
+                  ariaLabel={t("orgs.toolbar.searchLabel")}
+                  value={search}
+                  onChange={setSearch}
+                />
 
                 <div className="flex items-center gap-3">
-                  <select
-                    className="select select-bordered select-sm"
+                  <Toolbar.FilterSelect
                     aria-label={t("orgs.toolbar.sort.label")}
                     value={sortKey}
                     onChange={(e) => changeSort(e.target.value as OrgSortKey)}
@@ -400,7 +393,7 @@ const OrgsPage = () => {
                         {t(opt.labelKey)}
                       </option>
                     ))}
-                  </select>
+                  </Toolbar.FilterSelect>
 
                   <ViewToggle
                     viewMode={viewMode}
@@ -418,7 +411,7 @@ const OrgsPage = () => {
                     {t("orgs.newOrg.button")}
                   </Button>
                 </div>
-              </div>
+              </Toolbar>
             )}
 
             {noSearchResults ? (

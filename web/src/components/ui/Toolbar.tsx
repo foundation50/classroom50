@@ -24,13 +24,17 @@ export function Toolbar({
   children,
   ...props
 }: ToolbarProps) {
+  // Let a caller override the default gap (mirrors Input/Select's width guard):
+  // cx doesn't merge Tailwind classes, so a stray default `gap-2` would beat a
+  // per-site `gap-3`.
+  const hasGap = className ? /(?:^|\s)gap-/.test(className) : false
   return (
     <div
       className={cx(
         "flex flex-wrap items-center",
         header
           ? "gap-x-4 gap-y-3 border-b border-base-300 px-6 py-3"
-          : "gap-2",
+          : !hasGap && "gap-2",
         className,
       )}
       {...props}
