@@ -1,4 +1,5 @@
 import type { Student } from "@/types/classroom"
+import type { StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import { rosterClaimSet } from "@/util/identity"
 
@@ -25,11 +26,26 @@ import { rosterClaimSet } from "@/util/identity"
 
 export type TeamRosterRowState = "enrolled" | "pending" | "not_in_org"
 
+// A person's classroom role(s). "student" = classroom team; "instructor"/"ta"
+// = the per-classroom staff teams. A person can hold several (an instructor
+// also on the student team), so a row carries a set, unioned across teams.
+export type RosterRole = StaffRole | "student"
+
+// Precedence for the primary badge / role sort: instructor > ta > student.
+const ROLE_RANK: Record<RosterRole, number> = {
+  instructor: 2,
+  ta: 1,
+  student: 0,
+}
+
 export type TeamRosterRow = {
   // Stable identity for React keys and joins: github_id || login || email.
   // Mirrors studentKey.
   key: string
   state: TeamRosterRowState
+  // Classroom role(s) this person holds, unioned across the student + staff
+  // teams. Never empty: a plain student is ["student"]. Sorted by ROLE_RANK.
+  roles: RosterRole[]
   // GitHub identity when known. Empty only for an email-only pending invite.
   username: string
   github_id: string
@@ -100,6 +116,13 @@ export type BuildTeamRosterInput = {
   // Pending org invitations. May be empty for a non-owner who can't read them
   // (owner-only endpoint) — enrolled rows still render.
   invitations?: GitHubOrgInvitation[]
+  // Active members of the per-classroom staff teams, keyed by role. Merged into
+  // the same rows as `members` (a person on both the student and instructor
+  // team is one enrolled row with roles ["instructor","student"]).
+  staffMembers?: Partial<Record<StaffRole, GitHubUser[]>>
+  // Pending team invitations for the staff teams, keyed by role. Team-scoped, so
+  // a pending row is tagged with the role whose team lists it.
+  staffInvitations?: Partial<Record<StaffRole, GitHubOrgInvitation[]>>
   // Optional students.csv rows (display metadata only).
   students: Student[]
 }
@@ -111,7 +134,13 @@ export type BuildTeamRosterInput = {
 // Never duplicates a person (a member on the CSV appears once; a username-invite
 // that is also a member is credited as the member).
 export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
-  const { members, invitations = [], students } = input
+  const {
+    members,
+    invitations = [],
+    staffMembers = {},
+    staffInvitations = {},
+    students,
+  } = input
   const csv = indexCsv(students)
 
   // Legacy username-less rows indexed by email, to enrich a real (username or
@@ -134,32 +163,73 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // Track emitted identities so invites/CSV don't double up.
   const seenIds = new Set<string>()
   const seenLogins = new Set<string>()
+  // Enrolled rows already emitted, keyed by member id, so a person on several
+  // teams gets one row with their roles unioned rather than duplicate rows.
+  const enrolledById = new Map<string, TeamRosterRow>()
+  // Pending rows already emitted, keyed by login (else email), for the same
+  // union across the student + staff team invitation lists.
+  const pendingByKey = new Map<string, TeamRosterRow>()
 
-  for (const member of members) {
+  // Members tagged with the role of the team they came from. The student team
+  // is "student"; each staff team its role. Student first so a student+staff
+  // person keeps their student metadata join, with staff roles unioned on.
+  const roleMembers: Array<{ role: RosterRole; member: GitHubUser }> = [
+    ...members.map((member) => ({ role: "student" as const, member })),
+    ...STAFF_MEMBER_ROLES.flatMap((role) =>
+      (staffMembers[role] ?? []).map((member) => ({ role, member })),
+    ),
+  ]
+
+  for (const { role, member } of roleMembers) {
     const id = String(member.id)
+    const existing = enrolledById.get(id)
+    if (existing) {
+      addRole(existing, role)
+      continue
+    }
     const login = member.login.toLowerCase()
     seenIds.add(id)
     seenLogins.add(login)
     const own = csvForMember(csv, member)
     const email = own?.email?.trim().toLowerCase()
-    rows.push({
+    const row: TeamRosterRow = {
       key: id,
       state: "enrolled",
+      roles: [role],
       username: member.login,
       github_id: id,
       avatar_url: member.avatar_url,
       ...metadataFrom(own, legacyFor(email)),
-    })
+    }
+    enrolledById.set(id, row)
+    rows.push(row)
   }
 
-  for (const invite of invitations) {
+  // Pending, tagged by role. Student-team pending (org-level invitations) is
+  // "student"; each staff team's team-scoped invitations its role.
+  const roleInvites: Array<{ role: RosterRole; invite: GitHubOrgInvitation }> =
+    [
+      ...invitations.map((invite) => ({ role: "student" as const, invite })),
+      ...STAFF_MEMBER_ROLES.flatMap((role) =>
+        (staffInvitations[role] ?? []).map((invite) => ({ role, invite })),
+      ),
+    ]
+
+  for (const { role, invite } of roleInvites) {
     const login = invite.login?.trim() ?? ""
     const loginKey = login.toLowerCase()
     const email = invite.email?.trim() ?? ""
     const emailKey = email.toLowerCase()
-    // A login-carrying invite for an account already a member is stale — skip.
-    // Email-only invites can't collide with a member here.
+    // A login-carrying invite for an account already an active member is stale
+    // — skip. Email-only invites can't collide with a member here.
     if (loginKey && seenLogins.has(loginKey)) continue
+
+    const dedupeKey = loginKey || emailKey || `id:${invite.id}`
+    const existingPending = pendingByKey.get(dedupeKey)
+    if (existingPending) {
+      addRole(existingPending, role)
+      continue
+    }
 
     // Join CSV metadata by login first, then email.
     const own =
@@ -167,9 +237,10 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       (emailKey ? csv.byEmail.get(emailKey) : undefined)
 
     if (loginKey) seenLogins.add(loginKey)
-    rows.push({
+    const row: TeamRosterRow = {
       key: login || email || String(invite.id),
       state: "pending",
+      roles: [role],
       username: login,
       github_id: own?.github_id?.trim() ?? "",
       avatar_url: "",
@@ -177,7 +248,9 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       ...metadataFrom(own, legacyFor(emailKey || own?.email)),
       // Prefer the row's own email; fall back to the invite's target email.
       email: own?.email?.trim() || email,
-    })
+    }
+    pendingByKey.set(dedupeKey, row)
+    rows.push(row)
   }
 
   for (const student of students) {
@@ -196,6 +269,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     rows.push({
       key: student.github_id || student.username,
       state: "not_in_org",
+      roles: ["student"],
       username: student.username?.trim() ?? "",
       github_id: id,
       avatar_url: "",
@@ -204,6 +278,17 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   }
 
   return sortRows(rows)
+}
+
+// Every staff role in a stable order (instructor before ta), mirroring the
+// STAFF_ROLES contract. Kept here so the two role-fanout loops iterate the same
+// order without importing the array (which would widen this module's surface).
+const STAFF_MEMBER_ROLES: StaffRole[] = ["instructor", "ta"]
+
+// Add a role to a row's set (idempotent), keeping ROLE_RANK order.
+function addRole(row: TeamRosterRow, role: RosterRole): void {
+  if (row.roles.includes(role)) return
+  row.roles = [...row.roles, role].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
 // Display name for sorting: "Last, First" folded to a comparable string, else

@@ -7,6 +7,7 @@ import type { TeamRosterRow } from "@/util/teamRoster"
 const rosterRow = (over: Partial<TeamRosterRow> = {}): TeamRosterRow => ({
   key: "1",
   state: "enrolled",
+  roles: ["student"],
   username: "octocat",
   github_id: "1",
   first_name: "",

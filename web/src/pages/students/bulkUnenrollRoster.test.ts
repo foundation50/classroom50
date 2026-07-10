@@ -22,6 +22,7 @@ const client = {} as never
 const row = (over: Partial<TeamRosterRow> = {}): TeamRosterRow => ({
   key: "1",
   state: "enrolled",
+  roles: ["student"],
   username: "alice",
   github_id: "1",
   first_name: "",

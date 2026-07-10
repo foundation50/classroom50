@@ -259,6 +259,85 @@ describe("buildTeamRoster", () => {
   })
 })
 
+describe("buildTeamRoster — roles (union across student + staff teams)", () => {
+  it("tags a student-team member as student", () => {
+    const rows = buildTeamRoster({
+      members: [member(1, "stu")],
+      students: [],
+    })
+    expect(rows[0].roles).toEqual(["student"])
+  })
+
+  it("tags a staff-team member with their role", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      staffMembers: { ta: [member(2, "tessa")] },
+      students: [],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: "enrolled", username: "tessa" })
+    expect(rows[0].roles).toEqual(["ta"])
+  })
+
+  it("unions roles for a person on both the student and instructor teams (one row)", () => {
+    const rows = buildTeamRoster({
+      members: [member(3, "prof")],
+      staffMembers: { instructor: [member(3, "prof")] },
+      students: [],
+    })
+    expect(rows).toHaveLength(1)
+    // Sorted by ROLE_RANK: instructor before student.
+    expect(rows[0].roles).toEqual(["instructor", "student"])
+  })
+
+  it("credits a staff member who is also pending elsewhere as enrolled (no dup)", () => {
+    const rows = buildTeamRoster({
+      members: [member(4, "ada")],
+      staffInvitations: { instructor: [invite({ id: 5, login: "ada" })] },
+      students: [],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("enrolled")
+    // The stale login-invite for an active member is skipped, so no instructor
+    // role is added from it.
+    expect(rows[0].roles).toEqual(["student"])
+  })
+
+  it("tags a pending staff invite with the team's role", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      staffInvitations: { ta: [invite({ id: 6, login: "newta" })] },
+      students: [],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: "pending", username: "newta" })
+    expect(rows[0].roles).toEqual(["ta"])
+    expect(rows[0].invitation_id).toBe(6)
+  })
+
+  it("tags an email-only pending staff invite by email", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      staffInvitations: {
+        instructor: [invite({ id: 7, email: "prof@uni.edu" })],
+      },
+      students: [csvRow({ email: "prof@uni.edu", first_name: "Prof" })],
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ state: "pending", first_name: "Prof" })
+    expect(rows[0].roles).toEqual(["instructor"])
+  })
+
+  it("keeps not_in_org CSV rows as student", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ username: "ghost" })],
+    })
+    expect(rows[0]).toMatchObject({ state: "not_in_org", username: "ghost" })
+    expect(rows[0].roles).toEqual(["student"])
+  })
+})
+
 describe("teamMembersMissingFromCsv", () => {
   it("returns team members with no CSV row (matched by id/login/email)", () => {
     const missing = teamMembersMissingFromCsv(
