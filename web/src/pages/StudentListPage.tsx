@@ -50,9 +50,11 @@ const StudentListContent = ({
     isError: rosterError,
   } = useTeamRoster(org, classroom, students)
   const countReady = !rosterLoading && !rosterError
-  // Show staff head counts alongside students only when the class actually has
-  // a TA (per the roster design — a TA-less class keeps the plain student line).
-  const showStaffCounts = roleCounts.ta > 0
+  // Staff head counts appear independently, each shown only when the class has
+  // at least one enrolled member in that role — so an instructor-only class
+  // still surfaces its instructor count (a TA-less class no longer hides it).
+  const showInstructorCount = roleCounts.instructor > 0
+  const showTaCount = roleCounts.ta > 0
 
   return (
     <>
@@ -69,20 +71,17 @@ const StudentListContent = ({
                 >
                   {t("students.enrolledCount", { count: roleCounts.student })}
                 </Badge>
-                {showStaffCounts ? (
-                  <>
-                    <Badge
-                      tone={ROLE_BADGE_TONE.instructor}
-                      className="shrink-0"
-                    >
-                      {t("students.instructorCount", {
-                        count: roleCounts.instructor,
-                      })}
-                    </Badge>
-                    <Badge tone={ROLE_BADGE_TONE.ta} className="shrink-0">
-                      {t("students.taCount", { count: roleCounts.ta })}
-                    </Badge>
-                  </>
+                {showInstructorCount ? (
+                  <Badge tone={ROLE_BADGE_TONE.instructor} className="shrink-0">
+                    {t("students.instructorCount", {
+                      count: roleCounts.instructor,
+                    })}
+                  </Badge>
+                ) : null}
+                {showTaCount ? (
+                  <Badge tone={ROLE_BADGE_TONE.ta} className="shrink-0">
+                    {t("students.taCount", { count: roleCounts.ta })}
+                  </Badge>
                 ) : null}
               </>
             ) : (
