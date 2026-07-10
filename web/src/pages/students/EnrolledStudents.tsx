@@ -593,7 +593,7 @@ const EnrolledStudents = ({
         <Toolbar className="gap-3">
           <Toolbar.Search
             inputSize="md"
-            className="min-w-0 flex-1"
+            className="w-auto min-w-0 flex-1"
             iconClassName="opacity-50"
             placeholder={t("students.searchPlaceholder")}
             ariaLabel={t("students.searchLabel")}

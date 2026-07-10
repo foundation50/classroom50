@@ -384,6 +384,7 @@ const OrgsPage = () => {
 
                 <div className="flex items-center gap-3">
                   <Toolbar.FilterSelect
+                    className="w-auto"
                     aria-label={t("orgs.toolbar.sort.label")}
                     value={sortKey}
                     onChange={(e) => changeSort(e.target.value as OrgSortKey)}

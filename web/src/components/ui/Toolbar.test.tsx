@@ -105,6 +105,22 @@ describe("Toolbar.Search", () => {
     expect(label.className).not.toContain("input-sm")
   })
 
+  it("suppresses the default w-full when a caller passes w-auto with flex utilities", () => {
+    render(
+      <Toolbar.Search
+        value=""
+        onChange={() => {}}
+        ariaLabel="Search"
+        inputSize="md"
+        className="w-auto min-w-0 flex-1"
+      />,
+    )
+    const label = screen.getByLabelText("Search").closest("label")!
+    expect(label.className).not.toContain("w-full")
+    expect(label.className).toContain("w-auto")
+    expect(label.className).toContain("flex-1")
+  })
+
   it("applies an icon className override", () => {
     const { container } = render(
       <Toolbar.Search
