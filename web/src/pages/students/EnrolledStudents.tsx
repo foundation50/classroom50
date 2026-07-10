@@ -35,6 +35,7 @@ import {
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
+import type { RosterRole } from "@/util/teamRoster"
 import { studentKey, toStudent } from "@/util/roster"
 import { isSameGitHubUser } from "@/util/students"
 import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
@@ -82,6 +83,24 @@ export function groupStudentsBySection<T extends { section?: string }>(
 // Status filter values for the unified list.
 type StatusFilter = "all" | TeamRosterRowState
 
+// Role filter values for the unified list.
+type RoleFilter = "all" | RosterRole
+
+// i18n key per role for the row badge and filter labels.
+const ROLE_LABEL_KEY: Record<RosterRole, string> = {
+  instructor: "students.roleInstructor",
+  ta: "students.roleTa",
+  student: "students.roleStudent",
+}
+
+// DaisyUI badge tone per role, distinct from the warning/error status badges so
+// role and enrollment state read as separate facets.
+const ROLE_BADGE_CLASS: Record<RosterRole, string> = {
+  instructor: "badge-primary",
+  ta: "badge-secondary",
+  student: "badge-ghost",
+}
+
 const EnrolledStudents = ({
   students = [],
   org,
@@ -106,6 +125,7 @@ const EnrolledStudents = ({
   const [groupBySection, setGroupBySection] = useState(false)
   const [query, setQuery] = useState("")
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all")
+  const [roleFilter, setRoleFilter] = useState<RoleFilter>("all")
   const [sectionFilter, setSectionFilter] = useState<string>("all")
   const [selectedKey, setSelectedKey] = useState<string | null>(null)
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
@@ -144,13 +164,18 @@ const EnrolledStudents = ({
     invalidateInviteQueriesForOrg(queryClient, org)
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
-  // yourself), mirroring Org Members' self-exclusion.
+  // yourself), mirroring Org Members' self-exclusion. Staff rows aren't
+  // bulk-selectable either: unenroll is a student-roster action (drops the CSV
+  // row + student-team membership), not a way to remove an instructor/TA.
   const isSelf = (row: TeamRosterRow) =>
     isSameGitHubUser(viewer ?? null, {
       github_id: row.github_id,
       username: row.username,
     })
-  const isSelectable = (row: TeamRosterRow) => !isSelf(row)
+  const isStudentOnly = (row: TeamRosterRow) =>
+    row.roles.length === 1 && row.roles[0] === "student"
+  const isSelectable = (row: TeamRosterRow) =>
+    !isSelf(row) && isStudentOnly(row)
 
   // Distinct sections present across all rows (status-independent so switching
   // status never empties the section dropdown), sorted with "No section" last.
@@ -183,6 +208,7 @@ const EnrolledStudents = ({
     const q = query.trim().toLowerCase()
     return rows.filter((row) => {
       if (statusFilter !== "all" && row.state !== statusFilter) return false
+      if (roleFilter !== "all" && !row.roles.includes(roleFilter)) return false
       if (effectiveSection !== "all") {
         const section = row.section.trim() || NO_SECTION
         if (section !== effectiveSection) return false
@@ -193,7 +219,7 @@ const EnrolledStudents = ({
         field.toLowerCase().includes(q),
       )
     })
-  }, [rows, query, statusFilter, effectiveSection])
+  }, [rows, query, statusFilter, roleFilter, effectiveSection])
 
   const hasSectionsInFiltered = useMemo(
     () => filtered.some((r) => r.section.trim()),
@@ -450,6 +476,16 @@ const EnrolledStudents = ({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
+          {row.roles
+            .filter((role) => role !== "student" || row.roles.length === 1)
+            .map((role) => (
+              <span
+                key={role}
+                className={`badge badge-sm badge-soft shrink-0 ${ROLE_BADGE_CLASS[role]}`}
+              >
+                {t(ROLE_LABEL_KEY[role])}
+              </span>
+            ))}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
               {row.section.trim()}
@@ -612,6 +648,18 @@ const EnrolledStudents = ({
                 {o.label}
               </option>
             ))}
+          </Toolbar.FilterSelect>
+          <Toolbar.FilterSelect
+            selectSize="md"
+            className="w-full sm:w-auto"
+            aria-label={t("students.filterByRoleLabel")}
+            value={roleFilter}
+            onChange={(e) => setRoleFilter(e.target.value as RoleFilter)}
+          >
+            <option value="all">{t("students.filterAllRoles")}</option>
+            <option value="instructor">{t("students.roleInstructor")}</option>
+            <option value="ta">{t("students.roleTa")}</option>
+            <option value="student">{t("students.roleStudent")}</option>
           </Toolbar.FilterSelect>
           {sectionOptions.length > 0 ? (
             <Toolbar.FilterSelect
