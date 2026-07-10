@@ -51,7 +51,7 @@ const StudentListContent = ({
   return (
     <>
       <PageHeader
-        title={t("nav.students")}
+        title={t("nav.roster")}
         subtitle={
           <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
             <span>
@@ -117,12 +117,12 @@ const StudentListContent = ({
 
 const StudentListPage = () => {
   const { t } = useTranslation()
-  useDocumentTitle(t("documentTitle.students"))
+  useDocumentTitle(t("documentTitle.roster"))
   const { org = "", classroom = "" } = useParams({ strict: false })
 
   return (
     <PageShell selected="students">
-      <Breadcrumb endpoint={t("nav.students")} />
+      <Breadcrumb endpoint={t("nav.roster")} />
       <RequireTeacher>
         <StudentListContent org={org} classroom={classroom} />
       </RequireTeacher>
