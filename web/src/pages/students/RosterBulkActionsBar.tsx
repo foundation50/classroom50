@@ -345,7 +345,7 @@ const RosterBulkActionsBar = ({
           label={
             hasSelection
               ? t("students.bulk.selectedCount", { count: selectedRows.length })
-              : t("students.bulk.studentCount", { count: totalCount })
+              : t("students.bulk.memberCount", { count: totalCount })
           }
           aux={
             canGroupBySection && onGroupBySectionChange ? (
