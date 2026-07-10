@@ -18,6 +18,8 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
 import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { toStudent } from "@/util/roster"
+import { Badge } from "@/components/ui"
+import { ROLE_BADGE_TONE } from "@/util/rosterRoles"
 import { useTranslation } from "react-i18next"
 
 const StudentListContent = ({
@@ -57,28 +59,35 @@ const StudentListContent = ({
       <PageHeader
         title={t("nav.roster")}
         subtitle={
-          <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span>
-              {countReady
-                ? t("students.enrolledCount", { count: roleCounts.student })
-                : t("students.enrolledCountLoading")}
-            </span>
-            {countReady && showStaffCounts ? (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {countReady ? (
               <>
-                <span aria-hidden="true" className="text-base-content/30">
-                  ·
-                </span>
-                <span>
-                  {t("students.instructorCount", {
-                    count: roleCounts.instructor,
-                  })}
-                </span>
-                <span aria-hidden="true" className="text-base-content/30">
-                  ·
-                </span>
-                <span>{t("students.taCount", { count: roleCounts.ta })}</span>
+                <Badge
+                  tone={ROLE_BADGE_TONE.student}
+                  ghost
+                  className="shrink-0"
+                >
+                  {t("students.enrolledCount", { count: roleCounts.student })}
+                </Badge>
+                {showStaffCounts ? (
+                  <>
+                    <Badge
+                      tone={ROLE_BADGE_TONE.instructor}
+                      className="shrink-0"
+                    >
+                      {t("students.instructorCount", {
+                        count: roleCounts.instructor,
+                      })}
+                    </Badge>
+                    <Badge tone={ROLE_BADGE_TONE.ta} className="shrink-0">
+                      {t("students.taCount", { count: roleCounts.ta })}
+                    </Badge>
+                  </>
+                ) : null}
               </>
-            ) : null}
+            ) : (
+              <span>{t("students.enrolledCountLoading")}</span>
+            )}
             <span aria-hidden="true" className="text-base-content/30">
               ·
             </span>
