@@ -15,6 +15,12 @@ const rosterKey = (org: string, classroom: string) =>
 // pass-through, so optimistic cache writes pass through unchanged.
 const selectStudents = (rows: Student[]): Student[] => rows.map(toStudent)
 
+// Stable empty-roster reference: while the CSV query is loading/undefined, a
+// fresh `[]` each render would break referential stability for downstream
+// useMemo deps (the team-roster build re-runs needlessly during exactly the
+// window the roster queries are resolving).
+const EMPTY_STUDENTS: Student[] = []
+
 const useGetStudents = (
   org: string | undefined,
   classroom: string | undefined,
@@ -31,7 +37,7 @@ const useGetStudents = (
   })
 
   return {
-    students: students || [],
+    students: students ?? EMPTY_STUDENTS,
     isLoading,
   }
 }

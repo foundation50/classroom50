@@ -64,7 +64,6 @@
     "accountMenu": "Account menu",
     "assignment": "Assignment",
     "assignments": "Assignments",
-    "students": "Students",
     "roster": "Roster",
     "settings": "Settings",
     "submissions": "Submissions",
@@ -173,7 +172,6 @@
   "documentTitle": {
     "assignments": "Assignments",
     "assignmentSettings": "Assignment Settings",
-    "students": "Students",
     "roster": "Roster",
     "organizations": "Organizations",
     "getStarted": "Get Started",
