@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import type { Assignment } from "@/types/classroom"
+import { dueDeadlineInstant } from "@/util/formatDate"
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
@@ -117,10 +118,17 @@ describe("filterAndSortAssignments — due filter", () => {
   })
 
   it("treats a bare date as end-of-local-day, not UTC midnight", () => {
-    // Bare date "2026-06-15": due end of that local day. At NOW (noon UTC on
-    // the 15th) it is not yet overdue regardless of a negative UTC offset.
     const bare = assignment({ name: "Bare", due: "2026-06-15" })
-    expect(run([bare], { filters: { due: "overdue" }, now: NOW })).toEqual([])
+    // Derive the deadline instant the same way the code does, so the assertion
+    // holds in any runner timezone. A bare date is due at local end-of-day, so
+    // one ms before it is not overdue and one ms after it is.
+    const deadline = dueDeadlineInstant("2026-06-15")!.getTime()
+    expect(
+      run([bare], { filters: { due: "overdue" }, now: deadline - 1 }),
+    ).toEqual([])
+    expect(
+      names(run([bare], { filters: { due: "overdue" }, now: deadline + 1 })),
+    ).toEqual(["Bare"])
   })
 })
 
