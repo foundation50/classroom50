@@ -25,7 +25,7 @@ import { Route as AuthedOrgClassesIndexRouteImport } from './routes/_authed/$org
 import { Route as AuthedOrgActivityIndexRouteImport } from './routes/_authed/$org/activity/index'
 import { Route as AuthedOrgClassroomIndexRouteImport } from './routes/_authed/$org/$classroom/index'
 import { Route as AuthedOrgClassesNewIndexRouteImport } from './routes/_authed/$org/classes/new/index'
-import { Route as AuthedOrgClassroomStudentsIndexRouteImport } from './routes/_authed/$org/$classroom/students/index'
+import { Route as AuthedOrgClassroomRosterIndexRouteImport } from './routes/_authed/$org/$classroom/roster/index'
 import { Route as AuthedOrgClassroomOnboardIndexRouteImport } from './routes/_authed/$org/$classroom/onboard/index'
 import { Route as AuthedOrgClassroomEditIndexRouteImport } from './routes/_authed/$org/$classroom/edit/index'
 import { Route as AuthedOrgClassroomAssignmentsIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/index'
@@ -116,10 +116,10 @@ const AuthedOrgClassesNewIndexRoute =
     path: '/classes/new/',
     getParentRoute: () => AuthedOrgRouteRoute,
   } as any)
-const AuthedOrgClassroomStudentsIndexRoute =
-  AuthedOrgClassroomStudentsIndexRouteImport.update({
-    id: '/$classroom/students/',
-    path: '/$classroom/students/',
+const AuthedOrgClassroomRosterIndexRoute =
+  AuthedOrgClassroomRosterIndexRouteImport.update({
+    id: '/$classroom/roster/',
+    path: '/$classroom/roster/',
     getParentRoute: () => AuthedOrgRouteRoute,
   } as any)
 const AuthedOrgClassroomOnboardIndexRoute =
@@ -195,7 +195,7 @@ export interface FileRoutesByFullPath {
   '/$org/$classroom/assignments/': typeof AuthedOrgClassroomAssignmentsIndexRoute
   '/$org/$classroom/edit/': typeof AuthedOrgClassroomEditIndexRoute
   '/$org/$classroom/onboard/': typeof AuthedOrgClassroomOnboardIndexRoute
-  '/$org/$classroom/students/': typeof AuthedOrgClassroomStudentsIndexRoute
+  '/$org/$classroom/roster/': typeof AuthedOrgClassroomRosterIndexRoute
   '/$org/classes/new/': typeof AuthedOrgClassesNewIndexRoute
   '/$org/$classroom/assignments/$assignment/': typeof AuthedOrgClassroomAssignmentsAssignmentIndexRoute
   '/$org/$classroom/assignments/new/': typeof AuthedOrgClassroomAssignmentsNewIndexRoute
@@ -221,7 +221,7 @@ export interface FileRoutesByTo {
   '/$org/$classroom/assignments': typeof AuthedOrgClassroomAssignmentsIndexRoute
   '/$org/$classroom/edit': typeof AuthedOrgClassroomEditIndexRoute
   '/$org/$classroom/onboard': typeof AuthedOrgClassroomOnboardIndexRoute
-  '/$org/$classroom/students': typeof AuthedOrgClassroomStudentsIndexRoute
+  '/$org/$classroom/roster': typeof AuthedOrgClassroomRosterIndexRoute
   '/$org/classes/new': typeof AuthedOrgClassesNewIndexRoute
   '/$org/$classroom/assignments/$assignment': typeof AuthedOrgClassroomAssignmentsAssignmentIndexRoute
   '/$org/$classroom/assignments/new': typeof AuthedOrgClassroomAssignmentsNewIndexRoute
@@ -250,7 +250,7 @@ export interface FileRoutesById {
   '/_authed/$org/$classroom/assignments/': typeof AuthedOrgClassroomAssignmentsIndexRoute
   '/_authed/$org/$classroom/edit/': typeof AuthedOrgClassroomEditIndexRoute
   '/_authed/$org/$classroom/onboard/': typeof AuthedOrgClassroomOnboardIndexRoute
-  '/_authed/$org/$classroom/students/': typeof AuthedOrgClassroomStudentsIndexRoute
+  '/_authed/$org/$classroom/roster/': typeof AuthedOrgClassroomRosterIndexRoute
   '/_authed/$org/classes/new/': typeof AuthedOrgClassesNewIndexRoute
   '/_authed/$org/$classroom/assignments/$assignment/': typeof AuthedOrgClassroomAssignmentsAssignmentIndexRoute
   '/_authed/$org/$classroom/assignments/new/': typeof AuthedOrgClassroomAssignmentsNewIndexRoute
@@ -279,7 +279,7 @@ export interface FileRouteTypes {
     | '/$org/$classroom/assignments/'
     | '/$org/$classroom/edit/'
     | '/$org/$classroom/onboard/'
-    | '/$org/$classroom/students/'
+    | '/$org/$classroom/roster/'
     | '/$org/classes/new/'
     | '/$org/$classroom/assignments/$assignment/'
     | '/$org/$classroom/assignments/new/'
@@ -305,7 +305,7 @@ export interface FileRouteTypes {
     | '/$org/$classroom/assignments'
     | '/$org/$classroom/edit'
     | '/$org/$classroom/onboard'
-    | '/$org/$classroom/students'
+    | '/$org/$classroom/roster'
     | '/$org/classes/new'
     | '/$org/$classroom/assignments/$assignment'
     | '/$org/$classroom/assignments/new'
@@ -333,7 +333,7 @@ export interface FileRouteTypes {
     | '/_authed/$org/$classroom/assignments/'
     | '/_authed/$org/$classroom/edit/'
     | '/_authed/$org/$classroom/onboard/'
-    | '/_authed/$org/$classroom/students/'
+    | '/_authed/$org/$classroom/roster/'
     | '/_authed/$org/classes/new/'
     | '/_authed/$org/$classroom/assignments/$assignment/'
     | '/_authed/$org/$classroom/assignments/new/'
@@ -465,11 +465,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassesNewIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/$classroom/students/': {
-      id: '/_authed/$org/$classroom/students/'
-      path: '/$classroom/students'
-      fullPath: '/$org/$classroom/students/'
-      preLoaderRoute: typeof AuthedOrgClassroomStudentsIndexRouteImport
+    '/_authed/$org/$classroom/roster/': {
+      id: '/_authed/$org/$classroom/roster/'
+      path: '/$classroom/roster'
+      fullPath: '/$org/$classroom/roster/'
+      preLoaderRoute: typeof AuthedOrgClassroomRosterIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
     '/_authed/$org/$classroom/onboard/': {
@@ -550,7 +550,7 @@ interface AuthedOrgRouteRouteChildren {
   AuthedOrgClassroomAssignmentsIndexRoute: typeof AuthedOrgClassroomAssignmentsIndexRoute
   AuthedOrgClassroomEditIndexRoute: typeof AuthedOrgClassroomEditIndexRoute
   AuthedOrgClassroomOnboardIndexRoute: typeof AuthedOrgClassroomOnboardIndexRoute
-  AuthedOrgClassroomStudentsIndexRoute: typeof AuthedOrgClassroomStudentsIndexRoute
+  AuthedOrgClassroomRosterIndexRoute: typeof AuthedOrgClassroomRosterIndexRoute
   AuthedOrgClassesNewIndexRoute: typeof AuthedOrgClassesNewIndexRoute
   AuthedOrgClassroomAssignmentsAssignmentIndexRoute: typeof AuthedOrgClassroomAssignmentsAssignmentIndexRoute
   AuthedOrgClassroomAssignmentsNewIndexRoute: typeof AuthedOrgClassroomAssignmentsNewIndexRoute
@@ -573,7 +573,7 @@ const AuthedOrgRouteRouteChildren: AuthedOrgRouteRouteChildren = {
     AuthedOrgClassroomAssignmentsIndexRoute,
   AuthedOrgClassroomEditIndexRoute: AuthedOrgClassroomEditIndexRoute,
   AuthedOrgClassroomOnboardIndexRoute: AuthedOrgClassroomOnboardIndexRoute,
-  AuthedOrgClassroomStudentsIndexRoute: AuthedOrgClassroomStudentsIndexRoute,
+  AuthedOrgClassroomRosterIndexRoute: AuthedOrgClassroomRosterIndexRoute,
   AuthedOrgClassesNewIndexRoute: AuthedOrgClassesNewIndexRoute,
   AuthedOrgClassroomAssignmentsAssignmentIndexRoute:
     AuthedOrgClassroomAssignmentsAssignmentIndexRoute,

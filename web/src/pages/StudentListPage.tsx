@@ -121,7 +121,7 @@ const StudentListPage = () => {
   const { org = "", classroom = "" } = useParams({ strict: false })
 
   return (
-    <PageShell selected="students">
+    <PageShell selected="roster">
       <Breadcrumb endpoint={t("nav.roster")} />
       <RequireTeacher>
         <StudentListContent org={org} classroom={classroom} />

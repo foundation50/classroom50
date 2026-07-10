@@ -580,14 +580,11 @@ export const TeacherSidebarMenu = ({
           showStaffItems && (
             <>
               <Tip label={t("nav.roster")}>
-                <Link
-                  to="/$org/$classroom/students"
-                  params={{ org, classroom }}
-                >
+                <Link to="/$org/$classroom/roster" params={{ org, classroom }}>
                   <SidebarItemBody
                     label={t("nav.roster")}
                     icon={<UsersRound aria-hidden="true" />}
-                    active={selected === "students"}
+                    active={selected === "roster"}
                   />
                 </Link>
               </Tip>

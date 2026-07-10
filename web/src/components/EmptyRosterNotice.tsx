@@ -43,7 +43,7 @@ export const EmptyRosterNotice = ({
         </span>
       </div>
       <Link
-        to="/$org/$classroom/students"
+        to="/$org/$classroom/roster"
         params={{ org, classroom }}
         className="btn btn-sm btn-info whitespace-nowrap sm:shrink-0"
       >
