@@ -165,6 +165,13 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // Track emitted identities so invites/CSV don't double up.
   const seenIds = new Set<string>()
   const seenLogins = new Set<string>()
+  // Logins of ACTIVE members only. A pending invite for one of these is stale
+  // (already enrolled) and skipped — distinct from a login already claimed by
+  // another PENDING invite, which must instead union its role onto that pending
+  // row. Adding a not-yet-org-member to a staff team lists the same person in
+  // BOTH the org-level invitations (tagged student) and the team invitations
+  // (tagged ta/instructor); keying only on `seenLogins` would drop the second.
+  const memberLogins = new Set<string>()
   // Enrolled rows already emitted, keyed by member id, so a person on several
   // teams gets one row with their roles unioned rather than duplicate rows.
   const enrolledById = new Map<string, TeamRosterRow>()
@@ -192,6 +199,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     const login = member.login.toLowerCase()
     seenIds.add(id)
     seenLogins.add(login)
+    memberLogins.add(login)
     const own = csvForMember(csv, member)
     const email = own?.email?.trim().toLowerCase()
     const row: TeamRosterRow = {
@@ -207,29 +215,40 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     rows.push(row)
   }
 
-  // Pending, tagged by role. Student-team pending (org-level invitations) is
-  // "student"; each staff team's team-scoped invitations its role.
-  const roleInvites: Array<{ role: RosterRole; invite: GitHubOrgInvitation }> =
-    [
-      ...invitations.map((invite) => ({ role: "student" as const, invite })),
-      ...STAFF_ROLES.flatMap((role) =>
-        (staffInvitations[role] ?? []).map((invite) => ({ role, invite })),
-      ),
-    ]
+  // Pending, tagged by role. Staff-team invitations are AUTHORITATIVE for a
+  // staff role and are processed FIRST: adding a not-yet-org-member to a staff
+  // team lists them in BOTH the team invitations (tagged ta/instructor) AND the
+  // org-level invitations (which we can only blanket-tag "student"). Ordering
+  // staff first lets the org-level "student" invite recognize the person as an
+  // already-tagged pending staffer and NOT add a spurious "student" role.
+  const roleInvites: Array<{
+    role: RosterRole
+    invite: GitHubOrgInvitation
+  }> = [
+    ...STAFF_ROLES.flatMap((role) =>
+      (staffInvitations[role] ?? []).map((invite) => ({ role, invite })),
+    ),
+    ...invitations.map((invite) => ({ role: "student" as const, invite })),
+  ]
 
   for (const { role, invite } of roleInvites) {
     const login = invite.login?.trim() ?? ""
     const loginKey = login.toLowerCase()
     const email = invite.email?.trim() ?? ""
     const emailKey = email.toLowerCase()
-    // A login-carrying invite for an account already an active member is stale
-    // — skip. Email-only invites can't collide with a member here.
-    if (loginKey && seenLogins.has(loginKey)) continue
+    // A login-carrying invite for an account already an ACTIVE member is stale
+    // — skip. (A login already claimed by another PENDING invite is NOT stale:
+    // it falls through to the pendingByKey union below so its role is added.)
+    // Email-only invites can't collide with a member here.
+    if (loginKey && memberLogins.has(loginKey)) continue
 
     const dedupeKey = loginKey || emailKey || `id:${invite.id}`
     const existingPending = pendingByKey.get(dedupeKey)
     if (existingPending) {
-      addRole(existingPending, role)
+      // A staffer already pending: the org-level list re-reports them as a
+      // generic invite, but they aren't a student — don't add the "student"
+      // role. A genuine multi-team pending (e.g. instructor + ta) still unions.
+      if (role !== "student") addRole(existingPending, role)
       continue
     }
 
