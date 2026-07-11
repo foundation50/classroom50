@@ -141,6 +141,7 @@ const EnrolledStudents = ({
     teamSlug,
     csvMissingCount,
     csvMissingLogins,
+    orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
 
@@ -294,13 +295,27 @@ const EnrolledStudents = ({
   )
 
   // Status-filter options; hide "Pending" when invites are owner-only and this
-  // viewer can't read them (avoids a dead, always-empty filter).
+  // viewer can't read them (avoids a dead, always-empty filter). The two
+  // needs-attention options only exist when org membership is known (else those
+  // rows are suppressed, so the filters would be dead).
   const statusOptions: { value: StatusFilter; label: string }[] = [
     { value: "all", label: t("students.filterAll") },
     { value: "enrolled", label: t("students.filterEnrolled") },
     ...(pendingHidden
       ? []
       : [{ value: "pending" as const, label: t("students.filterPending") }]),
+    ...(orgMembersKnown
+      ? [
+          {
+            value: "needs_attention_in_org" as const,
+            label: t("students.filterNeedsAttentionInOrg"),
+          },
+          {
+            value: "needs_attention_not_in_org" as const,
+            label: t("students.filterNeedsAttentionNotInOrg"),
+          },
+        ]
+      : []),
   ]
 
   // Auto-migrate on open: converge a classroom bootstrapped before the
@@ -484,9 +499,16 @@ const EnrolledStudents = ({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {(() => {
-            // Every row is on a team (enrolled) or invited (pending), so it
-            // always asserts a role. Highest-precedence role only (instructor >
-            // ta > student); student uses the neutral ghost.
+            // Enrolled/pending rows assert a role (the team is the authority),
+            // shown as the highest-precedence badge (instructor > ta > student;
+            // student uses the neutral ghost). Needs-attention rows have no
+            // team role yet, so they render no role badge.
+            if (
+              row.state === "needs_attention_in_org" ||
+              row.state === "needs_attention_not_in_org"
+            ) {
+              return null
+            }
             const role = primaryRole(row)
             return (
               <Badge
@@ -507,6 +529,16 @@ const EnrolledStudents = ({
           {row.state === "pending" ? (
             <span className="badge badge-sm badge-warning badge-soft shrink-0">
               {t("students.statusPending")}
+            </span>
+          ) : null}
+          {row.state === "needs_attention_in_org" ? (
+            <span className="badge badge-sm badge-warning badge-soft shrink-0">
+              {t("students.statusNeedsAttentionInOrg")}
+            </span>
+          ) : null}
+          {row.state === "needs_attention_not_in_org" ? (
+            <span className="badge badge-sm badge-error badge-soft shrink-0">
+              {t("students.statusNeedsAttentionNotInOrg")}
             </span>
           ) : null}
           <ChevronRight
@@ -816,6 +848,12 @@ const EnrolledStudents = ({
         onResent={(rowKey) => {
           dismissWarning(rowKey)
           invalidateInviteQueries()
+        }}
+        onChanged={(rowKey) => {
+          dismissWarning(rowKey)
+          invalidateInviteQueries()
+          invalidateTeamRoster()
+          refetchRoster()
         }}
         onError={(rowKey, message) => setWarning(rowKey, message)}
       />

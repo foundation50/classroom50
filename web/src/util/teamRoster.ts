@@ -3,23 +3,32 @@ import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import { rosterClaimSet } from "@/util/identity"
 
-// Team-driven roster: the classroom GitHub team is the source of truth for who
-// belongs, not roster.csv. The roster is computed PURELY from team members +
-// pending org invitations, then enriched with optional roster.csv metadata
-// (name/section/email). The CSV never decides WHO is displayed — a roster.csv
-// row with no matching team member and no pending invite produces NO row. The
-// roster still renders when the CSV is absent or partial.
+// Team-driven roster: the classroom GitHub team is the source of truth for
+// enrollment and role, not roster.csv. Enrolled/pending rows come from team
+// members + pending invitations; roster.csv enriches them (name/section/email)
+// and never decides a person's role. A roster.csv row for someone on no team
+// and with no pending invite still surfaces — but as a "needs attention" row
+// (no role) so the teacher can act, split by whether they are an org member.
 //
 // Row states:
 //  - enrolled: an active classroom-team / staff-team member.
 //  - pending:  a pending org / staff-team invitation (no active membership yet).
+//  - needs_attention_in_org: on roster.csv, an active org member, but on none of
+//    this classroom's teams — the teacher assigns them a team/role.
+//  - needs_attention_not_in_org: on roster.csv, NOT an org member and no pending
+//    invite — the teacher invites them to the org.
 //
-// A person on none of this classroom's teams and with no pending invite does
-// not appear here at all (their roster.csv row, if any, only enriches — it
-// never creates a row). Bulk CSV upload sends org invites so uploaded students
-// appear as `pending` rather than as a CSV-only row.
+// The two needs-attention states require org membership to be known. When it
+// isn't (a non-owner who can't read members, or the read failed), those rows
+// are suppressed rather than misclassified — the roster degrades to the pure
+// team-driven view. Bulk CSV upload still sends org invites so uploaded students
+// appear as `pending` rather than lingering as needs-attention.
 
-export type TeamRosterRowState = "enrolled" | "pending"
+export type TeamRosterRowState =
+  | "enrolled"
+  | "pending"
+  | "needs_attention_in_org"
+  | "needs_attention_not_in_org"
 
 // A person's classroom role(s). "student" = classroom team; "instructor"/"ta"
 // = the per-classroom staff teams. A person can hold several (an instructor
@@ -41,7 +50,10 @@ export type TeamRosterRow = {
   key: string
   state: TeamRosterRowState
   // Classroom role(s) this person holds, unioned across the student + staff
-  // teams. Never empty: a plain student is ["student"]. Sorted by ROLE_RANK.
+  // teams. Never empty (a plain student is ["student"]), sorted by ROLE_RANK.
+  // For a needs-attention row the team hasn't assigned a role yet, so this holds
+  // the placeholder ["student"] purely for the non-empty invariant — the view
+  // renders NO role badge for those states.
   roles: RosterRole[]
   // GitHub identity when known. Empty only for an email-only pending invite.
   username: string
@@ -121,15 +133,26 @@ export type BuildTeamRosterInput = {
   // a pending row is tagged with the role whose team lists it.
   staffInvitations?: Partial<Record<StaffRole, GitHubOrgInvitation[]>>
   // Optional roster.csv rows (display metadata only — they enrich team/invite
-  // rows and never create a row of their own).
+  // rows; a CSV row on no team surfaces as a needs-attention row, never with a
+  // role).
   students: Student[]
+  // Active org-member identity sets (ids + lowercased logins) used to split a
+  // CSV row on no team into needs_attention_in_org (an org member) vs
+  // needs_attention_not_in_org (not in the org). Build from the org-member list.
+  orgMemberIds?: ReadonlySet<string>
+  orgMemberLogins?: ReadonlySet<string>
+  // Whether org membership was actually readable this render (an owner whose
+  // member list loaded). When false (non-owner or a failed/forbidden read),
+  // needs-attention rows are SUPPRESSED — the classifier has no basis, so the
+  // roster degrades to the pure team-driven view rather than guessing.
+  orgMembersKnown?: boolean
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
-// already a member -> pending. roster.csv only ENRICHES those rows (name /
-// section / email) — a CSV row with no matching team member or pending invite
-// produces NO row. Never duplicates a person (a member on the CSV appears once;
-// a username-invite that is also a member is credited as the member).
+// already a member -> pending. A roster.csv row for someone on no team and with
+// no pending invite -> a needs-attention row (in-org vs not-in-org by the
+// org-member sets), emitted only when orgMembersKnown. roster.csv otherwise only
+// ENRICHES team/invite rows (name / section / email). Never duplicates a person.
 export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   const {
     members,
@@ -137,6 +160,9 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     staffMembers = {},
     staffInvitations = {},
     students,
+    orgMemberIds,
+    orgMemberLogins,
+    orgMembersKnown = false,
   } = input
   const csv = indexCsv(students)
 
@@ -263,6 +289,60 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     rows.push(row)
   }
 
+  // Needs-attention pass: a roster.csv row for someone on none of this
+  // classroom's teams and with no pending invite. Emitted only when org
+  // membership is known (else suppressed — see orgMembersKnown). Split by real
+  // org membership: an org member is needs_attention_in_org (assign a team);
+  // a non-member is needs_attention_not_in_org (invite). No role is asserted —
+  // the team is the authority — so roles carries the ["student"] placeholder for
+  // the non-empty invariant and the view renders no role badge for these states.
+  if (orgMembersKnown) {
+    const pendingLogins = new Set<string>()
+    const pendingEmails = new Set<string>()
+    for (const row of pendingByKey.values()) {
+      const l = row.username.trim().toLowerCase()
+      const e = row.email.trim().toLowerCase()
+      if (l) pendingLogins.add(l)
+      if (e) pendingEmails.add(e)
+    }
+    // A duplicate CSV row for the same person must not emit twice.
+    const seenIds = new Set<string>()
+    const seenLogins = new Set<string>()
+    for (const student of students) {
+      const id = student.github_id?.trim() ?? ""
+      const login = student.username?.trim() ?? ""
+      const loginKey = login.toLowerCase()
+      const email = student.email?.trim().toLowerCase() ?? ""
+      // A row must carry a GitHub identity to appear on its own; a legacy
+      // email-only row only enriches (handled above).
+      if (!id && !loginKey) continue
+      // Already an enrolled member or a pending invite?
+      if (id && enrolledById.has(id)) continue
+      if (loginKey && memberLogins.has(loginKey)) continue
+      if (loginKey && pendingLogins.has(loginKey)) continue
+      if (email && pendingEmails.has(email)) continue
+      // Dedupe duplicate CSV rows for the same person.
+      if (id && seenIds.has(id)) continue
+      if (loginKey && seenLogins.has(loginKey)) continue
+      if (id) seenIds.add(id)
+      if (loginKey) seenLogins.add(loginKey)
+
+      const inOrg =
+        (id && orgMemberIds?.has(id)) ||
+        (loginKey && orgMemberLogins?.has(loginKey)) ||
+        false
+      rows.push({
+        key: id || login,
+        state: inOrg ? "needs_attention_in_org" : "needs_attention_not_in_org",
+        roles: ["student"],
+        username: login,
+        github_id: id,
+        avatar_url: "",
+        ...metadataFrom(student, legacyFor(email)),
+      })
+    }
+  }
+
   return sortRows(rows)
 }
 
@@ -286,11 +366,13 @@ function sortName(row: TeamRosterRow): string {
   return (name || row.username || row.email).toLowerCase()
 }
 
-// Enrolled first, then pending; alphabetical within each.
+// Enrolled first, then pending, then needs-attention; alphabetical within each.
 function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
   const order: Record<TeamRosterRowState, number> = {
     enrolled: 0,
     pending: 1,
+    needs_attention_in_org: 2,
+    needs_attention_not_in_org: 3,
   }
   return rows.sort((a, b) => {
     const byState = order[a.state] - order[b.state]
@@ -326,7 +408,12 @@ export function countByState(
       acc[row.state] += 1
       return acc
     },
-    { enrolled: 0, pending: 0 } as Record<TeamRosterRowState, number>,
+    {
+      enrolled: 0,
+      pending: 0,
+      needs_attention_in_org: 0,
+      needs_attention_not_in_org: 0,
+    } as Record<TeamRosterRowState, number>,
   )
 }
 

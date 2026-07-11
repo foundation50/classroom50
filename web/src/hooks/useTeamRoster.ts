@@ -7,6 +7,7 @@ import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
+  listAllOrgMembers,
 } from "@/hooks/github/queries"
 import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
@@ -62,6 +63,10 @@ export type UseTeamRosterResult = {
   // Lowercased logins of team members with no roster.csv row — used to skip a
   // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
   csvMissingLogins: string[]
+  // Whether org membership was readable, so the view can gate the in-org
+  // "needs attention" filter option (no such rows exist when membership is
+  // unknown — those rows are suppressed).
+  orgMembersKnown: boolean
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -122,6 +127,28 @@ export function useTeamRoster(
   )
   const taInvitesQuery = useQuery(teamInvitationsQuery(client, org, taSlug))
 
+  // All active org members (shared cache with the Org Members page). Used only
+  // to classify a roster.csv row on no team as in-org (assign a role) vs
+  // not-in-org (invite). A failed/forbidden read leaves orgMembersKnown false,
+  // so buildTeamRoster suppresses those needs-attention rows rather than
+  // guessing — the roster degrades to the pure team-driven view, never errors.
+  const orgMembersQuery = useQuery({
+    queryKey: githubKeys.orgMembersAll(org),
+    queryFn: () => listAllOrgMembers(client, org),
+    enabled: Boolean(org),
+    staleTime: 5 * 60 * 1000,
+  })
+  const orgMembersKnown = orgMembersQuery.isSuccess
+  const { orgMemberIds, orgMemberLogins } = useMemo(() => {
+    const ids = new Set<string>()
+    const logins = new Set<string>()
+    for (const m of orgMembersQuery.data ?? []) {
+      ids.add(String(m.id))
+      logins.add(m.login.toLowerCase())
+    }
+    return { orgMemberIds: ids, orgMemberLogins: logins }
+  }, [orgMembersQuery.data])
+
   const pendingHidden = computePendingHidden(invitesForbidden)
 
   const rows = useMemo(
@@ -147,6 +174,9 @@ export function useTeamRoster(
               ta: taInvitesQuery.data ?? [],
             },
         students,
+        orgMemberIds,
+        orgMemberLogins,
+        orgMembersKnown,
       }),
     [
       members,
@@ -157,6 +187,9 @@ export function useTeamRoster(
       taInvitesQuery.data,
       pendingHidden,
       students,
+      orgMemberIds,
+      orgMemberLogins,
+      orgMembersKnown,
     ],
   )
 
@@ -219,6 +252,7 @@ export function useTeamRoster(
     teamSlug,
     csvMissingCount,
     csvMissingLogins,
+    orgMembersKnown,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the
     // student one — otherwise a staff-team failure stays stuck in error. Also
@@ -230,6 +264,7 @@ export function useTeamRoster(
       void taMembersQuery.refetch()
       void instructorInvitesQuery.refetch()
       void taInvitesQuery.refetch()
+      void orgMembersQuery.refetch()
     },
   }
 }

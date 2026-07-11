@@ -7,6 +7,7 @@ import {
   unenrollStudent,
   bulkUnenrollStudents,
   bulkEnrollStudentsInClassroom,
+  assignRosterMemberRole,
   inviteRosterStudents,
   syncRosterFromTeam,
   migrateRosterFile,
@@ -2076,5 +2077,44 @@ describe("migrateRosterFile — converge students.csv onto roster.csv", () => {
 
     expect(result.migrated).toBe(false)
     expect(treePosted()).toBe(false)
+  })
+})
+
+describe("assignRosterMemberRole — enroll a rostered active member", () => {
+  it("adds an active org member to the student team and reports assigned", async () => {
+    const { client, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: { wanda: { id: 50 } },
+      members: ["wanda"], // wanda is an active org member, on no team yet
+    })
+
+    const result = await assignRosterMemberRole(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "wanda",
+      role: "student",
+    })
+
+    expect(result).toEqual({ state: "assigned", role: "student" })
+    // Added to the derived classroom student team.
+    expect(teamAdds).toEqual(["wanda"])
+  })
+
+  it("never team-adds a non-member — reports not-member for the invite path", async () => {
+    const { client, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: { stranger: { id: 77 } },
+      members: [], // not an active org member
+    })
+
+    const result = await assignRosterMemberRole(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "stranger",
+      role: "student",
+    })
+
+    expect(result).toEqual({ state: "not-member" })
+    expect(teamAdds).toEqual([])
   })
 })

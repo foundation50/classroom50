@@ -1,6 +1,13 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, Pencil, Send, UserMinus, X } from "lucide-react"
+import {
+  ExternalLink,
+  Pencil,
+  Send,
+  UserMinus,
+  UserPlus,
+  X,
+} from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
 
@@ -8,20 +15,30 @@ import Avatar from "@/components/avatar"
 import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { unenrollStudent, type StudentCsvRow } from "@/api/mutations/students"
+import {
+  assignRosterMemberRole,
+  inviteRosterStudents,
+  unenrollStudent,
+  type StudentCsvRow,
+} from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
-import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
+import {
+  rowToStudent,
+  type RosterRole,
+  type TeamRosterRow,
+} from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/rosterRoles"
-import { Button, Modal } from "@/components/ui"
+import { Button, Modal, Select } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
-// below is classroom-scoped and gated by row.state (only enrolled/pending
-// rows ever appear — the roster is team-driven):
+// below is classroom-scoped and gated by row.state:
 //   enrolled -> edit metadata + unenroll
 //   pending  -> resend invite + unenroll (cancels the invite); no edit
+//   needs_attention_in_org -> assign a role (adds to the chosen team)
+//   needs_attention_not_in_org -> invite to the organization
 //
 // The modal performs the writes but hands results back to the parent (which
 // owns the roster/invite caches and the per-row warnings map), mirroring the
@@ -36,6 +53,7 @@ const RosterMemberModal = ({
   onSaved,
   onUnenrolled,
   onResent,
+  onChanged,
   onError,
 }: {
   open: boolean
@@ -50,6 +68,10 @@ const RosterMemberModal = ({
   onSaved: (rowKey: string, updated: StudentCsvRow) => void
   onUnenrolled: (rowKey: string, teamWarning?: string) => void
   onResent: (rowKey: string) => void
+  // A needs-attention row was resolved (assigned a role, or invited) — the
+  // parent refetches the roster + invalidates invite/team caches so the row
+  // moves to enrolled/pending.
+  onChanged: (rowKey: string) => void
   onError: (rowKey: string, message: string) => void
 }) => {
   const { t } = useTranslation()
@@ -61,6 +83,8 @@ const RosterMemberModal = ({
   const [working, setWorking] = useState(false)
   const [resending, setResending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
+  const [assignRole, setAssignRole] = useState<RosterRole>("student")
+  const [resolving, setResolving] = useState(false)
 
   const unenrollMutation = useMutation({
     mutationFn: (student: ReturnType<typeof rowToStudent>) =>
@@ -72,7 +96,7 @@ const RosterMemberModal = ({
   // matching the unenroll (`working`) guard. Without it, closing or switching
   // rows mid-invite would let the captured-row promise apply onResent/onError/
   // onClose to a stale student.
-  const busy = working || submitting || resending
+  const busy = working || submitting || resending || resolving
 
   const handleClose = () => {
     if (busy) return
@@ -99,10 +123,71 @@ const RosterMemberModal = ({
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
+  const label = row.username || row.email
   const canResend = row.state === "pending" && Boolean(row.github_id)
+  const needsRole = row.state === "needs_attention_in_org"
+  const needsInvite = row.state === "needs_attention_not_in_org"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster).
   const canUnenroll = !staffOnly
+
+  const handleAssignRole = async () => {
+    if (resolving) return
+    setResolving(true)
+    try {
+      const result = await assignRosterMemberRole(client, {
+        org,
+        classroom,
+        username: row.username,
+        role: assignRole,
+      })
+      if (result.state === "not-member") {
+        onError(row.key, t("students.assignRoleNotMember", { label }))
+        return
+      }
+      onChanged(row.key)
+      onClose()
+    } catch (err) {
+      onError(
+        row.key,
+        t("students.assignRoleFailed", { label, error: getErrorMessage(err) }),
+      )
+    } finally {
+      setResolving(false)
+    }
+  }
+
+  const handleInvite = async () => {
+    if (resolving) return
+    setResolving(true)
+    try {
+      const res = await inviteRosterStudents(client, {
+        org,
+        classroom,
+        students: [{ username: row.username, github_id: row.github_id }],
+      })
+      const failure = res.failed[0]
+      if (failure) {
+        onError(
+          row.key,
+          t("students.inviteRosterFailed", { label, error: failure.message }),
+        )
+        return
+      }
+      onChanged(row.key)
+      onClose()
+    } catch (err) {
+      onError(
+        row.key,
+        t("students.inviteRosterFailed", {
+          label,
+          error: getErrorMessage(err),
+        }),
+      )
+    } finally {
+      setResolving(false)
+    }
+  }
 
   const handleResend = async () => {
     if (resending) return
@@ -155,8 +240,6 @@ const RosterMemberModal = ({
       setConfirmingUnenroll(false)
     }
   }
-
-  const label = row.username || row.email
 
   return (
     <Modal
@@ -213,6 +296,19 @@ const RosterMemberModal = ({
           />
 
           <div className="flex shrink-0 items-center gap-1">
+            {needsInvite ? (
+              <Button
+                size="sm"
+                loading={resolving}
+                loadingLabel={t("common.working")}
+                disabled={busy}
+                onClick={() => void handleInvite()}
+              >
+                <UserPlus aria-hidden="true" className="size-4" />
+                {t("students.inviteToOrg")}
+              </Button>
+            ) : null}
+
             {canResend && !confirmingResend ? (
               <Button
                 size="sm"
@@ -318,6 +414,55 @@ const RosterMemberModal = ({
           </section>
         ) : null}
 
+        {/* Needs-attention resolution: an in-org member gets a role picker to
+              enroll them; a not-in-org row is invited via the header action. */}
+        {needsRole ? (
+          <section className="flex flex-col gap-3 rounded-box border border-warning/30 bg-warning/5 p-4">
+            <p className="text-sm text-base-content/80">
+              {t("students.needsAttentionInOrgHelp", { label })}
+            </p>
+            <div className="flex items-end gap-2">
+              <label className="flex flex-col gap-1 text-sm">
+                <span className="text-xs font-medium text-base-content/70">
+                  {t("students.assignRoleLabel")}
+                </span>
+                <Select
+                  selectSize="sm"
+                  className="w-40"
+                  value={assignRole}
+                  disabled={busy}
+                  onChange={(e) =>
+                    setAssignRole(e.currentTarget.value as RosterRole)
+                  }
+                >
+                  <option value="student">{t("students.roleStudent")}</option>
+                  <option value="ta">{t("students.roleTa")}</option>
+                  <option value="instructor">
+                    {t("students.roleInstructor")}
+                  </option>
+                </Select>
+              </label>
+              <Button
+                variant="primary"
+                size="sm"
+                loading={resolving}
+                loadingLabel={t("common.working")}
+                disabled={busy}
+                onClick={() => void handleAssignRole()}
+              >
+                <UserPlus aria-hidden="true" className="size-4" />
+                {t("students.assignRoleAction")}
+              </Button>
+            </div>
+          </section>
+        ) : null}
+
+        {needsInvite ? (
+          <p className="text-sm text-base-content/80">
+            {t("students.needsAttentionNotInOrgHelp", { label })}
+          </p>
+        ) : null}
+
         {/* GitHub & enrollment — a single read-only summary: status + the
               classroom team. */}
         <section className="flex flex-col gap-2">
@@ -332,6 +477,14 @@ const RosterMemberModal = ({
               {row.state === "enrolled" ? (
                 <span className="badge badge-sm badge-success badge-soft">
                   {t("students.statusEnrolled")}
+                </span>
+              ) : row.state === "needs_attention_in_org" ? (
+                <span className="badge badge-sm badge-warning badge-soft">
+                  {t("students.statusNeedsAttentionInOrg")}
+                </span>
+              ) : row.state === "needs_attention_not_in_org" ? (
+                <span className="badge badge-sm badge-error badge-soft">
+                  {t("students.statusNeedsAttentionNotInOrg")}
                 </span>
               ) : (
                 <span className="badge badge-sm badge-warning badge-soft">

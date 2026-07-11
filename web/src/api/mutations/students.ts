@@ -5,9 +5,11 @@ import {
   createGitCommit,
   createGitTree,
   createOrgInvitation,
+  ensureClassroomRoleTeam,
   ensureOrgMembership,
   getErrorMessage,
   getOrgMembershipState,
+  grantTeamConfigRepoWrite,
   isActiveMember,
   removeOrgMembership,
   removeUserFromTeam,
@@ -1317,6 +1319,53 @@ export async function inviteRosterStudents(
   })
 
   return { invited, skipped, failed, deferred }
+}
+
+export type AssignRosterMemberRoleInput = {
+  org: string
+  classroom: string
+  username: string
+  role: RosterRole
+}
+
+export type AssignRosterMemberRoleResult =
+  // Added to the target team.
+  | { state: "assigned"; role: RosterRole }
+  // Not an active org member (must be invited first, not team-added).
+  | { state: "not-member" }
+
+// Assign a roster member (who is an active org member but on none of this
+// classroom's teams — a `needs_attention_in_org` row) a classroom role by
+// adding them to the target team: the classroom team for "student", else the
+// per-classroom staff team (created + granted config write if missing, mirroring
+// the Settings staff flow). NEVER team-adds a non-member — GitHub would create a
+// team INVITATION for a non-member, so a non-member is reported as `not-member`
+// and routed to the invite affordance instead. Idempotent (PUT membership).
+export async function assignRosterMemberRole(
+  client: GitHubClient,
+  input: AssignRosterMemberRoleInput,
+): Promise<AssignRosterMemberRoleResult> {
+  const { org, classroom, role } = input
+  const username = input.username.trim()
+  await assertClassroomNotArchived(client, org, classroom)
+  if (!username) throw new Error("A username is required")
+
+  // Never team-add a non-member (would create a stray team invitation, not an
+  // enrollment). The caller redirects these to the org-invite action.
+  if (!(await isActiveMember(client, org, username))) {
+    return { state: "not-member" }
+  }
+
+  const teamSlug =
+    role === "student"
+      ? await resolveClassroomTeamSlug(client, org, classroom)
+      : (await ensureClassroomRoleTeam(client, org, classroom, role)).slug
+  if (role !== "student") {
+    await grantTeamConfigRepoWrite(client, org, teamSlug)
+  }
+
+  await addUserToTeam(client, { org, teamSlug, username, role: "member" })
+  return { state: "assigned", role }
 }
 
 export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
