@@ -313,10 +313,10 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 	}
 
 	var action string
-	build := func(parentSHA string) (map[string]string, error) {
-		rows, err := configrepo.LoadRoster(client, org, classroom, parentSHA)
+	build := func(parentSHA string) (configwrite.CommitChange, error) {
+		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
 		if err != nil {
-			return nil, err
+			return configwrite.CommitChange{}, err
 		}
 		updated, replaced := configrepo.UpsertRosterRow(rows, newRow)
 		if replaced {
@@ -324,15 +324,11 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 		} else {
 			action = "added"
 		}
-		data, err := configrepo.EncodeRoster(updated)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]string{configrepo.RosterFilePath(classroom): string(data)}, nil
+		return configrepo.RosterWriteChange(classroom, sourcePath, updated)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: add %s to %s (gh teacher roster add)", login, classroom))
-	if _, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
 		return err
 	}
 
@@ -382,30 +378,26 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 	}
 
 	var noChange bool
-	build := func(parentSHA string) (map[string]string, error) {
+	build := func(parentSHA string) (configwrite.CommitChange, error) {
 		noChange = false
-		rows, err := configrepo.LoadRoster(client, org, classroom, parentSHA)
+		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
 		if err != nil {
-			return nil, err
+			return configwrite.CommitChange{}, err
 		}
 		next, found, changed := configrepo.UpdateRosterRow(rows, username, patch)
 		if !found {
-			return nil, fmt.Errorf("%s not in %s roster — add them with `gh teacher roster add %s %s %s` first",
+			return configwrite.CommitChange{}, fmt.Errorf("%s not in %s roster — add them with `gh teacher roster add %s %s %s` first",
 				username, classroom, org, classroom, username)
 		}
 		if !changed {
-			noChange = true // nil map → CommitTree skips the commit.
-			return nil, nil
+			noChange = true // empty change → CommitTreeChange skips the commit.
+			return configwrite.CommitChange{}, nil
 		}
-		data, err := configrepo.EncodeRoster(next)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]string{configrepo.RosterFilePath(classroom): string(data)}, nil
+		return configrepo.RosterWriteChange(classroom, sourcePath, next)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: update %s in %s (gh teacher roster update)", username, classroom))
-	if _, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
 		return err
 	}
 
@@ -426,25 +418,21 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 	}
 
 	var removed bool
-	build := func(parentSHA string) (map[string]string, error) {
-		rows, err := configrepo.LoadRoster(client, org, classroom, parentSHA)
+	build := func(parentSHA string) (configwrite.CommitChange, error) {
+		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
 		if err != nil {
-			return nil, err
+			return configwrite.CommitChange{}, err
 		}
 		next, ok := configrepo.RemoveRosterRow(rows, username)
 		removed = ok
 		if !ok {
-			return nil, nil // nil → CommitTree skips the commit (already absent)
+			return configwrite.CommitChange{}, nil // empty → skips the commit (already absent)
 		}
-		data, err := configrepo.EncodeRoster(next)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]string{configrepo.RosterFilePath(classroom): string(data)}, nil
+		return configrepo.RosterWriteChange(classroom, sourcePath, next)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: remove %s from %s (gh teacher roster remove)", username, classroom))
-	if _, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
 		return err
 	}
 
@@ -522,10 +510,10 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		added   int
 		updated int
 	)
-	build := func(parentSHA string) (map[string]string, error) {
-		rows, err := configrepo.LoadRoster(client, org, classroom, parentSHA)
+	build := func(parentSHA string) (configwrite.CommitChange, error) {
+		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
 		if err != nil {
-			return nil, err
+			return configwrite.CommitChange{}, err
 		}
 		// Reset counters per attempt — rebase may split new/replaced differently.
 		added, updated = 0, 0
@@ -538,15 +526,11 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 				added++
 			}
 		}
-		encoded, err := configrepo.EncodeRoster(rows)
-		if err != nil {
-			return nil, err
-		}
-		return map[string]string{configrepo.RosterFilePath(classroom): string(encoded)}, nil
+		return configrepo.RosterWriteChange(classroom, sourcePath, rows)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("roster: import %d row(s) into %s (gh teacher roster import)", len(resolved), classroom))
-	if _, err := configwrite.CommitTree(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
+	if _, err := configwrite.CommitTreeChange(client, org, configrepo.ConfigRepoName, branch, message, build); err != nil {
 		return err
 	}
 

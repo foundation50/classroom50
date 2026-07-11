@@ -40,6 +40,9 @@ const makeClient = (opts: {
     name?: string | null
     email?: string | null
   }
+  onTree?: (
+    tree: { path: string; sha?: string | null; content?: string }[],
+  ) => void
 }) => {
   const committed: CommittedCsv = { content: null }
   const membershipState = opts.membershipState ?? null
@@ -85,8 +88,11 @@ const makeClient = (opts: {
       }
       if (path.endsWith("/git/trees")) {
         const tree = (
-          options?.body as { tree?: { path: string; content?: string }[] }
+          options?.body as {
+            tree?: { path: string; sha?: string | null; content?: string }[]
+          }
         )?.tree
+        if (tree) opts.onTree?.(tree)
         const csvEntry = tree?.find((t) => t.path.includes("roster.csv"))
         if (csvEntry?.content) committed.content = csvEntry.content
         return Promise.resolve({ sha: "tree-sha" })
@@ -203,9 +209,14 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
   // only students.csv on disk. The read-modify-write mutations must fall back to
   // the legacy file on a roster.csv 404 (mirroring the display readers) so the
   // roster stays editable from the web before `gh teacher roster migrate` runs;
-  // the write still converges onto roster.csv.
-  it("reads the legacy students.csv when roster.csv is absent, still writing roster.csv", async () => {
-    const treePaths: string[] = []
+  // the write converges onto roster.csv AND deletes the legacy students.csv in
+  // the same commit (migrate-on-write), so a first edit renames the file.
+  it("reads the legacy students.csv when roster.csv is absent, writing roster.csv and deleting students.csv", async () => {
+    const treeEntries: {
+      path: string
+      sha?: string | null
+      content?: string
+    }[] = []
     const requestRaw = vi.fn().mockImplementation((path: string) => {
       if (path.includes("/contents/") && path.includes("classroom.json")) {
         return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
@@ -254,8 +265,12 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
           return Promise.resolve({ tree: { sha: "base-tree-sha" } })
         }
         if (path.endsWith("/git/trees")) {
-          const tree = (options?.body as { tree?: { path: string }[] })?.tree
-          for (const t of tree ?? []) treePaths.push(t.path)
+          const tree = (
+            options?.body as {
+              tree?: { path: string; sha?: string | null; content?: string }[]
+            }
+          )?.tree
+          for (const t of tree ?? []) treeEntries.push(t)
           return Promise.resolve({ sha: "tree-sha" })
         }
         if (path.endsWith("/git/commits")) {
@@ -278,9 +293,38 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
       username: "alice",
     })
 
-    // The write converges onto roster.csv even though the read came from legacy.
-    expect(treePaths).toContain("cs101/roster.csv")
-    expect(treePaths).not.toContain("cs101/students.csv")
+    // The write converges onto roster.csv (content upsert)...
+    const rosterUpsert = treeEntries.find(
+      (t) => t.path === "cs101/roster.csv" && t.content !== undefined,
+    )
+    expect(rosterUpsert).toBeTruthy()
+    // ...and deletes the legacy students.csv in the same commit (sha: null).
+    const legacyDelete = treeEntries.find(
+      (t) => t.path === "cs101/students.csv" && t.sha === null,
+    )
+    expect(legacyDelete).toBeTruthy()
+  })
+
+  // The converse of the migrate-on-write case: when roster.csv already exists,
+  // a write must NOT touch students.csv (no spurious deletion entry).
+  it("does not delete students.csv when roster.csv already exists", async () => {
+    const treeEntries: { path: string; sha?: string | null }[] = []
+    const { client } = makeClient({
+      startingCsv: HEADER,
+      membershipState: "active",
+      user: { login: "alice", id: 42 },
+      onTree: (tree) => {
+        for (const t of tree) treeEntries.push(t)
+      },
+    })
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "alice",
+    })
+
+    expect(treeEntries.some((t) => t.path === "cs101/students.csv")).toBe(false)
   })
 })
 

@@ -23,6 +23,18 @@ import (
 type rosterWriteMock struct {
 	files map[string]string
 	blobs []string
+	// treeEntries records the entries POSTed to /git/trees on the last write,
+	// so a test can assert both the roster.csv upsert and any legacy deletion
+	// (a deletion carries an explicit "sha": null).
+	treeEntries []rosterTreeEntry
+}
+
+type rosterTreeEntry struct {
+	Path    string  `json:"path"`
+	Mode    string  `json:"mode"`
+	Type    string  `json:"type"`
+	Content *string `json:"content"`
+	SHA     *string `json:"sha"`
 }
 
 func (m *rosterWriteMock) handler(t *testing.T) http.Handler {
@@ -73,6 +85,13 @@ func (m *rosterWriteMock) handler(t *testing.T) http.Handler {
 		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob-sha"})
 	})
 	mux.HandleFunc("/repos/o/classroom50/git/trees", func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var payload struct {
+			Tree []rosterTreeEntry `json:"tree"`
+		}
+		if err := json.Unmarshal(body, &payload); err == nil {
+			m.treeEntries = payload.Tree
+		}
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-tree-sha"})
 	})
@@ -312,7 +331,80 @@ func TestRunRosterRemove(t *testing.T) {
 	})
 }
 
-// TestRosterUpdateCmd covers the cobra layer of `roster update`: the
+// TestRosterWriteMigratesLegacy verifies migrate-on-write: a roster write on a
+// classroom that still has only the legacy students.csv (never migrated) writes
+// the combined content to roster.csv AND deletes students.csv in the same
+// commit, converging the classroom onto the current name. A classroom already
+// on roster.csv is left alone (no spurious legacy deletion).
+func TestRosterWriteMigratesLegacy(t *testing.T) {
+	legacy := rosterCSVContent(t,
+		configrepo.RosterRow{Username: "alice", FirstName: "Alice", LastName: "A", Email: "a@x.edu", Section: "s1", GitHubID: 1},
+	)
+	strptr := func(s string) *string { return &s }
+
+	// treeDelete returns the deletion entry (sha:null) for path, if present.
+	findDelete := func(entries []rosterTreeEntry, path string) (rosterTreeEntry, bool) {
+		for _, e := range entries {
+			if e.Path == path && e.SHA == nil {
+				return e, true
+			}
+		}
+		return rosterTreeEntry{}, false
+	}
+	findUpsert := func(entries []rosterTreeEntry, path string) bool {
+		for _, e := range entries {
+			if e.Path == path && e.SHA != nil {
+				return true
+			}
+		}
+		return false
+	}
+
+	t.Run("legacy-only classroom: update writes roster.csv and deletes students.csv", func(t *testing.T) {
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": legacy}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out bytes.Buffer
+		if err := runRosterUpdate(client, &out, "o", "cs-principles", "alice", configrepo.RosterPatch{Email: strptr("alice@new.edu")}); err != nil {
+			t.Fatalf("runRosterUpdate: %v", err)
+		}
+		if len(mock.blobs) != 1 {
+			t.Fatalf("got %d blobs POSTed, want 1", len(mock.blobs))
+		}
+		// The migrated content lands on roster.csv, carrying the edit.
+		rows, err := configrepo.ParseRoster([]byte(mock.blobs[0]))
+		if err != nil {
+			t.Fatalf("parse re-encoded roster: %v\n%s", err, mock.blobs[0])
+		}
+		if len(rows) != 1 || rows[0].Username != "alice" || rows[0].Email != "alice@new.edu" {
+			t.Fatalf("migrated roster.csv = %#v, want a single alice row with the edited email", rows)
+		}
+		if !findUpsert(mock.treeEntries, "cs-principles/roster.csv") {
+			t.Errorf("tree = %#v, want a roster.csv upsert", mock.treeEntries)
+		}
+		if _, ok := findDelete(mock.treeEntries, "cs-principles/students.csv"); !ok {
+			t.Errorf("tree = %#v, want a students.csv deletion (sha:null)", mock.treeEntries)
+		}
+	})
+
+	t.Run("roster.csv classroom: no legacy deletion", func(t *testing.T) {
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": legacy}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out bytes.Buffer
+		if err := runRosterUpdate(client, &out, "o", "cs-principles", "alice", configrepo.RosterPatch{Email: strptr("alice@new.edu")}); err != nil {
+			t.Fatalf("runRosterUpdate: %v", err)
+		}
+		if _, ok := findDelete(mock.treeEntries, "cs-principles/students.csv"); ok {
+			t.Errorf("tree = %#v, must NOT delete students.csv when the classroom is already on roster.csv", mock.treeEntries)
+		}
+	})
+}
+
 // "nothing to update" guard and email validation run inside RunE before any
 // auth/network, so these cases need no server (a stray HTTP call would be a
 // bug — RequireAuthClient is only reached after the guard).

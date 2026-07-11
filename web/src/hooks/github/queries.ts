@@ -695,12 +695,15 @@ export async function getRawFile(
   return decodeBase64Utf8(file.content)
 }
 
-// Read a config file, falling back to `fallbackPath` only on a 404. The roster
+// Read a config file, falling back to `fallbackPath` only on a 404, and report
+// whether the fallback (legacy) path was the one that answered. The roster
 // read-modify-write mutations use this so a classroom bootstrapped before the
-// students.csv -> roster.csv rename (only students.csv on disk) is still
-// editable: the write itself always targets roster.csv, converging the legacy
-// file on the next commit. A non-404 error propagates — a real API failure must
-// not be masked as "missing, use legacy".
+// students.csv -> roster.csv rename (only students.csv on disk) is both
+// editable AND converged in the same commit: the write always targets
+// roster.csv, and when `fromLegacy` is true it also deletes students.csv, so a
+// first edit renames the file (matching `gh teacher roster migrate`) instead of
+// leaving a stale legacy copy behind. A non-404 error propagates — a real API
+// failure must not be masked as "missing, use legacy".
 //
 // Not retried: the Contents API is eventually consistent per path, so right
 // after a roster.csv write it can briefly 404 while the pre-rename students.csv
@@ -711,16 +714,19 @@ export async function getRawFile(
 // rare, self-healing one. The acting tab is masked by the optimistic cache
 // (useUpdateRosterCache), and the classroom TEAM, not this CSV, is the
 // authority for enrollment, so a transient stale read is display-only.
-export async function getRawFileWithFallback(
+export async function getRawFileWithFallbackSource(
   client: GitHubClient,
   input: GetAssignmentsFileInput & { fallbackPath: string },
-): Promise<string> {
+): Promise<{ content: string; fromLegacy: boolean }> {
   const { fallbackPath, ...primary } = input
   try {
-    return await getRawFile(client, primary)
+    return { content: await getRawFile(client, primary), fromLegacy: false }
   } catch (err) {
     if (err instanceof GitHubAPIError && err.status === 404) {
-      return getRawFile(client, { ...primary, path: fallbackPath })
+      return {
+        content: await getRawFile(client, { ...primary, path: fallbackPath }),
+        fromLegacy: true,
+      }
     }
     throw err
   }

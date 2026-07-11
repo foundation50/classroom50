@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
+	"github.com/foundation50/classroom50-cli-shared/gittree"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -54,30 +55,65 @@ func ResolveConfigRepoBranch(client githubapi.Client, org string) (string, error
 // first, then falls back to the legacy students.csv so a classroom
 // bootstrapped before the rename still reads. Missing both → points the
 // teacher at `gh teacher classroom add`.
+//
+// Read-only callers use this; write callers use LoadRosterWithSource so they
+// can converge the legacy file onto roster.csv in the same commit.
 func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]RosterRow, error) {
+	rows, _, err := LoadRosterWithSource(client, org, classroom, parentSHA)
+	return rows, err
+}
+
+// LoadRosterWithSource is LoadRoster plus the repo-root-relative path the rows
+// were actually read from — RosterFilePath normally, or LegacyRosterFilePath
+// when only the pre-rename students.csv exists. Write paths use fromLegacy to
+// decide whether the same commit must also delete the legacy file (see
+// RosterWriteChange), so a first edit of an un-migrated classroom converges it
+// onto roster.csv rather than leaving a stale students.csv behind.
+func LoadRosterWithSource(client githubapi.Client, org, classroom, parentSHA string) (rows []RosterRow, sourcePath string, err error) {
 	path := RosterFilePath(classroom)
 	data, ok, err := ReadFileContents(client, org, ConfigRepoName, path, parentSHA)
 	if err != nil {
-		return nil, err
+		return nil, "", err
 	}
 	if !ok {
 		// Legacy fallback: an un-migrated classroom only has students.csv.
 		legacyPath := LegacyRosterFilePath(classroom)
 		legacyData, legacyOK, legacyErr := ReadFileContents(client, org, ConfigRepoName, legacyPath, parentSHA)
 		if legacyErr != nil {
-			return nil, legacyErr
+			return nil, "", legacyErr
 		}
 		if !legacyOK {
-			return nil, fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
+			return nil, "", fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
 				org, ConfigRepoName, path, org, classroom)
 		}
 		path, data = legacyPath, legacyData
 	}
-	rows, err := ParseRoster(data)
+	parsed, err := ParseRoster(data)
 	if err != nil {
-		return nil, fmt.Errorf("%s/%s/%s: %w", org, ConfigRepoName, path, err)
+		return nil, "", fmt.Errorf("%s/%s/%s: %w", org, ConfigRepoName, path, err)
 	}
-	return rows, nil
+	return parsed, path, nil
+}
+
+// RosterWriteChange builds the tree change that writes the updated rows to
+// roster.csv, and — when sourcePath is the legacy students.csv — deletes the
+// legacy file in the same commit. Every roster-mutating write funnels through
+// this so a first edit of an un-migrated classroom migrates it (create
+// roster.csv with the migrated + new content, drop students.csv) in one commit,
+// matching `gh teacher roster migrate`. Pass the sourcePath returned by
+// LoadRosterWithSource.
+func RosterWriteChange(classroom, sourcePath string, rows []RosterRow) (gittree.Change, error) {
+	data, err := EncodeRoster(rows)
+	if err != nil {
+		return gittree.Change{}, err
+	}
+	change := gittree.Change{
+		Upserts: map[string]string{RosterFilePath(classroom): string(data)},
+	}
+	if sourcePath == LegacyRosterFilePath(classroom) {
+		change.Deletes = []string{sourcePath}
+	}
+	return change, nil
 }
 
 // DedupeByUsername collapses repeated usernames (last-wins, matching
