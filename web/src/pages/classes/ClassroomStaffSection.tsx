@@ -28,6 +28,7 @@ import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 import type { GitHubClient } from "@/hooks/github/client"
 import type { QueryClient } from "@tanstack/react-query"
+import { logger } from "@/lib/logger"
 import { Button, Card, FormField, Input, Select } from "@/components/ui"
 
 // i18n key for each role's singular label. A map (not inline t()) so it works in
@@ -36,6 +37,8 @@ const ROLE_LABEL_KEY: Record<StaffRole, string> = {
   instructor: "classes.staff.roleInstructor",
   ta: "classes.staff.roleTa",
 }
+
+const log = logger.scope("classroom:staff")
 
 // Best-effort roster.csv convergence after a staff membership change: the roster
 // records a `role` per member (team is the authority), so adding/removing staff
@@ -53,8 +56,14 @@ async function syncRosterAfterStaffChange(
     await queryClient.invalidateQueries({
       queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
     })
-  } catch {
-    // Best-effort; the roster page's auto-sync converges it on next open.
+  } catch (err) {
+    // Best-effort; the roster page's auto-sync converges it on next open. Log
+    // so a persistently failing convergence is diagnosable.
+    log.debug("roster sync after staff change failed (non-fatal)", {
+      org,
+      classroom,
+      err,
+    })
   }
 }
 

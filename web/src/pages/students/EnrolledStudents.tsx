@@ -147,6 +147,7 @@ const EnrolledStudents = ({
     csvMissingCount,
     csvMissingLogins,
     notInOrgUsernames,
+    orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
 
@@ -437,6 +438,11 @@ const EnrolledStudents = ({
   const notInOrgKey = notInOrgUsernames.join(",")
   useEffect(() => {
     if (isLoading || isError) return
+    // Skip while the org-member list is unknown: a `not_in_org` row can't be
+    // trusted then (it may be an org member removed from THIS classroom), and
+    // reconcile would team-add them back onto the student team. Auto-reconcile
+    // re-arms once the org read succeeds and the roster re-derives.
+    if (!orgMembersKnown) return
     const targets = dropSuppressed(notInOrgUsernames, suppressedLogins)
     if (targets.length === 0) {
       autoReconciledRef.current = false
@@ -446,7 +452,7 @@ const EnrolledStudents = ({
     autoReconciledRef.current = true
     reconcileMutation.mutate(targets)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notInOrgKey, isLoading, isError])
+  }, [notInOrgKey, isLoading, isError, orgMembersKnown])
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -577,9 +583,9 @@ const EnrolledStudents = ({
             </span>
           ) : null}
           {row.state === "removed" ? (
-            <span className="badge badge-sm badge-ghost shrink-0">
+            <Badge size="sm" ghost className="shrink-0">
               {t("students.statusRemoved")}
-            </span>
+            </Badge>
           ) : null}
           {row.state === "not_in_org" ? (
             <span className="badge badge-sm badge-error badge-soft shrink-0">

@@ -32,7 +32,10 @@ import { Button, Modal } from "@/components/ui"
 // below is classroom-scoped and gated by row.state:
 //   enrolled    -> edit metadata + unenroll
 //   pending     -> resend invite + unenroll (cancels the invite); no edit
-//   not_in_org  -> edit metadata + unenroll (drops the CSV row); no resend
+//   removed      -> org member removed from this classroom's teams: edit
+//                   metadata + unenroll (drops the CSV row); no resend/invite
+//   not_in_org  -> not an org member: edit metadata + unenroll (drops the CSV
+//                   row) + invite to the org; no resend
 //
 // The modal performs the writes but hands results back to the parent (which
 // owns the roster/invite caches and the per-row warnings map), mirroring the
@@ -456,6 +459,10 @@ const RosterMemberModal = ({
               ) : row.state === "pending" ? (
                 <span className="badge badge-sm badge-warning badge-soft">
                   {t("students.statusPending")}
+                </span>
+              ) : row.state === "removed" ? (
+                <span className="badge badge-sm badge-ghost">
+                  {t("students.statusRemoved")}
                 </span>
               ) : (
                 <span className="badge badge-sm badge-error badge-soft">

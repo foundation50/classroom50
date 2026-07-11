@@ -71,6 +71,12 @@ export type UseTeamRosterResult = {
   // that are in fact active org members (native invite / SSO) and skips the
   // rest, which stay `not_in_org` and are highlighted for invite/removal.
   notInOrgUsernames: string[]
+  // Whether the org-wide member list was readable. When false (non-owner /
+  // transient failure), a `not_in_org` row can't be trusted to be a genuine
+  // non-member — it may be an org member removed from this classroom — so
+  // auto-reconcile must NOT act on notInOrgUsernames (it could re-add a removed
+  // member to the student team).
+  orgMembersKnown: boolean
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -259,6 +265,7 @@ export function useTeamRoster(
     csvMissingCount,
     csvMissingLogins,
     notInOrgUsernames: notInOrg,
+    orgMembersKnown: orgMemberSets.ids !== undefined,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the
     // student one — otherwise a staff-team failure stays stuck in error. Also

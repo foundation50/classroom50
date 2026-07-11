@@ -898,20 +898,29 @@ async function listClassroomMembersWithRoles(
   client: GitHubClient,
   org: string,
   slugs: { student: string; staff: Record<StaffRole, string> },
-): Promise<MemberWithRole[]> {
+): Promise<{ members: MemberWithRole[]; fullyRead: boolean }> {
   // The student read stays strict (a transient failure there fails the sync so
   // it retries against fresh state). The two staff reads are best-effort: a
   // flaky or permission-blocked staff team degrades to [] rather than blocking
   // an otherwise-fine student sync — listTeamMembers already treats a missing
   // team (404) as [], so only a non-404 reject reaches the settle here.
-  const [studentMembers, ...staffMemberLists] = await Promise.all([
+  //
+  // `fullyRead` is false when any staff read was degraded, so the caller must
+  // NOT treat "absent from this list" as "on no team" (that would wipe an active
+  // staffer's role from an incomplete picture). Appends are still safe from a
+  // partial list; only the role-CLEAR path is gated on fullyRead.
+  const [studentMembers, ...staffSettled] = await Promise.all([
     listTeamMembers(client, org, slugs.student),
     ...STAFF_ROLES.map((role) =>
       Promise.allSettled([
         listTeamMembers(client, org, slugs.staff[role]),
-      ]).then(([r]) => (r.status === "fulfilled" ? r.value : [])),
+      ]).then(([r]) => r),
     ),
   ])
+  const fullyRead = staffSettled.every((r) => r.status === "fulfilled")
+  const staffMemberLists = staffSettled.map((r) =>
+    r.status === "fulfilled" ? r.value : [],
+  )
 
   const byId = new Map<number, MemberWithRole>()
   const consider = (
@@ -935,7 +944,7 @@ async function listClassroomMembersWithRoles(
     for (const m of staffMemberLists[i]) consider(m, role)
   })
 
-  return [...byId.values()]
+  return { members: [...byId.values()], fullyRead }
 }
 
 // Sync roster.csv from the classroom's GitHub teams: ensure every active member
@@ -965,7 +974,7 @@ export async function syncRosterFromTeam(
   return withGitConflictRetry(async () => {
     // Re-read teams + CSV on every attempt so the diff is always against the
     // latest state (a concurrent add/edit can't be clobbered or duplicated).
-    const [members, ref] = await Promise.all([
+    const [{ members, fullyRead }, ref] = await Promise.all([
       listClassroomMembersWithRoles(client, org, slugs),
       getBranchRef(client, org),
     ])
@@ -1007,8 +1016,11 @@ export async function syncRosterFromTeam(
     // same identity join used above):
     //  - on a team now -> set the team-derived primary role (promotion/demotion,
     //    or a first-ever role on a pre-role row);
-    //  - on NO team -> clear the role to "" (e.g. a TA removed from the staff
-    //    team; the stale "ta" must not linger).
+    //  - on NO team, and every team read SUCCEEDED (fullyRead) -> clear the role
+    //    to "" (e.g. a TA removed from the staff team; the stale "ta" must not
+    //    linger). When a staff read was degraded (not fullyRead), leave the role
+    //    UNCHANGED — "absent from an incomplete read" is not proof of removal, so
+    //    a transient staff-team blip must never wipe an active staffer's role.
     // This is the only in-place edit sync makes; name/email/section stay
     // teacher-owned. The row itself is never removed (CSV-only rows are drift,
     // not deletions).
@@ -1021,8 +1033,10 @@ export async function syncRosterFromTeam(
       const teamRole =
         (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
         roleByLogin.get(s.username.trim().toLowerCase())
-      // On a team -> that role; on no team -> "" (cleared).
-      const role = teamRole ?? ""
+      // On a team -> that role. On no team: clear only when the membership read
+      // was complete; otherwise keep the current role (don't wipe from a partial
+      // read).
+      const role = teamRole ?? (fullyRead ? "" : s.role)
       if (role !== s.role) {
         roleChanges++
         return { ...s, role }

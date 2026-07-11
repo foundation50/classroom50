@@ -1614,6 +1614,34 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
   })
 
+  it("does NOT clear an active staffer's role when a staff-team read degrades", async () => {
+    // grace is a current instructor, but the instructor-team read transiently
+    // 500s (degrades to []). Sync must NOT treat "absent from the degraded read"
+    // as "removed" and wipe her recorded role — the read was incomplete.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "grace,Grace,Hopper,g@x.edu,A,707,instructor\n",
+      users: {},
+      teamHas: [],
+      instructorHas: [{ login: "grace", id: 707 }],
+      staffReadRejects: { role: "instructor", status: 500 },
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // No append, and crucially no role change from the incomplete read.
+    expect(result.addedUsernames).toEqual([])
+    expect(result.noop).toBe(true)
+    if (committed.content !== null) {
+      const grace = rowsFromCsv(committed.content).find(
+        (r) => r.username === "grace",
+      )
+      expect(grace?.role).toBe("instructor")
+    }
+  })
+
   it("a non-404 failure on a staff-team read degrades to [] and still syncs students", async () => {
     // The instructor-team read 500s; that must NOT fail the whole sync — the
     // student-team member is still backfilled (staff reads are best-effort).
