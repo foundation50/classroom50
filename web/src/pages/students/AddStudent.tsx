@@ -44,7 +44,7 @@ type AddStudentFormValues = {
 // Add-one-student modal. A username enrolls via GitHub (resolve, add to team,
 // send org invite) and stores the email; email-only sends an email invite.
 // Either way the student joins the classroom team on accepting the invite. The
-// form collects every students.csv field (name, username, email, section).
+// form collects every roster.csv field (name, username, email, section).
 const AddStudent = ({
   org,
   classroom,
@@ -98,7 +98,7 @@ const AddStudent = ({
       }
 
       // Email-only -> a pure GitHub org invite (carrying the classroom team) and
-      // NO students.csv write: the team is the enrollment source of truth and an
+      // NO roster.csv write: the team is the enrollment source of truth and an
       // email carries no reliable identity. The invite surfaces in the roster's
       // "pending" section via the org pending-invitations list; name/section are
       // captured later by adding the student by username or uploading a roster.

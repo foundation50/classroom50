@@ -38,7 +38,7 @@ export function primaryRole(row: Pick<TeamRosterRow, "roles">): RosterRole {
   return sortRolesByRank(row.roles)[0]
 }
 
-// Whether a row carries a student enrollment (a students.csv row + student-team
+// Whether a row carries a student enrollment (a roster.csv row + student-team
 // membership). True for a plain student AND for a student who is also staff.
 // The single definition of "can be unenrolled": unenroll drops only the student
 // enrollment (CSV row + student-team membership), leaving any staff role intact,

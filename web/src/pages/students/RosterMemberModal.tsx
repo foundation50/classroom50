@@ -102,7 +102,7 @@ const RosterMemberModal = ({
 
   const student = rowToStudent(row)
   // A staff-only row (instructor/TA with no student enrollment) has no
-  // students.csv row and isn't on the student team — the student-roster actions
+  // roster.csv row and isn't on the student team — the student-roster actions
   // (edit CSV metadata, unenroll) don't apply. Staff are managed in Settings. A
   // person who is BOTH staff and a student keeps the student actions (they do
   // have a student enrollment), so gate on the student enrollment, not
@@ -116,7 +116,7 @@ const RosterMemberModal = ({
   // A not_in_org row is on the roster (by username) but not in the org — offer a
   // fresh org invite (id derived from username when the CSV has no github_id).
   const canInvite = row.state === "not_in_org" && Boolean(row.username)
-  // Unenroll drops a students.csv row + student-team membership — a student-only
+  // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster).
   const canUnenroll = !staffOnly
 

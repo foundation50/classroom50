@@ -4,12 +4,12 @@ import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import { rosterClaimSet } from "@/util/identity"
 
 // Team-driven roster: the classroom GitHub team is the source of truth for who
-// belongs, not students.csv. The roster is computed PURELY from team members +
-// pending org invitations, then enriched with optional students.csv metadata
+// belongs, not roster.csv. The roster is computed PURELY from team members +
+// pending org invitations, then enriched with optional roster.csv metadata
 // (name/section/email). The CSV never decides enrollment — it can be absent or
 // partial and the roster still renders.
 //
-// Every students.csv row now carries a GitHub identity (username, ideally with
+// Every roster.csv row now carries a GitHub identity (username, ideally with
 // github_id). Legacy username-less rows (e.g. old email-only invite stubs) are
 // IGNORED for classification; their name/section is only borrowed to enrich a
 // username/id row that shares the same email (the one legacy merge we keep).
@@ -51,7 +51,7 @@ export type TeamRosterRow = {
   // GitHub identity when known. Empty only for an email-only pending invite.
   username: string
   github_id: string
-  // Display metadata joined from students.csv (blank when absent).
+  // Display metadata joined from the roster (blank when absent).
   first_name: string
   last_name: string
   section: string
@@ -125,7 +125,7 @@ export type BuildTeamRosterInput = {
   // Pending team invitations for the staff teams, keyed by role. Team-scoped, so
   // a pending row is tagged with the role whose team lists it.
   staffInvitations?: Partial<Record<StaffRole, GitHubOrgInvitation[]>>
-  // Optional students.csv rows (display metadata only).
+  // Optional roster.csv rows (display metadata only).
   students: Student[]
 }
 
@@ -366,7 +366,7 @@ export function countByState(
   )
 }
 
-// Team members with NO students.csv row — the exact set syncRosterFromTeam
+// Team members with NO roster.csv row — the exact set syncRosterFromTeam
 // appends. "Missing" when their id, login, AND profile email are all unclaimed
 // by any CSV row (the same id -> login -> email join syncRosterFromTeam uses,
 // so this count and the write can't diverge). Drives the "Sync roster" button
@@ -389,7 +389,7 @@ export function teamMembersMissingFromCsv(
   )
 }
 
-// The rostered usernames that are `not_in_org` — on students.csv with a GitHub
+// The rostered usernames that are `not_in_org` — on roster.csv with a GitHub
 // username but neither a team/org member nor a pending invite. Auto-reconcile
 // feeds these straight to reconcileTeamFromOrgMembers, which team-adds the ones
 // that turn out to be active org members and skips the rest (they stay

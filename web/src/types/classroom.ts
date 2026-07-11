@@ -171,7 +171,7 @@ export type AssignmentTest = {
   points: number
 }
 
-// students.csv is just the 6 identity/metadata columns — the classroom GitHub
+// The roster is just the 6 identity/metadata columns — the classroom GitHub
 // team is the source of truth for enrollment, so the email-first onboarding
 // lifecycle columns were pruned. A data contract shared with the gh-teacher CLI
 // and the Python collector; all three moved in lockstep.

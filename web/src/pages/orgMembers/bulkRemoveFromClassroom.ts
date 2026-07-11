@@ -49,7 +49,7 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
 //
 // Delegates the write to bulkUnenrollStudents, which drops every matched row in
 // one commit instead of one-per-student, avoiding N racing "Remove student"
-// commits cluttering students.csv history.
+// commits cluttering roster.csv history.
 //
 // This layer owns the per-row PRE-filtering the members view needs:
 //   - rows not on the target classroom (nothing to remove) -> skipped

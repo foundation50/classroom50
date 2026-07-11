@@ -1,7 +1,7 @@
 // Package staff implements the `gh teacher staff` command: managing the
 // per-classroom staff teams (instructor, ta) that back the web GUI's in-app
 // roles. Membership lives in the GitHub teams (`classroom50-<classroom>-{...}`),
-// not students.csv, so staff is identical from CLI or web. Only NewCmd is
+// not roster.csv, so staff is identical from CLI or web. Only NewCmd is
 // exported.
 package staff
 

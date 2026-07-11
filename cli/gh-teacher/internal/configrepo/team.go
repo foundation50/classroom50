@@ -435,7 +435,7 @@ type teamMember struct {
 
 // ListTeamMembers returns the logins of every member of the classroom team
 // addressed by `slug`, walking pagination. The classroom GitHub team is
-// authoritative for enrollment (students.csv is optional display metadata). A
+// authoritative for enrollment (roster.csv is optional display metadata). A
 // 404 (team doesn't exist yet) returns an empty slice rather than erroring.
 func ListTeamMembers(client githubapi.Client, org, slug string) ([]string, error) {
 	const perPage, maxPages = 100, 100

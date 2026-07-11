@@ -363,7 +363,7 @@ func TestParseImportCSV_StripsUTF8BOM(t *testing.T) {
 }
 
 func TestParseImportCSV_RejectsWidenedExportWithGuidance(t *testing.T) {
-	// Feeding a wider students.csv (canonical six + extra trailing columns)
+	// Feeding a wider roster CSV (canonical six + extra trailing columns)
 	// straight into import is rejected with a message that names the cause and
 	// the fix, rather than the generic header error — import is canonical-only
 	// by design (it re-resolves github_id and carries no extra column state).
@@ -482,7 +482,7 @@ func TestDedupeByUsername_LastWins(t *testing.T) {
 
 // --- legacy extra columns (e.g. a prior web schema) ------------------------
 
-// An earlier web app appended optional extra columns to students.csv. The CLI
+// An earlier web app appended optional extra columns to the roster. The CLI
 // must still parse such a wider file (not reject it) and preserve those columns
 // on a read/modify/write cycle so a CLI roster edit never wipes them.
 
