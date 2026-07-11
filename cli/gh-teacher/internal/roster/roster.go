@@ -48,6 +48,7 @@ func NewCmd() *cobra.Command {
 	cmd.AddCommand(rosterUpdateCmd())
 	cmd.AddCommand(rosterRemoveCmd())
 	cmd.AddCommand(rosterImportCmd())
+	cmd.AddCommand(rosterMigrateCmd())
 	return cmd
 }
 

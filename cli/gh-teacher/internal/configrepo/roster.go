@@ -24,10 +24,10 @@ func RosterFilePath(classroom string) string {
 	return classroom + "/" + contract.RosterFilename
 }
 
-// legacyRosterFilePath: on-repo path to a classroom's pre-rename students.csv.
+// LegacyRosterFilePath: on-repo path to a classroom's pre-rename students.csv.
 // Readers fall back to this so classrooms bootstrapped before the rename keep
 // working until `gh teacher roster migrate` converges them.
-func legacyRosterFilePath(classroom string) string {
+func LegacyRosterFilePath(classroom string) string {
 	return classroom + "/" + contract.LegacyRosterFilename
 }
 
@@ -62,7 +62,7 @@ func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]Ro
 	}
 	if !ok {
 		// Legacy fallback: an un-migrated classroom only has students.csv.
-		legacyPath := legacyRosterFilePath(classroom)
+		legacyPath := LegacyRosterFilePath(classroom)
 		legacyData, legacyOK, legacyErr := ReadFileContents(client, org, ConfigRepoName, legacyPath, parentSHA)
 		if legacyErr != nil {
 			return nil, legacyErr
