@@ -101,3 +101,30 @@ func TestLoadRoster_MalformedRosterCSVNamesRosterPath(t *testing.T) {
 		t.Errorf("error = %q, must not mention students.csv when roster.csv itself is malformed", err)
 	}
 }
+
+// A non-404 error on the roster.csv read must propagate, NOT trigger the legacy
+// fallback — otherwise a transient 5xx/permission failure would be silently
+// masked as "roster missing, use students.csv" and could read stale data.
+func TestLoadRoster_Non404OnRosterDoesNotFallBack(t *testing.T) {
+	var legacyRequested bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/classroom50/contents/", func(w http.ResponseWriter, r *http.Request) {
+		path := strings.TrimPrefix(r.URL.Path, "/repos/o/classroom50/contents/")
+		if strings.HasSuffix(path, "students.csv") {
+			legacyRequested = true
+		}
+		// roster.csv (and anything else) returns a 500, not a 404.
+		http.Error(w, "boom", http.StatusInternalServerError)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	_, err := LoadRoster(client, "o", "cs", "main")
+	if err == nil {
+		t.Fatal("expected the 500 to propagate, got nil")
+	}
+	if legacyRequested {
+		t.Error("students.csv must NOT be requested when roster.csv fails with a non-404 error")
+	}
+}

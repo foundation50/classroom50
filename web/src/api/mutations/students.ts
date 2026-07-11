@@ -19,7 +19,7 @@ import {
   type CreateClassroomResult,
 } from "./classrooms"
 import {
-  getRawFile,
+  getRawFileWithFallback,
   getUser,
   listTeamMembers,
   sleep,
@@ -33,7 +33,7 @@ import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { prefixCommit } from "@/util/commit"
-import { rosterPath } from "@/util/rosterPath"
+import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { type Student } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
@@ -304,9 +304,10 @@ export async function addStudentToClassroom(
 
   const studentsFilePath = rosterPath(input.classroom)
 
-  const currentCsv = await getRawFile(client, {
+  const currentCsv = await getRawFileWithFallback(client, {
     org: input.org,
     path: studentsFilePath,
+    fallbackPath: legacyRosterPath(input.classroom),
     ref: ref.object.sha,
   })
 
@@ -657,9 +658,10 @@ export async function addStudentsToClassroom(
 
   const studentsFilePath = rosterPath(input.classroom)
 
-  const currentCsv = await getRawFile(client, {
+  const currentCsv = await getRawFileWithFallback(client, {
     org: input.org,
     path: studentsFilePath,
+    fallbackPath: legacyRosterPath(input.classroom),
     ref: ref.object.sha,
   })
 
@@ -873,9 +875,10 @@ export async function syncRosterFromTeam(
     const commit = await getCommit(client, org, ref.object.sha)
 
     const studentsFilePath = rosterPath(classroom)
-    const currentCsv = await getRawFile(client, {
+    const currentCsv = await getRawFileWithFallback(client, {
       org,
       path: studentsFilePath,
+      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
     const currentStudents = parseStudentsCsv(currentCsv)
@@ -1390,9 +1393,10 @@ export async function unenrollStudent(
 
   const studentsFilePath = rosterPath(classroom)
 
-  const currentCsv = await getRawFile(client, {
+  const currentCsv = await getRawFileWithFallback(client, {
     org,
     path: studentsFilePath,
+    fallbackPath: legacyRosterPath(classroom),
     ref: ref.object.sha,
   })
 
@@ -1589,9 +1593,10 @@ export async function bulkUnenrollStudents(
   await withGitConflictRetry(async () => {
     const ref = await getBranchRef(client, org)
     const commit = await getCommit(client, org, ref.object.sha)
-    const currentCsv = await getRawFile(client, {
+    const currentCsv = await getRawFileWithFallback(client, {
       org,
       path: studentsFilePath,
+      fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
     const currentStudents = parseStudentsCsv(currentCsv)
@@ -1766,9 +1771,10 @@ export async function updateStudent(
 
   const studentsFilePath = rosterPath(classroom)
 
-  const currentCsv = await getRawFile(client, {
+  const currentCsv = await getRawFileWithFallback(client, {
     org,
     path: studentsFilePath,
+    fallbackPath: legacyRosterPath(classroom),
     ref: ref.object.sha,
   })
 

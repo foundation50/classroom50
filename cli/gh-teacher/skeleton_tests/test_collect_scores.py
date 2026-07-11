@@ -1267,6 +1267,16 @@ def test_full_roster_header_matches_go_constant():
     assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id"
 
 
+def test_roster_filename_matches_go_constant():
+    # The roster filename must stay in lockstep with contract.RosterFilename /
+    # contract.LegacyRosterFilename in cli/shared/contract/contract.go (pinned by
+    # TestContractLiterals) and the web's src/util/rosterPath.ts. There is no
+    # compile-time link across the three tools; a Python-only drift would
+    # otherwise ship green while readers stopped agreeing on which file to read.
+    assert cs.ROSTER_FILENAME == "roster.csv"
+    assert cs.LEGACY_ROSTER_FILENAME == "students.csv"
+
+
 # Roster metadata join (best-effort) + roster.csv/students.csv fallback -------
 
 

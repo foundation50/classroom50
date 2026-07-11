@@ -638,6 +638,27 @@ export async function getRawFile(
   return decodeBase64Utf8(file.content)
 }
 
+// Read a config file, falling back to `fallbackPath` only on a 404. The roster
+// read-modify-write mutations use this so a classroom bootstrapped before the
+// students.csv -> roster.csv rename (only students.csv on disk) is still
+// editable: the write itself always targets roster.csv, converging the legacy
+// file on the next commit. A non-404 error propagates — a real API failure must
+// not be masked as "missing, use legacy".
+export async function getRawFileWithFallback(
+  client: GitHubClient,
+  input: GetAssignmentsFileInput & { fallbackPath: string },
+): Promise<string> {
+  const { fallbackPath, ...primary } = input
+  try {
+    return await getRawFile(client, primary)
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) {
+      return getRawFile(client, { ...primary, path: fallbackPath })
+    }
+    throw err
+  }
+}
+
 export async function getClassroom50Yaml(
   client: GitHubClient,
   org: string,

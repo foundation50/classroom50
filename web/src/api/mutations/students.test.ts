@@ -144,7 +144,9 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
-        // Reads still land on roster.csv (writers don't fall back).
+        // The write target is always roster.csv; the read may fall back to the
+        // legacy students.csv (covered separately below), but here roster.csv
+        // exists so no fallback fires.
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           return Promise.resolve({
             type: "file",
@@ -188,6 +190,90 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
       username: "alice",
     })
 
+    expect(treePaths).toContain("cs101/roster.csv")
+    expect(treePaths).not.toContain("cs101/students.csv")
+  })
+
+  // A classroom bootstrapped before the students.csv -> roster.csv rename has
+  // only students.csv on disk. The read-modify-write mutations must fall back to
+  // the legacy file on a roster.csv 404 (mirroring the display readers) so the
+  // roster stays editable from the web before `gh teacher roster migrate` runs;
+  // the write still converges onto roster.csv.
+  it("reads the legacy students.csv when roster.csv is absent, still writing roster.csv", async () => {
+    const treePaths: string[] = []
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/contents/") && path.includes("classroom.json")) {
+        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { body?: unknown }) => {
+        // Un-migrated classroom: roster.csv 404s, only students.csv exists.
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 404,
+              url: path,
+              message: "not found",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
+        if (path.includes("/contents/") && path.includes("students.csv")) {
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(HEADER, "utf-8").toString("base64"),
+          })
+        }
+        if (path.startsWith("/users/")) {
+          return Promise.resolve({ login: "alice", id: 42, name: null })
+        }
+        if (path.includes("/memberships/") && !path.includes("/teams/")) {
+          return Promise.reject(new Error("404 not a member"))
+        }
+        if (path.includes("/git/ref/")) {
+          return Promise.resolve({ object: { sha: "base-sha" } })
+        }
+        if (path.includes("/git/commits/")) {
+          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+        }
+        if (path.endsWith("/git/trees")) {
+          const tree = (options?.body as { tree?: { path: string }[] })?.tree
+          for (const t of tree ?? []) treePaths.push(t.path)
+          return Promise.resolve({ sha: "tree-sha" })
+        }
+        if (path.endsWith("/git/commits")) {
+          return Promise.resolve({ sha: "new-commit-sha" })
+        }
+        if (path.endsWith("/git/refs/heads/main")) {
+          return Promise.resolve({})
+        }
+        if (path.includes("/teams/")) {
+          return Promise.resolve({ state: "active" })
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    // Must NOT throw — the legacy read fallback keeps the mutation working.
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "alice",
+    })
+
+    // The write converges onto roster.csv even though the read came from legacy.
     expect(treePaths).toContain("cs101/roster.csv")
     expect(treePaths).not.toContain("cs101/students.csv")
   })
