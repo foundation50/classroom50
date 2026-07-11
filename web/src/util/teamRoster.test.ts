@@ -4,6 +4,7 @@ import {
   countByState,
   rowToStudent,
   teamMembersMissingFromCsv,
+  rowsNeedingBackfill,
 } from "./teamRoster"
 import { enrolledCountsByRole } from "./rosterRoles"
 import type { Student } from "@/types/classroom"
@@ -516,6 +517,38 @@ describe("buildTeamRoster — roles (union across student + staff teams)", () =>
     const seen = new Set(rows.flatMap((r) => r.roles))
     for (const role of STAFF_ROLES) expect(seen.has(role)).toBe(true)
     expect(rows).toHaveLength(STAFF_ROLES.length)
+  })
+})
+
+describe("rowsNeedingBackfill", () => {
+  it("flags a login-only row on a team (blank github_id) — the rliu50 case", () => {
+    const needing = rowsNeedingBackfill(
+      [member(127826836, "rliu50")],
+      {},
+      [csvRow({ username: "rliu50" })], // blank github_id + blank role
+    )
+    expect(needing.map((s) => s.username)).toEqual(["rliu50"])
+  })
+
+  it("flags a row whose recorded role is stale vs the team", () => {
+    const needing = rowsNeedingBackfill(
+      [],
+      { instructor: [member(1, "prof")] },
+      [csvRow({ github_id: "1", username: "prof", role: "student" })],
+    )
+    expect(needing.map((s) => s.username)).toEqual(["prof"])
+  })
+
+  it("does not flag a complete, in-sync row", () => {
+    const needing = rowsNeedingBackfill([member(1, "ada")], {}, [
+      csvRow({ github_id: "1", username: "ada", role: "student" }),
+    ])
+    expect(needing).toEqual([])
+  })
+
+  it("does not flag a CSV row for someone on no team (needs-attention, not backfill)", () => {
+    const needing = rowsNeedingBackfill([], {}, [csvRow({ username: "ghost" })])
+    expect(needing).toEqual([])
   })
 })
 

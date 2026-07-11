@@ -21,6 +21,7 @@ import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
+import type { RosterCsvProblem } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -96,12 +97,22 @@ export function groupStudentsBySection<T extends { section?: string }>(
 
 const EnrolledStudents = ({
   students = [],
+  parseProblems = [],
+  onRecheckRoster,
+  rechecking = false,
   org,
   classroom,
   addActions,
   suppressedLogins,
 }: {
   students: Student[]
+  // Per-line problems from the strict roster.csv parse (empty when the file is
+  // well-formed). Surfaced as a banner so the instructor can fix the file.
+  parseProblems?: RosterCsvProblem[]
+  // Re-read roster.csv so a teacher who just fixed it can re-verify in place.
+  onRecheckRoster?: () => void
+  // The recheck read is in flight (disables the button, shows a spinner).
+  rechecking?: boolean
   org: string
   classroom: string
   addActions?: AddStudentActions
@@ -141,6 +152,7 @@ const EnrolledStudents = ({
     teamSlugByRole,
     csvMissingCount,
     csvMissingLogins,
+    backfillNeededLogins,
     orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
@@ -386,12 +398,23 @@ const EnrolledStudents = ({
   // intervening zero-drift render to reset it).
   const autoSyncedForRef = useRef<string | null>(null)
   const csvMissingKey = csvMissingLogins.join(",")
+  const backfillNeededKey = backfillNeededLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
     // Wait for the migrate pass to settle first (converges students.csv ->
     // roster.csv) so sync's write can't race migrate's on the ref.
     if (migrateSettledFor !== classroom) return
-    if (dropSuppressed(csvMissingLogins, suppressedLogins).length === 0) {
+    // Sync when there's drift to fix: a team member with no CSV row (missing),
+    // OR an existing CSV row that's stale against the team (blank github_id or a
+    // wrong role — the login-only `rliu50` case). Without the backfill term a
+    // login-only row would never converge, since it isn't "missing". BOTH terms
+    // drop suppressed (just-unenrolled) logins so a stale row lingering during
+    // the eventual-consistency window can't re-fire a resurrecting sync.
+    const hasMissing =
+      dropSuppressed(csvMissingLogins, suppressedLogins).length > 0
+    const hasBackfill =
+      dropSuppressed(backfillNeededLogins, suppressedLogins).length > 0
+    if (!hasMissing && !hasBackfill) {
       if (autoSyncedForRef.current === classroom)
         autoSyncedForRef.current = null
       return
@@ -400,7 +423,14 @@ const EnrolledStudents = ({
     autoSyncedForRef.current = classroom
     syncMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [csvMissingKey, isLoading, isError, migrateSettledFor, classroom])
+  }, [
+    csvMissingKey,
+    backfillNeededKey,
+    isLoading,
+    isError,
+    migrateSettledFor,
+    classroom,
+  ])
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -552,6 +582,57 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
+      {/* Malformed roster.csv: name every bad line so the instructor can fix
+          the file on GitHub. Distinct from a network load error — this is a bad
+          file, and reads/writes silently misbehave until it's corrected. */}
+      {parseProblems.length > 0 ? (
+        <Alert tone="error">
+          <div className="flex flex-col gap-2">
+            <span className="font-medium">
+              {t("students.rosterParseError")}
+            </span>
+            <ul className="list-disc pl-5 text-sm">
+              {parseProblems.map((p, i) => (
+                <li key={`${p.line}-${i}`}>
+                  {t("students.rosterParseErrorLine", {
+                    line: p.line,
+                    message: p.message,
+                  })}
+                </li>
+              ))}
+            </ul>
+            <a
+              href={`https://github.com/${encodeURIComponent(org)}/classroom50/edit/main/${rosterPath(
+                classroom,
+              )
+                .split("/")
+                .map(encodeURIComponent)
+                .join("/")}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            >
+              {t("students.rosterEditOnGitHub")}
+            </a>
+            {onRecheckRoster ? (
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={rechecking}
+                  loadingLabel={t("students.rosterRechecking")}
+                  disabled={rechecking}
+                  onClick={onRecheckRoster}
+                >
+                  <RefreshCw aria-hidden="true" className="size-4" />
+                  {t("students.rosterRecheck")}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+        </Alert>
+      ) : null}
+
       {/* Warnings / action results. */}
       {Object.keys(warnings).length > 0 ? (
         <div className="flex w-full flex-col gap-2">

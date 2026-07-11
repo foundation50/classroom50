@@ -881,9 +881,13 @@ export async function ensureOrgMembership(
     username: string
     inviteeId: number
     teamIds?: number[]
+    // Org-level role for a FRESH invite: "admin" makes the invitee an org owner
+    // (used for an instructor invite), else a plain member. Ignored when the
+    // person is already active/pending (we don't escalate an existing member).
+    role?: "direct_member" | "admin"
   },
 ): Promise<EnsureOrgMembershipResult> {
-  const { org, username, inviteeId, teamIds } = input
+  const { org, username, inviteeId, teamIds, role = "direct_member" } = input
 
   const existing = await getOrgMembershipState(client, org, username)
   if (existing === "active" || existing === "pending") {
@@ -895,6 +899,7 @@ export async function ensureOrgMembership(
       org,
       invitee_id: inviteeId,
       team_ids: teamIds,
+      role,
     })
     return { state: "invited" }
   } catch (err) {

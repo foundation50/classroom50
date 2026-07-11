@@ -15,6 +15,7 @@ import {
   buildTeamRoster,
   countByState,
   teamMembersMissingFromCsv,
+  rowsNeedingBackfill,
   type TeamRosterRow,
   type TeamRosterRowState,
   type RosterRole,
@@ -68,6 +69,14 @@ export type UseTeamRosterResult = {
   // Lowercased logins of team members with no roster.csv row — used to skip a
   // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
   csvMissingLogins: string[]
+  // Count of existing CSV rows that are stale against team membership (blank
+  // github_id or a role differing from the team). Sync backfills these; the
+  // view uses it (with csvMissingCount) to decide whether a sync is worthwhile.
+  backfillNeededCount: number
+  // Lowercased logins of the stale rows, so the auto-sync trigger can drop a
+  // suppressed (just-unenrolled) login before deciding to sync — mirroring
+  // csvMissingLogins, so both drift terms agree on who is suppressed.
+  backfillNeededLogins: string[]
   // Whether org membership was readable, so the view can gate the in-org
   // "needs attention" filter option (no such rows exist when membership is
   // unknown — those rows are suppressed).
@@ -230,6 +239,29 @@ export function useTeamRoster(
     [csvMissing],
   )
 
+  // Rows already in the CSV but stale against team membership (blank github_id
+  // or a role that differs from the team's) — the login-only `rliu50` case.
+  // These need the same sync backfill but aren't "missing", so they must feed
+  // the sync trigger separately, else a login-only row would never converge.
+  const backfillNeeded = useMemo(
+    () =>
+      rowsNeedingBackfill(
+        members ?? [],
+        { instructor: instructorMembers ?? [], ta: taMembers ?? [] },
+        students,
+      ),
+    [members, instructorMembers, taMembers, students],
+  )
+  const backfillNeededCount = backfillNeeded.length
+  // Lowercased logins of the stale rows, so the auto-sync trigger can drop a
+  // just-unenrolled member the same way it does for csvMissingLogins — a
+  // suppressed login's still-present stale row must not re-fire a resurrecting
+  // sync during the eventual-consistency window.
+  const backfillNeededLogins = useMemo(
+    () => backfillNeeded.map((s) => s.username.trim().toLowerCase()),
+    [backfillNeeded],
+  )
+
   // Any team-member fetch (student or staff) failing for a non-404 reason is a
   // real error — surface it rather than rendering a partial roster as "empty".
   const isError =
@@ -262,6 +294,8 @@ export function useTeamRoster(
     },
     csvMissingCount,
     csvMissingLogins,
+    backfillNeededCount,
+    backfillNeededLogins,
     orgMembersKnown,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the

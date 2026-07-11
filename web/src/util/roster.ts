@@ -1,5 +1,5 @@
 import type { Student } from "@/types/classroom"
-import { normalizeStudentRow, splitName } from "@/api/mutations/students"
+import { normalizeStudentRow, splitName } from "@/util/rosterCsv"
 import { studentKey } from "@/util/identity"
 
 // Re-exported so UI callers keep importing splitName/studentKey from here while
