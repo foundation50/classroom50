@@ -1581,6 +1581,39 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
   })
 
+  it("clears the role of a row whose person is on no team (removed staffer)", async () => {
+    // tara was a TA (role recorded), then removed from the staff team. She's on
+    // no team now, so sync clears her role to "" while keeping her row and
+    // teacher-owned metadata — the CSV stops disagreeing with the team.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "tara,Tara,Vance,t@x.edu,B,55,ta\n",
+      users: {},
+      teamHas: [],
+      instructorHas: [],
+      taHas: [], // removed from the ta team
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.addedUsernames).toEqual([])
+    expect(result.noop).toBe(false) // a role change happened
+    const tara = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "tara",
+    )
+    // Row kept, metadata intact, role cleared.
+    expect(tara).toMatchObject({
+      username: "tara",
+      github_id: "55",
+      first_name: "Tara",
+      email: "t@x.edu",
+      section: "B",
+      role: "",
+    })
+  })
+
   it("a non-404 failure on a staff-team read degrades to [] and still syncs students", async () => {
     // The instructor-team read 500s; that must NOT fail the whole sync — the
     // student-team member is still backfilled (staff reads are best-effort).

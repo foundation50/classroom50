@@ -7,6 +7,7 @@ import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
+  listAllOrgMembers,
 } from "@/hooks/github/queries"
 import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
@@ -117,6 +118,28 @@ export function useTeamRoster(
   const instructorMembers = instructorMembersQuery.data
   const taMembers = taMembersQuery.data
 
+  // Org-wide active members (shared cache key with the Org Members page — no
+  // duplicate fetch when both are mounted), used ONLY to split a leftover CSV
+  // row into `removed` (in the org, off this classroom's teams) vs `not_in_org`
+  // (not in the org). A failure here (non-owner 403 / transient) is non-fatal:
+  // the sets stay undefined and buildTeamRoster falls back to `not_in_org`.
+  const orgMembersQuery = useQuery({
+    queryKey: githubKeys.orgMembersAll(org),
+    queryFn: () => listAllOrgMembers(client, org),
+    enabled: Boolean(org),
+    staleTime: 5 * 60 * 1000,
+  })
+  const orgMemberSets = useMemo(() => {
+    if (!orgMembersQuery.data) return { ids: undefined, logins: undefined }
+    const ids = new Set<string>()
+    const logins = new Set<string>()
+    for (const m of orgMembersQuery.data) {
+      ids.add(String(m.id))
+      logins.add(m.login.toLowerCase())
+    }
+    return { ids, logins }
+  }, [orgMembersQuery.data])
+
   const {
     invitations,
     isLoading: invitesLoading,
@@ -155,6 +178,8 @@ export function useTeamRoster(
               ta: taInvitesQuery.data ?? [],
             },
         students,
+        orgMemberIds: orgMemberSets.ids,
+        orgMemberLogins: orgMemberSets.logins,
       }),
     [
       members,
@@ -165,6 +190,7 @@ export function useTeamRoster(
       taInvitesQuery.data,
       pendingHidden,
       students,
+      orgMemberSets,
     ],
   )
 

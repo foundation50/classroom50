@@ -17,14 +17,27 @@ import { rosterClaimSet } from "@/util/identity"
 // Row states:
 //  - enrolled:   an active classroom-team / org member.
 //  - pending:    a pending org invitation (no active membership yet).
-//  - not_in_org: a CSV row WITH a GitHub username that is neither a team/org
-//                member nor a pending invite — on the roster but not in the
-//                organization. Always tied to a username so it persists
-//                reliably. Kept VISIBLE so a rostered student is never lost.
+//  - removed:    a CSV row for someone who IS an active org member (possibly on
+//                other classrooms' teams) but is on NONE of this classroom's
+//                teams — they were removed from this classroom. Not enrolled and
+//                not "not in the org"; shown without a role badge so a removed
+//                TA never reads as a student.
+//  - not_in_org: a CSV row WITH a GitHub username for someone who is NOT a
+//                member of the GitHub org at all — on the roster but not in the
+//                organization (offer an org invite). Always tied to a username
+//                so it persists reliably. Kept VISIBLE so a rostered student is
+//                never lost.
 //
-// "drift" is folded into `not_in_org`; its count drives the banner.
+// enrolled/pending roles come from live team membership (highest wins). A
+// removed/not_in_org row asserts NO role (the team is the authority; a stale
+// roster.csv `role` cell is not trusted for the badge).
+//
+// "drift" (genuine non-members) is folded into `not_in_org`; its count drives
+// the banner and the auto-reconcile candidate set. A `removed` row is NOT drift
+// and is never auto-added back onto a team.
 
-export type TeamRosterRowState = "enrolled" | "pending" | "not_in_org"
+export type TeamRosterRowState =
+  "enrolled" | "pending" | "removed" | "not_in_org"
 
 // A person's classroom role(s). "student" = classroom team; "instructor"/"ta"
 // = the per-classroom staff teams. A person can hold several (an instructor
@@ -127,6 +140,13 @@ export type BuildTeamRosterInput = {
   staffInvitations?: Partial<Record<StaffRole, GitHubOrgInvitation[]>>
   // Optional roster.csv rows (display metadata only).
   students: Student[]
+  // Active GitHub-org members (org-wide, ALL classrooms) as id + lowercased
+  // login sets, used to split a leftover CSV row into `removed` (in the org,
+  // not on this classroom's teams) vs `not_in_org` (not in the org at all).
+  // Undefined when the org-member list couldn't be read (non-owner / error);
+  // the classifier then falls back to `not_in_org` without asserting a role.
+  orgMemberIds?: ReadonlySet<string>
+  orgMemberLogins?: ReadonlySet<string>
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
@@ -142,6 +162,8 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     staffMembers = {},
     staffInvitations = {},
     students,
+    orgMemberIds,
+    orgMemberLogins,
   } = input
   const csv = indexCsv(students)
 
@@ -287,9 +309,23 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     // Mark seen so duplicate CSV rows for the same person don't both emit.
     if (id) seenIds.add(id)
     if (login) seenLogins.add(login)
+    // The person has a CSV row but is on none of this classroom's teams. Split
+    // by real org membership (when we could read it): an org member was removed
+    // from THIS classroom (`removed`); a non-member is genuinely `not_in_org`.
+    // Without the org-member list, fall back to `not_in_org` (its existing
+    // meaning). Either way assert NO role — the team is the authority, so a
+    // stale CSV `role` never labels the badge (roles stays non-empty for the
+    // type invariant but the view renders no role badge for these states).
+    const orgKnown = orgMemberIds !== undefined || orgMemberLogins !== undefined
+    const inOrg =
+      (id && orgMemberIds?.has(id)) ||
+      (login && orgMemberLogins?.has(login)) ||
+      false
+    const state: TeamRosterRowState =
+      orgKnown && inOrg ? "removed" : "not_in_org"
     rows.push({
       key: student.github_id || student.username,
-      state: "not_in_org",
+      state,
       roles: ["student"],
       username: student.username?.trim() ?? "",
       github_id: id,
@@ -321,12 +357,14 @@ function sortName(row: TeamRosterRow): string {
   return (name || row.username || row.email).toLowerCase()
 }
 
-// Enrolled first, then pending, then not_in_org; alphabetical within each.
+// Enrolled first, then pending, then removed, then not_in_org; alphabetical
+// within each.
 function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
   const order: Record<TeamRosterRowState, number> = {
     enrolled: 0,
     pending: 1,
-    not_in_org: 2,
+    removed: 2,
+    not_in_org: 3,
   }
   return rows.sort((a, b) => {
     const byState = order[a.state] - order[b.state]
@@ -362,7 +400,7 @@ export function countByState(
       acc[row.state] += 1
       return acc
     },
-    { enrolled: 0, pending: 0, not_in_org: 0 } as Record<
+    { enrolled: 0, pending: 0, removed: 0, not_in_org: 0 } as Record<
       TeamRosterRowState,
       number
     >,

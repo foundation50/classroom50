@@ -312,6 +312,11 @@ const EnrolledStudents = ({
     ...(pendingHidden
       ? []
       : [{ value: "pending" as const, label: t("students.filterPending") }]),
+    // Only offer "Removed" when some exist, so it isn't a dead, always-empty
+    // filter on classrooms with no removed-but-still-in-org members.
+    ...(counts.removed > 0
+      ? [{ value: "removed" as const, label: t("students.filterRemoved") }]
+      : []),
     { value: "not_in_org", label: t("students.filterNotInOrg") },
   ]
 
@@ -540,23 +545,27 @@ const EnrolledStudents = ({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {(() => {
-            // Show only the person's highest-precedence role (instructor > ta >
-            // student), so a member on multiple teams reads as one primary role
-            // rather than a stack of chips. The student chip uses the neutral
-            // ghost style; staff roles use their tone.
-            const role = primaryRole(row)
-            return (
-              <Badge
-                size="sm"
-                tone={ROLE_BADGE_TONE[role]}
-                ghost={role === "student"}
-                className="shrink-0"
-              >
-                {t(ROLE_LABEL_KEY[role])}
-              </Badge>
-            )
-          })()}
+          {row.state === "enrolled" || row.state === "pending"
+            ? (() => {
+                // Role badge only for people actually on a team (enrolled) or
+                // invited (pending) — those are the states where a team/invite
+                // asserts a role. A `removed`/`not_in_org` row is on no team, so
+                // it shows its state badge below and NO role (a removed TA must
+                // never read as "Student"). Highest-precedence role only
+                // (instructor > ta > student); student uses the neutral ghost.
+                const role = primaryRole(row)
+                return (
+                  <Badge
+                    size="sm"
+                    tone={ROLE_BADGE_TONE[role]}
+                    ghost={role === "student"}
+                    className="shrink-0"
+                  >
+                    {t(ROLE_LABEL_KEY[role])}
+                  </Badge>
+                )
+              })()
+            : null}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
               {row.section.trim()}
@@ -565,6 +574,11 @@ const EnrolledStudents = ({
           {row.state === "pending" ? (
             <span className="badge badge-sm badge-warning badge-soft shrink-0">
               {t("students.statusPending")}
+            </span>
+          ) : null}
+          {row.state === "removed" ? (
+            <span className="badge badge-sm badge-ghost shrink-0">
+              {t("students.statusRemoved")}
             </span>
           ) : null}
           {row.state === "not_in_org" ? (

@@ -1002,20 +1002,28 @@ export async function syncRosterFromTeam(
         !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
     )
 
-    // Refresh the recorded role on existing rows whose team-derived role has
-    // changed (a promotion/demotion, or a first-ever role on a pre-role row).
-    // Matched by id, then login — the same identity join used above. This is
-    // the only in-place edit sync makes; name/email/section stay teacher-owned.
+    // Reconcile the recorded role on existing rows to match live team
+    // membership — the team is the authority. Matched by id, then login (the
+    // same identity join used above):
+    //  - on a team now -> set the team-derived primary role (promotion/demotion,
+    //    or a first-ever role on a pre-role row);
+    //  - on NO team -> clear the role to "" (e.g. a TA removed from the staff
+    //    team; the stale "ta" must not linger).
+    // This is the only in-place edit sync makes; name/email/section stay
+    // teacher-owned. The row itself is never removed (CSV-only rows are drift,
+    // not deletions).
     const roleById = new Map(members.map((m) => [String(m.id), m.role]))
     const roleByLogin = new Map(
       members.map((m) => [m.login.toLowerCase(), m.role]),
     )
     let roleChanges = 0
     const reconciledStudents = currentStudents.map((s) => {
-      const role =
+      const teamRole =
         (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
         roleByLogin.get(s.username.trim().toLowerCase())
-      if (role && role !== s.role) {
+      // On a team -> that role; on no team -> "" (cleared).
+      const role = teamRole ?? ""
+      if (role !== s.role) {
         roleChanges++
         return { ...s, role }
       }

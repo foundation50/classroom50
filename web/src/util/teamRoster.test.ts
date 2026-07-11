@@ -231,6 +231,7 @@ describe("buildTeamRoster", () => {
     expect(countByState(rows)).toEqual({
       enrolled: 2,
       pending: 1,
+      removed: 0,
       not_in_org: 2,
     })
   })
@@ -491,5 +492,80 @@ describe("notInOrgUsernames", () => {
   it("is empty when there are no not_in_org rows", () => {
     const rows = roster([], [member(101, "ada")])
     expect(notInOrgUsernames(rows)).toEqual([])
+  })
+
+  it("excludes a `removed` row (org member, off this classroom's teams)", () => {
+    // A person with a CSV row who is an org member but on no team here is
+    // `removed`, NOT `not_in_org` — so auto-reconcile never re-adds them.
+    const rows = buildTeamRoster({
+      members: [], // on no team in this classroom
+      students: [csvRow({ github_id: "202", username: "bob", role: "ta" })],
+      orgMemberIds: new Set(["202"]),
+      orgMemberLogins: new Set(["bob"]),
+    })
+    expect(rows[0].state).toBe("removed")
+    expect(notInOrgUsernames(rows)).toEqual([])
+  })
+})
+
+describe("buildTeamRoster — removed vs not_in_org classification", () => {
+  it("classifies an org member on no classroom team as `removed`, asserting no role", () => {
+    // The bug: a TA removed from the staff team, still an org member, must not
+    // read as a student. Their stale CSV role is ignored for the row's roles.
+    const rows = buildTeamRoster({
+      members: [],
+      staffMembers: { instructor: [], ta: [] },
+      students: [csvRow({ github_id: "5", username: "tara", role: "ta" })],
+      orgMemberIds: new Set(["5"]),
+      orgMemberLogins: new Set(["tara"]),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("removed")
+    // roles stays non-empty for the type invariant, but the VIEW renders no role
+    // badge for a removed row (asserted in the page component, not here).
+  })
+
+  it("classifies a CSV row for a non-org-member as `not_in_org`", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ github_id: "6", username: "newbie" })],
+      orgMemberIds: new Set(["999"]), // newbie (id 6) is NOT in the org
+      orgMemberLogins: new Set(["someoneelse"]),
+    })
+    expect(rows).toHaveLength(1)
+    expect(rows[0].state).toBe("not_in_org")
+  })
+
+  it("matches org membership by login when the CSV row has no github_id", () => {
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ username: "loginonly" })], // no github_id
+      orgMemberIds: new Set<string>(),
+      orgMemberLogins: new Set(["loginonly"]),
+    })
+    expect(rows[0].state).toBe("removed")
+  })
+
+  it("falls back to not_in_org when the org-member set is unavailable", () => {
+    // Non-owner / failed org-members read: sets are undefined. We must NOT
+    // assert `removed` (we can't prove org membership) — keep the existing
+    // not_in_org behavior so nothing regresses for a viewer who can't read it.
+    const rows = buildTeamRoster({
+      members: [],
+      students: [csvRow({ github_id: "7", username: "unknown", role: "ta" })],
+      // orgMemberIds / orgMemberLogins omitted
+    })
+    expect(rows[0].state).toBe("not_in_org")
+  })
+
+  it("still classifies a current team member as enrolled regardless of the org set", () => {
+    const rows = buildTeamRoster({
+      members: [member(8, "onteam")],
+      students: [csvRow({ github_id: "8", username: "onteam" })],
+      orgMemberIds: new Set(["8"]),
+      orgMemberLogins: new Set(["onteam"]),
+    })
+    expect(rows[0].state).toBe("enrolled")
+    expect(rows[0].roles).toEqual(["student"])
   })
 })
