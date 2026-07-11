@@ -629,6 +629,10 @@ export type ImportRosterRow = {
   last_name?: string
   email?: string
   section?: string
+  // Classroom role from an optional `role` column, validated to a RosterRole.
+  // Undefined when absent or unrecognized; the upload defaults it to "student"
+  // and lets the instructor override per row before inviting.
+  role?: RosterRole
 }
 
 export type AddStudentsToClassroomInput = {
@@ -1184,6 +1188,83 @@ export async function syncRosterFromTeam(
   })
 }
 
+export type WriteRosterRolesInput = {
+  org: string
+  classroom: string
+  // Usernames -> the role to persist on their roster.csv row. Used by the upload
+  // to write an assigned role for a freshly-invited (still-pending) member,
+  // whose role auto-sync can't yet derive from team membership.
+  roles: { username: string; role: RosterRole }[]
+}
+
+// Set the `role` column on existing roster.csv rows matched by username. Only
+// touches rows that exist and whose role actually changes; never appends,
+// removes, or edits other fields. Best-effort caller (upload) — a conflict-safe
+// single commit.
+export async function writeRosterRoles(
+  client: GitHubClient,
+  input: WriteRosterRolesInput,
+): Promise<{ changed: number }> {
+  const { org, classroom } = input
+  await assertClassroomNotArchived(client, org, classroom)
+  const roleByLogin = new Map(
+    input.roles
+      .map((r) => [r.username.trim().toLowerCase(), r.role] as const)
+      .filter(([login]) => login),
+  )
+  if (roleByLogin.size === 0) return { changed: 0 }
+
+  return withGitConflictRetry(async () => {
+    const ref = await getBranchRef(client, org)
+    const commit = await getCommit(client, org, ref.object.sha)
+    const studentsFilePath = rosterPath(classroom)
+    const currentCsv = await getRawFileWithFallback(client, {
+      org,
+      path: studentsFilePath,
+      fallbackPath: legacyRosterPath(classroom),
+      ref: ref.object.sha,
+    })
+    const currentStudents = parseStudentsCsv(currentCsv)
+
+    let changed = 0
+    const nextStudents = currentStudents.map((s) => {
+      const role = roleByLogin.get(s.username.trim().toLowerCase())
+      if (role && role !== s.role) {
+        changed++
+        return { ...s, role }
+      }
+      return s
+    })
+
+    if (changed === 0) return { changed: 0 }
+
+    const nextCsv = stringifyStudentsCsv(nextStudents)
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: studentsFilePath,
+          mode: "100644",
+          type: "blob",
+          content: nextCsv,
+        },
+      ],
+    })
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(
+        `Set role on ${changed} roster member${changed === 1 ? "" : "s"}: ${classroom}`,
+      ),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+    await updateRef(client, org, newCommit.sha)
+    log.info("write roster roles: committed", { org, classroom, changed })
+    return { changed }
+  })
+}
+
 export type MigrateRosterFileResult = {
   // True when a rename commit was made (legacy students.csv -> roster.csv).
   migrated: boolean
@@ -1276,8 +1357,10 @@ export type InviteRosterStudentsInput = {
   classroom: string
   // Rows to invite. Each carries at least a username (a roster.csv row always
   // has one); github_id is used when present, else derived from the username.
-  // `pending` rows are handled by resendOrgInvitation, not here.
-  students: { username: string; github_id?: string }[]
+  // `role` (default "student") selects the target team and org role: student ->
+  // classroom team, ta -> TA team, instructor -> org OWNER (admin) + instructor
+  // team. `pending` rows are handled by resendOrgInvitation, not here.
+  students: { username: string; github_id?: string; role?: RosterRole }[]
   onProgress?: (progress: {
     processed: number
     total: number
@@ -1286,8 +1369,9 @@ export type InviteRosterStudentsInput = {
 }
 
 export type InviteRosterStudentsResult = {
-  // A fresh org invite was created (carrying the classroom team).
-  invited: string[]
+  // A fresh org invite was created (carrying the role's team). Each carries the
+  // role it was invited as, so a caller can write it back to roster.csv.
+  invited: { username: string; role: RosterRole }[]
   // Already an active member or already had a pending invite — no new invite.
   skipped: { username: string; reason: "already-member" | "already-pending" }[]
   // Couldn't invite (username didn't resolve to a GitHub account, or the invite
@@ -1298,14 +1382,15 @@ export type InviteRosterStudentsResult = {
   deferred: string[]
 }
 
-// Bulk-invite roster students who are on roster.csv (by username) but not yet
-// in the organization. Resolves each username to its immutable GitHub id (using
-// the stored github_id when present, else GET /users/{username}) and sends a
-// fresh org invitation carrying the classroom team, so accepting it activates
-// team membership atomically. This is the roster-side counterpart to the Org
-// Members "Invite" action; it does NOT write roster.csv (identity backfill is
-// syncRosterFromTeam's job) and never touches an existing active/pending state
-// (ensureOrgMembership no-ops those).
+// Bulk-invite roster members who aren't yet in the organization, by role.
+// Resolves each username to its immutable GitHub id (stored github_id when
+// present, else GET /users/{username}) and sends a fresh org invitation
+// carrying the role's team so accepting it activates the right membership
+// atomically: student -> classroom team, ta -> TA team, instructor -> the
+// instructor team AND org OWNER (role "admin"). Does NOT write roster.csv
+// (writeback is the caller's job) and never touches an existing active/pending
+// state (ensureOrgMembership no-ops those, so an existing member is never
+// escalated).
 export async function inviteRosterStudents(
   client: GitHubClient,
   input: InviteRosterStudentsInput,
@@ -1313,26 +1398,24 @@ export async function inviteRosterStudents(
   const { org, classroom, students, onProgress } = input
   await assertClassroomNotArchived(client, org, classroom)
 
-  const invited: string[] = []
+  const invited: InviteRosterStudentsResult["invited"] = []
   const skipped: InviteRosterStudentsResult["skipped"] = []
   const failed: InviteRosterStudentsResult["failed"] = []
   const deferred: string[] = []
 
   const targets = students
-    .map((s) => ({ username: s.username.trim(), github_id: s.github_id }))
+    .map((s) => ({
+      username: s.username.trim(),
+      github_id: s.github_id,
+      role: s.role ?? "student",
+    }))
     .filter((s) => s.username)
   if (targets.length === 0) return { invited, skipped, failed, deferred }
 
-  // Resolve the classroom team once so every fresh invite carries it (accepting
-  // the single org invite then activates team membership). A missing team id is
-  // tolerated — the invite still sends, just without the team attached.
-  let teamIds: number[] | undefined
-  try {
-    const teamId = (await resolveClassroomTeam(client, org, classroom)).id
-    teamIds = teamId ? [teamId] : undefined
-  } catch {
-    teamIds = undefined
-  }
+  // Resolve every role's team id once so a fresh invite carries the right team
+  // (accepting the single org invite then activates that membership). A missing
+  // team id is tolerated — the invite still sends, just without a team attached.
+  const teamIdByRole = await resolveTeamIdByRole(client, org, classroom)
 
   let processed = 0
   const bump = (username: string) => {
@@ -1348,7 +1431,7 @@ export async function inviteRosterStudents(
   let rateLimited = false
 
   await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
-    const { username } = target
+    const { username, role } = target
     if (rateLimited) {
       deferred.push(username)
       bump(username)
@@ -1359,13 +1442,16 @@ export async function inviteRosterStudents(
       const inviteeId =
         parseGitHubId(target.github_id ?? "") ??
         (await getUser(client, username)).id
+      const teamId = teamIdByRole[role]
       const result = await ensureOrgMembership(client, {
         org,
         username,
         inviteeId,
-        teamIds,
+        teamIds: teamId ? [teamId] : undefined,
+        // An instructor becomes an org OWNER; student/ta are plain members.
+        role: role === "instructor" ? "admin" : "direct_member",
       })
-      if (result.state === "invited") invited.push(username)
+      if (result.state === "invited") invited.push({ username, role })
       else if (result.state === "active")
         skipped.push({ username, reason: "already-member" })
       else skipped.push({ username, reason: "already-pending" })
@@ -1382,6 +1468,37 @@ export async function inviteRosterStudents(
   })
 
   return { invited, skipped, failed, deferred }
+}
+
+// Resolve the team id for each role: student -> classroom team, instructor/ta ->
+// the staff team (created if missing, mirroring the Settings staff flow so an
+// instructor/ta invite lands them on the right team on acceptance). A failed
+// resolve leaves that role's id undefined — the invite still sends teamless.
+async function resolveTeamIdByRole(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+): Promise<Record<RosterRole, number | undefined>> {
+  const result: Record<RosterRole, number | undefined> = {
+    student: undefined,
+    instructor: undefined,
+    ta: undefined,
+  }
+  try {
+    result.student = (await resolveClassroomTeam(client, org, classroom)).id
+  } catch {
+    result.student = undefined
+  }
+  for (const role of STAFF_ROLES) {
+    try {
+      const team = await ensureClassroomRoleTeam(client, org, classroom, role)
+      await grantTeamConfigRepoWrite(client, org, team.slug)
+      result[role] = team.id
+    } catch {
+      result[role] = undefined
+    }
+  }
+  return result
 }
 
 export type AssignRosterMemberRoleInput = {

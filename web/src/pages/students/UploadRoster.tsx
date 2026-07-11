@@ -4,17 +4,19 @@ import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
 import type { GitHubClient } from "@/hooks/github/client"
-import { Alert, Button, Modal } from "@/components/ui"
+import { Alert, Button, Modal, Select } from "@/components/ui"
 import {
   inviteRosterStudents,
   isLikelyGithubUsername,
   NoNewStudentsError,
   normalizeGithubUsername,
   splitName,
+  writeRosterRoles,
   type BulkImportResult,
   type ImportRosterRow,
 } from "@/api/mutations/students"
 import { logger } from "@/lib/logger"
+import type { RosterRole } from "@/util/teamRoster"
 
 const log = logger.scope("students:UploadRoster")
 
@@ -61,6 +63,7 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
         last_name: (raw.last_name ?? fromName.last_name).trim(),
         email: (raw.email ?? "").trim(),
         section: (raw.section ?? "").trim(),
+        role: coerceImportRole(raw.role),
       })
     }
   } else {
@@ -70,6 +73,18 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
   }
 
   return rows
+}
+
+// Coerce a raw `role` cell to a RosterRole, or undefined when absent/unknown.
+// Case-insensitive; the upload defaults undefined to "student" and lets the
+// instructor override, so an unrecognized value degrades to student rather than
+// failing the whole import.
+const coerceImportRole = (raw: string | undefined): RosterRole | undefined => {
+  const value = raw?.trim().toLowerCase()
+  if (value === "student" || value === "instructor" || value === "ta") {
+    return value
+  }
+  return undefined
 }
 
 type UploadRosterProps = {
@@ -137,6 +152,10 @@ const UploadRoster = ({
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
   const [rows, setRows] = useState<ImportRosterRow[]>([])
+  // Per-row role the instructor is about to invite as, keyed by lowercased
+  // username. Seeded from the CSV `role` column (else "student") and editable in
+  // the preview. Instructor -> org owner invite (called out in the confirm).
+  const [rolesByUser, setRolesByUser] = useState<Record<string, RosterRole>>({})
   const [progress, setProgress] = useState<ImportProgress>({
     processed: 0,
     total: 0,
@@ -148,7 +167,7 @@ const UploadRoster = ({
   // dialog so an un-invited upload isn't silently lost (it won't appear on the
   // team-driven roster until re-invited or accepted).
   const [inviteOutcome, setInviteOutcome] = useState<{
-    invited: string[]
+    invited: { username: string; role: RosterRole }[]
     deferred: string[]
     failed: { username: string; message: string }[]
   } | null>(null)
@@ -173,6 +192,7 @@ const UploadRoster = ({
     setInviteOutcome(null)
     setInviteError(null)
     setError(null)
+    setRolesByUser({})
 
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -206,6 +226,15 @@ const UploadRoster = ({
 
       setFileName(file.name)
       setRows(parsedRows)
+      // Seed the per-row role from the CSV role column (else student).
+      setRolesByUser(
+        Object.fromEntries(
+          parsedRows.map((r) => [
+            r.username.toLowerCase(),
+            r.role ?? "student",
+          ]),
+        ),
+      )
       setResult(null)
       setError(null)
       setProgress({
@@ -301,6 +330,7 @@ const UploadRoster = ({
         students: rows.map((r) => ({
           username: r.username,
           github_id: idByLogin.get(r.username.toLowerCase()) ?? "",
+          role: rolesByUser[r.username.toLowerCase()] ?? "student",
         })),
         onProgress: setProgress,
       })
@@ -312,6 +342,27 @@ const UploadRoster = ({
           message: f.message,
         })),
       })
+
+      // 3) Write the assigned role back to roster.csv for successfully-invited
+      //    rows. A freshly-invited member isn't on the team yet (pending), so
+      //    auto-sync can't derive their role from team membership — persist it
+      //    now so the roster reflects the intended role immediately. Best-effort:
+      //    a writeback failure doesn't undo the invites (role converges on the
+      //    next sync once they accept and land on their team).
+      if (inviteRes.invited.length > 0) {
+        try {
+          await writeRosterRoles(client, {
+            org,
+            classroom,
+            roles: inviteRes.invited.map((i) => ({
+              username: i.username,
+              role: i.role,
+            })),
+          })
+        } catch (err) {
+          log.warn("roster role writeback failed", { err, record: true })
+        }
+      }
     } catch (err) {
       // The roster.csv write already landed; a hard invite failure must not
       // hide it behind the bare error screen. Keep the completed view and show
@@ -373,6 +424,11 @@ const UploadRoster = ({
                 {t("students.uploadInviteNotice", { count: rows.length })}
               </span>
             </Alert>
+            {Object.values(rolesByUser).some((r) => r === "instructor") ? (
+              <Alert tone="warning" className="mb-4">
+                <span>{t("students.uploadInstructorOwnerNotice")}</span>
+              </Alert>
+            ) : null}
 
             {rows.length > 0 ? (
               <div className="max-h-80 overflow-auto rounded-box border border-base-300">
@@ -384,24 +440,50 @@ const UploadRoster = ({
                       <th scope="col">{t("students.nameColumn")}</th>
                       <th scope="col">{t("students.emailColumn")}</th>
                       <th scope="col">{t("students.sectionColumn")}</th>
+                      <th scope="col">{t("students.roleColumn")}</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {rows.map((row, index) => (
-                      <tr key={row.username.toLowerCase()}>
-                        <td>{index + 1}</td>
-                        <td>
-                          <code>{row.username}</code>
-                        </td>
-                        <td className="opacity-70">
-                          {[row.first_name, row.last_name]
-                            .filter(Boolean)
-                            .join(" ")}
-                        </td>
-                        <td className="opacity-70">{row.email}</td>
-                        <td className="opacity-70">{row.section}</td>
-                      </tr>
-                    ))}
+                    {rows.map((row, index) => {
+                      const key = row.username.toLowerCase()
+                      return (
+                        <tr key={key}>
+                          <td>{index + 1}</td>
+                          <td>
+                            <code>{row.username}</code>
+                          </td>
+                          <td className="opacity-70">
+                            {[row.first_name, row.last_name]
+                              .filter(Boolean)
+                              .join(" ")}
+                          </td>
+                          <td className="opacity-70">{row.email}</td>
+                          <td className="opacity-70">{row.section}</td>
+                          <td>
+                            <Select
+                              selectSize="xs"
+                              className="w-32"
+                              aria-label={t("students.assignRoleLabel")}
+                              value={rolesByUser[key] ?? "student"}
+                              onChange={(e) =>
+                                setRolesByUser((prev) => ({
+                                  ...prev,
+                                  [key]: e.currentTarget.value as RosterRole,
+                                }))
+                              }
+                            >
+                              <option value="student">
+                                {t("students.roleStudent")}
+                              </option>
+                              <option value="ta">{t("students.roleTa")}</option>
+                              <option value="instructor">
+                                {t("students.roleInstructor")}
+                              </option>
+                            </Select>
+                          </td>
+                        </tr>
+                      )
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -514,10 +596,12 @@ const UploadRoster = ({
             {inviteOutcome && inviteOutcome.invited.length > 0 && (
               <ImportResultSection
                 title={t("students.resultInvited")}
-                rows={inviteOutcome.invited.map((username) => ({
+                rows={inviteOutcome.invited.map(({ username, role }) => ({
                   key: username,
                   label: username,
-                  detail: t("students.inviteSentDetail"),
+                  detail: t(
+                    `students.role${role === "ta" ? "Ta" : role === "instructor" ? "Instructor" : "Student"}`,
+                  ),
                 }))}
               />
             )}

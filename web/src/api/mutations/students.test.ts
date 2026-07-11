@@ -10,6 +10,7 @@ import {
   assignRosterMemberRole,
   inviteRosterStudents,
   syncRosterFromTeam,
+  writeRosterRoles,
   migrateRosterFile,
   updateStudent,
   updateStudentWithConflictRetry,
@@ -1785,6 +1786,45 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 })
 
+describe("writeRosterRoles — set role on existing rows", () => {
+  it("writes the assigned role onto a matching row and commits", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "prof,,,,,9,\n",
+      users: {},
+      teamHas: [],
+    })
+
+    const res = await writeRosterRoles(client, {
+      org: "acme",
+      classroom: "cs101",
+      roles: [{ username: "prof", role: "instructor" }],
+    })
+
+    expect(res.changed).toBe(1)
+    const prof = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "prof",
+    )
+    expect(prof?.role).toBe("instructor")
+  })
+
+  it("no-ops when the role already matches (no commit)", async () => {
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "prof,,,,,9,instructor\n",
+      users: {},
+      teamHas: [],
+    })
+
+    const res = await writeRosterRoles(client, {
+      org: "acme",
+      classroom: "cs101",
+      roles: [{ username: "prof", role: "instructor" }],
+    })
+
+    expect(res.changed).toBe(0)
+    expect(committed.content).toBeNull()
+  })
+})
+
 describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
   const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 
@@ -1963,7 +2003,7 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
       students: [{ username: "octocat", github_id: "1" }],
     })
 
-    expect(res.invited).toEqual(["octocat"])
+    expect(res.invited).toEqual([{ username: "octocat", role: "student" }])
     expect(invitations).toEqual([{ invitee_id: 1, role: "direct_member" }])
   })
 
@@ -1978,8 +2018,25 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
       students: [{ username: "torvalds", github_id: "" }],
     })
 
-    expect(res.invited).toEqual(["torvalds"])
+    expect(res.invited).toEqual([{ username: "torvalds", role: "student" }])
     expect(invitations).toEqual([{ invitee_id: 2, role: "direct_member" }])
+  })
+
+  it("invites an instructor row as an organization OWNER (role admin)", async () => {
+    const { client, invitations } = makeInviteClient({
+      users: { prof: { id: 9 } },
+      members: [],
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "prof", github_id: "9", role: "instructor" }],
+    })
+
+    expect(res.invited).toEqual([{ username: "prof", role: "instructor" }])
+    // The org invite must carry admin (owner), not direct_member.
+    expect(invitations[0]).toMatchObject({ invitee_id: 9, role: "admin" })
   })
 
   it("skips an already-active member without inviting", async () => {
