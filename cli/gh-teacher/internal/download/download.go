@@ -93,7 +93,7 @@ func NewCmd() *cobra.Command {
 		Use:   "download <org> <classroom> <assignment>",
 		Short: "Clone every student submission repo for an assignment",
 		Long: "Clone every student submission repo for an assignment under <org>/classroom50.\n\n" +
-			"Default (roster-driven): reads <classroom>/students.csv from the config\n" +
+			"Default (roster-driven): reads <classroom>/roster.csv from the config\n" +
 			"repo, derives the expected <classroom>-<assignment>-<username> repo for\n" +
 			"each row, clones whichever ones exist, and refreshes <repo>/result.json\n" +
 			"and <repo>/results.json from the repo's submit-tag releases alongside\n" +
@@ -207,7 +207,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return nil
 	}
 
-	// students.csv is optional display metadata: a missing/unreadable CSV
+	// The roster is optional display metadata: a missing/unreadable CSV
 	// yields blank metadata, never a skipped student. Best-effort, indexed by
 	// login for the scores.csv join.
 	metaByLogin := loadRosterMetadata(client, org, classroom, branch, errOut)
@@ -325,7 +325,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 }
 
 // RosterMeta is the optional display metadata joined into scores.csv from
-// students.csv (blank when the CSV is absent/partial).
+// the roster (blank when the CSV is absent/partial).
 type RosterMeta struct {
 	FirstName string
 	LastName  string
@@ -333,14 +333,14 @@ type RosterMeta struct {
 	Section   string
 }
 
-// loadRosterMetadata reads students.csv best-effort and indexes it by
+// loadRosterMetadata reads the roster best-effort and indexes it by
 // lowercased login for the scores.csv join. A missing/unreadable CSV is NOT
 // fatal (the team drives enrollment) — it warns and returns an empty map so
 // every team member still gets a row with blank name/section/email.
 func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, errOut io.Writer) map[string]RosterMeta {
 	rows, err := configrepo.LoadRoster(client, org, classroom, branch)
 	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "students.csv metadata unavailable (%v); scores.csv name/section/email will be blank\n", err)
+		_, _ = fmt.Fprintf(errOut, "roster metadata unavailable (%v); scores.csv name/section/email will be blank\n", err)
 		return map[string]RosterMeta{}
 	}
 	byLogin := make(map[string]RosterMeta, len(rows))
@@ -610,7 +610,7 @@ func writeScoresCSV(path string, scores scoresschema.File, assignment string, te
 // (non-submitter) yields one blank-scored line. Otherwise one line per
 // submission (newest first), each with its score columns; the entry-level
 // `override` flag repeats on every line. An entry with no usable submissions
-// still yields one blank line. `meta` is the best-effort students.csv join.
+// still yields one blank line. `meta` is the best-effort roster join.
 func scoresCSVRows(username string, meta RosterMeta, entry map[string]any) [][]string {
 	// Display metadata is teacher/student-controllable free text: guard it
 	// against spreadsheet formula injection like the other string cells.

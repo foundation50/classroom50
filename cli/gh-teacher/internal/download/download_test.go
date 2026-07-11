@@ -344,7 +344,7 @@ func TestStringifyOverride(t *testing.T) {
 
 func TestWriteScoresCSV(t *testing.T) {
 	teamLogins := []string{"alice", "Bob", "carol"} // mixed case to verify lookup is case-insensitive
-	// Best-effort students.csv metadata join (blank when a member is absent
+	// Best-effort roster metadata join (blank when a member is absent
 	// from the CSV — carol here).
 	meta := map[string]RosterMeta{
 		"alice": {FirstName: "Ada", LastName: "Lovelace", Email: "ada@uni.edu", Section: "A"},
@@ -1048,13 +1048,14 @@ func TestRewriteAssetURL(t *testing.T) {
 	}
 }
 
-// TestLoadRosterMetadata_MissingCSVWarnsAndBlanks: students.csv is optional
-// display metadata now — a missing/unreadable file must NOT skip students. The
-// contents read 404s, so LoadRoster errors; loadRosterMetadata warns and
-// returns an empty map so every team member still gets a (blank-metadata) row.
+// TestLoadRosterMetadata_MissingCSVWarnsAndBlanks: the roster is optional
+// display metadata now — a missing/unreadable file must NOT skip students. Both
+// roster.csv and the legacy students.csv contents reads 404, so LoadRoster
+// errors; loadRosterMetadata warns and returns an empty map so every team
+// member still gets a (blank-metadata) row.
 func TestLoadRosterMetadata_MissingCSVWarnsAndBlanks(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		http.NotFound(w, r) // students.csv contents read 404s
+		http.NotFound(w, r) // roster.csv and students.csv contents reads 404
 	}))
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
@@ -1065,12 +1066,12 @@ func TestLoadRosterMetadata_MissingCSVWarnsAndBlanks(t *testing.T) {
 	if len(meta) != 0 {
 		t.Fatalf("got %d metadata rows, want 0 (blank on missing CSV)", len(meta))
 	}
-	if !strings.Contains(errOut.String(), "students.csv metadata unavailable") {
+	if !strings.Contains(errOut.String(), "roster metadata unavailable") {
 		t.Errorf("expected an 'unavailable' warning, got %q", errOut.String())
 	}
 }
 
-// TestLoadRosterMetadata_IndexesByLogin: a readable students.csv is indexed by
+// TestLoadRosterMetadata_IndexesByLogin: a readable roster is indexed by
 // lowercased login into RosterMeta for the scores.csv name/section/email join.
 func TestLoadRosterMetadata_IndexesByLogin(t *testing.T) {
 	csv := "username,first_name,last_name,email,section,github_id\n" +

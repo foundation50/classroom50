@@ -337,7 +337,7 @@ func printMigrationSummary(out, errOut io.Writer, plan migrationPlan, resolved [
 		plan.Classroom.Name, plan.Classroom.ID)
 	_, _ = fmt.Fprintf(out, "  assignments.json   %d entries (%d individual, %d group)\n",
 		len(entries), indiv, group)
-	_, _ = fmt.Fprintln(out, "  students.csv       empty (not migrated)")
+	_, _ = fmt.Fprintln(out, "  roster.csv         empty (not migrated)")
 	_, _ = fmt.Fprintln(out, "  scores.json        empty (not migrated)")
 
 	_, _ = fmt.Fprintf(errOut, "View at https://github.com/%s/%s/tree/%s/%s\n",

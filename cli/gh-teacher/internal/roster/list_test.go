@@ -14,7 +14,7 @@ import (
 
 // rosterListMock is a minimal <org>/classroom50 server for the
 // read-only `roster list` command: default-branch metadata plus a
-// students.csv read. files maps repo-relative path -> content. When
+// roster.csv read. files maps repo-relative path -> content. When
 // statusOverride is set for a repo path, that contents request returns
 // the given HTTP status instead of file/404 -- used to exercise the
 // non-404 error path.
@@ -57,7 +57,7 @@ const rosterCSVTwoStudents = "username,first_name,last_name,email,section,github
 func TestRunRosterList(t *testing.T) {
 	t.Run("default table lists all rows with a stderr summary", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": rosterCSVTwoStudents,
+			"cs-principles/roster.csv": rosterCSVTwoStudents,
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -100,7 +100,7 @@ func TestRunRosterList(t *testing.T) {
 		csv := "username,first_name,last_name,email,section,github_id\n" +
 			"alice,Alice,Andersson,alice@example.edu,section-1,111\n" +
 			"carol,Carol,Clark,,,\n" // unresolved github_id (0)
-		mock := &rosterListMock{files: map[string]string{"cs-principles/students.csv": csv}}
+		mock := &rosterListMock{files: map[string]string{"cs-principles/roster.csv": csv}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -138,7 +138,7 @@ func TestRunRosterList(t *testing.T) {
 
 	t.Run("--json on empty roster emits [] not null", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": "username,first_name,last_name,email,section,github_id\n",
+			"cs-principles/roster.csv": "username,first_name,last_name,email,section,github_id\n",
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -155,7 +155,7 @@ func TestRunRosterList(t *testing.T) {
 
 	t.Run("--quiet prints one username per line, no header, no stderr", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": rosterCSVTwoStudents,
+			"cs-principles/roster.csv": rosterCSVTwoStudents,
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -185,7 +185,7 @@ func TestRunRosterList(t *testing.T) {
 
 	t.Run("--json takes precedence over --quiet", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": rosterCSVTwoStudents,
+			"cs-principles/roster.csv": rosterCSVTwoStudents,
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -206,7 +206,7 @@ func TestRunRosterList(t *testing.T) {
 
 	t.Run("empty roster: table shows header, stderr says none", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": "username,first_name,last_name,email,section,github_id\n",
+			"cs-principles/roster.csv": "username,first_name,last_name,email,section,github_id\n",
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -224,7 +224,7 @@ func TestRunRosterList(t *testing.T) {
 		}
 	})
 
-	t.Run("missing students.csv errors and points at classroom add", func(t *testing.T) {
+	t.Run("missing roster errors and points at classroom add", func(t *testing.T) {
 		mock := &rosterListMock{files: map[string]string{}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -243,7 +243,7 @@ func TestRunRosterList(t *testing.T) {
 	t.Run("non-404 API error propagates (not treated as missing)", func(t *testing.T) {
 		mock := &rosterListMock{
 			files:          map[string]string{},
-			statusOverride: map[string]int{"cs-principles/students.csv": http.StatusInternalServerError},
+			statusOverride: map[string]int{"cs-principles/roster.csv": http.StatusInternalServerError},
 		}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -264,11 +264,11 @@ func TestRunRosterList(t *testing.T) {
 		}
 	})
 
-	t.Run("malformed students.csv surfaces a parse error through runRosterList", func(t *testing.T) {
+	t.Run("malformed roster surfaces a parse error through runRosterList", func(t *testing.T) {
 		// Wrong header -> parseRoster rejects; loadRoster wraps with the
 		// repo path; runRosterList must propagate it.
 		mock := &rosterListMock{files: map[string]string{
-			"cs-principles/students.csv": "name,email\nalice,alice@example.edu\n",
+			"cs-principles/roster.csv": "name,email\nalice,alice@example.edu\n",
 		}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
@@ -277,9 +277,9 @@ func TestRunRosterList(t *testing.T) {
 		var out, errOut bytes.Buffer
 		err := runRosterList(client, &out, &errOut, "o", "cs-principles", false, false)
 		if err == nil {
-			t.Fatalf("err = nil, want a parse error for a malformed students.csv")
+			t.Fatalf("err = nil, want a parse error for a malformed roster.csv")
 		}
-		if !strings.Contains(err.Error(), "cs-principles/students.csv") {
+		if !strings.Contains(err.Error(), "cs-principles/roster.csv") {
 			t.Errorf("err = %v, want the loadRoster path wrap", err)
 		}
 		if !strings.Contains(err.Error(), "unexpected header") {

@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 )
@@ -18,9 +19,16 @@ type ConfigRepo struct {
 	DefaultBranch string `json:"default_branch"`
 }
 
-// RosterFilePath: on-repo path to a classroom's students.csv.
+// RosterFilePath: on-repo path to a classroom's roster.csv.
 func RosterFilePath(classroom string) string {
-	return classroom + "/students.csv"
+	return classroom + "/" + contract.RosterFilename
+}
+
+// legacyRosterFilePath: on-repo path to a classroom's pre-rename students.csv.
+// Readers fall back to this so classrooms bootstrapped before the rename keep
+// working until `gh teacher roster migrate` converges them.
+func legacyRosterFilePath(classroom string) string {
+	return classroom + "/" + contract.LegacyRosterFilename
 }
 
 // ResolveConfigRepoBranch fetches <org>/classroom50's default branch.
@@ -41,9 +49,11 @@ func ResolveConfigRepoBranch(client githubapi.Client, org string) (string, error
 	return branch, nil
 }
 
-// LoadRoster reads students.csv at a specific commit SHA so the build
-// callback's read stays consistent across rebase attempts. Missing file
-// → points the teacher at `gh teacher classroom add`.
+// LoadRoster reads the roster at a specific commit SHA so the build
+// callback's read stays consistent across rebase attempts. Tries roster.csv
+// first, then falls back to the legacy students.csv so a classroom
+// bootstrapped before the rename still reads. Missing both → points the
+// teacher at `gh teacher classroom add`.
 func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]RosterRow, error) {
 	path := RosterFilePath(classroom)
 	data, ok, err := ReadFileContents(client, org, ConfigRepoName, path, parentSHA)
@@ -51,8 +61,17 @@ func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]Ro
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
-			org, ConfigRepoName, path, org, classroom)
+		// Legacy fallback: an un-migrated classroom only has students.csv.
+		legacyPath := legacyRosterFilePath(classroom)
+		legacyData, legacyOK, legacyErr := ReadFileContents(client, org, ConfigRepoName, legacyPath, parentSHA)
+		if legacyErr != nil {
+			return nil, legacyErr
+		}
+		if !legacyOK {
+			return nil, fmt.Errorf("%s/%s/%s not found — run `gh teacher classroom add %s %s` first, or restore the file if it was deleted",
+				org, ConfigRepoName, path, org, classroom)
+		}
+		path, data = legacyPath, legacyData
 	}
 	rows, err := ParseRoster(data)
 	if err != nil {

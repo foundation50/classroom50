@@ -16,7 +16,7 @@ import (
 	"github.com/foundation50/gh-teacher/internal/validate"
 )
 
-// rosterListEntry is the `--json` view of one students.csv row. Field names
+// rosterListEntry is the `--json` view of one roster.csv row. Field names
 // mirror the CSV columns. github_id is always present; 0 for an unresolved row
 // — consumers branch on `github_id == 0`, not key presence.
 type rosterListEntry struct {
@@ -35,12 +35,13 @@ func rosterListCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "list <org> <classroom>",
-		Short: "List the students in students.csv",
+		Short: "List the students in the roster",
 		Long: "List every student row in\n" +
-			"<org>/classroom50/<classroom>/students.csv.\n\n" +
+			"<org>/classroom50/<classroom>/roster.csv (falling back to the\n" +
+			"legacy students.csv for un-migrated classrooms).\n\n" +
 			"Default output is an aligned table on stdout (username, name,\n" +
 			"email, section, github_id) with a one-line\n" +
-			"`<org>/<repo>/<classroom>/students.csv: N student(s)` summary\n" +
+			"`<org>/<repo>/<classroom>/roster.csv: N student(s)` summary\n" +
 			"on stderr.\n\n" +
 			"Pass --json for the full array of\n" +
 			"{username, first_name, last_name, email, section, github_id}\n" +
@@ -49,7 +50,7 @@ func rosterListCmd() *cobra.Command {
 			"an agent loop. --json takes precedence over --quiet.\n\n" +
 			"An empty roster is a clean exit-0 (empty stdout under --json /\n" +
 			"--quiet, a 'no students' note on stderr otherwise). A missing\n" +
-			"students.csv points at `gh teacher classroom add`. This is a\n" +
+			"roster points at `gh teacher classroom add`. This is a\n" +
 			"read-only command; no commit lands on the repo.",
 		Example: "  gh teacher roster list cs50-fall-2026 cs-principles\n" +
 			"  gh teacher roster list cs50-fall-2026 cs-principles --json\n" +
@@ -77,7 +78,7 @@ func rosterListCmd() *cobra.Command {
 	return cmd
 }
 
-// runRosterList reads students.csv at the config repo's default branch
+// runRosterList reads the roster at the config repo's default branch
 // and renders it as a table (default), a JSON array (--json), or
 // username-only lines (--quiet). Read-only; no commit.
 func runRosterList(client githubapi.Client, out, errOut io.Writer, org, classroom string, asJSON, quiet bool) error {
@@ -153,7 +154,7 @@ func dashIfEmpty(s string) string {
 }
 
 // summarizeRosterList: one-line stderr summary
-// `<org>/<repo>/<classroom>/students.csv: <message>`.
+// `<org>/<repo>/<classroom>/roster.csv: <message>`.
 func summarizeRosterList(org, classroom string, count int) string {
 	path := fmt.Sprintf("%s/%s/%s", org, configrepo.ConfigRepoName, configrepo.RosterFilePath(classroom))
 	if count == 0 {

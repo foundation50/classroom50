@@ -16,7 +16,7 @@ import (
 // mid-class username changes. Email may be empty.
 var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id"}
 
-// FullRosterHeader is the on-disk students.csv header (RosterColumns,
+// FullRosterHeader is the on-disk roster.csv header (RosterColumns,
 // comma-joined). The single shared fixture the Go, Python, and web suites
 // assert against, so column-order drift is caught by CI. A legacy trailing
 // column on an existing file still round-trips via RosterRow.Extra.
@@ -42,7 +42,7 @@ const maxFieldBytes = 320
 // and the header check fails on two identical-looking slices.
 var utf8BOM = []byte{0xEF, 0xBB, 0xBF}
 
-// RosterRow is one student in students.csv. GitHubID == 0 means unresolved (a
+// RosterRow is one student in the roster. GitHubID == 0 means unresolved (a
 // 5-column import row before GET /users/{username}).
 type RosterRow struct {
 	Username  string
@@ -59,7 +59,7 @@ type RosterRow struct {
 	ExtraOrder []string
 }
 
-// ParseRoster decodes students.csv. The header MUST begin with the canonical
+// ParseRoster decodes the roster CSV. The header MUST begin with the canonical
 // RosterColumns in order; additional trailing columns are preserved verbatim in
 // RosterRow.Extra. Empty input is rejected.
 func ParseRoster(data []byte) ([]RosterRow, error) {
@@ -71,7 +71,7 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 
 	header, err := r.Read()
 	if err == io.EOF {
-		return nil, errors.New("students.csv is empty (expected at least the header row)")
+		return nil, errors.New("roster CSV is empty (expected at least the header row)")
 	}
 	if err != nil {
 		return nil, fmt.Errorf("read header: %w", err)
@@ -142,7 +142,7 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	}
 
 	if !equalSlices(header, RosterColumns) && !equalSlices(header, RosterColumns[:5]) {
-		// Common mistake: feeding a wider students.csv straight into import.
+		// Common mistake: feeding a wider roster CSV straight into import.
 		if len(header) > len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns) {
 			return nil, fmt.Errorf("unexpected header: got %v — import takes only the canonical %v (or its 5-column form without github_id). "+
 				"This looks like a roster with extra columns appended; drop the columns after github_id before importing "+
@@ -218,7 +218,7 @@ func recordToRow(record, extraColumns []string, line int) (RosterRow, error) {
 	return row, nil
 }
 
-// EncodeRoster writes rows back as RFC 4180 students.csv (trailing newline).
+// EncodeRoster writes rows back as RFC 4180 roster.csv (trailing newline).
 // The header is RosterColumns followed by any extra columns present on the rows
 // (ordered by collectExtraColumns), preserving web-written extras.
 func EncodeRoster(rows []RosterRow) ([]byte, error) {

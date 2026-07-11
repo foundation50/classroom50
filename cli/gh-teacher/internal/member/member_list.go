@@ -54,7 +54,7 @@ func NewCmd() *cobra.Command {
 		Long: "Read-only views of who is actually a member of an org or a\n" +
 			"collaborator on a repo -- the counterpart to `gh teacher\n" +
 			"invite` / `gh teacher remove`.\n\n" +
-			"The roster (students.csv) is the INTENDED membership; this\n" +
+			"The roster (roster.csv) is the INTENDED membership; this\n" +
 			"command shows ACTUAL GitHub membership, so the two can be\n" +
 			"reconciled when they drift (a student on the roster who never\n" +
 			"accepted their invite, or a collaborator added out of band).\n\n" +

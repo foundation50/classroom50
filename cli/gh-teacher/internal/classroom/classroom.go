@@ -50,7 +50,7 @@ func NewCmd() *cobra.Command {
 			"A classroom is a directory at the root of <org>/classroom50,\n" +
 			"named by its short-name (e.g., cs-principles). Each classroom\n" +
 			"holds four files: classroom.json (metadata), assignments.json\n" +
-			"(assignment manifest), students.csv (roster), and scores.json\n" +
+			"(assignment manifest), roster.csv (roster), and scores.json\n" +
 			"(collected scores). The runner-side bootstrap (runner.py)\n" +
 			"lives at the org level under .github/scripts/ and is shared\n" +
 			"across all classrooms; the student-repo shim is embedded in\n" +
@@ -84,7 +84,7 @@ func classroomAddCmd() *cobra.Command {
 		Short: "Add a new classroom directory inside the config repo",
 		Long: "Create the directory <short-name>/ inside <org>/classroom50\n" +
 			"and populate it with a four-file scaffold: classroom.json,\n" +
-			"assignments.json, students.csv, and scores.json.\n\n" +
+			"assignments.json, roster.csv, and scores.json.\n\n" +
 			"Short-name rules (must match ^[a-z0-9][a-z0-9-]{1,38}$):\n" +
 			"  - 2-39 characters total\n" +
 			"  - lowercase letters, digits, or hyphens\n" +
@@ -647,7 +647,7 @@ func classroomRemoveCmd() *cobra.Command {
 		Use:   "remove <org> <short-name>",
 		Short: "Remove a classroom directory from the config repo",
 		Long: "Delete the <short-name>/ directory (classroom.json,\n" +
-			"assignments.json, students.csv, scores.json, and any\n" +
+			"assignments.json, roster.csv, scores.json, and any\n" +
 			"autograders/) from <org>/classroom50 in a single commit.\n\n" +
 			"This removes the classroom's configuration only. It does NOT\n" +
 			"delete student assignment repositories already created in the\n" +
@@ -822,9 +822,9 @@ func classroomScaffold(org, shortName, name, term, secret string, entries []assi
 	}
 
 	return map[string]string{
-		shortName + "/classroom.json":   string(classroomBytes),
-		shortName + "/assignments.json": string(assignmentsBytes),
-		shortName + "/students.csv":     studentsCSVHeader,
-		shortName + "/scores.json":      string(scoresBytes),
+		shortName + "/classroom.json":             string(classroomBytes),
+		shortName + "/assignments.json":           string(assignmentsBytes),
+		shortName + "/" + contract.RosterFilename: studentsCSVHeader,
+		shortName + "/scores.json":                string(scoresBytes),
 	}, nil
 }

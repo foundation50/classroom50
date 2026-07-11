@@ -92,7 +92,7 @@ func TestClassroomScaffold(t *testing.T) {
 	wantPaths := []string{
 		"cs-principles/classroom.json",
 		"cs-principles/assignments.json",
-		"cs-principles/students.csv",
+		"cs-principles/roster.csv",
 		"cs-principles/scores.json",
 	}
 	if got, want := len(files), len(wantPaths); got != want {
@@ -180,7 +180,7 @@ func TestClassroomScaffold(t *testing.T) {
 		t.Errorf("scores.json should serialize the empty map as {}, got:\n%s", files["cs-principles/scores.json"])
 	}
 
-	csv := files["cs-principles/students.csv"]
+	csv := files["cs-principles/roster.csv"]
 	if csv != studentsCSVHeader {
 		t.Errorf("students.csv = %q, want %q", csv, studentsCSVHeader)
 	}

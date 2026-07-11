@@ -1,7 +1,7 @@
 // Package roster implements the `gh teacher roster` command: managing the
-// classroom roster in <org>/classroom50/<classroom>/students.csv (list, add,
-// update, remove, import), including resolving each student's GitHub id and
-// inviting them to the org. Only NewCmd is exported.
+// classroom roster in <org>/classroom50/<classroom>/roster.csv (list, add,
+// update, remove, import, migrate), including resolving each student's GitHub
+// id and inviting them to the org. Only NewCmd is exported.
 package roster
 
 import (
@@ -25,14 +25,17 @@ import (
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "roster",
-		Short: "Manage the classroom roster (students.csv)",
-		Long: "Manage student rows in <org>/classroom50/<classroom>/students.csv.\n\n" +
+		Short: "Manage the classroom roster (roster.csv)",
+		Long: "Manage student rows in <org>/classroom50/<classroom>/roster.csv.\n\n" +
 			"Subcommands:\n" +
-			"  list    print the roster (table, --json, or --quiet username-only)\n" +
-			"  add     append or upsert one student (resolves github_id, invites to org)\n" +
-			"  update  correct fields on an existing student (roster-only; never invites)\n" +
-			"  remove  remove one student from the roster (does NOT touch org membership)\n" +
-			"  import  bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n\n" +
+			"  list     print the roster (table, --json, or --quiet username-only)\n" +
+			"  add      append or upsert one student (resolves github_id, invites to org)\n" +
+			"  update   correct fields on an existing student (roster-only; never invites)\n" +
+			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
+			"  import   bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n" +
+			"  migrate  rename a legacy students.csv to roster.csv (one commit)\n\n" +
+			"Reads fall back to the legacy students.csv for classrooms\n" +
+			"bootstrapped before the rename; writes always target roster.csv.\n\n" +
 			"All writes use a single Tree commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +
 			"(up to 5 attempts) so concurrent edits don't silently lose\n" +
@@ -58,8 +61,8 @@ func rosterAddCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "add <org> <classroom> <username>",
-		Short: "Append or upsert one student in students.csv",
-		Long: "Append a student to <org>/classroom50/<classroom>/students.csv,\n" +
+		Short: "Append or upsert one student in roster.csv",
+		Long: "Append a student to <org>/classroom50/<classroom>/roster.csv,\n" +
 			"or update the existing row if their username already appears\n" +
 			"(case-insensitive match). The student's GitHub-assigned\n" +
 			"numeric ID is resolved at write time and stored in the\n" +
@@ -69,10 +72,10 @@ func rosterAddCmd() *cobra.Command {
 			"member of <org> (and doesn't already have a pending invite),\n" +
 			"this command sends an org invitation (same path `gh teacher\n" +
 			"invite` uses).\n\n" +
-			"Returns non-zero on: classroom directory missing, students.csv\n" +
+			"Returns non-zero on: classroom directory missing, roster\n" +
 			"missing or malformed, GitHub user not found, or after 5\n" +
 			"failed rebase attempts against a concurrently-edited\n" +
-			"students.csv.",
+			"roster.",
 		Example: "  gh teacher roster add cs50-fall-2026 cs-principles alice --first-name Alice --last-name Andersson --email alice@example.edu --section section-1\n" +
 			"  gh teacher roster add cs50-fall-2026 cs-principles bob",
 		Args: cobra.ExactArgs(3),
@@ -118,9 +121,9 @@ func rosterUpdateCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "update <org> <classroom> <username>",
-		Short: "Correct one student's details in students.csv",
+		Short: "Correct one student's details in roster.csv",
 		Long: "Update fields on an existing row in\n" +
-			"<org>/classroom50/<classroom>/students.csv, matched by\n" +
+			"<org>/classroom50/<classroom>/roster.csv, matched by\n" +
 			"<username> (case-insensitive).\n\n" +
 			"Only the flags you pass are changed; every other column —\n" +
 			"including the immutable github_id — is left untouched. This is\n" +
@@ -190,9 +193,9 @@ func rosterUpdateCmd() *cobra.Command {
 func rosterRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <org> <classroom> <username>",
-		Short: "Remove one student from students.csv",
+		Short: "Remove one student from roster.csv",
 		Long: "Drop the row whose username matches <username> (case-insensitive)\n" +
-			"from <org>/classroom50/<classroom>/students.csv.\n\n" +
+			"from <org>/classroom50/<classroom>/roster.csv.\n\n" +
 			"Does NOT remove the student from the org. Use\n" +
 			"`gh teacher remove <org> <username>` for that — it's a\n" +
 			"deliberate two-step process so an off-by-one roster edit\n" +
@@ -225,9 +228,9 @@ func rosterRemoveCmd() *cobra.Command {
 func rosterImportCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "import <org> <classroom> <path-to-csv>",
-		Short: "Bulk upsert students.csv from a local CSV",
+		Short: "Bulk upsert roster.csv from a local CSV",
 		Long: "Read <path-to-csv> and upsert every row into\n" +
-			"<org>/classroom50/<classroom>/students.csv. The local CSV\n" +
+			"<org>/classroom50/<classroom>/roster.csv. The local CSV\n" +
 			"header must be `username,first_name,last_name,email,section`\n" +
 			"(the canonical 5 columns). A trailing `github_id` column\n" +
 			"is accepted but its value is ignored — the CLI re-resolves\n" +

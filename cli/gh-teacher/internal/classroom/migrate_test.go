@@ -197,7 +197,7 @@ func TestRunMigrate_NonDryRun_HappyPath(t *testing.T) {
 	if state.commitsCreated != 1 {
 		t.Errorf("commits created = %d, want 1", state.commitsCreated)
 	}
-	for _, want := range []string{"classroom50test/classroom.json", "classroom50test/assignments.json", "classroom50test/students.csv", "classroom50test/scores.json"} {
+	for _, want := range []string{"classroom50test/classroom.json", "classroom50test/assignments.json", "classroom50test/roster.csv", "classroom50test/scores.json"} {
 		if _, ok := state.uploadedFiles[want]; !ok {
 			t.Errorf("missing uploaded file %q (uploaded: %v)", want, mapKeys(state.uploadedFiles))
 		}

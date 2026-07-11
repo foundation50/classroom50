@@ -111,7 +111,7 @@ func TestRunRosterUpdate(t *testing.T) {
 	strptr := func(s string) *string { return &s }
 
 	t.Run("updates only the targeted field and commits once", func(t *testing.T) {
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": roster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -151,7 +151,7 @@ func TestRunRosterUpdate(t *testing.T) {
 	})
 
 	t.Run("unknown username errors and commits nothing", func(t *testing.T) {
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": roster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -167,7 +167,7 @@ func TestRunRosterUpdate(t *testing.T) {
 	})
 
 	t.Run("no-op when patch matches current values", func(t *testing.T) {
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": roster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -184,7 +184,7 @@ func TestRunRosterUpdate(t *testing.T) {
 		}
 	})
 
-	// The web app may append extra columns to students.csv; a `roster update`
+	// The web app may append extra columns to roster.csv; a `roster update`
 	// (which patches only canonical fields) must round-trip them so it never
 	// silently wipes them. This drives the actual command path (LoadRoster ->
 	// UpdateRosterRow -> EncodeRoster), not just the configrepo helpers.
@@ -201,7 +201,7 @@ func TestRunRosterUpdate(t *testing.T) {
 				ExtraOrder: []string{"enrollment_status", "invite_token"},
 			},
 		)
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": extraRoster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": extraRoster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -248,7 +248,7 @@ func TestRunRosterRemove(t *testing.T) {
 			configrepo.RosterRow{Username: "alice", FirstName: "Alice", LastName: "A", Email: "a@x.edu", Section: "s1", GitHubID: 1},
 			configrepo.RosterRow{Username: "bob", FirstName: "Bob", LastName: "B", Email: "b@x.edu", Section: "s1", GitHubID: 2},
 		)
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": roster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
@@ -287,7 +287,7 @@ func TestRunRosterRemove(t *testing.T) {
 				ExtraOrder: []string{"enrollment_status", "invite_token"},
 			},
 		)
-		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": roster}}
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
