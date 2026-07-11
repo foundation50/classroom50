@@ -3,10 +3,11 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { csvFileQuery, githubKeys } from "./github/queries"
 import { toStudent } from "@/util/roster"
+import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import type { Student } from "@/types/classroom"
 
 const rosterKey = (org: string, classroom: string) =>
-  githubKeys.csvFile(org, "classroom50", `${classroom}/students.csv`)
+  githubKeys.csvFile(org, "classroom50", rosterPath(classroom))
 
 // Module-level so the reference is stable: react-query memoizes a `select`
 // result only while the selector identity is unchanged. An inline arrow would
@@ -31,7 +32,9 @@ const useGetStudents = (
       client,
       org ?? "",
       "classroom50",
-      `${classroom ?? ""}/students.csv`,
+      rosterPath(classroom ?? ""),
+      undefined,
+      legacyRosterPath(classroom ?? ""),
     ),
     select: selectStudents,
   })
@@ -44,7 +47,7 @@ const useGetStudents = (
 
 // Optimistically patch the cached roster. GitHub's Contents API is eventually
 // consistent per path: right after a commit it often still serves the previous
-// students.csv, so an immediate refetch would clobber the cache with stale rows.
+// roster.csv, so an immediate refetch would clobber the cache with stale rows.
 // Mutations already compute the authoritative post-write rows, so write them in
 // and let a natural refetch reconcile. Pass a current->next mapping.
 export const useUpdateRosterCache = (

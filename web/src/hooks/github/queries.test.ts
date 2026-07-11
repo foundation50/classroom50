@@ -3,6 +3,7 @@ import {
   pagesAssignmentUrl,
   classroomsIndexUrl,
   configCommitsQuery,
+  csvFileQuery,
   getClassroom50OrgSummary,
   listAllOrgMembers,
   listOrgAdmins,
@@ -341,6 +342,63 @@ describe("configCommitsQuery", () => {
 })
 
 const MARKER_PATH = `/contents/${ORG_GITHUB_DIR}/${CONFIG_REPO_MARKER_REL}`
+
+describe("csvFileQuery — roster.csv read with legacy students.csv fallback", () => {
+  const HEADER = "username,first_name,last_name,email,section,github_id\n"
+
+  const run = <T>(client: GitHubClient, path: string, fallbackPath?: string) =>
+    (
+      csvFileQuery<T>(
+        client,
+        "acme",
+        "classroom50",
+        path,
+        undefined,
+        fallbackPath,
+      ).queryFn as (ctx: { signal?: AbortSignal }) => Promise<T[]>
+    )({})
+
+  it("reads roster.csv when present (no fallback attempt)", async () => {
+    const requestRaw = vi
+      .fn()
+      .mockResolvedValue(HEADER + "alice,Alice,A,alice@x.edu,,42\n")
+    const rows = await run<Record<string, string>>(
+      { requestRaw } as unknown as GitHubClient,
+      "cs101/roster.csv",
+      "cs101/students.csv",
+    )
+    expect(rows.map((r) => r.username)).toEqual(["alice"])
+    expect(requestRaw).toHaveBeenCalledTimes(1)
+    expect(requestRaw.mock.calls[0][0]).toContain("cs101/roster.csv")
+  })
+
+  it("falls back to legacy students.csv when roster.csv 404s", async () => {
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("roster.csv")) return Promise.reject(apiError(404))
+      return Promise.resolve(HEADER + "bob,Bob,B,bob@x.edu,,43\n")
+    })
+    const rows = await run<Record<string, string>>(
+      { requestRaw } as unknown as GitHubClient,
+      "cs101/roster.csv",
+      "cs101/students.csv",
+    )
+    expect(rows.map((r) => r.username)).toEqual(["bob"])
+    expect(requestRaw).toHaveBeenCalledTimes(2)
+    expect(requestRaw.mock.calls[1][0]).toContain("cs101/students.csv")
+  })
+
+  it("does not fall back on a non-404 error", async () => {
+    const requestRaw = vi.fn().mockRejectedValue(apiError(403))
+    await expect(
+      run(
+        { requestRaw } as unknown as GitHubClient,
+        "cs101/roster.csv",
+        "cs101/students.csv",
+      ),
+    ).rejects.toThrow(GitHubAPIError)
+    expect(requestRaw).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe("verifyClassroom50ConfigRepo (name-collision guard)", () => {
   it("returns true when the config-repo marker resolves", async () => {

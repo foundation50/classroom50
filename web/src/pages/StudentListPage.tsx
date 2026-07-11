@@ -19,6 +19,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
 import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { toStudent } from "@/util/roster"
+import { rosterPath } from "@/util/rosterPath"
 import { Badge } from "@/components/ui"
 import { ROLE_BADGE_TONE } from "@/util/rosterRoles"
 import { useTranslation } from "react-i18next"
@@ -108,7 +109,7 @@ const StudentListContent = ({
               ·
             </span>
             <GitHubLink
-              href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${classroom}/students.csv`}
+              href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${rosterPath(classroom)}`}
               label={t("students.viewCsvOnGitHub")}
               title={t("students.viewCsvOnGitHub")}
             />

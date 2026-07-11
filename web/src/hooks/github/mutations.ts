@@ -59,7 +59,7 @@ const createClassroomMetadata = (
   ...(secret ? { secret } : {}),
 })
 
-// Seed header for a new classroom's empty students.csv. Derived from the single
+// Seed header for a new classroom's empty roster.csv. Derived from the single
 // source of truth (STUDENT_CSV_FIELDS) so it can't drift; computed lazily (not
 // at module-eval) to dodge the students.ts <-> mutations.ts circular-import TDZ.
 // The parser is header-based, so an older roster still parses.
@@ -87,7 +87,7 @@ const createClassroomBody = (
         content: JSON.stringify(ASSIGNMENTS_TEMPLATE, null, 2),
       },
       {
-        path: `${classroom}/students.csv`,
+        path: `${classroom}/roster.csv`,
         mode,
         type,
         content: studentsCsvHeader(),

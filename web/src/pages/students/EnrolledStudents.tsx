@@ -53,6 +53,7 @@ import {
   type StatusFilter,
 } from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
+import { rosterPath } from "@/util/rosterPath"
 import { isSameGitHubUser } from "@/util/students"
 import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
 import {
@@ -325,11 +326,7 @@ const EnrolledStudents = ({
           : t("students.syncAdded", { count: result.addedUsernames.length }),
       })
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(
-          org,
-          "classroom50",
-          `${classroom}/students.csv`,
-        ),
+        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
       })
     },
     onError: (err) => {

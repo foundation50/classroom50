@@ -553,19 +553,35 @@ export function csvFileQuery<T>(
   repo: string,
   path: string,
   ref?: string,
+  // Legacy path tried only when `path` 404s (roster.csv -> students.csv). The
+  // query key stays on `path`, so a post-migration read converges on roster.csv
+  // and optimistic writes never have to know which name served the bytes.
+  fallbackPath?: string,
 ) {
   return queryOptions({
     queryKey: githubKeys.csvFile(owner, repo, path, ref),
     queryFn: async ({ signal }) => {
-      const raw = await client.requestRaw(
-        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
-          repo,
-        )}/contents/${path
-          .split("/")
-          .map(encodeURIComponent)
-          .join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
-        { method: "GET", signal },
-      )
+      let raw: string
+      try {
+        raw = await readContents(client, owner, repo, path, ref, signal)
+      } catch (err) {
+        if (
+          fallbackPath &&
+          err instanceof GitHubAPIError &&
+          err.status === 404
+        ) {
+          raw = await readContents(
+            client,
+            owner,
+            repo,
+            fallbackPath,
+            ref,
+            signal,
+          )
+        } else {
+          throw err
+        }
+      }
 
       const csvParse = Papa.parse<T>(raw, {
         header: true,
@@ -580,6 +596,25 @@ export function csvFileQuery<T>(
     staleTime: 10 * 60 * 1000,
     retry: false,
   })
+}
+
+function readContents(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  path: string,
+  ref: string | undefined,
+  signal: AbortSignal | undefined,
+) {
+  return client.requestRaw(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+      repo,
+    )}/contents/${path
+      .split("/")
+      .map(encodeURIComponent)
+      .join("/")}${ref ? `?ref=${encodeURIComponent(ref)}` : ""}`,
+    { method: "GET", signal },
+  )
 }
 
 export async function getRawFile(

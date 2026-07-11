@@ -45,8 +45,9 @@ import {
   runInviteMember,
 } from "@/pages/orgMembers/memberPresentation"
 import useGetClasses from "@/hooks/useGetClasses"
+import { rosterPath } from "@/util/rosterPath"
 
-// Delay before reconciling an optimistically-updated students.csv cache with
+// Delay before reconciling an optimistically-updated roster.csv cache with
 // the authoritative GitHub read: the contents API lags a fresh commit, so an
 // immediate refetch reads the pre-commit file and reverts the optimistic change.
 const CSV_RECONCILE_DELAY_MS = 4000
@@ -129,11 +130,7 @@ const OrgMembersPage = () => {
     if (!org) return
     if (!opts?.skipCsv) {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(
-          org,
-          "classroom50",
-          `${classroom}/students.csv`,
-        ),
+        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
       })
     }
     queryClient.invalidateQueries({
@@ -146,7 +143,7 @@ const OrgMembersPage = () => {
   }
 
   // Optimistically drop members (by resolved id/login) from BOTH the target
-  // classroom's students.csv AND its team-members cache, in the same tick, so
+  // classroom's roster.csv AND its team-members cache, in the same tick, so
   // the two never disagree (which would flash a false "unprovisioned" state).
   // teamSlug is the resolved slug, so a collided-name classroom updates right.
   const optimisticRemove = (classroom: string, removed: OrgMemberRow[]) => {
@@ -156,7 +153,7 @@ const OrgMembersPage = () => {
       removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
     )
     queryClient.setQueryData<StudentCsvRow[]>(
-      githubKeys.csvFile(org, "classroom50", `${classroom}/students.csv`),
+      githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
       (current) =>
         current?.filter(
           (s) =>
@@ -180,11 +177,7 @@ const OrgMembersPage = () => {
     if (!org) return
     window.setTimeout(() => {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(
-          org,
-          "classroom50",
-          `${classroom}/students.csv`,
-        ),
+        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
       })
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(org, teamSlugFor(classroom)),
@@ -208,7 +201,7 @@ const OrgMembersPage = () => {
       const csvKey = githubKeys.csvFile(
         org,
         "classroom50",
-        `${classroom}/students.csv`,
+        rosterPath(classroom),
       )
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []

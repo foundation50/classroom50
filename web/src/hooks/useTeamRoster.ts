@@ -56,15 +56,15 @@ export type UseTeamRosterResult = {
   pendingHidden: boolean
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
-  // Count of team members with no students.csv row — the exact set "Sync roster"
+  // Count of team members with no roster.csv row — the exact set "Sync roster"
   // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
   // can sync (auto-synced on open). Opposite direction from `not_in_org` (on
   // CSV, not on team), which sync can't fix.
   csvMissingCount: number
-  // Lowercased logins of team members with no students.csv row — used to skip a
+  // Lowercased logins of team members with no roster.csv row — used to skip a
   // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
   csvMissingLogins: string[]
-  // Rostered students who are `not_in_org` (on students.csv with a username but
+  // Rostered students who are `not_in_org` (on roster.csv with a username but
   // not a team/org member and not a pending invite) — the usernames
   // auto-reconcile feeds to reconcileTeamFromOrgMembers. It team-adds the ones
   // that are in fact active org members (native invite / SSO) and skips the
@@ -76,7 +76,7 @@ export type UseTeamRosterResult = {
 }
 
 // The teacher roster, driven by GitHub (team members + pending org invites),
-// with students.csv joined only as optional display metadata. Resolves the team
+// with roster.csv joined only as optional display metadata. Resolves the team
 // slug from classroom.json (fallback classroom50-<classroom>) so the grade
 // collector, Go download, and this view agree on the slug.
 export function useTeamRoster(
@@ -173,7 +173,7 @@ export function useTeamRoster(
   const roleCounts = useMemo(() => enrolledCountsByRole(rows), [rows])
 
   // CSV drift / reconcile are STUDENT-roster concepts: a staffer is never
-  // synced into students.csv, so count only the student team against the CSV.
+  // synced into roster.csv, so count only the student team against the CSV.
   const csvMissing = useMemo(
     () => teamMembersMissingFromCsv(members ?? [], students),
     [members, students],

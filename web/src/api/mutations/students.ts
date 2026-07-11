@@ -33,6 +33,7 @@ import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { prefixCommit } from "@/util/commit"
+import { rosterPath } from "@/util/rosterPath"
 import { type Student } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
@@ -205,7 +206,7 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
 
   if (fatalErrors.length > 0) {
     throw new Error(
-      `Could not parse students.csv: ${fatalErrors
+      `Could not parse roster.csv: ${fatalErrors
         .map((error) => error.message)
         .join("; ")}`,
     )
@@ -241,12 +242,12 @@ function tooFewFieldsAreTrailingOnly(
 // Which student fields to defang. Applied to name/section free text AND email —
 // email is a member-controlled GitHub profile field written verbatim by
 // syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
-// `=1+1@evil.com`) would otherwise reach students.csv and execute on open. NOT
+// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open. NOT
 // applied to github_id/tokens/hashes/timestamps, which must round-trip
 // byte-exact.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
-// students.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
+// roster.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
 // these fields. The Go writer defangs the same set; keep them in lockstep.
 // Email matching keys on the normalized (trim+lowercase) email, so guarding the
 // cell doesn't affect match-by-email.
@@ -301,7 +302,7 @@ export async function addStudentToClassroom(
   const ref = await getBranchRef(client, input.org)
   const commit = await getCommit(client, input.org, ref.object.sha)
 
-  const studentsFilePath = `${input.classroom}/students.csv`
+  const studentsFilePath = rosterPath(input.classroom)
 
   const currentCsv = await getRawFile(client, {
     org: input.org,
@@ -392,7 +393,7 @@ export type InviteByEmailResult = {
 }
 
 // Send a GitHub org invite for an email, attaching the classroom team so the
-// student lands in it on acceptance. Writes NOTHING to students.csv: the team
+// student lands in it on acceptance. Writes NOTHING to roster.csv: the team
 // is the source of truth for enrollment, and an email carries no reliable
 // GitHub identity (it changes to a login only once accepted). The invite shows
 // up in the roster's `pending` section via the org pending-invitations list; to
@@ -648,13 +649,13 @@ export async function addStudentsToClassroom(
   input.onProgress?.({
     processed: 0,
     total: normalizedRows.length,
-    message: "Reading current students.csv...",
+    message: "Reading current roster.csv...",
   })
 
   const ref = await getBranchRef(client, input.org)
   const commit = await getCommit(client, input.org, ref.object.sha)
 
-  const studentsFilePath = `${input.classroom}/students.csv`
+  const studentsFilePath = rosterPath(input.classroom)
 
   const currentCsv = await getRawFile(client, {
     org: input.org,
@@ -702,7 +703,7 @@ export async function addStudentsToClassroom(
       skippedStudents.push({
         username,
         reason: "duplicate",
-        message: "Student is already in students.csv",
+        message: "Student is already in roster.csv",
       })
 
       processed++
@@ -716,7 +717,7 @@ export async function addStudentsToClassroom(
         skippedStudents.push({
           username: githubUser.login,
           reason: "duplicate",
-          message: "Student GitHub ID is already in students.csv",
+          message: "Student GitHub ID is already in roster.csv",
         })
 
         processed++
@@ -770,7 +771,7 @@ export async function addStudentsToClassroom(
   input.onProgress?.({
     processed,
     total: normalizedRows.length,
-    message: "Writing students.csv...",
+    message: "Writing roster.csv...",
   })
 
   const nextStudents = [...currentStudents, ...addedStudents]
@@ -805,7 +806,7 @@ export async function addStudentsToClassroom(
   input.onProgress?.({
     processed: normalizedRows.length,
     total: normalizedRows.length,
-    message: "students.csv updated.",
+    message: "roster.csv updated.",
   })
 
   log.info("bulk add students: completed", {
@@ -834,13 +835,13 @@ export async function addStudentsToClassroomWithConflictRetry(
 }
 
 export type SyncRosterFromTeamResult = {
-  // Team members newly appended to students.csv as metadata rows.
+  // Team members newly appended to roster.csv as metadata rows.
   addedUsernames: string[]
   // No missing members — nothing was committed.
   noop: boolean
 }
 
-// Backfill students.csv from the classroom team: ensure every active team
+// Backfill roster.csv from the classroom team: ensure every active team
 // member has an IDENTITY row (username + github_id), appended in ONE commit. The
 // team is the source of truth for enrollment; the CSV holds only teacher-
 // supplied metadata, so this writes identity only and never fabricates
@@ -871,7 +872,7 @@ export async function syncRosterFromTeam(
     ])
     const commit = await getCommit(client, org, ref.object.sha)
 
-    const studentsFilePath = `${classroom}/students.csv`
+    const studentsFilePath = rosterPath(classroom)
     const currentCsv = await getRawFile(client, {
       org,
       path: studentsFilePath,
@@ -969,7 +970,7 @@ export type ReconcileTeamInput = {
   classroom: string
   // The rostered usernames (from `not_in_org` rows) to try to promote onto the
   // classroom team. These are the GitHub usernames the teacher put in
-  // students.csv — the teacher owns their accuracy; this is just a convenient
+  // roster.csv — the teacher owns their accuracy; this is just a convenient
   // batch team-add. A username that isn't an active org member is skipped and
   // stays `not_in_org` (highlighted in the roster for invite/removal).
   usernames: string[]
@@ -994,7 +995,7 @@ export type ReconcileTeamResult = {
 //      non-member is SKIPPED (stays `not_in_org`, highlighted), not a failure.
 //   2) an idempotent PUT team membership.
 // Best-effort per user: one failure never blocks the others, and nothing here
-// touches org membership or students.csv.
+// touches org membership or roster.csv.
 export async function reconcileTeamFromOrgMembers(
   client: GitHubClient,
   input: ReconcileTeamInput,
@@ -1083,13 +1084,13 @@ export type InviteRosterStudentsResult = {
   deferred: string[]
 }
 
-// Bulk-invite roster students who are on students.csv (by username) but not yet
+// Bulk-invite roster students who are on roster.csv (by username) but not yet
 // in the organization — the `not_in_org` rows. Resolves each username to its
 // immutable GitHub id (using the stored github_id when present, else
 // GET /users/{username}) and sends a fresh org invitation carrying the
 // classroom team, so accepting it activates team membership atomically. This is
 // the roster-side counterpart to the Org Members "Invite" action; it does NOT
-// write students.csv (identity backfill is syncRosterFromTeam's job) and never
+// write roster.csv (identity backfill is syncRosterFromTeam's job) and never
 // touches an existing active/pending state (ensureOrgMembership no-ops those).
 export async function inviteRosterStudents(
   client: GitHubClient,
@@ -1175,7 +1176,7 @@ export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
     status: "added" | "failed"
     message?: string
   }[]
-  // Added to students.csv but NOT an active org member and not a pending invite
+  // Added to roster.csv but NOT an active org member and not a pending invite
   // — on the roster, not in the organization. Surfaced so the teacher can chase
   // an invite; the team-driven roster shows them as `not_in_org`.
   notInOrg: string[]
@@ -1331,7 +1332,7 @@ export async function bulkEnrollStudentsInClassroom(
   }
 }
 
-// Does a students.csv row identify the same person as `target`? The single
+// Does a roster.csv row identify the same person as `target`? The single
 // authority for matching a removal target to a roster row, shared by
 // unenrollStudent and bulkUnenrollStudents so the two can't drift.
 //
@@ -1387,7 +1388,7 @@ export async function unenrollStudent(
   const ref = await getBranchRef(client, org)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const studentsFilePath = `${classroom}/students.csv`
+  const studentsFilePath = rosterPath(classroom)
 
   const currentCsv = await getRawFile(client, {
     org,
@@ -1580,7 +1581,7 @@ export async function bulkUnenrollStudents(
   // One conflict-retried CSV commit dropping every matched row. Re-reads the CSV
   // each attempt so a concurrent edit is preserved. Reports which targets were
   // actually present (removed) vs. missing (notFound).
-  const studentsFilePath = `${classroom}/students.csv`
+  const studentsFilePath = rosterPath(classroom)
   let removed: Student[] = []
   let notFound: Student[] = []
   let newCommitSha: string | undefined
@@ -1746,7 +1747,7 @@ export type UpdateStudentResult = CreateClassroomResult & {
 }
 
 // Edit one roster row's teacher-facing fields in place and commit the rewritten
-// students.csv. Identity columns are preserved verbatim from the matched row.
+// roster.csv. Identity columns are preserved verbatim from the matched row.
 export async function updateStudent(
   client: GitHubClient,
   input: UpdateStudentInput,
@@ -1763,7 +1764,7 @@ export async function updateStudent(
   const ref = await getBranchRef(client, org)
   const commit = await getCommit(client, org, ref.object.sha)
 
-  const studentsFilePath = `${classroom}/students.csv`
+  const studentsFilePath = rosterPath(classroom)
 
   const currentCsv = await getRawFile(client, {
     org,

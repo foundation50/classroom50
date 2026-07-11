@@ -22,7 +22,7 @@ import type { GitHubClient } from "@/hooks/github/client"
 // An already-org-member must land `enrolled` (not stuck "awaiting"), the per-row
 // confirm must refuse a non-member, and an already-member email invite must
 // resolve cross-roster or drop the stub. I/O is stubbed via a path-routing fake
-// client; assertions read the students.csv committed to git/trees.
+// client; assertions read the roster.csv committed to git/trees.
 
 type CommittedCsv = { content: string | null }
 
@@ -59,7 +59,7 @@ const makeClient = (opts: {
   const request = vi
     .fn()
     .mockImplementation((path: string, options?: { body?: unknown }) => {
-      if (path.includes("/contents/") && path.includes("students.csv")) {
+      if (path.includes("/contents/") && path.includes("roster.csv")) {
         return Promise.resolve(csvFile())
       }
       if (path.startsWith("/users/")) {
@@ -82,7 +82,7 @@ const makeClient = (opts: {
         const tree = (
           options?.body as { tree?: { path: string; content?: string }[] }
         )?.tree
-        const csvEntry = tree?.find((t) => t.path.includes("students.csv"))
+        const csvEntry = tree?.find((t) => t.path.includes("roster.csv"))
         if (csvEntry?.content) committed.content = csvEntry.content
         return Promise.resolve({ sha: "tree-sha" })
       }
@@ -107,14 +107,14 @@ const makeClient = (opts: {
 
 const HEADER = "username,first_name,last_name,email,section,github_id\n"
 
-// The web leg of the three-way students.csv header lockstep. The Go
+// The web leg of the three-way roster header lockstep. The Go
 // (TestFullRosterHeader) and Python (test_full_roster_header_matches_go_constant)
 // suites each pin their own header constant to this exact string; the web app
 // WRITES the file's column order (via STUDENT_CSV_FIELDS), so without this
 // assertion a web-only reorder/rename would keep every web test green while the
 // CLI's ParseRoster and the collector's read_students_csv reject every roster
 // the web writes. Pin the source-of-truth constant, not a fixture.
-describe("students.csv header lockstep (web leg)", () => {
+describe("roster.csv header lockstep (web leg)", () => {
   it("STUDENT_CSV_FIELDS matches the Go/Python header verbatim", () => {
     expect(STUDENT_CSV_FIELDS.join(",")).toBe(
       "username,first_name,last_name,email,section,github_id",
@@ -131,6 +131,67 @@ const rowsFromCsv = (csv: string) =>
     string,
     string
   >[]
+
+describe("roster write target — commits roster.csv, never students.csv", () => {
+  it("writes the roster blob at <classroom>/roster.csv", async () => {
+    const treePaths: string[] = []
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/contents/") && path.includes("classroom.json")) {
+        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { body?: unknown }) => {
+        // Reads still land on roster.csv (writers don't fall back).
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(HEADER, "utf-8").toString("base64"),
+          })
+        }
+        if (path.startsWith("/users/")) {
+          return Promise.resolve({ login: "alice", id: 42, name: null })
+        }
+        if (path.includes("/memberships/") && !path.includes("/teams/")) {
+          return Promise.reject(new Error("404 not a member"))
+        }
+        if (path.includes("/git/ref/")) {
+          return Promise.resolve({ object: { sha: "base-sha" } })
+        }
+        if (path.includes("/git/commits/")) {
+          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+        }
+        if (path.endsWith("/git/trees")) {
+          const tree = (options?.body as { tree?: { path: string }[] })?.tree
+          for (const t of tree ?? []) treePaths.push(t.path)
+          return Promise.resolve({ sha: "tree-sha" })
+        }
+        if (path.endsWith("/git/commits")) {
+          return Promise.resolve({ sha: "new-commit-sha" })
+        }
+        if (path.endsWith("/git/refs/heads/main")) {
+          return Promise.resolve({})
+        }
+        if (path.includes("/teams/")) {
+          return Promise.resolve({ state: "active" })
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "alice",
+    })
+
+    expect(treePaths).toContain("cs101/roster.csv")
+    expect(treePaths).not.toContain("cs101/students.csv")
+  })
+})
 
 describe("enrollStudentInClassroom — already-member writes the row directly", () => {
   it("writes the student row when the user is already an active org member", async () => {
@@ -223,7 +284,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
 
   // inviteSucceeds=false makes POST /invitations 422 (the already-member
   // signal). Records whether any git tree write (a CSV commit) happened so we
-  // can assert email invites never touch students.csv.
+  // can assert email invites never touch roster.csv.
   const makeEmailClient = (opts: {
     inviteSucceeds: boolean
     noTeamBlock?: boolean
@@ -267,7 +328,7 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     }
   }
 
-  it("sends the org invite (with team) and writes NO students.csv row", async () => {
+  it("sends the org invite (with team) and writes NO roster.csv row", async () => {
     const { client, state } = makeEmailClient({ inviteSucceeds: true })
 
     const result = await inviteByEmail(client, {
@@ -612,7 +673,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
-        if (path.includes("/contents/") && path.includes("students.csv")) {
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
           return Promise.resolve({
             type: "file",
             encoding: "base64",
@@ -667,7 +728,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
-        if (path.includes("/contents/") && path.includes("students.csv")) {
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
           // On retry, serve the already-committed CSV if present.
           const csv = committed.content ?? HEADER + aliceRow
           return Promise.resolve({
@@ -686,7 +747,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
           const tree = (
             options?.body as { tree?: { path: string; content?: string }[] }
           )?.tree
-          const entry = tree?.find((t) => t.path.includes("students.csv"))
+          const entry = tree?.find((t) => t.path.includes("roster.csv"))
           if (entry?.content) committed.content = entry.content
           return Promise.resolve({ sha: "tree-sha" })
         }
@@ -762,7 +823,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
       .fn()
       .mockImplementation(
         (path: string, options?: { method?: string; body?: unknown }) => {
-          if (path.includes("/contents/") && path.includes("students.csv")) {
+          if (path.includes("/contents/") && path.includes("roster.csv")) {
             const csv = committed.content ?? opts.startingCsv
             return Promise.resolve({
               type: "file",
@@ -811,7 +872,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
             const tree = (
               options?.body as { tree?: { path: string; content?: string }[] }
             )?.tree
-            const entry = tree?.find((t) => t.path.includes("students.csv"))
+            const entry = tree?.find((t) => t.path.includes("roster.csv"))
             if (entry?.content) committed.content = entry.content
             return Promise.resolve({ sha: "tree-sha" })
           }
@@ -899,7 +960,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
       },
     })
 
-    // The only roster write is cs101's students.csv (the committed content),
+    // The only roster write is cs101's roster.csv (the committed content),
     // and no org-wide removal happened, so any other classroom Alice is on is
     // untouched and her org seat is intact.
     expect(committed.content).not.toBeNull()
@@ -1090,7 +1151,7 @@ const makeTeamClient = (opts: {
   const request = vi
     .fn()
     .mockImplementation((path: string, options?: { method?: string }) => {
-      if (path.includes("/contents/") && path.includes("students.csv")) {
+      if (path.includes("/contents/") && path.includes("roster.csv")) {
         const csv = committed.content ?? opts.startingCsv
         return Promise.resolve({
           type: "file",
@@ -1138,7 +1199,7 @@ const makeTeamClient = (opts: {
         const tree = (
           options as { body?: { tree?: { path: string; content?: string }[] } }
         )?.body?.tree
-        const entry = tree?.find((t) => t.path.includes("students.csv"))
+        const entry = tree?.find((t) => t.path.includes("roster.csv"))
         if (entry?.content != null) committed.content = entry.content
         return Promise.resolve({ sha: "tree-sha" })
       }
@@ -1175,7 +1236,7 @@ describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-memb
       usernames: ["ada", "bob"],
     })
 
-    // Both rows are written to students.csv (roster is authoritative metadata)...
+    // Both rows are written to roster.csv (roster is authoritative metadata)...
     const rows = rowsFromCsv(committed.content!)
     expect(rows.map((r) => r.username).sort()).toEqual(["ada", "bob"])
     expect(rows.find((r) => r.username === "ada")?.github_id).toBe("101")
@@ -1383,7 +1444,7 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
     // treated as the optional trailing github_id being omitted — see above.)
     expect(() =>
       parseStudentsCsv(HEADER + "octocat,Grace,Hopper,grace@example.edu\n"),
-    ).toThrow(/students\.csv/)
+    ).toThrow(/roster\.csv/)
   })
 
   it("still rejects a TooManyFields (extra column) row as before", () => {
@@ -1391,7 +1452,7 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
       parseStudentsCsv(
         HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,extra\n",
       ),
-    ).toThrow(/students\.csv/)
+    ).toThrow(/roster\.csv/)
   })
 })
 

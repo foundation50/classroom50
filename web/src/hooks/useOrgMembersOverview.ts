@@ -13,6 +13,7 @@ import {
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { toStudent } from "@/util/roster"
+import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import {
   isClassroomArchived,
   type Classroom,
@@ -82,7 +83,9 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
         client,
         org ?? "",
         "classroom50",
-        `${name}/students.csv`,
+        rosterPath(name),
+        undefined,
+        legacyRosterPath(name),
       ),
       enabled: Boolean(org),
       select: (rows: Student[]) => rows.map(toStudent),

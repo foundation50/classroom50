@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { csvFileQuery, jsonFileQuery } from "@/hooks/github/queries"
+import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import {
   isClassroomArchived,
@@ -60,7 +61,9 @@ const useClassroomSummaries = (
         client,
         org ?? "",
         "classroom50",
-        `${dir.path}/students.csv`,
+        rosterPath(dir.path),
+        undefined,
+        legacyRosterPath(dir.path),
       ),
       enabled: withStudentCounts && Boolean(org && dir.path),
     })),
