@@ -1,6 +1,6 @@
 // Package download implements the `gh teacher download` command: cloning every
 // student submission repo for an assignment under <org>/classroom50
-// (roster-driven or --by-pattern), refreshing each repo's
+// (team-driven or --by-pattern), refreshing each repo's
 // result.json/results.json from its submit-tag releases, and writing a
 // scores.csv summary. Read-only consumer of the config repo; only NewCmd is
 // exported.
@@ -93,17 +93,20 @@ func NewCmd() *cobra.Command {
 		Use:   "download <org> <classroom> <assignment>",
 		Short: "Clone every student submission repo for an assignment",
 		Long: "Clone every student submission repo for an assignment under <org>/classroom50.\n\n" +
-			"Default (roster-driven): reads <classroom>/roster.csv from the config\n" +
-			"repo, derives the expected <classroom>-<assignment>-<username> repo for\n" +
-			"each row, clones whichever ones exist, and refreshes <repo>/result.json\n" +
+			"Default (team-driven): lists the classroom GitHub team's members (the\n" +
+			"source of truth for enrollment), derives the expected\n" +
+			"<classroom>-<assignment>-<username> repo for each, clones whichever\n" +
+			"ones exist, and refreshes <repo>/result.json\n" +
 			"and <repo>/results.json from the repo's submit-tag releases alongside\n" +
 			"the clone — results.json holds every submission (newest first), result.json\n" +
-			"the latest. Roster entries\n" +
+			"the latest. Team members\n" +
 			"with no repo on the org are reported as `not yet accepted` and don't\n" +
 			"fail the run. A scores.csv summary is written at the destination root\n" +
-			"with one row per roster entry — submitters carry their score columns,\n" +
-			"non-submitters get blanks.\n\n" +
-			"Pass --by-pattern to skip the roster lookup and clone every <org> repo\n" +
+			"with one row per team member — submitters carry their score columns,\n" +
+			"non-submitters get blanks. roster.csv (if present) supplies optional\n" +
+			"name/section/email metadata for that summary; it never decides who is\n" +
+			"cloned.\n\n" +
+			"Pass --by-pattern to skip the team lookup and clone every <org> repo\n" +
 			"whose name starts with <classroom>-<assignment>-. No result.json fetch,\n" +
 			"no scores.csv summary — useful when the config repo isn't bootstrapped\n" +
 			"yet or when you want every matching repo regardless of the roster.\n\n" +
@@ -158,14 +161,16 @@ func NewCmd() *cobra.Command {
 
 	cmd.Flags().StringVarP(&dir, "dir", "d", "", "Directory to clone repos into (default: <classroom>-<assignment>_submissions_<timestamp>)")
 	cmd.Flags().BoolVarP(&quiet, "quiet", "q", false, "Suppress informational output and pass --quiet to git clone (errors still go to stderr)")
-	cmd.Flags().BoolVar(&byPattern, "by-pattern", false, "Skip the roster lookup and clone every <org> repo matching <classroom>-<assignment>-* (no scores.csv, no result.json fetch)")
+	cmd.Flags().BoolVar(&byPattern, "by-pattern", false, "Skip the team lookup and clone every <org> repo matching <classroom>-<assignment>-* (no scores.csv, no result.json fetch)")
 	return cmd
 }
 
-// downloadByRoster: roster × assignment Cartesian, clone the existing repos,
-// refresh each repo's result.json from the latest submit-tag release, write a
-// scores.csv summary at the dir root. Roster entries without a repo are
-// reported as missing — not a hard failure.
+// downloadByRoster: team-member × assignment Cartesian (the classroom GitHub
+// team is authoritative for enrollment), clone the existing repos, refresh
+// each repo's result.json from the latest submit-tag release, write a
+// scores.csv summary at the dir root. Team members without a repo are
+// reported as missing — not a hard failure. roster.csv is joined in only as
+// optional display metadata (name/section/email).
 func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -177,7 +182,7 @@ func downloadByRoster(client githubapi.Client, out, errOut io.Writer, org, class
 		return err
 	}
 	if !assignmentRegistered(assignments, assignment) {
-		return fmt.Errorf("assignment %q is not registered in %s/%s/%s — run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first, or pass --by-pattern to skip the roster lookup",
+		return fmt.Errorf("assignment %q is not registered in %s/%s/%s — run `gh teacher assignment add %s %s %s --name <name> --template <owner>/<repo>` first, or pass --by-pattern to skip the team lookup",
 			assignment, org, configrepo.ConfigRepoName, assignmentsPath(classroom), org, classroom, assignment)
 	}
 
@@ -360,7 +365,7 @@ func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, 
 }
 
 // downloadByPattern: page through <org>'s repos and clone every one whose
-// name starts with <classroom>-<assignment>-. Skips the roster lookup,
+// name starts with <classroom>-<assignment>-. Skips the team lookup,
 // result.json refresh, and scores.csv summary (all depend on the config repo).
 func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
 	// Deterministic head of assignmentRepoName — cross-binary contract with
@@ -572,9 +577,9 @@ func decodeAssignments(raw json.RawMessage) (map[string]scoresschema.AssignmentB
 }
 
 // writeScoresCSV writes a per-assignment summary. One CSV line per submission,
-// grouped by roster entry in roster order: a student with N pushes contributes
-// N lines (newest first); a non-submitter contributes one blank line. Per-test
-// breakdowns live in the per-repo result.json / results.json.
+// grouped by team member in team-member order: a student with N pushes
+// contributes N lines (newest first); a non-submitter contributes one blank
+// line. Per-test breakdowns live in the per-repo result.json / results.json.
 func writeScoresCSV(path string, scores scoresschema.File, assignment string, teamLogins []string, metaByLogin map[string]RosterMeta) error {
 	entries := entriesForAssignment(scores, assignment)
 	// Map each credited student (lowercased) → gradebook entry. Group entries

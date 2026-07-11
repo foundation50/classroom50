@@ -1,11 +1,12 @@
 name: Collect Scores
 
 # Teacher-triggered workflow. Iterates the (student, assignment)
-# Cartesian product from <classroom>/roster.csv ×
-# <classroom>/assignments.json, pages through each expected
-# `<classroom>-<assignment>-<username>` repo's `submit/*` releases, and
-# downloads `result.json` from each. Single-writer by design — no
-# concurrent ingest, no per-student dispatch event, no broad
+# Cartesian product of the classroom GitHub team's members ×
+# <classroom>/assignments.json (the team is authoritative for
+# enrollment; roster.csv is optional display metadata), pages through
+# each expected `<classroom>-<assignment>-<username>` repo's `submit/*`
+# releases, and downloads `result.json` from each. Single-writer by
+# design — no concurrent ingest, no per-student dispatch event, no broad
 # cross-repo write secret.
 
 on:

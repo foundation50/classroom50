@@ -84,8 +84,8 @@ Same device flow as above, and — as of the scope unification — the **same sc
 > **Group assignments need no extra scope.** For a group assignment the
 > autograder runs once in the first-accepter's repo and emits a single score;
 > `collect_scores.py` then reads that repo's **collaborators** to fan the score
-> out to every group member **on the roster** (the owner is always credited; a
-> non-rostered out-of-band collaborator is excluded). Listing collaborators
+> out to every group member **on the classroom team** (the owner is always
+> credited; a collaborator not on the team, added out-of-band, is excluded). Listing collaborators
 > (`GET /repos/{owner}/{repo}/collaborators`) requires only `Metadata: read`,
 > which is auto-included on every fine-grained PAT and already implied by the
 > `Contents: read` grant above — so the same service token serves individual and
@@ -228,7 +228,7 @@ The CLIs call the GitHub REST API through [`go-gh`](https://github.com/cli/go-gh
 | GET | [`https://api.github.com/orgs/{org}/teams/{team_slug}/members`](https://docs.github.com/en/rest/teams/members#list-team-members) | List the classroom team's members (team-driven enrollment; the source of the (student, assignment) pairs) | **Organization → Members: Read** |
 | GET | [`https://api.github.com/repos/{owner}/{repo}/releases`](https://docs.github.com/en/rest/releases/releases#list-releases) | Page through a student's assignment-repo releases to collect every `submit/*` submission | **Repository → Contents: Read** |
 | GET | [`https://api.github.com/repos/{owner}/{repo}/releases/assets/{asset_id}`](https://docs.github.com/en/rest/releases/assets#get-a-release-asset) | Download the `result.json` asset from a release | **Repository → Contents: Read** |
-| GET | [`https://api.github.com/repos/{owner}/{repo}/collaborators`](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators) | List a group repo's collaborators to fan the score out to rostered teammates | **Repository → Metadata: Read** (auto-included) |
+| GET | [`https://api.github.com/repos/{owner}/{repo}/collaborators`](https://docs.github.com/en/rest/collaborators/collaborators#list-repository-collaborators) | List a group repo's collaborators to fan the score out to teammates on the classroom team | **Repository → Metadata: Read** (auto-included) |
 
 ### `probe_token.py` (runs inside GitHub Actions, uses `CLASSROOM50_SERVICE_TOKEN`)
 

@@ -24,11 +24,11 @@ import (
 // NOTE: this admin exclusion is for COUNTING toward max_group_size only — an
 // advisory limit (bypassable via the GitHub UI). It is deliberately NOT how a
 // teammate is CREDITED: crediting happens at collection time in
-// collect_scores.py, which gates on the teacher's roster (not on collaborator
-// permission), so a rostered teammate who is also a repo/org admin is still
-// credited the shared group score though they don't count as a slot here. The
-// roster — teacher-CLI only — is the real attribution boundary; the student
-// CLI has no roster, so it counts by permission.
+// collect_scores.py, which gates on the classroom GitHub team (not on
+// collaborator permission), so a teammate on the team who is also a repo/org
+// admin is still credited the shared group score though they don't count as a
+// slot here. The classroom team — the source of truth for enrollment — is the
+// real attribution boundary; the student CLI counts by permission instead.
 //
 // ctx bounds the enumeration: go-gh's default REST client has no HTTP timeout,
 // so without a deadline a stalled collaborators API would hang the invite. The

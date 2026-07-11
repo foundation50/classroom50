@@ -684,7 +684,7 @@ class TestGroupMemberUsernames:
 
 class TestListRepoCollaboratorLogins:
     def test_returns_all_collaborators_including_admins_and_paginates(self, monkeypatch):
-        # Crediting is gated on roster membership downstream
+        # Crediting is gated on classroom-team membership downstream
         # (group_member_usernames), NOT on permission level, so this
         # function returns EVERY collaborator regardless of role_name.
         # A group teammate who is an org owner (admin on every repo) or a

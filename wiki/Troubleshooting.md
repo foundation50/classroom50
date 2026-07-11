@@ -84,12 +84,12 @@ The instructor's autograder workflow has a YAML syntax error. `gh student` valid
 
 ## `gh teacher download` clones nothing
 
-By default, `gh teacher download` is **roster-driven**: it reads `<classroom>/roster.csv` and `<classroom>/assignments.json` from your config repo, then probes `GET /repos/<org>/<classroom>-<assignment>-<username>` for each roster row. If you get zero clones:
+By default, `gh teacher download` is **team-driven**: it lists the classroom GitHub team's members (the source of truth for enrollment) and reads `<classroom>/assignments.json` from your config repo, then probes `GET /repos/<org>/<classroom>-<assignment>-<username>` for each team member. If you get zero clones:
 
-- Confirm `<org>/classroom50` exists and `<classroom>/roster.csv` is populated (`gh teacher roster add` or `gh teacher roster import`).
+- Confirm `<org>/classroom50` exists and the classroom team has members (`gh teacher roster add` / `gh teacher roster import`, which add students to the org and the team).
 - Confirm `<assignment>` is registered in `<classroom>/assignments.json` (`gh teacher assignment list <org> <classroom>`).
 - Verify a few student repos exist under `https://github.com/orgs/<org>/repositories?q=<classroom>-<assignment>`.
-- Re-run with `-v` to see which roster rows were probed and which repos were missing.
+- Re-run with `-v` to see which team members were probed and which repos were missing.
 
 If the config repo isn't bootstrapped yet, or you want every matching repo regardless of the roster, pass `--by-pattern` — that mode pages through `GET /orgs/{org}/repos` and clones every repo whose name starts with `<classroom>-<assignment>-`.
 

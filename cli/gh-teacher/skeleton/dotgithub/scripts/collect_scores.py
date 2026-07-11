@@ -1228,8 +1228,8 @@ def list_repo_collaborator_logins(
     """Logins of every direct collaborator on owner/repo, walking pagination.
 
     Returns ALL collaborators regardless of permission level. The crediting gate
-    is NOT permission level — it's roster membership, applied by the caller
-    (group_member_usernames intersects with the roster). Filtering on
+    is NOT permission level — it's classroom-team membership, applied by the
+    caller (group_member_usernames intersects with the team). Filtering on
     `role_name == "admin"` here was a bug: a group teammate who is also an org
     owner (admin on every repo), or a founder kept as repo `admin` to invite
     teammates, is `admin` yet a legitimate student — the old filter dropped
@@ -1283,30 +1283,35 @@ def group_member_usernames(
     api_url: str, org: str, repo: str, owner_username: str, token: str, roster_logins: set[str]
 ) -> list[str]:
     """Member list for a group submission: the repo's collaborators (any
-    permission) **intersected with the roster** (case-insensitive), sorted and
-    deduped, owner guaranteed present. Crediting is gated on roster membership,
-    NOT collaborator permission: a rostered teammate is credited whether push or
-    admin (an org owner is admin everywhere; a founder is kept admin to invite).
-    A non-rostered collaborator (instructor, TA, non-student org owner, or an
-    account added out-of-band) is never credited. Raises on the underlying
-    HTTP/parse error so the caller can fall back to owner-only.
+    permission) **intersected with the classroom team** (case-insensitive),
+    sorted and deduped, owner guaranteed present. Crediting is gated on team
+    membership, NOT collaborator permission: a teammate on the classroom team is
+    credited whether push or admin (an org owner is admin everywhere; a founder
+    is kept admin to invite). A collaborator not on the team (instructor, TA,
+    non-student org owner, or an account added out-of-band) is never credited.
+    Raises on the underlying HTTP/parse error so the caller can fall back to
+    owner-only.
 
-    TRUST ASSUMPTION (F6, documented residual): every rostered collaborator on
-    the repo is credited. GitHub doesn't record HOW a collaborator was added, so
-    collection can't distinguish a teammate the founder invited via `gh student
-    invite` from one a student added via the UI. The roster intersection bounds
-    the blast radius to rostered classmates — a stranger can never be credited —
-    but a student could add a rostered classmate and credit them this score.
-    Treating that as acceptable (rostered students are mutually trusted within a
-    classroom) is the deliberate, simple model; see wiki/Autograders.md.
-    Tightening it would require a teacher-approved group manifest, out of scope.
+    (`roster_logins` is the case-folded set of classroom-team logins the caller
+    passes in — the team is authoritative for enrollment; the name is legacy.)
+
+    TRUST ASSUMPTION (F6, documented residual): every teammate on the classroom
+    team who is a collaborator on the repo is credited. GitHub doesn't record HOW
+    a collaborator was added, so collection can't distinguish a teammate the
+    founder invited via `gh student invite` from one a student added via the UI.
+    The team intersection bounds the blast radius to classmates on the team — a
+    stranger can never be credited — but a student could add a teammate on the
+    team and credit them this score. Treating that as acceptable (classmates on
+    the team are mutually trusted within a classroom) is the deliberate, simple
+    model; see wiki/Autograders.md. Tightening it would require a teacher-approved
+    group manifest, out of scope.
     """
     logins = list_repo_collaborator_logins(api_url, org, repo, token)
     seen: dict[str, str] = {}
     owner_key = owner_username.lower()
     for login in [owner_username, *logins]:
         key = login.lower()
-        # Owner always credited; other collaborators only if on the roster.
+        # Owner always credited; other collaborators only if on the team.
         if key != owner_key and key not in roster_logins:
             continue
         if key not in seen:

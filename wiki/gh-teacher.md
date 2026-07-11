@@ -17,7 +17,7 @@ Run `gh teacher <command> --help` for the live flag list. Errors always go to st
 | `gh teacher remove <org>/<repo> <user>` | Remove user from a single repo. Idempotent. |
 | `gh teacher member list <org>` | List actual org members + pending invitations, with role. Optional: `--json`, `--quiet` (login-only). Read-only. |
 | `gh teacher member list <org>/<repo>` | List actual repo collaborators, with permission level. Optional: `--json`, `--quiet` (login-only). Read-only. |
-| `gh teacher download <org> <classroom> <assignment>` | Roster-driven by default: clone one repo per `<classroom>/roster.csv` row, refresh each repo's `result.json` (latest submission) and `results.json` (every submission) from its submit-tag releases, and write a per-submission `scores.csv` summary at the destination root. Pass `--by-pattern` to skip the roster lookup and clone by name prefix instead. Default destination is `<classroom>-<assignment>_submissions_<YYYY_MM_DD_T_HH_MM_SS>/`; override with `-d`. |
+| `gh teacher download <org> <classroom> <assignment>` | Team-driven by default: clone one repo per classroom-team member (the source of truth for enrollment), refresh each repo's `result.json` (latest submission) and `results.json` (every submission) from its submit-tag releases, and write a per-submission `scores.csv` summary at the destination root. `roster.csv` supplies optional name/section/email metadata for that summary but never decides who is cloned. Pass `--by-pattern` to skip the team lookup and clone by name prefix instead. Default destination is `<classroom>-<assignment>_submissions_<YYYY_MM_DD_T_HH_MM_SS>/`; override with `-d`. |
 | `gh teacher teardown <org>` | Delete every repo in a Classroom 50 org (development reset). Requires `<org>/classroom50` to exist (the marker repo guards against accidental teardown of non-Classroom orgs); prompts for typed org-name confirmation unless `--yes`; deletes `classroom50` last so an interrupted run stays safe to re-run. Requires the `delete_repo` OAuth scope (opt in once via `gh teacher login -s delete_repo`). |
 | `gh teacher init <org>` | Bootstrap `<org>/classroom50` (org member defaults, config repo, Pages, branch protection, service-token secret). Idempotent; re-runs also refresh stale skeleton files after a confirmation prompt (`--yes` to skip). |
 | `gh teacher audit <org>` | Read-only audit of the org member-privilege lockdown. Re-reads the org and reports which API-readable settings are enforced vs. drifted, plus the four web-UI-only settings it can't read (confirm by hand). Exits non-zero if **any** API-readable lockdown field is unenforced (matching the web GUI's verdict); `--json` for a machine-readable report. |
@@ -693,32 +693,32 @@ The Read counterpart to `invite` / `remove`. The roster (`roster.csv`) is the *i
 ## `gh teacher download`
 
 ```sh
-gh teacher download <org> <classroom> <assignment>              # roster-driven (default)
-gh teacher download --by-pattern <org> <classroom> <assignment> # skip roster, clone by name prefix
+gh teacher download <org> <classroom> <assignment>              # team-driven (default)
+gh teacher download --by-pattern <org> <classroom> <assignment> # skip team, clone by name prefix
 gh teacher download -d <dir> <org> <classroom> <assignment>     # literal dir, no timestamp
 gh teacher download -v <org> <classroom> <assignment>           # stream raw git output per repo
 gh teacher download -q <org> <classroom> <assignment>           # suppress per-repo summary, forward --quiet to git
 ```
 
-### Roster-driven mode (default)
+### Team-driven mode (default)
 
-The command reads `<org>/classroom50/<classroom>/roster.csv` and `<classroom>/assignments.json`, then for each roster row:
+The command lists the classroom GitHub team's members (the source of truth for enrollment) and reads `<classroom>/assignments.json`, then for each team member:
 
 1. Computes the canonical `<classroom>-<assignment>-<username>` repo name (lowercased — matches `gh student accept`'s naming).
 2. Probes `GET /repos/<org>/<name>` ([docs](https://docs.github.com/en/rest/repos/repos?apiVersion=2026-03-10#get-a-repository)). A 404 prints `Missing: <username> (not accepted yet?)` and contributes to the per-run summary; a non-404 error surfaces as a per-repo failure.
 3. For repos that exist, shells out to `gh repo clone <org>/<name> <dir>/<name>` so authentication flows through the current `gh` session.
 4. For each cloned repo (and for repos already on disk), refreshes `<repo>/result.json` (the latest submission) **and** `<repo>/results.json` (every submit-tag submission, newest first) from that repo's submit-tag releases. Each asset is fetched via the release's asset API URL with `Accept: application/octet-stream`, and `Authorization` is stripped on the redirect to the signed storage URL so the GitHub token never reaches the storage origin. A repo with no submit-tag releases, or releases with no `result.json` asset, is a silent no-op.
-5. After all clones, writes a `scores.csv` summary at the destination root with **one line per submission**, grouped by roster entry in roster order (columns `username,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override`). A student who pushed N times contributes N lines (newest first); for a group assignment each credited member (the entry's `member_usernames`) gets the team's submission lines. Non-submitters get a single blank-score line so a teacher can sort by score and immediately see who hasn't submitted yet. Student-controlled string cells are guarded against spreadsheet formula injection.
+5. After all clones, writes a `scores.csv` summary at the destination root with **one line per submission**, grouped by team member in team-member order (columns `username,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override`). `roster.csv` (if present) supplies each row's optional name/section/email metadata. A student who pushed N times contributes N lines (newest first); for a group assignment each credited member (the entry's `member_usernames`) gets the team's submission lines. Non-submitters get a single blank-score line so a teacher can sort by score and immediately see who hasn't submitted yet. Student-controlled string cells are guarded against spreadsheet formula injection.
 
 The command refuses to run when:
 
 - `<org>/classroom50` doesn't exist → `run gh teacher init <org> first`.
-- `<classroom>/roster.csv` is missing → `run gh teacher classroom add` first.
-- `<assignment>` isn't registered in `assignments.json` → `run gh teacher assignment add <org> <classroom> <assignment>` first, or pass `--by-pattern` to skip the roster lookup.
+- The classroom directory / `assignments.json` is missing → `run gh teacher classroom add` first.
+- `<assignment>` isn't registered in `assignments.json` → `run gh teacher assignment add <org> <classroom> <assignment>` first, or pass `--by-pattern` to skip the team lookup.
 
 ### `--by-pattern`
 
-Pages through `GET /orgs/{org}/repos` ([docs](https://docs.github.com/en/rest/repos/repos?apiVersion=2026-03-10#list-organization-repositories)) and clones every repo whose name starts with `<classroom>-<assignment>-`. Skips the roster lookup, the `result.json` refresh, and the `scores.csv` summary — useful when the config repo isn't bootstrapped yet, or when you want every matching repo regardless of who's currently on the roster.
+Pages through `GET /orgs/{org}/repos` ([docs](https://docs.github.com/en/rest/repos/repos?apiVersion=2026-03-10#list-organization-repositories)) and clones every repo whose name starts with `<classroom>-<assignment>-`. Skips the team lookup, the `result.json` refresh, and the `scores.csv` summary — useful when the config repo isn't bootstrapped yet, or when you want every matching repo regardless of who's currently enrolled.
 
 ### Destination
 

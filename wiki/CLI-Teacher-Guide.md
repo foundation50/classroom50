@@ -372,7 +372,7 @@ What it does on each run:
 
 One entry per repo within each assignment bucket: per student for individual assignments, per group (`member_usernames` carries all members) for group assignments. Re-running collect appends new submissions to each entry's `submissions` history and refreshes the entry unless `override: true` is set. (Pre-canonical scores.json shapes are **not** migrated — a non-canonical file fails the run loudly.)
 
-**Group assignments.** A group assignment is graded once, in the first-accepter's repo. `collect-scores` reads that repo's collaborators, **keeps only those on the classroom roster** (the owner is always credited), and records that member list as the entry's `member_usernames`, so every rostered teammate gets the same score — `scores.csv` then has a line per member per submission with the shared score. Crediting is gated on roster membership, **not** on collaborator permission (a teammate who is also an org owner / admin is still credited). A non-rostered collaborator added out-of-band (e.g. via the GitHub UI) is **not** credited. Reading collaborators needs only `Metadata: read` (auto-included on every fine-grained PAT and already implied by `Contents: read`), so the existing service token works as-is. If the collaborator read fails, or only the owner is found, the score is credited to the repo owner only and the run logs a warning. Teammates who joined a repo own no repo of their own, so they are not reported as "missing" in `gh teacher download`.
+**Group assignments.** A group assignment is graded once, in the first-accepter's repo. `collect-scores` reads that repo's collaborators, **keeps only those on the classroom team** (the owner is always credited), and records that member list as the entry's `member_usernames`, so every teammate on the team gets the same score — `scores.csv` then has a line per member per submission with the shared score. Crediting is gated on team membership, **not** on collaborator permission (a teammate who is also an org owner / admin is still credited). A collaborator not on the classroom team added out-of-band (e.g. via the GitHub UI) is **not** credited. Reading collaborators needs only `Metadata: read` (auto-included on every fine-grained PAT and already implied by `Contents: read`), so the existing service token works as-is. If the collaborator read fails, or only the owner is found, the score is credited to the repo owner only and the run logs a warning. Teammates who joined a repo own no repo of their own, so they are not reported as "missing" in `gh teacher download`.
 
 ## 10. Download submissions
 
@@ -384,13 +384,13 @@ gh teacher download <org> <classroom> <assignment>
 
 ![Demo: gh teacher download](images/gh_teacher_download.gif)
 
-By default the command is **roster-driven**: it reads `<classroom>/roster.csv` and `<classroom>/assignments.json` from your config repo, then for each roster entry:
+By default the command is **team-driven**: it lists the classroom GitHub team's members (the source of truth for enrollment) and reads `<classroom>/assignments.json` from your config repo, then for each team member:
 
 1. Probes whether the expected `<classroom>-<assignment>-<username>` repo exists in the org.
 2. Clones it if it does, or reports `Missing: <username> (not accepted yet?)` if it doesn't.
 3. After each clone, refreshes `<repo>/result.json` (the latest submit-tag submission) **and** `<repo>/results.json` (every submission, newest first) from that repo's submit-tag releases — so the autograded payloads land alongside the code.
 
-After all clones, the command writes a `scores.csv` summary at the destination root: **one line per submission**, grouped by roster entry in roster order (`username,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override`). A student who pushed N times contributes N lines (newest first); for a group assignment each credited member gets the team's submission lines. Non-submitters get a single blank-score line so you can sort the spreadsheet by score and immediately see who hasn't submitted yet.
+After all clones, the command writes a `scores.csv` summary at the destination root: **one line per submission**, grouped by team member in team-member order (`username,score,max_score,datetime,submission_tag,submitted_by,review_url,late,override`). `roster.csv` (if present) supplies each row's optional name/section/email metadata. A student who pushed N times contributes N lines (newest first); for a group assignment each credited member gets the team's submission lines. Non-submitters get a single blank-score line so you can sort the spreadsheet by score and immediately see who hasn't submitted yet.
 
 Each run produces a fresh timestamped folder named `<classroom>-<assignment>_submissions_YYYY_MM_DD_T_HH_MM_SS/` (24-hour local time), so re-running picks up newer submissions without overwriting earlier downloads. Override the destination with `-d`:
 
