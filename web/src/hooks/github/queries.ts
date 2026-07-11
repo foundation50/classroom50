@@ -617,6 +617,49 @@ function readContents(
   )
 }
 
+// Raw roster.csv bytes with the same legacy fallback (roster.csv -> students.csv
+// on a 404) as csvFileQuery, but returning the unparsed text so the caller can
+// run the strict parser and surface per-line problems. Keyed on `rawFile`
+// (distinct from csvFileQuery's parsed-rows key) so the raw text and the parsed
+// rows never collide in the cache — this read is purely additive for problem
+// detection; the parsed-rows read (csvFileQuery) still drives display.
+export function rosterRawFileQuery(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  path: string,
+  fallbackPath?: string,
+  ref?: string,
+) {
+  return queryOptions({
+    queryKey: githubKeys.rawFile(owner, repo, path, ref),
+    queryFn: async ({ signal }) => {
+      try {
+        return await readContents(client, owner, repo, path, ref, signal)
+      } catch (err) {
+        if (
+          fallbackPath &&
+          err instanceof GitHubAPIError &&
+          err.status === 404
+        ) {
+          return await readContents(
+            client,
+            owner,
+            repo,
+            fallbackPath,
+            ref,
+            signal,
+          )
+        }
+        throw err
+      }
+    },
+    enabled: Boolean(owner && repo && typeof path === "string"),
+    staleTime: 10 * 60 * 1000,
+    retry: false,
+  })
+}
+
 export async function getRawFile(
   client: GitHubClient,
   input: GetAssignmentsFileInput,

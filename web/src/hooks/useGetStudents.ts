@@ -1,9 +1,11 @@
+import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { csvFileQuery, githubKeys } from "./github/queries"
+import { csvFileQuery, githubKeys, rosterRawFileQuery } from "./github/queries"
 import { toStudent } from "@/util/roster"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { parseRosterCsv, type RosterCsvProblem } from "@/api/mutations/students"
 import type { Student } from "@/types/classroom"
 
 const rosterKey = (org: string, classroom: string) =>
@@ -16,11 +18,10 @@ const rosterKey = (org: string, classroom: string) =>
 // pass-through, so optimistic cache writes pass through unchanged.
 const selectStudents = (rows: Student[]): Student[] => rows.map(toStudent)
 
-// Stable empty-roster reference: while the CSV query is loading/undefined, a
-// fresh `[]` each render would break referential stability for downstream
-// useMemo deps (the team-roster build re-runs needlessly during exactly the
-// window the roster queries are resolving).
+// Stable empty references so a loading/undefined read doesn't break referential
+// stability for downstream useMemo deps during the resolve window.
 const EMPTY_STUDENTS: Student[] = []
+const EMPTY_PROBLEMS: RosterCsvProblem[] = []
 
 const useGetStudents = (
   org: string | undefined,
@@ -39,9 +40,28 @@ const useGetStudents = (
     select: selectStudents,
   })
 
+  // A parallel strict read of the raw bytes purely to detect malformed rows and
+  // report them per line. Kept separate from the display read above (which
+  // stays tolerant so a partial file still renders what it can) so a bad file
+  // surfaces a precise banner instead of silently misaligned rows.
+  const { data: rawRoster } = useQuery(
+    rosterRawFileQuery(
+      client,
+      org ?? "",
+      "classroom50",
+      rosterPath(classroom ?? ""),
+      legacyRosterPath(classroom ?? ""),
+    ),
+  )
+  const parseProblems = useMemo(
+    () => (rawRoster ? parseRosterCsv(rawRoster).problems : EMPTY_PROBLEMS),
+    [rawRoster],
+  )
+
   return {
     students: students ?? EMPTY_STUDENTS,
     isLoading,
+    parseProblems,
   }
 }
 

@@ -178,7 +178,25 @@ export function splitName(name: string | null): {
   return { first_name: parts.at(0) ?? "", last_name: parts.slice(1).join(" ") }
 }
 
-export function parseStudentsCsv(csv: string): StudentCsvRow[] {
+// A structured problem in a roster.csv file: a 1-based file line (header is
+// line 1) and a human-readable message. Surfaced to the instructor so a
+// malformed roster names exactly what's wrong and where, rather than failing
+// silently or with an opaque blob.
+export type RosterCsvProblem = {
+  line: number
+  message: string
+}
+
+export type ParsedRosterCsv = {
+  rows: StudentCsvRow[]
+  problems: RosterCsvProblem[]
+}
+
+// Parse roster.csv into normalized rows plus a structured list of problems.
+// Never throws on a malformed file — the caller decides whether to refuse
+// (writes) or surface a banner (the view). `parseStudentsCsv` is the throwing
+// wrapper for write paths.
+export function parseRosterCsv(csv: string): ParsedRosterCsv {
   const parsed = Papa.parse<Record<string, string>>(csv, {
     header: true,
     delimiter: ",",
@@ -195,10 +213,9 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   // single dropped trailing field, and since Papa maps values POSITIONALLY it
   // would silently shift every value into the wrong column (corrupting the
   // identity/email join with no error) — exactly as untrustworthy as a
-  // `TooManyFields` row, so it stays fatal. (A row short by exactly one where a
-  // MIDDLE cell was dropped is positionally indistinguishable from a dropped
-  // trailing field, so it is unavoidably read as the latter; nothing in the row
-  // data can disambiguate the two.)
+  // `TooManyFields` row, so it stays a problem. (A row short by exactly one
+  // where a MIDDLE cell was dropped is positionally indistinguishable from a
+  // dropped trailing field, so it is unavoidably read as the latter.)
   // Only re-parse (tooFewFieldsAreTrailingOnly runs a second full parse) when a
   // TooFewFields error is actually present — the flag is never read otherwise.
   const shortRowsWithinTolerance =
@@ -208,23 +225,40 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
       parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
     )
 
-  const fatalErrors = parsed.errors.filter(
-    (error) =>
-      error.type !== "Delimiter" &&
-      !(error.code === "TooFewFields" && shortRowsWithinTolerance),
-  )
-
-  if (fatalErrors.length > 0) {
-    throw new Error(
-      `Could not parse roster.csv: ${fatalErrors
-        .map((error) => error.message)
-        .join("; ")}`,
+  const problems: RosterCsvProblem[] = parsed.errors
+    .filter(
+      (error) =>
+        error.type !== "Delimiter" &&
+        !(error.code === "TooFewFields" && shortRowsWithinTolerance),
     )
-  }
+    // Papa's `row` is the 0-based DATA row; the file line is that + 2 (header is
+    // line 1). Fall back to line 1 for a file-level error with no row.
+    .map((error) => ({
+      line: typeof error.row === "number" ? error.row + 2 : 1,
+      message: error.message,
+    }))
 
-  return parsed.data
+  const rows = parsed.data
     .map((row) => normalizeStudentRow(row))
     .filter((row) => row.username || row.github_id || row.email)
+
+  return { rows, problems }
+}
+
+// Format roster problems into a single-line message for the throwing wrapper
+// and logs. The view uses the structured `problems` instead.
+export function formatRosterProblems(problems: RosterCsvProblem[]): string {
+  return problems.map((p) => `line ${p.line}: ${p.message}`).join("; ")
+}
+
+export function parseStudentsCsv(csv: string): StudentCsvRow[] {
+  const { rows, problems } = parseRosterCsv(csv)
+  if (problems.length > 0) {
+    throw new Error(
+      `Could not parse roster.csv: ${formatRosterProblems(problems)}`,
+    )
+  }
+  return rows
 }
 
 // True when EVERY short data row is short by exactly one column, i.e. only the
@@ -1042,20 +1076,48 @@ export async function syncRosterFromTeam(
     const roleByLogin = new Map(
       members.map((m) => [m.login.toLowerCase(), m.role]),
     )
+    // github_id per login, to backfill a row that carries only a username (the
+    // common "teacher wrote a bare username, invited, the student joined" flow).
+    // Only usable when a login maps to exactly one member — a duplicate login
+    // (shouldn't happen on one team, but be safe) is left un-backfilled rather
+    // than guess. An existing non-empty id is NEVER overwritten (a renamed login
+    // must not silently repoint an id onto a different account).
+    const loginCounts = new Map<string, number>()
+    for (const m of members) {
+      const k = m.login.toLowerCase()
+      loginCounts.set(k, (loginCounts.get(k) ?? 0) + 1)
+    }
+    const idByLogin = new Map(
+      members
+        .filter((m) => loginCounts.get(m.login.toLowerCase()) === 1)
+        .map((m) => [m.login.toLowerCase(), String(m.id)]),
+    )
     let roleChanges = 0
+    let idBackfills = 0
     const reconciledStudents = currentStudents.map((s) => {
+      const loginKey = s.username.trim().toLowerCase()
       const teamRole =
         (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
-        roleByLogin.get(s.username.trim().toLowerCase())
+        roleByLogin.get(loginKey)
       const role = teamRole ?? (fullyRead ? "" : s.role)
+      // Backfill a missing github_id from the login-matched member. Never
+      // overwrite an existing id.
+      const backfilledId =
+        !s.github_id.trim() && loginKey ? idByLogin.get(loginKey) : undefined
+
+      let next = s
       if (role !== s.role) {
         roleChanges++
-        return { ...s, role }
+        next = { ...next, role }
       }
-      return s
+      if (backfilledId) {
+        idBackfills++
+        next = { ...next, github_id: backfilledId }
+      }
+      return next
     })
 
-    if (missing.length === 0 && roleChanges === 0) {
+    if (missing.length === 0 && roleChanges === 0 && idBackfills === 0) {
       log.info("sync roster from team: completed (up to date)", {
         org,
         classroom,
@@ -1113,6 +1175,7 @@ export async function syncRosterFromTeam(
       classroom,
       added: addedRows.length,
       roleChanges,
+      idBackfills,
     })
     return {
       addedUsernames: addedRows.map((r) => r.username),

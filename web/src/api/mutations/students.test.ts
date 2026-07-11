@@ -14,6 +14,7 @@ import {
   updateStudent,
   updateStudentWithConflictRetry,
   parseStudentsCsv,
+  parseRosterCsv,
   STUDENT_CSV_FIELDS,
   StudentAlreadyEnrolledError,
 } from "./students"
@@ -1483,6 +1484,69 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
   })
 
+  it("backfills a blank github_id on a login-matched row (the rliu50 case)", async () => {
+    // Teacher wrote a bare username, invited, the student joined the team — but
+    // the row still has no github_id. Sync must fill it in from the team member.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "rliu50,,,,,,\n",
+      users: {},
+      teamHas: [{ login: "rliu50", id: 127826836 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.noop).toBe(false)
+    const rliu = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "rliu50",
+    )
+    expect(rliu).toMatchObject({
+      username: "rliu50",
+      github_id: "127826836",
+      role: "student",
+    })
+  })
+
+  it("never overwrites an existing github_id (renamed-login safety)", async () => {
+    // The CSV row already has an id; a team member sharing the login but a
+    // DIFFERENT id must not repoint the row onto the other account.
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "rliu50,,,,,999,student\n",
+      users: {},
+      teamHas: [{ login: "rliu50", id: 127826836 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // Role already correct + id must be preserved -> nothing to change.
+    expect(result.noop).toBe(true)
+    const rliu = rowsFromCsv(
+      committed.content ?? HEADER + "rliu50,,,,,999,student\n",
+    ).find((r) => r.username === "rliu50")
+    expect(rliu?.github_id).toBe("999")
+  })
+
+  it("leaves a blank-id row untouched when its login is on no team", async () => {
+    const { client } = makeTeamClient({
+      startingCsv: HEADER + "ghost,,,,,,\n",
+      users: {},
+      teamHas: [],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // No team members at all -> nothing to backfill or append.
+    expect(result.noop).toBe(true)
+  })
+
   it("syncs instructors and TAs with their role, not just students", async () => {
     // The nice-classroom scenario: only an instructor and a TA, no students,
     // and no roster.csv rows yet. Both must be appended with their role so the
@@ -1763,6 +1827,42 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
         HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student,extra\n",
       ),
     ).toThrow(/roster\.csv/)
+  })
+})
+
+describe("parseRosterCsv — structured per-line problems", () => {
+  const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
+
+  it("reports the exact malformed line for a too-many-fields row (the rliu50 case)", () => {
+    // The real bug: a hand-written row with one comma too many (8 fields vs 7).
+    const csv =
+      HEADER + "rongxin-liu,,,,,10591665,instructor\n" + "rliu50,,,,,,,\n"
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toHaveLength(1)
+    // Header is line 1; rongxin-liu line 2; the malformed rliu50 row is line 3.
+    expect(problems[0].line).toBe(3)
+    expect(problems[0].message).toMatch(/too many fields/i)
+    // Rows are still returned (the view stays tolerant) — the good row parses.
+    expect(rows.some((r) => r.username === "rongxin-liu")).toBe(true)
+  })
+
+  it("returns no problems for a well-formed roster", () => {
+    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student\n"
+    const { problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+  })
+
+  it("treats a row short by exactly one trailing column as benign (no problem)", () => {
+    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42\n"
+    const { problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+  })
+
+  it("flags a row short by more than one column", () => {
+    const csv = HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A\n"
+    const { problems } = parseRosterCsv(csv)
+    expect(problems.length).toBeGreaterThan(0)
+    expect(problems[0].line).toBe(2)
   })
 })
 

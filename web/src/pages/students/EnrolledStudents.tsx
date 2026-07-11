@@ -21,6 +21,7 @@ import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
+import type { RosterCsvProblem } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -96,12 +97,16 @@ export function groupStudentsBySection<T extends { section?: string }>(
 
 const EnrolledStudents = ({
   students = [],
+  parseProblems = [],
   org,
   classroom,
   addActions,
   suppressedLogins,
 }: {
   students: Student[]
+  // Per-line problems from the strict roster.csv parse (empty when the file is
+  // well-formed). Surfaced as a banner so the instructor can fix the file.
+  parseProblems?: RosterCsvProblem[]
   org: string
   classroom: string
   addActions?: AddStudentActions
@@ -552,6 +557,37 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
+      {/* Malformed roster.csv: name every bad line so the instructor can fix
+          the file on GitHub. Distinct from a network load error — this is a bad
+          file, and reads/writes silently misbehave until it's corrected. */}
+      {parseProblems.length > 0 ? (
+        <Alert tone="error">
+          <div className="flex flex-col gap-2">
+            <span className="font-medium">
+              {t("students.rosterParseError")}
+            </span>
+            <ul className="list-disc pl-5 text-sm">
+              {parseProblems.map((p, i) => (
+                <li key={`${p.line}-${i}`}>
+                  {t("students.rosterParseErrorLine", {
+                    line: p.line,
+                    message: p.message,
+                  })}
+                </li>
+              ))}
+            </ul>
+            <a
+              href={`https://github.com/${org}/classroom50/edit/main/${rosterPath(classroom)}`}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
+            >
+              {t("students.rosterEditOnGitHub")}
+            </a>
+          </div>
+        </Alert>
+      ) : null}
+
       {/* Warnings / action results. */}
       {Object.keys(warnings).length > 0 ? (
         <div className="flex w-full flex-col gap-2">
