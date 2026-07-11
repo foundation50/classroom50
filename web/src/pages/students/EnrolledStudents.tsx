@@ -97,6 +97,21 @@ export function groupStudentsBySection<T extends { section?: string }>(
     .map(([section, group]) => ({ section, students: group }))
 }
 
+// After a metadata save, where should the open detail modal's selection point?
+// An edit can't change an editable row's identity (rows key on
+// github_id/username; the form edits only name/email/section), so this is
+// normally a no-op — but if the key ever moves, follow it so the modal stays on
+// the same person instead of snapping shut. Only re-points the row that was
+// saved; any other selection is left alone.
+export function nextSelectedKeyAfterSave(
+  prev: string | null,
+  savedRowKey: string,
+  nextRowKey: string,
+): string | null {
+  if (!nextRowKey || nextRowKey === savedRowKey) return prev
+  return prev === savedRowKey ? nextRowKey : prev
+}
+
 const EnrolledStudents = ({
   students = [],
   parseProblems = [],
@@ -443,6 +458,9 @@ const EnrolledStudents = ({
       const exists = current.some((s) => studentKey(s) === rowKey)
       return exists ? next : [...next, toStudent(updated)]
     })
+    // Follow the row's key if a save ever moved it, so the open modal stays put.
+    const nextKey = studentKey(updated)
+    setSelectedKey((prev) => nextSelectedKeyAfterSave(prev, rowKey, nextKey))
     invalidateInviteQueries()
   }
 

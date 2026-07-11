@@ -111,18 +111,27 @@ const EditStudentForm = ({
     },
   })
 
-  // Reset to the student's CURRENT values whenever the parent signals (open) or
-  // the target student changes; a parent keeping the form mounted across rows
-  // would otherwise show mount-time values that go stale after a save.
+  // Reset to the student's CURRENT values only when the parent deliberately
+  // signals it (open, or a switch to a different row/edit session). `defaults`
+  // is intentionally NOT a dependency: parents recreate the `student` object
+  // every render (e.g. the roster modal's `rowToStudent(row)`), so keying on it
+  // would re-run mid-submit — `form.reset` clears `isSubmitting`, so the Save
+  // button would flicker back to enabled while the write is in flight.
   useEffect(() => {
     setError(null)
     form.reset(defaults())
-  }, [resetSignal, form, defaults])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal])
 
   const submitting = form.state.isSubmitting
 
+  // On a successful save the parent unmounts this form (leaves edit mode) while
+  // `submitting` is still true for that render, so the parent never sees the
+  // trailing false — leaving its mirrored flag stuck true and the modal
+  // non-closeable. Reset it on unmount so `busy` always clears.
   useEffect(() => {
     onSubmittingChange?.(submitting)
+    return () => onSubmittingChange?.(false)
   }, [submitting, onSubmittingChange])
 
   return (

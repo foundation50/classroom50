@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest"
-import { groupStudentsBySection } from "./EnrolledStudents"
+import {
+  groupStudentsBySection,
+  nextSelectedKeyAfterSave,
+} from "./EnrolledStudents"
 import type { Student } from "@/types/classroom"
 
 const student = (username: string, section?: string): Student =>
@@ -36,5 +39,31 @@ describe("groupStudentsBySection", () => {
 
   it("returns an empty array for no students", () => {
     expect(groupStudentsBySection([])).toEqual([])
+  })
+})
+
+describe("nextSelectedKeyAfterSave", () => {
+  it("keeps the selection when the key is unchanged (common case)", () => {
+    expect(nextSelectedKeyAfterSave("42", "42", "42")).toBe("42")
+  })
+
+  it("follows the saved row's selection to its new key so the modal stays open", () => {
+    // An email-keyed row whose email was edited: the modal must track the new
+    // key instead of snapping shut on a now-missing old key.
+    expect(nextSelectedKeyAfterSave("old@x.io", "old@x.io", "new@x.io")).toBe(
+      "new@x.io",
+    )
+  })
+
+  it("leaves an unrelated selection alone when a different row moves keys", () => {
+    expect(nextSelectedKeyAfterSave("42", "old@x.io", "new@x.io")).toBe("42")
+  })
+
+  it("does nothing when nothing is selected", () => {
+    expect(nextSelectedKeyAfterSave(null, "old@x.io", "new@x.io")).toBeNull()
+  })
+
+  it("ignores an empty new key (never selects nothing by accident)", () => {
+    expect(nextSelectedKeyAfterSave("42", "42", "")).toBe("42")
   })
 })
