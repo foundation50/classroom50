@@ -83,6 +83,90 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
   return rows
 }
 
+// Optional roster columns the import reads when a `username` column is present
+// (case-insensitive). `name` is an alias split into first/last. NOTE: a
+// `github_id` column in the file is intentionally ignored (re-derived from
+// GitHub), so it is NOT advertised here. Kept in sync with the header path of
+// parseRosterImportFile above.
+const OPTIONAL_IMPORT_HEADERS = [
+  "first_name",
+  "last_name",
+  "name",
+  "email",
+  "section",
+  "role",
+] as const
+
+// Header tokens that mark the first line as a real header row (vs. a bare
+// username list). Includes `username` and the ignored-but-recognized `github_id`
+// so a file whose only column is `github_id` is diagnosed as a mis-headered CSV
+// rather than treated as a list of usernames.
+const RECOGNIZED_IMPORT_HEADERS = [
+  "username",
+  "github_id",
+  ...OPTIONAL_IMPORT_HEADERS,
+] as const
+
+// Why an uploaded file yielded no importable rows, when the cause is the file's
+// SHAPE rather than just invalid handles. `null` means "no structural problem" —
+// either a valid header file or a bare one-username-per-line list, both of which
+// the parser handles; an empty result there is genuinely "no valid usernames".
+//   - missing-username-header: the file has a header row (a delimiter or a
+//     recognized column name) but no `username` column, so the required field
+//     can't be mapped. We surface the required + optional columns instead of
+//     silently falling back to treating each line as a username.
+//   - malformed: Papa reported a structural parse error (ragged rows, unclosed
+//     quote, ...), so the columns can't be trusted.
+export type ImportHeaderIssue =
+  | { kind: "missing-username-header"; present: string[]; optional: string[] }
+  | { kind: "malformed"; detail: string }
+
+// Inspect an uploaded file's structure to explain an empty/mis-parsed import.
+// Pure and side-effect-free so it's unit-testable and can run alongside
+// parseRosterImportFile without re-reading the file. Deliberately does NOT flag
+// a bare one-username-per-line list (the supported headerless format): that is
+// only "a header row missing username" when the first line looks like headers.
+export const detectImportHeaderIssue = (
+  text: string,
+): ImportHeaderIssue | null => {
+  const trimmed = text.trim()
+  if (!trimmed) return null
+
+  const parsed = Papa.parse<Record<string, string>>(trimmed, {
+    header: true,
+    delimiter: "",
+    skipEmptyLines: "greedy",
+    transformHeader: (header) => header.trim().toLowerCase(),
+  })
+
+  // Papa emits a benign "Delimiter" warning for single-column input (a bare
+  // username list) — that's not a structural defect, so ignore it. Only genuine
+  // structural errors (ragged rows, unclosed quotes) mean "malformed".
+  const structuralError = parsed.errors.find((e) => e.type !== "Delimiter")
+  if (structuralError) {
+    return { kind: "malformed", detail: structuralError.message }
+  }
+
+  const fields = (parsed.meta.fields ?? []).map((f) => f.trim()).filter(Boolean)
+  if (fields.includes("username")) return null
+
+  // A header row is one with >1 column (a delimiter was found) or a single
+  // recognized column name. A lone unrecognized token is a bare username list,
+  // not a mis-headered CSV — leave it to the one-per-line fallback.
+  const looksLikeHeaderRow =
+    fields.length > 1 ||
+    fields.some((f) =>
+      (RECOGNIZED_IMPORT_HEADERS as readonly string[]).includes(f),
+    )
+  if (!looksLikeHeaderRow) return null
+
+  return {
+    kind: "missing-username-header",
+    present: fields,
+    optional: [...OPTIONAL_IMPORT_HEADERS],
+  }
+}
+
 // Coerce a raw string to a RosterRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // instructor override, so an unrecognized value degrades to student rather than
@@ -194,6 +278,11 @@ const UploadRoster = ({
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
   const [rows, setRows] = useState<ImportRosterRow[]>([])
+  // Why an empty parse produced no rows, when the cause is the file's shape (no
+  // `username` header, or malformed CSV) rather than merely invalid handles.
+  // Lets the preview explain the required columns instead of a generic "no
+  // valid usernames". Null when the file shape is fine.
+  const [headerIssue, setHeaderIssue] = useState<ImportHeaderIssue | null>(null)
   // Per-row role the instructor is about to invite as, keyed by lowercased
   // username. Seeded from the CSV `role` column (else "student") and editable in
   // the preview. Instructor -> org owner invite (called out in the confirm).
@@ -239,6 +328,7 @@ const UploadRoster = ({
     setPhase("idle")
     setFileName("")
     setRows([])
+    setHeaderIssue(null)
     setProgress({
       processed: 0,
       total: 0,
@@ -365,6 +455,11 @@ const UploadRoster = ({
 
       setFileName(file.name)
       setRows(parsedRows)
+      // Only diagnose the file shape when nothing parsed — a non-empty result
+      // means the header path worked, so the (rare) header issue is moot.
+      setHeaderIssue(
+        parsedRows.length === 0 ? detectImportHeaderIssue(text) : null,
+      )
       // Seed the per-row role from the CSV role column (else student).
       setRolesByUser(
         Object.fromEntries(
@@ -843,7 +938,29 @@ const UploadRoster = ({
                 </table>
               </div>
             ) : (
-              <Alert tone="warning">{t("students.noValidUsernames")}</Alert>
+              <Alert tone="warning">
+                {headerIssue?.kind === "missing-username-header" ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium">
+                      {t("students.missingUsernameHeader")}
+                    </span>
+                    <span className="text-sm">
+                      {t("students.expectedHeaders", {
+                        headers: headerIssue.optional.join(", "),
+                      })}
+                    </span>
+                  </div>
+                ) : headerIssue?.kind === "malformed" ? (
+                  <div className="flex flex-col gap-1">
+                    <span className="font-medium">
+                      {t("students.malformedCsv")}
+                    </span>
+                    <span className="text-sm">{headerIssue.detail}</span>
+                  </div>
+                ) : (
+                  t("students.noValidUsernames")
+                )}
+              </Alert>
             )}
 
             <div className="modal-action">

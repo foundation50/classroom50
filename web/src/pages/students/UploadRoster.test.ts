@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { coerceImportRole, parseRosterImportFile } from "./UploadRoster"
+import {
+  coerceImportRole,
+  detectImportHeaderIssue,
+  parseRosterImportFile,
+} from "./UploadRoster"
 
 describe("parseRosterImportFile", () => {
   it("parses a CSV with a username header and full metadata columns", () => {
@@ -82,6 +86,54 @@ describe("parseRosterImportFile", () => {
         ["ghost", undefined], // unrecognized -> undefined (upload defaults student)
       ],
     )
+  })
+})
+
+describe("detectImportHeaderIssue", () => {
+  it("flags a header row (multi-column) that is missing the username column", () => {
+    const csv = "email,first_name,section\na@x.io,Ada,Lab 1\n"
+    const issue = detectImportHeaderIssue(csv)
+    expect(issue?.kind).toBe("missing-username-header")
+    if (issue?.kind === "missing-username-header") {
+      expect(issue.present).toEqual(["email", "first_name", "section"])
+      // Advertises only the OPTIONAL columns — not `username` (already named as
+      // required) and not `github_id` (ignored by the parser).
+      expect(issue.optional).not.toContain("username")
+      expect(issue.optional).not.toContain("github_id")
+      expect(issue.optional).toContain("email")
+    }
+  })
+
+  it("flags a lone github_id column (recognized but ignored) as mis-headered", () => {
+    // github_id is recognized enough to mark this a header row (not a username
+    // list), but it's never a valid mapping, so it must surface the issue.
+    expect(detectImportHeaderIssue("github_id\n123\n")?.kind).toBe(
+      "missing-username-header",
+    )
+  })
+
+  it("flags a single recognized-but-wrong header column", () => {
+    // One column, but a recognized roster header — clearly a mis-headered CSV,
+    // not a bare username list.
+    expect(detectImportHeaderIssue("email\na@x.io\n")?.kind).toBe(
+      "missing-username-header",
+    )
+  })
+
+  it("does NOT flag a bare one-username-per-line list", () => {
+    // First line is a single unrecognized token -> the supported headerless
+    // format, handled by the one-per-line fallback. No structural issue.
+    expect(detectImportHeaderIssue("ada\nbob\n@carol\n")).toBeNull()
+  })
+
+  it("does NOT flag a valid file that has a username column", () => {
+    expect(detectImportHeaderIssue("username,email\nada,a@x.io\n")).toBeNull()
+    expect(detectImportHeaderIssue("Email,USERNAME\na@x.io,ada\n")).toBeNull()
+  })
+
+  it("returns null for empty or whitespace-only input", () => {
+    expect(detectImportHeaderIssue("")).toBeNull()
+    expect(detectImportHeaderIssue("   \n ")).toBeNull()
   })
 })
 
