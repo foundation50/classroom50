@@ -7,7 +7,7 @@ import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
-  listAllOrgMembers,
+  orgMembersAllQuery,
 } from "@/hooks/github/queries"
 import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
@@ -21,6 +21,7 @@ import {
   type RosterRole,
 } from "@/util/teamRoster"
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
+import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser } from "@/hooks/github/types"
 
@@ -146,20 +147,10 @@ export function useTeamRoster(
   // not-in-org (invite). A failed/forbidden read leaves orgMembersKnown false,
   // so buildTeamRoster suppresses those needs-attention rows rather than
   // guessing — the roster degrades to the pure team-driven view, never errors.
-  const orgMembersQuery = useQuery({
-    queryKey: githubKeys.orgMembersAll(org),
-    queryFn: () => listAllOrgMembers(client, org),
-    enabled: Boolean(org),
-    staleTime: 5 * 60 * 1000,
-  })
+  const orgMembersQuery = useQuery(orgMembersAllQuery(client, org))
   const orgMembersKnown = orgMembersQuery.isSuccess
   const { orgMemberIds, orgMemberLogins } = useMemo(() => {
-    const ids = new Set<string>()
-    const logins = new Set<string>()
-    for (const m of orgMembersQuery.data ?? []) {
-      ids.add(String(m.id))
-      logins.add(m.login.toLowerCase())
-    }
+    const { ids, logins } = memberIdentitySets(orgMembersQuery.data ?? [])
     return { orgMemberIds: ids, orgMemberLogins: logins }
   }, [orgMembersQuery.data])
 

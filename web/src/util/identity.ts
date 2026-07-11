@@ -40,6 +40,24 @@ export function memberIdSet(members: GitHubUser[]): Set<string> {
   return new Set(members.map((member) => String(member.id)))
 }
 
+// Both identity sets for a GitHub member list: string github_ids and lowercased
+// logins. The id/login pair is the canonical way to test "is this account one
+// of these members?" (id survives a rename; login covers a pre-id record), so
+// callers classifying a roster row against org/team membership share one fold
+// rather than re-deriving the two sets inline.
+export function memberIdentitySets(members: GitHubUser[]): {
+  ids: Set<string>
+  logins: Set<string>
+} {
+  const ids = new Set<string>()
+  const logins = new Set<string>()
+  for (const member of members) {
+    ids.add(String(member.id))
+    logins.add(member.login.toLowerCase())
+  }
+  return { ids, logins }
+}
+
 // GitHub ids and lowercased logins already claimed by a roster; a member is
 // "claimed" when their id or login appears on any row. Shared so org-members
 // aggregation and the team-sync "missing member" join apply one predicate.

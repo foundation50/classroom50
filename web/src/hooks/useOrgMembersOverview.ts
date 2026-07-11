@@ -4,10 +4,9 @@ import { useQuery, useQueries } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   csvFileQuery,
-  githubKeys,
   jsonFileQuery,
-  listAllOrgMembers,
   orgAdminsQuery,
+  orgMembersAllQuery,
   teamMembersQuery,
 } from "@/hooks/github/queries"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -20,6 +19,7 @@ import {
   type Student,
 } from "@/types/classroom"
 import { aggregateOrgMembers, type OrgMemberRow } from "@/util/orgMembers"
+import { memberIdSet } from "@/util/identity"
 import type { GitHubUser } from "@/hooks/github/types"
 
 export type OrgMembersOverview = {
@@ -49,10 +49,8 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   const client = useGitHubClient()
 
   const membersQuery = useQuery({
-    queryKey: githubKeys.orgMembersAll(org ?? ""),
-    queryFn: () => listAllOrgMembers(client, org ?? ""),
+    ...orgMembersAllQuery(client, org ?? ""),
     enabled: Boolean(org),
-    staleTime: 5 * 60 * 1000,
   })
 
   const adminsQuery = useQuery({
@@ -178,7 +176,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   )
 
   const ownerIds = useMemo(
-    () => new Set((adminsQuery.data ?? []).map((m) => String(m.id))),
+    () => memberIdSet(adminsQuery.data ?? []),
     [adminsQuery.data],
   )
 
