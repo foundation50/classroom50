@@ -138,7 +138,7 @@ const EnrolledStudents = ({
     isError,
     isEmpty,
     pendingHidden,
-    teamSlug,
+    teamSlugByRole,
     csvMissingCount,
     csvMissingLogins,
     orgMembersKnown,
@@ -838,7 +838,7 @@ const EnrolledStudents = ({
         open={Boolean(selected)}
         org={org}
         classroom={classroom}
-        teamSlug={teamSlug}
+        teamSlugByRole={teamSlugByRole}
         row={selected}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}

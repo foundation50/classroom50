@@ -26,11 +26,12 @@ import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
   rowToStudent,
+  sortRolesByRank,
   type RosterRole,
   type TeamRosterRow,
 } from "@/util/teamRoster"
 import { hasStudentEnrollment } from "@/util/rosterRoles"
-import { Button, Modal, Select } from "@/components/ui"
+import { Button, Modal } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -47,7 +48,7 @@ const RosterMemberModal = ({
   open,
   org,
   classroom,
-  teamSlug,
+  teamSlugByRole,
   row,
   onClose,
   onSaved,
@@ -59,9 +60,10 @@ const RosterMemberModal = ({
   open: boolean
   org: string
   classroom: string
-  // Resolved classroom-team slug (from useTeamRoster) — shown as the student's
-  // GitHub team, with a link and membership state.
-  teamSlug: string
+  // Resolved team slug per role, so each role a member actually holds links to
+  // its real team (student -> classroom team, instructor/ta -> the staff team)
+  // instead of assuming everyone is on the student team.
+  teamSlugByRole: Record<RosterRole, string>
   // Nullable so the <dialog> can stay mounted across open/close.
   row: TeamRosterRow | null
   onClose: () => void
@@ -83,7 +85,6 @@ const RosterMemberModal = ({
   const [working, setWorking] = useState(false)
   const [resending, setResending] = useState(false)
   const [submitting, setSubmitting] = useState(false)
-  const [assignRole, setAssignRole] = useState<RosterRole>("student")
   const [resolving, setResolving] = useState(false)
 
   const unenrollMutation = useMutation({
@@ -144,7 +145,10 @@ const RosterMemberModal = ({
         org,
         classroom,
         username,
-        role: assignRole,
+        // The roster only assigns the student role; TA/instructor are assigned
+        // in classroom Settings (staff management), keeping role-granting in one
+        // place and the roster's needs-attention action a simple "enroll".
+        role: "student",
       })
       if (result.state === "not-member") {
         onError(key, t("students.assignRoleNotMember", { label }))
@@ -436,34 +440,15 @@ const RosterMemberModal = ({
           </section>
         ) : null}
 
-        {/* Needs-attention resolution: an in-org member gets a role picker to
-              enroll them; a not-in-org row is invited via the header action. */}
+        {/* Needs-attention resolution: an in-org member is enrolled as a student
+              (TA/instructor roles are assigned in classroom Settings); a
+              not-in-org row is invited via the header action. */}
         {needsRole ? (
           <section className="flex flex-col gap-3 rounded-box border border-warning/30 bg-warning/5 p-4">
             <p className="text-sm text-base-content/80">
               {t("students.needsAttentionInOrgHelp", { label })}
             </p>
-            <div className="flex items-end gap-2">
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="text-xs font-medium text-base-content/70">
-                  {t("students.assignRoleLabel")}
-                </span>
-                <Select
-                  selectSize="sm"
-                  className="w-40"
-                  value={assignRole}
-                  disabled={busy}
-                  onChange={(e) =>
-                    setAssignRole(e.currentTarget.value as RosterRole)
-                  }
-                >
-                  <option value="student">{t("students.roleStudent")}</option>
-                  <option value="ta">{t("students.roleTa")}</option>
-                  <option value="instructor">
-                    {t("students.roleInstructor")}
-                  </option>
-                </Select>
-              </label>
+            <div className="flex justify-end">
               <Button
                 variant="primary"
                 size="sm"
@@ -514,19 +499,30 @@ const RosterMemberModal = ({
                 </span>
               )}
             </div>
-            <div className="flex items-center justify-between gap-3 px-4 py-2.5">
+            <div className="flex items-start justify-between gap-3 px-4 py-2.5">
               <span className="text-sm text-base-content/70">
                 {t("students.classroomTeamLabel")}
               </span>
-              <a
-                href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
-              >
-                {teamSlug}
-                <ExternalLink aria-hidden="true" className="size-3.5" />
-              </a>
+              {row.state === "enrolled" ? (
+                <div className="flex flex-col items-end gap-1">
+                  {sortRolesByRank(row.roles).map((r) => (
+                    <a
+                      key={r}
+                      href={`https://github.com/orgs/${org}/teams/${teamSlugByRole[r]}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-1 font-mono text-sm text-primary hover:underline"
+                    >
+                      {teamSlugByRole[r]}
+                      <ExternalLink aria-hidden="true" className="size-3.5" />
+                    </a>
+                  ))}
+                </div>
+              ) : (
+                <span className="text-sm text-base-content/50">
+                  {t("students.teamNotYet")}
+                </span>
+              )}
             </div>
           </div>
         </section>

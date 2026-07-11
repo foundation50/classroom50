@@ -17,6 +17,7 @@ import {
   teamMembersMissingFromCsv,
   type TeamRosterRow,
   type TeamRosterRowState,
+  type RosterRole,
 } from "@/util/teamRoster"
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
 import type { Student } from "@/types/classroom"
@@ -56,6 +57,10 @@ export type UseTeamRosterResult = {
   pendingHidden: boolean
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
+  // Resolved team slug per role, so the detail view can link each role a member
+  // actually holds to its real team (student -> classroom team, instructor/ta ->
+  // the staff team) rather than assuming everyone is on the student team.
+  teamSlugByRole: Record<RosterRole, string>
   // Count of team members with no roster.csv row — the exact set "Sync roster"
   // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
   // can sync (auto-synced on open).
@@ -250,6 +255,11 @@ export function useTeamRoster(
     isEmpty: !isLoading && !isError && rows.length === 0,
     pendingHidden,
     teamSlug,
+    teamSlugByRole: {
+      student: teamSlug,
+      instructor: instructorSlug,
+      ta: taSlug,
+    },
     csvMissingCount,
     csvMissingLogins,
     orgMembersKnown,
