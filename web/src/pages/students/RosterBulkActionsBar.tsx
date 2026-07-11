@@ -11,10 +11,6 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/pages/students/bulkUnenrollRoster"
-import {
-  inviteRosterStudents,
-  type InviteRosterStudentsResult,
-} from "@/api/mutations/students"
 import { parseGitHubId } from "@/util/students"
 import {
   BulkResultSection,
@@ -148,16 +144,9 @@ const RosterBulkActionsBar = ({
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
-  const notInOrgSelected = selectedRows.filter((r) => r.state === "not_in_org")
-  // Both pending (resend) and not_in_org (fresh invite) rows are "invitable".
-  const invitableSelected = pendingSelected.length + notInOrgSelected.length
-  // not_in_org rows with no stored github_id are invited by resolving the
-  // current holder of the username (GET /users/{login}). A recycled/renamed
-  // login could resolve to a stranger, so inviting them is gated behind a
-  // confirmation that names the risk (see the invite button below).
-  const idlessInviteCount = notInOrgSelected.filter(
-    (r) => !r.github_id?.trim(),
-  ).length
+  // Only pending rows are "invitable" — the action resends their org invite.
+  // (The roster is team-driven; there are no CSV-only rows to freshly invite.)
+  const invitableSelected = pendingSelected.length
 
   const isOpen = phase !== "idle"
 
@@ -262,60 +251,6 @@ const RosterBulkActionsBar = ({
         }
       }
       tick(label)
-    }
-
-    // not_in_org rows: send a FRESH org invite (resolve id from username when
-    // the CSV has no github_id), carrying the classroom team. Skipped when a
-    // rate limit already halted the pending pass.
-    if (!rateLimited && notInOrgSelected.length > 0) {
-      try {
-        const res: InviteRosterStudentsResult = await inviteRosterStudents(
-          client,
-          {
-            org,
-            classroom,
-            students: notInOrgSelected.map((r) => ({
-              username: r.username,
-              github_id: r.github_id,
-            })),
-            onProgress: ({ message }) => tick(message),
-          },
-        )
-        const keyFor = (username: string) =>
-          notInOrgSelected.find((r) => r.username === username)?.key ?? username
-        for (const u of res.invited) invited.push({ key: keyFor(u), label: u })
-        for (const s of res.skipped)
-          skipped.push({
-            key: keyFor(s.username),
-            label: s.username,
-            detail:
-              s.reason === "already-member"
-                ? t("students.bulk.alreadyMember")
-                : t("students.bulk.alreadyPending"),
-          })
-        for (const f of res.failed)
-          failed.push({
-            key: keyFor(f.username),
-            label: f.username,
-            detail: f.message,
-          })
-        // A rate limit inside the fresh-invite pass leaves the remaining rows
-        // deferred; surface them and flag the run so the rate-limit warning
-        // renders (mirrors the pending-pass break above).
-        if (res.deferred.length > 0) {
-          rateLimited = true
-          for (const u of res.deferred)
-            skipped.push({
-              key: keyFor(u),
-              label: u,
-              detail: t("students.bulk.rateLimitedDeferred"),
-            })
-        }
-      } catch (err) {
-        setError(getErrorMessage(err))
-        setPhase("error")
-        return
-      }
     }
 
     const sections: BulkResultView["sections"] = []
@@ -487,15 +422,9 @@ const RosterBulkActionsBar = ({
         title={t("students.bulk.confirmInviteTitle", {
           count: invitableSelected,
         })}
-        description={t(
-          idlessInviteCount > 0
-            ? "students.bulk.confirmInviteBody"
-            : "students.bulk.confirmInviteBodyPlain",
-          {
-            count:
-              idlessInviteCount > 0 ? idlessInviteCount : invitableSelected,
-          },
-        )}
+        description={t("students.bulk.confirmInviteBodyPlain", {
+          count: invitableSelected,
+        })}
         confirmLabel={t("students.bulk.invite")}
         onConfirm={async () => {
           setConfirmingInvite(false)

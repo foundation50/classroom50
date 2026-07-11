@@ -7,14 +7,12 @@ import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
-  listAllOrgMembers,
 } from "@/hooks/github/queries"
 import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
   buildTeamRoster,
   countByState,
-  notInOrgUsernames,
   teamMembersMissingFromCsv,
   type TeamRosterRow,
   type TeamRosterRowState,
@@ -65,18 +63,6 @@ export type UseTeamRosterResult = {
   // Lowercased logins of team members with no roster.csv row — used to skip a
   // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
   csvMissingLogins: string[]
-  // Rostered students who are `not_in_org` (on roster.csv with a username but
-  // not a team/org member and not a pending invite) — the usernames
-  // auto-reconcile feeds to reconcileTeamFromOrgMembers. It team-adds the ones
-  // that are in fact active org members (native invite / SSO) and skips the
-  // rest, which stay `not_in_org` and are highlighted for invite/removal.
-  notInOrgUsernames: string[]
-  // Whether the org-wide member list was readable. When false (non-owner /
-  // transient failure), a `not_in_org` row can't be trusted to be a genuine
-  // non-member — it may be an org member removed from this classroom — so
-  // auto-reconcile must NOT act on notInOrgUsernames (it could re-add a removed
-  // member to the student team).
-  orgMembersKnown: boolean
   // Re-run the team-member fetch so an error surface can offer a retry without a
   // full page reload.
   refetch: () => void
@@ -124,28 +110,6 @@ export function useTeamRoster(
   const instructorMembers = instructorMembersQuery.data
   const taMembers = taMembersQuery.data
 
-  // Org-wide active members (shared cache key with the Org Members page — no
-  // duplicate fetch when both are mounted), used ONLY to split a leftover CSV
-  // row into `removed` (in the org, off this classroom's teams) vs `not_in_org`
-  // (not in the org). A failure here (non-owner 403 / transient) is non-fatal:
-  // the sets stay undefined and buildTeamRoster falls back to `not_in_org`.
-  const orgMembersQuery = useQuery({
-    queryKey: githubKeys.orgMembersAll(org),
-    queryFn: () => listAllOrgMembers(client, org),
-    enabled: Boolean(org),
-    staleTime: 5 * 60 * 1000,
-  })
-  const orgMemberSets = useMemo(() => {
-    if (!orgMembersQuery.data) return { ids: undefined, logins: undefined }
-    const ids = new Set<string>()
-    const logins = new Set<string>()
-    for (const m of orgMembersQuery.data) {
-      ids.add(String(m.id))
-      logins.add(m.login.toLowerCase())
-    }
-    return { ids, logins }
-  }, [orgMembersQuery.data])
-
   const {
     invitations,
     isLoading: invitesLoading,
@@ -184,8 +148,6 @@ export function useTeamRoster(
               ta: taInvitesQuery.data ?? [],
             },
         students,
-        orgMemberIds: orgMemberSets.ids,
-        orgMemberLogins: orgMemberSets.logins,
       }),
     [
       members,
@@ -196,7 +158,6 @@ export function useTeamRoster(
       taInvitesQuery.data,
       pendingHidden,
       students,
-      orgMemberSets,
     ],
   )
 
@@ -232,11 +193,6 @@ export function useTeamRoster(
     [csvMissing],
   )
 
-  // Rostered `not_in_org` usernames — what auto-reconcile tries to team-add
-  // (reconcile skips any that aren't active org members). Memoized so the join
-  // key stays a stable string list rather than a fresh array every render.
-  const notInOrg = useMemo(() => notInOrgUsernames(rows), [rows])
-
   // Any team-member fetch (student or staff) failing for a non-404 reason is a
   // real error — surface it rather than rendering a partial roster as "empty".
   const isError =
@@ -264,8 +220,6 @@ export function useTeamRoster(
     teamSlug,
     csvMissingCount,
     csvMissingLogins,
-    notInOrgUsernames: notInOrg,
-    orgMembersKnown: orgMemberSets.ids !== undefined,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the
     // student one — otherwise a staff-team failure stays stuck in error. Also

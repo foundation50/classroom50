@@ -75,16 +75,15 @@ describe("countByRole", () => {
 })
 
 describe("enrolledCountsByRole", () => {
-  it("counts only enrolled rows, excluding pending and not_in_org", () => {
+  it("counts only enrolled rows, excluding pending", () => {
     const rows = [
       row(["student"], "enrolled"),
       row(["student"], "pending"),
-      row(["student"], "not_in_org"),
       row(["ta"], "enrolled"),
       row(["instructor", "student"], "enrolled"),
     ]
     // enrolled: 2 students (plain + the instructor-who-is-also-student) + the
-    // instructor + the ta. pending/not_in_org excluded.
+    // instructor + the ta. pending excluded.
     expect(enrolledCountsByRole(rows)).toEqual({
       instructor: 1,
       ta: 1,

@@ -20,11 +20,7 @@ import {
 import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  syncRosterFromTeam,
-  reconcileTeamFromOrgMembers,
-  migrateRosterFile,
-} from "@/api/mutations/students"
+import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -133,7 +129,6 @@ const EnrolledStudents = ({
   const [selectedKeys, setSelectedKeys] = useState<Set<string>>(new Set())
   // Session-only banner dismissal — a page refresh re-derives roster state and
   // shows them again.
-  const [driftDismissed, setDriftDismissed] = useState(false)
   const [pendingDismissed, setPendingDismissed] = useState(false)
 
   const {
@@ -146,15 +141,8 @@ const EnrolledStudents = ({
     teamSlug,
     csvMissingCount,
     csvMissingLogins,
-    notInOrgUsernames,
-    orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
-
-  const notInOrg = useMemo(
-    () => rows.filter((r) => r.state === "not_in_org"),
-    [rows],
-  )
 
   const setWarning = (key: string, message: string) =>
     setWarnings((prev) => ({ ...prev, [key]: message }))
@@ -313,12 +301,6 @@ const EnrolledStudents = ({
     ...(pendingHidden
       ? []
       : [{ value: "pending" as const, label: t("students.filterPending") }]),
-    // Only offer "Removed" when some exist, so it isn't a dead, always-empty
-    // filter on classrooms with no removed-but-still-in-org members.
-    ...(counts.removed > 0
-      ? [{ value: "removed" as const, label: t("students.filterRemoved") }]
-      : []),
-    { value: "not_in_org", label: t("students.filterNotInOrg") },
   ]
 
   // Auto-migrate on open: converge a classroom bootstrapped before the
@@ -398,61 +380,6 @@ const EnrolledStudents = ({
     syncMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csvMissingKey, isLoading, isError, migrateSettledFor, classroom])
-
-  // Auto-reconcile on open: team-add rostered not_in_org usernames that are in
-  // fact active org members (native invite / SSO).
-  const reconcileMutation = useMutation({
-    mutationFn: (usernames: string[]) =>
-      reconcileTeamFromOrgMembers(client, { org, classroom, usernames }),
-    onSuccess: (result) => {
-      if (result.added.length > 0) {
-        invalidateTeamRoster()
-        notify({
-          tone: "success",
-          durationMs: 5000,
-          message: t("students.reconcileAdded", { count: result.added.length }),
-        })
-      }
-      if (result.failed.length > 0) {
-        notify({
-          tone: "warning",
-          durationMs: 8000,
-          message: t("students.reconcileFailed", {
-            list: result.failed.map((f) => f.login).join(", "),
-          }),
-        })
-      }
-    },
-    onError: (err) => {
-      notify({
-        tone: "error",
-        message: t("students.reconcileError", { error: getErrorMessage(err) }),
-      })
-    },
-  })
-
-  const autoReconciledRef = useRef(false)
-  // dropSuppressed runs in the effect (read after render) so a teacher's
-  // leftover active org membership isn't silently promoted back onto the team —
-  // the root of the "unenrolled student keeps coming back" loop.
-  const notInOrgKey = notInOrgUsernames.join(",")
-  useEffect(() => {
-    if (isLoading || isError) return
-    // Skip while the org-member list is unknown: a `not_in_org` row can't be
-    // trusted then (it may be an org member removed from THIS classroom), and
-    // reconcile would team-add them back onto the student team. Auto-reconcile
-    // re-arms once the org read succeeds and the roster re-derives.
-    if (!orgMembersKnown) return
-    const targets = dropSuppressed(notInOrgUsernames, suppressedLogins)
-    if (targets.length === 0) {
-      autoReconciledRef.current = false
-      return
-    }
-    if (autoReconciledRef.current || reconcileMutation.isPending) return
-    autoReconciledRef.current = true
-    reconcileMutation.mutate(targets)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [notInOrgKey, isLoading, isError, orgMembersKnown])
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -551,27 +478,22 @@ const EnrolledStudents = ({
           />
         </div>
         <div className="flex shrink-0 items-center gap-2">
-          {row.state === "enrolled" || row.state === "pending"
-            ? (() => {
-                // Role badge only for people actually on a team (enrolled) or
-                // invited (pending) — those are the states where a team/invite
-                // asserts a role. A `removed`/`not_in_org` row is on no team, so
-                // it shows its state badge below and NO role (a removed TA must
-                // never read as "Student"). Highest-precedence role only
-                // (instructor > ta > student); student uses the neutral ghost.
-                const role = primaryRole(row)
-                return (
-                  <Badge
-                    size="sm"
-                    tone={ROLE_BADGE_TONE[role]}
-                    ghost={role === "student"}
-                    className="shrink-0"
-                  >
-                    {t(ROLE_LABEL_KEY[role])}
-                  </Badge>
-                )
-              })()
-            : null}
+          {(() => {
+            // Every row is on a team (enrolled) or invited (pending), so it
+            // always asserts a role. Highest-precedence role only (instructor >
+            // ta > student); student uses the neutral ghost.
+            const role = primaryRole(row)
+            return (
+              <Badge
+                size="sm"
+                tone={ROLE_BADGE_TONE[role]}
+                ghost={role === "student"}
+                className="shrink-0"
+              >
+                {t(ROLE_LABEL_KEY[role])}
+              </Badge>
+            )
+          })()}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
               {row.section.trim()}
@@ -580,16 +502,6 @@ const EnrolledStudents = ({
           {row.state === "pending" ? (
             <span className="badge badge-sm badge-warning badge-soft shrink-0">
               {t("students.statusPending")}
-            </span>
-          ) : null}
-          {row.state === "removed" ? (
-            <Badge size="sm" ghost className="shrink-0">
-              {t("students.statusRemoved")}
-            </Badge>
-          ) : null}
-          {row.state === "not_in_org" ? (
-            <span className="badge badge-sm badge-error badge-soft shrink-0">
-              {t("students.statusNotInOrg")}
             </span>
           ) : null}
           <ChevronRight
@@ -630,42 +542,6 @@ const EnrolledStudents = ({
             ))}
           </AnimatePresence>
         </div>
-      ) : null}
-
-      {/* Count-only drift banner: clicking "Review" filters the list to
-          not_in_org rather than expanding an inline list. Dismissable for the
-          session; a refresh re-derives and shows it again. */}
-      {!isLoading && !isError && !driftDismissed && notInOrg.length > 0 ? (
-        <Alert
-          tone="warning"
-          className="flex items-center justify-between gap-3"
-        >
-          <span className="flex items-center gap-2 text-sm">
-            <AlertTriangle aria-hidden="true" className="size-4 shrink-0" />
-            {t("students.driftBanner", { count: notInOrg.length })}
-          </span>
-          <div className="flex shrink-0 items-center gap-1">
-            <Button
-              variant="ghost"
-              size="xs"
-              onClick={() => {
-                setStatusFilter("not_in_org")
-              }}
-            >
-              {t("students.driftReview")}
-            </Button>
-            <Button
-              variant="ghost"
-              size="xs"
-              shape="square"
-              aria-label={t("students.dismiss")}
-              title={t("students.dismiss")}
-              onClick={() => setDriftDismissed(true)}
-            >
-              <X aria-hidden="true" className="size-4" />
-            </Button>
-          </div>
-        </Alert>
       ) : null}
 
       {/* Pending-invites banner: clicking "Review" filters to pending so the

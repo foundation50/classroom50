@@ -6,6 +6,7 @@ import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
 import type { GitHubClient } from "@/hooks/github/client"
 import { Alert, Button, Modal } from "@/components/ui"
 import {
+  inviteRosterStudents,
   isLikelyGithubUsername,
   normalizeGithubUsername,
   splitName,
@@ -141,6 +142,15 @@ const UploadRoster = ({
     message: "",
   })
   const [result, setResult] = useState<BulkImportResult | null>(null)
+  // Outcome of the follow-up org-invite pass for uploaded non-members
+  // (deferred = rate-limited, failed = couldn't invite). Surfaced in the result
+  // dialog so an un-invited upload isn't silently lost (it won't appear on the
+  // team-driven roster until re-invited or accepted).
+  const [inviteOutcome, setInviteOutcome] = useState<{
+    invited: string[]
+    deferred: string[]
+    failed: { username: string; message: string }[]
+  } | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const isOpen = phase !== "idle"
@@ -155,6 +165,7 @@ const UploadRoster = ({
       message: "",
     })
     setResult(null)
+    setInviteOutcome(null)
     setError(null)
 
     if (fileInputRef.current) {
@@ -212,6 +223,7 @@ const UploadRoster = ({
     setPhase("importing")
     setError(null)
     setResult(null)
+    setInviteOutcome(null)
     setProgress({
       processed: 0,
       total: rows.length,
@@ -219,14 +231,47 @@ const UploadRoster = ({
     })
 
     try {
+      // 1) Write the roster.csv rows (identity + name/email/section) and
+      //    team-add anyone already an active org member.
       const importResult = await bulkEnrollStudentsInClassroom(client, {
         org,
         classroom,
         rows,
         onProgress: setProgress,
       })
-
       setResult(importResult)
+
+      // 2) The team is the source of truth for who shows on the roster, so send
+      //    org invites for every uploaded non-member — they then appear as a
+      //    `pending` row. Their roster.csv row (written above) enriches that
+      //    pending row with the uploaded name/email/section. Rate-limited
+      //    (deferred) / failed invites are surfaced in the result dialog; their
+      //    CSV row persists so nothing is lost.
+      if (importResult.notInOrg && importResult.notInOrg.length > 0) {
+        setProgress({
+          processed: 0,
+          total: importResult.notInOrg.length,
+          message: t("students.invitingUploaded"),
+        })
+        const inviteRes = await inviteRosterStudents(client, {
+          org,
+          classroom,
+          students: importResult.notInOrg.map((username) => ({
+            username,
+            github_id: "",
+          })),
+          onProgress: setProgress,
+        })
+        setInviteOutcome({
+          invited: inviteRes.invited,
+          deferred: inviteRes.deferred,
+          failed: inviteRes.failed.map((f) => ({
+            username: f.username,
+            message: f.message,
+          })),
+        })
+      }
+
       setPhase("complete")
       onSuccess?.(importResult)
     } catch (err) {
@@ -278,6 +323,11 @@ const UploadRoster = ({
                 {t("students.usernamesFound", { count: rows.length })}
               </span>
             </Alert>
+            <Alert tone="warning" className="mb-4">
+              <span>
+                {t("students.uploadInviteNotice", { count: rows.length })}
+              </span>
+            </Alert>
 
             {rows.length > 0 ? (
               <div className="max-h-80 overflow-auto rounded-box border border-base-300">
@@ -324,7 +374,7 @@ const UploadRoster = ({
                 disabled={rows.length === 0}
                 onClick={startImport}
               >
-                {t("students.importCount", { count: rows.length })}
+                {t("students.importAndInviteCount", { count: rows.length })}
               </Button>
             </div>
           </div>
@@ -408,13 +458,24 @@ const UploadRoster = ({
               />
             )}
 
-            {result.notInOrg && result.notInOrg.length > 0 && (
+            {inviteOutcome && inviteOutcome.deferred.length > 0 && (
               <ImportResultSection
-                title={t("students.resultNotInOrg")}
-                rows={result.notInOrg.map((username) => ({
+                title={t("students.resultInvitesDeferred")}
+                rows={inviteOutcome.deferred.map((username) => ({
                   key: username,
                   label: username,
-                  detail: t("students.notInOrgDetail"),
+                  detail: t("students.inviteDeferredDetail"),
+                }))}
+              />
+            )}
+
+            {inviteOutcome && inviteOutcome.failed.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultInvitesFailed")}
+                rows={inviteOutcome.failed.map((f) => ({
+                  key: f.username,
+                  label: f.username,
+                  detail: f.message,
                 }))}
               />
             )}

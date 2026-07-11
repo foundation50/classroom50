@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
-  notInOrgUsernames,
   rowToStudent,
   teamMembersMissingFromCsv,
 } from "./teamRoster"
@@ -148,7 +147,7 @@ describe("buildTeamRoster", () => {
     expect(rows[0].invitation_id).toBe(3)
   })
 
-  it("marks CSV rows (with a username) not on the team/invite as not_in_org", () => {
+  it("does NOT emit a row for a CSV person not on any team or invite", () => {
     const rows = buildTeamRoster({
       members: [member(101, "ada")],
       invitations: [],
@@ -157,12 +156,12 @@ describe("buildTeamRoster", () => {
         csvRow({ username: "ghost", first_name: "Ghost" }),
       ],
     })
-    const ghost = rows.find((r) => r.username === "ghost")
-    expect(ghost?.state).toBe("not_in_org")
+    // ada is enrolled (on the team); ghost has only a CSV row -> no row.
+    expect(rows.map((r) => r.username)).toEqual(["ada"])
     expect(rows.filter((r) => r.state === "enrolled")).toHaveLength(1)
   })
 
-  it("does not emit a member as both enrolled and not_in_org", () => {
+  it("does not emit a member twice", () => {
     const rows = buildTeamRoster({
       members: [member(101, "ada")],
       students: [csvRow({ github_id: "101", username: "ada" })],
@@ -178,61 +177,49 @@ describe("buildTeamRoster", () => {
     expect(rows).toHaveLength(0)
   })
 
-  it("merges a legacy email-only row's metadata into a username row sharing its email", () => {
-    // The username row carries no name; the legacy email-only row (ignored on
-    // its own) lends its name/section by matching email.
+  it("enriches an enrolled row from its matching CSV row", () => {
+    // roster.csv only enriches — the row exists because ada is on the team; the
+    // CSV lends her name/section.
     const rows = buildTeamRoster({
-      members: [],
+      members: [member(101, "ada")],
       students: [
-        csvRow({ username: "sam", email: "sam@uni.edu" }),
-        csvRow({ email: "sam@uni.edu", first_name: "Sam", section: "C" }),
+        csvRow({
+          github_id: "101",
+          username: "ada",
+          first_name: "Ada",
+          section: "C",
+        }),
       ],
     })
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
-      state: "not_in_org",
-      username: "sam",
-      first_name: "Sam",
+      state: "enrolled",
+      username: "ada",
+      first_name: "Ada",
       section: "C",
     })
   })
 
-  it("dedupes duplicate CSV rows for the same username", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [
-        csvRow({ username: "dup", first_name: "Dup" }),
-        csvRow({ username: "dup", last_name: "Licate" }),
-      ],
-    })
-    expect(rows).toHaveLength(1)
-    expect(rows[0].state).toBe("not_in_org")
-  })
-
-  it("sorts enrolled, then pending, then not_in_org", () => {
+  it("sorts enrolled, then pending", () => {
     const rows = buildTeamRoster({
       members: [member(2, "zed")],
       invitations: [invite({ id: 9, login: "pat" })],
       students: [csvRow({ username: "wanda" })],
     })
-    expect(rows.map((r) => r.state)).toEqual([
-      "enrolled",
-      "pending",
-      "not_in_org",
-    ])
+    // wanda is CSV-only (not on a team) -> not rendered.
+    expect(rows.map((r) => r.state)).toEqual(["enrolled", "pending"])
   })
 
   it("counts rows by state for the banner", () => {
     const rows = buildTeamRoster({
       members: [member(1, "a"), member(2, "b")],
       invitations: [invite({ id: 9, login: "c" })],
+      // CSV-only rows d/e are not rendered (team-driven).
       students: [csvRow({ username: "d" }), csvRow({ username: "e" })],
     })
     expect(countByState(rows)).toEqual({
       enrolled: 2,
       pending: 1,
-      removed: 0,
-      not_in_org: 2,
     })
   })
 
@@ -386,15 +373,6 @@ describe("buildTeamRoster — roles (union across student + staff teams)", () =>
     expect(rows[0].roles).toEqual(["instructor", "ta"])
   })
 
-  it("keeps not_in_org CSV rows as student", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ username: "ghost" })],
-    })
-    expect(rows[0]).toMatchObject({ state: "not_in_org", username: "ghost" })
-    expect(rows[0].roles).toEqual(["student"])
-  })
-
   it("includes every STAFF_ROLES role (guards STAFF_ROLES drift)", () => {
     // One staff member per role; the roster must surface all of them. If a new
     // staff role were added to STAFF_ROLES but the builder's fanout drifted,
@@ -456,116 +434,26 @@ describe("teamMembersMissingFromCsv", () => {
   })
 })
 
-describe("notInOrgUsernames", () => {
-  // The rostered usernames that are `not_in_org` — what auto-reconcile tries to
-  // team-add. Enrolled team members and pending invites are excluded; only
-  // rows the roster classified as on-CSV-but-not-in-org contribute.
-  const roster = (students: Student[], members: GitHubUser[]) =>
-    buildTeamRoster({ members, students })
-
-  it("returns the username of a not_in_org row", () => {
-    const rows = roster(
-      [
+describe("buildTeamRoster — CSV-only rows do not render (team-driven)", () => {
+  it("does not render a CSV row for someone on no team or invite", () => {
+    // The team is the source of truth for who appears. A roster.csv row with a
+    // username/id but no matching team member or pending invite produces NO row
+    // (it only enriches team/invite rows).
+    const rows = buildTeamRoster({
+      members: [member(101, "ada")],
+      students: [
         csvRow({ github_id: "101", username: "ada" }),
-        csvRow({ github_id: "202", username: "bob" }),
+        csvRow({ github_id: "202", username: "bob", role: "ta" }),
       ],
-      [member(101, "ada")], // only ada is on the team; bob is not_in_org
-    )
-    expect(notInOrgUsernames(rows)).toEqual(["bob"])
-  })
-
-  it("returns the username of an id-less not_in_org row verbatim", () => {
-    const rows = roster([csvRow({ username: "Bob" })], [])
-    // No reverse match against the org list: the CSV username is authoritative,
-    // returned as written (reconcile lowercases/verifies membership itself).
-    expect(notInOrgUsernames(rows)).toEqual(["Bob"])
-  })
-
-  it("excludes already-enrolled team members", () => {
-    const rows = roster(
-      [csvRow({ github_id: "101", username: "ada" })],
-      [member(101, "ada")],
-    )
-    expect(notInOrgUsernames(rows)).toEqual([])
-  })
-
-  it("is empty when there are no not_in_org rows", () => {
-    const rows = roster([], [member(101, "ada")])
-    expect(notInOrgUsernames(rows)).toEqual([])
-  })
-
-  it("excludes a `removed` row (org member, off this classroom's teams)", () => {
-    // A person with a CSV row who is an org member but on no team here is
-    // `removed`, NOT `not_in_org` — so auto-reconcile never re-adds them.
-    const rows = buildTeamRoster({
-      members: [], // on no team in this classroom
-      students: [csvRow({ github_id: "202", username: "bob", role: "ta" })],
-      orgMemberIds: new Set(["202"]),
-      orgMemberLogins: new Set(["bob"]),
     })
-    expect(rows[0].state).toBe("removed")
-    expect(notInOrgUsernames(rows)).toEqual([])
+    expect(rows.map((r) => r.username)).toEqual(["ada"])
   })
-})
 
-describe("buildTeamRoster — removed vs not_in_org classification", () => {
-  it("classifies an org member on no classroom team as `removed`, asserting no role", () => {
-    // The bug: a TA removed from the staff team, still an org member, must not
-    // read as a student. Their stale CSV role is ignored for the row's roles.
+  it("renders nothing when the CSV has rows but no team members or invites", () => {
     const rows = buildTeamRoster({
       members: [],
-      staffMembers: { instructor: [], ta: [] },
-      students: [csvRow({ github_id: "5", username: "tara", role: "ta" })],
-      orgMemberIds: new Set(["5"]),
-      orgMemberLogins: new Set(["tara"]),
+      students: [csvRow({ username: "ghost" }), csvRow({ username: "casper" })],
     })
-    expect(rows).toHaveLength(1)
-    expect(rows[0].state).toBe("removed")
-    // roles stays non-empty for the type invariant, but the VIEW renders no role
-    // badge for a removed row (asserted in the page component, not here).
-  })
-
-  it("classifies a CSV row for a non-org-member as `not_in_org`", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ github_id: "6", username: "newbie" })],
-      orgMemberIds: new Set(["999"]), // newbie (id 6) is NOT in the org
-      orgMemberLogins: new Set(["someoneelse"]),
-    })
-    expect(rows).toHaveLength(1)
-    expect(rows[0].state).toBe("not_in_org")
-  })
-
-  it("matches org membership by login when the CSV row has no github_id", () => {
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ username: "loginonly" })], // no github_id
-      orgMemberIds: new Set<string>(),
-      orgMemberLogins: new Set(["loginonly"]),
-    })
-    expect(rows[0].state).toBe("removed")
-  })
-
-  it("falls back to not_in_org when the org-member set is unavailable", () => {
-    // Non-owner / failed org-members read: sets are undefined. We must NOT
-    // assert `removed` (we can't prove org membership) — keep the existing
-    // not_in_org behavior so nothing regresses for a viewer who can't read it.
-    const rows = buildTeamRoster({
-      members: [],
-      students: [csvRow({ github_id: "7", username: "unknown", role: "ta" })],
-      // orgMemberIds / orgMemberLogins omitted
-    })
-    expect(rows[0].state).toBe("not_in_org")
-  })
-
-  it("still classifies a current team member as enrolled regardless of the org set", () => {
-    const rows = buildTeamRoster({
-      members: [member(8, "onteam")],
-      students: [csvRow({ github_id: "8", username: "onteam" })],
-      orgMemberIds: new Set(["8"]),
-      orgMemberLogins: new Set(["onteam"]),
-    })
-    expect(rows[0].state).toBe("enrolled")
-    expect(rows[0].roles).toEqual(["student"])
+    expect(rows).toEqual([])
   })
 })

@@ -1,13 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  ExternalLink,
-  Pencil,
-  Send,
-  UserMinus,
-  UserPlus,
-  X,
-} from "lucide-react"
+import { ExternalLink, Pencil, Send, UserMinus, X } from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
 
@@ -15,11 +8,7 @@ import Avatar from "@/components/avatar"
 import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import {
-  inviteRosterStudents,
-  unenrollStudent,
-  type StudentCsvRow,
-} from "@/api/mutations/students"
+import { unenrollStudent, type StudentCsvRow } from "@/api/mutations/students"
 import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
@@ -29,13 +18,10 @@ import { Button, Modal } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
-// below is classroom-scoped and gated by row.state:
-//   enrolled    -> edit metadata + unenroll
-//   pending     -> resend invite + unenroll (cancels the invite); no edit
-//   removed      -> org member removed from this classroom's teams: edit
-//                   metadata + unenroll (drops the CSV row); no resend/invite
-//   not_in_org  -> not an org member: edit metadata + unenroll (drops the CSV
-//                   row) + invite to the org; no resend
+// below is classroom-scoped and gated by row.state (only enrolled/pending
+// rows ever appear — the roster is team-driven):
+//   enrolled -> edit metadata + unenroll
+//   pending  -> resend invite + unenroll (cancels the invite); no edit
 //
 // The modal performs the writes but hands results back to the parent (which
 // owns the roster/invite caches and the per-row warnings map), mirroring the
@@ -70,7 +56,6 @@ const RosterMemberModal = ({
   const client = useGitHubClient()
   const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
-  const [confirmingInvite, setConfirmingInvite] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
   const [working, setWorking] = useState(false)
@@ -92,7 +77,6 @@ const RosterMemberModal = ({
   const handleClose = () => {
     if (busy) return
     setConfirmingUnenroll(false)
-    setConfirmingInvite(false)
     setConfirmingResend(false)
     setEditingProfile(false)
     onClose()
@@ -116,59 +100,9 @@ const RosterMemberModal = ({
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
   const canResend = row.state === "pending" && Boolean(row.github_id)
-  // A not_in_org row is on the roster (by username) but not in the org — offer a
-  // fresh org invite (id derived from username when the CSV has no github_id).
-  const canInvite = row.state === "not_in_org" && Boolean(row.username)
   // Unenroll drops a roster.csv row + student-team membership — a student-only
   // action. Hidden for a staff-only row (nothing to unenroll from the roster).
   const canUnenroll = !staffOnly
-
-  const handleInvite = async () => {
-    if (resending) return
-    setResending(true)
-    try {
-      const res = await inviteRosterStudents(client, {
-        org,
-        classroom,
-        students: [{ username: row.username, github_id: row.github_id }],
-      })
-      if (res.failed.length > 0) {
-        onError(
-          row.key,
-          t("students.inviteFailed", {
-            username: row.username || row.email,
-            error: res.failed[0].message,
-          }),
-        )
-        return
-      }
-      // A rate limit deferred the single invite: report it rather than closing
-      // as if the invite was sent.
-      if (res.deferred.length > 0) {
-        onError(
-          row.key,
-          t("students.inviteFailed", {
-            username: row.username || row.email,
-            error: t("students.bulk.rateLimitedDeferred"),
-          }),
-        )
-        return
-      }
-      onResent(row.key)
-      onClose()
-    } catch (err) {
-      onError(
-        row.key,
-        t("students.inviteFailed", {
-          username: row.username || row.email,
-          error: getErrorMessage(err),
-        }),
-      )
-    } finally {
-      setResending(false)
-      setConfirmingInvite(false)
-    }
-  }
 
   const handleResend = async () => {
     if (resending) return
@@ -279,18 +213,6 @@ const RosterMemberModal = ({
           />
 
           <div className="flex shrink-0 items-center gap-1">
-            {canInvite && !confirmingInvite ? (
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={busy}
-                onClick={() => setConfirmingInvite(true)}
-              >
-                <UserPlus aria-hidden="true" className="size-4" />
-                {t("students.invite")}
-              </Button>
-            ) : null}
-
             {canResend && !confirmingResend ? (
               <Button
                 size="sm"
@@ -318,53 +240,8 @@ const RosterMemberModal = ({
         </div>
 
         {/* Inline confirmations for the enrollment actions above. */}
-        {(canInvite && confirmingInvite) ||
-        (canResend && confirmingResend) ||
-        confirmingUnenroll ? (
+        {(canResend && confirmingResend) || confirmingUnenroll ? (
           <section className="flex flex-col gap-3">
-            {canInvite && confirmingInvite ? (
-              <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
-                <p className="text-base-content/80">
-                  {t(
-                    row.github_id
-                      ? "students.confirmInviteBody"
-                      : "students.confirmInviteBodyNoId",
-                    {
-                      label: row.username || row.email,
-                      org,
-                    },
-                  )}
-                </p>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={resending}
-                    onClick={() => setConfirmingInvite(false)}
-                  >
-                    {t("common.cancel")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    size="sm"
-                    loading={resending}
-                    loadingLabel={t("common.working")}
-                    disabled={resending}
-                    onClick={() => void handleInvite()}
-                  >
-                    {resending ? (
-                      t("common.working")
-                    ) : (
-                      <>
-                        <Send aria-hidden="true" className="size-4" />
-                        {t("students.sendInvite")}
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-
             {canResend && confirmingResend ? (
               <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
                 <p className="text-base-content/80">
@@ -456,17 +333,9 @@ const RosterMemberModal = ({
                 <span className="badge badge-sm badge-success badge-soft">
                   {t("students.statusEnrolled")}
                 </span>
-              ) : row.state === "pending" ? (
+              ) : (
                 <span className="badge badge-sm badge-warning badge-soft">
                   {t("students.statusPending")}
-                </span>
-              ) : row.state === "removed" ? (
-                <span className="badge badge-sm badge-ghost">
-                  {t("students.statusRemoved")}
-                </span>
-              ) : (
-                <span className="badge badge-sm badge-error badge-soft">
-                  {t("students.statusNotInOrg")}
                 </span>
               )}
             </div>

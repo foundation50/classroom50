@@ -6,38 +6,20 @@ import { rosterClaimSet } from "@/util/identity"
 // Team-driven roster: the classroom GitHub team is the source of truth for who
 // belongs, not roster.csv. The roster is computed PURELY from team members +
 // pending org invitations, then enriched with optional roster.csv metadata
-// (name/section/email). The CSV never decides enrollment — it can be absent or
-// partial and the roster still renders.
-//
-// Every roster.csv row now carries a GitHub identity (username, ideally with
-// github_id). Legacy username-less rows (e.g. old email-only invite stubs) are
-// IGNORED for classification; their name/section is only borrowed to enrich a
-// username/id row that shares the same email (the one legacy merge we keep).
+// (name/section/email). The CSV never decides WHO is displayed — a roster.csv
+// row with no matching team member and no pending invite produces NO row. The
+// roster still renders when the CSV is absent or partial.
 //
 // Row states:
-//  - enrolled:   an active classroom-team / org member.
-//  - pending:    a pending org invitation (no active membership yet).
-//  - removed:    a CSV row for someone who IS an active org member (possibly on
-//                other classrooms' teams) but is on NONE of this classroom's
-//                teams — they were removed from this classroom. Not enrolled and
-//                not "not in the org"; shown without a role badge so a removed
-//                TA never reads as a student.
-//  - not_in_org: a CSV row WITH a GitHub username for someone who is NOT a
-//                member of the GitHub org at all — on the roster but not in the
-//                organization (offer an org invite). Always tied to a username
-//                so it persists reliably. Kept VISIBLE so a rostered student is
-//                never lost.
+//  - enrolled: an active classroom-team / staff-team member.
+//  - pending:  a pending org / staff-team invitation (no active membership yet).
 //
-// enrolled/pending roles come from live team membership (highest wins). A
-// removed/not_in_org row asserts NO role (the team is the authority; a stale
-// roster.csv `role` cell is not trusted for the badge).
-//
-// "drift" (genuine non-members) is folded into `not_in_org`; its count drives
-// the banner and the auto-reconcile candidate set. A `removed` row is NOT drift
-// and is never auto-added back onto a team.
+// A person on none of this classroom's teams and with no pending invite does
+// not appear here at all (their roster.csv row, if any, only enriches — it
+// never creates a row). Bulk CSV upload sends org invites so uploaded students
+// appear as `pending` rather than as a CSV-only row.
 
-export type TeamRosterRowState =
-  "enrolled" | "pending" | "removed" | "not_in_org"
+export type TeamRosterRowState = "enrolled" | "pending"
 
 // A person's classroom role(s). "student" = classroom team; "instructor"/"ta"
 // = the per-classroom staff teams. A person can hold several (an instructor
@@ -138,23 +120,16 @@ export type BuildTeamRosterInput = {
   // Pending team invitations for the staff teams, keyed by role. Team-scoped, so
   // a pending row is tagged with the role whose team lists it.
   staffInvitations?: Partial<Record<StaffRole, GitHubOrgInvitation[]>>
-  // Optional roster.csv rows (display metadata only).
+  // Optional roster.csv rows (display metadata only — they enrich team/invite
+  // rows and never create a row of their own).
   students: Student[]
-  // Active GitHub-org members (org-wide, ALL classrooms) as id + lowercased
-  // login sets, used to split a leftover CSV row into `removed` (in the org,
-  // not on this classroom's teams) vs `not_in_org` (not in the org at all).
-  // Undefined when the org-member list couldn't be read (non-owner / error);
-  // the classifier then falls back to `not_in_org` without asserting a role.
-  orgMemberIds?: ReadonlySet<string>
-  orgMemberLogins?: ReadonlySet<string>
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
-// already a member -> pending; CSV rows WITH a username that are neither ->
-// not_in_org. Username-less CSV rows (legacy email-only stubs) never produce a
-// row; their name/section is merged into a username/id row sharing their email.
-// Never duplicates a person (a member on the CSV appears once; a username-invite
-// that is also a member is credited as the member).
+// already a member -> pending. roster.csv only ENRICHES those rows (name /
+// section / email) — a CSV row with no matching team member or pending invite
+// produces NO row. Never duplicates a person (a member on the CSV appears once;
+// a username-invite that is also a member is credited as the member).
 export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   const {
     members,
@@ -162,8 +137,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     staffMembers = {},
     staffInvitations = {},
     students,
-    orgMemberIds,
-    orgMemberLogins,
   } = input
   const csv = indexCsv(students)
 
@@ -184,15 +157,12 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     email ? legacyByEmail.get(email.toLowerCase()) : undefined
 
   const rows: TeamRosterRow[] = []
-  // Track emitted identities so invites/CSV don't double up.
-  const seenIds = new Set<string>()
-  const seenLogins = new Set<string>()
   // Logins of ACTIVE members only. A pending invite for one of these is stale
   // (already enrolled) and skipped — distinct from a login already claimed by
   // another PENDING invite, which must instead union its role onto that pending
   // row. Adding a not-yet-org-member to a staff team lists the same person in
   // BOTH the org-level invitations (tagged student) and the team invitations
-  // (tagged ta/instructor); keying only on `seenLogins` would drop the second.
+  // (tagged ta/instructor); keying only on member logins would drop the second.
   const memberLogins = new Set<string>()
   // Enrolled rows already emitted, keyed by member id, so a person on several
   // teams gets one row with their roles unioned rather than duplicate rows.
@@ -219,8 +189,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       continue
     }
     const login = member.login.toLowerCase()
-    seenIds.add(id)
-    seenLogins.add(login)
     memberLogins.add(login)
     const own = csvForMember(csv, member)
     const email = own?.email?.trim().toLowerCase()
@@ -279,7 +247,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
       (loginKey ? csv.byLogin.get(loginKey) : undefined) ??
       (emailKey ? csv.byEmail.get(emailKey) : undefined)
 
-    if (loginKey) seenLogins.add(loginKey)
     const row: TeamRosterRow = {
       key: login || email || String(invite.id),
       state: "pending",
@@ -294,44 +261,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     }
     pendingByKey.set(dedupeKey, row)
     rows.push(row)
-  }
-
-  for (const student of students) {
-    const id = student.github_id?.trim() ?? ""
-    const login = student.username?.trim().toLowerCase() ?? ""
-    const email = student.email?.trim().toLowerCase() ?? ""
-    // A row must carry a GitHub identity to appear on its own. Legacy
-    // username-less rows are ignored here (only used to enrich by email above).
-    if (!id && !login) continue
-    // Already an enrolled member or a pending invite?
-    if (id && seenIds.has(id)) continue
-    if (login && seenLogins.has(login)) continue
-    // Mark seen so duplicate CSV rows for the same person don't both emit.
-    if (id) seenIds.add(id)
-    if (login) seenLogins.add(login)
-    // The person has a CSV row but is on none of this classroom's teams. Split
-    // by real org membership (when we could read it): an org member was removed
-    // from THIS classroom (`removed`); a non-member is genuinely `not_in_org`.
-    // Without the org-member list, fall back to `not_in_org` (its existing
-    // meaning). Either way assert NO role — the team is the authority, so a
-    // stale CSV `role` never labels the badge (roles stays non-empty for the
-    // type invariant but the view renders no role badge for these states).
-    const orgKnown = orgMemberIds !== undefined || orgMemberLogins !== undefined
-    const inOrg =
-      (id && orgMemberIds?.has(id)) ||
-      (login && orgMemberLogins?.has(login)) ||
-      false
-    const state: TeamRosterRowState =
-      orgKnown && inOrg ? "removed" : "not_in_org"
-    rows.push({
-      key: student.github_id || student.username,
-      state,
-      roles: ["student"],
-      username: student.username?.trim() ?? "",
-      github_id: id,
-      avatar_url: "",
-      ...metadataFrom(student, legacyFor(email)),
-    })
   }
 
   return sortRows(rows)
@@ -357,14 +286,11 @@ function sortName(row: TeamRosterRow): string {
   return (name || row.username || row.email).toLowerCase()
 }
 
-// Enrolled first, then pending, then removed, then not_in_org; alphabetical
-// within each.
+// Enrolled first, then pending; alphabetical within each.
 function sortRows(rows: TeamRosterRow[]): TeamRosterRow[] {
   const order: Record<TeamRosterRowState, number> = {
     enrolled: 0,
     pending: 1,
-    removed: 2,
-    not_in_org: 3,
   }
   return rows.sort((a, b) => {
     const byState = order[a.state] - order[b.state]
@@ -400,10 +326,7 @@ export function countByState(
       acc[row.state] += 1
       return acc
     },
-    { enrolled: 0, pending: 0, removed: 0, not_in_org: 0 } as Record<
-      TeamRosterRowState,
-      number
-    >,
+    { enrolled: 0, pending: 0 } as Record<TeamRosterRowState, number>,
   )
 }
 
@@ -428,19 +351,4 @@ export function teamMembersMissingFromCsv(
       !logins.has(m.login.toLowerCase()) &&
       !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
   )
-}
-
-// The rostered usernames that are `not_in_org` — on roster.csv with a GitHub
-// username but neither a team/org member nor a pending invite. Auto-reconcile
-// feeds these straight to reconcileTeamFromOrgMembers, which team-adds the ones
-// that turn out to be active org members and skips the rest (they stay
-// `not_in_org`, highlighted for the teacher to invite or remove). The CSV
-// username is authoritative — the teacher owns its accuracy — so no reverse
-// match against the live org-member list (which could target a recycled login
-// on the wrong account) is needed.
-export function notInOrgUsernames(rows: TeamRosterRow[]): string[] {
-  return rows
-    .filter((r) => r.state === "not_in_org")
-    .map((r) => r.username.trim())
-    .filter(Boolean)
 }
