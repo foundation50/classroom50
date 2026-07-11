@@ -32,7 +32,10 @@ const StudentListContent = ({
   classroom: string
 }) => {
   const { t } = useTranslation()
-  const { students, parseProblems } = useGetStudents(org, classroom)
+  const { students, parseProblems, recheckRoster, rechecking } = useGetStudents(
+    org,
+    classroom,
+  )
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
@@ -120,6 +123,8 @@ const StudentListContent = ({
       <EnrolledStudents
         students={students}
         parseProblems={parseProblems}
+        onRecheckRoster={recheckRoster}
+        rechecking={rechecking}
         org={org}
         classroom={classroom}
         suppressedLogins={suppressedLogins}

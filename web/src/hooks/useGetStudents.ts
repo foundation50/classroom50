@@ -28,6 +28,7 @@ const useGetStudents = (
   classroom: string | undefined,
 ) => {
   const client = useGitHubClient()
+  const queryClient = useQueryClient()
   const { data: students, isLoading } = useQuery({
     ...csvFileQuery<Student>(
       client,
@@ -44,7 +45,11 @@ const useGetStudents = (
   // report them per line. Kept separate from the display read above (which
   // stays tolerant so a partial file still renders what it can) so a bad file
   // surfaces a precise banner instead of silently misaligned rows.
-  const { data: rawRoster } = useQuery(
+  const {
+    data: rawRoster,
+    refetch: refetchRawRoster,
+    isFetching: rawRosterFetching,
+  } = useQuery(
     rosterRawFileQuery(
       client,
       org ?? "",
@@ -62,6 +67,15 @@ const useGetStudents = (
     students: students ?? EMPTY_STUDENTS,
     isLoading,
     parseProblems,
+    // Re-read the raw roster.csv so a teacher who just fixed the file can
+    // re-verify it in place (also refetches the tolerant display read).
+    recheckRoster: () => {
+      void refetchRawRoster()
+      void queryClient.invalidateQueries({
+        queryKey: rosterKey(org ?? "", classroom ?? ""),
+      })
+    },
+    rechecking: rawRosterFetching,
   }
 }
 

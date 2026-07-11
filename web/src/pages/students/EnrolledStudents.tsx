@@ -98,6 +98,8 @@ export function groupStudentsBySection<T extends { section?: string }>(
 const EnrolledStudents = ({
   students = [],
   parseProblems = [],
+  onRecheckRoster,
+  rechecking = false,
   org,
   classroom,
   addActions,
@@ -107,6 +109,10 @@ const EnrolledStudents = ({
   // Per-line problems from the strict roster.csv parse (empty when the file is
   // well-formed). Surfaced as a banner so the instructor can fix the file.
   parseProblems?: RosterCsvProblem[]
+  // Re-read roster.csv so a teacher who just fixed it can re-verify in place.
+  onRecheckRoster?: () => void
+  // The recheck read is in flight (disables the button, shows a spinner).
+  rechecking?: boolean
   org: string
   classroom: string
   addActions?: AddStudentActions
@@ -146,6 +152,7 @@ const EnrolledStudents = ({
     teamSlugByRole,
     csvMissingCount,
     csvMissingLogins,
+    backfillNeededCount,
     orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
@@ -396,7 +403,13 @@ const EnrolledStudents = ({
     // Wait for the migrate pass to settle first (converges students.csv ->
     // roster.csv) so sync's write can't race migrate's on the ref.
     if (migrateSettledFor !== classroom) return
-    if (dropSuppressed(csvMissingLogins, suppressedLogins).length === 0) {
+    // Sync when there's drift to fix: a team member with no CSV row (missing),
+    // OR an existing CSV row that's stale against the team (blank github_id or a
+    // wrong role — the login-only `rliu50` case). Without the backfill term a
+    // login-only row would never converge, since it isn't "missing".
+    const hasMissing =
+      dropSuppressed(csvMissingLogins, suppressedLogins).length > 0
+    if (!hasMissing && backfillNeededCount === 0) {
       if (autoSyncedForRef.current === classroom)
         autoSyncedForRef.current = null
       return
@@ -405,7 +418,14 @@ const EnrolledStudents = ({
     autoSyncedForRef.current = classroom
     syncMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [csvMissingKey, isLoading, isError, migrateSettledFor, classroom])
+  }, [
+    csvMissingKey,
+    backfillNeededCount,
+    isLoading,
+    isError,
+    migrateSettledFor,
+    classroom,
+  ])
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -589,6 +609,21 @@ const EnrolledStudents = ({
             >
               {t("students.rosterEditOnGitHub")}
             </a>
+            {onRecheckRoster ? (
+              <div>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  loading={rechecking}
+                  loadingLabel={t("students.rosterRechecking")}
+                  disabled={rechecking}
+                  onClick={onRecheckRoster}
+                >
+                  <RefreshCw aria-hidden="true" className="size-4" />
+                  {t("students.rosterRecheck")}
+                </Button>
+              </div>
+            ) : null}
           </div>
         </Alert>
       ) : null}

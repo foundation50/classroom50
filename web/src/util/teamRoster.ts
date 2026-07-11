@@ -439,3 +439,50 @@ export function teamMembersMissingFromCsv(
       !(m.email ? emails.has(m.email.trim().toLowerCase()) : false),
   )
 }
+
+// CSV rows that already exist but are STALE against team membership: the person
+// is on a classroom team (matched by id, then login — the same join sync uses),
+// yet the row's github_id is blank or its recorded role differs from the team's
+// primary role. These need the same server-side backfill sync performs, but
+// they aren't "missing" (teamMembersMissingFromCsv skips them because their
+// login/id is claimed), so the drift trigger would otherwise never fire for a
+// login-only row like `rliu50,,,,,,`. `staffMembers` is keyed by role so the
+// primary role can be derived (instructor > ta > student). Pure + testable.
+export function rowsNeedingBackfill(
+  members: GitHubUser[],
+  staffMembers: Partial<Record<StaffRole, GitHubUser[]>>,
+  students: Student[],
+): Student[] {
+  // Primary team role per id and per login (highest precedence wins).
+  const roleById = new Map<string, RosterRole>()
+  const roleByLogin = new Map<string, RosterRole>()
+  const consider = (m: GitHubUser, role: RosterRole) => {
+    const id = String(m.id)
+    const login = m.login.toLowerCase()
+    if (!roleById.has(id) || ROLE_RANK[role] > ROLE_RANK[roleById.get(id)!]) {
+      roleById.set(id, role)
+    }
+    if (
+      !roleByLogin.has(login) ||
+      ROLE_RANK[role] > ROLE_RANK[roleByLogin.get(login)!]
+    ) {
+      roleByLogin.set(login, role)
+    }
+  }
+  for (const m of members) consider(m, "student")
+  for (const role of STAFF_ROLES) {
+    for (const m of staffMembers[role] ?? []) consider(m, role)
+  }
+
+  return students.filter((s) => {
+    const id = s.github_id?.trim()
+    const login = s.username?.trim().toLowerCase()
+    const teamRole =
+      (id ? roleById.get(id) : undefined) ??
+      (login ? roleByLogin.get(login) : undefined)
+    // Not on any team -> nothing for sync to backfill (a needs-attention row).
+    if (!teamRole) return false
+    // On a team but the id is blank, or the recorded role is stale.
+    return !id || s.role !== teamRole
+  })
+}

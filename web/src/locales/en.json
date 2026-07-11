@@ -254,6 +254,8 @@
     "rosterParseError": "roster.csv is malformed and couldn't be fully read. Fix these lines so the roster stays accurate:",
     "rosterParseErrorLine": "Line {{line}}: {{message}}",
     "rosterEditOnGitHub": "Edit roster.csv on GitHub",
+    "rosterRecheck": "Re-check roster.csv",
+    "rosterRechecking": "Re-checking...",
     "statusPending": "Pending invite",
     "statusEnrolled": "Enrolled",
     "statusNeedsAttentionInOrg": "Assign a role",
