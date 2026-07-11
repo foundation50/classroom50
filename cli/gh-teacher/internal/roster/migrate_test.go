@@ -16,13 +16,17 @@ import (
 // migrateMock serves the <org>/classroom50 contents + git-data surface a
 // `roster migrate` touches. files maps repo-relative path -> content (present
 // files); a path absent from the map 404s on both contents reads and existence
-// checks. tree records the last git Tree payload so a test can assert which
-// paths were upserted (non-null sha) vs deleted (null sha).
+// checks. treeExtra lists paths that appear in the recursive tree listing but
+// are NOT in files — i.e. the git tree says the blob exists while a contents
+// GET 404s, modelling the eventual-consistency/spurious-404 case. tree records
+// the last git Tree payload so a test can assert which paths were upserted
+// (non-null sha) vs deleted (null sha).
 type migrateMock struct {
-	files    map[string]string
-	blobs    []string
-	treeSeen map[string]*string
-	treePost bool
+	files     map[string]string
+	treeExtra []string
+	blobs     []string
+	treeSeen  map[string]*string
+	treePost  bool
 }
 
 func (m *migrateMock) handler(t *testing.T) http.Handler {
@@ -88,10 +92,15 @@ func (m *migrateMock) handler(t *testing.T) http.Handler {
 		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-tree-sha"})
 	})
-	// Recursive-tree read used by the workflow-scope classifier's parent scan.
+	// Recursive-tree read used by the workflow-scope classifier's parent scan
+	// AND by the migrator's presence check. Lists every present file plus any
+	// treeExtra path (present in the tree but 404ing on contents).
 	mux.HandleFunc("/repos/o/classroom50/git/trees/", func(w http.ResponseWriter, r *http.Request) {
 		var entries []map[string]string
 		for p := range m.files {
+			entries = append(entries, map[string]string{"path": p, "type": "blob"})
+		}
+		for _, p := range m.treeExtra {
 			entries = append(entries, map[string]string{"path": p, "type": "blob"})
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"tree": entries, "truncated": false})
@@ -195,6 +204,69 @@ func TestRunRosterMigrate(t *testing.T) {
 		}
 		if _, ok := mock.treeSeen["cs-principles/roster.csv"]; ok {
 			t.Error("roster.csv must not be rewritten when it already exists")
+		}
+	})
+
+	// Branch selection is driven by the tree listing at parentSHA, NOT by
+	// per-path contents 404s. A spurious/consistency-lag 404 on roster.csv (the
+	// tree says it exists, but a contents GET would 404) must NOT flip the
+	// migrator into re-migrating or clobbering it: with the legacy file also
+	// present it takes the delete-only branch and never reads roster.csv.
+	t.Run("roster.csv present in tree but 404ing on contents still takes the delete-only branch", func(t *testing.T) {
+		mock := &migrateMock{
+			files: map[string]string{
+				"cs-principles/students.csv": migrateLegacyRoster,
+			},
+			// roster.csv is in the tree (canonical), but absent from files so a
+			// contents GET 404s — the eventual-consistency case.
+			treeExtra: []string{"cs-principles/roster.csv"},
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out bytes.Buffer
+		if err := runRosterMigrate(client, &out, "o", "cs-principles"); err != nil {
+			t.Fatalf("runRosterMigrate: %v", err)
+		}
+		// roster.csv seen in the tree → not rewritten, and no blob upserted.
+		if len(mock.blobs) != 0 {
+			t.Errorf("blobs = %#v, want none (roster.csv already canonical per the tree)", mock.blobs)
+		}
+		if _, ok := mock.treeSeen["cs-principles/roster.csv"]; ok {
+			t.Error("roster.csv must not be rewritten when the tree shows it exists")
+		}
+		// legacy still deleted.
+		sha, ok := mock.treeSeen["cs-principles/students.csv"]
+		if !ok || sha != nil {
+			t.Errorf("students.csv tree entry = %v (ok=%v), want a deletion (null sha)", sha, ok)
+		}
+	})
+
+	// A spurious 404 on the legacy contents read while the tree shows it present
+	// (a genuine race, or a lag blip) must fail loud so the rebase loop retries
+	// against fresh state — never commit an empty roster.csv.
+	t.Run("legacy present in tree but 404ing on contents fails loud rather than writing an empty roster", func(t *testing.T) {
+		mock := &migrateMock{
+			files: map[string]string{},
+			// students.csv is in the tree, but absent from files so its contents
+			// GET 404s after the tree listing saw it.
+			treeExtra: []string{"cs-principles/students.csv"},
+		}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out bytes.Buffer
+		err := runRosterMigrate(client, &out, "o", "cs-principles")
+		if err == nil {
+			t.Fatal("expected an error when the legacy file vanished between listing and read")
+		}
+		if len(mock.blobs) != 0 {
+			t.Errorf("blobs = %#v, want none — must not write an empty roster.csv", mock.blobs)
+		}
+		if mock.treePost {
+			t.Error("no tree/commit should be POSTed when the legacy read failed")
 		}
 	})
 }

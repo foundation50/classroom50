@@ -64,13 +64,25 @@ func runRosterMigrate(client githubapi.Client, out io.Writer, org, classroom str
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
 		alreadyMigrated = false
 
-		legacyData, legacyOK, err := configrepo.ReadFileContents(client, org, configrepo.ConfigRepoName, legacyPath, parentSHA)
+		// Derive both files' presence from ONE tree listing at parentSHA rather
+		// than two independent contents GETs: the Trees API is a consistent
+		// point-in-time snapshot of the commit, so a spurious/consistency-lag
+		// 404 on a single contents path can't flip the branch we pick (e.g.
+		// declaring "already migrated" and leaving students.csv behind, or
+		// erroring "nothing to migrate" on a classroom that has data).
+		blobs, err := configrepo.ListSubtreeBlobPaths(
+			client, org, configrepo.ConfigRepoName, parentSHA, classroom)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
-		rosterExists, err := configrepo.ContentsExists(client, org, configrepo.ConfigRepoName, rosterPath, parentSHA)
-		if err != nil {
-			return configwrite.CommitChange{}, err
+		var legacyOK, rosterExists bool
+		for _, p := range blobs {
+			switch p {
+			case legacyPath:
+				legacyOK = true
+			case rosterPath:
+				rosterExists = true
+			}
 		}
 
 		switch {
@@ -90,6 +102,21 @@ func runRosterMigrate(client githubapi.Client, out io.Writer, org, classroom str
 		// dropped. Otherwise carry the legacy bytes onto roster.csv verbatim.
 		change := configwrite.CommitChange{Deletes: []string{legacyPath}}
 		if !rosterExists {
+			legacyData, legacyReadOK, err := configrepo.ReadFileContents(
+				client, org, configrepo.ConfigRepoName, legacyPath, parentSHA)
+			if err != nil {
+				return configwrite.CommitChange{}, err
+			}
+			if !legacyReadOK {
+				// The tree listing saw the legacy blob at parentSHA but the
+				// contents read 404'd — a genuine race (a concurrent migrate/
+				// edit moved it) or a transient blip. Fail loud rather than
+				// commit an empty roster.csv; the rebase loop retries against
+				// fresh state.
+				return configwrite.CommitChange{}, fmt.Errorf(
+					"%s/%s/%s vanished between tree listing and read — retrying",
+					org, configrepo.ConfigRepoName, legacyPath)
+			}
 			change.Upserts = map[string]string{rosterPath: string(legacyData)}
 		}
 		return change, nil
