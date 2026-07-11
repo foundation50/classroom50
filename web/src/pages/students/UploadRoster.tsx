@@ -242,35 +242,34 @@ const UploadRoster = ({
       setResult(importResult)
 
       // 2) The team is the source of truth for who shows on the roster, so send
-      //    org invites for every uploaded non-member — they then appear as a
-      //    `pending` row. Their roster.csv row (written above) enriches that
-      //    pending row with the uploaded name/email/section. Rate-limited
-      //    (deferred) / failed invites are surfaced in the result dialog; their
-      //    CSV row persists so nothing is lost.
-      if (importResult.notInOrg && importResult.notInOrg.length > 0) {
-        setProgress({
-          processed: 0,
-          total: importResult.notInOrg.length,
-          message: t("students.invitingUploaded"),
-        })
-        const inviteRes = await inviteRosterStudents(client, {
-          org,
-          classroom,
-          students: importResult.notInOrg.map((username) => ({
-            username,
-            github_id: "",
-          })),
-          onProgress: setProgress,
-        })
-        setInviteOutcome({
-          invited: inviteRes.invited,
-          deferred: inviteRes.deferred,
-          failed: inviteRes.failed.map((f) => ({
-            username: f.username,
-            message: f.message,
-          })),
-        })
-      }
+      //    org invites for uploaded students who aren't already members — they
+      //    then appear as a `pending` row. Invite the FULL uploaded set (not
+      //    just the newly-added rows): inviteRosterStudents no-ops anyone
+      //    already active/pending, so a re-run after a rate limit still
+      //    re-invites a student whose first invite was deferred (their CSV row
+      //    already exists, so they'd otherwise be skipped as a duplicate and,
+      //    since CSV-only rows don't render, silently lost). Their roster.csv
+      //    row (written above) enriches the pending row; deferred/failed invites
+      //    are surfaced in the result dialog so nothing is lost.
+      setProgress({
+        processed: 0,
+        total: rows.length,
+        message: t("students.invitingUploaded"),
+      })
+      const inviteRes = await inviteRosterStudents(client, {
+        org,
+        classroom,
+        students: rows.map((r) => ({ username: r.username, github_id: "" })),
+        onProgress: setProgress,
+      })
+      setInviteOutcome({
+        invited: inviteRes.invited,
+        deferred: inviteRes.deferred,
+        failed: inviteRes.failed.map((f) => ({
+          username: f.username,
+          message: f.message,
+        })),
+      })
 
       setPhase("complete")
       onSuccess?.(importResult)
@@ -455,6 +454,17 @@ const UploadRoster = ({
                     detail:
                       teamResult.message ?? t("students.couldNotAddToTeam"),
                   }))}
+              />
+            )}
+
+            {inviteOutcome && inviteOutcome.invited.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultInvited")}
+                rows={inviteOutcome.invited.map((username) => ({
+                  key: username,
+                  label: username,
+                  detail: t("students.inviteSentDetail"),
+                }))}
               />
             )}
 

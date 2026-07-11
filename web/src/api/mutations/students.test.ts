@@ -7,7 +7,6 @@ import {
   unenrollStudent,
   bulkUnenrollStudents,
   bulkEnrollStudentsInClassroom,
-  reconcileTeamFromOrgMembers,
   inviteRosterStudents,
   syncRosterFromTeam,
   migrateRosterFile,
@@ -1429,42 +1428,6 @@ describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-memb
       section: "Lab 2",
       github_id: "303",
     })
-  })
-})
-
-describe("reconcileTeamFromOrgMembers — verified, best-effort team-add", () => {
-  it("adds active members and skips a rostered non-member (stays not_in_org)", async () => {
-    const { client, teamAdds } = makeTeamClient({
-      startingCsv: HEADER,
-      users: { ada: { id: 101 }, gone: { id: 999 } },
-      members: ["ada"], // "gone" is not an active org member
-    })
-
-    const result = await reconcileTeamFromOrgMembers(client, {
-      org: "acme",
-      classroom: "cs101",
-      usernames: ["ada", "gone"],
-    })
-
-    expect(result.added).toEqual(["ada"])
-    expect(teamAdds).toEqual(["ada"])
-    // A non-member isn't a failure — it's skipped and stays highlighted.
-    expect(result.skipped).toEqual(["gone"])
-    expect(result.failed).toEqual([])
-  })
-
-  it("short-circuits with no usernames", async () => {
-    const { client, teamAdds } = makeTeamClient({
-      startingCsv: HEADER,
-      users: {},
-    })
-    const result = await reconcileTeamFromOrgMembers(client, {
-      org: "acme",
-      classroom: "cs101",
-      usernames: [],
-    })
-    expect(result).toEqual({ added: [], skipped: [], failed: [] })
-    expect(teamAdds).toEqual([])
   })
 })
 
