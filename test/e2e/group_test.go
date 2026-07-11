@@ -61,8 +61,8 @@ func TestGroupAssignment(t *testing.T) {
 		teacher(t, "classroom", "add", cfg.Org, classroom, "--name", "CS Principles", "--term", "Spring-2026")
 		// Wait for the just-committed config files to be readable before the
 		// next CLI step reads them — the config repo's read-after-write can lag
-		// a few seconds, and roster add fails hard if students.csv isn't visible.
-		for _, f := range []string{"classroom.json", "assignments.json", "students.csv", "scores.json"} {
+		// a few seconds, and roster add fails hard if roster.csv isn't visible.
+		for _, f := range []string{"classroom.json", "assignments.json", "roster.csv", "scores.json"} {
 			waitFor(t, classroom+"/"+f+" readable", 1*time.Minute, func() (bool, error) {
 				return contentExists(t, cfg.TeacherPAT, "classroom50", classroom+"/"+f), nil
 			})
@@ -74,9 +74,9 @@ func TestGroupAssignment(t *testing.T) {
 			"--first-name", "Founder", "--last-name", "Bot", "--email", founder+"@example.edu", "--section", "section-1")
 		teacher(t, "roster", "add", cfg.Org, classroom, teammate,
 			"--first-name", "Teammate", "--last-name", "Bot", "--email", teammate+"@example.edu", "--section", "section-1")
-		csv, ok := fetchContent(t, cfg.TeacherPAT, "classroom50", classroom+"/students.csv")
+		csv, ok := fetchContent(t, cfg.TeacherPAT, "classroom50", classroom+"/roster.csv")
 		if !ok || !strings.Contains(csv, founder) || !strings.Contains(csv, teammate) {
-			t.Fatalf("both members not in students.csv:\n%s", csv)
+			t.Fatalf("both members not in roster.csv:\n%s", csv)
 		}
 	})
 

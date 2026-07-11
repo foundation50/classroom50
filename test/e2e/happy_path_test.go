@@ -102,7 +102,7 @@ func TestHappyPath(t *testing.T) {
 
 	step(t, "2.1 classroom add", func(t *testing.T) {
 		teacher(t, "classroom", "add", cfg.Org, cfg.Classroom, "--name", "CS Principles", "--term", "Spring-2026")
-		for _, f := range []string{"classroom.json", "assignments.json", "students.csv", "scores.json"} {
+		for _, f := range []string{"classroom.json", "assignments.json", "roster.csv", "scores.json"} {
 			if !contentExists(t, cfg.TeacherPAT, "classroom50", cfg.Classroom+"/"+f) {
 				t.Errorf("missing %s/%s", cfg.Classroom, f)
 			}
@@ -112,9 +112,9 @@ func TestHappyPath(t *testing.T) {
 	step(t, "2.3 roster add student", func(t *testing.T) {
 		teacher(t, "roster", "add", cfg.Org, cfg.Classroom, cfg.Student,
 			"--first-name", "Bot", "--last-name", "Fifty", "--email", "bot50@example.edu", "--section", "section-1")
-		csv, ok := fetchContent(t, cfg.TeacherPAT, "classroom50", cfg.Classroom+"/students.csv")
+		csv, ok := fetchContent(t, cfg.TeacherPAT, "classroom50", cfg.Classroom+"/roster.csv")
 		if !ok || !strings.Contains(csv, cfg.Student) {
-			t.Fatalf("student %s not in students.csv", cfg.Student)
+			t.Fatalf("student %s not in roster.csv", cfg.Student)
 		}
 		// org invite was sent (pending) — or the student already a member
 		var invites []struct {
@@ -130,6 +130,18 @@ func TestHappyPath(t *testing.T) {
 		member := getJSON(t, cfg.TeacherPAT, "/orgs/"+cfg.Org+"/members/"+cfg.Student, nil) == 204
 		if !pending && !member {
 			t.Errorf("student %s neither pending-invited nor a member after roster add", cfg.Student)
+		}
+	})
+
+	step(t, "2.4 roster migrate is an idempotent no-op on a roster.csv classroom", func(t *testing.T) {
+		// `classroom add` already scaffolds roster.csv, so migrate has nothing
+		// to rename — it must report the no-op and leave the roster intact.
+		out := teacher(t, "roster", "migrate", cfg.Org, cfg.Classroom)
+		if !strings.Contains(out, "already migrated") {
+			t.Errorf("roster migrate output = %q, want an 'already migrated' no-op", out)
+		}
+		if !contentExists(t, cfg.TeacherPAT, "classroom50", cfg.Classroom+"/roster.csv") {
+			t.Errorf("roster.csv missing after a no-op migrate")
 		}
 	})
 
