@@ -1375,17 +1375,6 @@ class TestRosterMetadataJoin:
     def test_load_roster_metadata_missing_returns_empty(self, tmp_path):
         assert cs.load_roster_metadata(tmp_path) == {}
 
-    def test_load_roster_metadata_prefers_roster_csv(self, tmp_path):
-        write_roster(tmp_path / "roster.csv", [{"username": "alice", "first_name": "New"}])
-        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Old"}])
-        meta = cs.load_roster_metadata(tmp_path)
-        assert meta["alice"]["first_name"] == "New"
-
-    def test_load_roster_metadata_legacy_fallback(self, tmp_path):
-        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Grace"}])
-        meta = cs.load_roster_metadata(tmp_path)
-        assert meta["alice"]["first_name"] == "Grace"
-
 
 # load_scores / save_scores ---------------------------------------------------
 

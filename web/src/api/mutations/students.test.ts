@@ -144,56 +144,19 @@ const rowsFromCsv = (csv: string) =>
   >[]
 
 describe("roster write target — commits roster.csv, never students.csv", () => {
-  it("writes the roster blob at <classroom>/roster.csv", async () => {
+  // When roster.csv already exists, the write targets roster.csv and never
+  // touches the legacy students.csv (no stray upsert or deletion entry). The
+  // legacy-fallback + migrate-on-write case is covered separately below.
+  it("writes the roster blob at roster.csv and leaves students.csv untouched", async () => {
     const treePaths: string[] = []
-    const requestRaw = vi.fn().mockImplementation((path: string) => {
-      if (path.includes("/contents/") && path.includes("classroom.json")) {
-        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
-      }
-      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    const { client } = makeClient({
+      startingCsv: HEADER,
+      membershipState: "active",
+      user: { login: "alice", id: 42 },
+      onTree: (tree) => {
+        for (const t of tree) treePaths.push(t.path)
+      },
     })
-    const request = vi
-      .fn()
-      .mockImplementation((path: string, options?: { body?: unknown }) => {
-        // The write target is always roster.csv; the read may fall back to the
-        // legacy name (covered separately below), but here roster.csv exists so
-        // no fallback fires.
-        if (path.includes("/contents/") && path.includes("roster.csv")) {
-          return Promise.resolve({
-            type: "file",
-            encoding: "base64",
-            content: Buffer.from(HEADER, "utf-8").toString("base64"),
-          })
-        }
-        if (path.startsWith("/users/")) {
-          return Promise.resolve({ login: "alice", id: 42, name: null })
-        }
-        if (path.includes("/memberships/") && !path.includes("/teams/")) {
-          return Promise.reject(new Error("404 not a member"))
-        }
-        if (path.includes("/git/ref/")) {
-          return Promise.resolve({ object: { sha: "base-sha" } })
-        }
-        if (path.includes("/git/commits/")) {
-          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
-        }
-        if (path.endsWith("/git/trees")) {
-          const tree = (options?.body as { tree?: { path: string }[] })?.tree
-          for (const t of tree ?? []) treePaths.push(t.path)
-          return Promise.resolve({ sha: "tree-sha" })
-        }
-        if (path.endsWith("/git/commits")) {
-          return Promise.resolve({ sha: "new-commit-sha" })
-        }
-        if (path.endsWith("/git/refs/heads/main")) {
-          return Promise.resolve({})
-        }
-        if (path.includes("/teams/")) {
-          return Promise.resolve({ state: "active" })
-        }
-        return Promise.reject(new Error(`unexpected request: ${path}`))
-      })
-    const client = { request, requestRaw } as unknown as GitHubClient
 
     await enrollStudentInClassroom(client, {
       org: "acme",
@@ -303,28 +266,6 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
       (t) => t.path === "cs101/students.csv" && t.sha === null,
     )
     expect(legacyDelete).toBeTruthy()
-  })
-
-  // The converse of the migrate-on-write case: when roster.csv already exists,
-  // a write must NOT touch students.csv (no spurious deletion entry).
-  it("does not delete students.csv when roster.csv already exists", async () => {
-    const treeEntries: { path: string; sha?: string | null }[] = []
-    const { client } = makeClient({
-      startingCsv: HEADER,
-      membershipState: "active",
-      user: { login: "alice", id: 42 },
-      onTree: (tree) => {
-        for (const t of tree) treeEntries.push(t)
-      },
-    })
-
-    await enrollStudentInClassroom(client, {
-      org: "acme",
-      classroom: "cs101",
-      username: "alice",
-    })
-
-    expect(treeEntries.some((t) => t.path === "cs101/students.csv")).toBe(false)
   })
 })
 
