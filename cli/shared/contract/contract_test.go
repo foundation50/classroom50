@@ -27,6 +27,12 @@ func TestContractLiterals(t *testing.T) {
 		{"ModeGroup", ModeGroup, "group"},
 		{"ResultFilename", ResultFilename, "result.json"},
 		{"ReleaseBodyFilename", ReleaseBodyFilename, "release-body.md"},
+		// RosterFilename / LegacyRosterFilename are mirrored, with NO
+		// compile-time link, in the web GUI (web/src/util/rosterPath.ts) and the
+		// Python collect-scores script (collect_scores.py). Update every copy in
+		// lockstep on change.
+		{"RosterFilename", RosterFilename, "roster.csv"},
+		{"LegacyRosterFilename", LegacyRosterFilename, "students.csv"},
 		// SecretPattern / SecretPatternDescription are mirrored, with NO
 		// compile-time link, in: cli/gh-teacher/skeleton/dotgithub/scripts/runner.py
 		// (re.fullmatch r"[a-z0-9]{4,64}"), autograde-runner.yaml (_SECRET),
