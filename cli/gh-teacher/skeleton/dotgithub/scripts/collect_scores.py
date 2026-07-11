@@ -5,7 +5,8 @@ Walks the classroom team × assignment manifest: for each (team member,
 assignment) pair, pages the canonical `<classroom>-<assignment>-<username>`
 repo's `submit/*` releases, validates each `result.json` asset, and upserts
 into `<classroom>/scores.json`. The classroom GitHub team is the source of
-truth for enrollment; students.csv is not read during collection.
+truth for enrollment; the roster (roster.csv, legacy students.csv) is only a
+best-effort source of optional display metadata (name/section/email).
 
 `scores.json` is keyed by assignment slug under root `assignments`: each value
 is `{ "type": "individual"|"group", "entries": [...] }`. An `entry` is one
@@ -44,6 +45,7 @@ Exit codes:
 
 from __future__ import annotations
 
+import csv
 import datetime
 import json
 import os
@@ -87,7 +89,15 @@ MAX_RESULT_BYTES = 10 * 1024 * 1024
 # GitHub team is the source of truth for enrollment).
 ROSTER_REQUIRED_COLUMNS = ("username", "first_name", "last_name", "email", "section", "github_id")
 
-# The exact on-disk students.csv header. Must equal FullRosterHeader in the Go
+# Per-classroom roster file. ROSTER_FILENAME is the current name; a reader
+# falls back to LEGACY_ROSTER_FILENAME for classrooms bootstrapped before the
+# rename (writers always target roster.csv). Mirrors contract.RosterFilename /
+# contract.LegacyRosterFilename in cli/shared/contract/contract.go with NO
+# compile-time link — keep byte-identical.
+ROSTER_FILENAME = "roster.csv"
+LEGACY_ROSTER_FILENAME = "students.csv"
+
+# The exact on-disk roster.csv header. Must equal FullRosterHeader in the Go
 # students_csv.go (asserted by TestFullRosterHeader) and the web app's
 # STUDENT_CSV_FIELDS header — a three-way lockstep. Retained as the Python leg
 # of that lockstep (the Go download-metadata join and the web writer share it),
@@ -149,6 +159,7 @@ def main() -> int:
                 classroom_meta=classroom_meta,
                 assignments=assignments,
                 service_token=service_token,
+                roster_meta=load_roster_metadata(base_dir / classroom_short),
             )
         except urllib.error.HTTPError as exc:
             # Auth (401/403) and synthetic-network (599) failures are GLOBAL —
@@ -229,10 +240,11 @@ def iter_classrooms(
     schemas skip with a workflow warning (forward-compat without crashing).
 
     Collection is TEAM-driven: the classroom GitHub team is the source of truth
-    for enrollment, so this no longer reads students.csv at all (the team
-    enumeration in collect_classroom drives the pairs). students.csv is optional
-    display metadata consumed elsewhere (the Go download scores.csv join and the
-    web roster view), not by the scorer.
+    for enrollment, so this no longer reads the roster to decide who to poll
+    (the team enumeration in collect_classroom drives the pairs). The roster
+    (roster.csv, legacy students.csv) is only best-effort display metadata,
+    joined onto collected results and also consumed elsewhere (the Go download
+    scores.csv join and the web roster view).
     """
     if not base_dir.is_dir():
         return
@@ -264,6 +276,41 @@ def iter_classrooms(
         yield entry.name, classroom_meta, assignments
 
 
+# Roster metadata (best-effort) -----------------------------------------------
+
+
+def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str]]:
+    """Best-effort roster read for optional display metadata, keyed by
+    lowercased username. Tries roster.csv first, then the legacy students.csv
+    (classrooms bootstrapped before the rename); writers always target
+    roster.csv. The classroom GitHub team — not this file — is authoritative
+    for enrollment, so a missing/unreadable/malformed roster is NOT fatal: it
+    just yields no metadata (blank name/section/email), never a crash or a
+    dropped student.
+    """
+    for filename in (ROSTER_FILENAME, LEGACY_ROSTER_FILENAME):
+        path = classroom_dir / filename
+        if not path.is_file():
+            continue
+        try:
+            with path.open(newline="") as fh:
+                reader = csv.DictReader(fh)
+                meta: dict[str, dict[str, str]] = {}
+                for row in reader:
+                    username = (row.get("username") or "").strip()
+                    if not username:
+                        continue
+                    meta[username.lower()] = {
+                        col: (row.get(col) or "").strip()
+                        for col in ("first_name", "last_name", "email", "section")
+                    }
+            return meta
+        except (OSError, csv.Error):
+            # Best-effort: a read/parse failure degrades to blank metadata.
+            return {}
+    return {}
+
+
 # Per-classroom collection ----------------------------------------------------
 
 
@@ -288,6 +335,7 @@ def collect_classroom(
     classroom_meta: dict[str, Any],
     assignments: dict[str, Any],
     service_token: str,
+    roster_meta: dict[str, dict[str, str]] | None = None,
 ) -> tuple[list[dict[str, Any]], int]:
     """Return (validated result payloads for every (student, assignment) pair,
     count of assignments whose only submissions were rejected by validation).
@@ -295,7 +343,13 @@ def collect_classroom(
     propagate and main() converts them to exit 1. The second tuple element lets
     main() distinguish a mode-flip-induced empty result (which has its own loud
     warning) from a token-access problem.
+
+    `roster_meta` is the best-effort roster join (username -> display metadata,
+    see load_roster_metadata); when a collected owner has a matching row its
+    name/section/email are attached to the entry. Absent/blank is fine — the
+    join never gates collection.
     """
+    roster_meta = roster_meta or {}
     results: list[dict[str, Any]] = []
     group_attribution_degraded = 0
     # (assignment) buckets where every present submission was rejected by
@@ -305,11 +359,11 @@ def collect_classroom(
     mode_flip_assignments = 0
 
     # Team-driven username source: the classroom GitHub team is authoritative
-    # for enrollment. students.csv is only optional display metadata, so the
-    # (student, assignment) pairs come from the team member list, NOT the CSV.
-    # A 404 (team missing) or empty team yields no pairs (warn + return),
-    # replacing the old "students.csv missing" skip. A hard auth/network error
-    # propagates so main() aborts the whole run loudly.
+    # for enrollment. The roster (roster.csv, legacy students.csv) is only
+    # best-effort display metadata, so the (student, assignment) pairs come from
+    # the team member list, NOT the CSV. A 404 (team missing) or empty team
+    # yields no pairs (warn + return), replacing the old "roster missing" skip.
+    # A hard auth/network error propagates so main() aborts the whole run loudly.
     team_slug = resolve_team_slug(classroom_meta, classroom_short)
     try:
         team_logins = list_team_member_logins(api_url, org, team_slug, service_token)
@@ -513,6 +567,15 @@ def collect_classroom(
             }
             if members is not None:
                 entry_row["member_usernames"] = list(members)
+            # Best-effort roster join: attach non-blank display metadata for the
+            # owner when the roster carries a row. Missing/blank is fine (the
+            # team, not the roster, drives enrollment).
+            meta = roster_meta.get(username.lower())
+            if meta:
+                for field in ("first_name", "last_name", "email", "section"):
+                    value = meta.get(field)
+                    if value:
+                        entry_row[field] = value
             entry_row["submissions"] = history
 
             results.append(entry_row)
@@ -799,7 +862,7 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
                 f"{slug}: group entry owned by {row_key(entry)!r} lost previously-"
                 f"credited member(s) {', '.join(sorted(dropped))} on re-collect. A "
                 f"teammate is credited only while on the classroom team; verify the "
-                f"drop is intended (e.g. an unenrollment) and not a team-vs-students.csv "
+                f"drop is intended (e.g. an unenrollment) and not a team-vs-roster "
                 f"divergence, since the shared score is now revoked for them."
             )
         # Preserve an explicit "override": false on replacement — the teacher's
@@ -1194,7 +1257,7 @@ def list_team_member_logins(
 ) -> list[str]:
     """Logins of every member of the classroom team, walking pagination. The
     team-driven username source for collection: the classroom GitHub team is
-    authoritative for enrollment (students.csv is only optional display
+    authoritative for enrollment (the roster is only best-effort display
     metadata). Hits GET /orgs/{org}/teams/{slug}/members.
 
     Pagination follows GitHub's `Link: rel="next"` header, host-pinned to

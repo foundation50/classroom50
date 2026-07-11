@@ -1,7 +1,7 @@
 name: Collect Scores
 
 # Teacher-triggered workflow. Iterates the (student, assignment)
-# Cartesian product from <classroom>/students.csv ×
+# Cartesian product from <classroom>/roster.csv ×
 # <classroom>/assignments.json, pages through each expected
 # `<classroom>-<assignment>-<username>` repo's `submit/*` releases, and
 # downloads `result.json` from each. Single-writer by design — no

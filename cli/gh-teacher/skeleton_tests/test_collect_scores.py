@@ -77,7 +77,7 @@ def make_update(*, assignment: str = "hello", assignment_type: str = "individual
 
 
 def write_roster(path, rows: list[dict[str, str]]) -> None:
-    """Write a 6-column students.csv at `path`. Each row dict only needs
+    """Write a 6-column roster CSV at `path`. Each row dict only needs
     the fields the test cares about; missing fields default to ''."""
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(cs.ROSTER_REQUIRED_COLUMNS), extrasaction="ignore")
@@ -89,7 +89,7 @@ def write_roster(path, rows: list[dict[str, str]]) -> None:
 def stub_team_members(monkeypatch, logins: list[str]) -> None:
     """Stub the team-member listing so collect_classroom's team-driven username
     source yields `logins` (collection is team-driven; the classroom team, not
-    students.csv, provides the pairs)."""
+    the roster, provides the pairs)."""
     monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: list(logins))
 
 
@@ -110,7 +110,7 @@ def write_minimal_classroom(root: pathlib.Path) -> pathlib.Path:
             }
         )
     )
-    write_roster(classroom / "students.csv", [{"username": "alice", "github_id": "111"}])
+    write_roster(classroom / "roster.csv", [{"username": "alice", "github_id": "111"}])
     (classroom / "scores.json").write_text(
         json.dumps({"schema": cs.SCORES_SCHEMA_V1, "assignments": {}})
     )
@@ -1092,7 +1092,7 @@ class TestCollectClassroomTeamDriven:
         return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
 
     def test_team_members_drive_pairs_not_the_csv(self, monkeypatch):
-        # The team, not students.csv, provides the usernames. Here the CSV is
+        # The team, not the roster, provides the usernames. Here the CSV is
         # empty but the team has one member — collection must poll that repo.
         stub_team_members(monkeypatch, ["alice"])
         monkeypatch.setattr(
@@ -1253,7 +1253,7 @@ class TestLateness:
         assert results[0]["submissions"][0]["late"] is True
 
 
-# students.csv header lockstep -----------------------------------------------
+# roster.csv header lockstep --------------------------------------------------
 
 
 def test_full_roster_header_matches_go_constant():
@@ -1261,10 +1261,94 @@ def test_full_roster_header_matches_go_constant():
     # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
     # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If this
     # fails, a column or its order drifted between the codebases. Collection is
-    # team-driven and no longer reads students.csv, but the Go download-metadata
-    # join and the web writer still share this header, so the Python leg of the
-    # 3-way lockstep is retained.
+    # team-driven and only reads the roster for best-effort metadata, but the Go
+    # download-metadata join and the web writer still share this header, so the
+    # Python leg of the 3-way lockstep is retained.
     assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id"
+
+
+# Roster metadata join (best-effort) + roster.csv/students.csv fallback -------
+
+
+class TestRosterMetadataJoin:
+    def _assignments(self):
+        return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
+
+    def _collect(self, tmp_path, monkeypatch):
+        stub_team_members(monkeypatch, ["alice"])
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda *a, **k: [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                              "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}],
+        )
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(username="alice"),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta={}, assignments=self._assignments(), service_token="token",
+            roster_meta=cs.load_roster_metadata(tmp_path),
+        )
+        return results
+
+    def test_joins_metadata_from_roster_csv(self, tmp_path, monkeypatch):
+        # roster.csv present: its name/section/email land on the entry.
+        write_roster(tmp_path / "roster.csv", [{
+            "username": "alice", "first_name": "Ada", "last_name": "Lovelace",
+            "email": "ada@uni.edu", "section": "A", "github_id": "1",
+        }])
+        results = self._collect(tmp_path, monkeypatch)
+        assert len(results) == 1
+        assert results[0]["first_name"] == "Ada"
+        assert results[0]["last_name"] == "Lovelace"
+        assert results[0]["email"] == "ada@uni.edu"
+        assert results[0]["section"] == "A"
+
+    def test_falls_back_to_legacy_students_csv(self, tmp_path, monkeypatch):
+        # No roster.csv — only the legacy students.csv exists (a classroom
+        # bootstrapped before the rename). The read must fall back and still
+        # join the metadata. This is the fallback under test: with only the
+        # pre-rename read (roster.csv), the metadata would be blank.
+        write_roster(tmp_path / "students.csv", [{
+            "username": "alice", "first_name": "Grace", "last_name": "Hopper",
+            "email": "grace@uni.edu", "section": "B", "github_id": "2",
+        }])
+        results = self._collect(tmp_path, monkeypatch)
+        assert len(results) == 1
+        assert results[0]["first_name"] == "Grace"
+        assert results[0]["email"] == "grace@uni.edu"
+        assert results[0]["section"] == "B"
+
+    def test_roster_csv_preferred_over_legacy(self, tmp_path, monkeypatch):
+        # Both present during the rename window: roster.csv wins, the legacy
+        # students.csv is ignored.
+        write_roster(tmp_path / "roster.csv", [{"username": "alice", "first_name": "New"}])
+        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Old"}])
+        results = self._collect(tmp_path, monkeypatch)
+        assert results[0]["first_name"] == "New"
+
+    def test_missing_roster_yields_blank_metadata_no_crash(self, tmp_path, monkeypatch):
+        # Neither file present: best-effort, so collection still succeeds and
+        # the entry simply carries no display metadata.
+        results = self._collect(tmp_path, monkeypatch)
+        assert len(results) == 1
+        assert "first_name" not in results[0]
+        assert "email" not in results[0]
+
+    def test_load_roster_metadata_missing_returns_empty(self, tmp_path):
+        assert cs.load_roster_metadata(tmp_path) == {}
+
+    def test_load_roster_metadata_prefers_roster_csv(self, tmp_path):
+        write_roster(tmp_path / "roster.csv", [{"username": "alice", "first_name": "New"}])
+        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Old"}])
+        meta = cs.load_roster_metadata(tmp_path)
+        assert meta["alice"]["first_name"] == "New"
+
+    def test_load_roster_metadata_legacy_fallback(self, tmp_path):
+        write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Grace"}])
+        meta = cs.load_roster_metadata(tmp_path)
+        assert meta["alice"]["first_name"] == "Grace"
 
 
 # load_scores / save_scores ---------------------------------------------------
@@ -1893,14 +1977,14 @@ class TestMain:
         assert "::warning::" not in capsys.readouterr().err
 
     def test_warns_when_zero_collected_but_assignments_exist(self, tmp_path, monkeypatch, capsys):
-        # Team-driven collection: an empty students.csv no longer means
+        # Team-driven collection: an empty roster no longer means
         # "nothing to collect" (the CSV is only metadata now). When
         # assignments exist and zero submissions come back, main() warns —
         # the cause is either an empty classroom team or a token that can't
         # read the student repos. (The empty-team case additionally emits its
         # own specific warning inside collect_classroom, which is mocked here.)
         write_minimal_classroom(tmp_path)
-        write_roster(tmp_path / "cs-principles" / "students.csv", [])
+        write_roster(tmp_path / "cs-principles" / "roster.csv", [])
         monkeypatch.setenv("GITHUB_WORKSPACE", str(tmp_path))
         monkeypatch.setenv("GITHUB_REPOSITORY_OWNER", "cs50")
         monkeypatch.setenv("CLASSROOM50_SERVICE_TOKEN", "token")
@@ -1943,7 +2027,7 @@ class TestMain:
             json.dumps({"schema": cs.ASSIGNMENTS_SCHEMA_V1,
                         "assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]})
         )
-        write_roster(bad / "students.csv", [{"username": "alice", "github_id": "1"}])
+        write_roster(bad / "roster.csv", [{"username": "alice", "github_id": "1"}])
         # Malformed: assignments is a list, not the canonical object.
         (bad / "scores.json").write_text(
             json.dumps({"schema": cs.SCORES_SCHEMA_V1, "assignments": []})
@@ -1958,7 +2042,7 @@ class TestMain:
             json.dumps({"schema": cs.ASSIGNMENTS_SCHEMA_V1,
                         "assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]})
         )
-        write_roster(good / "students.csv", [{"username": "alice", "github_id": "1"}])
+        write_roster(good / "roster.csv", [{"username": "alice", "github_id": "1"}])
         (good / "scores.json").write_text(
             json.dumps({"schema": cs.SCORES_SCHEMA_V1, "assignments": {}})
         )
