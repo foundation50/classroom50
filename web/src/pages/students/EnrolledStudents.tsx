@@ -577,7 +577,12 @@ const EnrolledStudents = ({
               ))}
             </ul>
             <a
-              href={`https://github.com/${org}/classroom50/edit/main/${rosterPath(classroom)}`}
+              href={`https://github.com/${encodeURIComponent(org)}/classroom50/edit/main/${rosterPath(
+                classroom,
+              )
+                .split("/")
+                .map(encodeURIComponent)
+                .join("/")}`}
               target="_blank"
               rel="noreferrer"
               className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"

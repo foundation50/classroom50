@@ -2022,6 +2022,38 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     expect(invitations).toEqual([{ invitee_id: 2, role: "direct_member" }])
   })
 
+  it("does not create staff teams for a students-only upload", async () => {
+    // resolveTeamIdByRole must only ensure a staff team for a role actually
+    // present. A students-only invite must not create/grant instructor/ta teams.
+    const teamWrites: string[] = []
+    const { client, invitations } = makeInviteClient({
+      users: { stu: { id: 5 } },
+      members: [],
+    })
+    // Wrap request to record any team-membership/creation write.
+    const orig = client.request as unknown as (
+      p: string,
+      o?: { method?: string },
+    ) => Promise<unknown>
+    ;(client as unknown as { request: typeof orig }).request = (p, o) => {
+      if (
+        p.includes("/teams") ||
+        (p.includes("/orgs/") && p.endsWith("/teams"))
+      )
+        teamWrites.push(p)
+      return orig(p, o)
+    }
+
+    await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "stu", github_id: "5", role: "student" }],
+    })
+
+    expect(teamWrites).toEqual([])
+    expect(invitations[0]).toMatchObject({ role: "direct_member" })
+  })
+
   it("invites an instructor row as an organization OWNER (role admin)", async () => {
     const { client, invitations } = makeInviteClient({
       users: { prof: { id: 9 } },

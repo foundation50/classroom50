@@ -1415,7 +1415,12 @@ export async function inviteRosterStudents(
   // Resolve every role's team id once so a fresh invite carries the right team
   // (accepting the single org invite then activates that membership). A missing
   // team id is tolerated — the invite still sends, just without a team attached.
-  const teamIdByRole = await resolveTeamIdByRole(client, org, classroom)
+  const teamIdByRole = await resolveTeamIdByRole(
+    client,
+    org,
+    classroom,
+    new Set(targets.map((t) => t.role)),
+  )
 
   let processed = 0
   const bump = (username: string) => {
@@ -1470,26 +1475,33 @@ export async function inviteRosterStudents(
   return { invited, skipped, failed, deferred }
 }
 
-// Resolve the team id for each role: student -> classroom team, instructor/ta ->
-// the staff team (created if missing, mirroring the Settings staff flow so an
-// instructor/ta invite lands them on the right team on acceptance). A failed
-// resolve leaves that role's id undefined — the invite still sends teamless.
+// Resolve the team id for each role present in the invite batch: student ->
+// classroom team, instructor/ta -> the staff team (created if missing, mirroring
+// the Settings staff flow so an instructor/ta invite lands them on the right
+// team on acceptance). Only ensures a staff team when that role is actually
+// being invited — a students-only upload must not create (and grant config-repo
+// write to) empty instructor/ta teams as a side effect. A failed resolve leaves
+// that role's id undefined — the invite still sends teamless.
 async function resolveTeamIdByRole(
   client: GitHubClient,
   org: string,
   classroom: string,
+  rolesPresent: ReadonlySet<RosterRole>,
 ): Promise<Record<RosterRole, number | undefined>> {
   const result: Record<RosterRole, number | undefined> = {
     student: undefined,
     instructor: undefined,
     ta: undefined,
   }
-  try {
-    result.student = (await resolveClassroomTeam(client, org, classroom)).id
-  } catch {
-    result.student = undefined
+  if (rolesPresent.has("student")) {
+    try {
+      result.student = (await resolveClassroomTeam(client, org, classroom)).id
+    } catch {
+      result.student = undefined
+    }
   }
   for (const role of STAFF_ROLES) {
+    if (!rolesPresent.has(role)) continue
     try {
       const team = await ensureClassroomRoleTeam(client, org, classroom, role)
       await grantTeamConfigRepoWrite(client, org, team.slug)
