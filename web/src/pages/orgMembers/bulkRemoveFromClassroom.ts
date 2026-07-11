@@ -40,6 +40,7 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
   email: row.email,
   section: "",
   github_id: row.github_id,
+  role: "",
 })
 
 // Remove selected members from ONE classroom in a SINGLE roster commit (drops

@@ -50,6 +50,7 @@ const student = (over: Partial<Student> = {}): Student => ({
   email: "alice@example.edu",
   section: "",
   github_id: "1",
+  role: "",
   ...over,
 })
 

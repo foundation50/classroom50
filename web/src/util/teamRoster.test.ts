@@ -235,7 +235,7 @@ describe("buildTeamRoster", () => {
     })
   })
 
-  it("rowToStudent projects all six Student fields from a roster row", () => {
+  it("rowToStudent projects all Student fields from a roster row", () => {
     const rows = buildTeamRoster({
       members: [member(101, "ada")],
       students: [
@@ -256,6 +256,8 @@ describe("buildTeamRoster", () => {
       email: "ada@uni.edu",
       section: "A",
       github_id: "101",
+      // primary role recorded from team membership (student team here)
+      role: "student",
     })
   })
 })

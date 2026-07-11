@@ -139,6 +139,7 @@ export const STUDENT_CSV_FIELDS = [
   "email",
   "section",
   "github_id",
+  "role",
 ] as const
 type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
 
@@ -154,6 +155,10 @@ export function normalizeStudentRow(
     email: String(row.email ?? "").trim(),
     section: String(row.section ?? "").trim(),
     github_id: String(row.github_id ?? "").trim(),
+    // Best-effort recorded metadata (instructor/ta/student, or ""), refreshed
+    // from the classroom's GitHub teams on sync. A pre-role file has no role
+    // column, so this coerces to "".
+    role: String(row.role ?? "").trim(),
   }
 }
 

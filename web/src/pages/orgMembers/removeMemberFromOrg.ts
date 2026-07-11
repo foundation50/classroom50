@@ -28,6 +28,7 @@ const rowToStudent = (row: OrgMemberRow): Student => ({
   email: row.email,
   section: "",
   github_id: row.github_id,
+  role: "",
 })
 
 // Remove a student from the org without leaving any roster inconsistent:

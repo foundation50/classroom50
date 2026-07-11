@@ -105,7 +105,7 @@ const makeClient = (opts: {
   return { client, committed }
 }
 
-const HEADER = "username,first_name,last_name,email,section,github_id\n"
+const HEADER = "username,first_name,last_name,email,section,github_id,role\n"
 
 // The web leg of the three-way roster header lockstep. The Go
 // (TestFullRosterHeader) and Python (test_full_roster_header_matches_go_constant)
@@ -117,7 +117,7 @@ const HEADER = "username,first_name,last_name,email,section,github_id\n"
 describe("roster.csv header lockstep (web leg)", () => {
   it("STUDENT_CSV_FIELDS matches the Go/Python header verbatim", () => {
     expect(STUDENT_CSV_FIELDS.join(",")).toBe(
-      "username,first_name,last_name,email,section,github_id",
+      "username,first_name,last_name,email,section,github_id,role",
     )
   })
 
@@ -992,6 +992,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "alice@x.edu",
         section: "",
         github_id: "42",
+        role: "",
       },
     })
 
@@ -1017,6 +1018,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "bob@x.edu",
         section: "",
         github_id: "43",
+        role: "",
       },
     })
 
@@ -1043,6 +1045,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "alice@x.edu",
         section: "",
         github_id: "42",
+        role: "",
       },
     })
 
@@ -1070,6 +1073,7 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
         email: "bob@x.edu",
         section: "",
         github_id: "43",
+        role: "",
       },
     })
 
@@ -1092,6 +1096,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     email: `${username}@x.edu`,
     section: "",
     github_id,
+    role: "",
   })
 
   it("drops every matched row in exactly ONE commit", async () => {
@@ -1176,6 +1181,7 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
           email: "sam@x.edu",
           section: "",
           github_id: "",
+          role: "",
         },
       ],
     })
@@ -1471,14 +1477,14 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 
   // Regression: a roster hand-edited (or exported by a tool that drops empty
-  // trailing columns) has rows with only 5 fields — the empty `github_id`
-  // column omitted, e.g. `octocat,Grace,Hopper,g@x.edu,Section A`. Papa flags
-  // TooFewFields, but the row is benign (missing trailing field -> ""), so the
-  // parse must NOT throw and sync must still see the row's identity.
-  it("tolerates short rows missing the trailing github_id column", async () => {
+  // trailing columns) has rows with the empty trailing column omitted, e.g.
+  // `octocat,Grace,Hopper,g@x.edu,Section A,1` (the trailing `role` dropped).
+  // Papa flags TooFewFields, but the row is benign (missing trailing field ->
+  // ""), so the parse must NOT throw and sync must still see the row's identity.
+  it("tolerates short rows missing the trailing role column", async () => {
     const shortRows =
-      "octocat,Grace,Hopper,grace@example.edu,Section A\n" +
-      "torvalds,Linus,Torvalds,linus@example.edu,Section A\n"
+      "octocat,Grace,Hopper,grace@example.edu,Section A,1\n" +
+      "torvalds,Linus,Torvalds,linus@example.edu,Section A,2\n"
     const { client } = makeTeamClient({
       startingCsv: HEADER + shortRows,
       users: {},
@@ -1504,11 +1510,11 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
 describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
   const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 
-  it("parses a row missing the trailing github_id into correct fields", () => {
-    // 5 fields: the empty trailing github_id column omitted. The row must parse
-    // (not throw) AND keep every value in its own column, with github_id -> "".
+  it("parses a row missing the trailing role column into correct fields", () => {
+    // 6 fields: the empty trailing role column omitted. The row must parse
+    // (not throw) AND keep every value in its own column, with role -> "".
     const rows = parseStudentsCsv(
-      HEADER + "octocat,Grace,Hopper,grace@example.edu,Section A\n",
+      HEADER + "octocat,Grace,Hopper,grace@example.edu,Section A,42\n",
     )
     expect(rows).toEqual([
       {
@@ -1517,26 +1523,30 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
         last_name: "Hopper",
         email: "grace@example.edu",
         section: "Section A",
-        github_id: "",
+        github_id: "42",
+        role: "",
       },
     ])
   })
 
   it("throws on a row short by more than one column", () => {
-    // 4 fields — short by 2. A row this incomplete can't be a mere dropped
-    // trailing github_id; Papa would map its values into the wrong columns, so
-    // the trailing-only guard must reject it rather than silently misalign
-    // identity. (A row short by exactly one is inherently ambiguous and is
-    // treated as the optional trailing github_id being omitted — see above.)
+    // 5 fields — short by 2 (github_id AND role dropped). A row this incomplete
+    // can't be a mere dropped trailing column; Papa would map its values into
+    // the wrong columns, so the trailing-only guard must reject it rather than
+    // silently misalign identity. (A row short by exactly one is inherently
+    // ambiguous and is treated as the optional trailing column being omitted —
+    // see above.)
     expect(() =>
-      parseStudentsCsv(HEADER + "octocat,Grace,Hopper,grace@example.edu\n"),
+      parseStudentsCsv(
+        HEADER + "octocat,Grace,Hopper,grace@example.edu,Sec A\n",
+      ),
     ).toThrow(/roster\.csv/)
   })
 
   it("still rejects a TooManyFields (extra column) row as before", () => {
     expect(() =>
       parseStudentsCsv(
-        HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,extra\n",
+        HEADER + "octocat,Grace,Hopper,g@x.edu,Sec A,42,student,extra\n",
       ),
     ).toThrow(/roster\.csv/)
   })

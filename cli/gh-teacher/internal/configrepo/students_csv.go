@@ -13,8 +13,18 @@ import (
 
 // RosterColumns: canonical required column order. github_id is CLI-managed
 // (from `GET /users/{username}`); the immutable numeric ID defends against
-// mid-class username changes. Email may be empty.
-var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id"}
+// mid-class username changes. Email may be empty. role is best-effort recorded
+// metadata (instructor/ta/student, or "") refreshed from the classroom's GitHub
+// teams on sync — the teams, not this column, remain the enrollment/role
+// authority; nothing reads it for logic.
+var RosterColumns = []string{"username", "first_name", "last_name", "email", "section", "github_id", "role"}
+
+// legacyRequiredColumns is the canonical prefix a pre-role roster.csv carries.
+// role was appended additively, so a file written before it (ending at
+// github_id) is still valid; ParseRoster tolerates a header missing exactly the
+// trailing role column and reads role as "". Everything before role is required
+// in order.
+var legacyRequiredColumns = RosterColumns[:len(RosterColumns)-1]
 
 // FullRosterHeader is the on-disk roster.csv header (RosterColumns,
 // comma-joined). The single shared fixture the Go, Python, and web suites
@@ -51,8 +61,12 @@ type RosterRow struct {
 	Email     string
 	Section   string
 	GitHubID  int64
+	// Role is best-effort recorded metadata: "instructor", "ta", "student", or
+	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
+	// never consulted for enrollment decisions.
+	Role string
 	// Extra carries non-canonical columns keyed by header name, so a
-	// read/modify/write round-trips them. nil for a plain 6-column file.
+	// read/modify/write round-trips them. nil for a plain canonical file.
 	Extra map[string]string
 	// ExtraOrder is the on-disk order of Extra columns for deterministic
 	// encoding. INVARIANT: it lists exactly the keys of Extra.
@@ -60,7 +74,9 @@ type RosterRow struct {
 }
 
 // ParseRoster decodes the roster CSV. The header MUST begin with the canonical
-// RosterColumns in order; additional trailing columns are preserved verbatim in
+// RosterColumns in order; a file written before the trailing `role` column was
+// added (ending at github_id) is still accepted (role reads as ""). Additional
+// trailing columns beyond the canonical set are preserved verbatim in
 // RosterRow.Extra. Empty input is rejected.
 func ParseRoster(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
@@ -76,12 +92,28 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
-	// Header must begin with the canonical columns in order; anything after is
-	// an extra column carried through verbatim.
-	if len(header) < len(RosterColumns) || !equalSlices(header[:len(RosterColumns)], RosterColumns) {
+	// The header must begin with the canonical columns in order. `role` is a
+	// trailing additive column, so a legacy file that stops at github_id is
+	// accepted too; anything after the matched canonical prefix is an extra
+	// column carried through verbatim.
+	var canonicalLen int
+	switch {
+	case len(header) >= len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns):
+		canonicalLen = len(RosterColumns)
+	case len(header) == len(legacyRequiredColumns) && equalSlices(header, legacyRequiredColumns):
+		// Pre-role file: exactly the canonical columns through github_id, no
+		// trailing columns. role reads as "".
+		canonicalLen = len(legacyRequiredColumns)
+	case len(header) < len(RosterColumns) || !equalSlices(header[:len(legacyRequiredColumns)], legacyRequiredColumns):
 		return nil, fmt.Errorf("unexpected header: got %v, want %v followed by any optional columns", header, RosterColumns)
+	default:
+		// Header begins with the legacy prefix but the 7th column is not `role`
+		// — treat the whole tail (including that 7th column) as extras and read
+		// role as "". Keeps a pre-role file that already carried its own extra
+		// columns working.
+		canonicalLen = len(legacyRequiredColumns)
 	}
-	extraColumns := append([]string(nil), header[len(RosterColumns):]...)
+	extraColumns := append([]string(nil), header[canonicalLen:]...)
 	// Reject a malformed extra-column header rather than mangling it on
 	// round-trip: a duplicate clobbers on read and collapses on write; a name
 	// reusing a canonical one produces a file the web's header-keyed parser
@@ -113,7 +145,7 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 		if err != nil {
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
-		row, err := recordToRow(record, extraColumns, line)
+		row, err := recordToRow(record, canonicalLen, extraColumns, line)
 		if err != nil {
 			return nil, err
 		}
@@ -122,12 +154,15 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 	return rows, nil
 }
 
-// ParseImportCSV decodes a teacher-supplied import CSV: the 6-column canonical
-// shape (github_id ignored; re-resolved) or the 5-column hand-edit shape.
+// ParseImportCSV decodes a teacher-supplied import CSV: the identity/metadata
+// columns through github_id (github_id ignored; re-resolved) or the 5-column
+// hand-edit shape without github_id. `role` is NOT an import column — it is
+// team-derived metadata written by sync, never hand-imported.
 //
-// Unlike ParseRoster, import rejects a wider file with extra trailing columns:
-// it re-resolves github_id and carries no extra state, so a wider file would
-// silently drop the tail. The error points at the canonical shape.
+// Unlike ParseRoster, import rejects a wider file with extra trailing columns
+// (including a stray role): it re-resolves github_id and carries no extra
+// state, so a wider file would silently drop the tail. The error points at the
+// canonical shape.
 func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
@@ -141,14 +176,19 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
-	if !equalSlices(header, RosterColumns) && !equalSlices(header, RosterColumns[:5]) {
-		// Common mistake: feeding a wider roster CSV straight into import.
-		if len(header) > len(RosterColumns) && equalSlices(header[:len(RosterColumns)], RosterColumns) {
+	// Import accepts the identity columns through github_id, or the 5-column
+	// form without it. role and any other trailing column are not import input.
+	importFull := legacyRequiredColumns      // username..github_id (6)
+	importShort := legacyRequiredColumns[:5] // username..section  (5)
+	if !equalSlices(header, importFull) && !equalSlices(header, importShort) {
+		// Common mistake: feeding a wider roster CSV (with role and/or legacy
+		// extra columns) straight into import.
+		if len(header) > len(importFull) && equalSlices(header[:len(importFull)], importFull) {
 			return nil, fmt.Errorf("unexpected header: got %v — import takes only the canonical %v (or its 5-column form without github_id). "+
 				"This looks like a roster with extra columns appended; drop the columns after github_id before importing "+
-				"(roster add/update preserve those columns, import does not)", header, RosterColumns[:5])
+				"(roster add/update preserve those columns, import does not)", header, importShort)
 		}
-		return nil, fmt.Errorf("unexpected header: got %v, want %v (with optional trailing github_id; github_id ignored on input — the CLI re-resolves it)", header, RosterColumns[:5])
+		return nil, fmt.Errorf("unexpected header: got %v, want %v (with optional trailing github_id; github_id ignored on input — the CLI re-resolves it)", header, importShort)
 	}
 	r.FieldsPerRecord = len(header)
 
@@ -183,9 +223,10 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 	return rows, nil
 }
 
-// recordToRow maps a data record onto a RosterRow. extraColumns (in header
-// order) name the values beyond the canonical 6, carried through Extra.
-func recordToRow(record, extraColumns []string, line int) (RosterRow, error) {
+// recordToRow maps a data record onto a RosterRow. canonicalLen is the matched
+// canonical prefix width (7 with role, 6 for a pre-role file); extraColumns (in
+// header order) name the values beyond it, carried through Extra.
+func recordToRow(record []string, canonicalLen int, extraColumns []string, line int) (RosterRow, error) {
 	if err := checkFieldLengths(line, record); err != nil {
 		return RosterRow{}, err
 	}
@@ -206,13 +247,18 @@ func recordToRow(record, extraColumns []string, line int) (RosterRow, error) {
 		}
 		row.GitHubID = id
 	}
+	// role is present only when the header carried the full canonical set; a
+	// pre-role file (canonicalLen == 6) leaves it "".
+	if canonicalLen == len(RosterColumns) {
+		row.Role = strings.TrimSpace(undefangCSVCell(record[len(RosterColumns)-1]))
+	}
 	if len(extraColumns) > 0 {
 		// Every row's extra order IS the header's, so share that slice instead
 		// of rebuilding an identical one per row. Read-only after parse.
 		row.Extra = make(map[string]string, len(extraColumns))
 		row.ExtraOrder = extraColumns
 		for i, name := range extraColumns {
-			row.Extra[name] = undefangCSVCell(record[len(RosterColumns)+i])
+			row.Extra[name] = undefangCSVCell(record[canonicalLen+i])
 		}
 	}
 	return row, nil
@@ -244,6 +290,7 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 			defangCSVCell(row.Email),
 			defangCSVCell(row.Section),
 			githubID,
+			defangCSVCell(row.Role),
 		}
 		for _, name := range extraColumns {
 			record = append(record, defangCSVCell(row.Extra[name]))
@@ -281,13 +328,18 @@ func collectExtraColumns(rows []RosterRow) []string {
 //
 // On replace, the existing row's Extra is carried over UNLESS the incoming row
 // supplies its own — so a CLI `roster add` (canonical fields only) never wipes
-// web-written extra columns.
+// web-written extra columns. The same guard applies to Role: an incoming empty
+// Role (a caller that doesn't know the team-derived role) preserves the
+// existing recorded role rather than blanking it.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	for i := range rows {
 		if strings.EqualFold(rows[i].Username, row.Username) {
 			if row.Extra == nil && rows[i].Extra != nil {
 				row.Extra = rows[i].Extra
 				row.ExtraOrder = rows[i].ExtraOrder
+			}
+			if row.Role == "" && rows[i].Role != "" {
+				row.Role = rows[i].Role
 			}
 			rows[i] = row
 			return rows, true

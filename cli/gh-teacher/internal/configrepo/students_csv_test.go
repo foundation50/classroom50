@@ -7,19 +7,36 @@ import (
 )
 
 func TestParseRoster_Canonical(t *testing.T) {
-	in := []byte("username,first_name,last_name,email,section,github_id\n" +
-		"alice,Alice,Andersson,alice@example.edu,section-1,12345\n" +
-		"bob,Bob,Baker,,,67890\n" +
-		"carol,,,carol@example.edu,section-2,11111\n")
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,Alice,Andersson,alice@example.edu,section-1,12345,instructor\n" +
+		"bob,Bob,Baker,,,67890,ta\n" +
+		"carol,,,carol@example.edu,section-2,11111,student\n")
 
 	rows, err := ParseRoster(in)
 	if err != nil {
 		t.Fatalf("ParseRoster: %v", err)
 	}
 	want := []RosterRow{
-		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345},
-		{Username: "bob", FirstName: "Bob", LastName: "Baker", Email: "", Section: "", GitHubID: 67890},
-		{Username: "carol", FirstName: "", LastName: "", Email: "carol@example.edu", Section: "section-2", GitHubID: 11111},
+		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "instructor"},
+		{Username: "bob", FirstName: "Bob", LastName: "Baker", Email: "", Section: "", GitHubID: 67890, Role: "ta"},
+		{Username: "carol", FirstName: "", LastName: "", Email: "carol@example.edu", Section: "section-2", GitHubID: 11111, Role: "student"},
+	}
+	if !reflect.DeepEqual(rows, want) {
+		t.Fatalf("rows = %#v, want %#v", rows, want)
+	}
+}
+
+// A pre-role roster.csv (canonical columns ending at github_id, no role column)
+// must still parse — role was added additively — with Role reading as "".
+func TestParseRoster_LegacyNoRoleColumn(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id\n" +
+		"alice,Alice,Andersson,alice@example.edu,section-1,12345\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster (pre-role file): %v", err)
+	}
+	want := []RosterRow{
+		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: ""},
 	}
 	if !reflect.DeepEqual(rows, want) {
 		t.Fatalf("rows = %#v, want %#v", rows, want)
@@ -27,7 +44,7 @@ func TestParseRoster_Canonical(t *testing.T) {
 }
 
 func TestParseRoster_HeaderOnly(t *testing.T) {
-	in := []byte("username,first_name,last_name,email,section,github_id\n")
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n")
 	rows, err := ParseRoster(in)
 	if err != nil {
 		t.Fatalf("ParseRoster: %v", err)
@@ -46,10 +63,10 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		{"empty input", "", "empty"},
 		{"missing github_id column", "username,first_name,last_name,email,section\nalice,A,A,a@x,s\n", "unexpected header"},
 		{"missing email column", "username,first_name,last_name,section,github_id\nalice,A,A,s,1\n", "unexpected header"},
-		{"renamed first column", "user,first_name,last_name,email,section,github_id\nalice,A,A,,s,1\n", "unexpected header"},
-		{"username empty", "username,first_name,last_name,email,section,github_id\n,A,A,,s,1\n", "username column is empty"},
-		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id\nalice,A,A,,s,nope\n", "invalid github_id"},
-		{"wrong field count", "username,first_name,last_name,email,section,github_id\nalice,A,A\n", "wrong number"},
+		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
+		{"username empty", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,1,student\n", "username column is empty"},
+		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
+		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -131,9 +148,9 @@ func TestParseImportCSV_Rejects(t *testing.T) {
 
 func TestEncodeRoster_RoundTrip(t *testing.T) {
 	original := []RosterRow{
-		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345},
-		{Username: "bob", FirstName: "Bob, Jr.", LastName: `"Baker"`, Email: "bob+tag@example.org", Section: "section, 2", GitHubID: 67890},
-		{Username: "carol", FirstName: "", LastName: "", Email: "", Section: "", GitHubID: 11111},
+		{Username: "alice", FirstName: "Alice", LastName: "Andersson", Email: "alice@example.edu", Section: "section-1", GitHubID: 12345, Role: "instructor"},
+		{Username: "bob", FirstName: "Bob, Jr.", LastName: `"Baker"`, Email: "bob+tag@example.org", Section: "section, 2", GitHubID: 67890, Role: "ta"},
+		{Username: "carol", FirstName: "", LastName: "", Email: "", Section: "", GitHubID: 11111, Role: "student"},
 	}
 	encoded, err := EncodeRoster(original)
 	if err != nil {
@@ -141,7 +158,7 @@ func TestEncodeRoster_RoundTrip(t *testing.T) {
 	}
 
 	// Canonical column order, no quoting on the header row.
-	wantHeader := "username,first_name,last_name,email,section,github_id\n"
+	wantHeader := "username,first_name,last_name,email,section,github_id,role\n"
 	if !strings.HasPrefix(string(encoded), wantHeader) {
 		t.Fatalf("encoded output should start with canonical header.\ngot:\n%s\nwant prefix:\n%s", encoded, wantHeader)
 	}
@@ -157,7 +174,7 @@ func TestEncodeRoster_RoundTrip(t *testing.T) {
 }
 
 func TestEncodeRoster_EmptyGitHubID(t *testing.T) {
-	rows := []RosterRow{{Username: "alice", FirstName: "A", LastName: "A", Email: "a@x", Section: "s", GitHubID: 0}}
+	rows := []RosterRow{{Username: "alice", FirstName: "A", LastName: "A", Email: "a@x", Section: "s", GitHubID: 0, Role: "student"}}
 	encoded, err := EncodeRoster(rows)
 	if err != nil {
 		t.Fatalf("EncodeRoster: %v", err)
@@ -165,7 +182,7 @@ func TestEncodeRoster_EmptyGitHubID(t *testing.T) {
 	// GitHubID == 0 must serialize as an empty github_id column,
 	// not "0". ParseRoster reads "" as 0 but treats "0" as a valid
 	// numeric ID, so the encoded shape matters.
-	if !strings.Contains(string(encoded), "alice,A,A,a@x,s,\n") {
+	if !strings.Contains(string(encoded), "alice,A,A,a@x,s,,student\n") {
 		t.Errorf("GitHubID == 0 should encode as empty column, got:\n%s", encoded)
 	}
 }
@@ -462,6 +479,25 @@ func TestEncodeRoster_LeavesSafeCellsAlone(t *testing.T) {
 	}
 }
 
+// role is recorded metadata, refreshed from team membership; an upsert that
+// doesn't know the role (empty Role) must preserve the existing recorded role
+// rather than blanking it — mirroring the Extra-preservation guard.
+func TestUpsertRosterRow_PreservesRoleWhenIncomingEmpty(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", GitHubID: 1, Role: "instructor"}}
+	updated, replaced := UpsertRosterRow(rows, RosterRow{Username: "alice", FirstName: "Alice", GitHubID: 1})
+	if !replaced {
+		t.Fatalf("expected replace")
+	}
+	if updated[0].Role != "instructor" {
+		t.Errorf("empty incoming Role should preserve existing role, got %q", updated[0].Role)
+	}
+	// A non-empty incoming role overrides (a re-sync that changed the role).
+	updated, _ = UpsertRosterRow(updated, RosterRow{Username: "alice", GitHubID: 1, Role: "ta"})
+	if updated[0].Role != "ta" {
+		t.Errorf("non-empty incoming Role should override, got %q", updated[0].Role)
+	}
+}
+
 func TestDedupeByUsername_LastWins(t *testing.T) {
 	rows := []RosterRow{
 		{Username: "Alice", FirstName: "first-A"},
@@ -531,7 +567,8 @@ func TestEncodeRoster_RoundTripsLegacyColumns(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeRoster: %v", err)
 	}
-	wantHeader := "username,first_name,last_name,email,section,github_id," +
+	// role (now canonical) is inserted after github_id; the legacy tail follows.
+	wantHeader := "username,first_name,last_name,email,section,github_id,role," +
 		"enrollment_status,enrollment_method,email_hash,invite_token,invited_at,enrolled_at\n"
 	if !strings.HasPrefix(string(encoded), wantHeader) {
 		t.Fatalf("encoded header drifted.\ngot:\n%s\nwant prefix:\n%s", encoded, wantHeader)
@@ -564,7 +601,7 @@ func TestEncodeRoster_UnknownColumnsPreserveSourceOrder(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EncodeRoster: %v", err)
 	}
-	wantHeader := "username,first_name,last_name,email,section,github_id," +
+	wantHeader := "username,first_name,last_name,email,section,github_id,role," +
 		"invite_token,enrollment_status\n"
 	if !strings.HasPrefix(string(encoded), wantHeader) {
 		t.Fatalf("unknown columns not preserved in source order.\ngot:\n%s\nwant prefix:\n%s", encoded, wantHeader)
@@ -662,7 +699,7 @@ func TestParseRoster_RejectsFormulaTriggerExtraColumnName(t *testing.T) {
 // file. If you change RosterColumns, update the web app and the Python fixture
 // in lockstep.
 func TestFullRosterHeader(t *testing.T) {
-	const want = "username,first_name,last_name,email,section,github_id"
+	const want = "username,first_name,last_name,email,section,github_id,role"
 	if FullRosterHeader != want {
 		t.Fatalf("FullRosterHeader = %q, want %q", FullRosterHeader, want)
 	}

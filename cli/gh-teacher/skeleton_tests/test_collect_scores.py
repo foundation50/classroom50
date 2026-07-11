@@ -77,8 +77,9 @@ def make_update(*, assignment: str = "hello", assignment_type: str = "individual
 
 
 def write_roster(path, rows: list[dict[str, str]]) -> None:
-    """Write a 6-column roster CSV at `path`. Each row dict only needs
-    the fields the test cares about; missing fields default to ''."""
+    """Write a roster CSV at `path` with the full canonical header (including
+    role). Each row dict only needs the fields the test cares about; missing
+    fields default to ''."""
     with path.open("w", newline="") as fh:
         writer = csv.DictWriter(fh, fieldnames=list(cs.ROSTER_REQUIRED_COLUMNS), extrasaction="ignore")
         writer.writeheader()
@@ -1257,14 +1258,14 @@ class TestLateness:
 
 
 def test_full_roster_header_matches_go_constant():
-    # The exact 6-column header must stay in lockstep with FullRosterHeader
+    # The exact 7-column header must stay in lockstep with FullRosterHeader
     # in cli/gh-teacher/internal/configrepo/students_csv.go (asserted there by
     # TestFullRosterHeader) and classroom50-web's STUDENT_CSV_FIELDS. If this
     # fails, a column or its order drifted between the codebases. Collection is
     # team-driven and only reads the roster for best-effort metadata, but the Go
     # download-metadata join and the web writer still share this header, so the
     # Python leg of the 3-way lockstep is retained.
-    assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id"
+    assert cs.FULL_ROSTER_HEADER == "username,first_name,last_name,email,section,github_id,role"
 
 
 def test_roster_filename_matches_go_constant():
@@ -1337,6 +1338,31 @@ class TestRosterMetadataJoin:
         write_roster(tmp_path / "students.csv", [{"username": "alice", "first_name": "Old"}])
         results = self._collect(tmp_path, monkeypatch)
         assert results[0]["first_name"] == "New"
+
+    def test_role_column_tolerated_metadata_still_joins(self, tmp_path, monkeypatch):
+        # A roster.csv carrying the role column joins its display metadata
+        # normally; role is recorded metadata the collector does not consume.
+        write_roster(tmp_path / "roster.csv", [{
+            "username": "alice", "first_name": "Ada", "last_name": "Lovelace",
+            "email": "ada@uni.edu", "section": "A", "github_id": "1", "role": "instructor",
+        }])
+        results = self._collect(tmp_path, monkeypatch)
+        assert len(results) == 1
+        assert results[0]["first_name"] == "Ada"
+        assert results[0]["email"] == "ada@uni.edu"
+        # role is not surfaced onto the result entry (best-effort metadata only).
+        assert "role" not in results[0]
+
+    def test_legacy_pre_role_roster_still_joins(self, tmp_path, monkeypatch):
+        # A pre-role file (no role column) must still join — DictReader is
+        # header-keyed, so an absent role just doesn't appear.
+        path = tmp_path / "roster.csv"
+        with path.open("w", newline="") as fh:
+            fh.write("username,first_name,last_name,email,section,github_id\n")
+            fh.write("alice,Ada,Lovelace,ada@uni.edu,A,1\n")
+        results = self._collect(tmp_path, monkeypatch)
+        assert results[0]["first_name"] == "Ada"
+        assert results[0]["section"] == "A"
 
     def test_missing_roster_yields_blank_metadata_no_crash(self, tmp_path, monkeypatch):
         # Neither file present: best-effort, so collection still succeeds and

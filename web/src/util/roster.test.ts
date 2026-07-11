@@ -15,6 +15,7 @@ const student = (overrides: Partial<Student> = {}): Student => ({
   email: "octocat@example.com",
   section: "",
   github_id: "583231",
+  role: "",
   ...overrides,
 })
 
@@ -56,7 +57,7 @@ describe("splitName", () => {
 })
 
 describe("toStudent", () => {
-  it("passes through the 6 identity/metadata columns", () => {
+  it("passes through the identity/metadata columns", () => {
     const row = {
       username: "x",
       first_name: "First",
@@ -64,6 +65,7 @@ describe("toStudent", () => {
       email: "x@y.io",
       section: "A",
       github_id: "9",
+      role: "student",
     }
     const s = toStudent(row)
     expect(s).toEqual(row)
@@ -90,6 +92,7 @@ describe("toStudent", () => {
       email: "",
       section: "",
       github_id: "",
+      role: "",
     })
     expect("enrollment_status" in s).toBe(false)
     expect("email_hash" in s).toBe(false)

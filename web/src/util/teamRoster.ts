@@ -347,6 +347,9 @@ export function rowToStudent(row: TeamRosterRow): Student {
     email: row.email,
     section: row.section,
     github_id: row.github_id,
+    // Primary (highest-precedence) role as recorded metadata. roles is always
+    // non-empty and rank-sorted (instructor > ta > student).
+    role: row.roles[0],
   }
 }
 

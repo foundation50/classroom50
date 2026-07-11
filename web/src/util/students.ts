@@ -21,6 +21,7 @@ export const placeholderStudent = (username: string): Student => ({
   email: "",
   section: "",
   github_id: "",
+  role: "",
 })
 
 // The roster Student for a username, or a placeholder so callers always get one.
