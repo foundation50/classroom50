@@ -2595,13 +2595,23 @@ describe("assignRosterMemberRole — enroll a rostered active member", () => {
 })
 
 // A focused client mock for applyRosterRoleChange: records team adds, team
-// removes, and org-membership role PUTs, and resolves the classroom + staff
-// teams. `members` are active org members; anyone else 404s (not a member).
-const makeRoleChangeClient = (opts: { members: string[] }) => {
+// removes, org-membership role PUTs, and an ordered `ops` log (to assert the
+// owner-demote-first ordering). `members` are active org members; anyone else
+// 404s. `failRemoveSlug` makes a team-removal of that slug throw (best-effort
+// warning path).
+const makeRoleChangeClient = (opts: {
+  members: string[]
+  failRemoveSlug?: string
+}) => {
   const memberSet = new Set(opts.members.map((m) => m.toLowerCase()))
   const teamAdds: { slug: string; login: string }[] = []
   const teamRemoves: { slug: string; login: string }[] = []
   const orgRolePuts: { login: string; role: string }[] = []
+  const ops: (
+    | { kind: "orgRole"; login: string; role: string }
+    | { kind: "teamAdd"; slug: string; login: string }
+    | { kind: "teamRemove"; slug: string; login: string }
+  )[] = []
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
     if (path.includes("/contents/") && path.includes("classroom.json")) {
@@ -2655,10 +2665,15 @@ const makeRoleChangeClient = (opts: { members: string[] }) => {
           const slug = decodeURIComponent(parts.split("/memberships/")[0])
           const login = decodeURIComponent(parts.split("/memberships/")[1])
           if (method === "DELETE") {
+            if (opts.failRemoveSlug && slug === opts.failRemoveSlug) {
+              return Promise.reject(new Error(`remove failed: ${slug}`))
+            }
             teamRemoves.push({ slug, login })
+            ops.push({ kind: "teamRemove", slug, login })
             return Promise.resolve()
           }
           teamAdds.push({ slug, login })
+          ops.push({ kind: "teamAdd", slug, login })
           return Promise.resolve({ state: "active" })
         }
         // Org membership: GET returns state; PUT sets role.
@@ -2667,6 +2682,7 @@ const makeRoleChangeClient = (opts: { members: string[] }) => {
           if (method === "PUT") {
             const role = (options?.body as { role?: string })?.role ?? ""
             orgRolePuts.push({ login, role })
+            ops.push({ kind: "orgRole", login, role })
             return Promise.resolve({ state: "active", role })
           }
           if (memberSet.has(login.toLowerCase())) {
@@ -2703,10 +2719,11 @@ const makeRoleChangeClient = (opts: { members: string[] }) => {
     teamAdds,
     teamRemoves,
     orgRolePuts,
+    ops,
   }
 }
 
-describe("applyRosterRoleChange — confirmed team move", () => {
+describe("applyRosterRoleChange — confirmed team move / enroll", () => {
   it("moves a student to TA: adds to the ta team, removes from the student team", async () => {
     const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
       { members: ["userb"] },
@@ -2716,7 +2733,7 @@ describe("applyRosterRoleChange — confirmed team move", () => {
       org: "acme",
       classroom: "cs101",
       username: "userb",
-      fromRole: "student",
+      fromRoles: ["student"],
       toRole: "ta",
     })
 
@@ -2742,7 +2759,7 @@ describe("applyRosterRoleChange — confirmed team move", () => {
       org: "acme",
       classroom: "cs101",
       username: "userb",
-      fromRole: "student",
+      fromRoles: ["student"],
       toRole: "instructor",
     })
 
@@ -2753,16 +2770,15 @@ describe("applyRosterRoleChange — confirmed team move", () => {
     expect(orgRolePuts).toContainEqual({ login: "userb", role: "admin" })
   })
 
-  it("downgrades an instructor to student: demotes org role to member", async () => {
-    const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
-      { members: ["boss"] },
-    )
+  it("downgrades an instructor to student: demotes org role to member BEFORE any team change", async () => {
+    const { client, teamAdds, teamRemoves, orgRolePuts, ops } =
+      makeRoleChangeClient({ members: ["boss"] })
 
     await applyRosterRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "boss",
-      fromRole: "instructor",
+      fromRoles: ["instructor"],
       toRole: "student",
     })
 
@@ -2775,6 +2791,75 @@ describe("applyRosterRoleChange — confirmed team move", () => {
       login: "boss",
     })
     expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
+    // The owner demote must run FIRST, so a failure never leaves the member
+    // half-moved-but-still-owner. The first recorded op is the membership PUT.
+    expect(ops[0]).toEqual({ kind: "orgRole", login: "boss", role: "member" })
+  })
+
+  it("drops EVERY non-target classroom team for a multi-team member", async () => {
+    const { client, teamRemoves } = makeRoleChangeClient({ members: ["boss"] })
+
+    // On both instructor + ta; move to student -> both staff teams dropped.
+    await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "boss",
+      fromRoles: ["ta", "instructor"],
+      toRole: "student",
+    })
+
+    expect(teamRemoves).toContainEqual({
+      slug: "classroom50-cs101-instructor",
+      login: "boss",
+    })
+    expect(teamRemoves).toContainEqual({
+      slug: "classroom50-cs101-ta",
+      login: "boss",
+    })
+  })
+
+  it("enroll (empty fromRoles): adds to the target team and drops nothing", async () => {
+    const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
+      { members: ["newta"] },
+    )
+
+    await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "newta",
+      fromRoles: [],
+      toRole: "ta",
+    })
+
+    expect(teamAdds).toContainEqual({
+      slug: "classroom50-cs101-ta",
+      login: "newta",
+    })
+    expect(teamRemoves).toEqual([])
+    expect(orgRolePuts).toEqual([]) // ta target, not instructor
+  })
+
+  it("surfaces a warning (not a throw) when the old-team removal fails", async () => {
+    const { client, teamAdds } = makeRoleChangeClient({
+      members: ["userb"],
+      failRemoveSlug: "classroom50-cs101",
+    })
+
+    const result = await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "userb",
+      fromRoles: ["student"],
+      toRole: "ta",
+    })
+
+    // Target add still landed; the failed removal is a warning, not fatal.
+    expect(teamAdds).toContainEqual({
+      slug: "classroom50-cs101-ta",
+      login: "userb",
+    })
+    expect(result.warnings.length).toBe(1)
+    expect(result.warnings[0]).toMatch(/removing them from/)
   })
 
   it("throws for a non-member (never team-adds) so the caller routes to invite", async () => {
@@ -2785,7 +2870,7 @@ describe("applyRosterRoleChange — confirmed team move", () => {
         org: "acme",
         classroom: "cs101",
         username: "stranger",
-        fromRole: "student",
+        fromRoles: ["student"],
         toRole: "ta",
       }),
     ).rejects.toThrow(/not an active member/)

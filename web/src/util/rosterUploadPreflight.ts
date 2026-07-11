@@ -1,5 +1,5 @@
 import { STAFF_ROLES } from "@/types/classroom"
-import { ROLE_RANK, type RosterRole } from "@/util/teamRoster"
+import { sortRolesByRank, type RosterRole } from "@/util/teamRoster"
 
 // Preflight classification for a CSV roster upload. Pure: given the uploaded
 // rows (each resolved to a username + intended role) and the classroom's CURRENT
@@ -51,8 +51,12 @@ export type PreflightOutcome =
       username: string
       // The CSV's intended role (the target team to move onto).
       role: PreflightRole
-      // The account's current highest-precedence classroom role.
+      // The account's current highest-precedence classroom role (for display).
       currentRole: RosterRole
+      // ALL classroom roles the account currently holds. applyRosterRoleChange
+      // drops every non-target team, so a member on both the instructor and TA
+      // teams moved to student leaves neither staff team behind.
+      currentRoles: RosterRole[]
     }
 
 export type PreflightResult = {
@@ -67,10 +71,10 @@ export type PreflightResult = {
 }
 
 // The highest-precedence role in a set (instructor > ta > student), or undefined
-// for an account on no classroom team.
+// for an account on no classroom team. Uses the canonical sortRolesByRank so the
+// precedence order has a single source (teamRoster.ROLE_RANK).
 function primaryOf(roles: RosterRole[]): RosterRole | undefined {
-  if (roles.length === 0) return undefined
-  return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])[0]
+  return roles.length === 0 ? undefined : sortRolesByRank(roles)[0]
 }
 
 // Classify each uploaded row against current membership. `lookup` resolves a
@@ -112,12 +116,15 @@ export function classifyRosterUpload(
     }
 
     // Active member whose current role differs from the CSV role -> a move that
-    // requires confirmation (student<->ta<->instructor, up or down).
+    // requires confirmation (student<->ta<->instructor, up or down). Carry the
+    // full current role set so the move drops every non-target team, not just
+    // the primary one.
     outcomes.push({
       kind: "role_change",
       username,
       role: row.role,
       currentRole,
+      currentRoles: [...current.roles],
     })
   }
 
@@ -182,12 +189,6 @@ export function membershipLookup(
 // (Re-exported from util/identity so the roster and this preflight share one
 // fold.)
 export { memberIdentitySets } from "@/util/identity"
-
-// Roles present in a set of outcomes' target roles — used to decide which staff
-// teams the apply pass must ensure exist.
-export function rolesInOutcomes(outcomes: PreflightOutcome[]): Set<RosterRole> {
-  return new Set(outcomes.map((o) => o.role))
-}
 
 // Whether any confirmed role change promotes someone to instructor (org owner),
 // so the UI can surface the owner-access warning only when relevant.

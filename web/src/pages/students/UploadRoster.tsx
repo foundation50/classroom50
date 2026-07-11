@@ -22,6 +22,7 @@ import {
   hasInstructorPromotion,
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
+import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
 import { logger } from "@/lib/logger"
 import type { RosterRole } from "@/util/teamRoster"
 
@@ -96,15 +97,6 @@ export const coerceImportRole = (
   }
   return undefined
 }
-
-// i18n key for a role's singular label, shared by the preview role Select and
-// the role-change list.
-const roleLabelKey = (role: RosterRole): string =>
-  role === "ta"
-    ? "students.roleTa"
-    : role === "instructor"
-      ? "students.roleInstructor"
-      : "students.roleStudent"
 
 // A small summary tile for a preflight bucket (count + label). Zero-count
 // buckets dim so the teacher's eye goes to what actually changes.
@@ -237,7 +229,7 @@ const UploadRoster = ({
   // Outcome of the confirmed role-change (team-move) pass, surfaced in the
   // result dialog alongside the invite outcomes.
   const [roleChangeOutcome, setRoleChangeOutcome] = useState<{
-    changed: { username: string; from: RosterRole; to: RosterRole }[]
+    changed: { username: string; to: RosterRole }[]
     failed: { username: string; message: string }[]
   } | null>(null)
 
@@ -334,15 +326,25 @@ const UploadRoster = ({
   }, [phase, rolesKey, org, classroom])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
-  const needsRoleConfirm = roleChanges.length > 0
+  // Enroll rows targeting instructor grant org OWNER on process, so — like a
+  // confirmed role change — they must sit behind the confirmation checkbox.
+  const instructorEnrolls = useMemo(
+    () => (preflight?.enroll ?? []).filter((e) => e.role === "instructor"),
+    [preflight],
+  )
+  // Confirmation is required for any team move (role change) or any org-owner
+  // grant via an instructor enroll — both are actions the teacher must approve.
+  const needsRoleConfirm =
+    roleChanges.length > 0 || instructorEnrolls.length > 0
   const showInstructorOwnerNotice = useMemo(
     () =>
       hasInstructorPromotion(roleChanges) ||
+      instructorEnrolls.length > 0 ||
       Object.values(rolesByUser).some((r) => r === "instructor"),
-    [roleChanges, rolesByUser],
+    [roleChanges, instructorEnrolls, rolesByUser],
   )
   // The primary action is blocked while the preflight is resolving/failed, or
-  // while role changes await explicit confirmation.
+  // while role changes / instructor enrolls await explicit confirmation.
   const canProcess =
     rows.length > 0 &&
     !preflighting &&
@@ -527,62 +529,83 @@ const UploadRoster = ({
       } catch (err) {
         if (err instanceof RosterCsvMalformedError) {
           setInviteError(t("students.roleWritebackMalformed"))
+        } else {
+          // A transient/other writeback failure isn't fatal (the role converges
+          // on the next sync), but the completed dialog would otherwise show a
+          // bare success — surface a soft warning so the teacher knows the role
+          // column didn't persist this run.
+          setInviteError(t("students.roleWritebackFailed"))
         }
         log.warn("roster role writeback failed", { err, record: true })
       }
     }
 
-    // 4) Apply the CONFIRMED role changes (team moves) the preflight identified.
-    //    Only runs for rows the teacher explicitly confirmed via the checkbox;
-    //    each is a destructive move (drops the old classroom team) and, for an
-    //    instructor target, an org-owner promotion. Best-effort per row: a
-    //    failure is surfaced in the result dialog, not fatal (the roster write
-    //    already landed).
-    const changes = plan?.roleChanges ?? []
-    if (changes.length > 0) {
+    // 4) Apply the CONFIRMED team assignments the preflight identified:
+    //    - role_change: an active member on a DIFFERENT classroom team -> move
+    //      them (drop every non-target team; instructor target grants org owner,
+    //      a demotion off instructor revokes it). Gated behind the confirmation
+    //      checkbox in the preview.
+    //    - enroll: an active member on NO classroom team -> an additive team-add
+    //      onto the CSV role's team (empty fromRoles, so nothing is dropped).
+    //    Both route through applyRosterRoleChange (re-verifies active membership,
+    //    never team-adds a non-member). Best-effort per row: a failure is
+    //    surfaced in the result dialog, not fatal (the roster write already
+    //    landed).
+    const moves: {
+      username: string
+      fromRoles: RosterRole[]
+      toRole: RosterRole
+    }[] = [
+      ...(plan?.roleChanges ?? []).map((c) => ({
+        username: c.username,
+        fromRoles: c.currentRoles,
+        toRole: c.role,
+      })),
+      ...(plan?.enroll ?? []).map((e) => ({
+        username: e.username,
+        fromRoles: [] as RosterRole[],
+        toRole: e.role,
+      })),
+    ]
+    if (moves.length > 0) {
       setProgress({
         processed: 0,
-        total: changes.length,
+        total: moves.length,
         message: t("students.processRoleChanges"),
       })
       const changed: {
         username: string
-        from: RosterRole
         to: RosterRole
       }[] = []
       const failed: { username: string; message: string }[] = []
       let done = 0
-      for (const change of changes) {
+      for (const move of moves) {
         try {
           const res = await applyRosterRoleChange(client, {
             org,
             classroom,
-            username: change.username,
-            github_id: idByLogin.get(change.username.toLowerCase()),
-            fromRole: change.currentRole,
-            toRole: change.role,
+            username: move.username,
+            github_id: idByLogin.get(move.username.toLowerCase()),
+            fromRoles: move.fromRoles,
+            toRole: move.toRole,
           })
-          changed.push({
-            username: res.username,
-            from: res.fromRole,
-            to: res.toRole,
-          })
+          changed.push({ username: res.username, to: res.toRole })
           // A best-effort old-team removal failure is a warning, not a hard
           // failure — surface it alongside so the teacher can retry.
           for (const w of res.warnings) {
-            failed.push({ username: change.username, message: w })
+            failed.push({ username: move.username, message: w })
           }
         } catch (err) {
           log.error("roster role change failed", { err, record: true })
           failed.push({
-            username: change.username,
+            username: move.username,
             message: err instanceof Error ? err.message : String(err),
           })
         } finally {
           done += 1
           setProgress({
             processed: done,
-            total: changes.length,
+            total: moves.length,
             message: t("students.processRoleChanges"),
           })
         }
@@ -689,26 +712,38 @@ const UploadRoster = ({
                   />
                 </div>
 
-                {/* Role changes need explicit confirmation — a destructive team
-                    move (and, for instructor, an org-owner promotion). List each
-                    change and gate the primary button on the checkbox. */}
-                {roleChanges.length > 0 ? (
+                {/* Team moves and org-owner grants need explicit confirmation:
+                    a role change is a destructive team move, and an instructor
+                    target (role change OR enroll) grants org OWNER. List each
+                    and gate the primary button on the checkbox. */}
+                {needsRoleConfirm ? (
                   <div className="mt-1 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
                     <h4 className="text-sm font-semibold">
-                      {t("students.preflightRoleChangeTitle")}
+                      {t("students.preflightConfirmTitle")}
                     </h4>
                     <ul className="flex flex-col gap-1 text-sm">
                       {roleChanges.map((c) => (
                         <li
-                          key={c.username}
+                          key={`change-${c.username}`}
                           className="flex items-center justify-between gap-2"
                         >
                           <code>{c.username}</code>
                           <span className="opacity-70">
                             {t("students.preflightRoleChangeDetail", {
-                              from: t(roleLabelKey(c.currentRole)),
-                              to: t(roleLabelKey(c.role)),
+                              from: t(ROLE_LABEL_KEY[c.currentRole]),
+                              to: t(ROLE_LABEL_KEY[c.role]),
                             })}
+                          </span>
+                        </li>
+                      ))}
+                      {instructorEnrolls.map((e) => (
+                        <li
+                          key={`enroll-${e.username}`}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <code>{e.username}</code>
+                          <span className="opacity-70">
+                            {t("students.preflightEnrollOwnerDetail")}
                           </span>
                         </li>
                       ))}
@@ -731,7 +766,7 @@ const UploadRoster = ({
                       />
                       <span>
                         {t("students.preflightConfirmRoleChanges", {
-                          count: roleChanges.length,
+                          count: roleChanges.length + instructorEnrolls.length,
                         })}
                       </span>
                     </label>
@@ -919,9 +954,7 @@ const UploadRoster = ({
                 rows={inviteOutcome.invited.map(({ username, role }) => ({
                   key: username,
                   label: username,
-                  detail: t(
-                    `students.role${role === "ta" ? "Ta" : role === "instructor" ? "Instructor" : "Student"}`,
-                  ),
+                  detail: t(ROLE_LABEL_KEY[role]),
                 }))}
               />
             )}
@@ -954,10 +987,7 @@ const UploadRoster = ({
                 rows={roleChangeOutcome.changed.map((c) => ({
                   key: c.username,
                   label: c.username,
-                  detail: t("students.preflightRoleChangeDetail", {
-                    from: t(roleLabelKey(c.from)),
-                    to: t(roleLabelKey(c.to)),
-                  }),
+                  detail: t(ROLE_LABEL_KEY[c.to]),
                 }))}
               />
             )}

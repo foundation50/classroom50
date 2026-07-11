@@ -30,8 +30,12 @@ import {
   type RosterRole,
   type TeamRosterRow,
 } from "@/util/teamRoster"
-import { hasStudentEnrollment } from "@/util/rosterRoles"
-import { Button, Modal } from "@/components/ui"
+import {
+  hasStudentEnrollment,
+  STATE_BADGE_TONE,
+  STATE_LABEL_KEY,
+} from "@/util/rosterRoles"
+import { Badge, Button, Modal } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -481,23 +485,9 @@ const RosterMemberModal = ({
               <span className="text-sm text-base-content/70">
                 {t("students.statusLabel")}
               </span>
-              {row.state === "enrolled" ? (
-                <span className="badge badge-sm badge-success badge-soft">
-                  {t("students.statusEnrolled")}
-                </span>
-              ) : row.state === "needs_attention_in_org" ? (
-                <span className="badge badge-sm badge-warning badge-soft">
-                  {t("students.statusNeedsAttentionInOrg")}
-                </span>
-              ) : row.state === "needs_attention_not_in_org" ? (
-                <span className="badge badge-sm badge-error badge-soft">
-                  {t("students.statusNeedsAttentionNotInOrg")}
-                </span>
-              ) : (
-                <span className="badge badge-sm badge-warning badge-soft">
-                  {t("students.statusPending")}
-                </span>
-              )}
+              <Badge size="sm" tone={STATE_BADGE_TONE[row.state]}>
+                {t(STATE_LABEL_KEY[row.state])}
+              </Badge>
             </div>
             <div className="flex items-start justify-between gap-3 px-4 py-2.5">
               <span className="text-sm text-base-content/70">

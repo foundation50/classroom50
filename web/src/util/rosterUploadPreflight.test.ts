@@ -76,6 +76,7 @@ describe("classifyRosterUpload", () => {
         username: "userb",
         role: "ta",
         currentRole: "student",
+        currentRoles: ["student"],
       },
     ])
   })
@@ -93,6 +94,7 @@ describe("classifyRosterUpload", () => {
         username: "usera",
         role: "student",
         currentRole: "ta",
+        currentRoles: ["ta"],
       },
     ])
   })
@@ -109,6 +111,8 @@ describe("classifyRosterUpload", () => {
       role: "student",
       currentRole: "instructor",
     })
+    // Carries the FULL current role set so the move drops both staff teams.
+    expect(result.roleChanges[0].currentRoles).toEqual(["ta", "instructor"])
   })
 
   it("reports allAlreadyMembers when nobody needs an invite", () => {
@@ -184,6 +188,7 @@ describe("hasInstructorPromotion", () => {
           username: "a",
           role: "ta",
           currentRole: "student",
+          currentRoles: ["student"],
         },
       ]),
     ).toBe(false)
@@ -194,6 +199,7 @@ describe("hasInstructorPromotion", () => {
           username: "b",
           role: "instructor",
           currentRole: "student",
+          currentRoles: ["student"],
         },
       ]),
     ).toBe(true)

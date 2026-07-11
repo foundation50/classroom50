@@ -41,6 +41,8 @@ import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
   ROLE_BADGE_TONE,
+  STATE_BADGE_TONE,
+  STATE_LABEL_KEY,
   hasStudentEnrollment,
   primaryRole,
 } from "@/util/rosterRoles"
@@ -556,20 +558,14 @@ const EnrolledStudents = ({
               {row.section.trim()}
             </span>
           ) : null}
-          {row.state === "pending" ? (
-            <span className="badge badge-sm badge-warning badge-soft shrink-0">
-              {t("students.statusPending")}
-            </span>
-          ) : null}
-          {row.state === "needs_attention_in_org" ? (
-            <span className="badge badge-sm badge-warning badge-soft shrink-0">
-              {t("students.statusNeedsAttentionInOrg")}
-            </span>
-          ) : null}
-          {row.state === "needs_attention_not_in_org" ? (
-            <span className="badge badge-sm badge-error badge-soft shrink-0">
-              {t("students.statusNeedsAttentionNotInOrg")}
-            </span>
+          {row.state !== "enrolled" ? (
+            <Badge
+              size="sm"
+              tone={STATE_BADGE_TONE[row.state]}
+              className="shrink-0"
+            >
+              {t(STATE_LABEL_KEY[row.state])}
+            </Badge>
           ) : null}
           <ChevronRight
             aria-hidden="true"
