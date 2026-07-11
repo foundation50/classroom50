@@ -368,7 +368,7 @@ func TestRemoveClassroom(t *testing.T) {
 		mock := &configRepoMock{files: map[string]string{
 			"cs-principles/classroom.json":                  classroomJSONContent(t, "o", "cs-principles", "CS Principles", ""),
 			"cs-principles/assignments.json":                "[]",
-			"cs-principles/students.csv":                    "username\n",
+			"cs-principles/roster.csv":                      "username\n",
 			"cs-principles/scores.json":                     "{}",
 			"cs-principles/autograders/hello/autograder.py": "print()\n",
 			// Sibling classroom that must survive.

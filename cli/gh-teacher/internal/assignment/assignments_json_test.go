@@ -171,7 +171,7 @@ func TestParseAssignments_RejectsInvalidAutograder(t *testing.T) {
       "name": "Hello",
       "template": { "owner": "cs50", "repo": "hello-template", "branch": "main" },
       "mode": "individual",
-      "autograder": "../students.csv"
+      "autograder": "../secrets.txt"
     }
   ]
 }`)

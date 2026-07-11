@@ -90,8 +90,8 @@ export const githubKeys = {
     [...githubKeys.all, "raw-file", owner, repo, path, ref ?? null] as const,
 
   // Distinct from `rawFile`: the roster raw read uses a different queryFn (with
-  // a legacy roster.csv -> students.csv 404 fallback), so it must not share a
-  // cache entry with rawFileQuery for the same path.
+  // a 404 fallback from the current roster name to the legacy one), so it must
+  // not share a cache entry with rawFileQuery for the same path.
   rosterRawFile: (owner: string, repo: string, path: string, ref?: string) =>
     [
       ...githubKeys.all,
@@ -566,9 +566,10 @@ export function csvFileQuery<T>(
   repo: string,
   path: string,
   ref?: string,
-  // Legacy path tried only when `path` 404s (roster.csv -> students.csv). The
-  // query key stays on `path`, so a post-migration read converges on roster.csv
-  // and optimistic writes never have to know which name served the bytes.
+  // Legacy path tried only when `path` 404s (current roster name -> legacy).
+  // The query key stays on `path`, so a post-migration read converges on the
+  // current name and optimistic writes never have to know which name served the
+  // bytes.
   fallbackPath?: string,
 ) {
   return queryOptions({
@@ -630,12 +631,13 @@ function readContents(
   )
 }
 
-// Raw roster.csv bytes with a legacy fallback (roster.csv -> students.csv on a
-// 404), returning the unparsed text so the caller can run the strict parser and
-// surface per-line problems. Keyed on `rosterRawFile` — a namespace of its own,
-// distinct from both `rawFile` (rawFileQuery, no fallback, different queryFn)
-// and csvFileQuery's parsed-rows key — so this additive problem-detection read
-// can never collide with another raw or parsed read of the same path. The
+// Raw roster.csv bytes with a legacy fallback (current roster name -> legacy on
+// a 404), returning the unparsed text so the caller can run the strict parser
+// and surface per-line problems. Keyed on `rosterRawFile` — a namespace of its
+// own, distinct from both `rawFile` (rawFileQuery, no fallback, different
+// queryFn) and csvFileQuery's parsed-rows key — so this additive
+// problem-detection read can never collide with another raw or parsed read of
+// the same path. The
 // parsed-rows read (csvFileQuery) still drives display.
 export function rosterRawFileQuery(
   client: GitHubClient,
@@ -698,18 +700,18 @@ export async function getRawFile(
 // Read a config file, falling back to `fallbackPath` only on a 404, and report
 // whether the fallback (legacy) path was the one that answered. The roster
 // read-modify-write mutations use this so a classroom bootstrapped before the
-// students.csv -> roster.csv rename (only students.csv on disk) is both
-// editable AND converged in the same commit: the write always targets
-// roster.csv, and when `fromLegacy` is true it also deletes students.csv, so a
-// first edit renames the file (matching `gh teacher roster migrate`) instead of
-// leaving a stale legacy copy behind. A non-404 error propagates — a real API
-// failure must not be masked as "missing, use legacy".
+// roster rename (only the legacy name on disk) is both editable AND converged
+// in the same commit: the write always targets the current name, and when
+// `fromLegacy` is true it also deletes the legacy file, so a first edit renames
+// it (matching `gh teacher roster migrate`) instead of leaving a stale copy
+// behind. A non-404 error propagates — a real API failure must not be masked as
+// "missing, use legacy".
 //
 // Not retried: the Contents API is eventually consistent per path, so right
-// after a roster.csv write it can briefly 404 while the pre-rename students.csv
-// still reads, and this would fall back to slightly-stale legacy bytes. We
-// accept that window rather than retry, because a 404 here is far more often a
-// stable "un-migrated classroom, only students.csv exists" than a lag blip —
+// after a write to the current name it can briefly 404 while the legacy name
+// still reads, and this would fall back to slightly-stale bytes. We accept that
+// window rather than retry, because a 404 here is far more often a stable
+// un-migrated classroom (only the legacy file exists) than a lag blip —
 // retrying would slow every legacy-classroom read (the common case) to cover a
 // rare, self-healing one. The acting tab is masked by the optimistic cache
 // (useUpdateRosterCache), and the classroom TEAM, not this CSV, is the

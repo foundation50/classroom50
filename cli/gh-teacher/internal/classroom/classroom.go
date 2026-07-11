@@ -34,8 +34,8 @@ const (
 	assignmentsSchemaV1 = contract.AssignmentsSchemaV1
 )
 
-// studentsCSVHeader derives from configrepo.RosterColumns so they can't drift.
-var studentsCSVHeader = strings.Join(configrepo.RosterColumns, ",") + "\n"
+// rosterCSVHeader derives from configrepo.RosterColumns so they can't drift.
+var rosterCSVHeader = strings.Join(configrepo.RosterColumns, ",") + "\n"
 
 // defaultAutograderName is the "use the universal default autograder"
 // sentinel, single-sourced from the shared contract; the migrate path stamps
@@ -824,7 +824,7 @@ func classroomScaffold(org, shortName, name, term, secret string, entries []assi
 	return map[string]string{
 		shortName + "/classroom.json":             string(classroomBytes),
 		shortName + "/assignments.json":           string(assignmentsBytes),
-		shortName + "/" + contract.RosterFilename: studentsCSVHeader,
+		shortName + "/" + contract.RosterFilename: rosterCSVHeader,
 		shortName + "/scores.json":                string(scoresBytes),
 	}, nil
 }

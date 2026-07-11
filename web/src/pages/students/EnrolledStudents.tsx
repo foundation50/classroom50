@@ -332,14 +332,14 @@ const EnrolledStudents = ({
       : []),
   ]
 
-  // Auto-migrate on open: converge a classroom bootstrapped before the
-  // students.csv -> roster.csv rename so roster.csv always physically exists.
-  // Idempotent and cheap (a no-op once roster.csv is present). It runs BEFORE
-  // auto-sync (which gates on migrateSettledFor) so the two roster writers don't
-  // race on the ref. The rename changes only the file's path, not its content,
-  // and reads already fall back to students.csv, so there's no cache to
-  // invalidate — a plain invalidate here would refetch eventually-consistent
-  // bytes and needlessly re-arm auto-sync.
+  // Auto-migrate on open: converge a classroom bootstrapped before the roster
+  // rename so roster.csv always physically exists. Idempotent and cheap (a
+  // no-op once roster.csv is present). It runs BEFORE auto-sync (which gates on
+  // migrateSettledFor) so the two roster writers don't race on the ref. The
+  // rename changes only the file's path, not its content, and reads already
+  // fall back to the legacy name, so there's no cache to invalidate — a plain
+  // invalidate here would refetch eventually-consistent bytes and needlessly
+  // re-arm auto-sync.
   const [migrateSettledFor, setMigrateSettledFor] = useState<string | null>(
     null,
   )
@@ -347,8 +347,9 @@ const EnrolledStudents = ({
     mutationFn: () => migrateRosterFile(client, { org, classroom }),
     onSettled: () => setMigrateSettledFor(classroom),
     // Best-effort convergence: a failure is non-fatal (reads still fall back to
-    // students.csv), so it's logged by the mutation layer, not surfaced — and
-    // onSettled still unblocks auto-sync so a migrate hiccup can't strand it.
+    // the legacy name), so it's logged by the mutation layer, not surfaced —
+    // and onSettled still unblocks auto-sync so a migrate hiccup can't strand
+    // it.
   })
   // Fire once per classroom (the component instance is reused across a
   // $classroom param switch, so a boolean would skip later classrooms).
@@ -403,8 +404,8 @@ const EnrolledStudents = ({
   const backfillNeededKey = backfillNeededLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
-    // Wait for the migrate pass to settle first (converges students.csv ->
-    // roster.csv) so sync's write can't race migrate's on the ref.
+    // Wait for the migrate pass to settle first (converges the legacy roster
+    // name onto roster.csv) so sync's write can't race migrate's on the ref.
     if (migrateSettledFor !== classroom) return
     // Sync when there's drift to fix: a team member with no CSV row (missing),
     // OR an existing CSV row that's stale against the team (blank github_id or a

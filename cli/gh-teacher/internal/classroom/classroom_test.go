@@ -181,11 +181,11 @@ func TestClassroomScaffold(t *testing.T) {
 	}
 
 	csv := files["cs-principles/roster.csv"]
-	if csv != studentsCSVHeader {
-		t.Errorf("students.csv = %q, want %q", csv, studentsCSVHeader)
+	if csv != rosterCSVHeader {
+		t.Errorf("roster.csv = %q, want %q", csv, rosterCSVHeader)
 	}
 	if !strings.HasSuffix(csv, "\n") {
-		t.Errorf("students.csv header should end with a newline, got %q", csv)
+		t.Errorf("roster.csv header should end with a newline, got %q", csv)
 	}
 }
 

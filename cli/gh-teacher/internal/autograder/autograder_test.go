@@ -51,7 +51,7 @@ func TestValidateAutograderName(t *testing.T) {
 
 		// Path-traversal / separator attempts. Must not reach the
 		// contents API.
-		{"../students.csv", true},
+		{"../secrets.txt", true},
 		{"..", true},
 		{"foo/bar", true},
 		{".github", true},

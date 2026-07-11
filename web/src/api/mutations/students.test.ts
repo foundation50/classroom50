@@ -156,8 +156,8 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
         // The write target is always roster.csv; the read may fall back to the
-        // legacy students.csv (covered separately below), but here roster.csv
-        // exists so no fallback fires.
+        // legacy name (covered separately below), but here roster.csv exists so
+        // no fallback fires.
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           return Promise.resolve({
             type: "file",
@@ -205,12 +205,12 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
     expect(treePaths).not.toContain("cs101/students.csv")
   })
 
-  // A classroom bootstrapped before the students.csv -> roster.csv rename has
-  // only students.csv on disk. The read-modify-write mutations must fall back to
-  // the legacy file on a roster.csv 404 (mirroring the display readers) so the
-  // roster stays editable from the web before `gh teacher roster migrate` runs;
-  // the write converges onto roster.csv AND deletes the legacy students.csv in
-  // the same commit (migrate-on-write), so a first edit renames the file.
+  // A classroom bootstrapped before the roster rename has only the legacy file
+  // on disk. The read-modify-write mutations must fall back to it on a
+  // roster.csv 404 (mirroring the display readers) so the roster stays editable
+  // from the web before `gh teacher roster migrate` runs; the write converges
+  // onto roster.csv AND deletes the legacy file in the same commit
+  // (migrate-on-write), so a first edit renames it.
   it("reads the legacy students.csv when roster.csv is absent, writing roster.csv and deleting students.csv", async () => {
     const treeEntries: {
       path: string

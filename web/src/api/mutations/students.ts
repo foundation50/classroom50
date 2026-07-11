@@ -65,11 +65,11 @@ import { logger } from "@/lib/logger"
 const log = logger.scope("mutations:students")
 
 // Build the git-tree entries for a roster read-modify-write: always the
-// roster.csv blob, plus — when the read fell back to the legacy students.csv —
-// a deletion of that legacy path. Threading `fromLegacy` (from
-// getRawFileWithFallbackSource) through here converges an un-migrated classroom
-// on its first edit: one commit writes the migrated + new content to
-// roster.csv and drops students.csv, matching `gh teacher roster migrate`,
+// roster.csv blob, plus — when the read fell back to the legacy file
+// (legacyRosterPath) — a deletion of that legacy path. Threading `fromLegacy`
+// (from getRawFileWithFallbackSource) through here converges an un-migrated
+// classroom on its first edit: one commit writes the migrated + new content to
+// roster.csv and drops the legacy file, matching `gh teacher roster migrate`,
 // instead of leaving a stale legacy copy alongside the new file.
 function rosterWriteTree(
   classroom: string,
@@ -1194,14 +1194,14 @@ async function readFileOrNull(
   }
 }
 
-// Converge a classroom bootstrapped before the students.csv -> roster.csv
-// rename onto roster.csv, so the file always physically exists. Mirrors the CLI
-// `gh teacher roster migrate`: if only the legacy students.csv is present, write
-// roster.csv with its bytes verbatim and delete students.csv in ONE tree commit.
-// Idempotent: a no-op when roster.csv already exists, and nothing-to-do when
-// neither file is present (a brand-new classroom's roster.csv is created by the
-// team sync instead). Runs inside the conflict-retry loop so a concurrent write
-// (e.g. an interleaved roster edit) is re-read rather than clobbered.
+// Converge a classroom bootstrapped before the roster rename onto roster.csv,
+// so the file always physically exists. Mirrors the CLI `gh teacher roster
+// migrate`: if only the legacy students.csv is present, write roster.csv with
+// its bytes verbatim and delete the legacy file in ONE tree commit. Idempotent:
+// a no-op when roster.csv already exists, and nothing-to-do when neither file
+// is present (a brand-new classroom's roster.csv is created by the team sync
+// instead). Runs inside the conflict-retry loop so a concurrent write (e.g. an
+// interleaved roster edit) is re-read rather than clobbered.
 export async function migrateRosterFile(
   client: GitHubClient,
   input: { org: string; classroom: string },
@@ -1228,7 +1228,7 @@ export async function migrateRosterFile(
     }
 
     // Only the legacy file exists: write roster.csv with its bytes verbatim and
-    // delete students.csv in a single commit (mode 100644; sha:null deletes).
+    // delete the legacy file in a single commit (mode 100644; sha:null deletes).
     const tree = await createGitTree(client, {
       org,
       base_tree: commit.tree.sha,

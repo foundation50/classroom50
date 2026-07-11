@@ -34,7 +34,7 @@ func NewCmd() *cobra.Command {
 			"  remove   remove one student from the roster (does NOT touch org membership)\n" +
 			"  import   bulk upsert from a local CSV (5-column input accepted; github_id auto-filled)\n" +
 			"  migrate  rename a legacy students.csv to roster.csv (one commit)\n\n" +
-			"Reads fall back to the legacy students.csv for classrooms\n" +
+			"Reads fall back to that legacy name for classrooms\n" +
 			"bootstrapped before the rename; writes always target roster.csv.\n\n" +
 			"All writes use a single Tree commit on <org>/classroom50's\n" +
 			"default branch and retry with an optimistic rebase loop\n" +

@@ -5,7 +5,7 @@ Walks the classroom team × assignment manifest: for each (team member,
 assignment) pair, pages the canonical `<classroom>-<assignment>-<username>`
 repo's `submit/*` releases, validates each `result.json` asset, and upserts
 into `<classroom>/scores.json`. The classroom GitHub team is the source of
-truth for enrollment; the roster (roster.csv, legacy students.csv) is only a
+truth for enrollment; the roster (roster.csv, or the legacy name) is only a
 best-effort source of optional display metadata (name/section/email).
 
 `scores.json` is keyed by assignment slug under root `assignments`: each value
@@ -244,7 +244,7 @@ def iter_classrooms(
     Collection is TEAM-driven: the classroom GitHub team is the source of truth
     for enrollment, so this no longer reads the roster to decide who to poll
     (the team enumeration in collect_classroom drives the pairs). The roster
-    (roster.csv, legacy students.csv) is only best-effort display metadata,
+    (roster.csv, or the legacy name) is only best-effort display metadata,
     joined onto collected results and also consumed elsewhere (the Go download
     scores.csv join and the web roster view).
     """
@@ -283,7 +283,7 @@ def iter_classrooms(
 
 def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str]]:
     """Best-effort roster read for optional display metadata, keyed by
-    lowercased username. Tries roster.csv first, then the legacy students.csv
+    lowercased username. Tries roster.csv first, then the legacy name
     (classrooms bootstrapped before the rename); writers always target
     roster.csv. The classroom GitHub team — not this file — is authoritative
     for enrollment, so a missing/unreadable/malformed roster is NOT fatal: it
@@ -361,7 +361,7 @@ def collect_classroom(
     mode_flip_assignments = 0
 
     # Team-driven username source: the classroom GitHub team is authoritative
-    # for enrollment. The roster (roster.csv, legacy students.csv) is only
+    # for enrollment. The roster (roster.csv, or the legacy name) is only
     # best-effort display metadata, so the (student, assignment) pairs come from
     # the team member list, NOT the CSV. A 404 (team missing) or empty team
     # yields no pairs (warn + return), replacing the old "roster missing" skip.
