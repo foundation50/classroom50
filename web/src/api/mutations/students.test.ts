@@ -1215,8 +1215,8 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
 })
 
 // A fake client over multiple GitHub users, per-user org membership, and the
-// classroom team. Drives bulkEnrollStudentsInClassroom / reconcileTeamFromOrgMembers
-// / syncRosterFromTeam end to end (CSV read+commit, /users/{login}, membership
+// classroom team. Drives bulkEnrollStudentsInClassroom / syncRosterFromTeam end
+// to end (CSV read+commit, /users/{login}, membership
 // GET, team-add PUT, team-members list). `users` maps login -> id/name/email;
 // `members` is the set of ACTIVE org-member logins (case-insensitive); `teamHas`
 // seeds the STUDENT team-member list, and `instructorHas`/`taHas` the staff

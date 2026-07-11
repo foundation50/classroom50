@@ -1033,9 +1033,6 @@ export async function syncRosterFromTeam(
       const teamRole =
         (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
         roleByLogin.get(s.username.trim().toLowerCase())
-      // On a team -> that role. On no team: clear only when the membership read
-      // was complete; otherwise keep the current role (don't wipe from a partial
-      // read).
       const role = teamRole ?? (fullyRead ? "" : s.role)
       if (role !== s.role) {
         roleChanges++
@@ -1200,9 +1197,9 @@ export async function migrateRosterFile(
 export type InviteRosterStudentsInput = {
   org: string
   classroom: string
-  // Rows to invite. Each carries at least a username (a `not_in_org` roster row
-  // always has one); github_id is used when present, else derived from the
-  // username. `pending` rows are handled by resendOrgInvitation, not here.
+  // Rows to invite. Each carries at least a username (a roster.csv row always
+  // has one); github_id is used when present, else derived from the username.
+  // `pending` rows are handled by resendOrgInvitation, not here.
   students: { username: string; github_id?: string }[]
   onProgress?: (progress: {
     processed: number
@@ -1225,13 +1222,13 @@ export type InviteRosterStudentsResult = {
 }
 
 // Bulk-invite roster students who are on roster.csv (by username) but not yet
-// in the organization — the `not_in_org` rows. Resolves each username to its
-// immutable GitHub id (using the stored github_id when present, else
-// GET /users/{username}) and sends a fresh org invitation carrying the
-// classroom team, so accepting it activates team membership atomically. This is
-// the roster-side counterpart to the Org Members "Invite" action; it does NOT
-// write roster.csv (identity backfill is syncRosterFromTeam's job) and never
-// touches an existing active/pending state (ensureOrgMembership no-ops those).
+// in the organization. Resolves each username to its immutable GitHub id (using
+// the stored github_id when present, else GET /users/{username}) and sends a
+// fresh org invitation carrying the classroom team, so accepting it activates
+// team membership atomically. This is the roster-side counterpart to the Org
+// Members "Invite" action; it does NOT write roster.csv (identity backfill is
+// syncRosterFromTeam's job) and never touches an existing active/pending state
+// (ensureOrgMembership no-ops those).
 export async function inviteRosterStudents(
   client: GitHubClient,
   input: InviteRosterStudentsInput,

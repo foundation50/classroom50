@@ -57,8 +57,7 @@ export type UseTeamRosterResult = {
   teamSlug: string
   // Count of team members with no roster.csv row — the exact set "Sync roster"
   // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
-  // can sync (auto-synced on open). Opposite direction from `not_in_org` (on
-  // CSV, not on team), which sync can't fix.
+  // can sync (auto-synced on open).
   csvMissingCount: number
   // Lowercased logins of team members with no roster.csv row — used to skip a
   // just-unenrolled member (team-drop failed) from the automatic CSV backfill.
@@ -265,8 +264,8 @@ export type OptimisticMember = {
 
 // Optimistically add a just-enrolled member to the team-members cache, then
 // invalidate to reconcile. Enrolling an already-active org member team-adds them
-// with no pending invite, so without the seed buildTeamRoster flashes the row as
-// "not_in_org" until the refetch lands. Dedup by id; the refetch replaces the
+// with no pending invite, so without the seed the just-enrolled member would not
+// render until the refetch lands. Dedup by id; the refetch replaces the
 // stub (or drops it if the add didn't land). No-ops a blank/invalid id.
 export function useSeedTeamMember(
   org: string,

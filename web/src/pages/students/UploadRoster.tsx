@@ -220,6 +220,10 @@ const UploadRoster = ({
   }
 
   const startImport = async () => {
+    // Re-entry guard: a synchronous double-click (before React re-renders the
+    // button out of the preview phase) would otherwise fire two concurrent
+    // imports racing the same roster.csv read-modify-write.
+    if (phase === "importing") return
     setPhase("importing")
     setError(null)
     setResult(null)

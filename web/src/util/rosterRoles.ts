@@ -67,8 +67,8 @@ export function countByRole(rows: TeamRosterRow[]): RoleCounts {
 }
 
 // Enrolled (active-member) head counts by role — the header's "who's in the
-// class" numbers. Pending invites and not_in_org rows are excluded so the
-// counts reflect people actually on a team, matching the old enrolled semantics.
+// class" numbers. Pending invites are excluded so the counts reflect people
+// actually on a team, matching the old enrolled semantics.
 export function enrolledCountsByRole(rows: TeamRosterRow[]): RoleCounts {
   return countByRole(rows.filter((r) => r.state === "enrolled"))
 }

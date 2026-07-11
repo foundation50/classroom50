@@ -394,10 +394,9 @@ const EnrolledStudents = ({
 
   const onRowUnenrolled = (rowKey: string, teamWarning?: string) => {
     if (teamWarning) setWarning(rowKey, teamWarning)
-    // Remember this login so the automatic backfills (auto-sync, auto-reconcile)
-    // don't re-add the student the teacher just removed — e.g. when a
-    // best-effort team-drop failed, or the CSV delete hasn't propagated and they
-    // resurface as not_in_org while still an active org member.
+    // Remember this login so the automatic backfill (auto-sync-on-open) doesn't
+    // re-add the student the teacher just removed — e.g. when a best-effort
+    // team-drop failed, or the CSV delete hasn't propagated yet.
     const removed = rows.find((r) => r.key === rowKey)
     if (removed?.username) suppressedLogins.remember([removed.username])
     updateRosterCache((current) =>
