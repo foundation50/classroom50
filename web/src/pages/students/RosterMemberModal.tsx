@@ -133,23 +133,28 @@ const RosterMemberModal = ({
 
   const handleAssignRole = async () => {
     if (resolving) return
+    const { key, username } = row
+    if (!username) {
+      onError(key, t("students.assignRoleNoUsername", { label }))
+      return
+    }
     setResolving(true)
     try {
       const result = await assignRosterMemberRole(client, {
         org,
         classroom,
-        username: row.username,
+        username,
         role: assignRole,
       })
       if (result.state === "not-member") {
-        onError(row.key, t("students.assignRoleNotMember", { label }))
+        onError(key, t("students.assignRoleNotMember", { label }))
         return
       }
-      onChanged(row.key)
+      onChanged(key)
       onClose()
     } catch (err) {
       onError(
-        row.key,
+        key,
         t("students.assignRoleFailed", { label, error: getErrorMessage(err) }),
       )
     } finally {
@@ -159,26 +164,43 @@ const RosterMemberModal = ({
 
   const handleInvite = async () => {
     if (resolving) return
+    const { key, username, github_id } = row
+    if (!username) {
+      onError(key, t("students.inviteRosterNoUsername", { label }))
+      return
+    }
     setResolving(true)
     try {
       const res = await inviteRosterStudents(client, {
         org,
         classroom,
-        students: [{ username: row.username, github_id: row.github_id }],
+        students: [{ username, github_id }],
       })
+      // A failed target sent nothing; a rate-limited (deferred) target also sent
+      // nothing. Only a fresh invite or an already-active/pending skip is a real
+      // success — otherwise surface it so the teacher retries rather than seeing
+      // a false success while the row stays put.
       const failure = res.failed[0]
       if (failure) {
         onError(
-          row.key,
+          key,
           t("students.inviteRosterFailed", { label, error: failure.message }),
         )
         return
       }
-      onChanged(row.key)
+      if (res.deferred.length > 0) {
+        onError(key, t("students.inviteRosterDeferred", { label }))
+        return
+      }
+      if (res.invited.length === 0 && res.skipped.length === 0) {
+        onError(key, t("students.inviteRosterNoneSent", { label }))
+        return
+      }
+      onChanged(key)
       onClose()
     } catch (err) {
       onError(
-        row.key,
+        key,
         t("students.inviteRosterFailed", {
           label,
           error: getErrorMessage(err),

@@ -1350,9 +1350,26 @@ export async function assignRosterMemberRole(
   await assertClassroomNotArchived(client, org, classroom)
   if (!username) throw new Error("A username is required")
 
-  // Never team-add a non-member (would create a stray team invitation, not an
-  // enrollment). The caller redirects these to the org-invite action.
-  if (!(await isActiveMember(client, org, username))) {
+  // Never team-add a non-member (GitHub would create a stray team invitation,
+  // not an enrollment) — the caller routes a confirmed non-member to the invite
+  // action. Read membership directly (not the error-swallowing isActiveMember)
+  // so a TRANSIENT read failure surfaces as an error the caller can retry,
+  // rather than being misreported as "not a member" (which would wrongly send
+  // the teacher to re-invite an already-active member). Only a definitive 404
+  // (or a non-active state) means not-a-member.
+  let membershipActive: boolean
+  try {
+    const membership = await client.request<{ state?: string }>(
+      `/orgs/${encodeURIComponent(org)}/memberships/${encodeURIComponent(username)}`,
+    )
+    membershipActive = membership.state === "active"
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) {
+      return { state: "not-member" }
+    }
+    throw err
+  }
+  if (!membershipActive) {
     return { state: "not-member" }
   }
 

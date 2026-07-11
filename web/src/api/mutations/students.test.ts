@@ -1317,7 +1317,25 @@ const makeTeamClient = (opts: {
         if (memberSet.has(login.toLowerCase())) {
           return Promise.resolve({ state: "active" })
         }
-        return Promise.reject(new Error("404 not a member"))
+        // A non-member is a real 404 (mirrors GitHub) so a status-aware caller
+        // (assignRosterMemberRole) can tell "not a member" from a transient
+        // read failure; isActiveMember-style callers swallow it to false anyway.
+        return Promise.reject(
+          new GitHubAPIError({
+            status: 404,
+            url: path,
+            message: "Not Found",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          }),
+        )
       }
       if (path.includes("/git/ref/")) {
         return Promise.resolve({ object: { sha: "base-sha" } })
@@ -1346,6 +1364,7 @@ const makeTeamClient = (opts: {
     client: { request, requestRaw } as unknown as GitHubClient,
     committed,
     teamAdds,
+    request,
   }
 }
 
@@ -2115,6 +2134,47 @@ describe("assignRosterMemberRole — enroll a rostered active member", () => {
     })
 
     expect(result).toEqual({ state: "not-member" })
+    expect(teamAdds).toEqual([])
+  })
+
+  it("surfaces a transient membership-read failure instead of misreporting not-member", async () => {
+    const { client, request, teamAdds } = makeTeamClient({
+      startingCsv: HEADER,
+      users: { wanda: { id: 50 } },
+      members: ["wanda"],
+    })
+    // Make the membership read fail transiently (500), not a definitive 404.
+    request.mockImplementationOnce((path: string) => {
+      if (path.includes("/memberships/") && !path.includes("/teams/")) {
+        return Promise.reject(
+          new GitHubAPIError({
+            status: 500,
+            url: path,
+            message: "boom",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          }),
+        )
+      }
+      return Promise.reject(new Error(`unexpected: ${path}`))
+    })
+
+    await expect(
+      assignRosterMemberRole(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "wanda",
+        role: "student",
+      }),
+    ).rejects.toThrow(/boom/)
+    // Never team-added on an unknown membership picture.
     expect(teamAdds).toEqual([])
   })
 })
