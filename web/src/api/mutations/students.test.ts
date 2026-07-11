@@ -10,6 +10,7 @@ import {
   reconcileTeamFromOrgMembers,
   inviteRosterStudents,
   syncRosterFromTeam,
+  migrateRosterFile,
   updateStudent,
   updateStudentWithConflictRetry,
   parseStudentsCsv,
@@ -1867,5 +1868,143 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     // Only the one attempt that tripped the limit was POSTed; no further invites
     // were fired at the throttled endpoint.
     expect(invitations).toEqual([])
+  })
+})
+
+describe("migrateRosterFile — converge students.csv onto roster.csv", () => {
+  // A minimal client: contents reads for roster.csv/students.csv (present in
+  // `files`, else a real 404), plus the git-data write surface. Records the
+  // tree payload so a test can assert the upsert + delete.
+  const notFound = (path: string) =>
+    new GitHubAPIError({
+      status: 404,
+      url: path,
+      message: "Not Found",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  const makeMigrateClient = (files: Record<string, string>) => {
+    const committed: {
+      tree: { path: string; content?: string; sha?: string | null }[] | null
+    } = { tree: null }
+    let treePosted = false
+
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (path.includes("/contents/")) {
+          const match = path.match(/\/contents\/(.+?)(\?|$)/)
+          const rel = match ? decodeURIComponent(match[1]) : ""
+          const content = files[rel]
+          if (content == null) return Promise.reject(notFound(path))
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(content, "utf-8").toString("base64"),
+          })
+        }
+        if (path.includes("/git/ref/")) {
+          return Promise.resolve({ object: { sha: "base-sha" } })
+        }
+        if (path.includes("/git/commits/")) {
+          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+        }
+        if (path.endsWith("/git/trees")) {
+          treePosted = true
+          committed.tree =
+            (
+              options?.body as {
+                tree?: {
+                  path: string
+                  content?: string
+                  sha?: string | null
+                }[]
+              }
+            )?.tree ?? null
+          return Promise.resolve({ sha: "tree-sha" })
+        }
+        if (path.endsWith("/git/commits")) {
+          return Promise.resolve({ sha: "new-commit-sha" })
+        }
+        if (path.endsWith("/git/refs/heads/main")) {
+          return Promise.resolve({})
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+
+    return {
+      client: { request } as unknown as GitHubClient,
+      committed,
+      treePosted: () => treePosted,
+    }
+  }
+
+  const LEGACY =
+    "username,first_name,last_name,email,section,github_id,role\nada,,,,,1,student\n"
+
+  it("renames students.csv to roster.csv (write new + delete legacy) in one commit", async () => {
+    const { client, committed } = makeMigrateClient({
+      "cs101/students.csv": LEGACY,
+    })
+
+    const result = await migrateRosterFile(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.migrated).toBe(true)
+    const upsert = committed.tree?.find((t) => t.path === "cs101/roster.csv")
+    expect(upsert?.content).toBe(LEGACY) // legacy bytes verbatim
+    const del = committed.tree?.find((t) => t.path === "cs101/students.csv")
+    expect(del?.sha).toBeNull() // deletion
+  })
+
+  it("is a no-op when roster.csv already exists", async () => {
+    const { client, treePosted } = makeMigrateClient({
+      "cs101/roster.csv": LEGACY,
+    })
+
+    const result = await migrateRosterFile(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.migrated).toBe(false)
+    expect(treePosted()).toBe(false)
+  })
+
+  it("prefers the existing roster.csv when both files are present (no rename)", async () => {
+    const { client, treePosted } = makeMigrateClient({
+      "cs101/roster.csv": LEGACY,
+      "cs101/students.csv": LEGACY,
+    })
+
+    const result = await migrateRosterFile(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.migrated).toBe(false)
+    expect(treePosted()).toBe(false)
+  })
+
+  it("does nothing when neither file exists (brand-new classroom)", async () => {
+    const { client, treePosted } = makeMigrateClient({})
+
+    const result = await migrateRosterFile(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.migrated).toBe(false)
+    expect(treePosted()).toBe(false)
   })
 })

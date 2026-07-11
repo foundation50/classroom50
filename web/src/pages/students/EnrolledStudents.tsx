@@ -23,6 +23,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   syncRosterFromTeam,
   reconcileTeamFromOrgMembers,
+  migrateRosterFile,
 } from "@/api/mutations/students"
 import { getErrorMessage } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -313,6 +314,35 @@ const EnrolledStudents = ({
       : [{ value: "pending" as const, label: t("students.filterPending") }]),
     { value: "not_in_org", label: t("students.filterNotInOrg") },
   ]
+
+  // Auto-migrate on open: converge a classroom bootstrapped before the
+  // students.csv -> roster.csv rename so roster.csv always physically exists.
+  // Idempotent and cheap (a no-op once roster.csv is present), so fire once per
+  // mount; on an actual rename, refresh the roster read so it reads roster.csv.
+  const migrateMutation = useMutation({
+    mutationFn: () => migrateRosterFile(client, { org, classroom }),
+    onSuccess: (result) => {
+      if (result.migrated) {
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.csvFile(
+            org,
+            "classroom50",
+            rosterPath(classroom),
+          ),
+        })
+      }
+    },
+    // Best-effort convergence: a failure is non-fatal (reads still fall back to
+    // students.csv), so it's logged by the mutation layer, not surfaced.
+  })
+  const migratedRef = useRef(false)
+  useEffect(() => {
+    if (isLoading || isError) return
+    if (migratedRef.current || migrateMutation.isPending) return
+    migratedRef.current = true
+    migrateMutation.mutate()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoading, isError])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open).
   const syncMutation = useMutation({

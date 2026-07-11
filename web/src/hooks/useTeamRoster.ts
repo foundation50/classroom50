@@ -172,11 +172,24 @@ export function useTeamRoster(
   // Enrolled head counts by role for the header (students / instructors / TAs).
   const roleCounts = useMemo(() => enrolledCountsByRole(rows), [rows])
 
-  // CSV drift / reconcile are STUDENT-roster concepts: a staffer is never
-  // synced into roster.csv, so count only the student team against the CSV.
+  // CSV drift / reconcile: role is now recorded metadata, so every classroom
+  // member (student + instructor + ta) belongs in roster.csv. Count all three
+  // teams against the CSV so auto-sync also populates a staff-only classroom
+  // (an instructor/TA with no students still needs a roster.csv row).
+  const allTeamMembers = useMemo(() => {
+    const byId = new Map<number, GitHubUser>()
+    for (const m of [
+      ...(members ?? []),
+      ...(instructorMembers ?? []),
+      ...(taMembers ?? []),
+    ]) {
+      if (!byId.has(m.id)) byId.set(m.id, m)
+    }
+    return [...byId.values()]
+  }, [members, instructorMembers, taMembers])
   const csvMissing = useMemo(
-    () => teamMembersMissingFromCsv(members ?? [], students),
-    [members, students],
+    () => teamMembersMissingFromCsv(allTeamMembers, students),
+    [allTeamMembers, students],
   )
   const csvMissingCount = csvMissing.length
   // Lowercased logins of those csv-missing team members, so the view can skip a

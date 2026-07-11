@@ -20,6 +20,7 @@ import {
   type CreateClassroomResult,
 } from "./classrooms"
 import {
+  getRawFile,
   getRawFileWithFallback,
   getUser,
   listTeamMembers,
@@ -1077,6 +1078,93 @@ export async function syncRosterFromTeam(
       addedUsernames: addedRows.map((r) => r.username),
       noop: false,
     }
+  })
+}
+
+export type MigrateRosterFileResult = {
+  // True when a rename commit was made (legacy students.csv -> roster.csv).
+  migrated: boolean
+}
+
+// Read a config file's bytes, or null on a true 404. A non-404 propagates so a
+// transient API failure is never mistaken for "file absent".
+async function readFileOrNull(
+  client: GitHubClient,
+  org: string,
+  path: string,
+  ref: string,
+): Promise<string | null> {
+  try {
+    return await getRawFile(client, { org, path, ref })
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.status === 404) return null
+    throw err
+  }
+}
+
+// Converge a classroom bootstrapped before the students.csv -> roster.csv
+// rename onto roster.csv, so the file always physically exists. Mirrors the CLI
+// `gh teacher roster migrate`: if only the legacy students.csv is present, write
+// roster.csv with its bytes verbatim and delete students.csv in ONE tree commit.
+// Idempotent: a no-op when roster.csv already exists, and nothing-to-do when
+// neither file is present (a brand-new classroom's roster.csv is created by the
+// team sync instead). Runs inside the conflict-retry loop so a concurrent write
+// (e.g. an interleaved roster edit) is re-read rather than clobbered.
+export async function migrateRosterFile(
+  client: GitHubClient,
+  input: { org: string; classroom: string },
+): Promise<MigrateRosterFileResult> {
+  const { org, classroom } = input
+  const rosterFilePath = rosterPath(classroom)
+  const legacyPath = legacyRosterPath(classroom)
+
+  return withGitConflictRetry(async () => {
+    const ref = await getBranchRef(client, org)
+    const commit = await getCommit(client, org, ref.object.sha)
+
+    // Read both files' presence at the same commit. roster.csv present -> the
+    // classroom is already converged (or has both, and roster.csv is canonical);
+    // nothing to migrate.
+    const [rosterBytes, legacyBytes] = await Promise.all([
+      readFileOrNull(client, org, rosterFilePath, ref.object.sha),
+      readFileOrNull(client, org, legacyPath, ref.object.sha),
+    ])
+
+    if (rosterBytes !== null || legacyBytes === null) {
+      // roster.csv already exists, or neither file does — no rename to do.
+      return { migrated: false }
+    }
+
+    // Only the legacy file exists: write roster.csv with its bytes verbatim and
+    // delete students.csv in a single commit (mode 100644; sha:null deletes).
+    const tree = await createGitTree(client, {
+      org,
+      base_tree: commit.tree.sha,
+      tree: [
+        {
+          path: rosterFilePath,
+          mode: "100644",
+          type: "blob",
+          content: legacyBytes,
+        },
+        { path: legacyPath, mode: "100644", type: "blob", sha: null },
+      ],
+    })
+
+    const newCommit = await createGitCommit(client, {
+      org,
+      message: prefixCommit(`Migrate students.csv to roster.csv: ${classroom}`),
+      tree_sha: tree.sha,
+      parents: [ref.object.sha],
+    })
+
+    await updateRef(client, org, newCommit.sha)
+
+    log.info("migrate roster file: renamed students.csv -> roster.csv", {
+      org,
+      classroom,
+    })
+    return { migrated: true }
   })
 }
 
