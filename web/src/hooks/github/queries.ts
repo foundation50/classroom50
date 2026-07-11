@@ -24,6 +24,7 @@ import {
   REGRADE_WORKFLOW,
   createTeam,
   getErrorMessage,
+  type GitHubTreeResponse,
 } from "./mutations"
 import { decodeBase64Utf8 } from "@/util/github"
 import { getCommit } from "@/api/github/queries"
@@ -697,27 +698,16 @@ export async function getRawFile(
   return decodeBase64Utf8(file.content)
 }
 
-// Read a config file for a WRITE, falling back to `fallbackPath` on a 404, and
-// report whether the fallback (legacy) path is authoritative. The roster
-// read-modify-write mutations use this so a classroom bootstrapped before the
-// roster rename (only the legacy name on disk) is both editable AND converged
-// in the same commit: the write always targets the current name, and when
-// `fromLegacy` is true it also DELETES the legacy file, so a first edit renames
-// it (matching `gh teacher roster migrate`) instead of leaving a stale copy
-// behind. Because `fromLegacy` authorizes a destructive delete + full
-// overwrite, it must not be decided by a Contents-API 404 alone.
-//
-// The Contents API is eventually consistent per path: right after a write to
-// the current name, a read pinned to that commit can briefly 404 while the
-// legacy name still serves stale bytes. Trusting that 404 would overwrite the
-// current file with stale legacy content AND delete the legacy file on a clean
+// Read a config file for a WRITE, reporting whether the returned bytes came
+// from the legacy fallback path. Callers pass `fromLegacy` to rosterWriteTree,
+// where it authorizes deleting the legacy file — so it must NOT be decided by a
+// bare Contents-API 404: that API is eventually consistent per path, so right
+// after a write to the current name a read pinned to that commit can briefly
+// 404 while the legacy name still serves stale bytes. Trusting that 404 would
+// overwrite the current file with stale legacy content and delete it on a clean
 // fast-forward the conflict-retry loop can't catch — a silently lost write. So
-// on a primary 404 we consult the git TREE at the same commit (authoritative
-// and internally consistent, unlike per-path Contents reads): if roster.csv is
-// genuinely absent there, this is a real un-migrated classroom and we fall back
-// to the legacy file with `fromLegacy: true`; if the tree shows roster.csv
-// present, the 404 was a lag lie, so we re-read the current name and report
-// `fromLegacy: false` — no stale overwrite, no spurious delete. A non-404 error
+// on a 404 we resolve legacy-vs-lag from the git TREE at the same commit
+// (internally consistent, unlike per-path Contents reads). A non-404 error
 // propagates unchanged.
 export async function getRawFileWithFallbackSource(
   client: GitHubClient,
@@ -743,11 +733,9 @@ export async function getRawFileWithFallbackSource(
   }
 }
 
-// True when `path` is a blob in the commit's recursive tree at `ref`. Used to
-// resolve the legacy-vs-current roster decision from git data (consistent at a
-// pinned commit) rather than an eventually-consistent Contents read. A
-// truncated tree is treated as "unknown -> not confirmed present" so the caller
-// takes the conservative legacy path only when the tree positively lacks it.
+// True when `path` is a blob in the commit's recursive tree at `ref`. A
+// truncated tree is treated as "not confirmed present" so the caller only takes
+// the destructive legacy path when the tree positively lacks `path`.
 async function pathInCommitTree(
   client: GitHubClient,
   org: string,
@@ -755,10 +743,9 @@ async function pathInCommitTree(
   ref: string,
 ): Promise<boolean> {
   const commit = await getCommit(client, org, ref)
-  const tree = await client.request<{
-    tree: Array<{ path: string; type: "blob" | "tree" | "commit" }>
-    truncated: boolean
-  }>(`/repos/${org}/classroom50/git/trees/${commit.tree.sha}?recursive=1`)
+  const tree = await client.request<GitHubTreeResponse>(
+    `/repos/${org}/classroom50/git/trees/${commit.tree.sha}?recursive=1`,
+  )
   if (tree.truncated) return false
   return tree.tree.some((e) => e.type === "blob" && e.path === path)
 }

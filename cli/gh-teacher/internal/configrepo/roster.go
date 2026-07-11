@@ -97,11 +97,9 @@ func LoadRosterWithSource(client githubapi.Client, org, classroom, parentSHA str
 
 // RosterWriteChange builds the tree change that writes the updated rows to
 // roster.csv, and — when sourcePath is the legacy file (LegacyRosterFilePath) —
-// deletes it in the same commit. Every roster-mutating write funnels through
-// this so a first edit of an un-migrated classroom migrates it (create
-// roster.csv with the migrated + new content, drop the legacy file) in one
-// commit, matching `gh teacher roster migrate`. Pass the sourcePath returned by
-// LoadRosterWithSource.
+// deletes it in the same commit, so a first edit of an un-migrated classroom
+// converges it (matching `gh teacher roster migrate`). Pass the sourcePath
+// returned by LoadRosterWithSource.
 func RosterWriteChange(classroom, sourcePath string, rows []RosterRow) (gittree.Change, error) {
 	data, err := EncodeRoster(rows)
 	if err != nil {

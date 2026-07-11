@@ -64,13 +64,10 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:students")
 
-// Build the git-tree entries for a roster read-modify-write: always the
-// roster.csv blob, plus — when the read fell back to the legacy file
-// (legacyRosterPath) — a deletion of that legacy path. Threading `fromLegacy`
-// (from getRawFileWithFallbackSource) through here converges an un-migrated
-// classroom on its first edit: one commit writes the migrated + new content to
-// roster.csv and drops the legacy file, matching `gh teacher roster migrate`,
-// instead of leaving a stale legacy copy alongside the new file.
+// Git-tree entries for a roster write: the roster.csv blob, plus — when
+// `fromLegacy` (from getRawFileWithFallbackSource) — a delete of the legacy
+// path, so a first edit of an un-migrated classroom converges it in one commit
+// (matching `gh teacher roster migrate`) instead of leaving a stale copy.
 function rosterWriteTree(
   classroom: string,
   csv: string,
@@ -1232,15 +1229,7 @@ export async function migrateRosterFile(
     const tree = await createGitTree(client, {
       org,
       base_tree: commit.tree.sha,
-      tree: [
-        {
-          path: rosterFilePath,
-          mode: "100644",
-          type: "blob",
-          content: legacyBytes,
-        },
-        { path: legacyPath, mode: "100644", type: "blob", sha: null },
-      ],
+      tree: rosterWriteTree(classroom, legacyBytes, true),
     })
 
     const newCommit = await createGitCommit(client, {
