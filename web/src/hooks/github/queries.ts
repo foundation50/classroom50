@@ -89,6 +89,19 @@ export const githubKeys = {
   rawFile: (owner: string, repo: string, path: string, ref?: string) =>
     [...githubKeys.all, "raw-file", owner, repo, path, ref ?? null] as const,
 
+  // Distinct from `rawFile`: the roster raw read uses a different queryFn (with
+  // a legacy roster.csv -> students.csv 404 fallback), so it must not share a
+  // cache entry with rawFileQuery for the same path.
+  rosterRawFile: (owner: string, repo: string, path: string, ref?: string) =>
+    [
+      ...githubKeys.all,
+      "roster-raw-file",
+      owner,
+      repo,
+      path,
+      ref ?? null,
+    ] as const,
+
   jsonFile: (owner: string, repo: string, path?: string, ref?: string) =>
     [
       ...githubKeys.all,
@@ -617,12 +630,13 @@ function readContents(
   )
 }
 
-// Raw roster.csv bytes with the same legacy fallback (roster.csv -> students.csv
-// on a 404) as csvFileQuery, but returning the unparsed text so the caller can
-// run the strict parser and surface per-line problems. Keyed on `rawFile`
-// (distinct from csvFileQuery's parsed-rows key) so the raw text and the parsed
-// rows never collide in the cache — this read is purely additive for problem
-// detection; the parsed-rows read (csvFileQuery) still drives display.
+// Raw roster.csv bytes with a legacy fallback (roster.csv -> students.csv on a
+// 404), returning the unparsed text so the caller can run the strict parser and
+// surface per-line problems. Keyed on `rosterRawFile` — a namespace of its own,
+// distinct from both `rawFile` (rawFileQuery, no fallback, different queryFn)
+// and csvFileQuery's parsed-rows key — so this additive problem-detection read
+// can never collide with another raw or parsed read of the same path. The
+// parsed-rows read (csvFileQuery) still drives display.
 export function rosterRawFileQuery(
   client: GitHubClient,
   owner: string,
@@ -632,7 +646,7 @@ export function rosterRawFileQuery(
   ref?: string,
 ) {
   return queryOptions({
-    queryKey: githubKeys.rawFile(owner, repo, path, ref),
+    queryKey: githubKeys.rosterRawFile(owner, repo, path, ref),
     queryFn: async ({ signal }) => {
       try {
         return await readContents(client, owner, repo, path, ref, signal)

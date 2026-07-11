@@ -1,4 +1,3 @@
-import Papa from "papaparse"
 import type { GitHubClient } from "@/hooks/github/client"
 import {
   addUserToTeam,
@@ -25,6 +24,7 @@ import {
   getRawFile,
   getRawFileWithFallback,
   getUser,
+  listTeamInvitations,
   listTeamMembers,
   sleep,
   REPO_READ_CONCURRENCY,
@@ -35,8 +35,16 @@ import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
-import { escapeCsvFormulaInjection } from "@/util/csv"
 import { prefixCommit } from "@/util/commit"
+import {
+  formatRosterProblems,
+  normalizeStudentRow,
+  parseRosterCsv,
+  parseStudentsCsv,
+  splitName,
+  stringifyStudentsCsv,
+  type StudentCsvRow,
+} from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { ROLE_RANK, type RosterRole } from "@/util/teamRoster"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
@@ -137,199 +145,23 @@ async function tryAddUserToTeam(
   }
 }
 
-export const STUDENT_CSV_FIELDS = [
-  "username",
-  "first_name",
-  "last_name",
-  "email",
-  "section",
-  "github_id",
-  "role",
-] as const
-type StudentCsvField = (typeof STUDENT_CSV_FIELDS)[number]
-
-export type StudentCsvRow = Record<StudentCsvField, string>
-
-export function normalizeStudentRow(
-  row: Partial<Record<StudentCsvField, unknown>>,
-): StudentCsvRow {
-  return {
-    username: String(row.username ?? "").trim(),
-    first_name: String(row.first_name ?? "").trim(),
-    last_name: String(row.last_name ?? "").trim(),
-    email: String(row.email ?? "").trim(),
-    section: String(row.section ?? "").trim(),
-    github_id: String(row.github_id ?? "").trim(),
-    // Best-effort recorded metadata (instructor/ta/student, or ""), refreshed
-    // from the classroom's GitHub teams on sync. A pre-role file has no role
-    // column, so this coerces to "".
-    role: String(row.role ?? "").trim(),
-  }
-}
-
-// Split a full name: first token is first_name, the remainder is last_name.
-// Accepts null since GitHub's display name may be null. The single canonical
-// implementation; re-exported from util/roster as splitName for UI callers.
-export function splitName(name: string | null): {
-  first_name: string
-  last_name: string
-} {
-  const parts = (name ?? "").trim().split(/\s+/).filter(Boolean)
-  return { first_name: parts.at(0) ?? "", last_name: parts.slice(1).join(" ") }
-}
-
-// A structured problem in a roster.csv file: a 1-based file line (header is
-// line 1) and a human-readable message. Surfaced to the instructor so a
-// malformed roster names exactly what's wrong and where, rather than failing
-// silently or with an opaque blob.
-export type RosterCsvProblem = {
-  line: number
-  message: string
-}
-
-export type ParsedRosterCsv = {
-  rows: StudentCsvRow[]
-  problems: RosterCsvProblem[]
-}
-
-// Parse roster.csv into normalized rows plus a structured list of problems.
-// Never throws on a malformed file — the caller decides whether to refuse
-// (writes) or surface a banner (the view). `parseStudentsCsv` is the throwing
-// wrapper for write paths.
-export function parseRosterCsv(csv: string): ParsedRosterCsv {
-  const parsed = Papa.parse<Record<string, string>>(csv, {
-    header: true,
-    delimiter: ",",
-    skipEmptyLines: "greedy",
-    transformHeader: (header) => header.trim(),
-  })
-
-  // A `TooFewFields` row is tolerated ONLY when it is short by exactly one
-  // column — the ambiguous-but-benign "trailing `github_id` omitted" case:
-  // `octocat,Grace,Hopper,,Section A` (5 fields) maps cleanly under
-  // `header: true` (the missing trailing field is `undefined`, coerced to "" by
-  // normalizeStudentRow), so a sync/read shouldn't abort on a roster merely
-  // missing trailing commas. A row short by TWO or more can't be explained by a
-  // single dropped trailing field, and since Papa maps values POSITIONALLY it
-  // would silently shift every value into the wrong column (corrupting the
-  // identity/email join with no error) — exactly as untrustworthy as a
-  // `TooManyFields` row, so it stays a problem. (A row short by exactly one
-  // where a MIDDLE cell was dropped is positionally indistinguishable from a
-  // dropped trailing field, so it is unavoidably read as the latter.)
-  // Only re-parse (tooFewFieldsAreTrailingOnly runs a second full parse) when a
-  // TooFewFields error is actually present — the flag is never read otherwise.
-  const shortRowsWithinTolerance =
-    parsed.errors.some((error) => error.code === "TooFewFields") &&
-    tooFewFieldsAreTrailingOnly(
-      csv,
-      parsed.meta.fields?.length ?? STUDENT_CSV_FIELDS.length,
-    )
-
-  const problems: RosterCsvProblem[] = parsed.errors
-    .filter(
-      (error) =>
-        error.type !== "Delimiter" &&
-        !(error.code === "TooFewFields" && shortRowsWithinTolerance),
-    )
-    // Papa's `row` is the 0-based DATA row; the file line is that + 2 (header is
-    // line 1). Fall back to line 1 for a file-level error with no row.
-    .map((error) => ({
-      line: typeof error.row === "number" ? error.row + 2 : 1,
-      message: error.message,
-    }))
-
-  const rows = parsed.data
-    .map((row) => normalizeStudentRow(row))
-    .filter((row) => row.username || row.github_id || row.email)
-
-  return { rows, problems }
-}
-
-// Format roster problems into a single-line message for the throwing wrapper
-// and logs. The view uses the structured `problems` instead.
-export function formatRosterProblems(problems: RosterCsvProblem[]): string {
-  return problems.map((p) => `line ${p.line}: ${p.message}`).join("; ")
-}
-
-export function parseStudentsCsv(csv: string): StudentCsvRow[] {
-  const { rows, problems } = parseRosterCsv(csv)
-  if (problems.length > 0) {
-    throw new Error(
-      `Could not parse roster.csv: ${formatRosterProblems(problems)}`,
-    )
-  }
-  return rows
-}
-
-// True when EVERY short data row is short by exactly one column, i.e. only the
-// trailing field was dropped. Re-parses without `header` to read raw row widths
-// (the header-keyed `data` hides which physical column is missing), so a row
-// dropping a middle cell — which Papa would silently left-shift — is NOT treated
-// as benign. A row that's short by 2+ (or a header we couldn't count) is fatal.
-function tooFewFieldsAreTrailingOnly(
-  csv: string,
-  headerWidth: number,
-): boolean {
-  if (headerWidth <= 0) return false
-  const raw = Papa.parse<string[]>(csv, {
-    delimiter: ",",
-    skipEmptyLines: "greedy",
-  })
-  // rows[0] is the header; a short DATA row is benign only at width-1.
-  return raw.data
-    .slice(1)
-    .every(
-      (row) => row.length === headerWidth || row.length === headerWidth - 1,
-    )
-}
-
-// Which student fields to defang. Applied to name/section free text AND email —
-// email is a member-controlled GitHub profile field written verbatim by
-// syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
-// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open. NOT
-// applied to github_id/tokens/hashes/timestamps, which must round-trip
-// byte-exact.
-//
-// NOTE: this writes the leading quote into the STORED value, so any consumer of
-// roster.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
-// these fields. The Go writer defangs the same set; keep them in lockstep.
-// Email matching keys on the normalized (trim+lowercase) email, so guarding the
-// cell doesn't affect match-by-email.
-const FORMULA_GUARDED_FIELDS = [
-  "first_name",
-  "last_name",
-  "section",
-  "email",
-] as const
-
-function stringifyStudentsCsv(rows: StudentCsvRow[]) {
-  const normalizedRows = rows
-    .map((row) => normalizeStudentRow(row))
-    .filter((row) => row.username || row.github_id || row.email)
-    .map((row) => {
-      const guarded = { ...row }
-      for (const field of FORMULA_GUARDED_FIELDS) {
-        guarded[field] = escapeCsvFormulaInjection(guarded[field])
-      }
-      return guarded
-    })
-
-  // Papa.unparse omits the header for an empty array, so an emptied roster
-  // would commit a header-less file the CLI/skeleton readers reject. Write the
-  // canonical header explicitly instead (keep in lockstep with STUDENT_CSV_FIELDS).
-  if (normalizedRows.length === 0) {
-    return STUDENT_CSV_FIELDS.join(",") + "\n"
-  }
-
-  return (
-    Papa.unparse(normalizedRows, {
-      columns: [...STUDENT_CSV_FIELDS],
-      delimiter: ",",
-      header: true,
-      newline: "\n",
-    }) + "\n"
-  )
-}
+// The roster.csv parse/serialize layer lives in util/rosterCsv (pure, no
+// GitHubClient dependency). Re-exported here so existing importers of these
+// symbols from "@/api/mutations/students" keep working unchanged.
+export {
+  STUDENT_CSV_FIELDS,
+  normalizeStudentRow,
+  splitName,
+  parseRosterCsv,
+  formatRosterProblems,
+  parseStudentsCsv,
+  stringifyStudentsCsv,
+} from "@/util/rosterCsv"
+export type {
+  StudentCsvRow,
+  RosterCsvProblem,
+  ParsedRosterCsv,
+} from "@/util/rosterCsv"
 
 export async function addStudentToClassroom(
   client: GitHubClient,
@@ -950,29 +782,61 @@ async function listClassroomMembersWithRoles(
   client: GitHubClient,
   org: string,
   slugs: { student: string; staff: Record<StaffRole, string> },
-): Promise<{ members: MemberWithRole[]; fullyRead: boolean }> {
+): Promise<{
+  members: MemberWithRole[]
+  fullyRead: boolean
+  // Lowercased logins + emails with a pending invite to ANY classroom team.
+  // A pending invitee isn't a team MEMBER yet, so sync must not clear the role
+  // it (or an upload writeback) just recorded — the invite already carries that
+  // role, and it activates on acceptance. Empty when pending reads degrade, in
+  // which case fullyRead is false so the clear path stays conservative anyway.
+  pendingRoleKeys: Set<string>
+}> {
   // The student read stays strict (a transient failure there fails the sync so
   // it retries against fresh state). The two staff reads are best-effort: a
   // flaky or permission-blocked staff team degrades to [] rather than blocking
   // an otherwise-fine student sync — listTeamMembers already treats a missing
   // team (404) as [], so only a non-404 reject reaches the settle here.
   //
-  // `fullyRead` is false when any staff read was degraded, so the caller must
-  // NOT treat "absent from this list" as "on no team" (that would wipe an active
-  // staffer's role from an incomplete picture). Appends are still safe from a
-  // partial list; only the role-CLEAR path is gated on fullyRead.
-  const [studentMembers, ...staffSettled] = await Promise.all([
+  // `fullyRead` is false when any staff or pending read was degraded, so the
+  // caller must NOT treat "absent from this list" as "on no team" (that would
+  // wipe an active staffer's role from an incomplete picture). Appends are
+  // still safe from a partial list; only the role-CLEAR path is gated on it.
+  const allSlugs = [slugs.student, ...STAFF_ROLES.map((r) => slugs.staff[r])]
+  const [studentMembers, staffSettled, pendingSettled] = await Promise.all([
     listTeamMembers(client, org, slugs.student),
-    ...STAFF_ROLES.map((role) =>
-      Promise.allSettled([
-        listTeamMembers(client, org, slugs.staff[role]),
-      ]).then(([r]) => r),
+    Promise.all(
+      STAFF_ROLES.map((role) =>
+        Promise.allSettled([
+          listTeamMembers(client, org, slugs.staff[role]),
+        ]).then(([r]) => r),
+      ),
+    ),
+    // Pending invitations per team (owner-only; 404 -> [], other errors settle
+    // to a rejection we treat as a degraded read).
+    Promise.all(
+      allSlugs.map((slug) =>
+        Promise.allSettled([listTeamInvitations(client, org, slug)]).then(
+          ([r]) => r,
+        ),
+      ),
     ),
   ])
-  const fullyRead = staffSettled.every((r) => r.status === "fulfilled")
+  const staffFullyRead = staffSettled.every((r) => r.status === "fulfilled")
+  const pendingFullyRead = pendingSettled.every((r) => r.status === "fulfilled")
+  const fullyRead = staffFullyRead && pendingFullyRead
   const staffMemberLists = staffSettled.map((r) =>
     r.status === "fulfilled" ? r.value : [],
   )
+
+  const pendingRoleKeys = new Set<string>()
+  for (const r of pendingSettled) {
+    if (r.status !== "fulfilled") continue
+    for (const invite of r.value) {
+      if (invite.login) pendingRoleKeys.add(invite.login.toLowerCase())
+      if (invite.email) pendingRoleKeys.add(invite.email.trim().toLowerCase())
+    }
+  }
 
   const byId = new Map<number, MemberWithRole>()
   const consider = (
@@ -996,7 +860,7 @@ async function listClassroomMembersWithRoles(
     for (const m of staffMemberLists[i]) consider(m, role)
   })
 
-  return { members: [...byId.values()], fullyRead }
+  return { members: [...byId.values()], fullyRead, pendingRoleKeys }
 }
 
 // Sync roster.csv from the classroom's GitHub teams: ensure every active member
@@ -1026,7 +890,7 @@ export async function syncRosterFromTeam(
   return withGitConflictRetry(async () => {
     // Re-read teams + CSV on every attempt so the diff is always against the
     // latest state (a concurrent add/edit can't be clobbered or duplicated).
-    const [{ members, fullyRead }, ref] = await Promise.all([
+    const [{ members, fullyRead, pendingRoleKeys }, ref] = await Promise.all([
       listClassroomMembersWithRoles(client, org, slugs),
       getBranchRef(client, org),
     ])
@@ -1100,12 +964,20 @@ export async function syncRosterFromTeam(
     let idBackfills = 0
     const reconciledStudents = currentStudents.map((s) => {
       const loginKey = s.username.trim().toLowerCase()
+      const emailKey = s.email?.trim().toLowerCase()
       const teamRole =
         (s.github_id ? roleById.get(s.github_id.trim()) : undefined) ??
         roleByLogin.get(loginKey)
-      const role = teamRole ?? (fullyRead ? "" : s.role)
-      // Backfill a missing github_id from the login-matched member. Never
-      // overwrite an existing id.
+      // A pending invitee is not a team member yet, so teamRole is undefined —
+      // but the invite already carries their role and activates on acceptance.
+      // Clearing it here (a fresh upload writeback, or any recorded role) would
+      // wipe the role for the whole pending window, so preserve s.role while a
+      // pending invite for this login/email exists.
+      const hasPendingRole =
+        (loginKey && pendingRoleKeys.has(loginKey)) ||
+        (emailKey ? pendingRoleKeys.has(emailKey) : false)
+      const role = teamRole ?? (fullyRead && !hasPendingRole ? "" : s.role)
+      // Backfill only a blank id (see the idByLogin block above).
       const backfilledId =
         !s.github_id.trim() && loginKey ? idByLogin.get(loginKey) : undefined
 
@@ -1197,6 +1069,21 @@ export type WriteRosterRolesInput = {
   roles: { username: string; role: RosterRole }[]
 }
 
+// A role writeback couldn't run because roster.csv is malformed. Typed so the
+// caller can surface "fix the file, then re-check" instead of blanket-swallowing
+// a generic parse error — we refuse to rewrite a file we can't fully parse
+// (a positional re-serialize would corrupt the malformed row).
+export class RosterCsvMalformedError extends Error {
+  problemsSummary: string
+  constructor(problemsSummary: string) {
+    super(
+      `roster.csv is malformed, so roles were not written: ${problemsSummary}`,
+    )
+    this.name = "RosterCsvMalformedError"
+    this.problemsSummary = problemsSummary
+  }
+}
+
 // Set the `role` column on existing roster.csv rows matched by username. Only
 // touches rows that exist and whose role actually changes; never appends,
 // removes, or edits other fields. Best-effort caller (upload) — a conflict-safe
@@ -1224,7 +1111,16 @@ export async function writeRosterRoles(
       fallbackPath: legacyRosterPath(classroom),
       ref: ref.object.sha,
     })
-    const currentStudents = parseStudentsCsv(currentCsv)
+    // Parse tolerantly: a role writeback must not throw an opaque error on a
+    // malformed sibling row (the exact self-healing case this feature targets).
+    // But we refuse to rewrite a file we can't fully parse — re-serializing
+    // positionally would corrupt the malformed row — so raise a TYPED error the
+    // caller can surface as "fix roster.csv, then re-check" instead of silently
+    // dropping the role. The role still converges on the next clean sync.
+    const { rows: currentStudents, problems } = parseRosterCsv(currentCsv)
+    if (problems.length > 0) {
+      throw new RosterCsvMalformedError(formatRosterProblems(problems))
+    }
 
     let changed = 0
     const nextStudents = currentStudents.map((s) => {
@@ -1494,11 +1390,10 @@ async function resolveTeamIdByRole(
     ta: undefined,
   }
   if (rolesPresent.has("student")) {
-    try {
-      result.student = (await resolveClassroomTeam(client, org, classroom)).id
-    } catch {
-      result.student = undefined
-    }
+    // resolveClassroomTeam already returns id: undefined on a genuine 404 (no
+    // team block) WITHOUT throwing, and propagates a transient read failure —
+    // so no catch here: a blip must surface, not be mistaken for "no team".
+    result.student = (await resolveClassroomTeam(client, org, classroom)).id
   }
   for (const role of STAFF_ROLES) {
     if (!rolesPresent.has(role)) continue
@@ -1506,8 +1401,19 @@ async function resolveTeamIdByRole(
       const team = await ensureClassroomRoleTeam(client, org, classroom, role)
       await grantTeamConfigRepoWrite(client, org, team.slug)
       result[role] = team.id
-    } catch {
-      result[role] = undefined
+    } catch (err) {
+      // Only a DEFINITIVE failure (e.g. 403 no permission to create/grant the
+      // staff team) degrades to a teamless invite. A transient 5xx/429/network
+      // error must propagate — sending an instructor an org-OWNER invite while
+      // silently dropping them off the instructor team is worse than retrying.
+      if (
+        err instanceof GitHubAPIError &&
+        isDefinitiveGitHubStatus(err.status)
+      ) {
+        result[role] = undefined
+      } else {
+        throw err
+      }
     }
   }
   return result

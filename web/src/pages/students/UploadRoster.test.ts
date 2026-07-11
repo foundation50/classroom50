@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseRosterImportFile } from "./UploadRoster"
+import { coerceImportRole, parseRosterImportFile } from "./UploadRoster"
 
 describe("parseRosterImportFile", () => {
   it("parses a CSV with a username header and full metadata columns", () => {
@@ -69,5 +69,37 @@ describe("parseRosterImportFile", () => {
   it("returns an empty array for empty or whitespace-only input", () => {
     expect(parseRosterImportFile("")).toEqual([])
     expect(parseRosterImportFile("   \n  ")).toEqual([])
+  })
+
+  it("parses a role column into the row role (case-insensitive)", () => {
+    const csv =
+      "username,role\nada,student\nprof,Instructor\nhelper,TA\nghost,dean\n"
+    expect(parseRosterImportFile(csv).map((r) => [r.username, r.role])).toEqual(
+      [
+        ["ada", "student"],
+        ["prof", "instructor"],
+        ["helper", "ta"],
+        ["ghost", undefined], // unrecognized -> undefined (upload defaults student)
+      ],
+    )
+  })
+})
+
+describe("coerceImportRole", () => {
+  it("accepts the three known roles, case-insensitively", () => {
+    expect(coerceImportRole("student")).toBe("student")
+    expect(coerceImportRole("instructor")).toBe("instructor")
+    expect(coerceImportRole("ta")).toBe("ta")
+    expect(coerceImportRole("Instructor")).toBe("instructor")
+    expect(coerceImportRole("  TA  ")).toBe("ta")
+  })
+
+  it("returns undefined for an unknown, empty, or missing value", () => {
+    expect(coerceImportRole("dean")).toBeUndefined()
+    expect(coerceImportRole("")).toBeUndefined()
+    expect(coerceImportRole(undefined)).toBeUndefined()
+    // Not a silent alias for admin/owner — an unknown role never escalates.
+    expect(coerceImportRole("admin")).toBeUndefined()
+    expect(coerceImportRole("owner")).toBeUndefined()
   })
 })

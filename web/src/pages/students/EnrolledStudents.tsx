@@ -152,7 +152,7 @@ const EnrolledStudents = ({
     teamSlugByRole,
     csvMissingCount,
     csvMissingLogins,
-    backfillNeededCount,
+    backfillNeededLogins,
     orgMembersKnown,
     refetch: refetchRoster,
   } = useTeamRoster(org, classroom, students)
@@ -398,6 +398,7 @@ const EnrolledStudents = ({
   // intervening zero-drift render to reset it).
   const autoSyncedForRef = useRef<string | null>(null)
   const csvMissingKey = csvMissingLogins.join(",")
+  const backfillNeededKey = backfillNeededLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
     // Wait for the migrate pass to settle first (converges students.csv ->
@@ -406,10 +407,14 @@ const EnrolledStudents = ({
     // Sync when there's drift to fix: a team member with no CSV row (missing),
     // OR an existing CSV row that's stale against the team (blank github_id or a
     // wrong role — the login-only `rliu50` case). Without the backfill term a
-    // login-only row would never converge, since it isn't "missing".
+    // login-only row would never converge, since it isn't "missing". BOTH terms
+    // drop suppressed (just-unenrolled) logins so a stale row lingering during
+    // the eventual-consistency window can't re-fire a resurrecting sync.
     const hasMissing =
       dropSuppressed(csvMissingLogins, suppressedLogins).length > 0
-    if (!hasMissing && backfillNeededCount === 0) {
+    const hasBackfill =
+      dropSuppressed(backfillNeededLogins, suppressedLogins).length > 0
+    if (!hasMissing && !hasBackfill) {
       if (autoSyncedForRef.current === classroom)
         autoSyncedForRef.current = null
       return
@@ -420,7 +425,7 @@ const EnrolledStudents = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     csvMissingKey,
-    backfillNeededCount,
+    backfillNeededKey,
     isLoading,
     isError,
     migrateSettledFor,

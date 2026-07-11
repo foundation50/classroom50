@@ -73,6 +73,10 @@ export type UseTeamRosterResult = {
   // github_id or a role differing from the team). Sync backfills these; the
   // view uses it (with csvMissingCount) to decide whether a sync is worthwhile.
   backfillNeededCount: number
+  // Lowercased logins of the stale rows, so the auto-sync trigger can drop a
+  // suppressed (just-unenrolled) login before deciding to sync — mirroring
+  // csvMissingLogins, so both drift terms agree on who is suppressed.
+  backfillNeededLogins: string[]
   // Whether org membership was readable, so the view can gate the in-org
   // "needs attention" filter option (no such rows exist when membership is
   // unknown — those rows are suppressed).
@@ -249,6 +253,14 @@ export function useTeamRoster(
     [members, instructorMembers, taMembers, students],
   )
   const backfillNeededCount = backfillNeeded.length
+  // Lowercased logins of the stale rows, so the auto-sync trigger can drop a
+  // just-unenrolled member the same way it does for csvMissingLogins — a
+  // suppressed login's still-present stale row must not re-fire a resurrecting
+  // sync during the eventual-consistency window.
+  const backfillNeededLogins = useMemo(
+    () => backfillNeeded.map((s) => s.username.trim().toLowerCase()),
+    [backfillNeeded],
+  )
 
   // Any team-member fetch (student or staff) failing for a non-404 reason is a
   // real error — surface it rather than rendering a partial roster as "empty".
@@ -283,6 +295,7 @@ export function useTeamRoster(
     csvMissingCount,
     csvMissingLogins,
     backfillNeededCount,
+    backfillNeededLogins,
     orgMembersKnown,
     // isError folds in the staff-member fetches too, so a retry must re-run
     // every team-member query (student + instructor + ta), not just the

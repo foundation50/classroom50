@@ -10,6 +10,7 @@ import {
   isLikelyGithubUsername,
   NoNewStudentsError,
   normalizeGithubUsername,
+  RosterCsvMalformedError,
   splitName,
   writeRosterRoles,
   type BulkImportResult,
@@ -75,11 +76,14 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
   return rows
 }
 
-// Coerce a raw `role` cell to a RosterRole, or undefined when absent/unknown.
+// Coerce a raw string to a RosterRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // instructor override, so an unrecognized value degrades to student rather than
-// failing the whole import.
-const coerceImportRole = (raw: string | undefined): RosterRole | undefined => {
+// failing the whole import. Exported so both the CSV parse and the preview
+// Select coerce through one guard (no unchecked cast on raw input).
+export const coerceImportRole = (
+  raw: string | undefined,
+): RosterRole | undefined => {
   const value = raw?.trim().toLowerCase()
   if (value === "student" || value === "instructor" || value === "ta") {
     return value
@@ -343,23 +347,32 @@ const UploadRoster = ({
         })),
       })
 
-      // 3) Write the assigned role back to roster.csv for successfully-invited
-      //    rows. A freshly-invited member isn't on the team yet (pending), so
-      //    auto-sync can't derive their role from team membership — persist it
-      //    now so the roster reflects the intended role immediately. Best-effort:
-      //    a writeback failure doesn't undo the invites (role converges on the
-      //    next sync once they accept and land on their team).
-      if (inviteRes.invited.length > 0) {
+      // 3) Persist the assigned role back to roster.csv for EVERY uploaded row,
+      //    not just the freshly-invited ones. A row that was deferred (rate
+      //    limit), skipped (already a member/pending), or failed still has a
+      //    teacher-assigned role and a roster row from step 1 — omitting them
+      //    would leave their role blank until a later sync. writeRosterRoles
+      //    only touches existing rows whose role actually changed, so covering
+      //    the full set is safe and idempotent. Best-effort: a writeback failure
+      //    doesn't undo the invites (role converges on the next sync). A
+      //    malformed roster.csv is surfaced distinctly so the teacher fixes it.
+      const roleWriteback = rows
+        .map((r) => ({
+          username: r.username,
+          role: rolesByUser[r.username.toLowerCase()] ?? "student",
+        }))
+        .filter((r) => r.username.trim())
+      if (roleWriteback.length > 0) {
         try {
           await writeRosterRoles(client, {
             org,
             classroom,
-            roles: inviteRes.invited.map((i) => ({
-              username: i.username,
-              role: i.role,
-            })),
+            roles: roleWriteback,
           })
         } catch (err) {
+          if (err instanceof RosterCsvMalformedError) {
+            setInviteError(t("students.roleWritebackMalformed"))
+          }
           log.warn("roster role writeback failed", { err, record: true })
         }
       }
@@ -468,7 +481,9 @@ const UploadRoster = ({
                               onChange={(e) =>
                                 setRolesByUser((prev) => ({
                                   ...prev,
-                                  [key]: e.currentTarget.value as RosterRole,
+                                  [key]:
+                                    coerceImportRole(e.currentTarget.value) ??
+                                    "student",
                                 }))
                               }
                             >

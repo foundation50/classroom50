@@ -438,6 +438,7 @@
     "uploadInviteNotice_one": "This will send {{count}} GitHub organization invitation to students who aren't members yet.",
     "uploadInviteNotice_other": "This will send {{count}} GitHub organization invitations to students who aren't members yet.",
     "uploadInstructorOwnerNotice": "Rows marked Instructor will be invited as organization OWNERS, granting full control of the organization. Only assign the instructor role to people you trust with owner access.",
+    "roleWritebackMalformed": "Invitations were sent, but the assigned roles couldn't be written because roster.csv is malformed. Fix the flagged lines on the roster, then re-check — roles will converge on the next sync.",
     "roleColumn": "Role",
     "assignRoleLabel": "Role",
     "invitingUploaded": "Sending organization invitations...",
