@@ -84,9 +84,9 @@ The instructor's autograder workflow has a YAML syntax error. `gh student` valid
 
 ## `gh teacher download` clones nothing
 
-By default, `gh teacher download` is **roster-driven**: it reads `<classroom>/students.csv` and `<classroom>/assignments.json` from your config repo, then probes `GET /repos/<org>/<classroom>-<assignment>-<username>` for each roster row. If you get zero clones:
+By default, `gh teacher download` is **roster-driven**: it reads `<classroom>/roster.csv` and `<classroom>/assignments.json` from your config repo, then probes `GET /repos/<org>/<classroom>-<assignment>-<username>` for each roster row. If you get zero clones:
 
-- Confirm `<org>/classroom50` exists and `<classroom>/students.csv` is populated (`gh teacher roster add` or `gh teacher roster import`).
+- Confirm `<org>/classroom50` exists and `<classroom>/roster.csv` is populated (`gh teacher roster add` or `gh teacher roster import`).
 - Confirm `<assignment>` is registered in `<classroom>/assignments.json` (`gh teacher assignment list <org> <classroom>`).
 - Verify a few student repos exist under `https://github.com/orgs/<org>/repositories?q=<classroom>-<assignment>`.
 - Re-run with `-v` to see which roster rows were probed and which repos were missing.

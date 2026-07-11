@@ -127,7 +127,7 @@ Each classroom is a directory at the root of `<org>/classroom50` holding four fi
 
 - `classroom.json` — public name / term / org metadata.
 - `assignments.json` — assignment manifest (published via Pages, fetched by `gh student accept` and by the autograde-runner workflow on every submission).
-- `students.csv` — private roster.
+- `roster.csv` — private roster.
 - `scores.json` — private collected scores.
 
 Plus, optionally:
@@ -188,7 +188,9 @@ Permission options for `-p`: `pull`, `triage`, `push`, `maintain`, `admin`. Re-r
 
 ## 6. Track students in the roster
 
-Each classroom keeps a `students.csv` file inside `<org>/classroom50/<classroom>/`. The CLI manages it for you with three subcommands; you should rarely hand-edit the file.
+Each classroom keeps a `roster.csv` file inside `<org>/classroom50/<classroom>/`. The CLI manages it for you with three subcommands; you should rarely hand-edit the file.
+
+> **Renamed from `students.csv`.** This file used to be `students.csv`. Classrooms created before the rename are still read automatically (readers fall back to the legacy name), so nothing breaks — but new writes always target `roster.csv`. To convert an existing classroom in a single commit, run `gh teacher roster migrate <org> <classroom>`.
 
 **Add or update one student:**
 
@@ -197,7 +199,7 @@ gh teacher roster add <org> <classroom> <username> [--first-name <name>] [--last
 gh teacher roster add cs50-fall-2026 cs-principles alice --first-name Alice --last-name Andersson --email alice@example.edu --section section-1
 ```
 
-This resolves the student's immutable `github_id` (GitHub's numeric account ID), upserts the row in `students.csv` (case-insensitive match on username), and sends an org invitation if they aren't already a member. It also adds the student to the classroom's `classroom50-<classroom>` team, so they inherit read access to the classroom's in-org private assignment templates (the membership goes active immediately for an existing org member, or pending until they accept the org invite). All four data flags are optional; values left unset become empty cells in the CSV. Re-running with the same arguments is safe — the row is replaced, the org invite is skipped if already pending or active, and the team add is idempotent. `gh teacher roster remove` symmetrically removes the student from the team (org membership is left untouched).
+This resolves the student's immutable `github_id` (GitHub's numeric account ID), upserts the row in `roster.csv` (case-insensitive match on username), and sends an org invitation if they aren't already a member. It also adds the student to the classroom's `classroom50-<classroom>` team, so they inherit read access to the classroom's in-org private assignment templates (the membership goes active immediately for an existing org member, or pending until they accept the org invite). All four data flags are optional; values left unset become empty cells in the CSV. Re-running with the same arguments is safe — the row is replaced, the org invite is skipped if already pending or active, and the team add is idempotent. `gh teacher roster remove` symmetrically removes the student from the team (org membership is left untouched).
 
 **Correct an existing student's details:**
 
@@ -214,7 +216,7 @@ Reach for `update` when you just need to fix a field on someone already on the r
 gh teacher roster import <org> <classroom> <path-to-csv>
 ```
 
-Accepts either the canonical 6-column header (`username,first_name,last_name,email,section,github_id` — the same shape `students.csv` uses on disk) or a 5-column header without `github_id` (recommended for hand-authored CSVs since `github_id` is CLI-managed). The `email` column values may be empty per row. All usernames are resolved up-front; a single typo aborts the whole import before any commit. The entire file is then written in one Tree commit, and every new student is invited to the org. Re-running is safe — already-imported rows just refresh.
+Accepts either the canonical 6-column header (`username,first_name,last_name,email,section,github_id` — the same shape `roster.csv` uses on disk) or a 5-column header without `github_id` (recommended for hand-authored CSVs since `github_id` is CLI-managed). The `email` column values may be empty per row. All usernames are resolved up-front; a single typo aborts the whole import before any commit. The entire file is then written in one Tree commit, and every new student is invited to the org. Re-running is safe — already-imported rows just refresh.
 
 **View the current roster:**
 
@@ -224,7 +226,7 @@ gh teacher roster list cs50-fall-2026 cs-principles --json
 gh teacher roster list cs50-fall-2026 cs-principles --quiet
 ```
 
-Prints `students.csv` without opening it on GitHub. Default output is an aligned table (username, name, email, section, github_id; empty cells show as `-`) with a `N student(s)` summary on stderr. Use `--json` for scripting (the full row objects) or `--quiet` for one username per line (handy for piping into `xargs` or an agent loop). An empty roster exits 0 with a clear note; a missing `students.csv` points you back at `gh teacher classroom add`. Read-only — no commit lands.
+Prints `roster.csv` without opening it on GitHub. Default output is an aligned table (username, name, email, section, github_id; empty cells show as `-`) with a `N student(s)` summary on stderr. Use `--json` for scripting (the full row objects) or `--quiet` for one username per line (handy for piping into `xargs` or an agent loop). An empty roster exits 0 with a clear note; a missing `roster.csv` points you back at `gh teacher classroom add`. Read-only — no commit lands.
 
 **Remove a student from the roster:**
 
@@ -232,9 +234,17 @@ Prints `students.csv` without opening it on GitHub. Default output is an aligned
 gh teacher roster remove <org> <classroom> <username>
 ```
 
-Drops the row from `students.csv`. **Does NOT remove org membership** — use `gh teacher remove <org> <username>` (step 8) for that. Splitting roster removal from org removal is deliberate: an off-by-one roster edit shouldn't be able to revoke a student's access to every repo in the org.
+Drops the row from `roster.csv`. **Does NOT remove org membership** — use `gh teacher remove <org> <username>` (step 8) for that. Splitting roster removal from org removal is deliberate: an off-by-one roster edit shouldn't be able to revoke a student's access to every repo in the org.
 
-`roster list` is read-only; the four write subcommands (`add`, `update`, `import`, `remove`) go through an optimistic-update-with-rebase loop (a small number of retries with exponential backoff) so two teachers editing the roster concurrently can't silently lose each other's work. If you see a `lost the rebase race` message, just retry the command.
+**Migrate a legacy classroom's roster file:**
+
+```sh
+gh teacher roster migrate <org> <classroom>
+```
+
+Renames a classroom's legacy `students.csv` to `roster.csv` in a single commit. Idempotent — a classroom already on `roster.csv` (or with no roster file yet) is a no-op. You rarely need this: readers already fall back to the legacy name, so migrating is only about making the on-disk name match the current convention.
+
+`roster list` is read-only; the write subcommands (`add`, `update`, `import`, `remove`, `migrate`) go through an optimistic-update-with-rebase loop (a small number of retries with exponential backoff) so two teachers editing the roster concurrently can't silently lose each other's work. If you see a `lost the rebase race` message, just retry the command.
 
 ## 7. Add assignments
 
@@ -295,11 +305,11 @@ gh teacher member list <org>         # org members + pending invitations, with r
 gh teacher member list <org>/<repo>  # repo collaborators, with permission level
 ```
 
-The roster (`students.csv`) is the *intended* class list; this is *actual* GitHub membership, so the two can drift — e.g. a student who was added to the roster but never accepted their org invite still shows as a pending `invitation`, not a `member`. Default output is a table (`LOGIN`, `KIND`, `ROLE`, `GITHUB_ID`); add `--json` for scripting or `--quiet` for one login per line (pipe into `xargs`/`grep` or diff against the roster to spot who hasn't joined yet). Reading an org's pending invitations needs the `admin:org` scope (the same scope `invite` uses). Read-only.
+The roster (`roster.csv`) is the *intended* class list; this is *actual* GitHub membership, so the two can drift — e.g. a student who was added to the roster but never accepted their org invite still shows as a pending `invitation`, not a `member`. Default output is a table (`LOGIN`, `KIND`, `ROLE`, `GITHUB_ID`); add `--json` for scripting or `--quiet` for one login per line (pipe into `xargs`/`grep` or diff against the roster to spot who hasn't joined yet). Reading an org's pending invitations needs the `admin:org` scope (the same scope `invite` uses). Read-only.
 
 ## 9. Collect scores
 
-Every student submission publishes a GitHub Release on their own repo carrying a `result.json` asset. The `collect-scores` workflow in `<org>/classroom50` walks every `(student, assignment)` pair in `<classroom>/students.csv` × `<classroom>/assignments.json`, collects **every** `submit/*` release for each expected repo, and aggregates the results into `<classroom>/scores.json` — the authoritative score record for the class.
+Every student submission publishes a GitHub Release on their own repo carrying a `result.json` asset. The `collect-scores` workflow in `<org>/classroom50` walks every `(student, assignment)` pair in `<classroom>/roster.csv` × `<classroom>/assignments.json`, collects **every** `submit/*` release for each expected repo, and aggregates the results into `<classroom>/scores.json` — the authoritative score record for the class.
 
 Run it from the Actions tab on `<org>/classroom50`, or trigger it from your shell:
 
@@ -313,7 +323,7 @@ The skeleton committed by `gh teacher init` ships the workflow with a nightly cr
 What it does on each run:
 
 1. Iterates every classroom under `<org>/classroom50/<classroom>/` (or just the one you passed via `-f classroom=`).
-2. For each `(student, assignment)` pair in `students.csv` × `assignments.json`, computes the canonical repo name `<classroom>-<assignment>-<username>` (the same formula `gh student accept` uses) and walks that repo's `submit/*` releases. No releases (or a `404`) means the student hasn't accepted or hasn't submitted yet — the collector counts the gap and moves on.
+2. For each `(student, assignment)` pair in `roster.csv` × `assignments.json`, computes the canonical repo name `<classroom>-<assignment>-<username>` (the same formula `gh student accept` uses) and walks that repo's `submit/*` releases. No releases (or a `404`) means the student hasn't accepted or hasn't submitted yet — the collector counts the gap and moves on.
 3. For every `submit/*` release found, downloads `result.json`, schema-validates it, and checks the payload's identity against the source repo: `classroom` / `assignment` must match, the payload's `owner` must equal the repo-name-derived owner, and the payload's `assignment_type` must match the assignment's configured `mode` (a mismatch is warned-and-skipped). This defends against a hostile autograder payload trying to land in the wrong scores.json. For a group assignment, the collector then reads the repo's collaborators and records the rostered member list on the entry's `member_usernames`.
 4. Upserts the validated payloads into `<classroom>/scores.json` under that assignment's bucket as one entry per repo (keyed by `owner`), with every collected submission retained newest-first in the entry's `submissions` list (each a stored `result.json` minus the redundant `assignment` bucket key). If the assignment has `due`, each submission record gets `"late": true|false` by comparing its `datetime` against the due timestamp. **Existing entries with `"override": true` are preserved verbatim** -- if you hand-edited an entry to grant partial credit, the next collect run leaves it alone.
 5. Logs a per-assignment `cs-principles/hello: 23/30 submitted` line so you see roster coverage at a glance.
@@ -374,7 +384,7 @@ gh teacher download <org> <classroom> <assignment>
 
 ![Demo: gh teacher download](images/gh_teacher_download.gif)
 
-By default the command is **roster-driven**: it reads `<classroom>/students.csv` and `<classroom>/assignments.json` from your config repo, then for each roster entry:
+By default the command is **roster-driven**: it reads `<classroom>/roster.csv` and `<classroom>/assignments.json` from your config repo, then for each roster entry:
 
 1. Probes whether the expected `<classroom>-<assignment>-<username>` repo exists in the org.
 2. Clones it if it does, or reports `Missing: <username> (not accepted yet?)` if it doesn't.
@@ -390,7 +400,7 @@ gh teacher download -d <dir> <org> <classroom> <assignment>     # literal, no ti
 
 Existing target dirs are skipped on the clone step, but `result.json` is still refreshed on the existing clones — so re-running after the latest `collect-scores.yaml` cycle picks up the newest score without re-cloning. Pass `--quiet` / `-q` to suppress the per-repo summary; pass `--verbose` / `-v` to stream raw git output instead of the concise `Cloning <name>... Done` summary.
 
-**Fallback for unconfigured classrooms.** If the config repo isn't bootstrapped yet (no `students.csv`, no `assignments.json`), or you want to clone every matching repo regardless of who's currently rostered, pass `--by-pattern`:
+**Fallback for unconfigured classrooms.** If the config repo isn't bootstrapped yet (no `roster.csv`, no `assignments.json`), or you want to clone every matching repo regardless of who's currently rostered, pass `--by-pattern`:
 
 ```sh
 gh teacher download --by-pattern <org> <classroom> <assignment>
