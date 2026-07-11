@@ -1234,6 +1234,9 @@ const makeTeamClient = (opts: {
   teamHas?: TeamMemberSeed[]
   instructorHas?: TeamMemberSeed[]
   taHas?: TeamMemberSeed[]
+  // When set, a members read for the instructor/ta team rejects with this
+  // non-404 status (to exercise the best-effort staff-read degradation).
+  staffReadRejects?: { role: "instructor" | "ta"; status: number }
 }) => {
   const committed: { content: string | null } = { content: null }
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
@@ -1277,6 +1280,25 @@ const makeTeamClient = (opts: {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/members")[0],
         )
+        const rejects = opts.staffReadRejects
+        if (rejects && slug.endsWith(`-${rejects.role}`)) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: rejects.status,
+              url: path,
+              message: "boom",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
         const seed = slug.endsWith("-instructor")
           ? (opts.instructorHas ?? [])
           : slug.endsWith("-ta")
@@ -1557,6 +1579,30 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
       email: "g@x.edu",
       section: "A",
     })
+  })
+
+  it("a non-404 failure on a staff-team read degrades to [] and still syncs students", async () => {
+    // The instructor-team read 500s; that must NOT fail the whole sync — the
+    // student-team member is still backfilled (staff reads are best-effort).
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER,
+      users: {},
+      teamHas: [{ login: "stu", id: 10 }],
+      instructorHas: [{ login: "prof", id: 1 }], // would be added, but read 500s
+      staffReadRejects: { role: "instructor", status: 500 },
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    // The student synced; the instructor (whose read failed) did not, but the
+    // sync as a whole succeeded rather than throwing.
+    expect(result.addedUsernames).toEqual(["stu"])
+    const rows = rowsFromCsv(committed.content!)
+    expect(rows.map((r) => r.username)).toEqual(["stu"])
+    expect(rows[0].role).toBe("student")
   })
 
   it("is a noop when every team member already has a CSV row with its role", async () => {

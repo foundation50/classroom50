@@ -899,10 +899,17 @@ async function listClassroomMembersWithRoles(
   org: string,
   slugs: { student: string; staff: Record<StaffRole, string> },
 ): Promise<MemberWithRole[]> {
+  // The student read stays strict (a transient failure there fails the sync so
+  // it retries against fresh state). The two staff reads are best-effort: a
+  // flaky or permission-blocked staff team degrades to [] rather than blocking
+  // an otherwise-fine student sync — listTeamMembers already treats a missing
+  // team (404) as [], so only a non-404 reject reaches the settle here.
   const [studentMembers, ...staffMemberLists] = await Promise.all([
     listTeamMembers(client, org, slugs.student),
     ...STAFF_ROLES.map((role) =>
-      listTeamMembers(client, org, slugs.staff[role]),
+      Promise.allSettled([
+        listTeamMembers(client, org, slugs.staff[role]),
+      ]).then(([r]) => (r.status === "fulfilled" ? r.value : [])),
     ),
   ])
 

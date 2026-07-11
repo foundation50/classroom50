@@ -1147,8 +1147,10 @@ const SKELETON_COMMIT_ATTEMPTS = 3
 
 // A ref PATCH with force:false that loses a race returns 422 "Update is not a
 // fast forward". Treat that (and only that) as retryable; everything else is a
-// real error the caller should see.
-function isNonFastForward(err: unknown): boolean {
+// real error the caller should see. Exported so withGitConflictRetry treats a
+// lost force:false race as retryable too (not just a 409) — the roster mutation
+// family relies on that retry for concurrency safety.
+export function isNonFastForward(err: unknown): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
   const message =
     err.message + " " + (typeof err.body === "string" ? err.body : "")

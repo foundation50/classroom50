@@ -317,32 +317,33 @@ const EnrolledStudents = ({
 
   // Auto-migrate on open: converge a classroom bootstrapped before the
   // students.csv -> roster.csv rename so roster.csv always physically exists.
-  // Idempotent and cheap (a no-op once roster.csv is present), so fire once per
-  // mount; on an actual rename, refresh the roster read so it reads roster.csv.
+  // Idempotent and cheap (a no-op once roster.csv is present). It runs BEFORE
+  // auto-sync (which gates on migrateSettledFor) so the two roster writers don't
+  // race on the ref. The rename changes only the file's path, not its content,
+  // and reads already fall back to students.csv, so there's no cache to
+  // invalidate — a plain invalidate here would refetch eventually-consistent
+  // bytes and needlessly re-arm auto-sync.
+  const [migrateSettledFor, setMigrateSettledFor] = useState<string | null>(
+    null,
+  )
   const migrateMutation = useMutation({
     mutationFn: () => migrateRosterFile(client, { org, classroom }),
-    onSuccess: (result) => {
-      if (result.migrated) {
-        void queryClient.invalidateQueries({
-          queryKey: githubKeys.csvFile(
-            org,
-            "classroom50",
-            rosterPath(classroom),
-          ),
-        })
-      }
-    },
+    onSettled: () => setMigrateSettledFor(classroom),
     // Best-effort convergence: a failure is non-fatal (reads still fall back to
-    // students.csv), so it's logged by the mutation layer, not surfaced.
+    // students.csv), so it's logged by the mutation layer, not surfaced — and
+    // onSettled still unblocks auto-sync so a migrate hiccup can't strand it.
   })
-  const migratedRef = useRef(false)
+  // Fire once per classroom (the component instance is reused across a
+  // $classroom param switch, so a boolean would skip later classrooms).
+  const migratedForRef = useRef<string | null>(null)
   useEffect(() => {
     if (isLoading || isError) return
-    if (migratedRef.current || migrateMutation.isPending) return
-    migratedRef.current = true
+    if (migratedForRef.current === classroom) return
+    migratedForRef.current = classroom
+    setMigrateSettledFor(null)
     migrateMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, isError])
+  }, [classroom, isLoading, isError])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open).
   const syncMutation = useMutation({
@@ -368,15 +369,20 @@ const EnrolledStudents = ({
   })
 
   // Auto-sync on open: append team members lacking a CSV row (fire once per
-  // drift episode; re-arm when count returns to 0). dropSuppressed skips any
-  // csv-missing member the teacher just unenrolled whose best-effort team-drop
-  // failed — otherwise auto-sync would re-append the student it just removed.
-  // (suppressedLogins is read in the effect, not during render;
-  // syncRosterFromTeam re-derives the authoritative set server-side.)
+  // drift episode; re-arm when count returns to 0). Gated on migrate having
+  // settled for this classroom so the two roster writers run in sequence, not a
+  // race. dropSuppressed skips any csv-missing member the teacher just
+  // unenrolled whose best-effort team-drop failed — otherwise auto-sync would
+  // re-append the student it just removed. (suppressedLogins is read in the
+  // effect, not during render; syncRosterFromTeam re-derives the authoritative
+  // set server-side.)
   const autoSyncedRef = useRef(false)
   const csvMissingKey = csvMissingLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
+    // Wait for the migrate pass to settle first (converges students.csv ->
+    // roster.csv) so sync's write can't race migrate's on the ref.
+    if (migrateSettledFor !== classroom) return
     if (dropSuppressed(csvMissingLogins, suppressedLogins).length === 0) {
       autoSyncedRef.current = false
       return
@@ -385,7 +391,7 @@ const EnrolledStudents = ({
     autoSyncedRef.current = true
     syncMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [csvMissingKey, isLoading, isError])
+  }, [csvMissingKey, isLoading, isError, migrateSettledFor, classroom])
 
   // Auto-reconcile on open: team-add rostered not_in_org usernames that are in
   // fact active org members (native invite / SSO).

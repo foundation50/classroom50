@@ -13,6 +13,7 @@ import {
   ensureStaffTeams,
   addUserToTeam,
   isDeletableClassroomTeamRef,
+  isNonFastForward,
   updateRef,
   type ClassroomTeamRef,
   type EditClassroomInput,
@@ -160,9 +161,11 @@ async function rollbackCreatedTeams(
 export async function withGitConflictRetry<T>(
   fn: () => Promise<T>,
 ): Promise<T> {
-  // A concurrent write to classroom50 main 409s the updateRef. fn re-reads the
-  // ref + file each attempt, so retrying is safe; jittered backoff lets the
-  // winning write land and avoids lock-step collisions between racing clients.
+  // A concurrent write to classroom50 main conflicts the updateRef: GitHub
+  // returns 409, or a 422 "not a fast forward" when the force:false ref PATCH
+  // loses the race. fn re-reads the ref + file each attempt, so retrying either
+  // is safe; jittered backoff lets the winning write land and avoids lock-step
+  // collisions between racing clients.
   const attempts = 4
   let lastError: unknown
   for (let attempt = 1; attempt <= attempts; attempt++) {
@@ -170,7 +173,9 @@ export async function withGitConflictRetry<T>(
       return await fn()
     } catch (err) {
       lastError = err
-      const isConflict = err instanceof GitHubAPIError && err.status === 409
+      const isConflict =
+        (err instanceof GitHubAPIError && err.status === 409) ||
+        isNonFastForward(err)
       if (!isConflict || attempt === attempts) {
         throw err
       }
