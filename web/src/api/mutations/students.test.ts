@@ -4,6 +4,7 @@ import Papa from "papaparse"
 import {
   enrollStudentInClassroom,
   inviteByEmail,
+  bulkInviteByEmail,
   unenrollStudent,
   bulkUnenrollStudents,
   bulkEnrollStudentsInClassroom,
@@ -575,6 +576,172 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
 
     expect(result.inviteWarning).toMatch(/already belongs to a member/i)
     expect(result.inviteWarning).toMatch(/by github username/i)
+    expect(state.csvWritten).toBe(false)
+  })
+})
+
+describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => {
+  const apiError = (status: number, message: string) =>
+    new GitHubAPIError({
+      status,
+      url: "/orgs/acme/invitations",
+      message,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  // Records every invite body and whether any git tree write happened, and can
+  // 422 a specific email (already-member) so skip/failed routing is testable.
+  const makeClient = (opts?: { memberEmails?: string[]; noTeam?: boolean }) => {
+    const memberEmails = new Set(opts?.memberEmails ?? [])
+    const state = {
+      csvWritten: false,
+      inviteBodies: [] as {
+        email: string
+        role: string
+        team_ids?: number[]
+      }[],
+    }
+
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("classroom.json")) {
+        const meta: Record<string, unknown> = { short_name: "x" }
+        if (!opts?.noTeam) meta.team = { slug: "classroom50-x", id: 4242 }
+        return Promise.resolve(JSON.stringify(meta))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+
+    const request = vi
+      .fn()
+      .mockImplementation(
+        (path: string, options?: { body?: unknown; method?: string }) => {
+          if (path.endsWith("/git/trees")) {
+            state.csvWritten = true
+            return Promise.resolve({ sha: "tree-sha" })
+          }
+          // Staff-team ensure (instructor/ta role -> resolveTeamIdByRole): create
+          // returns a fresh team; the config-repo write grant is a no-op PUT.
+          if (path.endsWith("/teams") && options?.method === "POST") {
+            const body = (options as { body?: { name?: string } }).body
+            return Promise.resolve({
+              id: 5000,
+              slug: body?.name ?? "team",
+              privacy: "secret",
+            })
+          }
+          if (path.includes("/teams/") && path.includes("/repos/")) {
+            return Promise.resolve({})
+          }
+          if (path.endsWith("/invitations")) {
+            const body = options?.body as {
+              email: string
+              role: string
+              team_ids?: number[]
+            }
+            if (memberEmails.has(body.email)) {
+              return Promise.reject(apiError(422, "already a member"))
+            }
+            state.inviteBodies.push(body)
+            return Promise.resolve({})
+          }
+          return Promise.reject(new Error(`unexpected request: ${path}`))
+        },
+      )
+
+    return { client: { request, requestRaw } as unknown as GitHubClient, state }
+  }
+
+  it("invites every email with the classroom team and writes NO roster.csv", async () => {
+    const { client, state } = makeClient()
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "a@x.edu" }, { email: "b@x.edu", role: "student" }],
+    })
+
+    expect(result.invited.map((i) => i.email).sort()).toEqual([
+      "a@x.edu",
+      "b@x.edu",
+    ])
+    expect(result.skipped).toEqual([])
+    expect(result.failed).toEqual([])
+    expect(state.csvWritten).toBe(false)
+    // Every invite carried the classroom team as a plain member (default role).
+    for (const body of state.inviteBodies) {
+      expect(body.team_ids).toEqual([4242])
+      expect(body.role).toBe("direct_member")
+    }
+  })
+
+  it("invites an instructor as an org OWNER (admin role)", async () => {
+    const { client, state } = makeClient()
+
+    await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "prof@x.edu", role: "instructor" }],
+    })
+
+    expect(state.inviteBodies[0]).toMatchObject({
+      email: "prof@x.edu",
+      role: "admin",
+    })
+  })
+
+  it("routes a 422 already-member into skipped, not failed", async () => {
+    const { client } = makeClient({ memberEmails: ["member@x.edu"] })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "member@x.edu" }, { email: "fresh@x.edu" }],
+    })
+
+    expect(result.skipped).toEqual([{ email: "member@x.edu" }])
+    expect(result.invited.map((i) => i.email)).toEqual(["fresh@x.edu"])
+    expect(result.failed).toEqual([])
+  })
+
+  it("reports progress and returns early for an empty invite list", async () => {
+    const { client, state } = makeClient()
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [],
+    })
+    expect(result).toEqual({
+      invited: [],
+      skipped: [],
+      failed: [],
+      deferred: [],
+    })
+    expect(state.inviteBodies).toEqual([])
+  })
+
+  it("blocks the whole batch (throws, sends nothing) when the classroom team can't be resolved", async () => {
+    // A team-less email invite would orphan the invitee (no team, no CSV row),
+    // so the batch must fail loudly before sending anything — mirroring the
+    // single inviteByEmail guard.
+    const { client, state } = makeClient({ noTeam: true })
+
+    await expect(
+      bulkInviteByEmail(client, {
+        org: "acme",
+        classroom: "cs101",
+        invites: [{ email: "a@x.edu" }, { email: "b@x.edu" }],
+      }),
+    ).rejects.toThrow(/couldn't resolve the classroom team/i)
+
+    expect(state.inviteBodies).toEqual([])
     expect(state.csvWritten).toBe(false)
   })
 })

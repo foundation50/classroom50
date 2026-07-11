@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, Send, Upload, UserMinus, X } from "lucide-react"
+import { Mail, Plus, Send, Upload, UserMinus, X } from "lucide-react"
 
 import type { GitHubClient } from "@/hooks/github/client"
 import { ConfirmModal } from "@/components/modals"
@@ -29,6 +29,7 @@ const log = logger.scope("students:RosterBulkActionsBar")
 export type AddStudentActions = {
   onAddStudent: () => void
   onUploadRoster: () => void
+  onInviteByEmail: () => void
   onInviteLinks: () => void
 }
 
@@ -332,6 +333,15 @@ const RosterBulkActionsBar = ({
                   onClick={addActions.onUploadRoster}
                 >
                   <Upload aria-hidden="true" className="size-4" />
+                </Button>
+                <Button
+                  size="sm"
+                  className="join-item"
+                  aria-label={t("students.emailInviteTitle")}
+                  title={t("students.emailInviteTitle")}
+                  onClick={addActions.onInviteByEmail}
+                >
+                  <Mail aria-hidden="true" className="size-4" />
                 </Button>
                 <Button
                   size="sm"

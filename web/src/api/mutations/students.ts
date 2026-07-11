@@ -1424,6 +1424,125 @@ async function resolveTeamIdByRole(
   return result
 }
 
+export type BulkInviteByEmailInput = {
+  org: string
+  classroom: string
+  // Emails to invite, each with the role the teacher assigned in the preview.
+  invites: { email: string; role?: RosterRole }[]
+  onProgress?: (progress: {
+    processed: number
+    total: number
+    message: string
+  }) => void
+}
+
+export type BulkInviteByEmailResult = {
+  // A fresh org email invite was created (carrying the role's team).
+  invited: { email: string; role: RosterRole }[]
+  // GitHub returned 422 — the email already belongs to a member or already has
+  // a pending invite, so no new invite was sent.
+  skipped: { email: string }[]
+  // The invite call failed for a non-rate-limit reason.
+  failed: { email: string; message: string }[]
+  // Not attempted because a rate limit was hit mid-batch; retry later.
+  deferred: string[]
+}
+
+// Bulk-invite a list of EMAIL addresses to the org, carrying the role's team so
+// accepting the single invite activates the right membership: student ->
+// classroom team, ta -> TA team, instructor -> the instructor team AND org
+// OWNER (role "admin"). Writes NOTHING to roster.csv — an email carries no
+// reliable GitHub identity until accepted; the invite surfaces as a `pending`
+// row via the org pending-invitations list. Mirrors inviteRosterStudents'
+// rate-limit handling (stop issuing new invites once throttled; defer the rest),
+// and the same team resolution (resolveTeamIdByRole ensures the staff team for
+// an instructor/ta invite, students-only never creates empty staff teams).
+export async function bulkInviteByEmail(
+  client: GitHubClient,
+  input: BulkInviteByEmailInput,
+): Promise<BulkInviteByEmailResult> {
+  const { org, classroom, invites, onProgress } = input
+  await assertClassroomNotArchived(client, org, classroom)
+
+  const invited: BulkInviteByEmailResult["invited"] = []
+  const skipped: BulkInviteByEmailResult["skipped"] = []
+  const failed: BulkInviteByEmailResult["failed"] = []
+  const deferred: string[] = []
+
+  const targets = invites
+    .map((i) => ({ email: i.email.trim(), role: i.role ?? "student" }))
+    .filter((i) => i.email)
+  if (targets.length === 0) return { invited, skipped, failed, deferred }
+
+  const teamIdByRole = await resolveTeamIdByRole(
+    client,
+    org,
+    classroom,
+    new Set(targets.map((t) => t.role)),
+  )
+
+  // Block the whole batch if any role's team couldn't be resolved, mirroring the
+  // single inviteByEmail guard: a team-less email invite is broken — the invitee
+  // accepts into the org attached to no team and, since we write no roster.csv
+  // row, is silently uncollected. Fail loudly BEFORE sending anything rather than
+  // send a batch of orphaning invites. (The username bulk path can tolerate a
+  // teamless invite because its CSV row still surfaces the person; an email
+  // invite has no such fallback.)
+  const rolesMissingTeam = [...new Set(targets.map((t) => t.role))].filter(
+    (role) => teamIdByRole[role] === undefined,
+  )
+  if (rolesMissingTeam.length > 0) {
+    throw new Error(
+      `Couldn't resolve the classroom team for ${classroom}, so no invitations ` +
+        `were sent. Make sure the classroom's GitHub team exists (re-run ` +
+        `classroom setup if needed), then try again.`,
+    )
+  }
+
+  let processed = 0
+  const bump = (email: string) => {
+    processed += 1
+    onProgress?.({ processed, total: targets.length, message: email })
+  }
+
+  let rateLimited = false
+
+  await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
+    const { email, role } = target
+    if (rateLimited) {
+      deferred.push(email)
+      bump(email)
+      return
+    }
+    try {
+      // Guaranteed present: the pre-send guard blocked the batch otherwise.
+      const teamId = teamIdByRole[role]
+      await createOrgInvitation(client, {
+        org,
+        email,
+        team_ids: teamId ? [teamId] : undefined,
+        // An instructor becomes an org OWNER; student/ta are plain members.
+        role: role === "instructor" ? "admin" : "direct_member",
+      })
+      invited.push({ email, role })
+    } catch (err) {
+      if (err instanceof GitHubAPIError && err.isRateLimited) {
+        rateLimited = true
+        deferred.push(email)
+      } else if (err instanceof GitHubAPIError && err.status === 422) {
+        // Already a member or already invited — nothing to send.
+        skipped.push({ email })
+      } else {
+        failed.push({ email, message: getErrorMessage(err) })
+      }
+    } finally {
+      bump(email)
+    }
+  })
+
+  return { invited, skipped, failed, deferred }
+}
+
 export type ResolveRosterUploadPreflightInput = {
   org: string
   classroom: string

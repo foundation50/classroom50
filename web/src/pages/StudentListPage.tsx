@@ -7,12 +7,13 @@ import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import EnrolledStudents from "@/pages/students/EnrolledStudents"
 import UploadRoster from "@/pages/students/UploadRoster"
+import EmailInviteModal from "@/pages/students/EmailInviteModal"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import useGetStudents, { useUpdateRosterCache } from "@/hooks/useGetStudents"
-import { useTeamRoster } from "@/hooks/useTeamRoster"
+import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -39,6 +40,7 @@ const StudentListContent = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
+  const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
   // Session-unenrolled logins, owned here so both the roster (which remembers on
   // unenroll and skips them in the auto-backfills) and the Add modal (which
   // forgets a login on a successful re-enroll) share one set — otherwise a
@@ -48,6 +50,7 @@ const StudentListContent = ({
   // Which add-students affordance is open (all mutually exclusive modals).
   const [addOpen, setAddOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
+  const [emailInviteOpen, setEmailInviteOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
 
   // Counts from the team roster (same source as EnrolledStudents), so header
@@ -131,6 +134,7 @@ const StudentListContent = ({
         addActions={{
           onAddStudent: () => setAddOpen(true),
           onUploadRoster: () => setUploadOpen(true),
+          onInviteByEmail: () => setEmailInviteOpen(true),
           onInviteLinks: () => setInviteOpen(true),
         }}
       />
@@ -162,6 +166,20 @@ const StudentListContent = ({
             suppressedLogins.forget(result.addedStudents.map((s) => s.username))
           }
           invalidateInviteQueries(queryClient, org)
+        }}
+      />
+      <EmailInviteModal
+        org={org}
+        classroom={classroom}
+        client={client}
+        open={emailInviteOpen}
+        onOpenChange={setEmailInviteOpen}
+        onSuccess={() => {
+          // Email invites write no roster.csv row; they surface as `pending`
+          // rows via the org pending-invitations list, so refresh those + the
+          // team roster to show them at once.
+          invalidateInviteQueries(queryClient, org)
+          invalidateTeamRoster()
         }}
       />
       <InviteLinksModal
