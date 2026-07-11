@@ -1349,7 +1349,7 @@ const makeTeamClient = (opts: {
 }
 
 describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-members", () => {
-  it("adds active org members to the team and flags non-members as notInOrg", async () => {
+  it("adds active org members to the team and skips non-members", async () => {
     const { client, committed, teamAdds } = makeTeamClient({
       startingCsv: HEADER,
       users: {
@@ -1369,9 +1369,9 @@ describe("bulkEnrollStudentsInClassroom — verify org membership, flag non-memb
     const rows = rowsFromCsv(committed.content!)
     expect(rows.map((r) => r.username).sort()).toEqual(["ada", "bob"])
     expect(rows.find((r) => r.username === "ada")?.github_id).toBe("101")
-    // ...but only the active member is team-added; the non-member is flagged.
+    // ...but only the active member is team-added; the non-member (bob, not in
+    // the org) is skipped and left for the upload's org-invite pass.
     expect(teamAdds).toEqual(["ada"])
-    expect(result.notInOrg).toEqual(["bob"])
     expect(result.teamResults).toEqual([{ username: "ada", status: "added" }])
   })
 

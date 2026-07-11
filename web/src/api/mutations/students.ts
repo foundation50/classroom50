@@ -623,6 +623,18 @@ export const isLikelyGithubUsername = (username: string) => {
   return /^[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,37}[a-zA-Z0-9])?$/.test(username)
 }
 
+// Thrown by addStudentsToClassroom when every candidate row is a duplicate or
+// invalid, so there is nothing to commit. A typed sentinel (not a bare Error)
+// so a caller like the roster upload can detect the benign "all rows already
+// present" re-run and still proceed to its invite pass, while other callers
+// keep surfacing it as a hard "nothing to add."
+export class NoNewStudentsError extends Error {
+  constructor() {
+    super("No new students to add")
+    this.name = "NoNewStudentsError"
+  }
+}
+
 export async function addStudentsToClassroom(
   client: GitHubClient,
   input: AddStudentsToClassroomInput,
@@ -775,7 +787,7 @@ export async function addStudentsToClassroom(
   }
 
   if (addedStudents.length === 0) {
-    throw new Error("No new students to add")
+    throw new NoNewStudentsError()
   }
 
   input.onProgress?.({
@@ -1313,10 +1325,6 @@ export type BulkEnrollStudentsResult = AddStudentsToClassroomResult & {
     status: "added" | "failed"
     message?: string
   }[]
-  // Added to roster.csv but NOT an active org member and not a pending invite
-  // — on the roster, not in the organization. Surfaced so the teacher can chase
-  // an invite; the team-driven roster shows them as `not_in_org`.
-  notInOrg: string[]
 }
 
 export type BulkImportResult = {
@@ -1331,7 +1339,6 @@ export type BulkImportResult = {
     status: "added" | "failed"
     message?: string
   }[]
-  notInOrg?: string[]
 }
 export async function bulkEnrollStudentsInClassroom(
   client: GitHubClient,
@@ -1382,7 +1389,6 @@ export async function bulkEnrollStudentsInClassroom(
   }
 
   const teamResults: BulkImportResult["teamResults"] = []
-  const notInOrg: string[] = []
 
   for (let i = 0; i < addResult.addedStudents.length; i++) {
     const student = addResult.addedStudents[i]
@@ -1395,10 +1401,9 @@ export async function bulkEnrollStudentsInClassroom(
 
     // Verify by team membership through org membership: only an active org
     // member is team-added (the trust model used across the enroll paths). A
-    // non-member is recorded as not_in_org (needs an invite) rather than a team
-    // failure — they aren't in the org to add yet.
+    // non-member is skipped here — they need an org invite first (sent by the
+    // upload's invite pass), so there's nothing to team-add yet.
     if (!(await isActiveMember(client, bulkInput.org, student.username))) {
-      notInOrg.push(student.username)
       onProgress?.({
         processed: i + 1,
         total: addResult.addedStudents.length,
@@ -1458,14 +1463,12 @@ export async function bulkEnrollStudentsInClassroom(
     classroom: bulkInput.classroom,
     added: addResult.addedStudents.length,
     skipped: addResult.skippedStudents.length,
-    notInOrg: notInOrg.length,
     teamFailed: teamResults.filter((r) => r.status === "failed").length,
   })
 
   return {
     ...addResult,
     teamResults,
-    notInOrg,
   }
 }
 

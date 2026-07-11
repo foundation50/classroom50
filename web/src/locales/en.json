@@ -430,6 +430,7 @@
     "resultInvitesDeferred": "Invitations deferred (rate limited)",
     "inviteDeferredDetail": "GitHub rate-limited the invitations — re-run the import shortly to invite the rest.",
     "resultInvitesFailed": "Invitations failed",
+    "invitePassFailed": "The roster was saved, but sending invitations failed: {{message}}. Re-run the import to retry the invitations.",
     "couldNotAddToTeam": "Could not add this user to the team",
     "done": "Done",
     "chooseAnotherFile": "Choose another file"

@@ -357,14 +357,19 @@ const EnrolledStudents = ({
   })
 
   // Auto-sync on open: append team members lacking a CSV row (fire once per
-  // drift episode; re-arm when count returns to 0). Gated on migrate having
-  // settled for this classroom so the two roster writers run in sequence, not a
-  // race. dropSuppressed skips any csv-missing member the teacher just
-  // unenrolled whose best-effort team-drop failed — otherwise auto-sync would
-  // re-append the student it just removed. (suppressedLogins is read in the
-  // effect, not during render; syncRosterFromTeam re-derives the authoritative
-  // set server-side.)
-  const autoSyncedRef = useRef(false)
+  // drift episode, per classroom; re-arm when the drift clears). Gated on
+  // migrate having settled for this classroom so the two roster writers run in
+  // sequence, not a race. dropSuppressed skips any csv-missing member the
+  // teacher just unenrolled whose best-effort team-drop failed — otherwise
+  // auto-sync would re-append the student it just removed. (suppressedLogins is
+  // read in the effect, not during render; syncRosterFromTeam re-derives the
+  // authoritative set server-side.)
+  //
+  // Keyed by classroom (not a boolean): the component instance is reused across
+  // a $classroom param switch, so a boolean set true for a drifting classroom A
+  // would wrongly skip a drifting classroom B navigated to directly (no
+  // intervening zero-drift render to reset it).
+  const autoSyncedForRef = useRef<string | null>(null)
   const csvMissingKey = csvMissingLogins.join(",")
   useEffect(() => {
     if (isLoading || isError) return
@@ -372,11 +377,12 @@ const EnrolledStudents = ({
     // roster.csv) so sync's write can't race migrate's on the ref.
     if (migrateSettledFor !== classroom) return
     if (dropSuppressed(csvMissingLogins, suppressedLogins).length === 0) {
-      autoSyncedRef.current = false
+      if (autoSyncedForRef.current === classroom)
+        autoSyncedForRef.current = null
       return
     }
-    if (autoSyncedRef.current || syncMutation.isPending) return
-    autoSyncedRef.current = true
+    if (autoSyncedForRef.current === classroom || syncMutation.isPending) return
+    autoSyncedForRef.current = classroom
     syncMutation.mutate()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [csvMissingKey, isLoading, isError, migrateSettledFor, classroom])

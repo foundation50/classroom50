@@ -8,6 +8,7 @@ import { Alert, Button, Modal } from "@/components/ui"
 import {
   inviteRosterStudents,
   isLikelyGithubUsername,
+  NoNewStudentsError,
   normalizeGithubUsername,
   splitName,
   type BulkImportResult,
@@ -151,6 +152,10 @@ const UploadRoster = ({
     deferred: string[]
     failed: { username: string; message: string }[]
   } | null>(null)
+  // A hard failure of the invite pass AFTER the roster.csv write already
+  // succeeded. Surfaced inside the (still-shown) result view rather than
+  // collapsing to the bare error screen, which would hide the rows that landed.
+  const [inviteError, setInviteError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
   const isOpen = phase !== "idle"
@@ -166,6 +171,7 @@ const UploadRoster = ({
     })
     setResult(null)
     setInviteOutcome(null)
+    setInviteError(null)
     setError(null)
 
     if (fileInputRef.current) {
@@ -228,42 +234,74 @@ const UploadRoster = ({
     setError(null)
     setResult(null)
     setInviteOutcome(null)
+    setInviteError(null)
     setProgress({
       processed: 0,
       total: rows.length,
       message: t("students.startingImport"),
     })
 
+    // 1) Write the roster.csv rows (identity + name/email/section) and team-add
+    //    anyone already an active org member. A re-run where every uploaded row
+    //    already exists throws NoNewStudentsError (nothing to commit) — that is
+    //    benign here: we still run the invite pass below so a student whose
+    //    first invite was rate-limited/failed gets re-invited. Any other enroll
+    //    error is a genuine failure (nothing written) -> error screen.
+    let importResult: BulkImportResult
     try {
-      // 1) Write the roster.csv rows (identity + name/email/section) and
-      //    team-add anyone already an active org member.
-      const importResult = await bulkEnrollStudentsInClassroom(client, {
+      importResult = await bulkEnrollStudentsInClassroom(client, {
         org,
         classroom,
         rows,
         onProgress: setProgress,
       })
-      setResult(importResult)
+    } catch (err) {
+      if (err instanceof NoNewStudentsError) {
+        // All rows already in roster.csv — synthesize an empty result so the
+        // completed view still renders, then fall through to the invite pass.
+        importResult = { addedStudents: [], skippedStudents: [] }
+      } else {
+        log.error("roster import failed", { err, record: true })
+        setError(
+          err instanceof Error ? err.message : t("students.importFailed"),
+        )
+        setPhase("error")
+        return
+      }
+    }
+    setResult(importResult)
 
-      // 2) The team is the source of truth for who shows on the roster, so send
-      //    org invites for uploaded students who aren't already members — they
-      //    then appear as a `pending` row. Invite the FULL uploaded set (not
-      //    just the newly-added rows): inviteRosterStudents no-ops anyone
-      //    already active/pending, so a re-run after a rate limit still
-      //    re-invites a student whose first invite was deferred (their CSV row
-      //    already exists, so they'd otherwise be skipped as a duplicate and,
-      //    since CSV-only rows don't render, silently lost). Their roster.csv
-      //    row (written above) enriches the pending row; deferred/failed invites
-      //    are surfaced in the result dialog so nothing is lost.
-      setProgress({
-        processed: 0,
-        total: rows.length,
-        message: t("students.invitingUploaded"),
-      })
+    // 2) The team is the source of truth for who shows on the roster, so send
+    //    org invites for uploaded students who aren't already members — they
+    //    then appear as a `pending` row. Invite the FULL uploaded set (not just
+    //    the newly-added rows): inviteRosterStudents no-ops anyone already
+    //    active/pending, so a re-run after a rate limit still re-invites a
+    //    student whose first invite was deferred (their CSV row already exists,
+    //    so they'd otherwise be skipped as a duplicate and, since CSV-only rows
+    //    don't render, silently lost). Thread the github_id the enroll pass
+    //    just resolved (from addedStudents, keyed by login) so the invite
+    //    targets the immutable account rather than re-resolving a possibly
+    //    recycled/renamed login. Their roster.csv row enriches the pending row;
+    //    deferred/failed invites are surfaced in the result dialog.
+    const idByLogin = new Map(
+      importResult.addedStudents.map((s) => [
+        s.username.toLowerCase(),
+        s.github_id,
+      ]),
+    )
+    setProgress({
+      processed: 0,
+      total: rows.length,
+      message: t("students.invitingUploaded"),
+    })
+    try {
       const inviteRes = await inviteRosterStudents(client, {
         org,
         classroom,
-        students: rows.map((r) => ({ username: r.username, github_id: "" })),
+        students: rows.map((r) => ({
+          username: r.username,
+          github_id: idByLogin.get(r.username.toLowerCase()) ?? "",
+        })),
         onProgress: setProgress,
       })
       setInviteOutcome({
@@ -274,14 +312,18 @@ const UploadRoster = ({
           message: f.message,
         })),
       })
-
-      setPhase("complete")
-      onSuccess?.(importResult)
     } catch (err) {
-      log.error("roster import failed", { err, record: true })
-      setError(err instanceof Error ? err.message : t("students.importFailed"))
-      setPhase("error")
+      // The roster.csv write already landed; a hard invite failure must not
+      // hide it behind the bare error screen. Keep the completed view and show
+      // the invite error there — the teacher can re-run to retry the invites.
+      log.error("roster invite pass failed", { err, record: true })
+      setInviteError(
+        err instanceof Error ? err.message : t("students.importFailed"),
+      )
     }
+
+    setPhase("complete")
+    onSuccess?.(importResult)
   }
 
   const progressPercent =
@@ -420,6 +462,14 @@ const UploadRoster = ({
                 })}
               </span>
             </Alert>
+
+            {inviteError && (
+              <Alert tone="error">
+                <span>
+                  {t("students.invitePassFailed", { message: inviteError })}
+                </span>
+              </Alert>
+            )}
 
             {result.addedStudents.length > 0 && (
               <ImportResultSection
