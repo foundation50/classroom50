@@ -789,6 +789,25 @@ export async function removeOrgMembership(
 
 export type OrgMembershipState = "active" | "pending"
 
+// Set an EXISTING member's (or invitee's) org-level role. PUT
+// /orgs/{org}/memberships/{username} with { role } — "admin" promotes to org
+// owner, "member" demotes to a plain member. Used to promote an already-active
+// member to owner on a confirmed instructor role change (the invite path only
+// sets the role on a FRESH invite, so an existing member is never escalated
+// there). Idempotent — setting the role a member already holds is a no-op PUT.
+export async function setOrgMembershipRole(
+  client: GitHubClient,
+  input: { org: string; username: string; role: "admin" | "member" },
+): Promise<void> {
+  const { org, username, role } = input
+  await client.request(
+    `/orgs/${encodeURIComponent(org)}/memberships/${encodeURIComponent(
+      username,
+    )}`,
+    { method: "PUT", body: { role } },
+  )
+}
+
 // PATCH /repos/{owner}/{repo} { archived: true }. Reversible and covered by the
 // existing `repo` scope (unlike deletion, which needs delete_repo and a
 // re-auth). The safe fallback when deletion isn't permitted. 404 = success.

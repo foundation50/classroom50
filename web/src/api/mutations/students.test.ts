@@ -8,6 +8,7 @@ import {
   bulkUnenrollStudents,
   bulkEnrollStudentsInClassroom,
   assignRosterMemberRole,
+  applyRosterRoleChange,
   inviteRosterStudents,
   syncRosterFromTeam,
   writeRosterRoles,
@@ -2589,6 +2590,205 @@ describe("assignRosterMemberRole — enroll a rostered active member", () => {
       }),
     ).rejects.toThrow(/boom/)
     // Never team-added on an unknown membership picture.
+    expect(teamAdds).toEqual([])
+  })
+})
+
+// A focused client mock for applyRosterRoleChange: records team adds, team
+// removes, and org-membership role PUTs, and resolves the classroom + staff
+// teams. `members` are active org members; anyone else 404s (not a member).
+const makeRoleChangeClient = (opts: { members: string[] }) => {
+  const memberSet = new Set(opts.members.map((m) => m.toLowerCase()))
+  const teamAdds: { slug: string; login: string }[] = []
+  const teamRemoves: { slug: string; login: string }[] = []
+  const orgRolePuts: { login: string; role: string }[] = []
+
+  const requestRaw = vi.fn().mockImplementation((path: string) => {
+    if (path.includes("/contents/") && path.includes("classroom.json")) {
+      return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+    }
+    return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+  })
+
+  const request = vi
+    .fn()
+    .mockImplementation(
+      (path: string, options?: { method?: string; body?: unknown }) => {
+        const method = options?.method ?? "GET"
+        // classroom.json read (resolveClassroomTeamSlugs) -> derived slugs.
+        if (path.includes("/contents/") && path.includes("classroom.json")) {
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 404,
+              url: path,
+              message: "Not Found",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
+        // Create team (ensureSecretTeamByName): POST /orgs/{org}/teams
+        if (path.endsWith("/teams") && method === "POST") {
+          const name = (options?.body as { name?: string })?.name ?? ""
+          return Promise.resolve({ id: 999, slug: name, name })
+        }
+        // Ensure staff team (GET/adopt team by name) -> resolve an adopted team.
+        if (path.includes("/teams/") && !path.includes("/memberships/")) {
+          const slugMatch = path.match(/\/teams\/([^/]+)/)
+          const slug = slugMatch ? decodeURIComponent(slugMatch[1]) : ""
+          // Team-remove: DELETE .../teams/{slug}/memberships handled below.
+          return Promise.resolve({ id: 999, slug, name: slug })
+        }
+        // Grant config-repo write: PUT /orgs/{org}/teams/{slug}/repos/... — the
+        // team-repo path also matches /teams/ above; disambiguate by /repos/.
+        // (Handled by the /teams/ branch returning a benign object.)
+        // Team membership PUT/DELETE: .../teams/{slug}/memberships/{login}
+        if (path.includes("/teams/") && path.includes("/memberships/")) {
+          const parts = path.split("/teams/")[1]
+          const slug = decodeURIComponent(parts.split("/memberships/")[0])
+          const login = decodeURIComponent(parts.split("/memberships/")[1])
+          if (method === "DELETE") {
+            teamRemoves.push({ slug, login })
+            return Promise.resolve()
+          }
+          teamAdds.push({ slug, login })
+          return Promise.resolve({ state: "active" })
+        }
+        // Org membership: GET returns state; PUT sets role.
+        if (path.includes("/memberships/") && !path.includes("/teams/")) {
+          const login = decodeURIComponent(path.split("/memberships/")[1])
+          if (method === "PUT") {
+            const role = (options?.body as { role?: string })?.role ?? ""
+            orgRolePuts.push({ login, role })
+            return Promise.resolve({ state: "active", role })
+          }
+          if (memberSet.has(login.toLowerCase())) {
+            return Promise.resolve({ state: "active" })
+          }
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 404,
+              url: path,
+              message: "Not Found",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          )
+        }
+        // Add repo to team (grantTeamConfigRepoWrite): PUT
+        // /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
+        if (path.includes("/repos/")) {
+          return Promise.resolve()
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      },
+    )
+
+  return {
+    client: { request, requestRaw } as unknown as GitHubClient,
+    teamAdds,
+    teamRemoves,
+    orgRolePuts,
+  }
+}
+
+describe("applyRosterRoleChange — confirmed team move", () => {
+  it("moves a student to TA: adds to the ta team, removes from the student team", async () => {
+    const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
+      { members: ["userb"] },
+    )
+
+    const result = await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "userb",
+      fromRole: "student",
+      toRole: "ta",
+    })
+
+    expect(result.warnings).toEqual([])
+    expect(teamAdds).toContainEqual({
+      slug: "classroom50-cs101-ta",
+      login: "userb",
+    })
+    expect(teamRemoves).toContainEqual({
+      slug: "classroom50-cs101",
+      login: "userb",
+    })
+    // Not an instructor move, so no org-owner promotion.
+    expect(orgRolePuts).toEqual([])
+  })
+
+  it("promotes to instructor: adds to the instructor team AND sets org role admin", async () => {
+    const { client, teamAdds, orgRolePuts } = makeRoleChangeClient({
+      members: ["userb"],
+    })
+
+    await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "userb",
+      fromRole: "student",
+      toRole: "instructor",
+    })
+
+    expect(teamAdds).toContainEqual({
+      slug: "classroom50-cs101-instructor",
+      login: "userb",
+    })
+    expect(orgRolePuts).toContainEqual({ login: "userb", role: "admin" })
+  })
+
+  it("downgrades an instructor to student: demotes org role to member", async () => {
+    const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
+      { members: ["boss"] },
+    )
+
+    await applyRosterRoleChange(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "boss",
+      fromRole: "instructor",
+      toRole: "student",
+    })
+
+    expect(teamAdds).toContainEqual({
+      slug: "classroom50-cs101",
+      login: "boss",
+    })
+    expect(teamRemoves).toContainEqual({
+      slug: "classroom50-cs101-instructor",
+      login: "boss",
+    })
+    expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
+  })
+
+  it("throws for a non-member (never team-adds) so the caller routes to invite", async () => {
+    const { client, teamAdds } = makeRoleChangeClient({ members: [] })
+
+    await expect(
+      applyRosterRoleChange(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "stranger",
+        fromRole: "student",
+        toRole: "ta",
+      }),
+    ).rejects.toThrow(/not an active member/)
     expect(teamAdds).toEqual([])
   })
 })

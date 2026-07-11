@@ -1,21 +1,27 @@
-import { useEffect, useId, useRef, useState } from "react"
+import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
 import type { GitHubClient } from "@/hooks/github/client"
-import { Alert, Button, Modal, Select } from "@/components/ui"
+import { Alert, Button, Modal, Select, Spinner } from "@/components/ui"
 import {
+  applyRosterRoleChange,
   inviteRosterStudents,
   isLikelyGithubUsername,
   NoNewStudentsError,
   normalizeGithubUsername,
+  resolveRosterUploadPreflight,
   RosterCsvMalformedError,
   splitName,
   writeRosterRoles,
   type BulkImportResult,
   type ImportRosterRow,
 } from "@/api/mutations/students"
+import {
+  hasInstructorPromotion,
+  type PreflightResult,
+} from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
 import type { RosterRole } from "@/util/teamRoster"
 
@@ -91,6 +97,46 @@ export const coerceImportRole = (
   return undefined
 }
 
+// i18n key for a role's singular label, shared by the preview role Select and
+// the role-change list.
+const roleLabelKey = (role: RosterRole): string =>
+  role === "ta"
+    ? "students.roleTa"
+    : role === "instructor"
+      ? "students.roleInstructor"
+      : "students.roleStudent"
+
+// A small summary tile for a preflight bucket (count + label). Zero-count
+// buckets dim so the teacher's eye goes to what actually changes.
+const PreflightBucket = ({
+  tone,
+  title,
+  count,
+}: {
+  tone: "neutral" | "info" | "warning" | "error"
+  title: string
+  count: number
+}) => {
+  const toneClass =
+    count === 0
+      ? "border-base-300 opacity-50"
+      : tone === "error"
+        ? "border-error/40 bg-error/5"
+        : tone === "warning"
+          ? "border-warning/40 bg-warning/5"
+          : tone === "info"
+            ? "border-info/40 bg-info/5"
+            : "border-base-300"
+  return (
+    <div
+      className={`flex items-center justify-between gap-2 rounded-box border px-4 py-2.5 ${toneClass}`}
+    >
+      <span className="text-sm">{title}</span>
+      <span className="badge badge-sm">{count}</span>
+    </div>
+  )
+}
+
 type UploadRosterProps = {
   org: string
   classroom: string
@@ -160,6 +206,14 @@ const UploadRoster = ({
   // username. Seeded from the CSV `role` column (else "student") and editable in
   // the preview. Instructor -> org owner invite (called out in the confirm).
   const [rolesByUser, setRolesByUser] = useState<Record<string, RosterRole>>({})
+  // Preflight against current GitHub membership (read-only). Null until the
+  // preview's classification resolves; drives the no-action / invite / enroll /
+  // role-change buckets and gates the confirm checkbox.
+  const [preflight, setPreflight] = useState<PreflightResult | null>(null)
+  const [preflighting, setPreflighting] = useState(false)
+  const [preflightError, setPreflightError] = useState<string | null>(null)
+  // The teacher's explicit confirmation of the role-change (team-move) rows.
+  const [roleChangesConfirmed, setRoleChangesConfirmed] = useState(false)
   const [progress, setProgress] = useState<ImportProgress>({
     processed: 0,
     total: 0,
@@ -180,6 +234,12 @@ const UploadRoster = ({
   // collapsing to the bare error screen, which would hide the rows that landed.
   const [inviteError, setInviteError] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Outcome of the confirmed role-change (team-move) pass, surfaced in the
+  // result dialog alongside the invite outcomes.
+  const [roleChangeOutcome, setRoleChangeOutcome] = useState<{
+    changed: { username: string; from: RosterRole; to: RosterRole }[]
+    failed: { username: string; message: string }[]
+  } | null>(null)
 
   const isOpen = phase !== "idle"
 
@@ -197,6 +257,11 @@ const UploadRoster = ({
     setInviteError(null)
     setError(null)
     setRolesByUser({})
+    setPreflight(null)
+    setPreflighting(false)
+    setPreflightError(null)
+    setRoleChangesConfirmed(false)
+    setRoleChangeOutcome(null)
 
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
@@ -215,6 +280,74 @@ const UploadRoster = ({
     }
     prevOpenRef.current = Boolean(open)
   }, [open, phase, onOpenChange])
+
+  // Preflight the parsed rows against current GitHub membership whenever we're
+  // in the preview and the rows or their assigned roles change (a role edit can
+  // move a row between the no-action / enroll / role-change buckets). Read-only.
+  // A stale-response guard (token) drops a slow classification superseded by a
+  // newer role edit. Clearing the confirm checkbox on every re-run forces the
+  // teacher to re-confirm after they change a role.
+  const preflightToken = useRef(0)
+  const rolesKey = rows
+    .map(
+      (r) =>
+        `${r.username.toLowerCase()}:${rolesByUser[r.username.toLowerCase()] ?? "student"}`,
+    )
+    .join("|")
+  useEffect(() => {
+    if (phase !== "preview" || rows.length === 0) return
+    const token = ++preflightToken.current
+    // Reset to the loading state, then fetch the fresh classification (an
+    // external-system sync: the async read supersedes any prior result). The
+    // synchronous resets here are the intended "clear then load" transition.
+    /* eslint-disable react-hooks/set-state-in-effect */
+    setPreflighting(true)
+    setPreflightError(null)
+    setRoleChangesConfirmed(false)
+    setPreflight(null)
+    /* eslint-enable react-hooks/set-state-in-effect */
+    const preflightRows = rows.map((r) => ({
+      username: r.username,
+      role: rolesByUser[r.username.toLowerCase()] ?? ("student" as RosterRole),
+    }))
+    void resolveRosterUploadPreflight(client, {
+      org,
+      classroom,
+      rows: preflightRows,
+    })
+      .then((result) => {
+        if (preflightToken.current !== token) return
+        setPreflight(result)
+      })
+      .catch((err) => {
+        if (preflightToken.current !== token) return
+        log.warn("roster upload preflight failed", { err, record: true })
+        setPreflight(null)
+        setPreflightError(
+          err instanceof Error ? err.message : t("students.somethingWentWrong"),
+        )
+      })
+      .finally(() => {
+        if (preflightToken.current === token) setPreflighting(false)
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase, rolesKey, org, classroom])
+
+  const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
+  const needsRoleConfirm = roleChanges.length > 0
+  const showInstructorOwnerNotice = useMemo(
+    () =>
+      hasInstructorPromotion(roleChanges) ||
+      Object.values(rolesByUser).some((r) => r === "instructor"),
+    [roleChanges, rolesByUser],
+  )
+  // The primary action is blocked while the preflight is resolving/failed, or
+  // while role changes await explicit confirmation.
+  const canProcess =
+    rows.length > 0 &&
+    !preflighting &&
+    !preflightError &&
+    (!needsRoleConfirm || roleChangesConfirmed)
 
   const handleFileChange = async (
     event: React.ChangeEvent<HTMLInputElement>,
@@ -268,6 +401,7 @@ const UploadRoster = ({
     setResult(null)
     setInviteOutcome(null)
     setInviteError(null)
+    setRoleChangeOutcome(null)
     setProgress({
       processed: 0,
       total: rows.length,
@@ -304,6 +438,11 @@ const UploadRoster = ({
     }
     setResult(importResult)
 
+    // Snapshot the classification computed in the preview so the process pass
+    // matches exactly what the teacher confirmed. (Recomputing here could drift
+    // if membership changed between preview and process.)
+    const plan = preflight
+
     // 2) The team is the source of truth for who shows on the roster, so send
     //    org invites for uploaded students who aren't already members — they
     //    then appear as a `pending` row. Invite the FULL uploaded set (not just
@@ -316,74 +455,139 @@ const UploadRoster = ({
     //    targets the immutable account rather than re-resolving a possibly
     //    recycled/renamed login. Their roster.csv row enriches the pending row;
     //    deferred/failed invites are surfaced in the result dialog.
+    //
+    //    SKIP the invite pass entirely when the preflight found every uploaded
+    //    username is already an active org member — there's nothing to invite,
+    //    so don't hammer the invite endpoint (requirement: skip invites when all
+    //    are members).
     const idByLogin = new Map(
       importResult.addedStudents.map((s) => [
         s.username.toLowerCase(),
         s.github_id,
       ]),
     )
-    setProgress({
-      processed: 0,
-      total: rows.length,
-      message: t("students.invitingUploaded"),
-    })
-    try {
-      const inviteRes = await inviteRosterStudents(client, {
-        org,
-        classroom,
-        students: rows.map((r) => ({
-          username: r.username,
-          github_id: idByLogin.get(r.username.toLowerCase()) ?? "",
-          role: rolesByUser[r.username.toLowerCase()] ?? "student",
-        })),
-        onProgress: setProgress,
+    if (!plan?.allAlreadyMembers) {
+      setProgress({
+        processed: 0,
+        total: rows.length,
+        message: t("students.invitingUploaded"),
       })
-      setInviteOutcome({
-        invited: inviteRes.invited,
-        deferred: inviteRes.deferred,
-        failed: inviteRes.failed.map((f) => ({
-          username: f.username,
-          message: f.message,
-        })),
-      })
+      try {
+        const inviteRes = await inviteRosterStudents(client, {
+          org,
+          classroom,
+          students: rows.map((r) => ({
+            username: r.username,
+            github_id: idByLogin.get(r.username.toLowerCase()) ?? "",
+            role: rolesByUser[r.username.toLowerCase()] ?? "student",
+          })),
+          onProgress: setProgress,
+        })
+        setInviteOutcome({
+          invited: inviteRes.invited,
+          deferred: inviteRes.deferred,
+          failed: inviteRes.failed.map((f) => ({
+            username: f.username,
+            message: f.message,
+          })),
+        })
+      } catch (err) {
+        // The roster.csv write already landed; a hard invite failure must not
+        // hide it behind the bare error screen. Keep the completed view and show
+        // the invite error there — the teacher can re-run to retry the invites.
+        log.error("roster invite pass failed", { err, record: true })
+        setInviteError(
+          err instanceof Error ? err.message : t("students.importFailed"),
+        )
+      }
+    }
 
-      // 3) Persist the assigned role back to roster.csv for EVERY uploaded row,
-      //    not just the freshly-invited ones. A row that was deferred (rate
-      //    limit), skipped (already a member/pending), or failed still has a
-      //    teacher-assigned role and a roster row from step 1 — omitting them
-      //    would leave their role blank until a later sync. writeRosterRoles
-      //    only touches existing rows whose role actually changed, so covering
-      //    the full set is safe and idempotent. Best-effort: a writeback failure
-      //    doesn't undo the invites (role converges on the next sync). A
-      //    malformed roster.csv is surfaced distinctly so the teacher fixes it.
-      const roleWriteback = rows
-        .map((r) => ({
-          username: r.username,
-          role: rolesByUser[r.username.toLowerCase()] ?? "student",
-        }))
-        .filter((r) => r.username.trim())
-      if (roleWriteback.length > 0) {
+    // 3) Persist the assigned role back to roster.csv for EVERY uploaded row,
+    //    not just the freshly-invited ones. A row that was deferred (rate
+    //    limit), skipped (already a member/pending), or failed still has a
+    //    teacher-assigned role and a roster row from step 1 — omitting them
+    //    would leave their role blank until a later sync. writeRosterRoles
+    //    only touches existing rows whose role actually changed, so covering
+    //    the full set is safe and idempotent. Best-effort: a writeback failure
+    //    doesn't undo the invites (role converges on the next sync). A
+    //    malformed roster.csv is surfaced distinctly so the teacher fixes it.
+    const roleWriteback = rows
+      .map((r) => ({
+        username: r.username,
+        role: rolesByUser[r.username.toLowerCase()] ?? "student",
+      }))
+      .filter((r) => r.username.trim())
+    if (roleWriteback.length > 0) {
+      try {
+        await writeRosterRoles(client, {
+          org,
+          classroom,
+          roles: roleWriteback,
+        })
+      } catch (err) {
+        if (err instanceof RosterCsvMalformedError) {
+          setInviteError(t("students.roleWritebackMalformed"))
+        }
+        log.warn("roster role writeback failed", { err, record: true })
+      }
+    }
+
+    // 4) Apply the CONFIRMED role changes (team moves) the preflight identified.
+    //    Only runs for rows the teacher explicitly confirmed via the checkbox;
+    //    each is a destructive move (drops the old classroom team) and, for an
+    //    instructor target, an org-owner promotion. Best-effort per row: a
+    //    failure is surfaced in the result dialog, not fatal (the roster write
+    //    already landed).
+    const changes = plan?.roleChanges ?? []
+    if (changes.length > 0) {
+      setProgress({
+        processed: 0,
+        total: changes.length,
+        message: t("students.processRoleChanges"),
+      })
+      const changed: {
+        username: string
+        from: RosterRole
+        to: RosterRole
+      }[] = []
+      const failed: { username: string; message: string }[] = []
+      let done = 0
+      for (const change of changes) {
         try {
-          await writeRosterRoles(client, {
+          const res = await applyRosterRoleChange(client, {
             org,
             classroom,
-            roles: roleWriteback,
+            username: change.username,
+            github_id: idByLogin.get(change.username.toLowerCase()),
+            fromRole: change.currentRole,
+            toRole: change.role,
           })
-        } catch (err) {
-          if (err instanceof RosterCsvMalformedError) {
-            setInviteError(t("students.roleWritebackMalformed"))
+          changed.push({
+            username: res.username,
+            from: res.fromRole,
+            to: res.toRole,
+          })
+          // A best-effort old-team removal failure is a warning, not a hard
+          // failure — surface it alongside so the teacher can retry.
+          for (const w of res.warnings) {
+            failed.push({ username: change.username, message: w })
           }
-          log.warn("roster role writeback failed", { err, record: true })
+        } catch (err) {
+          log.error("roster role change failed", { err, record: true })
+          failed.push({
+            username: change.username,
+            message: err instanceof Error ? err.message : String(err),
+          })
+        } finally {
+          done += 1
+          setProgress({
+            processed: done,
+            total: changes.length,
+            message: t("students.processRoleChanges"),
+          })
         }
       }
-    } catch (err) {
-      // The roster.csv write already landed; a hard invite failure must not
-      // hide it behind the bare error screen. Keep the completed view and show
-      // the invite error there — the teacher can re-run to retry the invites.
-      log.error("roster invite pass failed", { err, record: true })
-      setInviteError(
-        err instanceof Error ? err.message : t("students.importFailed"),
-      )
+      setRoleChangeOutcome({ changed, failed })
     }
 
     setPhase("complete")
@@ -432,12 +636,113 @@ const UploadRoster = ({
                 {t("students.usernamesFound", { count: rows.length })}
               </span>
             </Alert>
-            <Alert tone="warning" className="mb-4">
-              <span>
-                {t("students.uploadInviteNotice", { count: rows.length })}
-              </span>
-            </Alert>
-            {Object.values(rolesByUser).some((r) => r === "instructor") ? (
+
+            {/* Preflight against current GitHub membership: what processing will
+                do to each row. Resolving/failed states gate the primary button. */}
+            {preflighting ? (
+              <div className="mb-4 flex items-center gap-3 rounded-box border border-base-300 px-4 py-3 text-sm text-base-content/70">
+                <Spinner size="sm" />
+                <span>{t("students.preflightChecking")}</span>
+              </div>
+            ) : preflightError ? (
+              <Alert tone="error" className="mb-4">
+                <span>
+                  {t("students.preflightFailed", { message: preflightError })}
+                </span>
+              </Alert>
+            ) : preflight ? (
+              <div className="mb-4 flex flex-col gap-2">
+                {preflight.allAlreadyMembers ? (
+                  <Alert tone="info">
+                    <span>{t("students.preflightAllMembersNote")}</span>
+                  </Alert>
+                ) : preflight.needsInvite.length > 0 ? (
+                  <Alert tone="warning">
+                    <span>
+                      {t("students.uploadInviteNotice", {
+                        count: preflight.needsInvite.length,
+                      })}
+                    </span>
+                  </Alert>
+                ) : null}
+
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <PreflightBucket
+                    tone="neutral"
+                    title={t("students.preflightNoActionTitle")}
+                    count={preflight.noAction.length}
+                  />
+                  <PreflightBucket
+                    tone="warning"
+                    title={t("students.preflightInviteTitle")}
+                    count={preflight.needsInvite.length}
+                  />
+                  <PreflightBucket
+                    tone="info"
+                    title={t("students.preflightEnrollTitle")}
+                    count={preflight.enroll.length}
+                  />
+                  <PreflightBucket
+                    tone="error"
+                    title={t("students.preflightRoleChangeTitle")}
+                    count={preflight.roleChanges.length}
+                  />
+                </div>
+
+                {/* Role changes need explicit confirmation — a destructive team
+                    move (and, for instructor, an org-owner promotion). List each
+                    change and gate the primary button on the checkbox. */}
+                {roleChanges.length > 0 ? (
+                  <div className="mt-1 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
+                    <h4 className="text-sm font-semibold">
+                      {t("students.preflightRoleChangeTitle")}
+                    </h4>
+                    <ul className="flex flex-col gap-1 text-sm">
+                      {roleChanges.map((c) => (
+                        <li
+                          key={c.username}
+                          className="flex items-center justify-between gap-2"
+                        >
+                          <code>{c.username}</code>
+                          <span className="opacity-70">
+                            {t("students.preflightRoleChangeDetail", {
+                              from: t(roleLabelKey(c.currentRole)),
+                              to: t(roleLabelKey(c.role)),
+                            })}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                    {showInstructorOwnerNotice ? (
+                      <Alert tone="warning">
+                        <span>
+                          {t("students.preflightRoleChangeOwnerNotice")}
+                        </span>
+                      </Alert>
+                    ) : null}
+                    <label className="flex items-start gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        className="checkbox checkbox-sm mt-0.5"
+                        checked={roleChangesConfirmed}
+                        onChange={(e) =>
+                          setRoleChangesConfirmed(e.currentTarget.checked)
+                        }
+                      />
+                      <span>
+                        {t("students.preflightConfirmRoleChanges", {
+                          count: roleChanges.length,
+                        })}
+                      </span>
+                    </label>
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {/* Instructor-owner notice even before preflight resolves, whenever
+                any row is assigned the instructor role. */}
+            {!preflight && showInstructorOwnerNotice ? (
               <Alert tone="warning" className="mb-4">
                 <span>{t("students.uploadInstructorOwnerNotice")}</span>
               </Alert>
@@ -513,7 +818,7 @@ const UploadRoster = ({
 
               <Button
                 variant="primary"
-                disabled={rows.length === 0}
+                disabled={!canProcess}
                 onClick={startImport}
               >
                 {t("students.importAndInviteCount", { count: rows.length })}
@@ -637,6 +942,31 @@ const UploadRoster = ({
                 title={t("students.resultInvitesFailed")}
                 rows={inviteOutcome.failed.map((f) => ({
                   key: f.username,
+                  label: f.username,
+                  detail: f.message,
+                }))}
+              />
+            )}
+
+            {roleChangeOutcome && roleChangeOutcome.changed.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultRoleChanged")}
+                rows={roleChangeOutcome.changed.map((c) => ({
+                  key: c.username,
+                  label: c.username,
+                  detail: t("students.preflightRoleChangeDetail", {
+                    from: t(roleLabelKey(c.from)),
+                    to: t(roleLabelKey(c.to)),
+                  }),
+                }))}
+              />
+            )}
+
+            {roleChangeOutcome && roleChangeOutcome.failed.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultRoleChangeFailures")}
+                rows={roleChangeOutcome.failed.map((f, i) => ({
+                  key: `${f.username}-${i}`,
                   label: f.username,
                   detail: f.message,
                 }))}

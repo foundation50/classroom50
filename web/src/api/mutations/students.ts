@@ -13,6 +13,7 @@ import {
   readOrgMembershipState,
   removeOrgMembership,
   removeUserFromTeam,
+  setOrgMembershipRole,
   staffTeamName,
   updateRef,
 } from "@/hooks/github/mutations"
@@ -25,6 +26,7 @@ import {
   getRawFile,
   getRawFileWithFallback,
   getUser,
+  listAllOrgMembers,
   listTeamInvitations,
   listTeamMembers,
   sleep,
@@ -48,6 +50,14 @@ import {
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { ROLE_RANK, type RosterRole } from "@/util/teamRoster"
+import { memberIdentitySets } from "@/util/identity"
+import {
+  classifyRosterUpload,
+  membershipLookup,
+  type PreflightResult,
+  type PreflightRow,
+  type ResolvedMembership,
+} from "@/util/rosterUploadPreflight"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
 import { logger } from "@/lib/logger"
 
@@ -1418,6 +1428,171 @@ async function resolveTeamIdByRole(
     }
   }
   return result
+}
+
+export type ResolveRosterUploadPreflightInput = {
+  org: string
+  classroom: string
+  // The uploaded rows reduced to identity + intended role. github_id is
+  // optional (threaded when the enroll pass has resolved it) and anchors the
+  // membership lookup across a login rename.
+  rows: PreflightRow[]
+}
+
+// Preflight a CSV roster upload: read the classroom's CURRENT GitHub membership
+// (all active org members + the three per-classroom team memberships) once, then
+// classify each uploaded row (pure, via classifyRosterUpload) into no-action /
+// invite / enroll / role-change. Read-only — sends NOTHING to GitHub — so the
+// upload dialog can preview the plan and gate role changes behind confirmation.
+//
+// The team reads 404-tolerate (an uncreated staff team reads as empty), and the
+// org-member read pages to completion; a hard failure of either propagates so
+// the caller surfaces "couldn't preview, try again" rather than a wrong plan.
+export async function resolveRosterUploadPreflight(
+  client: GitHubClient,
+  input: ResolveRosterUploadPreflightInput,
+): Promise<PreflightResult> {
+  const { org, classroom, rows } = input
+  const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
+
+  const [orgMembers, studentMembers, instructorMembers, taMembers] =
+    await Promise.all([
+      listAllOrgMembers(client, org),
+      listTeamMembers(client, org, slugs.student),
+      listTeamMembers(client, org, slugs.staff.instructor),
+      listTeamMembers(client, org, slugs.staff.ta),
+    ])
+
+  const orgSets = memberIdentitySets(orgMembers)
+  const studentSets = memberIdentitySets(studentMembers)
+  const instructorSets = memberIdentitySets(instructorMembers)
+  const taSets = memberIdentitySets(taMembers)
+
+  const resolved: ResolvedMembership = {
+    orgMemberIds: orgSets.ids,
+    orgMemberLogins: orgSets.logins,
+    teamIdsByRole: {
+      student: studentSets.ids,
+      instructor: instructorSets.ids,
+      ta: taSets.ids,
+    },
+    teamLoginsByRole: {
+      student: studentSets.logins,
+      instructor: instructorSets.logins,
+      ta: taSets.logins,
+    },
+  }
+
+  return classifyRosterUpload(rows, membershipLookup(resolved))
+}
+
+export type ApplyRosterRoleChangeInput = {
+  org: string
+  classroom: string
+  username: string
+  github_id?: string
+  // The account's current classroom role (the team to move OFF of).
+  fromRole: RosterRole
+  // The CSV's intended role (the team to move ONTO).
+  toRole: RosterRole
+}
+
+export type ApplyRosterRoleChangeResult = {
+  username: string
+  fromRole: RosterRole
+  toRole: RosterRole
+  // Non-fatal warnings (a best-effort old-team removal that failed, etc.).
+  warnings: string[]
+}
+
+// Apply a CONFIRMED role change for an active org member: move them from their
+// current classroom team onto the CSV role's team. The caller must only invoke
+// this for a member the preflight classified as `role_change` and the teacher
+// confirmed — it is a destructive move (drops the old team grant) and, for an
+// instructor target, an org-OWNER promotion.
+//
+//  1) Add to the target team (student -> classroom team; ta/instructor -> the
+//     staff team, created + granted config-repo write if missing).
+//  2) Promote to org owner when the target is instructor (setOrgMembershipRole
+//     "admin"); demote to a plain member when moving OFF instructor to a
+//     non-staff/TA role, so a downgrade actually drops owner access.
+//  3) Remove from the previously-held classroom team (best-effort — a failed
+//     drop is a warning, since the target add already landed).
+//
+// NEVER team-adds a non-member (that would create a stray team invitation); the
+// preflight only produces role_change for active members, and this re-verifies.
+export async function applyRosterRoleChange(
+  client: GitHubClient,
+  input: ApplyRosterRoleChangeInput,
+): Promise<ApplyRosterRoleChangeResult> {
+  const { org, classroom, fromRole, toRole } = input
+  const username = input.username.trim()
+  await assertClassroomNotArchived(client, org, classroom)
+  if (!username) throw new Error("A username is required")
+
+  const warnings: string[] = []
+
+  // Re-verify active membership directly: only a definitive 404 is not-a-member
+  // (a transient read rethrows so the caller retries rather than team-adding a
+  // non-member on a blip).
+  const state = await readOrgMembershipState(client, org, username)
+  if (state !== "active") {
+    throw new Error(
+      `${username} is not an active member of ${org}, so their role can't be ` +
+        `changed here; invite them to the organization instead.`,
+    )
+  }
+
+  const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
+  const slugForRole = (role: RosterRole): string =>
+    role === "student" ? slugs.student : slugs.staff[role]
+
+  // 1) Add to the target team (ensure a staff team exists + config write).
+  if (toRole === "student") {
+    await addUserToTeam(client, {
+      org,
+      teamSlug: slugs.student,
+      username,
+      role: "member",
+    })
+  } else {
+    const team = await ensureClassroomRoleTeam(client, org, classroom, toRole)
+    await grantTeamConfigRepoWrite(client, org, team.slug)
+    await addUserToTeam(client, {
+      org,
+      teamSlug: team.slug,
+      username,
+      role: "member",
+    })
+  }
+
+  // 2) Org-owner promotion / demotion. Promote to owner for an instructor
+  // target; when leaving instructor for a non-instructor role, demote to a
+  // plain member so the downgrade actually removes owner access.
+  if (toRole === "instructor") {
+    await setOrgMembershipRole(client, { org, username, role: "admin" })
+  } else if (fromRole === "instructor") {
+    await setOrgMembershipRole(client, { org, username, role: "member" })
+  }
+
+  // 3) Remove from the previously-held classroom team (best-effort). Only the
+  // student + staff classroom teams are touched; org membership is untouched
+  // except the explicit owner demotion above.
+  const fromSlug = slugForRole(fromRole)
+  if (fromRole !== toRole && fromSlug) {
+    try {
+      await removeUserFromTeam(client, { org, teamSlug: fromSlug, username })
+    } catch (err) {
+      log.error("role-change old-team removal failed", { err })
+      warnings.push(
+        `${username} was added to the ${toRole} team, but removing them from ` +
+          `their previous ${fromRole} team failed (${getErrorMessage(err)}); ` +
+          `retry to complete the move.`,
+      )
+    }
+  }
+
+  return { username, fromRole, toRole, warnings }
 }
 
 export type AssignRosterMemberRoleInput = {
