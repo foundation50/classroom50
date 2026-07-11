@@ -26,6 +26,7 @@ import {
   getErrorMessage,
 } from "./mutations"
 import { decodeBase64Utf8 } from "@/util/github"
+import { getCommit } from "@/api/github/queries"
 import { classroomPagesSegment } from "@/util/secret"
 import type { GetAssignmentsFileInput } from "@/api/queries/assignments"
 import type { OrgRunner, OrgRunnersResult } from "@/util/runners"
@@ -637,8 +638,7 @@ function readContents(
 // own, distinct from both `rawFile` (rawFileQuery, no fallback, different
 // queryFn) and csvFileQuery's parsed-rows key — so this additive
 // problem-detection read can never collide with another raw or parsed read of
-// the same path. The
-// parsed-rows read (csvFileQuery) still drives display.
+// the same path. The parsed-rows read (csvFileQuery) still drives display.
 export function rosterRawFileQuery(
   client: GitHubClient,
   owner: string,
@@ -697,25 +697,28 @@ export async function getRawFile(
   return decodeBase64Utf8(file.content)
 }
 
-// Read a config file, falling back to `fallbackPath` only on a 404, and report
-// whether the fallback (legacy) path was the one that answered. The roster
+// Read a config file for a WRITE, falling back to `fallbackPath` on a 404, and
+// report whether the fallback (legacy) path is authoritative. The roster
 // read-modify-write mutations use this so a classroom bootstrapped before the
 // roster rename (only the legacy name on disk) is both editable AND converged
 // in the same commit: the write always targets the current name, and when
-// `fromLegacy` is true it also deletes the legacy file, so a first edit renames
+// `fromLegacy` is true it also DELETES the legacy file, so a first edit renames
 // it (matching `gh teacher roster migrate`) instead of leaving a stale copy
-// behind. A non-404 error propagates — a real API failure must not be masked as
-// "missing, use legacy".
+// behind. Because `fromLegacy` authorizes a destructive delete + full
+// overwrite, it must not be decided by a Contents-API 404 alone.
 //
-// Not retried: the Contents API is eventually consistent per path, so right
-// after a write to the current name it can briefly 404 while the legacy name
-// still reads, and this would fall back to slightly-stale bytes. We accept that
-// window rather than retry, because a 404 here is far more often a stable
-// un-migrated classroom (only the legacy file exists) than a lag blip —
-// retrying would slow every legacy-classroom read (the common case) to cover a
-// rare, self-healing one. The acting tab is masked by the optimistic cache
-// (useUpdateRosterCache), and the classroom TEAM, not this CSV, is the
-// authority for enrollment, so a transient stale read is display-only.
+// The Contents API is eventually consistent per path: right after a write to
+// the current name, a read pinned to that commit can briefly 404 while the
+// legacy name still serves stale bytes. Trusting that 404 would overwrite the
+// current file with stale legacy content AND delete the legacy file on a clean
+// fast-forward the conflict-retry loop can't catch — a silently lost write. So
+// on a primary 404 we consult the git TREE at the same commit (authoritative
+// and internally consistent, unlike per-path Contents reads): if roster.csv is
+// genuinely absent there, this is a real un-migrated classroom and we fall back
+// to the legacy file with `fromLegacy: true`; if the tree shows roster.csv
+// present, the 404 was a lag lie, so we re-read the current name and report
+// `fromLegacy: false` — no stale overwrite, no spurious delete. A non-404 error
+// propagates unchanged.
 export async function getRawFileWithFallbackSource(
   client: GitHubClient,
   input: GetAssignmentsFileInput & { fallbackPath: string },
@@ -724,14 +727,40 @@ export async function getRawFileWithFallbackSource(
   try {
     return { content: await getRawFile(client, primary), fromLegacy: false }
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return {
-        content: await getRawFile(client, { ...primary, path: fallbackPath }),
-        fromLegacy: true,
-      }
+    if (!(err instanceof GitHubAPIError && err.status === 404)) throw err
+    // Primary 404 — decide legacy-vs-lag from the commit tree, not the 404.
+    if (
+      await pathInCommitTree(client, primary.org, primary.path, primary.ref)
+    ) {
+      // Tree says the current name exists; the 404 was consistency lag. Re-read
+      // it so a stale legacy read can't drive an overwrite + delete.
+      return { content: await getRawFile(client, primary), fromLegacy: false }
     }
-    throw err
+    return {
+      content: await getRawFile(client, { ...primary, path: fallbackPath }),
+      fromLegacy: true,
+    }
   }
+}
+
+// True when `path` is a blob in the commit's recursive tree at `ref`. Used to
+// resolve the legacy-vs-current roster decision from git data (consistent at a
+// pinned commit) rather than an eventually-consistent Contents read. A
+// truncated tree is treated as "unknown -> not confirmed present" so the caller
+// takes the conservative legacy path only when the tree positively lacks it.
+async function pathInCommitTree(
+  client: GitHubClient,
+  org: string,
+  path: string,
+  ref: string,
+): Promise<boolean> {
+  const commit = await getCommit(client, org, ref)
+  const tree = await client.request<{
+    tree: Array<{ path: string; type: "blob" | "tree" | "commit" }>
+    truncated: boolean
+  }>(`/repos/${org}/classroom50/git/trees/${commit.tree.sha}?recursive=1`)
+  if (tree.truncated) return false
+  return tree.tree.some((e) => e.type === "blob" && e.path === path)
 }
 
 export async function getClassroom50Yaml(

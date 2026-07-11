@@ -128,3 +128,37 @@ func TestLoadRoster_Non404OnRosterDoesNotFallBack(t *testing.T) {
 		t.Error("students.csv must NOT be requested when roster.csv fails with a non-404 error")
 	}
 }
+
+// RosterWriteChange is the single seam every roster-mutating write funnels
+// through, so its delete gate is the invariant that decides whether a write
+// migrates. Pin both directions: a legacy source converges (write roster.csv +
+// delete the legacy file), a roster.csv source never emits a spurious delete.
+func TestRosterWriteChange(t *testing.T) {
+	rows := []RosterRow{{Username: "alice", GitHubID: 1}}
+
+	t.Run("legacy source: writes roster.csv and deletes the legacy file", func(t *testing.T) {
+		change, err := RosterWriteChange("cs", LegacyRosterFilePath("cs"), rows)
+		if err != nil {
+			t.Fatalf("RosterWriteChange: %v", err)
+		}
+		if _, ok := change.Upserts[RosterFilePath("cs")]; !ok {
+			t.Errorf("upserts = %v, want a roster.csv entry", change.Upserts)
+		}
+		if len(change.Deletes) != 1 || change.Deletes[0] != LegacyRosterFilePath("cs") {
+			t.Errorf("deletes = %v, want exactly the legacy path", change.Deletes)
+		}
+	})
+
+	t.Run("roster.csv source: no legacy deletion", func(t *testing.T) {
+		change, err := RosterWriteChange("cs", RosterFilePath("cs"), rows)
+		if err != nil {
+			t.Fatalf("RosterWriteChange: %v", err)
+		}
+		if _, ok := change.Upserts[RosterFilePath("cs")]; !ok {
+			t.Errorf("upserts = %v, want a roster.csv entry", change.Upserts)
+		}
+		if len(change.Deletes) != 0 {
+			t.Errorf("deletes = %v, want none when the source is already roster.csv", change.Deletes)
+		}
+	})
+}

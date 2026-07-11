@@ -227,6 +227,14 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
         if (path.includes("/git/commits/")) {
           return Promise.resolve({ tree: { sha: "base-tree-sha" } })
         }
+        // Recursive tree read used by getRawFileWithFallbackSource to resolve
+        // legacy-vs-lag: this un-migrated classroom has students.csv only.
+        if (path.includes("/git/trees/") && path.includes("recursive=1")) {
+          return Promise.resolve({
+            tree: [{ path: "cs101/students.csv", type: "blob" }],
+            truncated: false,
+          })
+        }
         if (path.endsWith("/git/trees")) {
           const tree = (
             options?.body as {
@@ -266,6 +274,118 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
       (t) => t.path === "cs101/students.csv" && t.sha === null,
     )
     expect(legacyDelete).toBeTruthy()
+  })
+
+  // Regression guard for the stale-read data-loss hazard: the Contents API can
+  // 404 roster.csv at a pinned commit due to per-path lag while the deleted
+  // legacy students.csv is still served stale. The delete + overwrite must NOT
+  // be driven by that 404 — getRawFileWithFallbackSource consults the git tree
+  // (consistent at a commit) and, seeing roster.csv present, re-reads it and
+  // reports fromLegacy=false, so no students.csv deletion and no stale
+  // overwrite are committed.
+  it("does not migrate when roster.csv 404s from lag but the tree shows it present", async () => {
+    const treeEntries: {
+      path: string
+      sha?: string | null
+      content?: string
+    }[] = []
+    let rosterContentsReads = 0
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("/contents/") && path.includes("classroom.json")) {
+        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const notFound = (path: string) =>
+      new GitHubAPIError({
+        status: 404,
+        url: path,
+        message: "not found",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      })
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (path.includes("/contents/") && path.includes("roster.csv")) {
+          rosterContentsReads++
+          // First read 404s (lag); the tree-confirmed re-read succeeds.
+          if (rosterContentsReads === 1) return Promise.reject(notFound(path))
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(HEADER, "utf-8").toString("base64"),
+          })
+        }
+        // The stale legacy blob is still served — but must NOT be trusted.
+        if (path.includes("/contents/") && path.includes("students.csv")) {
+          return Promise.resolve({
+            type: "file",
+            encoding: "base64",
+            content: Buffer.from(HEADER + "ghost,,,,,999\n", "utf-8").toString(
+              "base64",
+            ),
+          })
+        }
+        if (path.startsWith("/users/")) {
+          return Promise.resolve({ login: "alice", id: 42, name: null })
+        }
+        if (path.includes("/memberships/") && !path.includes("/teams/")) {
+          return Promise.reject(new Error("404 not a member"))
+        }
+        if (path.includes("/git/ref/")) {
+          return Promise.resolve({ object: { sha: "base-sha" } })
+        }
+        if (path.includes("/git/commits/")) {
+          return Promise.resolve({ tree: { sha: "base-tree-sha" } })
+        }
+        // Tree is authoritative: roster.csv IS present (the 404 was lag).
+        if (path.includes("/git/trees/") && path.includes("recursive=1")) {
+          return Promise.resolve({
+            tree: [
+              { path: "cs101/roster.csv", type: "blob" },
+              { path: "cs101/students.csv", type: "blob" },
+            ],
+            truncated: false,
+          })
+        }
+        if (path.endsWith("/git/trees")) {
+          const tree = (options?.body as { tree?: typeof treeEntries })?.tree
+          for (const t of tree ?? []) treeEntries.push(t)
+          return Promise.resolve({ sha: "tree-sha" })
+        }
+        if (path.endsWith("/git/commits")) {
+          return Promise.resolve({ sha: "new-commit-sha" })
+        }
+        if (path.endsWith("/git/refs/heads/main")) {
+          return Promise.resolve({})
+        }
+        if (path.includes("/teams/")) {
+          return Promise.resolve({ state: "active" })
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    const client = { request, requestRaw } as unknown as GitHubClient
+
+    await enrollStudentInClassroom(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "alice",
+    })
+
+    // No students.csv deletion — the tree said roster.csv exists.
+    expect(treeEntries.some((t) => t.path === "cs101/students.csv")).toBe(false)
+    // The write used the (re-read) roster.csv content, not the stale legacy
+    // blob: the fabricated `ghost` row from students.csv must not appear.
+    const rosterUpsert = treeEntries.find((t) => t.path === "cs101/roster.csv")
+    expect(rosterUpsert?.content).not.toContain("ghost")
   })
 })
 

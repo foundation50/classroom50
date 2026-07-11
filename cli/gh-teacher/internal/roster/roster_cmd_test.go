@@ -403,6 +403,26 @@ func TestRosterWriteMigratesLegacy(t *testing.T) {
 			t.Errorf("tree = %#v, must NOT delete students.csv when the classroom is already on roster.csv", mock.treeEntries)
 		}
 	})
+
+	// A no-op edit (patch matches current) on a legacy-only classroom must not
+	// commit anything — and therefore must NOT migrate. Migration rides an
+	// actual write, never a no-change command.
+	t.Run("legacy-only classroom: a no-op update does not migrate", func(t *testing.T) {
+		mock := &rosterWriteMock{files: map[string]string{"cs-principles/students.csv": legacy}}
+		server := httptest.NewServer(mock.handler(t))
+		t.Cleanup(server.Close)
+		client := githubtest.NewTestClient(t, server)
+
+		var out bytes.Buffer
+		// alice's email in `legacy` is already a@x.edu — patching to the same
+		// value is a no-op.
+		if err := runRosterUpdate(client, &out, "o", "cs-principles", "alice", configrepo.RosterPatch{Email: strptr("a@x.edu")}); err != nil {
+			t.Fatalf("runRosterUpdate: %v", err)
+		}
+		if len(mock.blobs) != 0 || len(mock.treeEntries) != 0 {
+			t.Errorf("no-op update committed a tree (blobs=%v, tree=%#v); the legacy file must be left untouched", mock.blobs, mock.treeEntries)
+		}
+	})
 }
 
 // "nothing to update" guard and email validation run inside RunE before any
