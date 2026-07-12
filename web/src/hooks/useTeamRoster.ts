@@ -187,6 +187,7 @@ export function useTeamRoster(
         orgMemberIds,
         orgMemberLogins,
         orgMembersKnown,
+        pendingHidden,
       }),
     [
       members,

@@ -995,6 +995,7 @@ const EnrolledStudents = ({
         classroom={classroom}
         teamSlugByRole={teamSlugByRole}
         row={selected}
+        canManage={!pendingHidden}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
         onUnenrolled={(rowKey, teamWarning) =>

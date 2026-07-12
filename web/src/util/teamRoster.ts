@@ -146,6 +146,13 @@ export type BuildTeamRosterInput = {
   // needs-attention rows are SUPPRESSED — the classifier has no basis, so the
   // roster degrades to the pure team-driven view rather than guessing.
   orgMembersKnown?: boolean
+  // True when pending invitations are hidden (a non-owner can't read them, so
+  // the caller passed invitations: [] / staffInvitations: {}). Without the
+  // pending list the needs-attention classifier can't tell a genuinely
+  // not-in-org CSV row from one whose only signal is a now-hidden pending
+  // invite, so the whole needs-attention pass is suppressed to avoid mislabeling
+  // a pending person as needs_attention_not_in_org.
+  pendingHidden?: boolean
 }
 
 // Compute the team-driven roster. Members -> enrolled; pending invitations not
@@ -163,6 +170,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     orgMemberIds,
     orgMemberLogins,
     orgMembersKnown = false,
+    pendingHidden = false,
   } = input
   const csv = indexCsv(students)
 
@@ -296,7 +304,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // a non-member is needs_attention_not_in_org (invite). No role is asserted —
   // the team is the authority — so roles carries the ["student"] placeholder for
   // the non-empty invariant and the view renders no role badge for these states.
-  if (orgMembersKnown) {
+  if (orgMembersKnown && !pendingHidden) {
     const pendingLogins = new Set<string>()
     const pendingEmails = new Set<string>()
     for (const row of pendingByKey.values()) {

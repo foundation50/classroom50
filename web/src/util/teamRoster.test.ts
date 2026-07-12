@@ -381,6 +381,23 @@ describe("buildTeamRoster — needs-attention (CSV row on no team)", () => {
       student: 1,
     })
   })
+
+  it("suppresses needs-attention rows when pending is hidden (non-owner), avoiding a not_in_org mislabel", () => {
+    // A non-owner passes invitations: [] (pending hidden). A CSV row for someone
+    // whose only signal was a now-hidden pending invite must NOT be mislabeled
+    // needs_attention_not_in_org — the whole pass is suppressed without the
+    // pending list, even though org members happen to be readable.
+    const rows = buildTeamRoster({
+      members: [],
+      invitations: [], // hidden for a non-owner
+      students: [csvRow({ github_id: "77", username: "invitee" })],
+      orgMembersKnown: true,
+      orgMemberIds: new Set(),
+      orgMemberLogins: new Set(),
+      pendingHidden: true,
+    })
+    expect(rows).toHaveLength(0)
+  })
 })
 
 describe("buildTeamRoster — roles (union across student + staff teams)", () => {
