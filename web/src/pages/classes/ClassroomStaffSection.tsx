@@ -1,31 +1,37 @@
 import { useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { Loader2, ShieldCheck, UserPlus, X } from "lucide-react"
+import { Loader2, Send, ShieldCheck, UserPlus, X, XCircle } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { ConfirmModal } from "@/components/modals"
 import {
   githubKeys,
   teamMembersQuery,
+  teamInvitationsQuery,
   getUserQuery,
+  getUser,
 } from "@/hooks/github/queries"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
   removeUserFromTeam,
+  resendOrgInvitation,
+  cancelOrgInvitation,
   staffTeamName,
   grantTeamConfigRepoWrite,
 } from "@/hooks/github/mutations"
 import {
   normalizeGithubUsername,
+  resolveTeamIdForRoleRead,
   syncRosterFromTeam,
 } from "@/api/mutations/students"
 import { rosterPath } from "@/util/rosterPath"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import type { GitHubClient } from "@/hooks/github/client"
 import type { QueryClient } from "@tanstack/react-query"
 import { logger } from "@/lib/logger"
@@ -294,6 +300,9 @@ const StaffRoleList = ({
   )
   const membersQuery = useQuery(teamMembersQuery(client, org, teamSlug))
   const members = membersQuery.data ?? []
+  // Pending staff invitations for this team (owner-only; 403 -> [], 404 -> []).
+  const invitesQuery = useQuery(teamInvitationsQuery(client, org, teamSlug))
+  const pendingInvites = invitesQuery.data ?? []
 
   const rolePlural =
     role === "instructor"
@@ -311,7 +320,7 @@ const StaffRoleList = ({
           <Loader2 aria-hidden="true" className="size-4 animate-spin" />{" "}
           {t("common.loading")}
         </div>
-      ) : members.length === 0 ? (
+      ) : members.length === 0 && pendingInvites.length === 0 ? (
         <p className="text-sm text-base-content/70">
           {t("classes.staff.noneYet", { role: rolePlural.toLowerCase() })}
         </p>
@@ -324,6 +333,16 @@ const StaffRoleList = ({
               classroom={classroom}
               role={role}
               member={member}
+              disabled={disabled}
+            />
+          ))}
+          {pendingInvites.map((invite) => (
+            <PendingStaffRow
+              key={`invite-${invite.id}`}
+              org={org}
+              classroom={classroom}
+              role={role}
+              invite={invite}
               disabled={disabled}
             />
           ))}
@@ -350,6 +369,7 @@ const StaffMemberRow = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
+  const [confirmingRemove, setConfirmingRemove] = useState(false)
   const teamSlug = staffTeamName(classroom, role)
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
@@ -364,6 +384,9 @@ const StaffMemberRow = ({
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(org, teamSlug),
+      })
+      queryClient.invalidateQueries({
+        queryKey: githubKeys.teamInvitations(org, teamSlug),
       })
       // Clear the removed staffer's stale role from roster.csv now
       // (best-effort) so the roster stops showing them with a role.
@@ -419,7 +442,7 @@ const StaffMemberRow = ({
         className="text-error"
         title={t("classes.staff.removeRole", { role: roleLabel })}
         disabled={disabled || removeMutation.isPending}
-        onClick={() => removeMutation.mutate()}
+        onClick={() => setConfirmingRemove(true)}
       >
         {removeMutation.isPending ? (
           <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
@@ -427,6 +450,169 @@ const StaffMemberRow = ({
           <X aria-hidden="true" className="size-3.5" />
         )}
       </Button>
+      <ConfirmModal
+        open={confirmingRemove}
+        dangerous
+        needsConfirm={false}
+        title={t("classes.staff.confirmRemoveTitle", {
+          login: member.login,
+          role: roleLabel,
+        })}
+        description={t("classes.staff.confirmRemoveBody", {
+          login: member.login,
+          role: roleLabel,
+        })}
+        confirmLabel={t("classes.staff.removeRole", { role: roleLabel })}
+        onConfirm={async () => {
+          setConfirmingRemove(false)
+          await removeMutation.mutateAsync()
+        }}
+        onClose={() => setConfirmingRemove(false)}
+      />
+    </li>
+  )
+}
+
+// A pending staff invitation (owner-only). Resend recreates the org invite
+// carrying the staff team; cancel deletes it. An email-only invite (no login)
+// can't be resolved to a numeric invitee id, so it's cancel-only.
+const PendingStaffRow = ({
+  org,
+  classroom,
+  role,
+  invite,
+  disabled,
+}: {
+  org: string
+  classroom: string
+  role: StaffRole
+  invite: GitHubOrgInvitation
+  disabled: boolean
+}) => {
+  const { t } = useTranslation()
+  const client = useGitHubClient()
+  const queryClient = useQueryClient()
+  const { notify } = useToast()
+  const teamSlug = staffTeamName(classroom, role)
+  const who = invite.login || invite.email || String(invite.id)
+
+  const invalidate = () => {
+    queryClient.invalidateQueries({
+      queryKey: githubKeys.teamInvitations(org, teamSlug),
+    })
+    queryClient.invalidateQueries({
+      queryKey: githubKeys.teamMembers(org, teamSlug),
+    })
+  }
+
+  const resendMutation = useMutation({
+    mutationFn: async () => {
+      if (!invite.login) throw new Error(t("classes.staff.resendEmailOnly"))
+      // Resolve the invitee's immutable id (org invites don't carry it) and the
+      // role's team, so the re-sent invite lands them on the staff team.
+      const inviteeId = (await getUser(client, invite.login)).id
+      const teamId = await resolveTeamIdForRoleRead(
+        client,
+        org,
+        classroom,
+        role,
+      )
+      await resendOrgInvitation(client, {
+        org,
+        username: invite.login,
+        inviteeId,
+        invitationId: invite.id,
+        teamIds: teamId ? [teamId] : undefined,
+      })
+    },
+    onSuccess: () => {
+      invalidate()
+      notify({
+        tone: "success",
+        durationMs: 4000,
+        message: t("classes.staff.resentToast", { who }),
+      })
+    },
+    onError: (err) =>
+      notify({
+        tone: "error",
+        message: t("classes.staff.resendFailed", {
+          who,
+          error:
+            err instanceof Error
+              ? err.message
+              : t("classes.somethingWentWrong"),
+        }),
+      }),
+  })
+
+  const cancelMutation = useMutation({
+    mutationFn: () =>
+      cancelOrgInvitation(client, { org, invitationId: invite.id }),
+    onSuccess: () => {
+      invalidate()
+      notify({
+        tone: "success",
+        durationMs: 4000,
+        message: t("classes.staff.cancelledToast", { who }),
+      })
+    },
+    onError: (err) =>
+      notify({
+        tone: "error",
+        message: t("classes.staff.cancelFailed", {
+          who,
+          error:
+            err instanceof Error
+              ? err.message
+              : t("classes.somethingWentWrong"),
+        }),
+      }),
+  })
+
+  const busy = resendMutation.isPending || cancelMutation.isPending
+
+  return (
+    <li className="flex items-center justify-between gap-2 rounded-md border border-dashed border-base-300 px-2 py-1.5">
+      <span className="flex min-w-0 items-center gap-2 text-sm">
+        <span className="truncate">
+          {invite.login ? `@${invite.login}` : invite.email}
+        </span>
+        <span className="badge badge-xs badge-ghost shrink-0">
+          {t("classes.staff.pendingBadge")}
+        </span>
+      </span>
+      <div className="flex shrink-0 items-center gap-1">
+        {invite.login ? (
+          <Button
+            variant="ghost"
+            size="xs"
+            title={t("classes.staff.resend")}
+            disabled={disabled || busy}
+            onClick={() => resendMutation.mutate()}
+          >
+            {resendMutation.isPending ? (
+              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+            ) : (
+              <Send aria-hidden="true" className="size-3.5" />
+            )}
+          </Button>
+        ) : null}
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-error"
+          title={t("classes.staff.cancelInvite")}
+          disabled={disabled || busy}
+          onClick={() => cancelMutation.mutate()}
+        >
+          {cancelMutation.isPending ? (
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <XCircle aria-hidden="true" className="size-3.5" />
+          )}
+        </Button>
+      </div>
     </li>
   )
 }

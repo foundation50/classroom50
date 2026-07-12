@@ -1449,7 +1449,17 @@
       "noneYet": "No {{role}} yet.",
       "removedToast": "Removed @{{login}} from {{role}}.",
       "removeFailed": "Couldn't remove @{{login}}: {{error}}",
-      "removeRole": "Remove {{role}}"
+      "removeRole": "Remove {{role}}",
+      "confirmRemoveTitle": "Remove @{{login}} from {{role}}?",
+      "confirmRemoveBody": "This removes @{{login}} from the {{role}} team and its config-repo access. It doesn't remove them from the organization.",
+      "pendingBadge": "Pending",
+      "resend": "Re-send invite",
+      "resendEmailOnly": "This invite has no GitHub username, so it can't be re-sent. Cancel it and re-add the person.",
+      "resentToast": "Re-sent the invitation to {{who}}.",
+      "resendFailed": "Couldn't re-send the invitation to {{who}}: {{error}}",
+      "cancelInvite": "Cancel invite",
+      "cancelledToast": "Cancelled the invitation for {{who}}.",
+      "cancelFailed": "Couldn't cancel the invitation for {{who}}: {{error}}"
     }
   },
   "accept": {
