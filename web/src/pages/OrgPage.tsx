@@ -1,12 +1,12 @@
 import { useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 
-import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
+import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
 import useGetClasses from "@/hooks/useGetClasses"
 
 const OrgPage = () => {
   const { org } = useParams({ strict: false })
-  const { isTeacher, isStudent, isBlocked } = useCourseTeacherAccess(org)
+  const { isTeacher, isStudent, isBlocked } = useConfigRepoAccess(org)
   const { classes } = useGetClasses(org)
   const { t } = useTranslation()
 

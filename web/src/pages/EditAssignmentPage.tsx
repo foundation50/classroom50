@@ -8,7 +8,7 @@ import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { Spinner } from "@/components/Spinner"
 import { Alert, AnimatedAlert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
+import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
@@ -166,7 +166,7 @@ const EditAssignmentPage = () => {
   useDocumentTitle(t("documentTitle.assignmentSettings"))
   const { org, classroom, assignment } = useParams({ strict: false })
   const router = useRouter()
-  const { isTeacher, isStudent } = useCourseTeacherAccess(org)
+  const { isTeacher, isStudent } = useClassroomRoleContext()
   const { data: assignments } = useGetClassroomAssignments(org, classroom)
   const { data: classroomData } = useGetClassroom(org, classroom)
   const archived = isClassroomArchived(classroomData ?? {})

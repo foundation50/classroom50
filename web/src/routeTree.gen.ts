@@ -17,6 +17,7 @@ import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedOrgRouteRouteImport } from './routes/_authed/$org/route'
 import { Route as AuthedOrgIndexRouteImport } from './routes/_authed/$org/index'
+import { Route as AuthedOrgClassroomRouteRouteImport } from './routes/_authed/$org/$classroom/route'
 import { Route as AuthedOrgSetupIndexRouteImport } from './routes/_authed/$org/setup/index'
 import { Route as AuthedOrgSettingsIndexRouteImport } from './routes/_authed/$org/settings/index'
 import { Route as AuthedOrgPublishedIndexRouteImport } from './routes/_authed/$org/published/index'
@@ -75,6 +76,11 @@ const AuthedOrgIndexRoute = AuthedOrgIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
+const AuthedOrgClassroomRouteRoute = AuthedOrgClassroomRouteRouteImport.update({
+  id: '/$classroom',
+  path: '/$classroom',
+  getParentRoute: () => AuthedOrgRouteRoute,
+} as any)
 const AuthedOrgSetupIndexRoute = AuthedOrgSetupIndexRouteImport.update({
   id: '/setup/',
   path: '/setup/',
@@ -106,9 +112,9 @@ const AuthedOrgActivityIndexRoute = AuthedOrgActivityIndexRouteImport.update({
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
 const AuthedOrgClassroomIndexRoute = AuthedOrgClassroomIndexRouteImport.update({
-  id: '/$classroom/',
-  path: '/$classroom/',
-  getParentRoute: () => AuthedOrgRouteRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedOrgClassroomRouteRoute,
 } as any)
 const AuthedOrgClassesNewIndexRoute =
   AuthedOrgClassesNewIndexRouteImport.update({
@@ -118,63 +124,63 @@ const AuthedOrgClassesNewIndexRoute =
   } as any)
 const AuthedOrgClassroomRosterIndexRoute =
   AuthedOrgClassroomRosterIndexRouteImport.update({
-    id: '/$classroom/roster/',
-    path: '/$classroom/roster/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/roster/',
+    path: '/roster/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomOnboardIndexRoute =
   AuthedOrgClassroomOnboardIndexRouteImport.update({
-    id: '/$classroom/onboard/',
-    path: '/$classroom/onboard/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/onboard/',
+    path: '/onboard/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomEditIndexRoute =
   AuthedOrgClassroomEditIndexRouteImport.update({
-    id: '/$classroom/edit/',
-    path: '/$classroom/edit/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/edit/',
+    path: '/edit/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsIndexRoute =
   AuthedOrgClassroomAssignmentsIndexRouteImport.update({
-    id: '/$classroom/assignments/',
-    path: '/$classroom/assignments/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/',
+    path: '/assignments/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsNewIndexRoute =
   AuthedOrgClassroomAssignmentsNewIndexRouteImport.update({
-    id: '/$classroom/assignments/new/',
-    path: '/$classroom/assignments/new/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/new/',
+    path: '/assignments/new/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentIndexRoute =
   AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport.update({
-    id: '/$classroom/assignments/$assignment/',
-    path: '/$classroom/assignments/$assignment/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/$assignment/',
+    path: '/assignments/$assignment/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute =
   AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport.update({
-    id: '/$classroom/assignments/$assignment/submissions/',
-    path: '/$classroom/assignments/$assignment/submissions/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/$assignment/submissions/',
+    path: '/assignments/$assignment/submissions/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute =
   AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport.update({
-    id: '/$classroom/assignments/$assignment/submission/',
-    path: '/$classroom/assignments/$assignment/submission/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/$assignment/submission/',
+    path: '/assignments/$assignment/submission/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute =
   AuthedOrgClassroomAssignmentsAssignmentEditIndexRouteImport.update({
-    id: '/$classroom/assignments/$assignment/edit/',
-    path: '/$classroom/assignments/$assignment/edit/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/$assignment/edit/',
+    path: '/assignments/$assignment/edit/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute =
   AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport.update({
-    id: '/$classroom/assignments/$assignment/accept/',
-    path: '/$classroom/assignments/$assignment/accept/',
-    getParentRoute: () => AuthedOrgRouteRoute,
+    id: '/assignments/$assignment/accept/',
+    path: '/assignments/$assignment/accept/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 
 export interface FileRoutesByFullPath {
@@ -184,6 +190,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/$org': typeof AuthedOrgRouteRouteWithChildren
   '/auth/': typeof AuthIndexRoute
+  '/$org/$classroom': typeof AuthedOrgClassroomRouteRouteWithChildren
   '/$org/': typeof AuthedOrgIndexRoute
   '/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
   '/$org/activity/': typeof AuthedOrgActivityIndexRoute
@@ -239,6 +246,7 @@ export interface FileRoutesById {
   '/_authed/$org': typeof AuthedOrgRouteRouteWithChildren
   '/_authed/': typeof AuthedIndexRoute
   '/auth/': typeof AuthIndexRoute
+  '/_authed/$org/$classroom': typeof AuthedOrgClassroomRouteRouteWithChildren
   '/_authed/$org/': typeof AuthedOrgIndexRoute
   '/_authed/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
   '/_authed/$org/activity/': typeof AuthedOrgActivityIndexRoute
@@ -268,6 +276,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/$org'
     | '/auth/'
+    | '/$org/$classroom'
     | '/$org/'
     | '/$org/$classroom/'
     | '/$org/activity/'
@@ -322,6 +331,7 @@ export interface FileRouteTypes {
     | '/_authed/$org'
     | '/_authed/'
     | '/auth/'
+    | '/_authed/$org/$classroom'
     | '/_authed/$org/'
     | '/_authed/$org/$classroom/'
     | '/_authed/$org/activity/'
@@ -409,6 +419,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
+    '/_authed/$org/$classroom': {
+      id: '/_authed/$org/$classroom'
+      path: '/$classroom'
+      fullPath: '/$org/$classroom'
+      preLoaderRoute: typeof AuthedOrgClassroomRouteRouteImport
+      parentRoute: typeof AuthedOrgRouteRoute
+    }
     '/_authed/$org/setup/': {
       id: '/_authed/$org/setup/'
       path: '/setup'
@@ -453,10 +470,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authed/$org/$classroom/': {
       id: '/_authed/$org/$classroom/'
-      path: '/$classroom'
+      path: '/'
       fullPath: '/$org/$classroom/'
       preLoaderRoute: typeof AuthedOrgClassroomIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/classes/new/': {
       id: '/_authed/$org/classes/new/'
@@ -467,91 +484,83 @@ declare module '@tanstack/react-router' {
     }
     '/_authed/$org/$classroom/roster/': {
       id: '/_authed/$org/$classroom/roster/'
-      path: '/$classroom/roster'
+      path: '/roster'
       fullPath: '/$org/$classroom/roster/'
       preLoaderRoute: typeof AuthedOrgClassroomRosterIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/onboard/': {
       id: '/_authed/$org/$classroom/onboard/'
-      path: '/$classroom/onboard'
+      path: '/onboard'
       fullPath: '/$org/$classroom/onboard/'
       preLoaderRoute: typeof AuthedOrgClassroomOnboardIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/edit/': {
       id: '/_authed/$org/$classroom/edit/'
-      path: '/$classroom/edit'
+      path: '/edit'
       fullPath: '/$org/$classroom/edit/'
       preLoaderRoute: typeof AuthedOrgClassroomEditIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/': {
       id: '/_authed/$org/$classroom/assignments/'
-      path: '/$classroom/assignments'
+      path: '/assignments'
       fullPath: '/$org/$classroom/assignments/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/new/': {
       id: '/_authed/$org/$classroom/assignments/new/'
-      path: '/$classroom/assignments/new'
+      path: '/assignments/new'
       fullPath: '/$org/$classroom/assignments/new/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsNewIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/': {
       id: '/_authed/$org/$classroom/assignments/$assignment/'
-      path: '/$classroom/assignments/$assignment'
+      path: '/assignments/$assignment'
       fullPath: '/$org/$classroom/assignments/$assignment/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/submissions/': {
       id: '/_authed/$org/$classroom/assignments/$assignment/submissions/'
-      path: '/$classroom/assignments/$assignment/submissions'
+      path: '/assignments/$assignment/submissions'
       fullPath: '/$org/$classroom/assignments/$assignment/submissions/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/submission/': {
       id: '/_authed/$org/$classroom/assignments/$assignment/submission/'
-      path: '/$classroom/assignments/$assignment/submission'
+      path: '/assignments/$assignment/submission'
       fullPath: '/$org/$classroom/assignments/$assignment/submission/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/edit/': {
       id: '/_authed/$org/$classroom/assignments/$assignment/edit/'
-      path: '/$classroom/assignments/$assignment/edit'
+      path: '/assignments/$assignment/edit'
       fullPath: '/$org/$classroom/assignments/$assignment/edit/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentEditIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/accept/': {
       id: '/_authed/$org/$classroom/assignments/$assignment/accept/'
-      path: '/$classroom/assignments/$assignment/accept'
+      path: '/assignments/$assignment/accept'
       fullPath: '/$org/$classroom/assignments/$assignment/accept/'
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
   }
 }
 
-interface AuthedOrgRouteRouteChildren {
-  AuthedOrgIndexRoute: typeof AuthedOrgIndexRoute
+interface AuthedOrgClassroomRouteRouteChildren {
   AuthedOrgClassroomIndexRoute: typeof AuthedOrgClassroomIndexRoute
-  AuthedOrgActivityIndexRoute: typeof AuthedOrgActivityIndexRoute
-  AuthedOrgClassesIndexRoute: typeof AuthedOrgClassesIndexRoute
-  AuthedOrgMembersIndexRoute: typeof AuthedOrgMembersIndexRoute
-  AuthedOrgPublishedIndexRoute: typeof AuthedOrgPublishedIndexRoute
-  AuthedOrgSettingsIndexRoute: typeof AuthedOrgSettingsIndexRoute
-  AuthedOrgSetupIndexRoute: typeof AuthedOrgSetupIndexRoute
   AuthedOrgClassroomAssignmentsIndexRoute: typeof AuthedOrgClassroomAssignmentsIndexRoute
   AuthedOrgClassroomEditIndexRoute: typeof AuthedOrgClassroomEditIndexRoute
   AuthedOrgClassroomOnboardIndexRoute: typeof AuthedOrgClassroomOnboardIndexRoute
   AuthedOrgClassroomRosterIndexRoute: typeof AuthedOrgClassroomRosterIndexRoute
-  AuthedOrgClassesNewIndexRoute: typeof AuthedOrgClassesNewIndexRoute
   AuthedOrgClassroomAssignmentsAssignmentIndexRoute: typeof AuthedOrgClassroomAssignmentsAssignmentIndexRoute
   AuthedOrgClassroomAssignmentsNewIndexRoute: typeof AuthedOrgClassroomAssignmentsNewIndexRoute
   AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute: typeof AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute
@@ -560,33 +569,55 @@ interface AuthedOrgRouteRouteChildren {
   AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute
 }
 
+const AuthedOrgClassroomRouteRouteChildren: AuthedOrgClassroomRouteRouteChildren =
+  {
+    AuthedOrgClassroomIndexRoute: AuthedOrgClassroomIndexRoute,
+    AuthedOrgClassroomAssignmentsIndexRoute:
+      AuthedOrgClassroomAssignmentsIndexRoute,
+    AuthedOrgClassroomEditIndexRoute: AuthedOrgClassroomEditIndexRoute,
+    AuthedOrgClassroomOnboardIndexRoute: AuthedOrgClassroomOnboardIndexRoute,
+    AuthedOrgClassroomRosterIndexRoute: AuthedOrgClassroomRosterIndexRoute,
+    AuthedOrgClassroomAssignmentsAssignmentIndexRoute:
+      AuthedOrgClassroomAssignmentsAssignmentIndexRoute,
+    AuthedOrgClassroomAssignmentsNewIndexRoute:
+      AuthedOrgClassroomAssignmentsNewIndexRoute,
+    AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute:
+      AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute,
+    AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute:
+      AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute,
+    AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute:
+      AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute,
+    AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute:
+      AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute,
+  }
+
+const AuthedOrgClassroomRouteRouteWithChildren =
+  AuthedOrgClassroomRouteRoute._addFileChildren(
+    AuthedOrgClassroomRouteRouteChildren,
+  )
+
+interface AuthedOrgRouteRouteChildren {
+  AuthedOrgClassroomRouteRoute: typeof AuthedOrgClassroomRouteRouteWithChildren
+  AuthedOrgIndexRoute: typeof AuthedOrgIndexRoute
+  AuthedOrgActivityIndexRoute: typeof AuthedOrgActivityIndexRoute
+  AuthedOrgClassesIndexRoute: typeof AuthedOrgClassesIndexRoute
+  AuthedOrgMembersIndexRoute: typeof AuthedOrgMembersIndexRoute
+  AuthedOrgPublishedIndexRoute: typeof AuthedOrgPublishedIndexRoute
+  AuthedOrgSettingsIndexRoute: typeof AuthedOrgSettingsIndexRoute
+  AuthedOrgSetupIndexRoute: typeof AuthedOrgSetupIndexRoute
+  AuthedOrgClassesNewIndexRoute: typeof AuthedOrgClassesNewIndexRoute
+}
+
 const AuthedOrgRouteRouteChildren: AuthedOrgRouteRouteChildren = {
+  AuthedOrgClassroomRouteRoute: AuthedOrgClassroomRouteRouteWithChildren,
   AuthedOrgIndexRoute: AuthedOrgIndexRoute,
-  AuthedOrgClassroomIndexRoute: AuthedOrgClassroomIndexRoute,
   AuthedOrgActivityIndexRoute: AuthedOrgActivityIndexRoute,
   AuthedOrgClassesIndexRoute: AuthedOrgClassesIndexRoute,
   AuthedOrgMembersIndexRoute: AuthedOrgMembersIndexRoute,
   AuthedOrgPublishedIndexRoute: AuthedOrgPublishedIndexRoute,
   AuthedOrgSettingsIndexRoute: AuthedOrgSettingsIndexRoute,
   AuthedOrgSetupIndexRoute: AuthedOrgSetupIndexRoute,
-  AuthedOrgClassroomAssignmentsIndexRoute:
-    AuthedOrgClassroomAssignmentsIndexRoute,
-  AuthedOrgClassroomEditIndexRoute: AuthedOrgClassroomEditIndexRoute,
-  AuthedOrgClassroomOnboardIndexRoute: AuthedOrgClassroomOnboardIndexRoute,
-  AuthedOrgClassroomRosterIndexRoute: AuthedOrgClassroomRosterIndexRoute,
   AuthedOrgClassesNewIndexRoute: AuthedOrgClassesNewIndexRoute,
-  AuthedOrgClassroomAssignmentsAssignmentIndexRoute:
-    AuthedOrgClassroomAssignmentsAssignmentIndexRoute,
-  AuthedOrgClassroomAssignmentsNewIndexRoute:
-    AuthedOrgClassroomAssignmentsNewIndexRoute,
-  AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute:
-    AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute,
-  AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute:
-    AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute,
-  AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute:
-    AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute,
-  AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute:
-    AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute,
 }
 
 const AuthedOrgRouteRouteWithChildren = AuthedOrgRouteRoute._addFileChildren(

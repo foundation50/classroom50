@@ -9,6 +9,7 @@ import {
 import { Spinner } from "@/components/Spinner"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
+import { OrgRoleProvider } from "@/context/orgRole/OrgRoleProvider"
 
 export const Route = createFileRoute("/_authed/$org")({
   component: OrgLayout,
@@ -19,6 +20,15 @@ export const Route = createFileRoute("/_authed/$org")({
 // the hood. Students/non-admins are never redirected — a 404 on the private
 // config repo is expected for them, so gating would lock them out of their org.
 function OrgLayout() {
+  const { org } = useParams({ from: "/_authed/$org" })
+  return (
+    <OrgRoleProvider org={org}>
+      <OrgLayoutInner />
+    </OrgRoleProvider>
+  )
+}
+
+function OrgLayoutInner() {
   const { org } = useParams({ from: "/_authed/$org" })
   // Match the setup route by matched-route id, not a pathname suffix: a suffix
   // check (endsWith("/setup")) both collides with any path segment named

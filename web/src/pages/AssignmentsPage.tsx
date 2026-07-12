@@ -19,15 +19,15 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import { ClaimInstructorNotice } from "./classes/ClaimInstructorNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetStudents from "@/hooks/useGetStudents"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
-import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
-import { useClassroomRole, roleLabelKey } from "@/hooks/useClassroomRole"
-import { useGithubAuth } from "@/auth/useGithubAuth"
+import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { roleLabelKey } from "@/util/resolveRole"
 import { isClassroomArchived } from "@/types/classroom"
 import { OrgRepos } from "./ClassesPage"
 
@@ -114,8 +114,7 @@ const TeacherAssignmentsView = ({
     org,
     classroom,
   )
-  const { user } = useGithubAuth()
-  const { role: myRole } = useClassroomRole(org, classroom, user?.login)
+  const { role: myRole } = useClassroomRoleContext()
   const myRoleLabelKey = roleLabelKey(myRole)
   const myRoleLabel = myRoleLabelKey ? t(myRoleLabelKey) : null
   const archived = isClassroomArchived(classroomData ?? {})
@@ -254,26 +253,25 @@ const AssignmentsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.assignments"))
   const { org, classroom } = useParams({ strict: false })
-  const {
-    isTeacher,
-    isStudent,
-    isLoading: roleLoading,
-  } = useCourseTeacherAccess(org)
+  const { isTeacher, isStudent, roleResolved } = useClassroomRoleContext()
 
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("nav.assignments")} />
-      {roleLoading && (
+      {org && classroom && (
+        <ClaimInstructorNotice org={org} classroom={classroom} />
+      )}
+      {!roleResolved && (
         <div className="space-y-4">
           <div className="skeleton skeleton-shimmer h-6 w-48" />
           <div className="skeleton skeleton-shimmer h-4 w-32" />
           <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
         </div>
       )}
-      {!roleLoading && isTeacher && org && classroom && (
+      {roleResolved && isTeacher && org && classroom && (
         <TeacherAssignmentsView org={org} classroom={classroom} />
       )}
-      {!roleLoading && isStudent && org && classroom && (
+      {roleResolved && isStudent && org && classroom && (
         <StudentAssignmentsView org={org} classroom={classroom} />
       )}
     </PageShell>

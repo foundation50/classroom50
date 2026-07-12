@@ -19,7 +19,7 @@ import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubRepo } from "@/hooks/github/types"
 import MissingParams from "@/components/MissingParams"
-import { useCourseTeacherAccess } from "@/hooks/useCourseTeacherAccess"
+import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { acceptPendingOrgInvite } from "@/api/mutations/users"
@@ -305,7 +305,7 @@ const ClassesPage = () => {
     isTeacher,
     isStudent,
     isLoading: roleLoading,
-  } = useCourseTeacherAccess(org)
+  } = useConfigRepoAccess(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
 

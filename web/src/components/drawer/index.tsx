@@ -31,13 +31,13 @@ import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "../../auth/useGithubAuth"
 import GitHub from "@/assets/github.svg?react"
 import duck from "@/assets/duck.png"
-import { useCourseTeacherAccess } from "../../hooks/useCourseTeacherAccess"
+import { useConfigRepoAccess } from "../../hooks/useConfigRepoAccess"
 import {
-  useClassroomRole,
-  roleLabelKey,
-  isStaffRole,
-  type ViewAsRole,
-} from "@/hooks/useClassroomRole"
+  useClassroomRoleContext,
+  useClassroomRoleContextOptional,
+} from "@/context/classroomRole/ClassroomRoleProvider"
+import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { roleLabelKey, isStaffRole, type ViewAsRole } from "@/util/resolveRole"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgMembership from "@/hooks/useGetOrgMembership"
@@ -346,7 +346,7 @@ const AssignmentSidebarMenu = ({
 }) => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
-  const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
+  const { showTeacherUi, roleResolved } = useClassroomRoleContext()
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
@@ -372,7 +372,7 @@ const AssignmentSidebarMenu = ({
     org,
     studentRepoNameForSecret,
   )
-  const { actualRole } = useClassroomRole(org, classroom, user?.login)
+  const { actualRole } = useClassroomRoleContext()
   const isActuallyStaff = isStaffRole(actualRole) && actualRole !== "unresolved"
   const { data: classroomMeta } = useGetClassroom(org, classroom, {
     enabled: isActuallyStaff,
@@ -545,15 +545,16 @@ export const TeacherSidebarMenu = ({
   selected: string
 }) => {
   // Placeholder while pending so items never flash in then out.
-  const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
+  const {
+    showTeacherUi,
+    roleResolved,
+    role: classroomRole,
+  } = useClassroomRoleContext()
   // Finer, preview-aware classroom role. Roster is staff-only, Settings
   // instructor-only; gating on this makes "View as student/TA" faithfully hide
   // what a real student/TA wouldn't see. `unresolved` is permissive (no flash).
-  const { user } = useGithubAuth()
-  const { role: classroomRole } = useClassroomRole(org, classroom, user?.login)
   const showStaffItems = showTeacherUi && isStaffRole(classroomRole)
-  const canEditSettings =
-    classroomRole === "owner" || classroomRole === "instructor"
+  const canEditSettings = classroomRole === "instructor"
   const { t } = useTranslation()
 
   return (
@@ -619,24 +620,24 @@ export const SidebarFooter = () => {
     from: "/_authed/$org/setup/",
     shouldThrow: false,
   })
-  const { isStudent, isLoading: roleLoading } = useCourseTeacherAccess(org)
+  const { isStudent, isLoading: roleLoading } = useConfigRepoAccess(org)
   // Org plan for the About-dialog diagnostics snapshot. Cached and shared with
   // the setup/audit panes; `plan` is only visible to org owners, so this is
   // often undefined (the snapshot then reports "unknown" with a reason).
   const { data: orgPlanDetails } = useGetOrgPlanDetails(org)
   // Precise classroom role (Instructor vs TA); respects the "view as" preview.
-  // `actualRole` is the real (preview-independent) role.
-  const {
-    role: classroomRole,
-    actualRole: actualClassroomRole,
-    isLoading: classroomRoleLoading,
-  } = useClassroomRole(org, classroom, user?.login)
+  // `actualRole` is the real (preview-independent) role. Null off a classroom
+  // route (no provider), where the org-level label logic below applies instead.
+  const classroomCtx = useClassroomRoleContextOptional()
+  const classroomRole = classroomCtx?.role ?? "unresolved"
+  const actualClassroomRole = classroomCtx?.actualRole ?? "unresolved"
+  const classroomRoleLoading = classroomCtx?.isLoading ?? false
   const { viewAs, setViewAs } = useRoleView()
-  // Offer "View as" only to a real owner/instructor in a classroom (the roles
-  // with something lower to preview).
+  // Offer "View as" only to a real instructor of THIS classroom — the role with
+  // something lower to preview. Keyed off instructor-team membership, not
+  // org-admin status (KTD-4).
   const canPreviewRoles =
-    Boolean(classroom) &&
-    (actualClassroomRole === "owner" || actualClassroomRole === "instructor")
+    Boolean(classroom) && actualClassroomRole === "instructor"
 
   // Apply a "view as" change and, if the current route is role-specific, move to
   // the analogous route for the new role so the user isn't stranded.
@@ -1017,11 +1018,11 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
 export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
   const { t } = useTranslation()
-  const { showTeacherUi, roleResolved } = useCourseTeacherAccess(org)
-  // Org-level Members/Settings are owner-only, so gate those two links on org
-  // ownership rather than the broad staff signal.
-  const { data: orgMembership } = useGetOrgMembership(org)
-  const isOwner = orgMembership?.role === "admin"
+  const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
+  // Org-level Members/Settings are owner-only, so gate those two links on the
+  // org-role context rather than the broad staff signal.
+  const { orgRole } = useOrgRole()
+  const isOwner = orgRole === "owner"
   const onSettings = settings || selected === "settings"
   const onPublished = selected === "published"
   const onMembers = selected === "members"
