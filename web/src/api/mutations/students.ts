@@ -28,6 +28,7 @@ import {
   getRawFileWithFallbackSource,
   getUser,
   listAllOrgMembers,
+  listOrgAdmins,
   listTeamInvitations,
   listTeamMembers,
   sleep,
@@ -1294,6 +1295,58 @@ export type InviteRosterStudentsInput = {
   maxRetries?: number
 }
 
+// Retry a deferred (rate-limited) set with bounded, Retry-After-honoring
+// backoff so a transient secondary limit doesn't force a manual re-run. Shared
+// by inviteRosterStudents and bulkInviteByEmail (their per-item invite differs;
+// the retry machinery does not). `attempt` performs one invite and throws on
+// error; `onError` classifies a non-rate-limit failure (each caller records its
+// own failed/skipped shape). A still-rate-limited item is re-queued for the
+// next round; whatever remains after `maxRetries` is returned as `deferred`.
+//
+// The honored `Retry-After` is carried FORWARD as a floor across rounds (max of
+// the running floor and any freshly-seen header) rather than cleared each round.
+// GitHub omits Retry-After on some secondary limits, so clearing it would let a
+// headerless repeat 429 collapse the wait back to the ~1s exponential backoff
+// and re-hammer a limit the server already told us to wait out.
+async function retryDeferred<T>(opts: {
+  queue: T[]
+  maxRetries: number
+  sleepFn: (ms: number) => Promise<unknown>
+  // The Retry-After floor (ms) seeded from the first pass's rate-limit errors.
+  initialRetryAfterMs: number
+  attempt: (item: T) => Promise<void>
+  // Handle a non-rate-limit error (the caller records it in its own bucket).
+  onError: (item: T, err: unknown) => void
+}): Promise<T[]> {
+  const { maxRetries, sleepFn, attempt, onError } = opts
+  let queue = opts.queue
+  let retryAfterMs = opts.initialRetryAfterMs
+  for (let round = 0; round < maxRetries && queue.length > 0; round++) {
+    const backoffMs = Math.min(8000, 500 * 2 ** round)
+    const jitterMs = Math.floor(Math.random() * 250)
+    await sleepFn(Math.max(retryAfterMs, backoffMs) + jitterMs)
+    const stillDeferred: T[] = []
+    for (const item of queue) {
+      try {
+        await attempt(item)
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) {
+          if (err.rateLimit.retryAfter !== null)
+            retryAfterMs = Math.max(
+              retryAfterMs,
+              err.rateLimit.retryAfter * 1000,
+            )
+          stillDeferred.push(item)
+        } else {
+          onError(item, err)
+        }
+      }
+    }
+    queue = stillDeferred
+  }
+  return queue
+}
+
 export type InviteRosterStudentsResult = {
   // A fresh org invite was created (carrying the role's team). Each carries the
   // role it was invited as, so a caller can write it back to roster.csv.
@@ -1426,38 +1479,21 @@ export async function inviteRosterStudents(
 
   // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
   // backoff so a transient secondary limit doesn't force a manual re-run.
-  let queue = deferredTargets
-  for (let attempt = 0; attempt < maxRetries && queue.length > 0; attempt++) {
-    const backoffMs = Math.min(8000, 500 * 2 ** attempt)
-    const jitterMs = Math.floor(Math.random() * 250)
-    await sleepFn(Math.max(retryAfterMs, backoffMs) + jitterMs)
-    retryAfterMs = 0
-    const stillDeferred: Target[] = []
-    for (const target of queue) {
-      try {
-        const outcome = await inviteOne(target)
-        if ("skip" in outcome)
-          skipped.push({ username: target.username, reason: outcome.skip })
-        else invited.push(outcome)
-      } catch (err) {
-        if (err instanceof GitHubAPIError && err.isRateLimited) {
-          if (err.rateLimit.retryAfter !== null)
-            retryAfterMs = Math.max(
-              retryAfterMs,
-              err.rateLimit.retryAfter * 1000,
-            )
-          stillDeferred.push(target)
-        } else {
-          failed.push({
-            username: target.username,
-            message: getErrorMessage(err),
-          })
-        }
-      }
-    }
-    queue = stillDeferred
-  }
-  for (const target of queue) deferred.push(target.username)
+  const stillDeferred = await retryDeferred({
+    queue: deferredTargets,
+    maxRetries,
+    sleepFn,
+    initialRetryAfterMs: retryAfterMs,
+    attempt: async (target) => {
+      const outcome = await inviteOne(target)
+      if ("skip" in outcome)
+        skipped.push({ username: target.username, reason: outcome.skip })
+      else invited.push(outcome)
+    },
+    onError: (target, err) =>
+      failed.push({ username: target.username, message: getErrorMessage(err) }),
+  })
+  for (const target of stillDeferred) deferred.push(target.username)
 
   return { invited, skipped, failed, deferred }
 }
@@ -1652,35 +1688,23 @@ export async function bulkInviteByEmail(
 
   // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
   // backoff, mirroring inviteRosterStudents.
-  let queue = deferredTargets
-  for (let attempt = 0; attempt < maxRetries && queue.length > 0; attempt++) {
-    const backoffMs = Math.min(8000, 500 * 2 ** attempt)
-    const jitterMs = Math.floor(Math.random() * 250)
-    await sleepFn(Math.max(retryAfterMs, backoffMs) + jitterMs)
-    retryAfterMs = 0
-    const stillDeferred: EmailTarget[] = []
-    for (const target of queue) {
-      try {
-        await inviteOne(target)
-        invited.push({ email: target.email, role: target.role })
-      } catch (err) {
-        if (err instanceof GitHubAPIError && err.isRateLimited) {
-          if (err.rateLimit.retryAfter !== null)
-            retryAfterMs = Math.max(
-              retryAfterMs,
-              err.rateLimit.retryAfter * 1000,
-            )
-          stillDeferred.push(target)
-        } else if (err instanceof GitHubAPIError && err.status === 422) {
-          skipped.push({ email: target.email })
-        } else {
-          failed.push({ email: target.email, message: getErrorMessage(err) })
-        }
-      }
-    }
-    queue = stillDeferred
-  }
-  for (const target of queue) deferred.push(target.email)
+  const stillDeferred = await retryDeferred({
+    queue: deferredTargets,
+    maxRetries,
+    sleepFn,
+    initialRetryAfterMs: retryAfterMs,
+    attempt: async (target) => {
+      await inviteOne(target)
+      invited.push({ email: target.email, role: target.role })
+    },
+    onError: (target, err) => {
+      // A 422 on retry means already-member/already-invited, not a failure.
+      if (err instanceof GitHubAPIError && err.status === 422)
+        skipped.push({ email: target.email })
+      else failed.push({ email: target.email, message: getErrorMessage(err) })
+    },
+  })
+  for (const target of stillDeferred) deferred.push(target.email)
 
   return { invited, skipped, failed, deferred }
 }
@@ -1769,10 +1793,14 @@ export type ApplyRosterRoleChangeResult = {
 //
 // Ordering is chosen so a mid-sequence failure never leaves ELEVATED access
 // dangling:
+//  0) Before any change, refuse an org-OWNER revocation that would be
+//     self-inflicted or strip the last owner (self-demotion / sole-owner
+//     demotion) — both are unrecoverable-in-place, so they're blocked outright.
 //  1) Demote org owner -> member FIRST when leaving instructor for a
 //     non-instructor role. Done before any team change, so if it throws we abort
 //     with the member unchanged (still instructor + owner) rather than
-//     half-moved-but-still-owner.
+//     half-moved-but-still-owner. If a LATER step fails after this committed,
+//     the error explicitly says the owner was revoked so the caller re-runs.
 //  2) Add to the target team (student -> classroom team; ta/instructor -> the
 //     staff team, created + granted config-repo write if missing), then promote
 //     to org owner when the target is instructor.
@@ -1812,36 +1840,82 @@ export async function applyRosterRoleChange(
     role === "student" ? slugs.student : slugs.staff[role]
 
   const wasInstructor = fromRoles.includes("instructor")
+  const demotesOwner = wasInstructor && toRole !== "instructor"
+
+  // Guard the org-OWNER revocation before touching anything. Demoting yourself
+  // strips your own admin mid-operation (you may then lose permission to finish
+  // the very move you started); demoting the sole owner leaves the org with no
+  // owner. Both are refused outright rather than half-applied. listOrgAdmins is
+  // owner-only and returns [] on 403 — the acting owner can read it, so a
+  // confirmed single-owner set is trustworthy; an unreadable ([]) list does not
+  // block (preserves the prior fail-open behavior for a degraded read).
+  if (demotesOwner) {
+    const viewer = await getAuthenticatedUser(client)
+    if (isSameGitHubUser(viewer, { github_id: input.github_id, username })) {
+      throw new Error(
+        `You can't demote yourself from instructor here — it would revoke ` +
+          `your own organization-owner access mid-change. Ask another owner ` +
+          `to change your role.`,
+      )
+    }
+    const admins = await listOrgAdmins(client, org)
+    const soleOwner =
+      admins.length === 1 &&
+      isSameGitHubUser(admins[0], { github_id: input.github_id, username })
+    if (soleOwner) {
+      throw new Error(
+        `${username} is the only organization owner, so they can't be demoted ` +
+          `from instructor — promote another owner first.`,
+      )
+    }
+  }
 
   // 1) Demote org owner FIRST when leaving instructor for a non-instructor role.
   // Doing this before any team mutation guarantees a failure here leaves the
   // member fully unchanged (still owner) rather than partially moved but still
   // an owner — the dangerous partial state.
-  if (wasInstructor && toRole !== "instructor") {
-    await setOrgMembershipRole(client, { org, username, role: "member" })
-  }
+  let ownerRevoked = false
+  try {
+    if (demotesOwner) {
+      await setOrgMembershipRole(client, { org, username, role: "member" })
+      ownerRevoked = true
+    }
 
-  // 2) Add to the target team (ensure a staff team exists + config write), then
-  // promote to org owner for an instructor target.
-  if (toRole === "student") {
-    await addUserToTeam(client, {
-      org,
-      teamSlug: slugs.student,
-      username,
-      role: "member",
-    })
-  } else {
-    const team = await ensureClassroomRoleTeam(client, org, classroom, toRole)
-    await grantTeamConfigRepoWrite(client, org, team.slug)
-    await addUserToTeam(client, {
-      org,
-      teamSlug: team.slug,
-      username,
-      role: "member",
-    })
-  }
-  if (toRole === "instructor") {
-    await setOrgMembershipRole(client, { org, username, role: "admin" })
+    // 2) Add to the target team (ensure a staff team exists + config write),
+    // then promote to org owner for an instructor target.
+    if (toRole === "student") {
+      await addUserToTeam(client, {
+        org,
+        teamSlug: slugs.student,
+        username,
+        role: "member",
+      })
+    } else {
+      const team = await ensureClassroomRoleTeam(client, org, classroom, toRole)
+      await grantTeamConfigRepoWrite(client, org, team.slug)
+      await addUserToTeam(client, {
+        org,
+        teamSlug: team.slug,
+        username,
+        role: "member",
+      })
+    }
+    if (toRole === "instructor") {
+      await setOrgMembershipRole(client, { org, username, role: "admin" })
+    }
+  } catch (err) {
+    // A failure AFTER the owner demote committed leaves the member no longer an
+    // owner but not yet on the target team — a half-applied elevated-access
+    // change the caller must know to re-run, not a silent generic failure.
+    if (ownerRevoked) {
+      throw new Error(
+        `${username} was demoted from organization owner, but moving them to ` +
+          `the ${toRole} team then failed (${getErrorMessage(err)}). Re-run ` +
+          `the role change to finish the move.`,
+        { cause: err },
+      )
+    }
+    throw err
   }
 
   // 3) Remove from EVERY currently-held classroom team except the target

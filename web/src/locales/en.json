@@ -362,6 +362,7 @@
       "cancelTitle": "Cancel invitations",
       "cancelledHeadline_one": "Cancelled {{count}} invitation.",
       "cancelledHeadline_other": "Cancelled {{count}} invitations.",
+      "cancelAlreadyGone": "Already gone (no longer pending)",
       "confirmCancelTitle_one": "Cancel {{count}} invitation?",
       "confirmCancelTitle_other": "Cancel {{count}} invitations?",
       "confirmCancelBody_one": "This cancels {{count}} pending organization invitation. The person won't join unless re-invited.",

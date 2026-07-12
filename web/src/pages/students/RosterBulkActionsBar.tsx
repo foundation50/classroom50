@@ -309,17 +309,21 @@ const RosterBulkActionsBar = ({
     setProgress({ processed: 0, total, message: t("students.bulk.starting") })
 
     const cancelled: { key: string; label: string }[] = []
+    const alreadyGone: { key: string; label: string }[] = []
     const failed: { key: string; label: string; detail?: string }[] = []
     let processed = 0
     for (const row of cancellableSelected) {
       const label = row.username || row.email
       try {
         // Non-null: cancellableSelected is filtered on a numeric invitation_id.
-        await cancelOrgInvitation(client, {
+        const { cancelled: didCancel } = await cancelOrgInvitation(client, {
           org,
           invitationId: row.invitation_id as number,
         })
-        cancelled.push({ key: row.key, label })
+        // A 404 means the id was stale (e.g. a resend already replaced it), so
+        // report it as "already gone" rather than a phantom cancellation.
+        if (didCancel) cancelled.push({ key: row.key, label })
+        else alreadyGone.push({ key: row.key, label })
       } catch (err) {
         log.debug("bulk cancel: per-row cancel failed", { err })
         failed.push({ key: row.key, label, detail: getErrorMessage(err) })
@@ -329,6 +333,11 @@ const RosterBulkActionsBar = ({
     }
 
     const sections: BulkResultView["sections"] = []
+    if (alreadyGone.length > 0)
+      sections.push({
+        title: t("students.bulk.cancelAlreadyGone"),
+        rows: alreadyGone,
+      })
     if (failed.length > 0)
       sections.push({ title: t("students.bulk.resultFailed"), rows: failed })
     setResult({

@@ -748,20 +748,25 @@ export function createOrgInvitation(
   })
 }
 
-// Owner-only. A 404 (already gone) is treated as success so resend can proceed.
+// Owner-only. Returns { cancelled: true } when the DELETE removed a live
+// invitation, or { cancelled: false } on a 404 — the invite was already gone
+// (e.g. a resend replaced it, or it was cancelled elsewhere). A 404 stays
+// non-throwing so resend's cancel-then-recreate and best-effort dismiss still
+// proceed, but the boolean lets a caller avoid reporting a phantom cancel.
 export async function cancelOrgInvitation(
   client: GitHubClient,
   input: { org: string; invitationId: number },
-): Promise<void> {
+): Promise<{ cancelled: boolean }> {
   const { org, invitationId } = input
 
   try {
     await client.request(`/orgs/${org}/invitations/${invitationId}`, {
       method: "DELETE",
     })
+    return { cancelled: true }
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isNotFound) {
-      return
+      return { cancelled: false }
     }
     throw err
   }
@@ -960,9 +965,14 @@ export async function ensureOrgMembership(
 // `ensureOrgMembership` recreates when the invitee is neither active nor
 // pending. When they ARE still pending and we know the stale invitation id,
 // cancel it and recreate so the invite is genuinely re-sent (previously this
-// short-circuited on the pending precheck and re-sent nothing). If the recreate
-// then 422s (a pending invite still blocks it), that existing invite is the
-// live one, so leave it in place.
+// short-circuited on the pending precheck and re-sent nothing). GitHub blocks a
+// second invite while one is pending, so the stale invite MUST be cancelled
+// before the recreate — which opens a window where a failed recreate would
+// leave the invitee with no invitation at all. To close it, a failed recreate
+// best-effort re-issues the original invite before rethrowing, so a transient
+// error (429/5xx) restores the pending state instead of orphaning the invitee.
+// If the recreate 422s (a pending invite still blocks it), that existing invite
+// is the live one, so leave it in place.
 export async function resendOrgInvitation(
   client: GitHubClient,
   input: {
@@ -997,13 +1007,29 @@ export async function resendOrgInvitation(
   // student actually receives a new invitation. Active members are left alone.
   if (result.state === "pending" && invitationId !== undefined) {
     await cancelOrgInvitation(client, { org, invitationId })
-    const recreated = await ensureOrgMembership(client, {
-      org,
-      username,
-      inviteeId,
-      teamIds,
-    })
-    return recreated
+    try {
+      return await ensureOrgMembership(client, {
+        org,
+        username,
+        inviteeId,
+        teamIds,
+      })
+    } catch (err) {
+      // The stale invite is already cancelled; a failed recreate would orphan
+      // the invitee. Best-effort re-issue so they stay pending, then rethrow the
+      // original error so the caller still surfaces the failure.
+      try {
+        await createOrgInvitation(client, {
+          org,
+          invitee_id: inviteeId,
+          team_ids: teamIds,
+        })
+      } catch {
+        // Compensation itself failed — nothing more to do; the original error
+        // (below) is the one the caller acts on.
+      }
+      throw err
+    }
   }
 
   return result

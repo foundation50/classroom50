@@ -47,6 +47,7 @@ vi.mock("@/hooks/useGetClassroom", () => ({
 vi.mock("@/hooks/useGetOrgInvitations", () => ({
   default: () => ({
     invitations: [],
+    failedInvitations: [],
     isLoading: false,
     isForbidden: false,
   }),

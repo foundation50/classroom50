@@ -995,4 +995,54 @@ describe("resendOrgInvitation carries team_ids", () => {
       team_ids: [4242],
     })
   })
+
+  it("re-issues the invite (no orphan) and rethrows when the recreate fails", async () => {
+    // Pending precheck -> cancel the stale invite -> recreate POST 429s. The
+    // stale invite is already gone, so a naive impl would orphan the invitee;
+    // the compensating re-issue must fire (a second POST) and the original 429
+    // must still propagate so the caller surfaces the failure.
+    const membershipStates = ["pending", "not-member"]
+    const state = { cancelled: 0, invitePosts: 0 }
+    let recreateAttempts = 0
+    const request = vi
+      .fn()
+      .mockImplementation(
+        (path: string, options?: { method?: string; body?: unknown }) => {
+          if (path.includes("/memberships/")) {
+            const next = membershipStates.shift() ?? "not-member"
+            if (next === "not-member")
+              return Promise.reject(apiError(404, "not a member"))
+            return Promise.resolve({ state: next })
+          }
+          if (path.includes("/invitations/") && options?.method === "DELETE") {
+            state.cancelled += 1
+            return Promise.resolve({})
+          }
+          if (path.endsWith("/invitations") && options?.method === "POST") {
+            state.invitePosts += 1
+            // First recreate attempt 429s; the compensating re-issue succeeds.
+            if (recreateAttempts++ === 0)
+              return Promise.reject(apiError(429, "rate limited"))
+            return Promise.resolve({})
+          }
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        },
+      )
+    const client = { request } as unknown as GitHubClient
+
+    await expect(
+      resendOrgInvitation(client, {
+        org: "acme",
+        username: "octocat",
+        inviteeId: 1,
+        invitationId: 42,
+        teamIds: [4242],
+      }),
+    ).rejects.toBeInstanceOf(GitHubAPIError)
+
+    expect(state.cancelled).toBe(1)
+    // Two POSTs: the failed recreate + the compensating re-issue that keeps the
+    // invitee pending rather than orphaned.
+    expect(state.invitePosts).toBe(2)
+  })
 })
