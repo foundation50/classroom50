@@ -7,6 +7,7 @@ import {
   UserMinus,
   UserPlus,
   X,
+  XCircle,
 } from "lucide-react"
 
 import { useMutation } from "@tanstack/react-query"
@@ -21,7 +22,11 @@ import {
   unenrollStudent,
   type StudentCsvRow,
 } from "@/api/mutations/students"
-import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
+import {
+  resendOrgInvitation,
+  cancelOrgInvitation,
+  getErrorMessage,
+} from "@/hooks/github/mutations"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
@@ -58,6 +63,7 @@ const RosterMemberModal = ({
   onSaved,
   onUnenrolled,
   onResent,
+  onCanceled,
   onChanged,
   onError,
 }: {
@@ -74,6 +80,9 @@ const RosterMemberModal = ({
   onSaved: (rowKey: string, updated: StudentCsvRow) => void
   onUnenrolled: (rowKey: string, teamWarning?: string) => void
   onResent: (rowKey: string) => void
+  // A pending invite was cancelled — the parent drops the row's warning and
+  // refetches so the now-uninvited person leaves the roster.
+  onCanceled: (rowKey: string) => void
   // A needs-attention row was resolved (assigned a role, or invited) — the
   // parent refetches the roster + invalidates invite/team caches so the row
   // moves to enrolled/pending.
@@ -85,9 +94,11 @@ const RosterMemberModal = ({
   const titleId = useId()
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingResend, setConfirmingResend] = useState(false)
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
   const [editingProfile, setEditingProfile] = useState(false)
   const [working, setWorking] = useState(false)
   const [resending, setResending] = useState(false)
+  const [cancelling, setCancelling] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [resolving, setResolving] = useState(false)
 
@@ -101,12 +112,13 @@ const RosterMemberModal = ({
   // matching the unenroll (`working`) guard. Without it, closing or switching
   // rows mid-invite would let the captured-row promise apply onResent/onError/
   // onClose to a stale student.
-  const busy = working || submitting || resending || resolving
+  const busy = working || submitting || resending || cancelling || resolving
 
   const handleClose = () => {
     if (busy) return
     setConfirmingUnenroll(false)
     setConfirmingResend(false)
+    setConfirmingCancel(false)
     setEditingProfile(false)
     onClose()
   }
@@ -141,6 +153,11 @@ const RosterMemberModal = ({
   const displayInitials = rosterRowInitials(row)
   const label = row.username || row.email
   const canResend = row.state === "pending" && Boolean(row.github_id)
+  // Cancelling a pending invite needs its org-invitation id (set on pending
+  // rows). Available even for an email-only pending invite (no github_id), so
+  // gate on the id, not github_id.
+  const canCancel =
+    row.state === "pending" && typeof row.invitation_id === "number"
   const needsRole = row.state === "needs_attention_in_org"
   const needsInvite = row.state === "needs_attention_not_in_org"
   // Unenroll drops a roster.csv row + student-team membership — a student-only
@@ -264,6 +281,32 @@ const RosterMemberModal = ({
     }
   }
 
+  const handleCancelInvite = async () => {
+    if (cancelling) return
+    const invitationId = row.invitation_id
+    if (typeof invitationId !== "number") {
+      onError(row.key, t("students.cancelInviteMissingId", { label }))
+      return
+    }
+    setCancelling(true)
+    try {
+      await cancelOrgInvitation(client, { org, invitationId })
+      onCanceled(row.key)
+      onClose()
+    } catch (err) {
+      onError(
+        row.key,
+        t("students.cancelInviteFailed", {
+          label,
+          error: getErrorMessage(err),
+        }),
+      )
+    } finally {
+      setCancelling(false)
+      setConfirmingCancel(false)
+    }
+  }
+
   const handleUnenroll = async () => {
     if (working) return
     setWorking(true)
@@ -361,6 +404,19 @@ const RosterMemberModal = ({
               </Button>
             ) : null}
 
+            {canCancel && !confirmingCancel ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-error hover:bg-error/10"
+                disabled={busy}
+                onClick={() => setConfirmingCancel(true)}
+              >
+                <XCircle aria-hidden="true" className="size-4" />
+                {t("students.cancelInvite")}
+              </Button>
+            ) : null}
+
             {canUnenroll && !confirmingUnenroll ? (
               <Button
                 variant="ghost"
@@ -377,7 +433,9 @@ const RosterMemberModal = ({
         </div>
 
         {/* Inline confirmations for the enrollment actions above. */}
-        {(canResend && confirmingResend) || confirmingUnenroll ? (
+        {(canResend && confirmingResend) ||
+        (canCancel && confirmingCancel) ||
+        confirmingUnenroll ? (
           <section className="flex flex-col gap-3">
             {canResend && confirmingResend ? (
               <div className="flex flex-col gap-3 rounded-box border border-primary/30 bg-primary/5 p-4 text-sm">
@@ -412,6 +470,39 @@ const RosterMemberModal = ({
                         {t("students.resend")}
                       </>
                     )}
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+
+            {canCancel && confirmingCancel ? (
+              <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
+                <p className="text-base-content/80">
+                  {t("students.confirmCancelInviteBody", {
+                    label: row.username || row.email,
+                    org,
+                  })}
+                </p>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={cancelling}
+                    onClick={() => setConfirmingCancel(false)}
+                  >
+                    {t("students.keepInvite")}
+                  </Button>
+                  <Button
+                    variant="error"
+                    size="sm"
+                    loading={cancelling}
+                    loadingLabel={t("common.working")}
+                    disabled={cancelling}
+                    onClick={() => void handleCancelInvite()}
+                  >
+                    {cancelling
+                      ? t("common.working")
+                      : t("students.cancelInvite")}
                   </Button>
                 </div>
               </div>

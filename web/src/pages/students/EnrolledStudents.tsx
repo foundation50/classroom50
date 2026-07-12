@@ -945,6 +945,14 @@ const EnrolledStudents = ({
           dismissWarning(rowKey)
           invalidateInviteQueries()
         }}
+        onCanceled={(rowKey) => {
+          // A cancelled invite removes the pending person; refresh invite + team
+          // caches so the row leaves the roster.
+          dismissWarning(rowKey)
+          invalidateInviteQueries()
+          invalidateTeamRoster()
+          refetchRoster()
+        }}
         onChanged={(rowKey) => {
           dismissWarning(rowKey)
           invalidateInviteQueries()

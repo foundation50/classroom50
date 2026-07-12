@@ -23,7 +23,7 @@ import {
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
 import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
 // Pending is owner-only, and the ORG-level invitations endpoint is the
 // authoritative owner check: a non-owner gets 403 there and we hide all pending
@@ -57,6 +57,10 @@ export type UseTeamRosterResult = {
   // non-owner TA/instructor gets 403). The view then hides the pending section
   // and shows an "owners only" note instead of rendering zero pending.
   pendingHidden: boolean
+  // Failed/expired org invitations (owner-only, like pending). Empty when
+  // pendingHidden (a non-owner can't read them). Surfaced so the roster can show
+  // a "needs re-invite" section for invites GitHub couldn't deliver.
+  failedInvitations: GitHubOrgInvitation[]
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
   // Resolved team slug per role, so the detail view can link each role a member
@@ -131,6 +135,7 @@ export function useTeamRoster(
 
   const {
     invitations,
+    failedInvitations,
     isLoading: invitesLoading,
     isForbidden: invitesForbidden,
   } = useGetOrgInvitations(org)
@@ -277,6 +282,8 @@ export function useTeamRoster(
     isError,
     isEmpty: !isLoading && !isError && rows.length === 0,
     pendingHidden,
+    // Owner-only, like pending — hide wholesale for a non-owner.
+    failedInvitations: pendingHidden ? [] : failedInvitations,
     teamSlug,
     teamSlugByRole: {
       student: teamSlug,
