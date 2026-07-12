@@ -347,12 +347,15 @@ const UploadRoster = ({
     failed: { username: string; message: string }[]
   } | null>(null)
 
-  // The modal is shown while an external `open` is set (idle -> drop zone) or
-  // once a file has advanced us past idle. Two drivers, so the drop-zone idle
-  // screen is visible before a file is chosen.
-  const isOpen = open || phase !== "idle"
+  // Visibility is owned by the controlling parent via `open` (the roster page
+  // always passes it). Fall back to phase-driven only if used uncontrolled.
+  const isOpen = open ?? phase !== "idle"
 
-  const reset = () => {
+  // Clear the file/preview state and return to the drop-zone (idle) screen —
+  // WITHOUT closing the modal. Used when the user cancels/dismisses the preview:
+  // they land back on the drop zone to pick a different file, and there's no
+  // close-then-reopen flash.
+  const resetToDropZone = () => {
     setPhase("idle")
     setFileName("")
     setFileText("")
@@ -363,11 +366,7 @@ const UploadRoster = ({
     setEmailRoles({})
     setEmailOwnerConfirmed(false)
     setEmailResult(null)
-    setProgress({
-      processed: 0,
-      total: 0,
-      message: "",
-    })
+    setProgress({ processed: 0, total: 0, message: "" })
     setResult(null)
     setInviteOutcome(null)
     setInviteError(null)
@@ -378,17 +377,26 @@ const UploadRoster = ({
     setPreflightError(null)
     setRoleChangesConfirmed(false)
     setRoleChangeOutcome(null)
-
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
     }
   }
 
-  // The modal now shows a drop-zone idle screen (no auto-firing the OS picker),
-  // so `open` just needs to render the dialog — the drop zone / Choose File
-  // button drives file selection from there.
+  // Clear internal state after the modal has actually closed (open -> false),
+  // so a programmatic close doesn't flash the idle drop-zone mid-close.
+  const wasOpenRef = useRef(false)
+  useEffect(() => {
+    if (wasOpenRef.current && open === false) {
+      resetToDropZone()
+    }
+    wasOpenRef.current = Boolean(open)
+  }, [open])
+
+  // The X / backdrop / Esc always dismiss the whole modal, from any screen —
+  // that's what a close affordance means. Stepping back to the drop zone is a
+  // distinct, explicit action (the preview's "Cancel" button), not what the X
+  // does. State is cleared by the open->false effect, so there's no flash.
   const handleClose = () => {
-    reset()
     onOpenChange?.(false)
   }
 
@@ -455,25 +463,61 @@ const UploadRoster = ({
   // grant via an instructor enroll — both are actions the teacher must approve.
   const needsRoleConfirm =
     roleChanges.length > 0 || instructorEnrolls.length > 0
-  const showInstructorOwnerNotice = useMemo(
+  // The listed confirmation items (role changes + instructor enrolls) grant org
+  // OWNER only when one of THOSE targets instructor — not merely because some
+  // other row in the file is an instructor. Keeps the in-box owner warning
+  // matched to the change it sits next to (a Student -> TA move must not claim
+  // it grants owner).
+  const confirmGrantsOwner = useMemo(
+    () => hasInstructorPromotion(roleChanges) || instructorEnrolls.length > 0,
+    [roleChanges, instructorEnrolls],
+  )
+  // The broad "any row is assigned instructor" signal — used only for the
+  // general pre-preflight notice above the table (a fresh instructor invite also
+  // grants owner, and that row isn't in the confirm box).
+  const anyInstructorAssigned = useMemo(
     () =>
-      hasInstructorPromotion(roleChanges) ||
-      instructorEnrolls.length > 0 ||
+      confirmGrantsOwner ||
       Object.values(rolesByUser).some((r) => r === "instructor"),
-    [roleChanges, instructorEnrolls, rolesByUser],
+    [confirmGrantsOwner, rolesByUser],
   )
   // The primary action is blocked while the preflight is resolving/failed, or
   // while role changes / instructor enrolls await explicit confirmation.
   const emailHasInstructor = emails.some(
     (e) => (emailRoles[e.toLowerCase()] ?? "student") === "instructor",
   )
+  // Once the preflight resolves, "process" is only meaningful when it will do
+  // something (send an invite, enroll onto a team, or change a role). An upload
+  // where every row is already correctly enrolled is all no-action, so the
+  // primary button is disabled — there's nothing to confirm.
+  const hasActionableWork =
+    (preflight?.needsInvite.length ?? 0) +
+      (preflight?.enroll.length ?? 0) +
+      (preflight?.roleChanges.length ?? 0) >
+    0
   const canProcess =
     uploadKind === "email-list"
       ? emails.length > 0 && (!emailHasInstructor || emailOwnerConfirmed)
       : rows.length > 0 &&
         !preflighting &&
         !preflightError &&
+        (!preflight || hasActionableWork) &&
         (!needsRoleConfirm || roleChangesConfirmed)
+
+  // The roster primary-button label reflects what processing will actually do:
+  //   - some rows need an org invite -> "Import & invite N members"
+  //   - everyone's already a member (no invites) -> a generic "Confirm changes",
+  //     since the recap already spells out the team moves being confirmed
+  //   - preflight not resolved yet -> a neutral "Import N members"
+  // "members" (not "students") because a batch can assign TA/instructor too.
+  const willSendInvites = (preflight?.needsInvite.length ?? 0) > 0
+  const rosterPrimaryLabel = willSendInvites
+    ? t("students.importAndInviteMembers", { count: rows.length })
+    : preflight
+      ? hasActionableWork
+        ? t("students.confirmChanges")
+        : t("students.noChangesToApply")
+      : t("students.importMembers", { count: rows.length })
 
   // Seed the preview state for a given kind from the raw text. Used both on
   // initial ingest (with the auto-detected kind) and when the teacher overrides
@@ -1014,7 +1058,7 @@ const UploadRoster = ({
                 )}
 
                 <div className="modal-action">
-                  <Button variant="ghost" onClick={handleClose}>
+                  <Button variant="ghost" onClick={resetToDropZone}>
                     {t("common.cancel")}
                   </Button>
                   <Button
@@ -1150,7 +1194,7 @@ const UploadRoster = ({
                         </li>
                       ))}
                     </ul>
-                    {showInstructorOwnerNotice ? (
+                    {confirmGrantsOwner ? (
                       <Alert tone="warning">
                         <span>
                           {t("students.preflightRoleChangeOwnerNotice")}
@@ -1179,7 +1223,7 @@ const UploadRoster = ({
 
             {/* Instructor-owner notice even before preflight resolves, whenever
                 any row is assigned the instructor role. */}
-            {!preflight && showInstructorOwnerNotice ? (
+            {!preflight && anyInstructorAssigned ? (
               <Alert tone="warning" className="mb-4">
                 <span>{t("students.uploadInstructorOwnerNotice")}</span>
               </Alert>
@@ -1275,7 +1319,7 @@ const UploadRoster = ({
             )}
 
             <div className="modal-action">
-              <Button variant="ghost" onClick={handleClose}>
+              <Button variant="ghost" onClick={resetToDropZone}>
                 {t("common.cancel")}
               </Button>
 
@@ -1284,7 +1328,7 @@ const UploadRoster = ({
                 disabled={!canProcess}
                 onClick={startImport}
               >
-                {t("students.importAndInviteCount", { count: rows.length })}
+                {rosterPrimaryLabel}
               </Button>
             </div>
           </div>
