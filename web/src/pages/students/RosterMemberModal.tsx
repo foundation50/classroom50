@@ -62,6 +62,7 @@ const RosterMemberModal = ({
   teamSlugByRole,
   row: rowProp,
   canManage = true,
+  isSelf = false,
   onClose,
   onSaved,
   onUnenrolled,
@@ -84,6 +85,11 @@ const RosterMemberModal = ({
   // hidden), so those actions are hidden with an explanatory note rather than
   // rendered as buttons that silently no-op.
   canManage?: boolean
+  // True when this row IS the signed-in viewer. A viewer can't change their own
+  // role here: demoting yourself off instructor would revoke your own org-owner
+  // access mid-change (the mutation refuses it too — this hides the control so
+  // there's no dead action). Mirrors the self-exclusion on bulk select/unenroll.
+  isSelf?: boolean
   onClose: () => void
   onSaved: (rowKey: string, updated: StudentCsvRow) => void
   onUnenrolled: (rowKey: string, teamWarning?: string) => void
@@ -206,12 +212,19 @@ const RosterMemberModal = ({
   // action. Hidden for a staff-only row (nothing to unenroll from the roster).
   const canUnenroll = canManage && !staffOnly
   // Per-member role change is offered for an ENROLLED (active-team) member with
-  // a resolvable username. The dropdown seeds from their primary current role;
-  // switching + confirming calls applyRosterRoleChange (which grants/revokes org
-  // owner for an instructor target/demotion).
+  // a resolvable username — but NOT for the viewer's own row: demoting yourself
+  // off instructor revokes your own org-owner access mid-change (the mutation
+  // refuses it), so the control is suppressed with a note rather than shown as a
+  // dead action. The dropdown seeds from their primary current role; switching +
+  // confirming calls applyRosterRoleChange (which grants/revokes org owner for
+  // an instructor target/demotion).
   const currentRole: RosterRole = sortRolesByRank(row.roles)[0] ?? "student"
   const canChangeRole =
-    canManage && row.state === "enrolled" && Boolean(row.username)
+    canManage && !isSelf && row.state === "enrolled" && Boolean(row.username)
+  // Show the "can't change your own role" note only when a role change would
+  // otherwise be offered (an enrolled self row a manager could act on).
+  const selfRoleBlocked =
+    canManage && isSelf && row.state === "enrolled" && Boolean(row.username)
   const selectedRole = pendingRole ?? currentRole
   const roleChanged = selectedRole !== currentRole
   const roleGrantsOwner = selectedRole === "instructor"
@@ -786,6 +799,12 @@ const RosterMemberModal = ({
                   </div>
                 ) : null}
               </div>
+            ) : null}
+
+            {selfRoleBlocked ? (
+              <p className="px-4 py-2.5 text-sm text-base-content/70">
+                {t("students.changeRoleSelfBlocked")}
+              </p>
             ) : null}
           </div>
         </section>

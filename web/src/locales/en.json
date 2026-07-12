@@ -297,6 +297,7 @@
     "assignRoleNoUsername": "{{label}} has no GitHub username on file — add one before assigning a role.",
     "roleLabel": "Role",
     "changeRoleApply": "Change role",
+    "changeRoleSelfBlocked": "You can't change your own role here — ask another organization owner to change it.",
     "changeRoleOwnerNotice": "Instructor grants organization OWNER (full control of the organization). Only confirm for people you trust with owner access.",
     "changeRoleNoUsername": "{{label}} has no GitHub username on file — can't change their role.",
     "changeRoleFailed": "Couldn't change {{label}}'s role: {{error}}",
