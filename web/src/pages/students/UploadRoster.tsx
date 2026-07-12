@@ -33,6 +33,16 @@ import {
   type UploadKind,
 } from "@/pages/students/uploadClassify"
 import { parseEmailInviteFile } from "@/pages/students/emailInvite"
+import {
+  DetectedFormatSelect,
+  EmailInvitePreview,
+  EmailInviteResult,
+} from "@/pages/students/EmailInviteFlow"
+import {
+  OPTIONAL_IMPORT_HEADERS,
+  RECOGNIZED_IMPORT_HEADERS,
+  type OptionalImportHeader,
+} from "@/pages/students/rosterImportHeaders"
 
 const log = logger.scope("students:UploadRoster")
 
@@ -71,15 +81,21 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
 
   if (hasUsernameColumn) {
     for (const raw of parsed.data) {
-      // Support either split first/last name columns or a single "name".
+      // Read the optional columns generically from the shared header list so
+      // the parser can't drift from what the diagnostic advertises. Two columns
+      // get special handling on top of the generic read: `name` is an alias
+      // that fills first/last when those split columns are ABSENT (not merely
+      // empty), and `role` is coerced through the known-role guard.
+      const cell = (header: OptionalImportHeader): string =>
+        (raw[header] ?? "").trim()
       const fromName = splitName(raw.name ?? null)
       push({
         username: raw.username ?? "",
         first_name: (raw.first_name ?? fromName.first_name).trim(),
         last_name: (raw.last_name ?? fromName.last_name).trim(),
-        email: (raw.email ?? "").trim(),
-        section: (raw.section ?? "").trim(),
-        role: coerceImportRole(raw.role),
+        email: cell("email"),
+        section: cell("section"),
+        role: coerceImportRole(cell("role")),
       })
     }
   } else {
@@ -90,30 +106,6 @@ export const parseRosterImportFile = (text: string): ImportRosterRow[] => {
 
   return rows
 }
-
-// Optional roster columns the import reads when a `username` column is present
-// (case-insensitive). `name` is an alias split into first/last. NOTE: a
-// `github_id` column in the file is intentionally ignored (re-derived from
-// GitHub), so it is NOT advertised here. Kept in sync with the header path of
-// parseRosterImportFile above.
-const OPTIONAL_IMPORT_HEADERS = [
-  "first_name",
-  "last_name",
-  "name",
-  "email",
-  "section",
-  "role",
-] as const
-
-// Header tokens that mark the first line as a real header row (vs. a bare
-// username list). Includes `username` and the ignored-but-recognized `github_id`
-// so a file whose only column is `github_id` is diagnosed as a mis-headered CSV
-// rather than treated as a list of usernames.
-const RECOGNIZED_IMPORT_HEADERS = [
-  "username",
-  "github_id",
-  ...OPTIONAL_IMPORT_HEADERS,
-] as const
 
 // Why an uploaded file yielded no importable rows, when the cause is the file's
 // SHAPE rather than just invalid handles. `null` means "no structural problem" —
@@ -351,11 +343,17 @@ const UploadRoster = ({
   // always passes it). Fall back to phase-driven only if used uncontrolled.
   const isOpen = open ?? phase !== "idle"
 
+  // A stale-response token for the async file ingest (see ingestFile). Bumped
+  // here so a reset/close cancels an in-flight file.text() read before its
+  // writes can land on a cleared modal.
+  const ingestToken = useRef(0)
+
   // Clear the file/preview state and return to the drop-zone (idle) screen —
   // WITHOUT closing the modal. Used when the user cancels/dismisses the preview:
   // they land back on the drop zone to pick a different file, and there's no
   // close-then-reopen flash.
   const resetToDropZone = () => {
+    ingestToken.current += 1
     setPhase("idle")
     setFileName("")
     setFileText("")
@@ -559,9 +557,15 @@ const UploadRoster = ({
 
   // Read + classify a chosen/dropped file, seed the auto-detected kind, and show
   // the preview (where the teacher can override the kind before processing).
+  // A stale-response token guards the post-await writes (mirroring
+  // preflightToken): a close (resetToDropZone via the open->false effect) or a
+  // second file dropped while file.text() is in flight bumps the token, so the
+  // superseded read bails instead of re-populating a closed/replaced modal.
   const ingestFile = async (file: File) => {
+    const token = ++ingestToken.current
     try {
       const text = await file.text()
+      if (ingestToken.current !== token) return
       setFileName(file.name)
       setFileText(text)
       applyKind(text, classifyUploadFile(text))
@@ -573,6 +577,7 @@ const UploadRoster = ({
       setProgress({ processed: 0, total: 0, message: "" })
       setPhase("preview")
     } catch (err) {
+      if (ingestToken.current !== token) return
       log.warn("upload file read/parse failed", { err, record: true })
       setError(
         err instanceof Error ? err.message : t("students.couldNotReadFile"),
@@ -938,168 +943,38 @@ const UploadRoster = ({
           </div>
         )}
 
-        {phase === "preview" && uploadKind === "email-list" && (
+        {phase === "preview" && (
           <div className="mt-6">
-            {/* Detected format + override: the file was auto-classified; the
-                teacher can switch if the guess is wrong before processing. */}
-            <div className="mb-4 flex flex-col gap-1 rounded-box border border-base-300 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-base-content/70">
-                {t("students.detectedFormat")}
-              </span>
-              <Select
-                selectSize="sm"
-                className="w-full sm:w-64"
-                aria-label={t("students.detectedFormat")}
-                value={uploadKind}
-                onChange={(e) =>
-                  applyKind(fileText, e.currentTarget.value as UploadKind)
-                }
-              >
-                <option value="roster-csv">
-                  {t("students.uploadKindRosterCsv")}
-                </option>
-                <option value="username-list">
-                  {t("students.uploadKindUsernameList")}
-                </option>
-                <option value="email-list">
-                  {t("students.uploadKindEmailList")}
-                </option>
-              </Select>
-            </div>
+            {/* Detected format + override, rendered once above the branch
+                split: the file was auto-classified; the teacher can switch if
+                the guess is wrong before processing. The roster-CSV / username
+                body renders in the block below (it carries the preflight). */}
+            <DetectedFormatSelect
+              value={uploadKind}
+              onChange={(kind) => applyKind(fileText, kind)}
+            />
 
             {uploadKind === "email-list" ? (
-              <>
-                <Alert tone="info" className="mb-2">
-                  <span>
-                    {t("students.emailsFound", { count: emails.length })}
-                  </span>
-                </Alert>
-                <Alert tone="info" className="mb-4">
-                  <span>{t("students.emailInviteNoRosterNotice")}</span>
-                </Alert>
-
-                {emails.length > 0 ? (
-                  <>
-                    <div className="max-h-80 overflow-auto rounded-box border border-base-300">
-                      <table className="table table-sm">
-                        <thead>
-                          <tr>
-                            <th scope="col">#</th>
-                            <th scope="col">{t("students.emailColumn")}</th>
-                            <th scope="col">{t("students.roleColumn")}</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {emails.map((email, index) => {
-                            const key = email.toLowerCase()
-                            return (
-                              <tr key={key}>
-                                <td>{index + 1}</td>
-                                <td>
-                                  <code>{email}</code>
-                                </td>
-                                <td>
-                                  <Select
-                                    selectSize="xs"
-                                    className="w-32"
-                                    aria-label={t("students.assignRoleLabel")}
-                                    value={emailRoles[key] ?? "student"}
-                                    onChange={(e) => {
-                                      const role =
-                                        coerceImportRole(e.target.value) ??
-                                        "student"
-                                      setEmailRoles((prev) => ({
-                                        ...prev,
-                                        [key]: role,
-                                      }))
-                                    }}
-                                  >
-                                    <option value="student">
-                                      {t("students.roleStudent")}
-                                    </option>
-                                    <option value="ta">
-                                      {t("students.roleTa")}
-                                    </option>
-                                    <option value="instructor">
-                                      {t("students.roleInstructor")}
-                                    </option>
-                                  </Select>
-                                </td>
-                              </tr>
-                            )
-                          })}
-                        </tbody>
-                      </table>
-                    </div>
-
-                    {emailHasInstructor ? (
-                      <div className="mt-3 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
-                        <Alert tone="warning">
-                          <span>
-                            {t("students.uploadInstructorOwnerNotice")}
-                          </span>
-                        </Alert>
-                        <label className="flex items-start gap-2 text-sm">
-                          <input
-                            type="checkbox"
-                            className="checkbox checkbox-sm mt-0.5"
-                            checked={emailOwnerConfirmed}
-                            onChange={(e) =>
-                              setEmailOwnerConfirmed(e.currentTarget.checked)
-                            }
-                          />
-                          <span>{t("students.emailInviteConfirmOwner")}</span>
-                        </label>
-                      </div>
-                    ) : null}
-                  </>
-                ) : (
-                  <Alert tone="warning">{t("students.noValidEmails")}</Alert>
-                )}
-
-                <div className="modal-action">
-                  <Button variant="ghost" onClick={resetToDropZone}>
-                    {t("common.cancel")}
-                  </Button>
-                  <Button
-                    variant="primary"
-                    disabled={!canProcess}
-                    onClick={startImport}
-                  >
-                    {t("students.sendInviteCount", { count: emails.length })}
-                  </Button>
-                </div>
-              </>
+              <EmailInvitePreview
+                emails={emails}
+                emailRoles={emailRoles}
+                emailOwnerConfirmed={emailOwnerConfirmed}
+                emailHasInstructor={emailHasInstructor}
+                canProcess={canProcess}
+                onRoleChange={(key, rawValue) => {
+                  const role = coerceImportRole(rawValue) ?? "student"
+                  setEmailRoles((prev) => ({ ...prev, [key]: role }))
+                }}
+                onOwnerConfirmedChange={setEmailOwnerConfirmed}
+                onCancel={resetToDropZone}
+                onSend={startImport}
+              />
             ) : null}
           </div>
         )}
 
         {phase === "preview" && uploadKind !== "email-list" && (
-          <div className="mt-6">
-            <div className="mb-4 flex flex-col gap-1 rounded-box border border-base-300 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
-              <span className="text-sm text-base-content/70">
-                {t("students.detectedFormat")}
-              </span>
-              <Select
-                selectSize="sm"
-                className="w-full sm:w-64"
-                aria-label={t("students.detectedFormat")}
-                value={uploadKind}
-                onChange={(e) =>
-                  applyKind(fileText, e.currentTarget.value as UploadKind)
-                }
-              >
-                <option value="roster-csv">
-                  {t("students.uploadKindRosterCsv")}
-                </option>
-                <option value="username-list">
-                  {t("students.uploadKindUsernameList")}
-                </option>
-                <option value="email-list">
-                  {t("students.uploadKindEmailList")}
-                </option>
-              </Select>
-            </div>
+          <div>
             <Alert tone="info" className="mb-4">
               <span>
                 {t("students.usernamesFound", { count: rows.length })}
@@ -1363,62 +1238,11 @@ const UploadRoster = ({
         )}
 
         {phase === "complete" && emailResult && (
-          <div className="mt-6 space-y-4">
-            <Alert tone="success">
-              <span>
-                {t("students.emailInvitedCount", {
-                  count: emailResult.invited.length,
-                })}
-              </span>
-            </Alert>
-
-            {emailResult.invited.length > 0 && (
-              <ImportResultSection
-                title={t("students.resultInvited")}
-                rows={emailResult.invited.map(({ email, role }) => ({
-                  key: email,
-                  label: email,
-                  detail: t(ROLE_LABEL_KEY[role]),
-                }))}
-              />
-            )}
-            {emailResult.skipped.length > 0 && (
-              <ImportResultSection
-                title={t("students.resultSkipped")}
-                rows={emailResult.skipped.map(({ email }) => ({
-                  key: email,
-                  label: email,
-                  detail: t("students.emailInviteSkippedDetail"),
-                }))}
-              />
-            )}
-            {emailResult.deferred.length > 0 && (
-              <ImportResultSection
-                title={t("students.resultInvitesDeferred")}
-                rows={emailResult.deferred.map((email) => ({
-                  key: email,
-                  label: email,
-                  detail: t("students.inviteDeferredDetail"),
-                }))}
-              />
-            )}
-            {emailResult.failed.length > 0 && (
-              <ImportResultSection
-                title={t("students.resultInvitesFailed")}
-                rows={emailResult.failed.map((f) => ({
-                  key: f.email,
-                  label: f.email,
-                  detail: f.message,
-                }))}
-              />
-            )}
-
-            <div className="modal-action">
-              <Button variant="primary" onClick={handleClose}>
-                {t("students.done")}
-              </Button>
-            </div>
-          </div>
+          <EmailInviteResult
+            result={emailResult}
+            onDone={handleClose}
+            renderSection={(props) => <ImportResultSection {...props} />}
+          />
         )}
 
         {phase === "complete" && result && (

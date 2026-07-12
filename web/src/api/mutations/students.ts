@@ -1440,7 +1440,12 @@ export type BulkInviteByEmailResult = {
   // A fresh org email invite was created (carrying the role's team).
   invited: { email: string; role: RosterRole }[]
   // GitHub returned 422 — the email already belongs to a member or already has
-  // a pending invite, so no new invite was sent.
+  // a pending invite, so no new invite was sent. Unlike inviteRosterStudents'
+  // skipped bucket ({ username; reason: "already-member" | "already-pending" }),
+  // this deliberately carries no `reason`: a 422 on an EMAIL invite can't
+  // disambiguate already-member from already-pending, so there's no honest
+  // reason to report (the UI shows one static "already a member or invited"
+  // detail). Widen to a reason literal only if that distinction ever surfaces.
   skipped: { email: string }[]
   // The invite call failed for a non-rate-limit reason.
   failed: { email: string; message: string }[]

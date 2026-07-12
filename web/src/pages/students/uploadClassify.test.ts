@@ -48,6 +48,12 @@ describe("classifyUploadFile", () => {
     )
   })
 
+  it("treats an exactly-half email/username tie as email-list", () => {
+    // 1 email + 1 username: emailCount (1) >= ceil(2/2) (1) -> email-list. Pins
+    // the ceil rounding so an off-by-one drift to `>`/`floor` would fail here.
+    expect(classifyUploadFile("ada@x.io\noctocat\n")).toBe("email-list")
+  })
+
   it("does not misread a username header CSV whose rows contain emails", () => {
     // The header row wins: this is a structured roster CSV, not an email list.
     expect(classifyUploadFile("username,email\nada,ada@x.io\n")).toBe(

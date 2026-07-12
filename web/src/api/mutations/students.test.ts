@@ -597,10 +597,18 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       },
     })
 
-  // Records every invite body and whether any git tree write happened, and can
-  // 422 a specific email (already-member) so skip/failed routing is testable.
-  const makeClient = (opts?: { memberEmails?: string[]; noTeam?: boolean }) => {
+  // Records every invite body and whether any git tree write happened. Can 422
+  // a specific email (already-member), reject one with a 429 (rate limit), or
+  // reject one with a generic 500 (failed) so every result bucket is testable.
+  const makeClient = (opts?: {
+    memberEmails?: string[]
+    noTeam?: boolean
+    rateLimitEmails?: string[]
+    failEmails?: string[]
+  }) => {
     const memberEmails = new Set(opts?.memberEmails ?? [])
+    const rateLimitEmails = new Set(opts?.rateLimitEmails ?? [])
+    const failEmails = new Set(opts?.failEmails ?? [])
     const state = {
       csvWritten: false,
       inviteBodies: [] as {
@@ -648,6 +656,12 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
             }
             if (memberEmails.has(body.email)) {
               return Promise.reject(apiError(422, "already a member"))
+            }
+            if (rateLimitEmails.has(body.email)) {
+              return Promise.reject(apiError(429, "rate limited"))
+            }
+            if (failEmails.has(body.email)) {
+              return Promise.reject(apiError(500, "server error"))
             }
             state.inviteBodies.push(body)
             return Promise.resolve({})
@@ -743,6 +757,96 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
 
     expect(state.inviteBodies).toEqual([])
     expect(state.csvWritten).toBe(false)
+  })
+
+  it("routes a non-422, non-rate-limit error into failed (not skipped)", async () => {
+    // A 500 (or any non-422/non-throttle error) must land in `failed` with its
+    // message surfaced, while the rest of the batch still invites.
+    const { client } = makeClient({ failEmails: ["broken@x.edu"] })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [{ email: "broken@x.edu" }, { email: "ok@x.edu" }],
+    })
+
+    expect(result.failed).toHaveLength(1)
+    expect(result.failed[0].email).toBe("broken@x.edu")
+    expect(result.failed[0].message).toMatch(/server error/i)
+    expect(result.invited.map((i) => i.email)).toEqual(["ok@x.edu"])
+    expect(result.skipped).toEqual([])
+    expect(result.deferred).toEqual([])
+  })
+
+  it("defers the rest once a mid-batch rate limit hits, sending no new invites", async () => {
+    // More targets than REPO_READ_CONCURRENCY (=8): once the throttled invite
+    // sets the rateLimited flag, every not-yet-started target short-circuits to
+    // `deferred` (never `failed`), and no invite body is recorded for them.
+    const total = 20
+    const targets = Array.from({ length: total }, (_, i) => ({
+      email: `u${i}@x.edu`,
+    }))
+    // Throttle the very first target so the flag flips as early as possible.
+    const { client, state } = makeClient({ rateLimitEmails: ["u0@x.edu"] })
+
+    const result = await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: targets,
+    })
+
+    // The throttled email is deferred; nothing is misrouted to `failed`.
+    expect(result.deferred).toContain("u0@x.edu")
+    expect(result.failed).toEqual([])
+    // Every target is accounted for exactly once across the buckets.
+    expect(
+      result.invited.length +
+        result.skipped.length +
+        result.failed.length +
+        result.deferred.length,
+    ).toBe(total)
+    // The short-circuit actually fired: with the flag set early, most targets
+    // are deferred rather than sent (bounded by the concurrency window that was
+    // already in flight when the flag flipped).
+    expect(result.deferred.length).toBeGreaterThan(total / 2)
+    // No invite was sent for a deferred email.
+    const sentEmails = new Set(state.inviteBodies.map((b) => b.email))
+    for (const email of result.deferred) {
+      expect(sentEmails.has(email)).toBe(false)
+    }
+  })
+
+  it("maps a mixed-role batch to the right team and org role per email", async () => {
+    // student/ta -> plain member on their team; instructor -> org OWNER (admin).
+    // Asserts role AND team_ids together so a role/team cross-wiring is caught.
+    const { client, state } = makeClient()
+
+    await bulkInviteByEmail(client, {
+      org: "acme",
+      classroom: "cs101",
+      invites: [
+        { email: "stu@x.edu", role: "student" },
+        { email: "ta@x.edu", role: "ta" },
+        { email: "prof@x.edu", role: "instructor" },
+      ],
+    })
+
+    const byEmail = new Map(state.inviteBodies.map((b) => [b.email, b]))
+    // Student rides the classroom team (id 4242) as a plain member.
+    expect(byEmail.get("stu@x.edu")).toMatchObject({
+      role: "direct_member",
+      team_ids: [4242],
+    })
+    // TA rides the ensured staff team (id 5000) as a plain member.
+    expect(byEmail.get("ta@x.edu")).toMatchObject({
+      role: "direct_member",
+      team_ids: [5000],
+    })
+    // Instructor becomes an org OWNER on the ensured staff team.
+    expect(byEmail.get("prof@x.edu")).toMatchObject({
+      role: "admin",
+      team_ids: [5000],
+    })
   })
 })
 

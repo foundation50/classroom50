@@ -1,8 +1,5 @@
 import { isValidEmail } from "@/util/orgMembership"
-import {
-  isLikelyGithubUsername,
-  normalizeGithubUsername,
-} from "@/api/mutations/students"
+import { RECOGNIZED_IMPORT_HEADERS } from "@/pages/students/rosterImportHeaders"
 
 // Which of the three supported upload formats a file is. Drives the unified
 // upload modal's routing (and the auto-detected default the teacher can
@@ -13,19 +10,9 @@ import {
 //   - email-list:     one email address per line -> email invitations
 export type UploadKind = "roster-csv" | "username-list" | "email-list"
 
-// Roster header tokens that mark the first line as a CSV header row rather than
-// a bare one-per-line list. Mirrors RECOGNIZED_IMPORT_HEADERS in UploadRoster
-// (kept local so the classifier is a leaf with no heavy import).
-const HEADER_TOKENS = new Set([
-  "username",
-  "github_id",
-  "first_name",
-  "last_name",
-  "name",
-  "email",
-  "section",
-  "role",
-])
+// One source: the same header vocabulary the parser and the header-issue
+// diagnostic use, so classification can't drift from them.
+const HEADER_TOKENS = new Set<string>(RECOGNIZED_IMPORT_HEADERS)
 
 const nonEmptyLines = (text: string): string[] =>
   text
@@ -79,10 +66,3 @@ export const classifyUploadFile = (text: string): UploadKind => {
   // majority-email check above already caught the email case), so username-list.
   return "username-list"
 }
-
-// True when the file has at least one line that parses as a plausible username
-// (used by the modal to warn when a chosen kind won't yield anything).
-export const hasLikelyUsername = (text: string): boolean =>
-  nonEmptyLines(text).some((l) =>
-    isLikelyGithubUsername(normalizeGithubUsername(l)),
-  )
