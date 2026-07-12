@@ -153,6 +153,24 @@ const RosterMemberModal = ({
   useEffect(() => {
     if (rowProp) setLastRow(rowProp)
   }, [rowProp])
+
+  // Reset per-row draft state when the modal's row identity changes without an
+  // intervening close (parent re-points the selection, or a refetch re-resolves
+  // the same key to shifted data). Done during render (not an effect) so a
+  // staged role change — and its owner-grant confirmation, the sole guard
+  // before granting org OWNER — can never carry onto the next member and apply
+  // against a base role the teacher never re-evaluated.
+  const [draftRowKey, setDraftRowKey] = useState<string | null>(
+    rowProp?.key ?? null,
+  )
+  if (rowProp && rowProp.key !== draftRowKey) {
+    setDraftRowKey(rowProp.key)
+    setPendingRole(null)
+    setRoleOwnerConfirmed(false)
+    setConfirmingResend(false)
+    setConfirmingCancel(false)
+  }
+
   const row = rowProp ?? lastRow
 
   if (!row) {

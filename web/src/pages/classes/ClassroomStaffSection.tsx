@@ -35,7 +35,7 @@ import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 import type { GitHubClient } from "@/hooks/github/client"
 import type { QueryClient } from "@tanstack/react-query"
 import { logger } from "@/lib/logger"
-import { Button, Card, FormField, Input, Select } from "@/components/ui"
+import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 
 // i18n key for each role's singular label. A map (not inline t()) so it works in
 // module scope; components translate via t(ROLE_LABEL_KEY[role]).
@@ -578,9 +578,9 @@ const PendingStaffRow = ({
         <span className="truncate">
           {invite.login ? `@${invite.login}` : invite.email}
         </span>
-        <span className="badge badge-xs badge-ghost shrink-0">
+        <Badge size="xs" ghost className="shrink-0">
           {t("classes.staff.pendingBadge")}
-        </span>
+        </Badge>
       </span>
       <div className="flex shrink-0 items-center gap-1">
         {invite.login ? (
