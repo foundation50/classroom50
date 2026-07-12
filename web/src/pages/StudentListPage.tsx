@@ -7,7 +7,6 @@ import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import EnrolledStudents from "@/pages/students/EnrolledStudents"
 import UploadRoster from "@/pages/students/UploadRoster"
-import EmailInviteModal from "@/pages/students/EmailInviteModal"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useParams } from "@tanstack/react-router"
@@ -50,7 +49,6 @@ const StudentListContent = ({
   // Which add-students affordance is open (all mutually exclusive modals).
   const [addOpen, setAddOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
-  const [emailInviteOpen, setEmailInviteOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
 
   // Counts from the team roster (same source as EnrolledStudents), so header
@@ -134,7 +132,6 @@ const StudentListContent = ({
         addActions={{
           onAddStudent: () => setAddOpen(true),
           onUploadRoster: () => setUploadOpen(true),
-          onInviteByEmail: () => setEmailInviteOpen(true),
           onInviteLinks: () => setInviteOpen(true),
         }}
       />
@@ -167,14 +164,7 @@ const StudentListContent = ({
           }
           invalidateInviteQueries(queryClient, org)
         }}
-      />
-      <EmailInviteModal
-        org={org}
-        classroom={classroom}
-        client={client}
-        open={emailInviteOpen}
-        onOpenChange={setEmailInviteOpen}
-        onSuccess={() => {
+        onEmailSuccess={() => {
           // Email invites write no roster.csv row; they surface as `pending`
           // rows via the org pending-invitations list, so refresh those + the
           // team roster to show them at once.

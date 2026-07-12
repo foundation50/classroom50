@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { Upload } from "lucide-react"
 
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
@@ -7,6 +8,7 @@ import type { GitHubClient } from "@/hooks/github/client"
 import { Alert, Button, Modal, Select, Spinner } from "@/components/ui"
 import {
   applyRosterRoleChange,
+  bulkInviteByEmail,
   inviteRosterStudents,
   isLikelyGithubUsername,
   NoNewStudentsError,
@@ -16,6 +18,7 @@ import {
   splitName,
   writeRosterRoles,
   type BulkImportResult,
+  type BulkInviteByEmailResult,
   type ImportRosterRow,
 } from "@/api/mutations/students"
 import {
@@ -25,6 +28,11 @@ import {
 import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
 import { logger } from "@/lib/logger"
 import type { RosterRole } from "@/util/teamRoster"
+import {
+  classifyUploadFile,
+  type UploadKind,
+} from "@/pages/students/uploadClassify"
+import { parseEmailInviteFile } from "@/pages/students/emailInvite"
 
 const log = logger.scope("students:UploadRoster")
 
@@ -218,8 +226,12 @@ type UploadRosterProps = {
   classroom: string
   client: GitHubClient
   onSuccess?: (result: BulkImportResult) => void
-  // When true, immediately prompt for a file (header-icon entry point). The
-  // component has no visible trigger of its own in this mode.
+  // Fired after a successful email-invite batch (uploadKind === "email-list").
+  // Separate from onSuccess because email invites write no roster.csv row — the
+  // parent refreshes the pending-invite + team caches rather than the roster.
+  onEmailSuccess?: (result: BulkInviteByEmailResult) => void
+  // When true, render the modal (idle -> drop zone). The drop zone / Choose File
+  // button drives file selection from there.
   open?: boolean
   onOpenChange?: (open: boolean) => void
 }
@@ -268,6 +280,7 @@ const UploadRoster = ({
   classroom,
   client,
   onSuccess,
+  onEmailSuccess,
   open,
   onOpenChange,
 }: UploadRosterProps) => {
@@ -277,7 +290,19 @@ const UploadRoster = ({
 
   const [phase, setPhase] = useState<ImportPhase>("idle")
   const [fileName, setFileName] = useState("")
+  // The raw uploaded text, kept so switching the detected kind re-parses without
+  // re-reading the file, and the auto-detected/overridable format.
+  const [fileText, setFileText] = useState("")
+  const [uploadKind, setUploadKind] = useState<UploadKind>("username-list")
   const [rows, setRows] = useState<ImportRosterRow[]>([])
+  // Email-invite branch (uploadKind === "email-list"): parsed addresses, the
+  // per-address role, the org-owner confirmation, and the send result. Kept
+  // separate from the roster rows so the two flows don't entangle.
+  const [emails, setEmails] = useState<string[]>([])
+  const [emailRoles, setEmailRoles] = useState<Record<string, RosterRole>>({})
+  const [emailOwnerConfirmed, setEmailOwnerConfirmed] = useState(false)
+  const [emailResult, setEmailResult] =
+    useState<BulkInviteByEmailResult | null>(null)
   // Why an empty parse produced no rows, when the cause is the file's shape (no
   // `username` header, or malformed CSV) rather than merely invalid handles.
   // Lets the preview explain the required columns instead of a generic "no
@@ -322,13 +347,22 @@ const UploadRoster = ({
     failed: { username: string; message: string }[]
   } | null>(null)
 
-  const isOpen = phase !== "idle"
+  // The modal is shown while an external `open` is set (idle -> drop zone) or
+  // once a file has advanced us past idle. Two drivers, so the drop-zone idle
+  // screen is visible before a file is chosen.
+  const isOpen = open || phase !== "idle"
 
   const reset = () => {
     setPhase("idle")
     setFileName("")
+    setFileText("")
+    setUploadKind("username-list")
     setRows([])
     setHeaderIssue(null)
+    setEmails([])
+    setEmailRoles({})
+    setEmailOwnerConfirmed(false)
+    setEmailResult(null)
     setProgress({
       processed: 0,
       total: 0,
@@ -350,18 +384,13 @@ const UploadRoster = ({
     }
   }
 
-  // Header-icon entry point: when opened externally and idle, prompt for a file
-  // right away (there's no visible trigger card in this mode). Edge-triggered —
-  // we fire the native picker and immediately clear `open`, since the dialog's
-  // own phase state drives everything from here.
-  const prevOpenRef = useRef(false)
-  useEffect(() => {
-    if (open && !prevOpenRef.current && phase === "idle") {
-      fileInputRef.current?.click()
-      onOpenChange?.(false)
-    }
-    prevOpenRef.current = Boolean(open)
-  }, [open, phase, onOpenChange])
+  // The modal now shows a drop-zone idle screen (no auto-firing the OS picker),
+  // so `open` just needs to render the dialog — the drop zone / Choose File
+  // button drives file selection from there.
+  const handleClose = () => {
+    reset()
+    onOpenChange?.(false)
+  }
 
   // Preflight the parsed rows against current GitHub membership whenever we're
   // in the preview and the rows or their assigned roles change (a role edit can
@@ -435,25 +464,36 @@ const UploadRoster = ({
   )
   // The primary action is blocked while the preflight is resolving/failed, or
   // while role changes / instructor enrolls await explicit confirmation.
+  const emailHasInstructor = emails.some(
+    (e) => (emailRoles[e.toLowerCase()] ?? "student") === "instructor",
+  )
   const canProcess =
-    rows.length > 0 &&
-    !preflighting &&
-    !preflightError &&
-    (!needsRoleConfirm || roleChangesConfirmed)
+    uploadKind === "email-list"
+      ? emails.length > 0 && (!emailHasInstructor || emailOwnerConfirmed)
+      : rows.length > 0 &&
+        !preflighting &&
+        !preflightError &&
+        (!needsRoleConfirm || roleChangesConfirmed)
 
-  const handleFileChange = async (
-    event: React.ChangeEvent<HTMLInputElement>,
-  ) => {
-    const input = event.currentTarget
-    const file = input.files?.[0]
-
-    if (!file) return
-
-    try {
-      const text = await file.text()
+  // Seed the preview state for a given kind from the raw text. Used both on
+  // initial ingest (with the auto-detected kind) and when the teacher overrides
+  // the detected kind in the preview — re-parsing the same text, no re-read.
+  const applyKind = (text: string, kind: UploadKind) => {
+    setUploadKind(kind)
+    if (kind === "email-list") {
+      const parsed = parseEmailInviteFile(text)
+      setEmails(parsed.map((r) => r.email))
+      setEmailRoles(
+        Object.fromEntries(
+          parsed.map((r) => [r.email.toLowerCase(), "student"]),
+        ),
+      )
+      setEmailOwnerConfirmed(false)
+      // Clear roster-side state so a switch back and forth can't leave stale rows.
+      setRows([])
+      setHeaderIssue(null)
+    } else {
       const parsedRows = parseRosterImportFile(text)
-
-      setFileName(file.name)
       setRows(parsedRows)
       // Only diagnose the file shape when nothing parsed — a non-empty result
       // means the header path worked, so the (rare) header issue is moot.
@@ -469,23 +509,52 @@ const UploadRoster = ({
           ]),
         ),
       )
+      setEmails([])
+    }
+  }
+
+  // Read + classify a chosen/dropped file, seed the auto-detected kind, and show
+  // the preview (where the teacher can override the kind before processing).
+  const ingestFile = async (file: File) => {
+    try {
+      const text = await file.text()
+      setFileName(file.name)
+      setFileText(text)
+      applyKind(text, classifyUploadFile(text))
       setResult(null)
+      setEmailResult(null)
+      setInviteOutcome(null)
+      setInviteError(null)
       setError(null)
-      setProgress({
-        processed: 0,
-        total: parsedRows.length,
-        message: "",
-      })
+      setProgress({ processed: 0, total: 0, message: "" })
       setPhase("preview")
     } catch (err) {
-      log.warn("roster file read/parse failed", { err, record: true })
+      log.warn("upload file read/parse failed", { err, record: true })
       setError(
         err instanceof Error ? err.message : t("students.couldNotReadFile"),
       )
       setPhase("error")
-    } finally {
-      input.value = ""
     }
+  }
+
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const input = event.currentTarget
+    const file = input.files?.[0]
+    if (!file) {
+      return
+    }
+    await ingestFile(file)
+    input.value = ""
+  }
+
+  const [dragActive, setDragActive] = useState(false)
+  const handleDrop = async (event: React.DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setDragActive(false)
+    const file = event.dataTransfer.files?.[0]
+    if (file) await ingestFile(file)
   }
 
   const startImport = async () => {
@@ -493,6 +562,42 @@ const UploadRoster = ({
     // button out of the preview phase) would otherwise fire two concurrent
     // imports racing the same roster.csv read-modify-write.
     if (phase === "importing") return
+
+    // Email-list branch: send org invitations by email (no roster.csv write),
+    // then land on the same result screen. Kept before the roster pass so the
+    // two flows never both run.
+    if (uploadKind === "email-list") {
+      setPhase("importing")
+      setError(null)
+      setEmailResult(null)
+      setProgress({
+        processed: 0,
+        total: emails.length,
+        message: t("students.startingImport"),
+      })
+      try {
+        const res = await bulkInviteByEmail(client, {
+          org,
+          classroom,
+          invites: emails.map((email) => ({
+            email,
+            role: emailRoles[email.toLowerCase()] ?? "student",
+          })),
+          onProgress: setProgress,
+        })
+        setEmailResult(res)
+        setPhase("complete")
+        onEmailSuccess?.(res)
+      } catch (err) {
+        log.error("bulk email invite failed", { err, record: true })
+        setError(
+          err instanceof Error ? err.message : t("students.importFailed"),
+        )
+        setPhase("error")
+      }
+      return
+    }
+
     setPhase("importing")
     setError(null)
     setResult(null)
@@ -729,7 +834,7 @@ const UploadRoster = ({
 
       <Modal
         open={isOpen}
-        onClose={reset}
+        onClose={handleClose}
         closeDisabled={phase === "importing"}
         size="3xl"
         aria-labelledby={titleId}
@@ -737,7 +842,7 @@ const UploadRoster = ({
         <div className="flex items-start justify-between gap-4">
           <div>
             <h3 id={titleId} className="text-lg font-bold">
-              {t("students.importStudentsTitle")}
+              {t("students.uploadTitle")}
             </h3>
             {fileName && (
               <p className="text-sm opacity-70 mt-1">
@@ -747,8 +852,210 @@ const UploadRoster = ({
           </div>
         </div>
 
-        {phase === "preview" && (
+        {phase === "idle" && (
           <div className="mt-6">
+            {/* Drop zone + click-to-pick. One entry for all three formats; the
+                file is auto-classified on receipt and shown in the preview with
+                an override. */}
+            <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault()
+                  fileInputRef.current?.click()
+                }
+              }}
+              onDragOver={(e) => {
+                e.preventDefault()
+                setDragActive(true)
+              }}
+              onDragLeave={() => setDragActive(false)}
+              onDrop={handleDrop}
+              className={`flex cursor-pointer flex-col items-center justify-center gap-2 rounded-box border-2 border-dashed px-6 py-10 text-center transition-colors ${
+                dragActive
+                  ? "border-primary bg-primary/5"
+                  : "border-base-300 hover:border-primary/50 hover:bg-base-200"
+              }`}
+            >
+              <Upload aria-hidden="true" className="size-8 opacity-50" />
+              <p className="font-medium">{t("students.uploadDropPrompt")}</p>
+              <p className="text-sm opacity-70">
+                {t("students.uploadHintAll")}
+              </p>
+              <Button variant="primary" size="sm" className="mt-2">
+                {t("students.chooseFile")}
+              </Button>
+            </div>
+            <p className="mt-3 text-center text-xs opacity-60">
+              {t("students.supportedFormats")}
+            </p>
+          </div>
+        )}
+
+        {phase === "preview" && uploadKind === "email-list" && (
+          <div className="mt-6">
+            {/* Detected format + override: the file was auto-classified; the
+                teacher can switch if the guess is wrong before processing. */}
+            <div className="mb-4 flex flex-col gap-1 rounded-box border border-base-300 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-base-content/70">
+                {t("students.detectedFormat")}
+              </span>
+              <Select
+                selectSize="sm"
+                className="w-full sm:w-64"
+                aria-label={t("students.detectedFormat")}
+                value={uploadKind}
+                onChange={(e) =>
+                  applyKind(fileText, e.currentTarget.value as UploadKind)
+                }
+              >
+                <option value="roster-csv">
+                  {t("students.uploadKindRosterCsv")}
+                </option>
+                <option value="username-list">
+                  {t("students.uploadKindUsernameList")}
+                </option>
+                <option value="email-list">
+                  {t("students.uploadKindEmailList")}
+                </option>
+              </Select>
+            </div>
+
+            {uploadKind === "email-list" ? (
+              <>
+                <Alert tone="info" className="mb-2">
+                  <span>
+                    {t("students.emailsFound", { count: emails.length })}
+                  </span>
+                </Alert>
+                <Alert tone="info" className="mb-4">
+                  <span>{t("students.emailInviteNoRosterNotice")}</span>
+                </Alert>
+
+                {emails.length > 0 ? (
+                  <>
+                    <div className="max-h-80 overflow-auto rounded-box border border-base-300">
+                      <table className="table table-sm">
+                        <thead>
+                          <tr>
+                            <th scope="col">#</th>
+                            <th scope="col">{t("students.emailColumn")}</th>
+                            <th scope="col">{t("students.roleColumn")}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {emails.map((email, index) => {
+                            const key = email.toLowerCase()
+                            return (
+                              <tr key={key}>
+                                <td>{index + 1}</td>
+                                <td>
+                                  <code>{email}</code>
+                                </td>
+                                <td>
+                                  <Select
+                                    selectSize="xs"
+                                    className="w-32"
+                                    aria-label={t("students.assignRoleLabel")}
+                                    value={emailRoles[key] ?? "student"}
+                                    onChange={(e) => {
+                                      const role =
+                                        coerceImportRole(e.target.value) ??
+                                        "student"
+                                      setEmailRoles((prev) => ({
+                                        ...prev,
+                                        [key]: role,
+                                      }))
+                                    }}
+                                  >
+                                    <option value="student">
+                                      {t("students.roleStudent")}
+                                    </option>
+                                    <option value="ta">
+                                      {t("students.roleTa")}
+                                    </option>
+                                    <option value="instructor">
+                                      {t("students.roleInstructor")}
+                                    </option>
+                                  </Select>
+                                </td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {emailHasInstructor ? (
+                      <div className="mt-3 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
+                        <Alert tone="warning">
+                          <span>
+                            {t("students.uploadInstructorOwnerNotice")}
+                          </span>
+                        </Alert>
+                        <label className="flex items-start gap-2 text-sm">
+                          <input
+                            type="checkbox"
+                            className="checkbox checkbox-sm mt-0.5"
+                            checked={emailOwnerConfirmed}
+                            onChange={(e) =>
+                              setEmailOwnerConfirmed(e.currentTarget.checked)
+                            }
+                          />
+                          <span>{t("students.emailInviteConfirmOwner")}</span>
+                        </label>
+                      </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <Alert tone="warning">{t("students.noValidEmails")}</Alert>
+                )}
+
+                <div className="modal-action">
+                  <Button variant="ghost" onClick={handleClose}>
+                    {t("common.cancel")}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    disabled={!canProcess}
+                    onClick={startImport}
+                  >
+                    {t("students.sendInviteCount", { count: emails.length })}
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
+
+        {phase === "preview" && uploadKind !== "email-list" && (
+          <div className="mt-6">
+            <div className="mb-4 flex flex-col gap-1 rounded-box border border-base-300 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+              <span className="text-sm text-base-content/70">
+                {t("students.detectedFormat")}
+              </span>
+              <Select
+                selectSize="sm"
+                className="w-full sm:w-64"
+                aria-label={t("students.detectedFormat")}
+                value={uploadKind}
+                onChange={(e) =>
+                  applyKind(fileText, e.currentTarget.value as UploadKind)
+                }
+              >
+                <option value="roster-csv">
+                  {t("students.uploadKindRosterCsv")}
+                </option>
+                <option value="username-list">
+                  {t("students.uploadKindUsernameList")}
+                </option>
+                <option value="email-list">
+                  {t("students.uploadKindEmailList")}
+                </option>
+              </Select>
+            </div>
             <Alert tone="info" className="mb-4">
               <span>
                 {t("students.usernamesFound", { count: rows.length })}
@@ -913,14 +1220,18 @@ const UploadRoster = ({
                               className="w-32"
                               aria-label={t("students.assignRoleLabel")}
                               value={rolesByUser[key] ?? "student"}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                // Read the value synchronously — React nulls the
+                                // event's currentTarget after the handler
+                                // returns, so a deferred setState updater must
+                                // not touch `e`.
+                                const role =
+                                  coerceImportRole(e.target.value) ?? "student"
                                 setRolesByUser((prev) => ({
                                   ...prev,
-                                  [key]:
-                                    coerceImportRole(e.currentTarget.value) ??
-                                    "student",
+                                  [key]: role,
                                 }))
-                              }
+                              }}
                             >
                               <option value="student">
                                 {t("students.roleStudent")}
@@ -964,7 +1275,7 @@ const UploadRoster = ({
             )}
 
             <div className="modal-action">
-              <Button variant="ghost" onClick={reset}>
+              <Button variant="ghost" onClick={handleClose}>
                 {t("common.cancel")}
               </Button>
 
@@ -1004,6 +1315,65 @@ const UploadRoster = ({
             <Alert tone="info" className="mt-6">
               <span>{t("students.keepTabOpen")}</span>
             </Alert>
+          </div>
+        )}
+
+        {phase === "complete" && emailResult && (
+          <div className="mt-6 space-y-4">
+            <Alert tone="success">
+              <span>
+                {t("students.emailInvitedCount", {
+                  count: emailResult.invited.length,
+                })}
+              </span>
+            </Alert>
+
+            {emailResult.invited.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultInvited")}
+                rows={emailResult.invited.map(({ email, role }) => ({
+                  key: email,
+                  label: email,
+                  detail: t(ROLE_LABEL_KEY[role]),
+                }))}
+              />
+            )}
+            {emailResult.skipped.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultSkipped")}
+                rows={emailResult.skipped.map(({ email }) => ({
+                  key: email,
+                  label: email,
+                  detail: t("students.emailInviteSkippedDetail"),
+                }))}
+              />
+            )}
+            {emailResult.deferred.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultInvitesDeferred")}
+                rows={emailResult.deferred.map((email) => ({
+                  key: email,
+                  label: email,
+                  detail: t("students.inviteDeferredDetail"),
+                }))}
+              />
+            )}
+            {emailResult.failed.length > 0 && (
+              <ImportResultSection
+                title={t("students.resultInvitesFailed")}
+                rows={emailResult.failed.map((f) => ({
+                  key: f.email,
+                  label: f.email,
+                  detail: f.message,
+                }))}
+              />
+            )}
+
+            <div className="modal-action">
+              <Button variant="primary" onClick={handleClose}>
+                {t("students.done")}
+              </Button>
+            </div>
           </div>
         )}
 
@@ -1121,7 +1491,7 @@ const UploadRoster = ({
             )}
 
             <div className="modal-action">
-              <Button variant="primary" onClick={reset}>
+              <Button variant="primary" onClick={handleClose}>
                 {t("students.done")}
               </Button>
             </div>
@@ -1135,7 +1505,7 @@ const UploadRoster = ({
             </Alert>
 
             <div className="modal-action">
-              <Button variant="ghost" onClick={reset}>
+              <Button variant="ghost" onClick={handleClose}>
                 {t("common.close")}
               </Button>
 

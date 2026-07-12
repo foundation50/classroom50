@@ -1,0 +1,88 @@
+import { isValidEmail } from "@/util/orgMembership"
+import {
+  isLikelyGithubUsername,
+  normalizeGithubUsername,
+} from "@/api/mutations/students"
+
+// Which of the three supported upload formats a file is. Drives the unified
+// upload modal's routing (and the auto-detected default the teacher can
+// override):
+//   - roster-csv:     a structured CSV with a header row (username + optional
+//                     name/email/section/role) -> roster import
+//   - username-list:  one GitHub username per line -> roster import (headerless)
+//   - email-list:     one email address per line -> email invitations
+export type UploadKind = "roster-csv" | "username-list" | "email-list"
+
+// Roster header tokens that mark the first line as a CSV header row rather than
+// a bare one-per-line list. Mirrors RECOGNIZED_IMPORT_HEADERS in UploadRoster
+// (kept local so the classifier is a leaf with no heavy import).
+const HEADER_TOKENS = new Set([
+  "username",
+  "github_id",
+  "first_name",
+  "last_name",
+  "name",
+  "email",
+  "section",
+  "role",
+])
+
+const nonEmptyLines = (text: string): string[] =>
+  text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean)
+
+const stripMailto = (line: string): string =>
+  line.replace(/^mailto:/i, "").trim()
+
+// A first line is a "header row" when it has a delimiter (>1 comma-separated
+// cell) or its sole cell is a recognized roster column name.
+const looksLikeHeaderRow = (firstLine: string): boolean => {
+  const cells = firstLine.split(",").map((c) => c.trim().toLowerCase())
+  if (cells.length > 1) return true
+  return HEADER_TOKENS.has(cells[0] ?? "")
+}
+
+// Classify an uploaded file by content. Precedence (best guess; the modal shows
+// it and lets the teacher override):
+//   1. email-list  — the majority of non-empty lines are valid emails AND the
+//      first line isn't a roster header. Emails and GitHub handles are disjoint
+//      (`@`+dot vs. the handle charset), so this rarely misfires.
+//   2. roster-csv  — the first line is a header row (a delimiter, or a
+//      recognized roster column name).
+//   3. username-list — the default: bare one-handle-per-line.
+// An empty/whitespace file defaults to username-list (the modal will just show
+// "no valid usernames"). Deterministic and pure for unit testing.
+export const classifyUploadFile = (text: string): UploadKind => {
+  const lines = nonEmptyLines(text)
+  if (lines.length === 0) return "username-list"
+
+  const firstIsHeader = looksLikeHeaderRow(lines[0])
+
+  // Email detection ignores a header row (a CSV's header line isn't data).
+  const dataLines = firstIsHeader ? lines.slice(1) : lines
+  const emailCount = dataLines.filter((l) =>
+    isValidEmail(stripMailto(l)),
+  ).length
+  if (
+    !firstIsHeader &&
+    emailCount > 0 &&
+    emailCount >= Math.ceil(dataLines.length / 2)
+  ) {
+    return "email-list"
+  }
+
+  if (firstIsHeader) return "roster-csv"
+
+  // Fall through: a bare list. It's usernames unless it's actually emails (the
+  // majority-email check above already caught the email case), so username-list.
+  return "username-list"
+}
+
+// True when the file has at least one line that parses as a plausible username
+// (used by the modal to warn when a chosen kind won't yield anything).
+export const hasLikelyUsername = (text: string): boolean =>
+  nonEmptyLines(text).some((l) =>
+    isLikelyGithubUsername(normalizeGithubUsername(l)),
+  )
