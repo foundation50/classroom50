@@ -1287,6 +1287,11 @@ export type InviteRosterStudentsInput = {
     total: number
     message: string
   }) => void
+  // Injectable sleep for the Retry-After backoff (tests pass a no-op). Defaults
+  // to the real sleep.
+  sleepFn?: (ms: number) => Promise<void>
+  // Max Retry-After-backed retry rounds for the deferred (rate-limited) set.
+  maxRetries?: number
 }
 
 export type InviteRosterStudentsResult = {
@@ -1316,7 +1321,14 @@ export async function inviteRosterStudents(
   client: GitHubClient,
   input: InviteRosterStudentsInput,
 ): Promise<InviteRosterStudentsResult> {
-  const { org, classroom, students, onProgress } = input
+  const {
+    org,
+    classroom,
+    students,
+    onProgress,
+    sleepFn = sleep,
+    maxRetries = 3,
+  } = input
   await assertClassroomNotArchived(client, org, classroom)
 
   const invited: InviteRosterStudentsResult["invited"] = []
@@ -1349,46 +1361,61 @@ export async function inviteRosterStudents(
     onProgress?.({ processed, total: targets.length, message: username })
   }
 
-  // Once GitHub returns a (secondary) rate limit, stop issuing NEW invites:
-  // hammering a throttled endpoint for every remaining target only extends the
-  // throttle window and floods the results with spurious failures. Remaining
-  // (not-yet-started) targets are reported as `deferred` for a later retry.
-  // Every error is classified individually by isRateLimited below, so a genuine
-  // 429 — even one that lands concurrently after the flag is set — is always
-  // deferred, never mislabeled `failed`; only a non-rate-limit error becomes a
-  // real `failed`. A re-run re-invites anyone deferred/failed (ensureOrgMembership
-  // no-ops those already active/pending).
+  type Target = (typeof targets)[number]
+
+  // Invite one target. Returns its result bucket; throws on error so the caller
+  // can classify rate-limit vs failure.
+  const inviteOne = async (
+    target: Target,
+  ): Promise<
+    | InviteRosterStudentsResult["invited"][number]
+    | { skip: "already-member" | "already-pending" }
+  > => {
+    const { username, role } = target
+    const inviteeId =
+      parseGitHubId(target.github_id ?? "") ??
+      (await getUser(client, username)).id
+    const teamId = teamIdByRole[role]
+    const result = await ensureOrgMembership(client, {
+      org,
+      username,
+      inviteeId,
+      teamIds: teamId ? [teamId] : undefined,
+      // An instructor becomes an org OWNER; student/ta are plain members.
+      role: role === "instructor" ? "admin" : "direct_member",
+    })
+    if (result.state === "invited") return { username, role }
+    return {
+      skip: result.state === "active" ? "already-member" : "already-pending",
+    }
+  }
+
+  // Once GitHub returns a (secondary) rate limit, stop issuing NEW invites this
+  // pass: hammering a throttled endpoint only extends the window. Remaining
+  // targets are collected as `deferred` and then retried (below) honoring
+  // Retry-After. Every error is classified individually so a genuine 429 is
+  // always deferred, never mislabeled `failed`.
   let rateLimited = false
+  let retryAfterMs = 0
+  const deferredTargets: Target[] = []
 
   await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
-    const { username, role } = target
+    const { username } = target
     if (rateLimited) {
-      deferred.push(username)
+      deferredTargets.push(target)
       bump(username)
       return
     }
     try {
-      // Prefer the stored id; otherwise resolve the current account by login.
-      const inviteeId =
-        parseGitHubId(target.github_id ?? "") ??
-        (await getUser(client, username)).id
-      const teamId = teamIdByRole[role]
-      const result = await ensureOrgMembership(client, {
-        org,
-        username,
-        inviteeId,
-        teamIds: teamId ? [teamId] : undefined,
-        // An instructor becomes an org OWNER; student/ta are plain members.
-        role: role === "instructor" ? "admin" : "direct_member",
-      })
-      if (result.state === "invited") invited.push({ username, role })
-      else if (result.state === "active")
-        skipped.push({ username, reason: "already-member" })
-      else skipped.push({ username, reason: "already-pending" })
+      const outcome = await inviteOne(target)
+      if ("skip" in outcome) skipped.push({ username, reason: outcome.skip })
+      else invited.push(outcome)
     } catch (err) {
       if (err instanceof GitHubAPIError && err.isRateLimited) {
         rateLimited = true
-        deferred.push(username)
+        if (err.rateLimit.retryAfter !== null)
+          retryAfterMs = Math.max(retryAfterMs, err.rateLimit.retryAfter * 1000)
+        deferredTargets.push(target)
       } else {
         failed.push({ username, message: getErrorMessage(err) })
       }
@@ -1396,6 +1423,41 @@ export async function inviteRosterStudents(
       bump(username)
     }
   })
+
+  // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
+  // backoff so a transient secondary limit doesn't force a manual re-run.
+  let queue = deferredTargets
+  for (let attempt = 0; attempt < maxRetries && queue.length > 0; attempt++) {
+    const backoffMs = Math.min(8000, 500 * 2 ** attempt)
+    const jitterMs = Math.floor(Math.random() * 250)
+    await sleepFn(Math.max(retryAfterMs, backoffMs) + jitterMs)
+    retryAfterMs = 0
+    const stillDeferred: Target[] = []
+    for (const target of queue) {
+      try {
+        const outcome = await inviteOne(target)
+        if ("skip" in outcome)
+          skipped.push({ username: target.username, reason: outcome.skip })
+        else invited.push(outcome)
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) {
+          if (err.rateLimit.retryAfter !== null)
+            retryAfterMs = Math.max(
+              retryAfterMs,
+              err.rateLimit.retryAfter * 1000,
+            )
+          stillDeferred.push(target)
+        } else {
+          failed.push({
+            username: target.username,
+            message: getErrorMessage(err),
+          })
+        }
+      }
+    }
+    queue = stillDeferred
+  }
+  for (const target of queue) deferred.push(target.username)
 
   return { invited, skipped, failed, deferred }
 }
@@ -1458,6 +1520,10 @@ export type BulkInviteByEmailInput = {
     total: number
     message: string
   }) => void
+  // Injectable sleep for the Retry-After backoff (tests pass a no-op).
+  sleepFn?: (ms: number) => Promise<void>
+  // Max Retry-After-backed retry rounds for the deferred set.
+  maxRetries?: number
 }
 
 export type BulkInviteByEmailResult = {
@@ -1490,7 +1556,14 @@ export async function bulkInviteByEmail(
   client: GitHubClient,
   input: BulkInviteByEmailInput,
 ): Promise<BulkInviteByEmailResult> {
-  const { org, classroom, invites, onProgress } = input
+  const {
+    org,
+    classroom,
+    invites,
+    onProgress,
+    sleepFn = sleep,
+    maxRetries = 3,
+  } = input
   await assertClassroomNotArchived(client, org, classroom)
 
   const invited: BulkInviteByEmailResult["invited"] = []
@@ -1534,30 +1607,38 @@ export async function bulkInviteByEmail(
     onProgress?.({ processed, total: targets.length, message: email })
   }
 
+  type EmailTarget = (typeof targets)[number]
+  // Invite one email; throws on error so the caller classifies rate-limit/422.
+  const inviteOne = (target: EmailTarget) => {
+    const teamId = teamIdByRole[target.role]
+    return createOrgInvitation(client, {
+      org,
+      email: target.email,
+      team_ids: teamId ? [teamId] : undefined,
+      role: target.role === "instructor" ? "admin" : "direct_member",
+    })
+  }
+
   let rateLimited = false
+  let retryAfterMs = 0
+  const deferredTargets: EmailTarget[] = []
 
   await mapWithConcurrency(targets, REPO_READ_CONCURRENCY, async (target) => {
-    const { email, role } = target
+    const { email } = target
     if (rateLimited) {
-      deferred.push(email)
+      deferredTargets.push(target)
       bump(email)
       return
     }
     try {
-      // Guaranteed present: the pre-send guard blocked the batch otherwise.
-      const teamId = teamIdByRole[role]
-      await createOrgInvitation(client, {
-        org,
-        email,
-        team_ids: teamId ? [teamId] : undefined,
-        // An instructor becomes an org OWNER; student/ta are plain members.
-        role: role === "instructor" ? "admin" : "direct_member",
-      })
-      invited.push({ email, role })
+      await inviteOne(target)
+      invited.push({ email, role: target.role })
     } catch (err) {
       if (err instanceof GitHubAPIError && err.isRateLimited) {
         rateLimited = true
-        deferred.push(email)
+        if (err.rateLimit.retryAfter !== null)
+          retryAfterMs = Math.max(retryAfterMs, err.rateLimit.retryAfter * 1000)
+        deferredTargets.push(target)
       } else if (err instanceof GitHubAPIError && err.status === 422) {
         // Already a member or already invited — nothing to send.
         skipped.push({ email })
@@ -1568,6 +1649,38 @@ export async function bulkInviteByEmail(
       bump(email)
     }
   })
+
+  // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
+  // backoff, mirroring inviteRosterStudents.
+  let queue = deferredTargets
+  for (let attempt = 0; attempt < maxRetries && queue.length > 0; attempt++) {
+    const backoffMs = Math.min(8000, 500 * 2 ** attempt)
+    const jitterMs = Math.floor(Math.random() * 250)
+    await sleepFn(Math.max(retryAfterMs, backoffMs) + jitterMs)
+    retryAfterMs = 0
+    const stillDeferred: EmailTarget[] = []
+    for (const target of queue) {
+      try {
+        await inviteOne(target)
+        invited.push({ email: target.email, role: target.role })
+      } catch (err) {
+        if (err instanceof GitHubAPIError && err.isRateLimited) {
+          if (err.rateLimit.retryAfter !== null)
+            retryAfterMs = Math.max(
+              retryAfterMs,
+              err.rateLimit.retryAfter * 1000,
+            )
+          stillDeferred.push(target)
+        } else if (err instanceof GitHubAPIError && err.status === 422) {
+          skipped.push({ email: target.email })
+        } else {
+          failed.push({ email: target.email, message: getErrorMessage(err) })
+        }
+      }
+    }
+    queue = stillDeferred
+  }
+  for (const target of queue) deferred.push(target.email)
 
   return { invited, skipped, failed, deferred }
 }

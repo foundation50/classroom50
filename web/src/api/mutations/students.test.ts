@@ -793,6 +793,8 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       org: "acme",
       classroom: "cs101",
       invites: targets,
+      // Isolate the mid-batch short-circuit from the Retry-After retry pass.
+      maxRetries: 0,
     })
 
     // The throttled email is deferred; nothing is misrouted to `failed`.
@@ -2419,6 +2421,9 @@ const makeInviteClient = (opts: {
   // When set, the Nth (0-based) POST /invitations rejects with a 429 rate limit
   // and every later POST would too — used to exercise the mid-batch short-circuit.
   rateLimitFromInvite?: number
+  // When set, ONLY the first N POST /invitations attempts 429; later attempts
+  // succeed — used to exercise the Retry-After-backed retry of the deferred set.
+  rateLimitFirstN?: number
 }) => {
   const invitations: { invitee_id?: number; team_ids?: number[] }[] = []
   const memberSet = new Set((opts.members ?? []).map((m) => m.toLowerCase()))
@@ -2474,6 +2479,12 @@ const makeInviteClient = (opts: {
         if (
           opts.rateLimitFromInvite !== undefined &&
           attempt >= opts.rateLimitFromInvite
+        ) {
+          return Promise.reject(rateLimitError())
+        }
+        if (
+          opts.rateLimitFirstN !== undefined &&
+          attempt < opts.rateLimitFirstN
         ) {
           return Promise.reject(rateLimitError())
         }
@@ -2739,6 +2750,10 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
         { username: "b", github_id: "2" },
         { username: "c", github_id: "3" },
       ],
+      // Isolate the mid-batch short-circuit from the Retry-After retry pass
+      // (covered by its own test): with the endpoint throttled indefinitely,
+      // skip retries so this asserts the first-pass defer behavior.
+      maxRetries: 0,
     })
 
     expect(res.invited).toEqual([])
@@ -2749,6 +2764,30 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
     // Only the one attempt that tripped the limit was POSTed; no further invites
     // were fired at the throttled endpoint.
     expect(invitations).toEqual([])
+  })
+
+  it("auto-retries a deferred (rate-limited) target honoring Retry-After", async () => {
+    // The first POST 429s (deferring the target); the retry pass sleeps the
+    // honored Retry-After and re-attempts, which succeeds. Injected sleepFn
+    // keeps the test instant and records the honored delay.
+    const { client, invitations } = makeInviteClient({ rateLimitFirstN: 1 })
+    const slept: number[] = []
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "a", github_id: "1" }],
+      sleepFn: async (ms) => {
+        slept.push(ms)
+      },
+    })
+
+    expect(res.invited).toEqual([{ username: "a", role: "student" }])
+    expect(res.deferred).toEqual([])
+    expect(res.failed).toEqual([])
+    // Honored the 60s Retry-After from the rate-limit error.
+    expect(slept.some((ms) => ms >= 60_000)).toBe(true)
+    expect(invitations).toHaveLength(1)
   })
 })
 
