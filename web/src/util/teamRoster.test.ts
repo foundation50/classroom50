@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
+  orgRoleForRole,
+  roleForOrgRole,
   rowToStudent,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
@@ -637,5 +639,26 @@ describe("buildTeamRoster — CSV-only rows do not render (team-driven)", () => 
       students: [csvRow({ username: "ghost" }), csvRow({ username: "casper" })],
     })
     expect(rows).toEqual([])
+  })
+})
+
+describe("orgRoleForRole / roleForOrgRole — classroom<->org role mapping", () => {
+  it("maps instructor to org OWNER (admin), student/ta to direct_member", () => {
+    expect(orgRoleForRole("instructor")).toBe("admin")
+    expect(orgRoleForRole("ta")).toBe("direct_member")
+    expect(orgRoleForRole("student")).toBe("direct_member")
+  })
+
+  it("maps admin back to instructor, everything else to student", () => {
+    expect(roleForOrgRole("admin")).toBe("instructor")
+    expect(roleForOrgRole("direct_member")).toBe("student")
+    // An unrecognized/absent org role is treated as a plain student, never a
+    // silent owner grant.
+    expect(roleForOrgRole("")).toBe("student")
+    expect(roleForOrgRole("member")).toBe("student")
+  })
+
+  it("round-trips instructor (the security-sensitive owner grant)", () => {
+    expect(roleForOrgRole(orgRoleForRole("instructor"))).toBe("instructor")
   })
 })
