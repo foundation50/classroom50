@@ -185,10 +185,11 @@ const RosterMemberModal = ({
   }
 
   const student = rowToStudent(row)
-  // A staff-only row (instructor/TA with no student enrollment) has no
-  // roster.csv row and isn't on the student team — the student-roster actions
-  // (edit CSV metadata, unenroll) don't apply. Staff are managed in Settings. A
-  // person who is BOTH staff and a student keeps the student actions (they do
+  // A staff-only row is an instructor/TA with no student enrollment. Unenroll
+  // (dropping a student-team membership) doesn't apply to them — that's the one
+  // student-only action (see canUnenroll). Profile metadata IS editable for them
+  // (see canEdit): syncRosterFromTeam writes a roster.csv row per team member.
+  // A person who is BOTH staff and a student keeps the student actions (they do
   // have a student enrollment), so gate on the student enrollment, not
   // "student is the sole role" (hasStudentEnrollment — shared with the bulk gate).
   const staffOnly = !hasStudentEnrollment(row)
