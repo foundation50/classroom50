@@ -192,7 +192,14 @@ const RosterMemberModal = ({
   // have a student enrollment), so gate on the student enrollment, not
   // "student is the sole role" (hasStudentEnrollment — shared with the bulk gate).
   const staffOnly = !hasStudentEnrollment(row)
-  const canEdit = !staffOnly && row.state !== "pending"
+  // Profile metadata (name / email / section) is teacher-supplied and editable
+  // for any enrolled member with a roster.csv row — including a staff-only
+  // instructor/TA, since syncRosterFromTeam writes a (blank-metadata) row for
+  // every team member for the teacher to fill in. It only gates out `pending`
+  // rows (no roster row yet — the invite hasn't been accepted) and rows without
+  // a resolvable roster identity. Unenroll stays student-only (see canUnenroll);
+  // editing profile fields is not the same as unenrolling.
+  const canEdit = row.state !== "pending" && Boolean(row.username)
   const displayName =
     nameFromParts(row.first_name, row.last_name) || row.username || row.email
   const displayInitials = rosterRowInitials(row)
@@ -829,11 +836,7 @@ const RosterMemberModal = ({
             ) : null}
           </div>
 
-          {staffOnly ? (
-            <p className="text-sm text-base-content/70">
-              {t("students.staffManagedInSettings")}
-            </p>
-          ) : !canEdit ? (
+          {!canEdit ? (
             <p className="text-sm text-base-content/70">
               {t("students.pendingNoEdit")}
             </p>
