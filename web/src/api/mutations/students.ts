@@ -118,6 +118,30 @@ async function resolveClassroomTeam(
   return { slug: `classroom50-${classroom}` }
 }
 
+// Read-only resolution of the GitHub team id for a role from classroom.json —
+// NO team creation (unlike resolveTeamIdByRole, which ensures/creates staff
+// teams). Used by resend, which must re-attach the invitee's existing team
+// without the side effect of creating an empty staff team. Returns undefined
+// when classroom.json has no id for that role (a blip propagates via
+// resolveClassroomTeam for the student role; staff refs are read directly).
+export async function resolveTeamIdForRoleRead(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  role: RosterRole,
+): Promise<number | undefined> {
+  if (role === "student") {
+    return (await resolveClassroomTeam(client, org, classroom)).id
+  }
+  try {
+    const classroomJson = await getClassroomJson(client, { org, classroom })
+    return classroomJson.teams?.[role]?.id
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) return undefined
+    throw err
+  }
+}
+
 // Resolve the classroom team, retrying only TRANSIENT read failures (5xx / 429 /
 // network). A genuine "no team block" returns id: undefined without throwing
 // (handled inside resolveClassroomTeam), so it is NOT retried; a transient blip

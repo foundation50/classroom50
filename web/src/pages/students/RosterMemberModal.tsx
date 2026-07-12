@@ -19,6 +19,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   assignRosterMemberRole,
   inviteRosterStudents,
+  resolveTeamIdForRoleRead,
   unenrollStudent,
   type StudentCsvRow,
 } from "@/api/mutations/students"
@@ -259,11 +260,21 @@ const RosterMemberModal = ({
     }
     setResending(true)
     try {
+      // Re-attach the row's team so the re-sent invite lands the invitee on the
+      // right team on acceptance (a team-less resend would orphan them).
+      const role = sortRolesByRank(row.roles)[0] ?? "student"
+      const teamId = await resolveTeamIdForRoleRead(
+        client,
+        org,
+        classroom,
+        role,
+      )
       await resendOrgInvitation(client, {
         org,
         username: row.username,
         inviteeId,
         invitationId: row.invitation_id,
+        teamIds: teamId ? [teamId] : undefined,
       })
       onResent(row.key)
       onClose()

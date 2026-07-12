@@ -970,11 +970,20 @@ export async function resendOrgInvitation(
     username: string
     inviteeId: number
     invitationId?: number
+    // Team ids to re-attach to the recreated invite so accepting it lands the
+    // invitee on the classroom/staff team. Without this a re-sent invite is
+    // recreated team-less and the accepted invitee is orphaned (uncollected).
+    teamIds?: number[]
   },
 ): Promise<EnsureOrgMembershipResult> {
-  const { org, username, inviteeId, invitationId } = input
+  const { org, username, inviteeId, invitationId, teamIds } = input
 
-  const result = await ensureOrgMembership(client, { org, username, inviteeId })
+  const result = await ensureOrgMembership(client, {
+    org,
+    username,
+    inviteeId,
+    teamIds,
+  })
 
   if (result.state === "invited") {
     // A fresh invite was created; cancel the prior one if we know it.
@@ -992,6 +1001,7 @@ export async function resendOrgInvitation(
       org,
       username,
       inviteeId,
+      teamIds,
     })
     return recreated
   }

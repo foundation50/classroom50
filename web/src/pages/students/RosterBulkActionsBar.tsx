@@ -15,7 +15,9 @@ import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/pages/students/bulkUnenrollRoster"
+import { resolveTeamIdForRoleRead } from "@/api/mutations/students"
 import { parseGitHubId } from "@/util/students"
+import { sortRolesByRank } from "@/util/teamRoster"
 import {
   BulkResultSection,
   type BulkPhase,
@@ -245,11 +247,19 @@ const RosterBulkActionsBar = ({
         continue
       }
       try {
+        const role = sortRolesByRank(row.roles)[0] ?? "student"
+        const teamId = await resolveTeamIdForRoleRead(
+          client,
+          org,
+          classroom,
+          role,
+        )
         const outcome = await resendOrgInvitation(client, {
           org,
           username: row.username,
           inviteeId,
           invitationId: row.invitation_id,
+          teamIds: teamId ? [teamId] : undefined,
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })

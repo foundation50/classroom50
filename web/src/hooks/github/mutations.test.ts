@@ -8,6 +8,7 @@ import {
   ensureWorkflowPermissions,
   findStaleSkeletonFiles,
   gitBlobSha,
+  resendOrgInvitation,
   triggerRegrade,
   validateServiceToken,
   REGRADE_WORKFLOW,
@@ -925,5 +926,73 @@ describe("ensureSkeletonFiles non-fast-forward retry", () => {
     )
     await expect(ensureSkeletonFiles(client, org)).rejects.toBe(err)
     expect(refPatches).toEqual([1])
+  })
+})
+
+describe("resendOrgInvitation carries team_ids", () => {
+  const apiError = (status: number, message: string) =>
+    new GitHubAPIError({
+      status,
+      url: "/orgs/acme/invitations",
+      message,
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  // Models the still-pending resend path: precheck -> pending, cancel the stale
+  // invite, second precheck -> not-a-member (404), then a fresh POST whose body
+  // we capture. `membershipStates` is consumed in order per GET.
+  const makeClient = () => {
+    const membershipStates = ["pending", "not-member"]
+    const state = {
+      inviteBodies: [] as Record<string, unknown>[],
+      cancelled: 0,
+    }
+    const request = vi
+      .fn()
+      .mockImplementation(
+        (path: string, options?: { method?: string; body?: unknown }) => {
+          if (path.includes("/memberships/")) {
+            const next = membershipStates.shift() ?? "not-member"
+            if (next === "not-member")
+              return Promise.reject(apiError(404, "not a member"))
+            return Promise.resolve({ state: next })
+          }
+          if (path.includes("/invitations/") && options?.method === "DELETE") {
+            state.cancelled += 1
+            return Promise.resolve({})
+          }
+          if (path.endsWith("/invitations") && options?.method === "POST") {
+            state.inviteBodies.push(options?.body as Record<string, unknown>)
+            return Promise.resolve({})
+          }
+          return Promise.reject(new Error(`unexpected: ${path}`))
+        },
+      )
+    return { client: { request } as unknown as GitHubClient, state }
+  }
+
+  it("recreates the invite with the passed teamIds", async () => {
+    const { client, state } = makeClient()
+    await resendOrgInvitation(client, {
+      org: "acme",
+      username: "octocat",
+      inviteeId: 1,
+      invitationId: 42,
+      teamIds: [4242],
+    })
+    expect(state.cancelled).toBe(1)
+    expect(state.inviteBodies).toHaveLength(1)
+    expect(state.inviteBodies[0]).toMatchObject({
+      invitee_id: 1,
+      team_ids: [4242],
+    })
   })
 })
