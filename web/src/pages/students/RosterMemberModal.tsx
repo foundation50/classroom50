@@ -348,6 +348,9 @@ const RosterMemberModal = ({
         inviteeId,
         invitationId: row.invitation_id,
         teamIds: teamId ? [teamId] : undefined,
+        // Re-issue with the same org role as the original invite (instructor ->
+        // org OWNER), so a resend never downgrades a pending instructor.
+        role: role === "instructor" ? "admin" : "direct_member",
       })
       onResent(row.key)
       onClose()

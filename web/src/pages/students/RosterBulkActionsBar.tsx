@@ -260,6 +260,8 @@ const RosterBulkActionsBar = ({
           inviteeId,
           invitationId: row.invitation_id,
           teamIds: teamId ? [teamId] : undefined,
+          // Preserve the original invite's org role (instructor -> org OWNER).
+          role: role === "instructor" ? "admin" : "direct_member",
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })

@@ -78,6 +78,13 @@ const EditStudentForm = ({
           email: value.email.trim(),
           section: value.section.trim(),
         },
+        // Seed a row if none exists yet (a team member — often staff — added on
+        // GitHub before the roster synced their blank row), so editing upserts.
+        identity: {
+          github_id: student.github_id,
+          username: student.username,
+          email: student.email,
+        },
       }),
   })
 

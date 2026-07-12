@@ -996,13 +996,35 @@ describe("resendOrgInvitation carries team_ids", () => {
     })
   })
 
+  it("re-issues with the same org role (instructor -> admin), not a downgrade", async () => {
+    const { client, state } = makeClient()
+    await resendOrgInvitation(client, {
+      org: "acme",
+      username: "prof",
+      inviteeId: 1,
+      invitationId: 42,
+      teamIds: [7],
+      role: "admin",
+    })
+    // The recreated invite must carry role "admin" so a re-sent instructor
+    // invite is equivalent to the original, not silently downgraded to member.
+    expect(state.inviteBodies[0]).toMatchObject({
+      invitee_id: 1,
+      role: "admin",
+    })
+  })
+
   it("re-issues the invite (no orphan) and rethrows when the recreate fails", async () => {
     // Pending precheck -> cancel the stale invite -> recreate POST 429s. The
     // stale invite is already gone, so a naive impl would orphan the invitee;
     // the compensating re-issue must fire (a second POST) and the original 429
     // must still propagate so the caller surfaces the failure.
     const membershipStates = ["pending", "not-member"]
-    const state = { cancelled: 0, invitePosts: 0 }
+    const state = {
+      cancelled: 0,
+      invitePosts: 0,
+      bodies: [] as Record<string, unknown>[],
+    }
     let recreateAttempts = 0
     const request = vi
       .fn()
@@ -1020,6 +1042,7 @@ describe("resendOrgInvitation carries team_ids", () => {
           }
           if (path.endsWith("/invitations") && options?.method === "POST") {
             state.invitePosts += 1
+            state.bodies.push(options?.body as Record<string, unknown>)
             // First recreate attempt 429s; the compensating re-issue succeeds.
             if (recreateAttempts++ === 0)
               return Promise.reject(apiError(429, "rate limited"))
@@ -1037,6 +1060,7 @@ describe("resendOrgInvitation carries team_ids", () => {
         inviteeId: 1,
         invitationId: 42,
         teamIds: [4242],
+        role: "admin",
       }),
     ).rejects.toBeInstanceOf(GitHubAPIError)
 
@@ -1044,5 +1068,12 @@ describe("resendOrgInvitation carries team_ids", () => {
     // Two POSTs: the failed recreate + the compensating re-issue that keeps the
     // invitee pending rather than orphaned.
     expect(state.invitePosts).toBe(2)
+    // The compensating re-issue preserves the original role + team, so the
+    // orphan-recovery invite is still equivalent to the original.
+    expect(state.bodies[1]).toMatchObject({
+      invitee_id: 1,
+      team_ids: [4242],
+      role: "admin",
+    })
   })
 })

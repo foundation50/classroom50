@@ -2540,6 +2540,12 @@ export type UpdateStudentInput = {
   // still findable after the rewrite.
   key: string
   patch: StudentEditableFields
+  // Identity columns for the row, used to CREATE it when no roster.csv row
+  // matches `key` yet — a team member (e.g. a staff instructor/TA) added on
+  // GitHub whose blank metadata row hasn't been written by syncRosterFromTeam.
+  // Editing then upserts rather than failing. Omitted -> a missing key is an
+  // error (the legacy strict behavior, for callers that guarantee the row).
+  identity?: { github_id?: string; username?: string; email?: string }
 }
 
 export type UpdateStudentResult = CreateClassroomResult & {
@@ -2552,7 +2558,7 @@ export async function updateStudent(
   client: GitHubClient,
   input: UpdateStudentInput,
 ): Promise<UpdateStudentResult> {
-  const { org, classroom, key, patch } = input
+  const { org, classroom, key, patch, identity } = input
 
   const targetKey = key.trim()
   if (!targetKey) {
@@ -2581,11 +2587,14 @@ export async function updateStudent(
     (row) => studentKey(row) === targetKey,
   )
 
-  if (targetIndex === -1) {
+  // No matching row yet. With identity provided, UPSERT — a team member (often
+  // staff) added on GitHub before syncRosterFromTeam wrote their blank row can
+  // still have their metadata edited, which creates the row. Without identity,
+  // preserve the strict error for callers that guarantee the row exists.
+  const missing = targetIndex === -1
+  if (missing && !identity) {
     throw new Error(`Student does not exist in roster: ${targetKey}`)
   }
-
-  const existing = currentStudents[targetIndex]
 
   const nextEmail = patch.email.trim()
 
@@ -2593,7 +2602,8 @@ export async function updateStudent(
   // and freely editable — the row is keyed by github_id/username, never email.
 
   // Guard against editing an email into one already held by ANOTHER row
-  // (case-insensitive). The target row matching its own current email is fine.
+  // (case-insensitive). On an upsert (missing, targetIndex -1) there is no self
+  // row, so every match is a genuine clash.
   if (nextEmail) {
     const emailKey = nextEmail.toLowerCase()
     const clash = currentStudents.some(
@@ -2604,19 +2614,21 @@ export async function updateStudent(
     }
   }
 
-  // Spread the existing row so identity columns are preserved, then overwrite
-  // only the four editable fields.
+  // Spread the existing row (preserving identity columns) or seed a new row from
+  // the passed identity on an upsert, then overwrite only the editable fields.
   const updatedStudent = normalizeStudentRow({
-    ...existing,
+    ...(missing ? (identity ?? {}) : currentStudents[targetIndex]),
     first_name: patch.first_name,
     last_name: patch.last_name,
     email: nextEmail,
     section: patch.section,
   })
 
-  const nextStudents = currentStudents.map((row, idx) =>
-    idx === targetIndex ? updatedStudent : row,
-  )
+  const nextStudents = missing
+    ? [...currentStudents, updatedStudent]
+    : currentStudents.map((row, idx) =>
+        idx === targetIndex ? updatedStudent : row,
+      )
   const nextCsv = stringifyStudentsCsv(nextStudents)
 
   const tree = await createGitTree(client, {

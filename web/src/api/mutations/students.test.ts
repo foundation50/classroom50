@@ -1010,6 +1010,38 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(committed.content).toBeNull()
   })
 
+  it("upserts a new row when no row matches but identity is provided", async () => {
+    // A team member (e.g. a staff instructor) with no roster.csv row yet: editing
+    // their profile should CREATE the row from identity rather than throw.
+    const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
+
+    const result = await updateStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      key: "77",
+      patch: {
+        first_name: "Sam",
+        last_name: "Staff",
+        email: "sam@x.edu",
+        section: "",
+      },
+      identity: { github_id: "77", username: "sam" },
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    // Existing alice row is preserved; the new sam row is appended with identity.
+    expect(rows.find((r) => r.github_id === "42")?.username).toBe("alice")
+    const sam = rows.find((r) => r.github_id === "77")
+    expect(sam).toMatchObject({
+      github_id: "77",
+      username: "sam",
+      first_name: "Sam",
+      last_name: "Staff",
+      email: "sam@x.edu",
+    })
+    expect(result.student.github_id).toBe("77")
+  })
+
   it("blocks editing into another row's email and leaves the CSV unwritten", async () => {
     const { client, committed } = makeClient({
       startingCsv: HEADER + aliceRow + bobRow,

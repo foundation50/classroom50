@@ -961,7 +961,9 @@ export async function ensureOrgMembership(
   }
 }
 
-// Resend an org invite without ever leaving the student invite-less. A fresh
+// Resend an org invite without ever leaving the student invite-less, re-issuing
+// an invite EQUIVALENT to the original — same org role and same team(s), so a
+// resend never changes what the invitee accepts into. A fresh
 // `ensureOrgMembership` recreates when the invitee is neither active nor
 // pending. When they ARE still pending and we know the stale invitation id,
 // cancel it and recreate so the invite is genuinely re-sent (previously this
@@ -984,15 +986,21 @@ export async function resendOrgInvitation(
     // invitee on the classroom/staff team. Without this a re-sent invite is
     // recreated team-less and the accepted invitee is orphaned (uncollected).
     teamIds?: number[]
+    // Org role to re-issue with so the resend matches the original invite: an
+    // instructor invite is "admin" (org OWNER), everyone else "direct_member".
+    // Omitted defaults to direct_member — a caller resending an instructor must
+    // pass "admin" or the re-sent invite would silently downgrade to a member.
+    role?: "direct_member" | "admin"
   },
 ): Promise<EnsureOrgMembershipResult> {
-  const { org, username, inviteeId, invitationId, teamIds } = input
+  const { org, username, inviteeId, invitationId, teamIds, role } = input
 
   const result = await ensureOrgMembership(client, {
     org,
     username,
     inviteeId,
     teamIds,
+    role,
   })
 
   if (result.state === "invited") {
@@ -1013,6 +1021,7 @@ export async function resendOrgInvitation(
         username,
         inviteeId,
         teamIds,
+        role,
       })
     } catch (err) {
       // The stale invite is already cancelled; a failed recreate would orphan
@@ -1023,6 +1032,7 @@ export async function resendOrgInvitation(
           org,
           invitee_id: inviteeId,
           team_ids: teamIds,
+          role,
         })
       } catch {
         // Compensation itself failed — nothing more to do; the original error

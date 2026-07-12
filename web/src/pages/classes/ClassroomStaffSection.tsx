@@ -523,6 +523,8 @@ const PendingStaffRow = ({
         inviteeId,
         invitationId: invite.id,
         teamIds: teamId ? [teamId] : undefined,
+        // Preserve the original org role: an instructor invite is org OWNER.
+        role: role === "instructor" ? "admin" : "direct_member",
       })
     },
     onSuccess: () => {
