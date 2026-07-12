@@ -22,7 +22,7 @@ import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
 import type { RosterCsvProblem } from "@/api/mutations/students"
-import { getErrorMessage } from "@/hooks/github/mutations"
+import { getErrorMessage, cancelOrgInvitation } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
@@ -166,6 +166,7 @@ const EnrolledStudents = ({
     isError,
     isEmpty,
     pendingHidden,
+    failedInvitations,
     teamSlugByRole,
     csvMissingCount,
     csvMissingLogins,
@@ -185,6 +186,21 @@ const EnrolledStudents = ({
 
   const invalidateInviteQueries = () =>
     invalidateInviteQueriesForOrg(queryClient, org)
+
+  // Dismiss a failed/expired invitation: cancel it on GitHub (removes it from
+  // the failed list) and refresh. 404 is treated as success by the mutation.
+  const dismissFailedInvite = useMutation({
+    mutationFn: (invitationId: number) =>
+      cancelOrgInvitation(client, { org, invitationId }),
+    onSuccess: () => invalidateInviteQueries(),
+    onError: (err) =>
+      notify({
+        tone: "error",
+        message: t("students.failedInviteDismissError", {
+          error: getErrorMessage(err),
+        }),
+      }),
+  })
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
   // yourself), mirroring Org Members' self-exclusion. A pure staff row (no
@@ -486,13 +502,14 @@ const EnrolledStudents = ({
   // After a bulk run, clear the selection and refresh the caches the run
   // touched (roster team membership + pending invites).
   const onBulkDone = (
-    action: "unenroll" | "invite",
+    action: "unenroll" | "invite" | "cancel",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => {
     setSelectedKeys(new Set())
     invalidateInviteQueries()
     // Unenroll changes team membership; invite changes org-invite state and may
-    // team-add an already-active member — refresh the enrolled roster for both.
+    // team-add an already-active member; cancel removes pending invites — refresh
+    // the enrolled roster for all three.
     invalidateTeamRoster()
     // After a bulk unenroll, remember the removed logins so the automatic
     // backfills don't re-add them (see the effects). Only confirmed-removed rows
@@ -720,6 +737,48 @@ const EnrolledStudents = ({
       {!isLoading && !isError && pendingHidden ? (
         <Alert tone="error">
           <span className="text-sm">{t("students.pendingOwnerOnly")}</span>
+        </Alert>
+      ) : null}
+
+      {/* Failed/expired invitations (owner-only). GitHub couldn't deliver these,
+          so they need a re-invite or dismissal — surfaced here since they never
+          appear as roster rows. */}
+      {!isLoading && !isError && failedInvitations.length > 0 ? (
+        <Alert tone="warning" className="flex-col items-stretch gap-2">
+          <span className="text-sm font-medium">
+            {t("students.failedInvitesTitle", {
+              count: failedInvitations.length,
+            })}
+          </span>
+          <ul className="flex flex-col divide-y divide-warning/20">
+            {failedInvitations.map((inv) => {
+              const who = inv.login || inv.email || String(inv.id)
+              return (
+                <li
+                  key={inv.id}
+                  className="flex items-center justify-between gap-3 py-1.5"
+                >
+                  <span className="min-w-0 text-sm">
+                    <span className="font-mono">{who}</span>
+                    {inv.failed_reason ? (
+                      <span className="text-base-content/60">
+                        {" "}
+                        — {inv.failed_reason}
+                      </span>
+                    ) : null}
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="xs"
+                    disabled={dismissFailedInvite.isPending}
+                    onClick={() => dismissFailedInvite.mutate(inv.id)}
+                  >
+                    {t("students.dismiss")}
+                  </Button>
+                </li>
+              )
+            })}
+          </ul>
         </Alert>
       ) : null}
 

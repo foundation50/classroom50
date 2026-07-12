@@ -1,12 +1,16 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, Send, Upload, UserMinus, X } from "lucide-react"
+import { Plus, Send, Upload, UserMinus, X, XCircle } from "lucide-react"
 
 import type { GitHubClient } from "@/hooks/github/client"
 import { ConfirmModal } from "@/components/modals"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/hooks/github/errors"
-import { resendOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
+import {
+  resendOrgInvitation,
+  cancelOrgInvitation,
+  getErrorMessage,
+} from "@/hooks/github/mutations"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
@@ -116,7 +120,7 @@ const RosterBulkActionsBar = ({
   // rows are passed so the page can suppress the automatic backfills from
   // re-adding them.
   onDone: (
-    action: "unenroll" | "invite",
+    action: "unenroll" | "invite" | "cancel",
     removed?: Array<Pick<TeamRosterRow, "username">>,
   ) => void
   // The "add students" triggers shown on the right when nothing is selected.
@@ -130,7 +134,9 @@ const RosterBulkActionsBar = ({
   const { t } = useTranslation()
   const titleId = useId()
 
-  const [action, setAction] = useState<"unenroll" | "invite" | null>(null)
+  const [action, setAction] = useState<"unenroll" | "invite" | "cancel" | null>(
+    null,
+  )
   const [phase, setPhase] = useState<BulkPhase>("idle")
   const [progress, setProgress] = useState<BulkProgress>({
     processed: 0,
@@ -141,12 +147,17 @@ const RosterBulkActionsBar = ({
   const [error, setError] = useState<string | null>(null)
   const [confirmingUnenroll, setConfirmingUnenroll] = useState(false)
   const [confirmingInvite, setConfirmingInvite] = useState(false)
+  const [confirmingCancel, setConfirmingCancel] = useState(false)
 
   const hasSelection = selectedRows.length > 0
   const pendingSelected = selectedRows.filter((r) => r.state === "pending")
   // Only pending rows are "invitable" — the action resends their org invite.
   // (The roster is team-driven; there are no CSV-only rows to freshly invite.)
   const invitableSelected = pendingSelected.length
+  // Cancellable = pending rows that carry an org-invitation id.
+  const cancellableSelected = pendingSelected.filter(
+    (r) => typeof r.invitation_id === "number",
+  )
 
   const isOpen = phase !== "idle"
 
@@ -278,6 +289,48 @@ const RosterBulkActionsBar = ({
     onDone("invite")
   }
 
+  const runCancel = async () => {
+    if (cancellableSelected.length === 0) return
+    setAction("cancel")
+    setPhase("working")
+    setError(null)
+    setResult(null)
+    const total = cancellableSelected.length
+    setProgress({ processed: 0, total, message: t("students.bulk.starting") })
+
+    const cancelled: { key: string; label: string }[] = []
+    const failed: { key: string; label: string; detail?: string }[] = []
+    let processed = 0
+    for (const row of cancellableSelected) {
+      const label = row.username || row.email
+      try {
+        // Non-null: cancellableSelected is filtered on a numeric invitation_id.
+        await cancelOrgInvitation(client, {
+          org,
+          invitationId: row.invitation_id as number,
+        })
+        cancelled.push({ key: row.key, label })
+      } catch (err) {
+        log.debug("bulk cancel: per-row cancel failed", { err })
+        failed.push({ key: row.key, label, detail: getErrorMessage(err) })
+      }
+      processed += 1
+      setProgress({ processed, total, message: label })
+    }
+
+    const sections: BulkResultView["sections"] = []
+    if (failed.length > 0)
+      sections.push({ title: t("students.bulk.resultFailed"), rows: failed })
+    setResult({
+      headline: t("students.bulk.cancelledHeadline", {
+        count: cancelled.length,
+      }),
+      sections,
+    })
+    setPhase("complete")
+    onDone("cancel")
+  }
+
   const progressPercent =
     progress.total === 0
       ? 0
@@ -366,6 +419,22 @@ const RosterBulkActionsBar = ({
                   {t("students.bulk.invite")}
                 </Button>
                 <Button
+                  size="sm"
+                  className="join-item"
+                  disabled={cancellableSelected.length === 0}
+                  title={
+                    cancellableSelected.length === 0
+                      ? t("students.bulk.cancelNoneCancellable")
+                      : t("students.bulk.cancelSelected", {
+                          count: cancellableSelected.length,
+                        })
+                  }
+                  onClick={() => setConfirmingCancel(true)}
+                >
+                  <XCircle aria-hidden="true" className="size-4" />
+                  {t("students.bulk.cancelInvite")}
+                </Button>
+                <Button
                   variant="ghost"
                   size="sm"
                   className="join-item text-error hover:bg-error/10"
@@ -433,6 +502,24 @@ const RosterBulkActionsBar = ({
         onClose={() => setConfirmingInvite(false)}
       />
 
+      <ConfirmModal
+        open={confirmingCancel}
+        dangerous
+        needsConfirm={false}
+        title={t("students.bulk.confirmCancelTitle", {
+          count: cancellableSelected.length,
+        })}
+        description={t("students.bulk.confirmCancelBody", {
+          count: cancellableSelected.length,
+        })}
+        confirmLabel={t("students.bulk.cancelInvite")}
+        onConfirm={async () => {
+          setConfirmingCancel(false)
+          setTimeout(() => void runCancel(), 0)
+        }}
+        onClose={() => setConfirmingCancel(false)}
+      />
+
       <Modal
         open={isOpen}
         onClose={closeModal}
@@ -444,7 +531,9 @@ const RosterBulkActionsBar = ({
           <h3 id={titleId} className="text-lg font-bold">
             {action === "invite"
               ? t("students.bulk.inviteTitle")
-              : t("students.bulk.unenrollTitle")}
+              : action === "cancel"
+                ? t("students.bulk.cancelTitle")
+                : t("students.bulk.unenrollTitle")}
           </h3>
         </div>
 
