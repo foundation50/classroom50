@@ -1,4 +1,4 @@
-import { useId, useState } from "react"
+import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   ExternalLink,
@@ -53,7 +53,7 @@ const RosterMemberModal = ({
   org,
   classroom,
   teamSlugByRole,
-  row,
+  row: rowProp,
   onClose,
   onSaved,
   onUnenrolled,
@@ -111,8 +111,19 @@ const RosterMemberModal = ({
     onClose()
   }
 
+  // Retain the last non-null row so the modal keeps rendering its real content
+  // through the close animation. Without this, clearing the selection swaps in a
+  // structurally-empty <Modal> for the frames the dialog is still fading out,
+  // flashing a tiny empty box. `open` (from the parent's Boolean(selected)) still
+  // drives the actual close.
+  const [lastRow, setLastRow] = useState<TeamRosterRow | null>(null)
+  useEffect(() => {
+    if (rowProp) setLastRow(rowProp)
+  }, [rowProp])
+  const row = rowProp ?? lastRow
+
   if (!row) {
-    // No selected row: render nothing (the modal is closed in this state).
+    // Never had a row (initial mount, closed): nothing to show.
     return <Modal open={open} onClose={handleClose} aria-labelledby={titleId} />
   }
 
