@@ -1042,6 +1042,41 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     expect(result.student.github_id).toBe("77")
   })
 
+  it("updates a username-only row (no duplicate) when editing keyed by github_id", async () => {
+    // A legacy username-only row for "carol"; the edit is keyed by github_id (as
+    // buildTeamRoster stamps an enrolled row's id from the live member). The
+    // upsert must match by the identity claim (username) and UPDATE that row,
+    // not append a second row for the same person.
+    const carolRow = "carol,,,,,\n" // username only, no github_id
+    const { client, committed } = makeClient({
+      startingCsv: HEADER + aliceRow + carolRow,
+    })
+
+    await updateStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      key: "88", // github_id key, which does NOT match the id-less carol row
+      patch: {
+        first_name: "Carol",
+        last_name: "C",
+        email: "carol@x.edu",
+        section: "Period 3",
+      },
+      identity: { github_id: "88", username: "carol" },
+    })
+
+    const rows = rowsFromCsv(committed.content!)
+    // Exactly one carol row (updated in place), not a duplicate.
+    const carols = rows.filter((r) => r.username === "carol")
+    expect(carols).toHaveLength(1)
+    expect(carols[0]).toMatchObject({
+      first_name: "Carol",
+      email: "carol@x.edu",
+    })
+    // Total rows unchanged (alice + carol), no append.
+    expect(rows).toHaveLength(2)
+  })
+
   it("blocks editing into another row's email and leaves the CSV unwritten", async () => {
     const { client, committed } = makeClient({
       startingCsv: HEADER + aliceRow + bobRow,

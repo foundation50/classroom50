@@ -2583,9 +2583,26 @@ export async function updateStudent(
 
   // Stable per-row identity via the shared studentKey (github_id -> username ->
   // email), the same precedence the UI and reconcile use.
-  const targetIndex = currentStudents.findIndex(
+  let targetIndex = currentStudents.findIndex(
     (row) => studentKey(row) === targetKey,
   )
+
+  // Before treating a miss as an upsert, re-resolve by the FULL identity claim
+  // (github_id OR case-insensitive username), not just the studentKey. A person
+  // can have a legacy username-only (id-less) row while the edit is keyed by
+  // github_id (buildTeamRoster stamps an enrolled row's id from the live GitHub
+  // member): those keys differ, so a studentKey-only match would miss and append
+  // a DUPLICATE. Matching the claim set edits the existing row instead — the
+  // same id+login dedup syncRosterFromTeam uses.
+  if (targetIndex === -1 && identity) {
+    const idKey = identity.github_id?.trim()
+    const loginKey = identity.username?.trim().toLowerCase()
+    targetIndex = currentStudents.findIndex(
+      (row) =>
+        (Boolean(idKey) && row.github_id.trim() === idKey) ||
+        (Boolean(loginKey) && row.username.trim().toLowerCase() === loginKey),
+    )
+  }
 
   // No matching row yet. With identity provided, UPSERT — a team member (often
   // staff) added on GitHub before syncRosterFromTeam wrote their blank row can

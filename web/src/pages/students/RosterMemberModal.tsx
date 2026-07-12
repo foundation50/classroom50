@@ -175,6 +175,8 @@ const RosterMemberModal = ({
     setRoleOwnerConfirmed(false)
     setConfirmingResend(false)
     setConfirmingCancel(false)
+    setConfirmingUnenroll(false)
+    setEditingProfile(false)
   }
 
   const row = rowProp ?? lastRow
