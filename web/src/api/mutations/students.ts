@@ -51,7 +51,7 @@ import {
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
-import { ROLE_RANK, type RosterRole } from "@/util/teamRoster"
+import { ROLE_RANK, orgRoleForRole, type RosterRole } from "@/util/teamRoster"
 import { memberIdentitySets } from "@/util/identity"
 import {
   classifyRosterUpload,
@@ -1434,8 +1434,7 @@ export async function inviteRosterStudents(
       username,
       inviteeId,
       teamIds: teamId ? [teamId] : undefined,
-      // An instructor becomes an org OWNER; student/ta are plain members.
-      role: role === "instructor" ? "admin" : "direct_member",
+      role: orgRoleForRole(role),
     })
     if (result.state === "invited") return { username, role }
     return {
@@ -1477,8 +1476,7 @@ export async function inviteRosterStudents(
     }
   })
 
-  // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
-  // backoff so a transient secondary limit doesn't force a manual re-run.
+  // Retry the deferred (rate-limited) set (see retryDeferred).
   const stillDeferred = await retryDeferred({
     queue: deferredTargets,
     maxRetries,
@@ -1651,7 +1649,7 @@ export async function bulkInviteByEmail(
       org,
       email: target.email,
       team_ids: teamId ? [teamId] : undefined,
-      role: target.role === "instructor" ? "admin" : "direct_member",
+      role: orgRoleForRole(target.role),
     })
   }
 
@@ -1686,8 +1684,7 @@ export async function bulkInviteByEmail(
     }
   })
 
-  // Retry the deferred (rate-limited) set with bounded, Retry-After-honoring
-  // backoff, mirroring inviteRosterStudents.
+  // Retry the deferred (rate-limited) set (see retryDeferred).
   const stillDeferred = await retryDeferred({
     queue: deferredTargets,
     maxRetries,
@@ -2604,10 +2601,8 @@ export async function updateStudent(
     )
   }
 
-  // No matching row yet. With identity provided, UPSERT — a team member (often
-  // staff) added on GitHub before syncRosterFromTeam wrote their blank row can
-  // still have their metadata edited, which creates the row. Without identity,
-  // preserve the strict error for callers that guarantee the row exists.
+  // No matching row (even by claim): upsert when identity is provided (see the
+  // `identity` field doc), else preserve the strict error.
   const missing = targetIndex === -1
   if (missing && !identity) {
     throw new Error(`Student does not exist in roster: ${targetKey}`)

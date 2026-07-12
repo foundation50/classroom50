@@ -14,6 +14,7 @@ import {
   syncRosterFromTeam,
   writeRosterRoles,
   migrateRosterFile,
+  resolveTeamIdForRoleRead,
   updateStudent,
   updateStudentWithConflictRetry,
   parseStudentsCsv,
@@ -3617,5 +3618,69 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     ).rejects.toThrow(/demoted from organization owner.*Re-run/s)
     // The demote did land (it ran first); the failure is the team move.
     expect(orgRolePuts).toContainEqual({ login: "boss", role: "member" })
+  })
+})
+
+describe("resolveTeamIdForRoleRead — read-only team id per role", () => {
+  const notFound = (path: string) =>
+    new GitHubAPIError({
+      status: 404,
+      url: path,
+      message: "Not Found",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  // classroom.json read via requestRaw; `json` null models a 404 (no file).
+  const makeClient = (json: Record<string, unknown> | null) => {
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("classroom.json")) {
+        return json === null
+          ? Promise.reject(notFound(path))
+          : Promise.resolve(JSON.stringify(json))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    return { requestRaw } as unknown as GitHubClient
+  }
+
+  it("student -> the classroom team id from classroom.json.team", async () => {
+    const client = makeClient({ team: { slug: "classroom50-cs101", id: 4242 } })
+    expect(
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "student"),
+    ).toBe(4242)
+  })
+
+  it("staff -> the role's team id from classroom.json.teams[role]", async () => {
+    const client = makeClient({
+      teams: { instructor: { id: 7 }, ta: { id: 9 } },
+    })
+    expect(
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "instructor"),
+    ).toBe(7)
+    expect(await resolveTeamIdForRoleRead(client, "acme", "cs101", "ta")).toBe(
+      9,
+    )
+  })
+
+  it("staff with no teams block -> undefined (no team to attach)", async () => {
+    const client = makeClient({ team: { slug: "classroom50-cs101", id: 1 } })
+    expect(
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "instructor"),
+    ).toBeUndefined()
+  })
+
+  it("staff, classroom.json 404 -> undefined (not a throw)", async () => {
+    const client = makeClient(null)
+    expect(
+      await resolveTeamIdForRoleRead(client, "acme", "cs101", "ta"),
+    ).toBeUndefined()
   })
 })

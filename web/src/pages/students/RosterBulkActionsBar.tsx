@@ -17,7 +17,7 @@ import {
 } from "@/pages/students/bulkUnenrollRoster"
 import { resolveTeamIdForRoleRead } from "@/api/mutations/students"
 import { parseGitHubId } from "@/util/students"
-import { sortRolesByRank } from "@/util/teamRoster"
+import { orgRoleForRole, sortRolesByRank } from "@/util/teamRoster"
 import {
   BulkResultSection,
   type BulkPhase,
@@ -226,6 +226,7 @@ const RosterBulkActionsBar = ({
     const invited: { key: string; label: string; detail?: string }[] = []
     const skipped: { key: string; label: string; detail?: string }[] = []
     const failed: { key: string; label: string; detail?: string }[] = []
+    const deferred: { key: string; label: string; detail?: string }[] = []
     let rateLimited = false
     let processed = 0
     const tick = (label: string) => {
@@ -236,6 +237,13 @@ const RosterBulkActionsBar = ({
     // Pending rows: cancel + re-send the existing invite (resendOrgInvitation).
     for (const row of pendingSelected) {
       const label = row.username || row.email
+      // Once GitHub rate-limits us, stop issuing new resends (hammering only
+      // extends the throttle) and defer the rest for a later retry.
+      if (rateLimited) {
+        deferred.push({ key: row.key, label })
+        tick(label)
+        continue
+      }
       const inviteeId = parseGitHubId(row.github_id)
       if (inviteeId === null || !row.username) {
         skipped.push({
@@ -261,16 +269,20 @@ const RosterBulkActionsBar = ({
           invitationId: row.invitation_id,
           teamIds: teamId ? [teamId] : undefined,
           // Preserve the original invite's org role (instructor -> org OWNER).
-          role: role === "instructor" ? "admin" : "direct_member",
+          role: orgRoleForRole(role),
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })
       } catch (err) {
-        log.debug("bulk resend: per-row invite failed", { err })
-        failed.push({ key: row.key, label, detail: getErrorMessage(err) })
+        // A 429 is deferred (never failed) — mirroring the deferred bucket in
+        // inviteRosterStudents — and flips the flag so the remaining rows are
+        // deferred too rather than hammering a throttled endpoint.
         if (err instanceof GitHubAPIError && err.isRateLimited) {
           rateLimited = true
-          break
+          deferred.push({ key: row.key, label })
+        } else {
+          log.debug("bulk resend: per-row invite failed", { err })
+          failed.push({ key: row.key, label, detail: getErrorMessage(err) })
         }
       }
       tick(label)
@@ -291,6 +303,7 @@ const RosterBulkActionsBar = ({
               resent: invited.length,
             }),
           },
+          ...deferred,
         ],
       })
     setResult({

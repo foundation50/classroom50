@@ -32,6 +32,7 @@ import {
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
+  orgRoleForRole,
   rowToStudent,
   sortRolesByRank,
   type RosterRole,
@@ -350,9 +351,9 @@ const RosterMemberModal = ({
         inviteeId,
         invitationId: row.invitation_id,
         teamIds: teamId ? [teamId] : undefined,
-        // Re-issue with the same org role as the original invite (instructor ->
-        // org OWNER), so a resend never downgrades a pending instructor.
-        role: role === "instructor" ? "admin" : "direct_member",
+        // Re-issue with the same org role as the original invite, so a resend
+        // never downgrades a pending instructor from org OWNER.
+        role: orgRoleForRole(role),
       })
       onResent(row.key)
       onClose()

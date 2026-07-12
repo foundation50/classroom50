@@ -1024,9 +1024,7 @@ export async function resendOrgInvitation(
         role,
       })
     } catch (err) {
-      // The stale invite is already cancelled; a failed recreate would orphan
-      // the invitee. Best-effort re-issue so they stay pending, then rethrow the
-      // original error so the caller still surfaces the failure.
+      // Best-effort re-issue (see the orphan-window note above), then rethrow.
       try {
         await createOrgInvitation(client, {
           org,

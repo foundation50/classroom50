@@ -21,11 +21,16 @@ import Avatar from "@/components/avatar"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
+import {
+  inviteRosterStudents,
+  bulkInviteByEmail,
+} from "@/api/mutations/students"
 import type { RosterCsvProblem } from "@/api/mutations/students"
 import { getErrorMessage, cancelOrgInvitation } from "@/hooks/github/mutations"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
+import type { GitHubOrgInvitation } from "@/hooks/github/types"
 import {
   githubKeys,
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
@@ -37,6 +42,7 @@ import {
   type SuppressedLogins,
 } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, RosterRole } from "@/util/teamRoster"
+import { roleForOrgRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
@@ -197,6 +203,40 @@ const EnrolledStudents = ({
       notify({
         tone: "error",
         message: t("students.failedInviteDismissError", {
+          error: getErrorMessage(err),
+        }),
+      }),
+  })
+
+  // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
+  // an equivalent fresh invite — same classroom role (instructor -> org OWNER),
+  // by username when known (carries the team) else by email. A login-less,
+  // email-less invite can't be re-issued (dismiss-only).
+  const reinviteFailedInvite = useMutation({
+    mutationFn: async (inv: GitHubOrgInvitation) => {
+      await cancelOrgInvitation(client, { org, invitationId: inv.id })
+      const role = roleForOrgRole(inv.role)
+      if (inv.login) {
+        await inviteRosterStudents(client, {
+          org,
+          classroom,
+          students: [{ username: inv.login, role }],
+        })
+      } else if (inv.email) {
+        await bulkInviteByEmail(client, {
+          org,
+          classroom,
+          invites: [{ email: inv.email, role }],
+        })
+      } else {
+        throw new Error(t("students.failedInviteNoTarget"))
+      }
+    },
+    onSuccess: () => invalidateInviteQueries(),
+    onError: (err) =>
+      notify({
+        tone: "error",
+        message: t("students.failedInviteReinviteError", {
           error: getErrorMessage(err),
         }),
       }),
@@ -767,14 +807,32 @@ const EnrolledStudents = ({
                       </span>
                     ) : null}
                   </span>
-                  <Button
-                    variant="ghost"
-                    size="xs"
-                    disabled={dismissFailedInvite.isPending}
-                    onClick={() => dismissFailedInvite.mutate(inv.id)}
-                  >
-                    {t("students.dismiss")}
-                  </Button>
+                  <div className="flex shrink-0 items-center gap-1">
+                    {inv.login || inv.email ? (
+                      <Button
+                        variant="ghost"
+                        size="xs"
+                        disabled={
+                          reinviteFailedInvite.isPending ||
+                          dismissFailedInvite.isPending
+                        }
+                        onClick={() => reinviteFailedInvite.mutate(inv)}
+                      >
+                        {t("students.reinvite")}
+                      </Button>
+                    ) : null}
+                    <Button
+                      variant="ghost"
+                      size="xs"
+                      disabled={
+                        reinviteFailedInvite.isPending ||
+                        dismissFailedInvite.isPending
+                      }
+                      onClick={() => dismissFailedInvite.mutate(inv.id)}
+                    >
+                      {t("students.dismiss")}
+                    </Button>
+                  </div>
                 </li>
               )
             })}

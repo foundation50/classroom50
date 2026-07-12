@@ -29,6 +29,7 @@ import {
   syncRosterFromTeam,
 } from "@/api/mutations/students"
 import { rosterPath } from "@/util/rosterPath"
+import { orgRoleForRole } from "@/util/teamRoster"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
@@ -524,7 +525,7 @@ const PendingStaffRow = ({
         invitationId: invite.id,
         teamIds: teamId ? [teamId] : undefined,
         // Preserve the original org role: an instructor invite is org OWNER.
-        role: role === "instructor" ? "admin" : "direct_member",
+        role: orgRoleForRole(role),
       })
     },
     onSuccess: () => {
