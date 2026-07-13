@@ -1,11 +1,5 @@
-"""Tests for runner.py's pytest grading path.
-
-Focus is _ensure_pytest (issue #212): actions/setup-python provides only bare
-CPython, so a `python` test must have pytest + pytest-json-report installed
-before it runs. _ensure_pytest checks each dep against the grading interpreter
-and installs only what's missing, best-effort, without breaking per-case
-scoring when the report is present.
-"""
+"""Tests for runner.py's pytest grading path (_ensure_pytest, issue #212):
+install the pytest deps missing from the grading interpreter, best-effort."""
 
 from __future__ import annotations
 
@@ -24,14 +18,16 @@ def _completed(returncode: int) -> subprocess.CompletedProcess[str]:
 
 
 class _InstallRecorder:
-    """Stand-in for runner._run_command that records the install commands it's
-    asked to run (the only thing _ensure_pytest still shells out for)."""
+    """Stand-in for runner._run_command that records the install commands (and
+    their timeouts) it's asked to run."""
 
     def __init__(self):
         self.installs: list[str] = []
+        self.timeouts: list[int] = []
 
     def __call__(self, command, cwd, timeout, stdin=""):
         self.installs.append(command)
+        self.timeouts.append(timeout)
         return _completed(0)
 
 
@@ -73,6 +69,34 @@ def test_installs_both_when_both_missing(monkeypatch):
     assert "pytest-json-report" in rec.installs[0]
 
 
+def test_install_targets_grading_interpreter(monkeypatch):
+    import shlex
+    import sys
+    rec = _run_ensure(monkeypatch, set())
+    # The fix rests on installing into the interpreter that grades (sys.executable),
+    # not whatever `python` the run command resolves from PATH.
+    assert rec.installs[0].startswith(f"{shlex.quote(sys.executable)} -m pip install")
+
+
+def test_install_uses_its_own_timeout_floor(monkeypatch):
+    # A cold install can't fit the 10s default per-test timeout; _ensure_pytest
+    # must floor the install budget at PIP_INSTALL_TIMEOUT so the fix isn't a no-op.
+    monkeypatch.setattr(runner.importlib.util, "find_spec", lambda module: None)
+    rec = _InstallRecorder()
+    monkeypatch.setattr(runner, "_run_command", rec)
+    runner._ensure_pytest(cwd=None, timeout=10)
+    assert rec.timeouts == [runner.PIP_INSTALL_TIMEOUT]
+
+
+def test_install_keeps_larger_test_timeout(monkeypatch):
+    # A teacher-set timeout above the floor is respected, not clamped down.
+    monkeypatch.setattr(runner.importlib.util, "find_spec", lambda module: None)
+    rec = _InstallRecorder()
+    monkeypatch.setattr(runner, "_run_command", rec)
+    runner._ensure_pytest(cwd=None, timeout=runner.PIP_INSTALL_TIMEOUT + 60)
+    assert rec.timeouts == [runner.PIP_INSTALL_TIMEOUT + 60]
+
+
 def test_swallows_install_failure(monkeypatch):
     monkeypatch.setattr(runner.importlib.util, "find_spec", lambda module: None)
 
@@ -81,6 +105,18 @@ def test_swallows_install_failure(monkeypatch):
 
     monkeypatch.setattr(runner, "_run_command", boom)
     # Must not raise -- an offline runner degrades to fallback scoring.
+    runner._ensure_pytest(cwd=None, timeout=30)
+
+
+def test_swallows_install_timeout(monkeypatch):
+    # A bounded install that times out is the realistic failure; TimeoutExpired
+    # is a SubprocessError, so the except tuple must swallow it too.
+    monkeypatch.setattr(runner.importlib.util, "find_spec", lambda module: None)
+
+    def slow(command, cwd, timeout, stdin=""):
+        raise subprocess.TimeoutExpired(cmd="pip", timeout=timeout)
+
+    monkeypatch.setattr(runner, "_run_command", slow)
     runner._ensure_pytest(cwd=None, timeout=30)
 
 
