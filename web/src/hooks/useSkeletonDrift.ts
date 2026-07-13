@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { findStaleSkeletonFiles } from "./github/mutations"
 import { githubKeys } from "./github/queries"
-import useGetOrgMembership from "./useGetOrgMembership"
+import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { can } from "@/util/capabilities"
 
 // State subset the verdict depends on — structural so the fail-open logic stays
 // a pure, testable function.
@@ -31,8 +32,8 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 // dead-end their CTA on a NotFound.
 export function useSkeletonDrift(org: string | undefined) {
   const client = useGitHubClient()
-  const { data: membership } = useGetOrgMembership(org)
-  const isOwner = membership?.role === "admin"
+  const { orgRole } = useOrgRole()
+  const isOwner = can("manageOrg", { orgRole })
 
   const query = useQuery({
     queryKey: githubKeys.skeletonDrift(org ?? ""),

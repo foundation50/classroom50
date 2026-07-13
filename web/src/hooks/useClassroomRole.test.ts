@@ -10,21 +10,18 @@ import {
 
 // The pure resolution is exercised in depth in resolveRole.test.ts. This suite
 // pins the KTD-4 behavior change directly against the pure resolver: org-admin
-// status is no longer a classroom short-circuit, so an org owner not on a
-// classroom's instructor team resolves to `student` at classroom scope.
+// status is not a classroom role, so an org owner on none of a classroom's
+// teams resolves to `student` at classroom scope.
 const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",
-  staffRoleResolved: true,
-  isStaff: true,
   instructor: "non-member",
   ta: "non-member",
+  student: "non-member",
 }
 
 describe("resolveClassroomRole (KTD-4: owner is not a classroom role)", () => {
-  it("an org owner not on the instructor team is a student at classroom scope", () => {
-    // Previously this case short-circuited to "owner"; now, without a team
-    // membership, staff-but-teamless resolves to student.
+  it("an org owner on no classroom team is a student at classroom scope", () => {
     expect(resolveClassroomRole(base)).toBe("student")
   })
 
@@ -34,14 +31,14 @@ describe("resolveClassroomRole (KTD-4: owner is not a classroom role)", () => {
     )
   })
 
-  it("holds unresolved while the staff verdict is in flight (fail-closed)", () => {
-    expect(resolveClassroomRole({ ...base, staffRoleResolved: false })).toBe(
+  it("holds unresolved while an elevation read is in flight (fail-closed)", () => {
+    expect(resolveClassroomRole({ ...base, instructor: "unresolved" })).toBe(
       "unresolved",
     )
   })
 })
 
-describe("re-exported role predicates stay wired", () => {
+describe("role predicates stay wired", () => {
   it("isStaffRole / isInstructorRole", () => {
     expect(isStaffRole("ta")).toBe(true)
     expect(isInstructorRole("ta")).toBe(false)

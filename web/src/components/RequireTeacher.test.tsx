@@ -46,7 +46,6 @@ const ctx = (over: Record<string, unknown> = {}) => ({
   isLoading: false,
   isTeacher: true,
   isStudent: false,
-  isBlocked: false,
   roleResolved: true,
   showTeacherUi: true,
   ...over,

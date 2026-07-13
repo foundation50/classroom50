@@ -7,6 +7,7 @@ import {
 } from "./github/queries"
 import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { can } from "@/util/capabilities"
 
 // Owner-only endpoints; a non-owner token gets 403, surfaced as `isForbidden`
 // so the UI can explain why invite status is hidden. 403/404 stay definitive
@@ -16,18 +17,18 @@ import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 //
 // PRE-FLIGHT GATE: only an org owner may read these. A TA/instructor is a
 // definitive non-owner, so firing the request just to catch the inevitable 403
-// wastes a call and pollutes the console; gate `enabled` on the resolved org
-// role and treat a non-owner as forbidden without a request. `unresolved` holds
-// the read (fail-closed) until ownership is known.
+// wastes a call and pollutes the console; gate `enabled` on the `manageOrg`
+// capability and treat a non-owner as forbidden without a request. `unresolved`
+// holds the read (fail-closed) until ownership is known.
 const useGetOrgInvitations = (org: string) => {
   const client = useGitHubClient()
   const { orgRole } = useOrgRole()
-  const isOwner = orgRole === "owner"
+  const canManageOrg = can("manageOrg", { orgRole })
 
   const invitationsQuery = useQuery({
     queryKey: githubKeys.orgInvitations(org),
     queryFn: () => getOrgInvitations(client, org),
-    enabled: Boolean(org) && isOwner,
+    enabled: Boolean(org) && canManageOrg,
     staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })
@@ -35,7 +36,7 @@ const useGetOrgInvitations = (org: string) => {
   const failedQuery = useQuery({
     queryKey: githubKeys.orgFailedInvitations(org),
     queryFn: () => getOrgFailedInvitations(client, org),
-    enabled: Boolean(org) && isOwner,
+    enabled: Boolean(org) && canManageOrg,
     staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })

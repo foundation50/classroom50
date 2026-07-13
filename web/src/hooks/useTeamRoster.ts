@@ -4,6 +4,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { can } from "@/util/capabilities"
 import {
   githubKeys,
   teamMembersQuery,
@@ -104,8 +105,8 @@ export function useTeamRoster(
   const client = useGitHubClient()
   const { orgRole } = useOrgRole()
   // Team invitations are owner-only (like org invitations). Gate the reads on
-  // resolved org ownership so a TA/instructor doesn't fire a guaranteed 403.
-  const isOwner = orgRole === "owner"
+  // the manageOrg capability so a non-owner doesn't fire a guaranteed 403.
+  const isOwner = can("manageOrg", { orgRole })
 
   const { data: classroomJson } = useGetClassroom(org, classroom)
   const teamSlug =

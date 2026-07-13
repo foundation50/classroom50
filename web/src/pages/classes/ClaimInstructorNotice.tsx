@@ -6,6 +6,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { can } from "@/util/capabilities"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
@@ -96,7 +97,8 @@ export function ClaimInstructorNotice({
   // Only an org owner who currently resolves to `student` here needs repair. A
   // TA/instructor of this classroom, or a non-owner, never sees it. `unresolved`
   // holds the affordance back (fail-closed — don't offer it mid-resolution).
-  if (orgRole !== "owner" || actualRole !== "student") return null
+  if (!can("claimInstructor", { orgRole, classroomRole: actualRole }))
+    return null
 
   return (
     <Alert

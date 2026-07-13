@@ -3,7 +3,7 @@ import { useParams } from "@tanstack/react-router"
 import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
-import { isInstructorRole } from "@/util/resolveRole"
+import { can } from "@/util/capabilities"
 import NotFound from "@/components/NotFound"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 
@@ -63,9 +63,14 @@ const RequireStaff = ({ children }: { children: ReactNode }) => {
 }
 
 const RequireClassroomStaff = ({ children }: { children: ReactNode }) => {
-  const { showTeacherUi, roleResolved } = useClassroomRoleContext()
+  const { role, roleResolved } = useClassroomRoleContext()
   return (
-    <RoleGate resolved={roleResolved} permitted={showTeacherUi}>
+    <RoleGate
+      resolved={roleResolved}
+      permitted={can("viewClassroomStaffContent", {
+        classroomRole: role,
+      })}
+    >
       {children}
     </RoleGate>
   )
@@ -75,7 +80,12 @@ const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
   const { org } = useParams({ strict: false })
   const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
   return (
-    <RoleGate resolved={roleResolved} permitted={showTeacherUi}>
+    <RoleGate
+      resolved={roleResolved}
+      permitted={can("viewOrgStaffContent", {
+        orgStaff: showTeacherUi,
+      })}
+    >
       {children}
     </RoleGate>
   )
@@ -89,7 +99,9 @@ const RequireInstructor = ({ children }: { children: ReactNode }) => {
   return (
     <RoleGate
       resolved={!isLoading && role !== "unresolved"}
-      permitted={isInstructorRole(role)}
+      permitted={can("editClassroomSettings", {
+        classroomRole: role,
+      })}
     >
       {children}
     </RoleGate>
@@ -103,7 +115,7 @@ const RequireOwner = ({ children }: { children: ReactNode }) => {
   return (
     <RoleGate
       resolved={orgRole !== "unresolved"}
-      permitted={orgRole === "owner"}
+      permitted={can("manageOrg", { orgRole })}
     >
       {children}
     </RoleGate>

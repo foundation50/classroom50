@@ -37,6 +37,7 @@ import {
   useClassroomRoleContextOptional,
 } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { can } from "@/util/capabilities"
 import { roleLabelKey, isStaffRole, type ViewAsRole } from "@/util/resolveRole"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
@@ -635,9 +636,11 @@ export const SidebarFooter = () => {
   const { viewAs, setViewAs } = useRoleView()
   // Offer "View as" only to a real instructor of THIS classroom — the role with
   // something lower to preview. Keyed off instructor-team membership, not
-  // org-admin status (KTD-4).
+  // org-admin status (KTD-4). Uses the REAL role (actualClassroomRole), not the
+  // preview-clamped one.
   const canPreviewRoles =
-    Boolean(classroom) && actualClassroomRole === "instructor"
+    Boolean(classroom) &&
+    can("previewAsRole", { classroomRole: actualClassroomRole })
 
   // Apply a "view as" change and, if the current route is role-specific, move to
   // the analogous route for the new role so the user isn't stranded.
@@ -1020,9 +1023,9 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const { t } = useTranslation()
   const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
   // Org-level Members/Settings are owner-only, so gate those two links on the
-  // org-role context rather than the broad staff signal.
+  // org-role capability rather than the broad staff signal.
   const { orgRole } = useOrgRole()
-  const isOwner = orgRole === "owner"
+  const isOwner = can("manageOrg", { orgRole })
   const onSettings = settings || selected === "settings"
   const onPublished = selected === "published"
   const onMembers = selected === "members"

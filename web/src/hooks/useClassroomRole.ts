@@ -1,12 +1,11 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useGitHubRepo } from "./github/hooks"
-import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
+import { GitHubAPIError } from "./github/errors"
 import { staffTeamName } from "./github/mutations"
+import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import {
   resolveClassroomRole,
-  resolveTeacherVerdict,
   applyViewAs,
   membershipFromQuery,
   type EffectiveRole,
@@ -58,9 +57,9 @@ export function teamMembershipQuery(
   }
 }
 
-// Resolve the viewer's effective CLASSROOM role from live queries: the
-// classroom50 repo read (staff gate) and instructor/ta team membership. Org-
-// admin status is NOT consulted here (KTD-4) — that capability is OrgRole,
+// Resolve the viewer's effective CLASSROOM role from live team-membership
+// reads: the instructor, ta, and students teams (instructor > ta > student).
+// Org-admin status is NOT consulted here (KTD-4) — that capability is OrgRole,
 // resolved at the org boundary. Applies "view as" as a downgrade-only lens:
 // `role` reflects the preview, `actualRole` is the real one.
 export function useClassroomRole(
@@ -71,43 +70,39 @@ export function useClassroomRole(
   const client = useGitHubClient()
   const { viewAs } = useRoleView()
 
-  const staffRepoQuery = useGitHubRepo(org, "classroom50", {
-    retry: retryTransientGitHubError,
-  })
-  const staff = resolveTeacherVerdict({
-    org,
-    isSuccess: staffRepoQuery.isSuccess,
-    permissions: staffRepoQuery.data?.permissions,
-    error: staffRepoQuery.error,
-  })
-
-  const teamRole = (role: StaffRole) =>
+  const teamSlug = (role: StaffRole) =>
     org && classroom ? staffTeamName(classroom, role) : ""
+  const studentSlug =
+    org && classroom ? classroomTeamSlugHeuristic(classroom) : ""
 
+  const enabled = Boolean(org && classroom && username)
   const instructorQuery = useQuery({
     ...teamMembershipQuery(
       client,
       org ?? "",
-      teamRole("instructor"),
+      teamSlug("instructor"),
       username ?? "",
     ),
-    enabled: Boolean(org && classroom && username),
+    enabled,
   })
   const taQuery = useQuery({
-    ...teamMembershipQuery(client, org ?? "", teamRole("ta"), username ?? ""),
-    enabled: Boolean(org && classroom && username),
+    ...teamMembershipQuery(client, org ?? "", teamSlug("ta"), username ?? ""),
+    enabled,
+  })
+  const studentQuery = useQuery({
+    ...teamMembershipQuery(client, org ?? "", studentSlug, username ?? ""),
+    enabled,
   })
 
   const actualRole = resolveClassroomRole({
     org,
     classroom,
-    staffRoleResolved: staff.roleResolved,
-    isStaff: staff.isTeacher,
     instructor: membershipFromQuery(
       instructorQuery.isSuccess,
       instructorQuery.error,
     ),
     ta: membershipFromQuery(taQuery.isSuccess, taQuery.error),
+    student: membershipFromQuery(studentQuery.isSuccess, studentQuery.error),
   })
 
   // Apply the "view as" preview (downgrade-only; never escalates).
@@ -117,9 +112,9 @@ export function useClassroomRole(
   // (e.g. team reads on an org-level route) is `pending` but idle and must not
   // pin the guard's spinner.
   const isLoading =
-    staffRepoQuery.fetchStatus === "fetching" ||
     instructorQuery.fetchStatus === "fetching" ||
-    taQuery.fetchStatus === "fetching"
+    taQuery.fetchStatus === "fetching" ||
+    studentQuery.fetchStatus === "fetching"
 
   return { role, actualRole, isLoading }
 }

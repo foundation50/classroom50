@@ -31,10 +31,9 @@ const apiError = (status: number) =>
 const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",
-  staffRoleResolved: true,
-  isStaff: true,
   instructor: "non-member",
   ta: "non-member",
+  student: "non-member",
 }
 
 describe("resolveClassroomRole", () => {
@@ -44,9 +43,14 @@ describe("resolveClassroomRole", () => {
     )
   })
 
-  it("instructor outranks ta when in both", () => {
+  it("instructor outranks ta and student when in several", () => {
     expect(
-      resolveClassroomRole({ ...base, instructor: "member", ta: "member" }),
+      resolveClassroomRole({
+        ...base,
+        instructor: "member",
+        ta: "member",
+        student: "member",
+      }),
     ).toBe("instructor")
   })
 
@@ -54,40 +58,24 @@ describe("resolveClassroomRole", () => {
     expect(resolveClassroomRole({ ...base, ta: "member" })).toBe("ta")
   })
 
-  it("student when staff (repo access) but in neither staff team", () => {
+  it("student when on the students team only (positive student signal)", () => {
+    expect(resolveClassroomRole({ ...base, student: "member" })).toBe("student")
+  })
+
+  it("student when a definitive non-member of all three teams", () => {
     expect(resolveClassroomRole(base)).toBe("student")
   })
 
-  it("student when not staff (no config-repo access), ignoring stale team signal", () => {
-    expect(
-      resolveClassroomRole({ ...base, isStaff: false, instructor: "member" }),
-    ).toBe("student")
-  })
-
-  // KTD-4: the key behavior change. An org owner not on THIS classroom's
-  // instructor team resolves to `student` at classroom scope — org-admin status
-  // is no longer a classroom short-circuit. Org capability lives in OrgRole.
-  it("org owner NOT on the instructor team is a student at classroom scope (KTD-4)", () => {
-    // No isOwner input exists anymore; a real owner reads the config repo as a
-    // student (404) or is staff-but-teamless. Either way => student here.
+  // KTD-4: the key behavior change. An org owner not on THIS classroom's teams
+  // resolves to `student` at classroom scope — org-admin status is not a
+  // classroom role. Org capability lives in OrgRole.
+  it("org owner NOT on any classroom team is a student at classroom scope (KTD-4)", () => {
+    // A real owner reads all three team memberships as definitive non-member.
     expect(resolveClassroomRole(base)).toBe("student")
-    expect(
-      resolveClassroomRole({
-        ...base,
-        isStaff: false,
-        staffRoleResolved: true,
-      }),
-    ).toBe("student")
   })
 
-  describe("fail-closed (unresolved) on transient signals we depend on", () => {
-    it("unresolved when the staff (repo) verdict isn't resolved", () => {
-      expect(resolveClassroomRole({ ...base, staffRoleResolved: false })).toBe(
-        "unresolved",
-      )
-    })
-
-    it("unresolved when staff but a team read is in flight", () => {
+  describe("fail-closed (unresolved) on transient ELEVATION signals we depend on", () => {
+    it("unresolved when an elevation read (instructor/ta) is in flight", () => {
       expect(resolveClassroomRole({ ...base, instructor: "unresolved" })).toBe(
         "unresolved",
       )
@@ -96,12 +84,21 @@ describe("resolveClassroomRole", () => {
       )
     })
 
-    it("does NOT go unresolved on a team read when a higher role already matched", () => {
+    it("does NOT hold on an in-flight/errored STUDENTS read — falls through to student (never strand a real student)", () => {
+      // The students team can't grant access, so its read is fail-open-to-
+      // student once instructor/ta are definitive non-member.
+      expect(resolveClassroomRole({ ...base, student: "unresolved" })).toBe(
+        "student",
+      )
+    })
+
+    it("does NOT go unresolved on a lower team read when a higher role already matched", () => {
       expect(
         resolveClassroomRole({
           ...base,
           instructor: "member",
           ta: "unresolved",
+          student: "unresolved",
         }),
       ).toBe("instructor")
     })
