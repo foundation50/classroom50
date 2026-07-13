@@ -1,14 +1,10 @@
 import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { csvFileQuery, jsonFileQuery } from "@/hooks/github/queries"
-import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
+import { jsonFileQuery } from "@/hooks/github/queries"
+import useStudentCount from "@/hooks/useStudentCount"
 import type { GitHubFileListing } from "@/hooks/github/types"
-import {
-  isClassroomArchived,
-  type Classroom,
-  type Student,
-} from "@/types/classroom"
+import { isClassroomArchived, type Classroom } from "@/types/classroom"
 
 export type ClassroomSummary = {
   // The classroom directory slug. Always present, even when classroom.json
@@ -27,12 +23,13 @@ export type ClassroomSummary = {
   loading: boolean
 }
 
-// Lifts each classroom's classroom.json (and optionally its roster) to the
-// parent so the My Classrooms list can search/sort/filter before rendering.
-// Reuses useGetClassroom's jsonFileQuery cache keys and useGetStudents'
-// csvFileQuery keys, so no duplicate requests vs. the per-card reads. Roster
-// fetches are gated behind `withStudentCounts` (only true when the
-// student-count sort is active) to avoid an unnecessary fan-out otherwise.
+// Lifts each classroom's classroom.json to the parent so the My Classrooms list
+// can search/sort/filter before rendering the cards. Reuses useGetClassroom's
+// jsonFileQuery cache keys, so no duplicate requests vs. the per-card reads.
+// When the student-count sort is active, it also fetches the authoritative
+// role-aware student count per classroom (same useStudentCount the cards use),
+// gated behind `withStudentCounts` so the team-membership fan-out only happens
+// then.
 //
 // jsonFileQuery/csvFileQuery use retry:false, so a dir with a missing/malformed
 // classroom.json resolves to data===undefined: we keep {path} and mark the rest
@@ -55,30 +52,27 @@ const useClassroomSummaries = (
     ),
   })
 
-  const rosterResults = useQueries({
-    queries: dirs.map((dir) => ({
-      ...csvFileQuery<Student>(
-        client,
-        org ?? "",
-        "classroom50",
-        rosterPath(dir.path),
-        undefined,
-        legacyRosterPath(dir.path),
-      ),
-      enabled: withStudentCounts && Boolean(org && dir.path),
-    })),
-  })
+  // Authoritative role-aware student count per classroom, from the single
+  // useStudentCount source (R5) — never roster.csv row count, which includes
+  // staff. dirs is a stable-length listing for a mounted list (it changes only
+  // on create/delete, which remounts), so a hook-per-dir is safe here.
+  const studentCounts = dirs.map((dir) =>
+    // eslint-disable-next-line react-hooks/rules-of-hooks
+    useStudentCount(
+      withStudentCounts ? org : undefined,
+      withStudentCounts ? dir.path : undefined,
+    ),
+  )
 
   return dirs.map((dir, i) => {
     const cl = classroomResults[i]?.data
-    const roster = rosterResults[i]?.data
     return {
       path: dir.path,
       name: cl?.name,
       short_name: cl?.short_name,
       term: cl?.term,
       archived: isClassroomArchived(cl ?? {}),
-      studentCount: withStudentCounts ? roster?.length : undefined,
+      studentCount: withStudentCounts ? studentCounts[i]?.studentCount : undefined,
       loading: classroomResults[i]?.isPending ?? false,
     }
   })
