@@ -10,7 +10,7 @@ import { githubKeys } from "@/hooks/github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useGetStudents from "@/hooks/useGetStudents"
+import useStudentCount from "@/hooks/useStudentCount"
 import {
   classroomDisplayName,
   type ClassroomSummary,
@@ -47,10 +47,11 @@ type ClassroomCardProps = {
 // no assignments.json); a non-404 error sets assignmentsError so the caller can
 // show "Counts unavailable".
 function useCardCounts(org: string, classroom: string) {
-  const { students, isLoading: studentsLoading } = useGetStudents(
-    org,
-    classroom,
-  )
+  const {
+    studentCount,
+    isLoading: studentsLoading,
+    isError: studentsError,
+  } = useStudentCount(org, classroom)
   const assignmentsQuery = useGetClassroomAssignments(org, classroom)
   // A missing assignments.json 404s (a brand-new classroom has none), which is
   // the normal zero case — not a failure. Only a non-404 error is "unavailable".
@@ -58,7 +59,10 @@ function useCardCounts(org: string, classroom: string) {
     assignmentsQuery.error instanceof GitHubAPIError &&
     assignmentsQuery.error.status === 404
   return {
-    studentCount: studentsLoading ? undefined : students.length,
+    // undefined while the authoritative team count resolves; on error the caller
+    // shows "counts unavailable" rather than a misleading 0 (R6).
+    studentCount: studentsLoading ? undefined : studentCount,
+    studentsError,
     // Optional-chain `assignments` too: jsonFileQuery does no shape validation,
     // so a file that parses without an `assignments` array must not throw.
     assignmentCount: assignmentsQuery.isPending
@@ -484,22 +488,22 @@ function ClassroomBadges({ summary }: { summary: ClassroomSummary }) {
   )
 }
 
-function ClassroomStats({ org, slug }: { org: string; slug: string }) {
+export function ClassroomStats({ org, slug }: { org: string; slug: string }) {
   const { t } = useTranslation()
-  const { studentCount, assignmentCount, assignmentsError } = useCardCounts(
-    org,
-    slug,
-  )
+  const { studentCount, studentsError, assignmentCount, assignmentsError } =
+    useCardCounts(org, slug)
   return (
     <div className="flex flex-wrap items-center gap-x-4 gap-y-1">
       <CountStat
         icon={<UsersRound aria-hidden="true" className="size-4" />}
-        loading={studentCount === undefined}
+        loading={studentCount === undefined && !studentsError}
         loadingLabel={t("classes.card.loadingStudents")}
         label={
-          studentCount === 0
-            ? t("classes.noStudents")
-            : t("classes.studentCount", { count: studentCount ?? 0 })
+          studentsError
+            ? t("classes.card.countsUnavailable")
+            : studentCount === 0
+              ? t("classes.noStudents")
+              : t("classes.studentCount", { count: studentCount ?? 0 })
         }
       />
       <CountStat
