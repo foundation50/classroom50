@@ -7,6 +7,7 @@ import {
   bulkInviteByEmail,
   unenrollStudent,
   bulkUnenrollStudents,
+  resolveClassroomPendingInvite,
   bulkEnrollStudentsInClassroom,
   assignRosterMemberRole,
   applyRosterRoleChange,
@@ -42,12 +43,16 @@ const makeClient = (opts: {
     name?: string | null
     email?: string | null
   }
+  // Pending invitations listed under the classroom team (drives the
+  // sole-vs-multi-classroom cancel decision in bulk unenroll).
+  teamInvites?: Array<{ id: number; login: string; team_count?: number }>
   onTree?: (
     tree: { path: string; sha?: string | null; content?: string }[],
   ) => void
 }) => {
   const committed: CommittedCsv = { content: null }
   const membershipState = opts.membershipState ?? null
+  const invitationDeletes: number[] = []
 
   const requestRaw = vi.fn().mockImplementation((path: string) => {
     if (path.includes("/contents/") && path.includes("classroom.json")) {
@@ -107,6 +112,16 @@ const makeClient = (opts: {
       if (path.endsWith("/git/refs/heads/main")) {
         return Promise.resolve({})
       }
+      // Team-scoped pending invitations (listTeamInvitations) — must return an
+      // array and be matched before the generic /invitations catch-all below.
+      if (path.includes("/teams/") && path.includes("/invitations")) {
+        return Promise.resolve(opts.teamInvites ?? [])
+      }
+      // Cancel a specific invite by id.
+      if (/\/invitations\/\d+$/.test(path)) {
+        invitationDeletes.push(Number(path.split("/").pop()))
+        return Promise.resolve({})
+      }
       if (path.includes("/invitations")) {
         return Promise.resolve({})
       }
@@ -117,7 +132,7 @@ const makeClient = (opts: {
     })
 
   const client = { request, requestRaw } as unknown as GitHubClient
-  return { client, committed }
+  return { client, committed, invitationDeletes }
 }
 
 const HEADER = "username,first_name,last_name,email,section,github_id,role\n"
@@ -1465,6 +1480,121 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
 // would leave other rosters showing them enrolled while non-member of the org).
 // A pending invite is still cancelled. The fake tracks org-membership DELETEs
 // and the committed roster so we can assert both.
+describe("resolveClassroomPendingInvite — sole-classroom detection", () => {
+  const makeInviteClient = (opts: {
+    teamInvites: Array<{
+      id: number
+      login: string
+      team_count?: number
+      invitation_teams_url?: string | null
+    }>
+    inviteTeamsByUrl?: Record<string, Array<{ slug: string }>>
+    failList?: boolean
+  }) => {
+    const request = vi.fn((path: string) => {
+      if (path.includes("/teams/") && path.includes("/invitations")) {
+        if (opts.failList) return Promise.reject(new Error("boom"))
+        return Promise.resolve(opts.teamInvites)
+      }
+      if (opts.inviteTeamsByUrl && path in opts.inviteTeamsByUrl) {
+        return Promise.resolve(opts.inviteTeamsByUrl[path])
+      }
+      return Promise.reject(new Error(`unexpected: ${path}`))
+    })
+    const requestRaw = vi.fn((path: string) => {
+      if (path.includes("classroom.json")) {
+        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      return Promise.reject(new Error(`unexpected raw: ${path}`))
+    })
+    return { request, requestRaw } as unknown as GitHubClient
+  }
+
+  const call = (client: GitHubClient) =>
+    resolveClassroomPendingInvite(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+      teamSlug: "classroom50-cs101",
+    })
+
+  it("sole-classroom when team_count is 1", async () => {
+    const client = makeInviteClient({
+      teamInvites: [{ id: 1, login: "bob", team_count: 1 }],
+    })
+    expect(await call(client)).toEqual({ invitationId: 1, soleClassroom: true })
+  })
+
+  it("NOT sole-classroom when team_count > 1", async () => {
+    const client = makeInviteClient({
+      teamInvites: [{ id: 1, login: "bob", team_count: 2 }],
+    })
+    expect(await call(client)).toEqual({
+      invitationId: 1,
+      soleClassroom: false,
+    })
+  })
+
+  it("resolves invitation_teams_url when team_count is absent: single team matches", async () => {
+    const client = makeInviteClient({
+      teamInvites: [
+        {
+          id: 1,
+          login: "bob",
+          invitation_teams_url: "https://api.github.com/invites/1/teams",
+        },
+      ],
+      inviteTeamsByUrl: {
+        "https://api.github.com/invites/1/teams": [
+          { slug: "classroom50-cs101" },
+        ],
+      },
+    })
+    expect(await call(client)).toEqual({ invitationId: 1, soleClassroom: true })
+  })
+
+  it("NOT sole-classroom when invitation_teams_url resolves to multiple teams", async () => {
+    const client = makeInviteClient({
+      teamInvites: [
+        {
+          id: 1,
+          login: "bob",
+          invitation_teams_url: "https://api.github.com/invites/1/teams",
+        },
+      ],
+      inviteTeamsByUrl: {
+        "https://api.github.com/invites/1/teams": [
+          { slug: "classroom50-cs101" },
+          { slug: "classroom50-cs201" },
+        ],
+      },
+    })
+    expect(await call(client)).toEqual({
+      invitationId: 1,
+      soleClassroom: false,
+    })
+  })
+
+  it("matches the invite login case-insensitively", async () => {
+    const client = makeInviteClient({
+      teamInvites: [{ id: 9, login: "BoB", team_count: 1 }],
+    })
+    expect(await call(client)).toEqual({ invitationId: 9, soleClassroom: true })
+  })
+
+  it("returns no invite (fail safe) when the user has no pending invite on the team", async () => {
+    const client = makeInviteClient({
+      teamInvites: [{ id: 1, login: "someoneelse", team_count: 1 }],
+    })
+    expect(await call(client)).toEqual({ soleClassroom: false })
+  })
+
+  it("returns fail-safe (do not cancel) when the team-invitations read throws", async () => {
+    const client = makeInviteClient({ teamInvites: [], failList: true })
+    expect(await call(client)).toEqual({ soleClassroom: false })
+  })
+})
+
 describe("unenrollStudent — classroom-scoped, no active-member org removal", () => {
   const aliceEnrolled = "alice,Alice,A,alice@x.edu,,42\n"
   const bobInvited = "bob,Bob,B,bob@x.edu,,43\n"
@@ -1473,10 +1603,32 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
     startingCsv: string
     membershipState?: "active" | "pending" | null
     viewer?: { login: string; id: number }
+    // Pending invitations listed under the classroom's team (GET
+    // /orgs/{org}/teams/{slug}/invitations). Drives the sole-vs-multi-classroom
+    // cancel decision. Defaults to a single sole-classroom invite for the
+    // pending user so the legacy "cancels a pending invite" case still cancels.
+    teamInvites?: Array<{
+      id: number
+      login: string
+      team_count?: number
+      invitation_teams_url?: string | null
+    }>
+    // Teams resolved from an invite's invitation_teams_url (keyed by URL).
+    inviteTeamsByUrl?: Record<string, Array<{ slug: string }>>
+    // When true, the invite-cancel DELETE rejects with a non-404 error so the
+    // caller's non-fatal warning path can be exercised.
+    failCancel?: boolean
   }) => {
     const committed: { content: string | null } = { content: null }
     const membershipState = opts.membershipState ?? null
     const orgMembershipDeletes: string[] = []
+    const invitationDeletes: number[] = []
+    // Default: one sole-classroom pending invite for "bob"/"alice" so an
+    // unspecified pending test still exercises the cancel path.
+    const teamInvites = opts.teamInvites ?? [
+      { id: 7001, login: "bob", team_count: 1 },
+      { id: 7002, login: "alice", team_count: 1 },
+    ]
 
     const requestRaw = vi.fn().mockImplementation((path: string) => {
       if (path.includes("/contents/") && path.includes("classroom.json")) {
@@ -1501,6 +1653,34 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
           }
           if (path === "/user" || path.startsWith("/users/")) {
             return Promise.resolve(opts.viewer ?? { login: "teacher", id: 999 })
+          }
+          // Team-scoped pending invitations for the sole-classroom decision.
+          if (path.includes("/teams/") && path.includes("/invitations")) {
+            return Promise.resolve(teamInvites)
+          }
+          // A resolved invite's teams (invitation_teams_url), when routed here.
+          if (opts.inviteTeamsByUrl && path in opts.inviteTeamsByUrl) {
+            return Promise.resolve(opts.inviteTeamsByUrl[path])
+          }
+          // Cancel a specific invite by id: DELETE /orgs/{org}/invitations/{id}.
+          if (
+            /\/invitations\/\d+$/.test(path) &&
+            (options?.method ?? "GET") === "DELETE"
+          ) {
+            if (opts.failCancel) {
+              return Promise.reject(
+                new GitHubAPIError({
+                  status: 500,
+                  url: path,
+                  message: "boom",
+                  body: null,
+                  rateLimit: {} as never,
+                }),
+              )
+            }
+            const id = Number(path.split("/").pop())
+            invitationDeletes.push(id)
+            return Promise.resolve({})
           }
           // Org membership: GET returns state; DELETE is the removal/cancel we
           // assert on. Team memberships also hit /memberships/ but include
@@ -1555,14 +1735,15 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
       )
 
     const client = { request, requestRaw } as unknown as GitHubClient
-    return { client, committed, orgMembershipDeletes }
+    return { client, committed, orgMembershipDeletes, invitationDeletes }
   }
 
   it("removes the roster row but never removes an ACTIVE org member", async () => {
-    const { client, committed, orgMembershipDeletes } = makeUnenrollClient({
-      startingCsv: HEADER + aliceEnrolled,
-      membershipState: "active",
-    })
+    const { client, committed, orgMembershipDeletes, invitationDeletes } =
+      makeUnenrollClient({
+        startingCsv: HEADER + aliceEnrolled,
+        membershipState: "active",
+      })
 
     await unenrollStudent(client, {
       org: "acme",
@@ -1580,15 +1761,19 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
 
     const rows = rowsFromCsv(committed.content!)
     expect(rows.find((r) => r.username === "alice")).toBeUndefined()
-    // No org-membership DELETE for an active member.
+    // An active member is never removed/cancelled by EITHER mechanism.
     expect(orgMembershipDeletes).toHaveLength(0)
+    expect(invitationDeletes).toHaveLength(0)
   })
 
-  it("cancels a PENDING invite on unenroll", async () => {
-    const { client, committed, orgMembershipDeletes } = makeUnenrollClient({
-      startingCsv: HEADER + bobInvited,
-      membershipState: "pending",
-    })
+  it("cancels a PENDING invite on unenroll when it's sole-classroom", async () => {
+    const { client, committed, orgMembershipDeletes, invitationDeletes } =
+      makeUnenrollClient({
+        startingCsv: HEADER + bobInvited,
+        membershipState: "pending",
+        // bob's pending invite belongs solely to this classroom (team_count 1).
+        teamInvites: [{ id: 7001, login: "bob", team_count: 1 }],
+      })
 
     await unenrollStudent(client, {
       org: "acme",
@@ -1607,8 +1792,70 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
     expect(
       rowsFromCsv(committed.content!).find((r) => r.username === "bob"),
     ).toBeUndefined()
-    // The pending invite is cancelled via the memberships DELETE.
-    expect(orgMembershipDeletes).toHaveLength(1)
+    // Cancelled by the specific invitation id, NOT the org-wide membership DELETE.
+    expect(invitationDeletes).toEqual([7001])
+    expect(orgMembershipDeletes).toHaveLength(0)
+  })
+
+  it("keeps a PENDING invite that spans other classrooms (never revokes a sibling)", async () => {
+    const { client, committed, orgMembershipDeletes, invitationDeletes } =
+      makeUnenrollClient({
+        startingCsv: HEADER + bobInvited,
+        membershipState: "pending",
+        // bob's pending invite carries this classroom's team AND another's.
+        teamInvites: [{ id: 7001, login: "bob", team_count: 2 }],
+      })
+
+    const result = await unenrollStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      student: {
+        username: "bob",
+        first_name: "Bob",
+        last_name: "B",
+        email: "bob@x.edu",
+        section: "",
+        github_id: "43",
+        role: "",
+      },
+    })
+
+    // Roster row still removed, but NO invite cancel of any kind.
+    expect(
+      rowsFromCsv(committed.content!).find((r) => r.username === "bob"),
+    ).toBeUndefined()
+    expect(invitationDeletes).toHaveLength(0)
+    expect(orgMembershipDeletes).toHaveLength(0)
+    // The teacher is warned the invite was kept.
+    expect(result.teamWarning).toMatch(/other classrooms/i)
+  })
+
+  it("keeps a PENDING invite when its scope can't be confirmed (fail safe)", async () => {
+    const { client, invitationDeletes, orgMembershipDeletes } =
+      makeUnenrollClient({
+        startingCsv: HEADER + bobInvited,
+        membershipState: "pending",
+        // No matching team invite found -> can't confirm sole-classroom.
+        teamInvites: [],
+      })
+
+    const result = await unenrollStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      student: {
+        username: "bob",
+        first_name: "Bob",
+        last_name: "B",
+        email: "bob@x.edu",
+        section: "",
+        github_id: "43",
+        role: "",
+      },
+    })
+
+    expect(invitationDeletes).toHaveLength(0)
+    expect(orgMembershipDeletes).toHaveLength(0)
+    expect(result.teamWarning).toBeDefined()
   })
 
   it("does not touch other rosters: only the target classroom's CSV is committed", async () => {
@@ -1639,10 +1886,42 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
   })
 
   it("keeps the signed-in teacher's pending invite (self-guard)", async () => {
-    const { client, orgMembershipDeletes } = makeUnenrollClient({
+    const { client, orgMembershipDeletes, invitationDeletes } =
+      makeUnenrollClient({
+        startingCsv: HEADER + bobInvited,
+        membershipState: "pending",
+        // Even a sole-classroom invite must not be cancelled for self.
+        teamInvites: [{ id: 7001, login: "bob", team_count: 1 }],
+        viewer: { login: "bob", id: 43 },
+      })
+
+    const result = await unenrollStudent(client, {
+      org: "acme",
+      classroom: "cs101",
+      student: {
+        username: "bob",
+        first_name: "Bob",
+        last_name: "B",
+        email: "bob@x.edu",
+        section: "",
+        github_id: "43",
+        role: "",
+      },
+    })
+
+    // Self: invite NOT cancelled by EITHER mechanism, and a warning explains why.
+    expect(invitationDeletes).toHaveLength(0)
+    expect(orgMembershipDeletes).toHaveLength(0)
+    expect(result.teamWarning).toMatch(/signed-in account/i)
+  })
+
+  it("warns (non-fatal) when the sole-classroom invite cancel fails", async () => {
+    const { client, committed, invitationDeletes } = makeUnenrollClient({
       startingCsv: HEADER + bobInvited,
       membershipState: "pending",
-      viewer: { login: "bob", id: 43 },
+      teamInvites: [{ id: 7001, login: "bob", team_count: 1 }],
+      // The invite-cancel DELETE rejects with a non-404 error.
+      failCancel: true,
     })
 
     const result = await unenrollStudent(client, {
@@ -1659,9 +1938,14 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
       },
     })
 
-    // Self: invite NOT cancelled, and a warning explains why.
-    expect(orgMembershipDeletes).toHaveLength(0)
-    expect(result.teamWarning).toMatch(/signed-in account/i)
+    // The roster commit still landed; the failure is a non-fatal warning.
+    expect(
+      rowsFromCsv(committed.content!).find((r) => r.username === "bob"),
+    ).toBeUndefined()
+    expect(invitationDeletes).toHaveLength(0) // the DELETE threw, nothing recorded
+    expect(result.teamWarning).toMatch(
+      /cancelling their pending org invite failed/i,
+    )
   })
 })
 
@@ -1704,6 +1988,31 @@ describe("bulkUnenrollStudents — single-commit batch removal", () => {
     expect(survivors).toEqual(["carol"])
     expect(result.removed.map((s) => s.username)).toEqual(["alice", "bob"])
     expect(result.notFound).toHaveLength(0)
+  })
+
+  it("cancels a sole-classroom pending invite but keeps a multi-classroom one", async () => {
+    const { client, invitationDeletes } = makeClient({
+      startingCsv: rosterWith(["alice", "bob"]),
+      membershipState: "pending",
+      // alice's invite is sole-classroom (team_count 1); bob's spans two.
+      teamInvites: [
+        { id: 8001, login: "alice", team_count: 1 },
+        { id: 8002, login: "bob", team_count: 2 },
+      ],
+      // The viewer is neither, so neither is skipped as self.
+      user: { login: "teacher", id: 999 },
+    })
+
+    const result = await bulkUnenrollStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [student("alice", "100"), student("bob", "101")],
+    })
+
+    expect(result.removed.map((s) => s.username)).toEqual(["alice", "bob"])
+    // Only alice's sole-classroom invite is cancelled by id; bob's is kept.
+    expect(invitationDeletes).toEqual([8001])
+    expect(result.warnings.join(" ")).toMatch(/other classrooms/i)
   })
 
   it("reports rows already gone as notFound and still commits the rest", async () => {

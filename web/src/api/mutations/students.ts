@@ -1,6 +1,7 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import {
   addUserToTeam,
+  cancelOrgInvitation,
   createGitCommit,
   createGitTree,
   createOrgInvitation,
@@ -11,7 +12,6 @@ import {
   grantTeamConfigRepoWrite,
   isActiveMember,
   readOrgMembershipState,
-  removeOrgMembership,
   removeUserFromTeam,
   setOrgMembershipRole,
   staffTeamName,
@@ -102,6 +102,62 @@ async function resolveClassroomTeamSlug(
   classroom: string,
 ): Promise<string> {
   return (await resolveClassroomTeam(client, org, classroom)).slug
+}
+
+// Decision input for unenroll's invite cancel: for a pending invitee on THIS
+// classroom, find their team-scoped invitation and whether it belongs solely to
+// this classroom. GitHub can't remove one team from a multi-team invite (DELETE
+// cancels the whole thing), so unenroll only cancels a sole-classroom invite —
+// a multi-classroom invite is left intact rather than revoking a sibling
+// classroom's onboarding. Fail-safe: any unresolved signal returns
+// soleClassroom:false so the caller leaves the invite alone. Never throws.
+export type ClassroomPendingInvite = {
+  invitationId?: number
+  soleClassroom: boolean
+}
+
+export async function resolveClassroomPendingInvite(
+  client: GitHubClient,
+  input: {
+    org: string
+    classroom: string
+    username: string
+    teamSlug?: string
+  },
+): Promise<ClassroomPendingInvite> {
+  const { org, classroom, username } = input
+  const loginKey = username.trim().toLowerCase()
+  if (!loginKey) return { soleClassroom: false }
+
+  try {
+    const teamSlug =
+      input.teamSlug ?? (await resolveClassroomTeamSlug(client, org, classroom))
+    const invites = await listTeamInvitations(client, org, teamSlug)
+    const invite = invites.find(
+      (i) => i.login?.trim().toLowerCase() === loginKey,
+    )
+    if (!invite) return { soleClassroom: false }
+
+    // team_count is the invite's TOTAL team span (not just this team). Since the
+    // invite is listed under this classroom's team, exactly 1 => solely this
+    // classroom. When absent, resolve the team set and require it to be [teamSlug].
+    if (typeof invite.team_count === "number") {
+      return { invitationId: invite.id, soleClassroom: invite.team_count === 1 }
+    }
+    if (invite.invitation_teams_url) {
+      const teams = await client.request<Array<{ slug?: string }>>(
+        invite.invitation_teams_url,
+      )
+      const wantSlug = teamSlug.toLowerCase()
+      const sole =
+        teams.length === 1 && teams[0]?.slug?.toLowerCase() === wantSlug
+      return { invitationId: invite.id, soleClassroom: sole }
+    }
+    // Have the invite id but can't confirm span: fail safe, don't cancel.
+    return { invitationId: invite.id, soleClassroom: false }
+  } catch {
+    return { soleClassroom: false }
+  }
 }
 
 // Slug + numeric id from a single classroom.json read (404 -> derived slug,
@@ -2286,11 +2342,12 @@ export async function unenrollStudent(
     }
   }
 
-  // Cancel a pending invite (a not-yet-accepted invitee has no cross-classroom
-  // footprint). An ACTIVE member is never removed here — unenroll is
-  // classroom-scoped; org removal lives on the Members page. Resolve
-  // defensively: a reject after the roster commit landed would discard
-  // accumulated warnings and break the "commit landed -> non-fatal" guarantee.
+  // Cancel the pending invite only when it belongs solely to this classroom
+  // (see resolveClassroomPendingInvite); a multi-classroom invite is left intact
+  // so a sibling classroom's onboarding survives. An ACTIVE member is never
+  // touched — unenroll is classroom-scoped; org removal lives on the Members
+  // page. Resolve defensively: a reject after the commit landed would break the
+  // "commit landed -> non-fatal warning" guarantee.
   const orgState = await orgStatePromise.catch(() => null)
 
   // Never cancel the signed-in teacher's own invite (a teacher mid-enrollment).
@@ -2306,15 +2363,36 @@ export async function unenrollStudent(
         `account.`,
     )
   } else if (shouldCancelInvite) {
-    try {
-      await removeOrgMembership(client, { org, username: normalizedUsername })
-    } catch (err) {
-      log.error("org invite cancellation failed (student unenrolled)", { err })
-      const detail = getErrorMessage(err)
+    const teamSlug = await teamSlugPromise.catch(() => undefined)
+    const invite = await resolveClassroomPendingInvite(client, {
+      org,
+      classroom,
+      username: normalizedUsername,
+      teamSlug,
+    })
+    if (invite.soleClassroom && invite.invitationId !== undefined) {
+      try {
+        await cancelOrgInvitation(client, {
+          org,
+          invitationId: invite.invitationId,
+        })
+      } catch (err) {
+        log.error("org invite cancellation failed (student unenrolled)", {
+          err,
+        })
+        const detail = getErrorMessage(err)
+        warnings.push(
+          `${toRemoveStudent.username} was removed from the roster, but ` +
+            `cancelling their pending org invite failed (${detail}); retry from ` +
+            `the organization's people page.`,
+        )
+      }
+    } else {
       warnings.push(
-        `${toRemoveStudent.username} was removed from the roster, but ` +
-          `cancelling their pending org invite failed (${detail}); retry from ` +
-          `the organization's people page.`,
+        `${toRemoveStudent.username} was removed from this classroom, but their ` +
+          `pending organization invite was kept because it also grants access ` +
+          `to other classrooms (or its scope couldn't be confirmed). Cancel it ` +
+          `from the organization's people page if it's no longer needed.`,
       )
     }
   }
@@ -2495,25 +2573,43 @@ export async function bulkUnenrollStudents(
       }
     }
 
-    // Cancel a still-pending invite only (never an active member; never self).
+    // Cancel a still-pending invite only when it belongs solely to this
+    // classroom (never an active member; never self). A multi-classroom invite
+    // is left intact — the team drop above is the classroom-scoped effect.
     if (username) {
       const orgState = await getOrgMembershipState(client, org, username).catch(
         () => null,
       )
       if (orgState === "pending" && !isSameGitHubUser(viewer, student)) {
-        try {
-          await removeOrgMembership(client, { org, username })
-        } catch (err) {
-          log.error(
-            "org invite cancellation failed (student bulk-unenrolled)",
-            {
-              err,
-            },
-          )
+        const invite = await resolveClassroomPendingInvite(client, {
+          org,
+          classroom,
+          username,
+          teamSlug,
+        })
+        if (invite.soleClassroom && invite.invitationId !== undefined) {
+          try {
+            await cancelOrgInvitation(client, {
+              org,
+              invitationId: invite.invitationId,
+            })
+          } catch (err) {
+            log.error(
+              "org invite cancellation failed (student bulk-unenrolled)",
+              { err },
+            )
+            warnings.push(
+              `${username} was removed from the roster, but cancelling their ` +
+                `pending org invite failed (${getErrorMessage(err)}); retry from ` +
+                `the organization's people page.`,
+            )
+          }
+        } else {
           warnings.push(
-            `${username} was removed from the roster, but cancelling their ` +
-              `pending org invite failed (${getErrorMessage(err)}); retry from ` +
-              `the organization's people page.`,
+            `${username} was removed from this classroom, but their pending org ` +
+              `invite was kept because it also grants access to other classrooms ` +
+              `(or its scope couldn't be confirmed). Cancel it from the ` +
+              `organization's people page if it's no longer needed.`,
           )
         }
       } else if (orgState === "pending" && isSameGitHubUser(viewer, student)) {

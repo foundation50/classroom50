@@ -263,8 +263,11 @@ export const OrgRepos = ({
 
   let maintainRepos = repos.filter((repo) => repo.permissions?.maintain)
   if (classroom) {
+    // Classroom repos are `<classroom>-<assignment>-<user>`, so require the
+    // trailing "-" to avoid matching a sibling classroom whose name extends
+    // this one (e.g. "cs" wrongly matching "cs101-a1-bob").
     maintainRepos = maintainRepos.filter((repo) =>
-      repo.name.startsWith(classroom),
+      repo.name.startsWith(`${classroom}-`),
     )
   }
 
