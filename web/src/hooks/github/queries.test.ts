@@ -5,6 +5,7 @@ import {
   configCommitsQuery,
   csvFileQuery,
   getClassroom50OrgSummary,
+  getOrgFailedInvitationsForTeam,
   listAllOrgMembers,
   listOrgAdmins,
   listOrgTeams,
@@ -237,6 +238,160 @@ describe("listTeamInvitations (team-scoped pending, role attribution)", () => {
     )
     expect(invites).toHaveLength(101)
     expect(invites[100]).toMatchObject({ login: null, email: "invitee@x.edu" })
+  })
+})
+
+describe("getOrgFailedInvitationsForTeam (team-scoped failed invites, #236)", () => {
+  const failedListUrl = "/orgs/acme/failed_invitations?per_page=100&page=1"
+  // A client whose request routes by URL: the org-wide failed list, then each
+  // invite's invitation_teams_url returns that invite's team set.
+  const clientReturning = (
+    failed: unknown[],
+    teamsByUrl: Record<string, Array<{ slug: string }>>,
+  ) =>
+    ({
+      request: vi.fn((url: string) => {
+        if (url === failedListUrl) return Promise.resolve(failed)
+        if (url in teamsByUrl) return Promise.resolve(teamsByUrl[url])
+        return Promise.resolve([])
+      }),
+    }) as unknown as GitHubClient
+
+  it("keeps only failed invites whose team set includes the classroom slug", async () => {
+    const failed = [
+      {
+        id: 1,
+        login: "onteam",
+        email: null,
+        role: "direct_member",
+        team_count: 1,
+        invitation_teams_url: "https://api.github.com/invites/1/teams",
+      },
+      {
+        id: 2,
+        login: "otherclass",
+        email: null,
+        role: "direct_member",
+        team_count: 1,
+        invitation_teams_url: "https://api.github.com/invites/2/teams",
+      },
+    ]
+    const client = clientReturning(failed, {
+      "https://api.github.com/invites/1/teams": [{ slug: "classroom50-cs101" }],
+      "https://api.github.com/invites/2/teams": [{ slug: "classroom50-cs201" }],
+    })
+    const result = await getOrgFailedInvitationsForTeam(
+      client,
+      "acme",
+      "classroom50-cs101",
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ id: 1, login: "onteam" })
+  })
+
+  it("drops team-less invites (team_count 0) without fetching their teams", async () => {
+    const failed = [
+      {
+        id: 3,
+        login: "orgonly",
+        email: null,
+        role: "direct_member",
+        team_count: 0,
+        invitation_teams_url: "https://api.github.com/invites/3/teams",
+      },
+    ]
+    const request = vi.fn((url: string) =>
+      url === failedListUrl ? Promise.resolve(failed) : Promise.resolve([]),
+    )
+    const client = { request } as unknown as GitHubClient
+    const result = await getOrgFailedInvitationsForTeam(
+      client,
+      "acme",
+      "classroom50-cs101",
+    )
+    expect(result).toEqual([])
+    // No per-invite teams fetch for a team-less invite.
+    expect(
+      request.mock.calls.some(([url]) => String(url).includes("/teams")),
+    ).toBe(false)
+  })
+
+  it("drops an invite whose per-invite teams read fails (never leaks unattributable)", async () => {
+    const failed = [
+      {
+        id: 4,
+        login: "unreadable",
+        email: null,
+        role: "direct_member",
+        team_count: 1,
+        invitation_teams_url: "https://api.github.com/invites/4/teams",
+      },
+    ]
+    const request = vi.fn((url: string) => {
+      if (url === failedListUrl) return Promise.resolve(failed)
+      return Promise.reject(new Error("boom"))
+    })
+    const client = { request } as unknown as GitHubClient
+    const result = await getOrgFailedInvitationsForTeam(
+      client,
+      "acme",
+      "classroom50-cs101",
+    )
+    expect(result).toEqual([])
+  })
+
+  it("drops a team_count>0 invite with no invitation_teams_url (no fetch)", async () => {
+    const failed = [
+      {
+        id: 5,
+        login: "noteamsurl",
+        email: null,
+        role: "direct_member",
+        team_count: 1,
+        invitation_teams_url: null,
+      },
+    ]
+    const request = vi.fn((url: string) =>
+      url === failedListUrl ? Promise.resolve(failed) : Promise.resolve([]),
+    )
+    const client = { request } as unknown as GitHubClient
+    const result = await getOrgFailedInvitationsForTeam(
+      client,
+      "acme",
+      "classroom50-cs101",
+    )
+    expect(result).toEqual([])
+    expect(
+      request.mock.calls.some(([url]) => String(url).includes("/teams")),
+    ).toBe(false)
+  })
+
+  it("keeps an invite on MULTIPLE teams including the classroom, case-insensitively", async () => {
+    // A real classroom invite carries the classroom team plus possibly others;
+    // GitHub may echo the slug with different casing.
+    const failed = [
+      {
+        id: 6,
+        login: "multi",
+        email: null,
+        role: "direct_member",
+        team_count: 2,
+        invitation_teams_url: "https://api.github.com/invites/6/teams",
+      },
+    ]
+    const client = clientReturning(failed, {
+      "https://api.github.com/invites/6/teams": [
+        { slug: "some-other-team" },
+        { slug: "Classroom50-CS101" },
+      ],
+    })
+    const result = await getOrgFailedInvitationsForTeam(
+      client,
+      "acme",
+      "classroom50-cs101",
+    )
+    expect(result).toHaveLength(1)
+    expect(result[0]).toMatchObject({ id: 6, login: "multi" })
   })
 })
 

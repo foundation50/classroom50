@@ -22,6 +22,11 @@ export type GitHubOrgInvitation = {
   created_at: string
   failed_at: string | null
   failed_reason: string | null
+  // Teams on the invite: 0 => a team-less org invite (belongs to no classroom);
+  // >0 => resolve invitation_teams_url for the slugs. Used to scope a failed
+  // invite (which has no team-scoped list endpoint) to a classroom team.
+  team_count?: number
+  invitation_teams_url?: string | null
 }
 
 export type GitHubBranchRef = {

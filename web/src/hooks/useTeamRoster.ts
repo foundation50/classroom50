@@ -2,15 +2,16 @@ import { useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
+  teamFailedInvitationsQuery,
   orgMembersAllQuery,
 } from "@/hooks/github/queries"
+import { GitHubAPIError } from "@/hooks/github/errors"
 import { staffTeamName } from "@/hooks/github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import {
@@ -27,13 +28,12 @@ import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
 
-// Pending is owner-only, and the ORG-level invitations endpoint is the
-// authoritative owner check: a non-owner gets 403 there and we hide all pending
-// behind one "owners only" note. A single STAFF team's 403 is NOT a hide-all
-// signal — when org invitations are readable the viewer is an owner, so a
-// per-team 403 (or any per-team error) just omits that one team's pending
-// (handled at the call site via `data ?? []`) rather than blacking out the
-// readable org + sibling-team pending too.
+// Pending is owner-only. The manageOrg capability is the authoritative owner
+// check (a non-owner can't read invitations at all), so we hide all pending
+// behind one "owners only" note. A single team's definitive 403 on the student
+// pending read also hides (a scope gap the owner can't fix here); a per-STAFF
+// team 403 is NOT a hide-all — it just omits that one team's pending (handled at
+// the call site via `data ?? []`).
 export function computePendingHidden(invitesForbidden: boolean): boolean {
   return invitesForbidden
 }
@@ -55,13 +55,14 @@ export type UseTeamRosterResult = {
   // The classroom has zero team members AND zero pending invites — a brand-new
   // classroom nobody has joined yet.
   isEmpty: boolean
-  // Pending invites couldn't be read (getOrgInvitations is owner-only; a
-  // non-owner TA/instructor gets 403). The view then hides the pending section
-  // and shows an "owners only" note instead of rendering zero pending.
+  // Pending invites couldn't be read (owner-only; a non-owner TA/instructor
+  // can't read them). The view then hides the pending section and shows an
+  // "owners only" note instead of rendering zero pending.
   pendingHidden: boolean
-  // Failed/expired org invitations (owner-only, like pending). Empty when
-  // pendingHidden (a non-owner can't read them). Surfaced so the roster can show
-  // a "needs re-invite" section for invites GitHub couldn't deliver.
+  // Failed/expired invitations scoped to THIS classroom team (owner-only, like
+  // pending). Empty when pendingHidden (a non-owner can't read them). Surfaced
+  // so the roster can show a "needs re-invite" section for invites GitHub
+  // couldn't deliver.
   failedInvitations: GitHubOrgInvitation[]
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
@@ -139,13 +140,22 @@ export function useTeamRoster(
   const instructorMembers = instructorMembersQuery.data
   const taMembers = taMembersQuery.data
 
-  const {
-    invitations,
-    failedInvitations,
-    isLoading: invitesLoading,
-    isError: invitesError,
-    isForbidden: invitesForbidden,
-  } = useGetOrgInvitations(org)
+  // Student pending invitations, TEAM-SCOPED (owner-only, like the staff teams).
+  // GitHub lists a pending invite under a team only when that team was on the
+  // invite, and every classroom student invite carries the classroom team — so
+  // this scopes pending to THIS classroom, unlike the org-wide list which leaked
+  // one org invite onto every classroom's roster (#236). Gated on ownership so a
+  // non-owner never fires the guaranteed 403.
+  const studentInvitesQuery = useQuery({
+    ...teamInvitationsQuery(client, org, teamSlug),
+    enabled: Boolean(org && teamSlug) && isOwner,
+  })
+  // Failed/expired invites, scoped to this classroom team (see
+  // getOrgFailedInvitationsForTeam). Owner-only, same gate.
+  const studentFailedInvitesQuery = useQuery({
+    ...teamFailedInvitationsQuery(client, org, teamSlug),
+    enabled: Boolean(org && teamSlug) && isOwner,
+  })
 
   // Team-scoped pending invitations for the staff teams (owner-only, like org
   // invitations). Gated on org ownership so a non-owner never fires the 403;
@@ -159,6 +169,15 @@ export function useTeamRoster(
     enabled: Boolean(org && taSlug) && isOwner,
   })
 
+  const invitations = useMemo(
+    () => studentInvitesQuery.data ?? [],
+    [studentInvitesQuery.data],
+  )
+  const failedInvitations = useMemo(
+    () => studentFailedInvitesQuery.data ?? [],
+    [studentFailedInvitesQuery.data],
+  )
+
   // All active org members (shared cache with the Org Members page). Used only
   // to classify a roster.csv row on no team as in-org (assign a role) vs
   // not-in-org (invite). A failed/forbidden read leaves orgMembersKnown false,
@@ -171,7 +190,16 @@ export function useTeamRoster(
     return { orgMemberIds: ids, orgMemberLogins: logins }
   }, [orgMembersQuery.data])
 
-  const pendingHidden = computePendingHidden(invitesForbidden)
+  // Pending is owner-only. A definitive non-owner is hidden without a request;
+  // an owner whose student pending read returns a definitive 403 (e.g. a token
+  // scope gap) is also hidden. A transient error is NOT a hide (it self-heals
+  // and folds into isError below).
+  const studentInvitesForbidden =
+    studentInvitesQuery.error instanceof GitHubAPIError &&
+    studentInvitesQuery.error.isForbidden
+  const pendingHidden = computePendingHidden(
+    !isOwner || studentInvitesForbidden,
+  )
 
   const rows = useMemo(
     () =>
@@ -273,16 +301,18 @@ export function useTeamRoster(
 
   // Any team-member fetch (student or staff) failing for a non-404 reason is a
   // real error — surface it rather than rendering a partial roster as "empty".
-  // The invitations read counts too when it's READABLE (an owner): a transient
-  // 5xx there returns an empty list that would otherwise render as authoritative
-  // "zero pending" for an owner who does have invites. A non-owner's definitive
-  // 403 is `pendingHidden`, not an error (pending is hidden by design), so it's
+  // The student invitation reads count too when READABLE (an owner): a transient
+  // 5xx returns an empty list that would otherwise render as authoritative "zero
+  // pending" / "zero failed" for an owner who does have invites — so both the
+  // pending and the failed read fold in. A non-owner's definitive 403 is
+  // `pendingHidden`, not an error (pending is hidden by design), so it's
   // excluded.
   const isError = Boolean(
     membersError ||
     instructorMembersQuery.isError ||
     taMembersQuery.isError ||
-    (!pendingHidden && invitesError),
+    (!pendingHidden &&
+      (studentInvitesQuery.isError || studentFailedInvitesQuery.isError)),
   )
 
   // Wait on every team-member fetch (student + staff) so the roster appears
@@ -294,7 +324,7 @@ export function useTeamRoster(
     membersLoading ||
     instructorMembersQuery.isLoading ||
     taMembersQuery.isLoading ||
-    (!pendingHidden && invitesLoading)
+    (!pendingHidden && studentInvitesQuery.isLoading)
 
   return {
     rows,
@@ -326,6 +356,8 @@ export function useTeamRoster(
       void refetchMembers()
       void instructorMembersQuery.refetch()
       void taMembersQuery.refetch()
+      void studentInvitesQuery.refetch()
+      void studentFailedInvitesQuery.refetch()
       void instructorInvitesQuery.refetch()
       void taInvitesQuery.refetch()
       void orgMembersQuery.refetch()

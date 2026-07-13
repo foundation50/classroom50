@@ -27,6 +27,7 @@ import {
   type GitHubTreeResponse,
 } from "./mutations"
 import { decodeBase64Utf8 } from "@/util/github"
+import { mapWithConcurrency } from "@/util/concurrency"
 import { getCommit } from "@/api/github/queries"
 import { classroomPagesSegment } from "@/util/secret"
 import type { GetAssignmentsFileInput } from "@/api/queries/assignments"
@@ -44,12 +45,6 @@ export const githubKeys = {
 
   orgMembership: (org: string) =>
     [...githubKeys.all, "org-membership", org] as const,
-
-  orgInvitations: (org: string) =>
-    [...githubKeys.all, "org-invitations", org] as const,
-
-  orgFailedInvitations: (org: string) =>
-    [...githubKeys.all, "org-failed-invitations", org] as const,
 
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,
 
@@ -69,6 +64,9 @@ export const githubKeys = {
 
   teamInvitations: (org: string, teamSlug: string) =>
     [...githubKeys.all, "team-invitations", org, teamSlug] as const,
+
+  teamFailedInvitations: (org: string, teamSlug: string) =>
+    [...githubKeys.all, "team-failed-invitations", org, teamSlug] as const,
 
   orgTeams: (org: string) => [...githubKeys.all, "org-teams", org] as const,
 
@@ -166,12 +164,15 @@ export const githubKeys = {
     [...githubKeys.all, "releases", owner, repo] as const,
 }
 
-// Refresh roster invite-status lists after enroll/resend/unenroll: invites
-// move between pending/failed/members.
+// Refresh roster invite-status lists after enroll/resend/unenroll: invites move
+// between pending/failed/members. Team-scoped caches are keyed by slug, so
+// invalidate by the [.., kind, org] prefix to cover every classroom team.
 export function invalidateInviteQueries(queryClient: QueryClient, org: string) {
-  queryClient.invalidateQueries({ queryKey: githubKeys.orgInvitations(org) })
   queryClient.invalidateQueries({
-    queryKey: githubKeys.orgFailedInvitations(org),
+    queryKey: [...githubKeys.all, "team-invitations", org],
+  })
+  queryClient.invalidateQueries({
+    queryKey: [...githubKeys.all, "team-failed-invitations", org],
   })
   queryClient.invalidateQueries({ queryKey: githubKeys.orgMembers(org) })
 }
@@ -883,19 +884,9 @@ export async function paginateAll<T>(
   return all
 }
 
-// Owner-only (403 for non-owners). Expired invites drop off this list and
-// surface via getOrgFailedInvitations.
-export async function getOrgInvitations(
-  client: GitHubClient,
-  org: string,
-): Promise<GitHubOrgInvitation[]> {
-  return paginateAll<GitHubOrgInvitation>(
-    client,
-    (page) => `/orgs/${org}/invitations?per_page=100&page=${page}`,
-  )
-}
-
 // Failed / expired org invitations (carry failed_at / failed_reason). Owner-only.
+// Read org-wide, then attributed to a classroom team by
+// getOrgFailedInvitationsForTeam (GitHub has no team-scoped failed endpoint).
 export async function getOrgFailedInvitations(
   client: GitHubClient,
   org: string,
@@ -904,6 +895,37 @@ export async function getOrgFailedInvitations(
     client,
     (page) => `/orgs/${org}/failed_invitations?per_page=100&page=${page}`,
   )
+}
+
+// Failed org invitations scoped to ONE classroom team. GitHub has no
+// team-scoped failed endpoint, so this reads the org-wide failed list and keeps
+// only invites whose team set (resolved per invite from invitation_teams_url)
+// includes `teamSlug`. A per-invite teams read that fails drops that invite, so
+// one bad read never leaks an unattributable invite onto the roster. Owner-only.
+export async function getOrgFailedInvitationsForTeam(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+): Promise<GitHubOrgInvitation[]> {
+  const failed = await getOrgFailedInvitations(client, org)
+  const wantSlug = teamSlug.toLowerCase()
+  const candidates = failed.filter((inv) => (inv.team_count ?? 0) > 0)
+  const onTeam = await mapWithConcurrency(
+    candidates,
+    REPO_READ_CONCURRENCY,
+    async (inv) => {
+      if (!inv.invitation_teams_url) return false
+      try {
+        const teams = await client.request<GitHubTeam[]>(
+          inv.invitation_teams_url,
+        )
+        return teams.some((t) => t.slug?.toLowerCase() === wantSlug)
+      } catch {
+        return false
+      }
+    },
+  )
+  return candidates.filter((_, i) => onTeam[i])
 }
 
 export async function getTeam(
@@ -1278,6 +1300,25 @@ export function teamInvitationsQuery(
     // 403 (owner-only) / 404 stay definitive so pendingHidden / [] resolve at
     // once; a transient 5xx/429 self-heals rather than silently rendering zero
     // pending for the role with no retry (the query error isn't in isError).
+    retry: retryTransientGitHubError,
+  })
+}
+
+// Failed org invitations scoped to a classroom team. Owner-only, like the
+// pending read; a transient 5xx self-heals. Attributes each org-wide failed
+// invite to a team via its invitation_teams_url (see
+// getOrgFailedInvitationsForTeam), so a failed invite for another classroom
+// never surfaces on this roster.
+export function teamFailedInvitationsQuery(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+) {
+  return queryOptions({
+    queryKey: githubKeys.teamFailedInvitations(org, teamSlug),
+    queryFn: () => getOrgFailedInvitationsForTeam(client, org, teamSlug),
+    enabled: Boolean(org && teamSlug),
+    staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })
 }
