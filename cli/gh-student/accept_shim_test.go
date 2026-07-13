@@ -7,14 +7,15 @@ import (
 
 func TestRenderEmbeddedShim(t *testing.T) {
 	// The embedded shim is the universal one-body-fits-all that gh student
-	// accept drops into every student repo. {{ORG}} is the only per-classroom
-	// customization; everything else is fixed.
-	got := renderEmbeddedShim("cs50-fall-2026")
+	// accept drops into every student repo. {{ORG}}, the submission branch, and
+	// the config-repo branch are the per-repo substitutions; everything else is
+	// fixed.
+	got := renderEmbeddedShim("cs50-fall-2026", "main", "main")
 
 	// Trigger contract: branch pushes auto-grade; manual submit/* tag pushes
 	// still work (the runner detects which fired and creates or reuses the tag).
 	for _, want := range []string{
-		"branches: [main]",
+		`branches: ["main"]`,
 		`tags: ["submit/*"]`,
 	} {
 		if !strings.Contains(got, want) {
@@ -30,9 +31,11 @@ func TestRenderEmbeddedShim(t *testing.T) {
 		t.Errorf("embedded shim missing %q\nfull:\n%s", wantUses, got)
 	}
 
-	// Placeholder must be fully substituted.
-	if strings.Contains(got, "{{ORG}}") {
-		t.Errorf("embedded shim still contains unsubstituted {{ORG}}:\n%s", got)
+	// Placeholders must be fully substituted.
+	for _, ph := range []string{"{{ORG}}", "{{BRANCH}}", "{{CONFIG_BRANCH}}"} {
+		if strings.Contains(got, ph) {
+			t.Errorf("embedded shim still contains unsubstituted %s:\n%s", ph, got)
+		}
 	}
 
 	// Caller's job-level permissions must include both writes the runner's
@@ -68,7 +71,7 @@ func TestRenderEmbeddedShim_OrgSubstitution(t *testing.T) {
 	// matching anything else.
 	for _, org := range []string{"cs50-fall-2026", "foundation50", "very-long-org-name-2026"} {
 		t.Run(org, func(t *testing.T) {
-			got := renderEmbeddedShim(org)
+			got := renderEmbeddedShim(org, "main", "main")
 			wantUses := `uses: "` + org + `/classroom50/.github/workflows/autograde-runner.yaml@main"`
 			if !strings.Contains(got, wantUses) {
 				t.Errorf("expected %q in shim, got:\n%s", wantUses, got)
@@ -77,5 +80,28 @@ func TestRenderEmbeddedShim_OrgSubstitution(t *testing.T) {
 				t.Errorf("placeholder leak for %q:\n%s", org, got)
 			}
 		})
+	}
+}
+
+func TestRenderEmbeddedShim_BranchSubstitution(t *testing.T) {
+	// A master-default assignment repo must trigger on `master`; a config repo
+	// that stayed on `master` (rename didn't land) must be referenced via
+	// `@master` so the reusable-workflow ref resolves.
+	got := renderEmbeddedShim("cs50", "master", "master")
+	if !strings.Contains(got, `branches: ["master"]`) {
+		t.Errorf("expected branches: [\"master\"], got:\n%s", got)
+	}
+	wantUses := `uses: "cs50/classroom50/.github/workflows/autograde-runner.yaml@master"`
+	if !strings.Contains(got, wantUses) {
+		t.Errorf("expected %q, got:\n%s", wantUses, got)
+	}
+
+	// Empty branch/configBranch default to main.
+	def := renderEmbeddedShim("cs50", "", "")
+	if !strings.Contains(def, `branches: ["main"]`) {
+		t.Errorf("empty branch should default to main, got:\n%s", def)
+	}
+	if !strings.Contains(def, "autograde-runner.yaml@main") {
+		t.Errorf("empty configBranch should default to main, got:\n%s", def)
 	}
 }

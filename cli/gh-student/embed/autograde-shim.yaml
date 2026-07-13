@@ -12,9 +12,9 @@
 # This file should not be edited.
 #
 # Triggers:
-#   • push to main      — every commit grades (except the acceptance
-#                         commit, which the runner detects and skips);
-#                         the runner creates the
+#   • push to the repo's default branch — every commit grades (except
+#                         the acceptance commit, which the runner detects
+#                         and skips); the runner creates the
 #                         submit/<UTC-timestamp>-<short-sha> tag itself
 #   • push of submit/*  — manual or web-UI tag pushes work too;
 #                         the runner reuses the pushed tag
@@ -23,16 +23,16 @@ name: Autograde
 
 on:
   push:
-    branches: [main]
+    branches: ["{{BRANCH}}"]
     tags: ["submit/*"]
 
 jobs:
   grade:
-    # `uses:` quoted so the unsubstituted {{ORG}} placeholder
-    # parses as a plain string rather than a YAML flow mapping —
+    # `uses:` quoted so the unsubstituted {{ORG}}/{{CONFIG_BRANCH}} placeholders
+    # parse as a plain string rather than a YAML flow mapping —
     # actionlint and any other YAML pre-flight tool can validate
     # the embed before substitution.
-    uses: "{{ORG}}/classroom50/.github/workflows/autograde-runner.yaml@main"
+    uses: "{{ORG}}/classroom50/.github/workflows/autograde-runner.yaml@{{CONFIG_BRANCH}}"
     permissions:
       contents: write
       statuses: write

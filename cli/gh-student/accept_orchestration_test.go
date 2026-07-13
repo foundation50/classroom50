@@ -37,8 +37,9 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
 			generated = true
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"full_name": "o/cs-principles-hello-alice",
-				"html_url":  "https://github.com/o/cs-principles-hello-alice",
+				"full_name":      "o/cs-principles-hello-alice",
+				"html_url":       "https://github.com/o/cs-principles-hello-alice",
+				"default_branch": "main",
 			})
 		})
 		mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
@@ -46,8 +47,9 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 				patched = true
 			}
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"full_name": "o/cs-principles-hello-alice",
-				"html_url":  "https://github.com/o/cs-principles-hello-alice",
+				"full_name":      "o/cs-principles-hello-alice",
+				"html_url":       "https://github.com/o/cs-principles-hello-alice",
+				"default_branch": "main",
 			})
 		})
 		server := httptest.NewServer(mux)
@@ -55,12 +57,15 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		htmlURL, fullName, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		htmlURL, fullName, branch, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
 		if already {
 			t.Error("alreadyExisted = true, want false on a fresh create")
+		}
+		if branch != "main" {
+			t.Errorf("branch = %q, want main", branch)
 		}
 		if !generated || !patched {
 			t.Errorf("generated=%v patched=%v, want both true", generated, patched)
@@ -92,7 +97,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, fullName, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		_, fullName, _, already, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -117,7 +122,7 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		_, _, _, _, err := createTemplatedPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
 		if err == nil || !strings.Contains(err.Error(), "not accessible to you") {
 			t.Fatalf("err = %v, want the cross-org 'not accessible' message", err)
 		}

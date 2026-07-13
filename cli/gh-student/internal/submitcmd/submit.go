@@ -1,6 +1,6 @@
 // Package submitcmd implements `gh student submit`: snapshot the current
-// branch and push it as a new commit on the assignment repo's main, so the
-// autograde workflow tags and grades the submission. Extracted command
+// branch and push it as a new commit on the assignment repo's default branch,
+// so the autograde workflow tags and grades the submission. Extracted command
 // package; only NewCmd is exported. Consumes the internal/* seams (githubapi,
 // classroomcfg, identity, localgit) + the shared ghutil helper, never main.
 package submitcmd
@@ -38,11 +38,11 @@ func NewCmd() *cobra.Command {
 		Use:   "submit",
 		Short: "Submit the current assignment to its remote",
 		Long: "Snapshot the current branch and push it as a new commit on top\n" +
-			"of the assignment repo's `main` branch. The autograde workflow\n" +
-			"in the student repo listens for pushes to main and (a) creates\n" +
-			"its own `submit/<UTC-timestamp>-<short-sha>` tag at the pushed\n" +
-			"commit and (b) publishes a scored Release at that tag a minute\n" +
-			"or two later.\n\n" +
+			"of the assignment repo's default branch. The autograde workflow\n" +
+			"in the student repo listens for pushes to that branch and (a)\n" +
+			"creates its own `submit/<UTC-timestamp>-<short-sha>` tag at the\n" +
+			"pushed commit and (b) publishes a scored Release at that tag a\n" +
+			"minute or two later.\n\n" +
 			"Before snapshotting, the latest instructor `.gitignore` and\n" +
 			"`.github/` (both optional) are fetched from the template repo\n" +
 			"recorded in `.classroom50.yaml` so any teacher-side updates\n" +
@@ -75,10 +75,7 @@ func NewCmd() *cobra.Command {
 }
 
 func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool, out io.Writer, errOut io.Writer) error {
-	const (
-		remote = "origin"
-		branch = "main"
-	)
+	const remote = "origin"
 
 	u := ui.New(errOut)
 
@@ -114,6 +111,15 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 		return fmt.Errorf("parse remote URL: %w", err)
 	}
 	repoHTMLURL := fmt.Sprintf("https://github.com/%s/%s", repoOwner, repoName)
+
+	// Push to the assignment repo's actual default branch (which GitHub, not
+	// Classroom 50, may have named `master`) so the autograde shim — which
+	// triggers on that branch — fires. A failed lookup is fatal: silently
+	// falling back to `main` would push to the wrong branch and skip grading.
+	branch, err := resolveRepoDefaultBranch(client, repoOwner, repoName)
+	if err != nil {
+		return err
+	}
 
 	tmpRoot, err := os.MkdirTemp("", "classroom50-submit-*")
 	if err != nil {
@@ -262,6 +268,23 @@ func resolveAssignmentName(ctx context.Context, org, classroom, secret, slug str
 // assignmentNameTimeout caps the cosmetic post-push name lookup so a slow
 // Pages CDN can't stall the terminal after the submission already landed.
 const assignmentNameTimeout = 3 * time.Second
+
+// resolveRepoDefaultBranch reads the assignment repo's default branch. A GET
+// failure is returned as an error (submitting to the wrong branch would skip
+// grading); an empty value falls back to "main" (matches an auto_init repo).
+func resolveRepoDefaultBranch(client githubapi.Client, owner, repo string) (string, error) {
+	var resp struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	path := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
+	if err := client.Get(path, &resp); err != nil {
+		return "", fmt.Errorf("resolve default branch for %s/%s: %w", owner, repo, err)
+	}
+	if resp.DefaultBranch == "" {
+		return "main", nil
+	}
+	return resp.DefaultBranch, nil
+}
 
 func gitOutput(dir string, args ...string) (string, error) {
 	cmd := exec.Command("git", args...)

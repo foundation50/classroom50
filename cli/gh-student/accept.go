@@ -44,15 +44,32 @@ var embeddedShimContent string
 
 // shimOrgPlaceholder is substituted in embeddedShimContent at accept time so
 // each student repo's shim references the correct org's reusable
-// autograde-runner workflow.
-const shimOrgPlaceholder = "{{ORG}}"
+// autograde-runner workflow. shimBranchPlaceholder is the student repo's
+// default branch (the shim's push trigger); shimConfigBranchPlaceholder is the
+// config repo's default branch (the reusable-workflow ref), which may not be
+// `main` if a config-repo rename could not land.
+const (
+	shimOrgPlaceholder          = "{{ORG}}"
+	shimBranchPlaceholder       = "{{BRANCH}}"
+	shimConfigBranchPlaceholder = "{{CONFIG_BRANCH}}"
+	defaultConfigRepoBranch     = "main"
+)
 
-// renderEmbeddedShim returns the embedded shim with the org placeholder
-// substituted. The shim never changes after accept — runtime customization,
-// runner edits, and teacher overrides all flow through the runner workflow +
-// assignments.json on the teacher's side.
-func renderEmbeddedShim(org string) string {
-	return strings.ReplaceAll(embeddedShimContent, shimOrgPlaceholder, org)
+// renderEmbeddedShim returns the embedded shim with the org, submission-branch,
+// and config-branch placeholders substituted. The shim never changes after
+// accept — runtime customization, runner edits, and teacher overrides all flow
+// through the runner workflow + assignments.json on the teacher's side.
+func renderEmbeddedShim(org, branch, configBranch string) string {
+	if branch == "" {
+		branch = defaultConfigRepoBranch
+	}
+	if configBranch == "" {
+		configBranch = defaultConfigRepoBranch
+	}
+	out := strings.ReplaceAll(embeddedShimContent, shimOrgPlaceholder, org)
+	out = strings.ReplaceAll(out, shimBranchPlaceholder, branch)
+	out = strings.ReplaceAll(out, shimConfigBranchPlaceholder, configBranch)
+	return out
 }
 
 func acceptCmd() *cobra.Command {
@@ -284,15 +301,16 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 			assignment, entry.Template.Owner, entry.Template.Repo, entry.Template.Branch)
 	}
 
-	// 2) Resolve the autograder shim *before* creating the repo so a
-	//    non-default-autograder fetch failure doesn't leave a half-baked repo
-	//    on the teacher's org. The default autograder uses the embedded shim
-	//    (no Pages fetch); other names fetch from Pages.
+	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
+	//    is teacher-authored and resolved up front so a fetch failure doesn't
+	//    leave a half-baked repo. The default (embedded) shim is rendered AFTER
+	//    the repo is created, because its `on: push: branches` must match the
+	//    assignment repo's actual default branch (which GitHub, not the template,
+	//    decides) and its `uses:` ref must match the config repo's branch.
 	autograderName := entry.ResolveAutograder()
+	useDefaultShim := autograderName == contract.DefaultAutograderName
 	var shim string
-	if autograderName == contract.DefaultAutograderName {
-		shim = renderEmbeddedShim(org)
-	} else {
+	if !useDefaultShim {
 		workflow, err := assignments.FetchAutograderWorkflow(cmd.Context(), org, classroom, secret, autograderName)
 		if err != nil {
 			return err
@@ -317,8 +335,11 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	createSp := u.Spinner(createMsg)
 	createSp.Start()
 	if hasTemplate {
-		htmlURL, fullName, alreadyExisted, err = createTemplatedPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template)
-		commitBranch = entry.Template.Branch
+		var genBranch string
+		htmlURL, fullName, genBranch, alreadyExisted, err = createTemplatedPrivateAssignmentRepoInOrg(client, u, verbose, username, classroom, assignment, org, *entry.Template)
+		// The generated repo's own default branch — not the template's branch —
+		// is where control files land and what the shim must trigger on.
+		commitBranch = genBranch
 		// Resolve the template owner's immutable id best-effort so a rename
 		// of the template org/user doesn't break submit's instructor-file
 		// re-fetch. A failed lookup is non-fatal — leave owner_id null.
@@ -340,6 +361,14 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	if err != nil {
 		createSp.Fail(createMsg)
 		return err
+	}
+
+	// Render the default shim now that the assignment repo's default branch is
+	// known: `on: push: branches` targets commitBranch, and the reusable-workflow
+	// `uses:` ref targets the config repo's actual default branch (best-effort;
+	// defaults to main when it can't be read).
+	if useDefaultShim {
+		shim = renderEmbeddedShim(org, commitBranch, resolveConfigRepoBranch(client, org))
 	}
 
 	repoName := reponame.Name(classroom, assignment, username)
@@ -637,7 +666,7 @@ type GeneratedRepo struct {
 // cross-org visibility message (template not readable by the student).
 // 422-already-exists → alreadyExisted=true and the PATCH is skipped so
 // re-runs don't disturb an existing repo.
-func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef) (htmlURL, fullName string, alreadyExisted bool, err error) {
+func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, verbose bool, username, classroom, assignment, org string, tmpl assignments.TemplateRef) (htmlURL, fullName, defaultBranch string, alreadyExisted bool, err error) {
 	newRepoName := reponame.Name(classroom, assignment, username)
 	createBody, err := json.Marshal(map[string]any{
 		"owner":   org,
@@ -645,7 +674,7 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 		"private": true,
 	})
 	if err != nil {
-		return "", "", false, fmt.Errorf("error encoding json for template: %w", err)
+		return "", "", "", false, fmt.Errorf("error encoding json for template: %w", err)
 	}
 
 	createPath := fmt.Sprintf("repos/%s/%s/generate", url.PathEscape(tmpl.Owner), url.PathEscape(tmpl.Repo))
@@ -658,16 +687,16 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 				if is422AlreadyExists(httpErr) {
 					getPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
 					if getErr := client.Get(getPath, &created); getErr != nil {
-						return "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
+						return "", "", "", false, fmt.Errorf("POST %s returned 422 and follow-up GET %s failed: %w", createPath, getPath, getErr)
 					}
-					return created.HTMLURL, created.FullName, true, nil
+					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 				}
 			case http.StatusNotFound:
-				return "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your instructor to make it public or grant your account access",
+				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your instructor to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
 			}
 		}
-		return "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
+		return "", "", "", false, fmt.Errorf("POST %s: %w", createPath, err)
 	}
 
 	patchBody, err := json.Marshal(map[string]any{
@@ -676,14 +705,14 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 		"has_wiki":     false,
 	})
 	if err != nil {
-		return "", "", false, fmt.Errorf("patch body encode error: %w", err)
+		return "", "", "", false, fmt.Errorf("patch body encode error: %w", err)
 	}
 
 	patchPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(org), url.PathEscape(newRepoName))
 
 	var updated GeneratedRepo
 	if err := client.Patch(patchPath, bytes.NewReader(patchBody), &updated); err != nil {
-		return "", "", false, fmt.Errorf("created %s/%s, but failed to disable issues/projects/wiki: %w", org, newRepoName, err)
+		return "", "", "", false, fmt.Errorf("created %s/%s, but failed to disable issues/projects/wiki: %w", org, newRepoName, err)
 	}
 
 	if verbose {
@@ -691,7 +720,14 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 			updated.FullName, updated.HTMLURL)
 	}
 
-	return updated.HTMLURL, updated.FullName, false, nil
+	// Prefer the PATCH response's default_branch, falling back to the generate
+	// response — a template generated into a `master`-defaulting org yields a
+	// `master` repo regardless of the template's own branch name.
+	genBranch := updated.DefaultBranch
+	if genBranch == "" {
+		genBranch = created.DefaultBranch
+	}
+	return updated.HTMLURL, updated.FullName, defaultBranchOrMain(genBranch), false, nil
 }
 
 // createEmptyPrivateAssignmentRepoInOrg creates an empty private repo for a
@@ -752,8 +788,21 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 	return updated.HTMLURL, updated.FullName, defaultBranchOrMain(updated.DefaultBranch), false, nil
 }
 
+// resolveConfigRepoBranch returns the org's classroom50 config repo default
+// branch for the shim's reusable-workflow `uses:` ref. Best-effort: any failure
+// (or empty value) falls back to "main". This keeps the shim's `@<branch>` ref
+// valid even when a config-repo rename to main could not land.
+func resolveConfigRepoBranch(client githubapi.Client, org string) string {
+	var repo struct {
+		DefaultBranch string `json:"default_branch"`
+	}
+	if err := client.Get(fmt.Sprintf("repos/%s/classroom50", url.PathEscape(org)), &repo); err != nil {
+		return defaultConfigRepoBranch
+	}
+	return defaultBranchOrMain(repo.DefaultBranch)
+}
+
 // defaultBranchOrMain guards against an empty default_branch in the
-// create/GET response. The templated path takes its branch from the
 // (HasTemplate-guaranteed non-empty) template ref; the empty-repo path has no
 // such guarantee, so an empty value would flow into WaitForStableBranch("")
 // and 404-loop to an opaque "did not stabilize" failure, leaving a

@@ -1,8 +1,13 @@
 package submitcmd
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/foundation50/gh-student/internal/githubtest"
 )
 
 func TestParseGitHubRemote(t *testing.T) {
@@ -62,4 +67,51 @@ func TestParseGitHubRemote_ErrorMentionsShape(t *testing.T) {
 	if !strings.Contains(err.Error(), "git@github.com") {
 		t.Errorf("error should hint at expected shape, got %q", err)
 	}
+}
+
+func TestResolveRepoDefaultBranch(t *testing.T) {
+	newClient := func(t *testing.T, handler http.HandlerFunc) *httptest.Server {
+		server := httptest.NewServer(handler)
+		t.Cleanup(server.Close)
+		return server
+	}
+
+	t.Run("returns the repo's actual default branch (master)", func(t *testing.T) {
+		server := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/repos/o/repo" {
+				t.Errorf("unexpected path %s", r.URL.Path)
+			}
+			_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "master"})
+		})
+		got, err := resolveRepoDefaultBranch(githubtest.NewTestClient(t, server), "o", "repo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "master" {
+			t.Errorf("got %q, want master", got)
+		}
+	})
+
+	t.Run("empty default_branch falls back to main", func(t *testing.T) {
+		server := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": ""})
+		})
+		got, err := resolveRepoDefaultBranch(githubtest.NewTestClient(t, server), "o", "repo")
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if got != "main" {
+			t.Errorf("got %q, want main", got)
+		}
+	})
+
+	t.Run("a failed GET is fatal (never silently pushes to main)", func(t *testing.T) {
+		server := newClient(t, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+		_, err := resolveRepoDefaultBranch(githubtest.NewTestClient(t, server), "o", "repo")
+		if err == nil {
+			t.Fatal("expected an error on a failed default-branch lookup")
+		}
+	})
 }
