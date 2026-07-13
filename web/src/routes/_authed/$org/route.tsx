@@ -9,7 +9,8 @@ import {
 import { Spinner } from "@/components/Spinner"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
-import { OrgRoleProvider } from "@/context/orgRole/OrgRoleProvider"
+import { OrgRoleProvider, useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { can } from "@/util/capabilities"
 
 export const Route = createFileRoute("/_authed/$org")({
   component: OrgLayout,
@@ -38,9 +39,11 @@ function OrgLayoutInner() {
     select: (s) => s.matches.some((m) => m.routeId === "/_authed/$org/setup/"),
   })
 
-  const { data: membership, isLoading: loadingMembership } =
-    useGetOwnOrgMembership(org)
-  const isAdmin = membership?.role === "admin"
+  const { isLoading: loadingMembership } = useGetOwnOrgMembership(org)
+  // Gate on the org-role capability (provider mounted by OrgLayout) rather than
+  // re-deriving the admin literal from membership.
+  const { orgRole } = useOrgRole()
+  const isAdmin = can("manageOrg", { orgRole })
 
   const { data: repoStatus, isLoading: loadingRepo } =
     useOrgClassroom50Status(org)

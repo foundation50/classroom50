@@ -31,6 +31,7 @@ const Probe = () => {
       <span data-testid="showTeacherUi">{String(ctx.showTeacherUi)}</span>
       <span data-testid="isStudent">{String(ctx.isStudent)}</span>
       <span data-testid="roleResolved">{String(ctx.roleResolved)}</span>
+      <span data-testid="isError">{String(ctx.isError)}</span>
     </div>
   )
 }
@@ -123,6 +124,19 @@ describe("ClassroomRoleProvider", () => {
     expect(screen.getByTestId("roleResolved").textContent).toBe("false")
     expect(screen.getByTestId("isTeacher").textContent).toBe("false")
     expect(screen.getByTestId("isStudent").textContent).toBe("false")
+  })
+
+  it("passes the elevation-read error state through to the context", () => {
+    classroomRoleMock.mockReturnValue({
+      role: "unresolved",
+      actualRole: "unresolved",
+      isLoading: false,
+      isError: true,
+      refetch: () => {},
+    })
+    renderProvider()
+    expect(screen.getByTestId("isError").textContent).toBe("true")
+    expect(screen.getByTestId("roleResolved").textContent).toBe("false")
   })
 
   it("throws when used outside a provider", () => {

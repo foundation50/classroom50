@@ -1,9 +1,4 @@
-import {
-  isInstructorRole,
-  isStaffRole,
-  type EffectiveRole,
-  type OrgRole,
-} from "@/util/resolveRole"
+import type { EffectiveRole, OrgRole } from "@/util/resolveRole"
 
 // The capability vocabulary — WHAT a viewer can do, decoupled from WHICH role
 // they hold. Consumers ask `can("editClassroomSettings")` instead of comparing
@@ -35,6 +30,11 @@ export type CapabilityInput = {
 
 // Central policy: the single source of truth mapping roles to capabilities.
 // Mirrors the semantics that were previously scattered as role-literal checks.
+// Fail-closed and self-contained: an `unresolved` role is denied here (it does
+// NOT rely on callers to separately gate the sentinel). Route guards still pair
+// a `resolved` signal to decide spinner-vs-NotFound, but a consumer that reads
+// `can(...)` alone (e.g. a nav affordance) can't be tricked into granting during
+// the in-flight window.
 export function can(cap: Capability, input: CapabilityInput): boolean {
   const { orgRole, classroomRole, orgStaff } = input
   switch (cap) {
@@ -44,11 +44,11 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
     case "viewOrgStaffContent":
       return orgStaff === true
     case "viewClassroomStaffContent":
-      // instructor | ta (and permissive `unresolved` is handled by the caller's
-      // resolved gate, not here — a definitive student is denied).
-      return classroomRole !== undefined && isStaffRole(classroomRole)
+      // instructor | ta. `unresolved` is denied here (fail-closed); the caller's
+      // `resolved` gate holds a spinner rather than flashing NotFound.
+      return classroomRole === "instructor" || classroomRole === "ta"
     case "editClassroomSettings":
-      return classroomRole !== undefined && isInstructorRole(classroomRole)
+      return classroomRole === "instructor"
     case "previewAsRole":
       return classroomRole === "instructor"
     case "claimInstructor":

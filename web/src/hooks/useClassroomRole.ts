@@ -1,6 +1,7 @@
+import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { GitHubAPIError } from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { staffTeamName } from "./github/mutations"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
@@ -49,11 +50,12 @@ export function teamMembershipQuery(
     },
     enabled: Boolean(org && teamSlug && username),
     staleTime: 5 * 60 * 1000,
-    // Definitive 404 (not a member) must not retry; transient errors self-heal.
-    retry: (failureCount: number, error: unknown) => {
-      if (error instanceof GitHubAPIError && error.status === 404) return false
-      return failureCount < 2
-    },
+    // Fail-closed retry: a definitive 401/403/404 (revoked, blocked/SSO-gated,
+    // not a member) must NOT retry — matching every sibling role read — while a
+    // transient 5xx/429/network blip self-heals (bounded). A 403 that retried as
+    // if transient would keep the guard's spinner up (see useClassroomRole's
+    // `settled` terminal state).
+    retry: retryTransientGitHubError,
   }
 }
 
@@ -66,7 +68,13 @@ export function useClassroomRole(
   org: string | undefined,
   classroom: string | undefined,
   username: string | undefined,
-): { role: EffectiveRole; actualRole: EffectiveRole; isLoading: boolean } {
+): {
+  role: EffectiveRole
+  actualRole: EffectiveRole
+  isLoading: boolean
+  isError: boolean
+  refetch: () => void
+} {
   const client = useGitHubClient()
   const { viewAs } = useRoleView()
 
@@ -116,5 +124,29 @@ export function useClassroomRole(
     taQuery.fetchStatus === "fetching" ||
     studentQuery.fetchStatus === "fetching"
 
-  return { role, actualRole, isLoading }
+  // An ELEVATION read (instructor/ta) that settled in a non-definitive error
+  // (retries exhausted, not fetching) leaves the role `unresolved` with nothing
+  // left in flight. Surface that so a guard can show an error+retry affordance
+  // instead of an indefinite spinner. A definitive 404 is not `isError` (React
+  // Query treats a no-retry rejection as an error, but membershipFromQuery
+  // already reduced it to a definitive `non-member`, so the role resolves) — so
+  // only report the strand when the role is genuinely still `unresolved`.
+  const isError =
+    actualRole === "unresolved" &&
+    !isLoading &&
+    (instructorQuery.isError || taQuery.isError)
+
+  // Re-run all three team reads so an error surface can offer a retry without a
+  // full page reload (mirrors useTeamRoster's refetch). Stable identity so it
+  // doesn't churn the context value it's threaded through.
+  const { refetch: refetchInstructor } = instructorQuery
+  const { refetch: refetchTa } = taQuery
+  const { refetch: refetchStudent } = studentQuery
+  const refetch = useCallback(() => {
+    void refetchInstructor()
+    void refetchTa()
+    void refetchStudent()
+  }, [refetchInstructor, refetchTa, refetchStudent])
+
+  return { role, actualRole, isLoading, isError, refetch }
 }

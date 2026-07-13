@@ -1,11 +1,13 @@
 import { type ReactNode } from "react"
 import { useParams } from "@tanstack/react-router"
+import { useTranslation } from "react-i18next"
 import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 import NotFound from "@/components/NotFound"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
+import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 
 // What a guarded surface requires:
 // - "staff": any classroom staff (instructor/ta) — for classroom CONTENT
@@ -35,18 +37,35 @@ const RequireTeacher = ({
   return <RequireStaff>{children}</RequireStaff>
 }
 
-// Shared gate shape: hold a spinner until the signal resolves (never flash a 404
-// at a real teacher), then render children or NotFound. Each Require* wrapper
-// computes its own `resolved`/`permitted` from the role signal it reads.
+// Shared gate shape: while the role read is in flight show a spinner (never
+// flash a 404 at a real teacher); if the read SETTLED IN ERROR (retries
+// exhausted, role still unresolved) show a retryable error instead of an
+// indefinite spinner; then render children or NotFound. Each Require* wrapper
+// computes its own `resolved`/`permitted` from the role signal it reads, and
+// classroom gates pass `errored`/`onRetry` from the context.
 const RoleGate = ({
   resolved,
   permitted,
+  errored = false,
+  onRetry,
   children,
 }: {
   resolved: boolean
   permitted: boolean
+  errored?: boolean
+  onRetry?: () => void
   children: ReactNode
 }) => {
+  const { t } = useTranslation()
+  if (errored && onRetry) {
+    return (
+      <QueryErrorAlert
+        message={t("error.roleResolveFailed")}
+        onRetry={onRetry}
+        className="m-4"
+      />
+    )
+  }
   if (!resolved) return <RoleResolvingFallback />
   if (!permitted) return <NotFound />
   return <>{children}</>
@@ -63,13 +82,15 @@ const RequireStaff = ({ children }: { children: ReactNode }) => {
 }
 
 const RequireClassroomStaff = ({ children }: { children: ReactNode }) => {
-  const { role, roleResolved } = useClassroomRoleContext()
+  const { role, roleResolved, isError, retry } = useClassroomRoleContext()
   return (
     <RoleGate
       resolved={roleResolved}
       permitted={can("viewClassroomStaffContent", {
         classroomRole: role,
       })}
+      errored={isError}
+      onRetry={retry}
     >
       {children}
     </RoleGate>
@@ -93,15 +114,20 @@ const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
 
 // Instructor gate: instructor of this classroom (TAs excluded). An org owner is
 // permitted only when they are on the classroom instructor team — org-admin
-// status alone no longer grants classroom-instructor access (KTD-4).
+// status alone no longer grants classroom-instructor access (KTD-4). Gate on
+// `roleResolved` (the fine role short-circuits to instructor on the instructor
+// read alone) — NOT `!isLoading`, which would hold a confirmed instructor on
+// the spinner while the irrelevant ta/student reads finish.
 const RequireInstructor = ({ children }: { children: ReactNode }) => {
-  const { role, isLoading } = useClassroomRoleContext()
+  const { role, roleResolved, isError, retry } = useClassroomRoleContext()
   return (
     <RoleGate
-      resolved={!isLoading && role !== "unresolved"}
+      resolved={roleResolved}
       permitted={can("editClassroomSettings", {
         classroomRole: role,
       })}
+      errored={isError}
+      onRetry={retry}
     >
       {children}
     </RoleGate>

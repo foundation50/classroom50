@@ -18,6 +18,12 @@ export type ClassroomRoleContextValue = {
   role: EffectiveRole
   actualRole: EffectiveRole
   isLoading: boolean
+  // An elevation (instructor/ta) read settled in a non-definitive error with
+  // the role still `unresolved` and nothing in flight — the guard shows an
+  // error+retry surface instead of holding a spinner forever.
+  isError: boolean
+  // Re-run the classroom team reads (the error surface's retry).
+  retry: () => void
   // Coarse staff verdict, DERIVED from the fine role (not a separate config-repo
   // read) so it can't diverge from `role`. Preview-aware via `role`.
   isTeacher: boolean
@@ -38,7 +44,7 @@ function useClassroomRoleResolution(
 ): ClassroomRoleContextValue {
   const { user } = useGithubAuth()
 
-  const { role, actualRole, isLoading } = useClassroomRole(
+  const { role, actualRole, isLoading, isError, refetch } = useClassroomRole(
     org,
     classroom,
     user?.login,
@@ -56,6 +62,8 @@ function useClassroomRoleResolution(
     role,
     actualRole,
     isLoading,
+    isError,
+    retry: refetch,
     isTeacher,
     isStudent,
     roleResolved,
@@ -82,6 +90,8 @@ export function ClassroomRoleProvider({
       resolved.role,
       resolved.actualRole,
       resolved.isLoading,
+      resolved.isError,
+      resolved.retry,
       resolved.isTeacher,
       resolved.isStudent,
       resolved.roleResolved,

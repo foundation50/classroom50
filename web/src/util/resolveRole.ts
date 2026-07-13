@@ -2,12 +2,10 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 
 // The viewer's effective role WITHIN a classroom, used by route guards and UI
 // visibility. Precedence (highest first): instructor > ta > student. Org-admin
-// status is NOT a classroom role — teams are classroom-specific, so an org
-// owner not on THIS classroom's instructor team is not an instructor of it (see
-// resolveClassroomRole). Org-wide capability lives in OrgRole instead.
-// `unresolved` is a fail-closed sentinel: a needed signal hit a transient
-// error, so callers treat it as "don't redirect; let the page load" rather than
-// demoting a real staff member on a blip.
+// status is NOT a classroom role (see resolveClassroomRole for the KTD-4
+// rationale). `unresolved` is a fail-closed sentinel: a needed signal hit a
+// transient error, so callers treat it as "don't redirect; let the page load"
+// rather than demoting a real staff member on a blip.
 export type EffectiveRole = "instructor" | "ta" | "student" | "unresolved"
 
 // The viewer's ORG-wide capability, independent of any classroom. `owner` (org

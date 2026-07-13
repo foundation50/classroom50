@@ -27,6 +27,14 @@ vi.mock("@/components/NotFound", () => ({
 vi.mock("@/components/RoleResolvingFallback", () => ({
   default: () => <div data-testid="spinner" />,
 }))
+vi.mock("@/components/QueryErrorAlert", () => ({
+  QueryErrorAlert: ({ onRetry }: { onRetry: () => void }) => (
+    <button data-testid="error-retry" onClick={onRetry} />
+  ),
+}))
+vi.mock("react-i18next", () => ({
+  useTranslation: () => ({ t: (key: string) => key }),
+}))
 
 import RequireTeacher from "./RequireTeacher"
 
@@ -34,6 +42,7 @@ const child = <div data-testid="child" />
 
 const shown = () => {
   if (screen.queryByTestId("child")) return "child"
+  if (screen.queryByTestId("error-retry")) return "error"
   if (screen.queryByTestId("spinner")) return "spinner"
   if (screen.queryByTestId("notfound")) return "notfound"
   return "none"
@@ -44,6 +53,8 @@ const ctx = (over: Record<string, unknown> = {}) => ({
   role: "instructor",
   actualRole: "instructor",
   isLoading: false,
+  isError: false,
+  retry: () => {},
   isTeacher: true,
   isStudent: false,
   roleResolved: true,
@@ -84,6 +95,20 @@ describe("RequireTeacher — staff gate on a classroom", () => {
     render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
     expect(shown()).toBe("spinner")
   })
+
+  it("shows a retryable error when the role read settles in error", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(
+      ctx({
+        role: "unresolved",
+        roleResolved: false,
+        showTeacherUi: false,
+        isError: true,
+      }),
+    )
+    render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
+    expect(shown()).toBe("error")
+  })
 })
 
 describe("RequireTeacher — instructor gate on a classroom", () => {
@@ -112,9 +137,31 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
 
   it("holds the spinner while the classroom role is unresolved", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
-    classroomCtxMock.mockReturnValue(ctx({ role: "unresolved" }))
+    classroomCtxMock.mockReturnValue(
+      ctx({ role: "unresolved", roleResolved: false }),
+    )
     render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
     expect(shown()).toBe("spinner")
+  })
+
+  it("admits a confirmed instructor even while sibling reads are still loading (no spinner-over-wait)", () => {
+    // roleResolved is true once the instructor read confirms; the gate must not
+    // hold on isLoading waiting for the irrelevant ta/student reads.
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(
+      ctx({ role: "instructor", roleResolved: true, isLoading: true }),
+    )
+    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    expect(shown()).toBe("child")
+  })
+
+  it("shows a retryable error (not an infinite spinner) when an elevation read settles in error", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(
+      ctx({ role: "unresolved", roleResolved: false, isError: true }),
+    )
+    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    expect(shown()).toBe("error")
   })
 })
 

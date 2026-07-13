@@ -6,9 +6,9 @@ import { resolveTeacherVerdict } from "@/util/resolveRole"
 // readable, student = 404, blocked = 403, unresolved = transient (fail-closed).
 // This is the ORG-LEVEL staff signal for surfaces that have no classroom in
 // scope (e.g. the org "Published" page, the classes drawer). CLASSROOM pages
-// must instead read the shared classroom context (useClassroomRoleContext),
-// which layers team membership on top of this same verdict. No "view as" clamp
-// applies here — the preview is classroom-scoped.
+// instead read the shared classroom context (useClassroomRoleContext), whose
+// role resolves from per-classroom team membership — NOT this config-repo
+// verdict. No "view as" clamp applies here — the preview is classroom-scoped.
 export function useConfigRepoAccess(org: string | undefined) {
   const repoQuery = useGitHubRepo(org, "classroom50", {
     retry: retryTransientGitHubError,

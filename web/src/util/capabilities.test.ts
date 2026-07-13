@@ -34,16 +34,17 @@ describe("can — org capabilities", () => {
   })
 })
 
-describe("can — classroom capabilities", () => {
-  it("viewClassroomStaffContent: instructor|ta (unresolved is permissive; student denied)", () => {
+describe("can — classroom capabilities (fail-closed on unresolved)", () => {
+  it("viewClassroomStaffContent: instructor|ta; unresolved and student denied", () => {
     expect(
       can("viewClassroomStaffContent", { classroomRole: "instructor" }),
     ).toBe(true)
     expect(can("viewClassroomStaffContent", { classroomRole: "ta" })).toBe(true)
-    // `unresolved` is permissive by design (callers pair with a resolved gate).
+    // Fail-closed: an unresolved role is denied by the policy itself; the
+    // caller's separate `resolved` gate holds a spinner rather than NotFound.
     expect(
       can("viewClassroomStaffContent", { classroomRole: "unresolved" }),
-    ).toBe(true)
+    ).toBe(false)
     expect(can("viewClassroomStaffContent", { classroomRole: "student" })).toBe(
       false,
     )
@@ -51,12 +52,12 @@ describe("can — classroom capabilities", () => {
     expect(can("viewClassroomStaffContent", {})).toBe(false)
   })
 
-  it("editClassroomSettings: instructor only (TA excluded; unresolved permissive)", () => {
+  it("editClassroomSettings: instructor only (TA, student, unresolved all denied)", () => {
     expect(can("editClassroomSettings", { classroomRole: "instructor" })).toBe(
       true,
     )
     expect(can("editClassroomSettings", { classroomRole: "unresolved" })).toBe(
-      true,
+      false,
     )
     expect(can("editClassroomSettings", { classroomRole: "ta" })).toBe(false)
     expect(can("editClassroomSettings", { classroomRole: "student" })).toBe(

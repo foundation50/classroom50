@@ -45,7 +45,8 @@
   "error": {
     "title": "Something went wrong",
     "unexpected": "An unexpected error occurred.",
-    "reload": "Reload"
+    "reload": "Reload",
+    "roleResolveFailed": "Couldn't verify your access for this classroom."
   },
   "permissionDenied": {
     "title": "You don't have permission",

@@ -555,7 +555,9 @@ export const TeacherSidebarMenu = ({
   // instructor-only; gating on this makes "View as student/TA" faithfully hide
   // what a real student/TA wouldn't see. `unresolved` is permissive (no flash).
   const showStaffItems = showTeacherUi && isStaffRole(classroomRole)
-  const canEditSettings = classroomRole === "instructor"
+  const canEditSettings = can("editClassroomSettings", {
+    classroomRole,
+  })
   const { t } = useTranslation()
 
   return (
