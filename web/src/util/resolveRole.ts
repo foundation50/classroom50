@@ -197,21 +197,3 @@ export function resolveTeacherVerdict(
 
   return { isTeacher, isStudent, isBlocked, roleResolved, showTeacherUi }
 }
-
-// Apply a "view as" preview to the coarse teacher/student verdict, so every
-// surface reading showTeacherUi/isStudent transforms together. DOWNGRADE-ONLY:
-// a preview can only hide teacher UI, never reveal it. Only "student" affects
-// this coarse switch (a TA still sees staff content); the TA/instructor split
-// lives in the fine EffectiveRole.
-export function applyViewAsToVerdict(
-  verdict: TeacherVerdict,
-  viewAs: ViewAsRole | null,
-): TeacherVerdict {
-  if (viewAs !== "student" || !verdict.isTeacher) return verdict
-  return {
-    ...verdict,
-    isTeacher: false,
-    isStudent: true,
-    showTeacherUi: false,
-  }
-}

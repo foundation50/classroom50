@@ -8,7 +8,6 @@ import {
   roleLabelKey,
   membershipFromQuery,
   resolveTeacherVerdict,
-  applyViewAsToVerdict,
   type ClassroomRoleInput,
 } from "./resolveRole"
 import { GitHubAPIError } from "@/hooks/github/errors"
@@ -313,39 +312,5 @@ describe("resolveTeacherVerdict", () => {
     })
     expect(v.roleResolved).toBe(true)
     expect(v.showTeacherUi).toBe(false)
-  })
-})
-
-describe("applyViewAsToVerdict (downgrade-only preview)", () => {
-  const teacher = resolveTeacherVerdict({
-    org: "acme",
-    isSuccess: true,
-    permissions: { push: true },
-    error: null,
-  })
-  const student = resolveTeacherVerdict({
-    org: "acme",
-    isSuccess: false,
-    permissions: undefined,
-    error: apiError(404),
-  })
-
-  it("a teacher previewing 'student' is downgraded", () => {
-    const v = applyViewAsToVerdict(teacher, "student")
-    expect(v.isTeacher).toBe(false)
-    expect(v.isStudent).toBe(true)
-    expect(v.showTeacherUi).toBe(false)
-  })
-
-  it("a teacher previewing 'ta' keeps teacher UI", () => {
-    expect(applyViewAsToVerdict(teacher, "ta")).toEqual(teacher)
-  })
-
-  it("no preview is a no-op", () => {
-    expect(applyViewAsToVerdict(teacher, null)).toEqual(teacher)
-  })
-
-  it("NEVER escalates: a real student previewing 'student' stays a student", () => {
-    expect(applyViewAsToVerdict(student, "student")).toEqual(student)
   })
 })

@@ -9,10 +9,9 @@ import {
 } from "@/util/resolveRole"
 
 // The pure resolution is exercised in depth in resolveRole.test.ts. This suite
-// pins the KTD-4 behavior change through the surface useClassroomRole re-exports
-// (see useClassroomRole.ts): org-admin status is no longer a classroom
-// short-circuit, so an org owner not on a classroom's instructor team resolves
-// to `student` at classroom scope.
+// pins the KTD-4 behavior change directly against the pure resolver: org-admin
+// status is no longer a classroom short-circuit, so an org owner not on a
+// classroom's instructor team resolves to `student` at classroom scope.
 const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",

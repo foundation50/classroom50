@@ -35,6 +35,23 @@ const RequireTeacher = ({
   return <RequireStaff>{children}</RequireStaff>
 }
 
+// Shared gate shape: hold a spinner until the signal resolves (never flash a 404
+// at a real teacher), then render children or NotFound. Each Require* wrapper
+// computes its own `resolved`/`permitted` from the role signal it reads.
+const RoleGate = ({
+  resolved,
+  permitted,
+  children,
+}: {
+  resolved: boolean
+  permitted: boolean
+  children: ReactNode
+}) => {
+  if (!resolved) return <RoleResolvingFallback />
+  if (!permitted) return <NotFound />
+  return <>{children}</>
+}
+
 // Staff gate. On a classroom surface, read the shared classroom context; on an
 // org-level surface (no classroom), fall back to the org-scoped config-repo
 // verdict, which needs no classroom.
@@ -47,17 +64,21 @@ const RequireStaff = ({ children }: { children: ReactNode }) => {
 
 const RequireClassroomStaff = ({ children }: { children: ReactNode }) => {
   const { showTeacherUi, roleResolved } = useClassroomRoleContext()
-  if (!roleResolved) return <RoleResolvingFallback />
-  if (!showTeacherUi) return <NotFound />
-  return <>{children}</>
+  return (
+    <RoleGate resolved={roleResolved} permitted={showTeacherUi}>
+      {children}
+    </RoleGate>
+  )
 }
 
 const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
   const { org } = useParams({ strict: false })
   const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
-  if (!roleResolved) return <RoleResolvingFallback />
-  if (!showTeacherUi) return <NotFound />
-  return <>{children}</>
+  return (
+    <RoleGate resolved={roleResolved} permitted={showTeacherUi}>
+      {children}
+    </RoleGate>
+  )
 }
 
 // Instructor gate: instructor of this classroom (TAs excluded). An org owner is
@@ -65,18 +86,28 @@ const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
 // status alone no longer grants classroom-instructor access (KTD-4).
 const RequireInstructor = ({ children }: { children: ReactNode }) => {
   const { role, isLoading } = useClassroomRoleContext()
-  if (isLoading || role === "unresolved") return <RoleResolvingFallback />
-  if (!isInstructorRole(role)) return <NotFound />
-  return <>{children}</>
+  return (
+    <RoleGate
+      resolved={!isLoading && role !== "unresolved"}
+      permitted={isInstructorRole(role)}
+    >
+      {children}
+    </RoleGate>
+  )
 }
 
 // Owner gate: org admin, read from the org-role context. Org-wide, independent
 // of any classroom.
 const RequireOwner = ({ children }: { children: ReactNode }) => {
   const { orgRole } = useOrgRole()
-  if (orgRole === "unresolved") return <RoleResolvingFallback />
-  if (orgRole !== "owner") return <NotFound />
-  return <>{children}</>
+  return (
+    <RoleGate
+      resolved={orgRole !== "unresolved"}
+      permitted={orgRole === "owner"}
+    >
+      {children}
+    </RoleGate>
+  )
 }
 
 export default RequireTeacher

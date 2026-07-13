@@ -14,17 +14,6 @@ import {
 import type { GitHubClient } from "./github/client"
 import type { StaffRole } from "@/types/classroom"
 
-// Re-exported for the many call sites that import role helpers from here; the
-// canonical home is now the React-free @/util/resolveRole module.
-export type { EffectiveRole, ViewAsRole, Membership } from "@/util/resolveRole"
-export {
-  resolveClassroomRole,
-  isStaffRole,
-  isInstructorRole,
-  applyViewAs,
-  roleLabelKey,
-} from "@/util/resolveRole"
-
 // Team-membership query: 2xx + active => member, 404 => definitive non-member,
 // anything else throws so React Query can retry and the verdict stays
 // `unresolved`.
