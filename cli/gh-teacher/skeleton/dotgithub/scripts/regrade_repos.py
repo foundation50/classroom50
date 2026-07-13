@@ -73,8 +73,9 @@ ASSIGNMENTS_SCHEMA_V1 = "classroom50/assignments/v1"
 # prefix aligned with autograde-runner.yaml and collect_scores.py.
 SUBMIT_TAG_PREFIX = "submit/"
 
-# Branch whose HEAD we re-tag. Submissions are graded off `main` (the autograde
-# shim's `on.push.branches`), so that's the ref we regrade.
+# Fallback submission branch when a repo's default branch can't be read.
+# Submissions grade off the repo's default branch (the autograde shim's
+# `on.push.branches`); `main` is only the fallback for a repo with no default.
 SUBMISSION_BRANCH = "main"
 
 # How often (every N repos) the fan-out logs incremental progress, so a run
@@ -365,10 +366,35 @@ def build_submit_tag(sha: str) -> str:
     return f"{SUBMIT_TAG_PREFIX}{stamp}-{sha[:7]}"
 
 
+def repo_default_branch(api_url: str, org: str, repo: str, token: str) -> str | None:
+    """The repo's default branch (which GitHub may have named `master`), or None
+    when the repo doesn't exist (404) — the student hasn't accepted."""
+    try:
+        body = _http_get(
+            _repo_url(api_url, org, repo), token, accept="application/vnd.github+json"
+        )
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return None
+        raise
+    data = json.loads(body.decode("utf-8"))
+    branch = data.get("default_branch") if isinstance(data, dict) else None
+    if isinstance(branch, str) and branch:
+        return branch
+    return SUBMISSION_BRANCH
+
+
 def main_head_sha(api_url: str, org: str, repo: str, token: str) -> str | None:
-    """The commit SHA at `repo`'s main branch HEAD, or None when the repo
-    or branch doesn't exist (404) — the student hasn't accepted/pushed."""
-    url = f"{_repo_url(api_url, org, repo)}/git/ref/heads/{urllib.parse.quote(SUBMISSION_BRANCH)}"
+    """The commit SHA at `repo`'s default-branch HEAD, or None when the repo
+    or branch doesn't exist (404) — the student hasn't accepted/pushed.
+
+    Resolves the repo's actual default branch first (it may be `master`), so a
+    non-main repo is regraded off its real HEAD rather than a nonexistent
+    `main`."""
+    branch = repo_default_branch(api_url, org, repo, token)
+    if branch is None:
+        return None
+    url = f"{_repo_url(api_url, org, repo)}/git/ref/heads/{urllib.parse.quote(branch)}"
     try:
         body = _http_get(url, token, accept="application/vnd.github+json")
     except urllib.error.HTTPError as exc:
@@ -379,7 +405,7 @@ def main_head_sha(api_url: str, org: str, repo: str, token: str) -> str | None:
     obj = ref.get("object") if isinstance(ref, dict) else None
     sha = obj.get("sha") if isinstance(obj, dict) else None
     if not isinstance(sha, str) or not sha:
-        raise ValueError(f"git/ref/heads/{SUBMISSION_BRANCH} returned no object.sha")
+        raise ValueError(f"git/ref/heads/{branch} returned no object.sha")
     return sha
 
 

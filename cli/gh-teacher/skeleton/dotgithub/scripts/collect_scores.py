@@ -66,7 +66,7 @@ SCORES_SCHEMA_V1 = "classroom50/scores/v1"
 RESULT_SCHEMA_V1 = "classroom50/result/v1"
 
 # Trigger contract: only `submit/*` tag releases count as submissions
-# (created by autograde-runner.yaml on push to `main`).
+# (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
 RFC3339_RE = re.compile(

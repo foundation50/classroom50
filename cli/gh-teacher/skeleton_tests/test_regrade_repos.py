@@ -161,6 +161,33 @@ def test_main_head_sha_parses_object_sha(monkeypatch):
     assert rr.main_head_sha("https://api", "cs50", "repo", "tok") == "1234abcd"
 
 
+def test_main_head_sha_resolves_master_default_branch(monkeypatch):
+    # A master-default student repo must be regraded off heads/master, not a
+    # nonexistent heads/main.
+    seen = {}
+
+    def fake_get(url, token, *, accept, _retries=3):
+        if url.endswith("/repos/cs50/repo"):
+            return json.dumps({"default_branch": "master"}).encode("utf-8")
+        seen["ref_url"] = url
+        return json.dumps({"object": {"sha": "cafe"}}).encode("utf-8")
+
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    assert rr.main_head_sha("https://api", "cs50", "repo", "tok") == "cafe"
+    assert seen["ref_url"].endswith("/git/ref/heads/master")
+
+
+def test_main_head_sha_returns_none_when_repo_missing(monkeypatch):
+    # 404 on the repo read (student never accepted) → None, no ref read.
+    def fake_get(url, token, *, accept, _retries=3):
+        if url.endswith("/repos/cs50/repo"):
+            raise _http_error(404)
+        raise AssertionError("ref read should not happen when the repo is 404")
+
+    monkeypatch.setattr(rr, "_http_get", fake_get)
+    assert rr.main_head_sha("https://api", "cs50", "repo", "tok") is None
+
+
 def test_existing_submit_tag_matches_sha(monkeypatch):
     body = json.dumps(
         [
