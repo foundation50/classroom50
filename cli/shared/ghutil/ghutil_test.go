@@ -7,6 +7,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"testing"
+	"time"
 
 	"github.com/cli/go-gh/v2/pkg/api"
 )
@@ -215,4 +216,58 @@ func TestWaitForStableBranch(t *testing.T) {
 	if err := WaitForStableBranch(newTestRESTClient(t, server), "o", "r", "main"); err != nil {
 		t.Fatalf("WaitForStableBranch: %v", err)
 	}
+}
+
+// TestResolveSettledDefaultBranch pins the async-copy-lag resolution the accept
+// flow relies on: it must return the branch that actually materialized, not a
+// transiently-reported default_branch, and fall back when nothing appears.
+func TestResolveSettledDefaultBranch(t *testing.T) {
+	t.Run("returns the settled default when it names a real branch", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "master"}})
+		})
+		mux.HandleFunc("/repos/o/r", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "master"})
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		got := ResolveSettledDefaultBranch(newTestRESTClient(t, server), "o", "r", "main", 5, time.Millisecond)
+		if got != "master" {
+			t.Errorf("got %q, want master", got)
+		}
+	})
+
+	t.Run("returns the materialized branch when default_branch is stale", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "master"}})
+		})
+		mux.HandleFunc("/repos/o/r", func(w http.ResponseWriter, _ *http.Request) {
+			// Stale: names a branch (`main`) that doesn't exist yet.
+			_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		got := ResolveSettledDefaultBranch(newTestRESTClient(t, server), "o", "r", "main", 5, time.Millisecond)
+		if got != "master" {
+			t.Errorf("got %q, want master (the only materialized branch)", got)
+		}
+	})
+
+	t.Run("falls back when no branch materializes", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/o/r/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]string{})
+		})
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		got := ResolveSettledDefaultBranch(newTestRESTClient(t, server), "o", "r", "fallback-br", 2, time.Millisecond)
+		if got != "fallback-br" {
+			t.Errorf("got %q, want fallback-br", got)
+		}
+	})
 }

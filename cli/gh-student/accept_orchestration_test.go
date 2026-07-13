@@ -52,6 +52,9 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 				"default_branch": "main",
 			})
 		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "main"}})
+		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 		client := newTestRESTClient(t, server)
@@ -91,6 +94,9 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 				"default_branch": "master",
 			})
 		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice/branches", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "master"}})
+		})
 		server := httptest.NewServer(mux)
 		t.Cleanup(server.Close)
 
@@ -104,24 +110,29 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		}
 	})
 
-	t.Run("empty default_branch in both echoes: confirming GET resolves it", func(t *testing.T) {
-		var confirmGets int
+	t.Run("stale default_branch: settles to the branch that materializes", func(t *testing.T) {
+		var branchesGets int
 		mux := http.NewServeMux()
 		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+			// Generate echoes the transient org default `main`, but the template
+			// really produces `master`.
 			_ = json.NewEncoder(w).Encode(map[string]string{
-				"full_name": "o/cs-principles-hello-alice",
-				"html_url":  "https://github.com/o/cs-principles-hello-alice",
+				"full_name":      "o/cs-principles-hello-alice",
+				"html_url":       "https://github.com/o/cs-principles-hello-alice",
+				"default_branch": "main",
 			})
 		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice/branches", func(w http.ResponseWriter, _ *http.Request) {
+			branchesGets++
+			_ = json.NewEncoder(w).Encode([]map[string]string{{"name": "master"}})
+		})
 		mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
-			// PATCH and the initial echoes omit default_branch; the confirming GET
-			// (issued only when both are empty) returns the settled branch.
 			body := map[string]string{
 				"full_name": "o/cs-principles-hello-alice",
 				"html_url":  "https://github.com/o/cs-principles-hello-alice",
 			}
 			if r.Method == http.MethodGet {
-				confirmGets++
+				// The settled repo reports the real branch.
 				body["default_branch"] = "master"
 			}
 			_ = json.NewEncoder(w).Encode(body)
@@ -134,11 +145,11 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
-		if confirmGets == 0 {
-			t.Error("expected a confirming GET when both echoes omit default_branch")
+		if branchesGets == 0 {
+			t.Error("expected the settle-resolver to poll the branches endpoint")
 		}
 		if branch != "master" {
-			t.Errorf("branch = %q, want master from the confirming GET", branch)
+			t.Errorf("branch = %q, want master (the branch that materialized, not the stale main echo)", branch)
 		}
 	})
 

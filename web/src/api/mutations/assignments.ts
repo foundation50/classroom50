@@ -1082,30 +1082,6 @@ const extractTemplate = (template: string) => {
   if (!/\//.test(template)) return template
   return template.split("/")?.[1] ?? template
 }
-// GitHub's POST .../generate response reports a stale/default `default_branch`
-// (often `main`) before the generated repo's real branch settles — so a
-// `master`-default template can yield a response claiming `main` while the only
-// branch is `master`, sending the downstream commit at a nonexistent `heads/main`
-// ref (a 409/404 stabilize loop). Confirm the real branch with a follow-up GET,
-// falling back to the generate response's value when the read is unavailable.
-async function confirmGeneratedDefaultBranch(
-  client: GitHubClient,
-  owner: string,
-  name: string,
-  generated: GitHubRepo,
-): Promise<GitHubRepo> {
-  try {
-    const confirmed = await getRepo(client, owner, name)
-    const branch = confirmed?.default_branch
-    if (branch && branch !== generated.default_branch) {
-      return { ...generated, default_branch: branch }
-    }
-  } catch {
-    // Fall through: keep the generate response's branch on a read failure.
-  }
-  return generated
-}
-
 export async function createAssignmentRepo(params: {
   client: GitHubClient
   templateOwner?: string
@@ -1138,7 +1114,7 @@ export async function createAssignmentRepo(params: {
 
       return {
         kind: "generated",
-        repo: await confirmGeneratedDefaultBranch(client, owner, name, repo),
+        repo,
       }
     } catch (err) {
       if (!(err instanceof GitHubAPIError)) {
@@ -1974,11 +1950,32 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  // Rebuild the autograde shim for the branch that actually materialized. The
+  // default shim's push-trigger branch must match the generated repo's real
+  // default branch, which is only known after GitHub's async template copy
+  // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
+  rerenderShimForBranch?: (branch: string) => string
 }) {
-  const { client, owner, repo, branch, metadataYaml, autogradeYaml } = params
+  const {
+    client,
+    owner,
+    repo,
+    branch,
+    metadataYaml,
+    autogradeYaml,
+    rerenderShimForBranch,
+  } = params
 
   await withFreshRepoRetry(async () => {
-    const ref = await getBranchRefRepo(client, owner, repo, branch)
+    // A freshly template-generated repo's real branch (copied from the template,
+    // e.g. `master`) only materializes after GitHub finishes the async copy —
+    // until then `default_branch` transiently reports the org default (`main`)
+    // and no ref exists. Re-resolve the live default branch each attempt so we
+    // commit to the branch that actually appears, not a pre-guessed `main` that
+    // may never exist. Fall back to the caller's branch while it's still empty.
+    const live = await getRepo(client, owner, repo)
+    const targetBranch = live?.default_branch || branch
+    const ref = await getBranchRefRepo(client, owner, repo, targetBranch)
     const parentSha = ref.object.sha
     const currentCommit = await getCommitByRepo(client, owner, repo, parentSha)
     const baseTreeSha = currentCommit.tree?.sha
@@ -1987,13 +1984,20 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       throw freshRepoNotReadyError(owner, repo)
     }
 
+    // Re-render the default shim's push trigger for the branch that actually
+    // materialized (targetBranch), so autograde fires on the repo's real
+    // default branch rather than a transiently-reported `main`.
+    const shim = rerenderShimForBranch
+      ? rerenderShimForBranch(targetBranch)
+      : autogradeYaml
+
     const tree = await createTreeForAssignment({
       client,
       owner,
       repo,
       baseTreeSha,
       metadataYaml,
-      autogradeYaml,
+      autogradeYaml: shim,
     })
 
     const commit = await createCommitForAssignment({
@@ -2011,7 +2015,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       client,
       owner,
       repo,
-      branch,
+      branch: targetBranch,
       commitSha: commit.sha,
     })
   })
@@ -2034,6 +2038,7 @@ async function provisionAcceptedRepo(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
 }) {
   const {
@@ -2045,6 +2050,7 @@ async function provisionAcceptedRepo(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    rerenderShimForBranch,
     onStepUpdate,
   } = params
 
@@ -2086,6 +2092,7 @@ async function provisionAcceptedRepo(params: {
         branch,
         metadataYaml,
         autogradeYaml,
+        rerenderShimForBranch,
       }),
   )
 }
@@ -2230,6 +2237,11 @@ export async function acceptAssignment(params: {
   // template generated into a `master`-default org yields a `master` repo), and
   // its reusable-workflow `uses:` ref must match the config repo's branch. Both
   // are only knowable after the repo exists, so re-render here.
+  //
+  // The generated repo's real branch lags GitHub's async template copy, so the
+  // branch resolved here may still be the transient `main`. rerenderShim lets
+  // the commit step rebuild the shim once the true branch materializes.
+  let rerenderShim: ((branch: string) => string) | undefined
   if (isDefaultAutograder(assignment.autograder)) {
     const resolvedBranch =
       created.kind === "fallback-empty"
@@ -2241,6 +2253,8 @@ export async function acceptAssignment(params: {
       resolvedBranch,
     )
     autogradeYaml = defaultAutograderWorkflow(org, resolvedBranch, configBranch)
+    rerenderShim = (branch: string) =>
+      defaultAutograderWorkflow(org, branch, configBranch)
   }
 
   if (created.kind === "already-accepted") {
@@ -2321,6 +2335,7 @@ export async function acceptAssignment(params: {
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
+      rerenderShimForBranch: rerenderShim,
       onStepUpdate,
     })
 
@@ -2355,6 +2370,7 @@ export async function acceptAssignment(params: {
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
+    rerenderShimForBranch: rerenderShim,
     onStepUpdate,
   })
 

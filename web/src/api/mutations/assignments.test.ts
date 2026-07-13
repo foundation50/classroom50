@@ -1312,27 +1312,20 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
   })
 })
 
-// createAssignmentRepo trusts GitHub's POST .../generate response, whose
-// default_branch can be a stale `main` before the real branch (e.g. `master`
-// from a master-default template) settles. A confirming GET fixes it so the
-// downstream commit targets the repo's actual default branch.
-describe("createAssignmentRepo generated default-branch confirmation", () => {
-  it("confirms the real default branch when generate reports a stale main", async () => {
+// createAssignmentRepo returns the POST .../generate response verbatim. The
+// generated repo's real branch is resolved later (in the commit retry), because
+// the template copy is async — right after generate, default_branch is still a
+// transient value and no ref exists yet.
+describe("createAssignmentRepo", () => {
+  it("returns the generated repo from the generate response", async () => {
     const paths: string[] = []
     const client: GitHubClient = {
       request: <T>(path: string, opts?: { method?: string }) => {
         paths.push(`${opts?.method ?? "GET"} ${path}`)
         if (path.endsWith("/generate")) {
-          // Stale echo: claims main, but the repo really defaults to master.
           return Promise.resolve({
             name: "hw1-alice",
             default_branch: "main",
-          } as T)
-        }
-        if (path === "/repos/acme/hw1-alice") {
-          return Promise.resolve({
-            name: "hw1-alice",
-            default_branch: "master",
           } as T)
         }
         return Promise.reject(new Error(`unexpected: ${path}`))
@@ -1350,35 +1343,35 @@ describe("createAssignmentRepo generated default-branch confirmation", () => {
     })
 
     expect(result.kind).toBe("generated")
-    expect(result.repo.default_branch).toBe("master")
-    expect(paths).toContain("GET /repos/acme/hw1-alice")
+    expect(result.repo.name).toBe("hw1-alice")
+    // No extra confirming GET — the generate response is used directly.
+    expect(paths).toEqual(["POST /repos/acme/master-template/generate"])
   })
 
-  it("keeps the generate branch when the confirming read fails", async () => {
+  it("returns already-accepted on a 422 (repo exists)", async () => {
     const client: GitHubClient = {
       request: <T>(path: string) => {
         if (path.endsWith("/generate"))
-          return Promise.resolve({
-            name: "hw1-alice",
-            default_branch: "develop",
-          } as T)
-        // getRepo is 404-tolerant → returns null → keep the echo.
-        return Promise.reject(
-          new GitHubAPIError({
-            status: 404,
-            url: path,
-            message: "Not Found",
-            body: null,
-            rateLimit: {
-              limit: null,
-              remaining: null,
-              used: null,
-              reset: null,
-              resource: null,
-              retryAfter: null,
-            },
-          }),
-        ) as Promise<T>
+          return Promise.reject(
+            new GitHubAPIError({
+              status: 422,
+              url: path,
+              message: "Unprocessable",
+              body: null,
+              rateLimit: {
+                limit: null,
+                remaining: null,
+                used: null,
+                reset: null,
+                resource: null,
+                retryAfter: null,
+              },
+            }),
+          ) as Promise<T>
+        return Promise.resolve({
+          name: "hw1-alice",
+          default_branch: "master",
+        } as T)
       },
       requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
     }
@@ -1392,8 +1385,8 @@ describe("createAssignmentRepo generated default-branch confirmation", () => {
       fallbackBranch: "main",
     })
 
-    expect(result.kind).toBe("generated")
-    expect(result.repo.default_branch).toBe("develop")
+    expect(result.kind).toBe("already-accepted")
+    expect(result.repo.default_branch).toBe("master")
   })
 })
 

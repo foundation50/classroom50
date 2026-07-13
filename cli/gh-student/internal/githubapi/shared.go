@@ -1,6 +1,8 @@
 package githubapi
 
 import (
+	"time"
+
 	"github.com/cli/go-gh/v2/pkg/api"
 
 	"github.com/foundation50/classroom50-cli-shared/ghutil"
@@ -35,6 +37,13 @@ func SetCollaborator(c Client, owner, repo, username, permission string) (int, e
 // a templated-repo creation, smoothing replication lag.
 func WaitForStableBranch(c Client, owner, repo, branch string) error {
 	return ghutil.WaitForStableBranch(rest(c), owner, repo, branch)
+}
+
+// ResolveSettledDefaultBranch waits out the async template-copy lag and returns
+// the branch that actually materialized (not the transiently-reported
+// default_branch), falling back to `fallback`.
+func ResolveSettledDefaultBranch(c Client, owner, repo, fallback string) string {
+	return ghutil.ResolveSettledDefaultBranch(rest(c), owner, repo, fallback, 20, 250*time.Millisecond)
 }
 
 // UploadBlobs uploads file contents as git blobs, returning their tree

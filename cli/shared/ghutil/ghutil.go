@@ -124,6 +124,53 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 	return fmt.Errorf("branch %s/%s:%s did not stabilize", owner, repo, branch)
 }
 
+// ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
+// returns the branch that actually materialized. Right after POST .../generate,
+// GET /repos reports a transient default_branch (the org default, e.g. `main`)
+// while the real branch (copied from the template, e.g. `master`) hasn't been
+// created yet — so trusting default_branch, or an immediate confirming GET,
+// can pin a `heads/main` that never exists. This polls the repo's branch list
+// until at least one ref exists, then returns the live default_branch when it
+// names a real branch, else the sole/first materialized branch. Falls back to
+// `fallback` if nothing materializes within the window.
+// ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
+// returns the branch that actually materialized. Right after POST .../generate,
+// GET /repos reports a transient default_branch (the org default, e.g. `main`)
+// while the real branch (copied from the template, e.g. `master`) hasn't been
+// created yet — so trusting default_branch, or an immediate confirming GET,
+// can pin a `heads/main` that never exists. This polls the repo's branch list
+// up to `attempts` times (sleeping `delay*(i+1)` between tries) until at least
+// one ref exists, then returns the live default_branch when it names a real
+// branch, else the first materialized branch. Falls back to `fallback` if
+// nothing materializes within the window.
+func ResolveSettledDefaultBranch(client *api.RESTClient, owner, repo, fallback string, attempts int, delay time.Duration) string {
+	repoPath := fmt.Sprintf("repos/%s/%s", url.PathEscape(owner), url.PathEscape(repo))
+	branchesPath := fmt.Sprintf("repos/%s/%s/branches?per_page=100", url.PathEscape(owner), url.PathEscape(repo))
+	for i := range attempts {
+		var branches []struct {
+			Name string `json:"name"`
+		}
+		if err := client.Get(branchesPath, &branches); err == nil && len(branches) > 0 {
+			names := make(map[string]bool, len(branches))
+			for _, b := range branches {
+				names[b.Name] = true
+			}
+			// Prefer the live default_branch when it names a branch that exists;
+			// otherwise fall back to the first materialized branch.
+			var repoResp struct {
+				DefaultBranch string `json:"default_branch"`
+			}
+			if err := client.Get(repoPath, &repoResp); err == nil &&
+				repoResp.DefaultBranch != "" && names[repoResp.DefaultBranch] {
+				return repoResp.DefaultBranch
+			}
+			return branches[0].Name
+		}
+		time.Sleep(delay * time.Duration(i+1))
+	}
+	return fallback
+}
+
 // CurrentUser returns the authenticated user's login and immutable numeric ID
 // via GET /user. Callers needing only the login can ignore the id (e.g.
 // whoami); gh-student's identity.Fetch uses both to build the noreply email.
