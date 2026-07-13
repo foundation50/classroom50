@@ -6,19 +6,28 @@ import {
   getOrgFailedInvitations,
 } from "./github/queries"
 import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
+import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 
 // Owner-only endpoints; a non-owner token gets 403, surfaced as `isForbidden`
 // so the UI can explain why invite status is hidden. 403/404 stay definitive
 // (no retry) so isForbidden resolves at once; a transient 5xx/429 self-heals
 // rather than silently rendering zero pending (the roster treats an empty
 // invitations list as authoritative).
+//
+// PRE-FLIGHT GATE: only an org owner may read these. A TA/instructor is a
+// definitive non-owner, so firing the request just to catch the inevitable 403
+// wastes a call and pollutes the console; gate `enabled` on the resolved org
+// role and treat a non-owner as forbidden without a request. `unresolved` holds
+// the read (fail-closed) until ownership is known.
 const useGetOrgInvitations = (org: string) => {
   const client = useGitHubClient()
+  const { orgRole } = useOrgRole()
+  const isOwner = orgRole === "owner"
 
   const invitationsQuery = useQuery({
     queryKey: githubKeys.orgInvitations(org),
     queryFn: () => getOrgInvitations(client, org),
-    enabled: Boolean(org),
+    enabled: Boolean(org) && isOwner,
     staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })
@@ -26,14 +35,18 @@ const useGetOrgInvitations = (org: string) => {
   const failedQuery = useQuery({
     queryKey: githubKeys.orgFailedInvitations(org),
     queryFn: () => getOrgFailedInvitations(client, org),
-    enabled: Boolean(org),
+    enabled: Boolean(org) && isOwner,
     staleTime: 60 * 1000,
     retry: retryTransientGitHubError,
   })
 
-  const isForbidden = [invitationsQuery.error, failedQuery.error].some(
-    (error) => error instanceof GitHubAPIError && error.isForbidden,
-  )
+  // A definitive non-owner can't read invitations at all — report forbidden
+  // without a request so the roster hides pending exactly as it did on a 403.
+  const isForbidden =
+    orgRole === "member" ||
+    [invitationsQuery.error, failedQuery.error].some(
+      (error) => error instanceof GitHubAPIError && error.isForbidden,
+    )
 
   return {
     invitations: invitationsQuery.data ?? [],

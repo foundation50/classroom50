@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetOrgInvitations from "@/hooks/useGetOrgInvitations"
+import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import {
   githubKeys,
   teamMembersQuery,
@@ -101,6 +102,10 @@ export function useTeamRoster(
   students: Student[],
 ): UseTeamRosterResult {
   const client = useGitHubClient()
+  const { orgRole } = useOrgRole()
+  // Team invitations are owner-only (like org invitations). Gate the reads on
+  // resolved org ownership so a TA/instructor doesn't fire a guaranteed 403.
+  const isOwner = orgRole === "owner"
 
   const { data: classroomJson } = useGetClassroom(org, classroom)
   const teamSlug =
@@ -141,11 +146,16 @@ export function useTeamRoster(
   } = useGetOrgInvitations(org)
 
   // Team-scoped pending invitations for the staff teams (owner-only, like org
-  // invitations). 403 marks pending hidden; 404 (uncreated team) -> [].
-  const instructorInvitesQuery = useQuery(
-    teamInvitationsQuery(client, org, instructorSlug),
-  )
-  const taInvitesQuery = useQuery(teamInvitationsQuery(client, org, taSlug))
+  // invitations). Gated on org ownership so a non-owner never fires the 403;
+  // 404 (uncreated team) -> [].
+  const instructorInvitesQuery = useQuery({
+    ...teamInvitationsQuery(client, org, instructorSlug),
+    enabled: Boolean(org && instructorSlug) && isOwner,
+  })
+  const taInvitesQuery = useQuery({
+    ...teamInvitationsQuery(client, org, taSlug),
+    enabled: Boolean(org && taSlug) && isOwner,
+  })
 
   // All active org members (shared cache with the Org Members page). Used only
   // to classify a roster.csv row on no team as in-org (assign a role) vs
