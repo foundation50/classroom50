@@ -208,7 +208,7 @@ func fetchFileContent(client githubapi.Client, owner, repo, path, ref string) ([
 	if body.Encoding != "base64" {
 		return nil, fmt.Errorf("GET %s: unexpected encoding %q (want base64)", apiPath, body.Encoding)
 	}
-	// GitHub wraps base64 at 76 chars; strip whitespace before decoding.
+	// GitHub wraps base64 at 60 chars; strip whitespace before decoding.
 	clean := strings.Map(func(r rune) rune {
 		if r == '\n' || r == '\r' || r == ' ' || r == '\t' {
 			return -1

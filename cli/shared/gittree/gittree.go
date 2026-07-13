@@ -40,7 +40,7 @@ import (
 // descendant of the current branch tip. CommitWithRebase retries on it.
 var ErrNonFastForward = errors.New("non-fast-forward ref update")
 
-// rebaseAttempts: 5 tries at 200ms × 2^n backoff (~6.2s) — absorbs concurrent
+// rebaseAttempts: 5 tries at 200ms × 2^n backoff (~3s) — absorbs concurrent
 // CLI invocations, fails fast on a wedged repo.
 const rebaseAttempts = 5
 

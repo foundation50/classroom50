@@ -398,8 +398,8 @@ type AddStudentToClassroomInput = {
   last_name?: string
   email?: string
   section?: string
-  // Write the new row directly as `enrolled` (vs `invited`); set when the
-  // student is already an active org member, so they aren't stranded.
+  // Student is already an active org member: skip the invite and drive the
+  // team-add / optimistic-seed path. Not written to the roster row.
   enrolled?: boolean
 }
 export async function enrollStudentInClassroom(
@@ -415,9 +415,9 @@ export async function enrollStudentInClassroom(
   const teamPromise = resolveClassroomTeam(client, org, classroom)
   teamPromise.catch(() => {})
 
-  // Already an active member -> write the row enrolled directly (no invite is
-  // sent, so reconcile would never confirm them). Best-effort: a failed read
-  // falls back to the normal "invited" path.
+  // Already an active member -> skip the org invite and add to the team
+  // directly (an invite would be a no-op, so reconcile would never confirm
+  // them). Best-effort: a failed read falls back to sending the invite.
   const normalizedUsername = input.username.trim()
   const alreadyMember = await isActiveMember(client, org, normalizedUsername)
 
