@@ -7,25 +7,25 @@ import {
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useGitHubRepo } from "@/hooks/github/hooks"
 import { retryTransientGitHubError } from "@/hooks/github/errors"
-import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
 import {
   resolveTeacherVerdict,
-  applyViewAsToVerdict,
+  isStaffRole,
   type EffectiveRole,
 } from "@/util/resolveRole"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child
 // page + guard. Carries both the fine classroom role (instructor/ta/student)
-// and the coarse staff verdict (showTeacherUi/isStudent/...) derived from the
-// SAME reads, so the two can't diverge. Preview-aware fields respect the
+// and the coarse staff verdict (showTeacherUi/isStudent/...) DERIVED from that
+// fine role, so the two can't diverge. Preview-aware fields respect the
 // downgrade-only "view as" lens; `actualRole` is the real one.
 export type ClassroomRoleContextValue = {
   role: EffectiveRole
   actualRole: EffectiveRole
   isLoading: boolean
-  // Coarse staff verdict (config-repo gate), preview-aware.
+  // Coarse staff verdict, DERIVED from the fine role (not the raw config-repo
+  // read) so it can't diverge from `role`. Preview-aware via `role`.
   isTeacher: boolean
   isStudent: boolean
   isBlocked: boolean
@@ -45,7 +45,6 @@ function useClassroomRoleResolution(
   classroom: string | undefined,
 ): ClassroomRoleContextValue {
   const { user } = useGithubAuth()
-  const { viewAs } = useRoleView()
 
   const { role, actualRole, isLoading } = useClassroomRole(
     org,
@@ -53,6 +52,9 @@ function useClassroomRoleResolution(
     user?.login,
   )
 
+  // `isBlocked` is a config-repo access fact (403), independent of classroom
+  // role; keep it from the repo verdict for the diagnostics surface. The retry
+  // shares the `classroom50` query key with useClassroomRole, so no extra fetch.
   const staffRepoQuery = useGitHubRepo(org, "classroom50", {
     retry: retryTransientGitHubError,
   })
@@ -62,18 +64,27 @@ function useClassroomRoleResolution(
     permissions: staffRepoQuery.data?.permissions,
     error: staffRepoQuery.error,
   })
-  // The preview is classroom-scoped; a classroom is always in scope here.
-  const previewVerdict = applyViewAsToVerdict(verdict, viewAs)
+
+  // KTD-3: DERIVE the coarse staff verdict from the resolved fine role (which
+  // already folds in team membership AND the "view as" clamp) so the two signals
+  // can't diverge. Config-repo access alone must NOT grant teacher UI — an org
+  // owner can read the config repo of a classroom they don't instruct, so keying
+  // teacher UI on repo access (the old path) leaked the teacher view to an
+  // owner-as-student. `unresolved` is the fail-closed sentinel (not resolved,
+  // no teacher UI, not yet a definitive student).
+  const roleResolved = role !== "unresolved"
+  const isTeacher = isStaffRole(role) && roleResolved
+  const isStudent = role === "student"
 
   return {
     role,
     actualRole,
     isLoading,
-    isTeacher: previewVerdict.isTeacher,
-    isStudent: previewVerdict.isStudent,
-    isBlocked: previewVerdict.isBlocked,
-    roleResolved: previewVerdict.roleResolved,
-    showTeacherUi: previewVerdict.showTeacherUi,
+    isTeacher,
+    isStudent,
+    isBlocked: verdict.isBlocked,
+    roleResolved,
+    showTeacherUi: isTeacher,
   }
 }
 
@@ -87,6 +98,7 @@ export function ClassroomRoleProvider({
   classroom: string | undefined
 }>) {
   const resolved = useClassroomRoleResolution(org, classroom)
+
   const value = useMemo(
     () => resolved,
     // Spread the primitives so a stable resolution doesn't churn consumers.
