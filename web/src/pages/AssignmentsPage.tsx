@@ -23,7 +23,7 @@ import { ClaimInstructorNotice } from "./classes/ClaimInstructorNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import useGetStudents from "@/hooks/useGetStudents"
+import useStudentCount from "@/hooks/useStudentCount"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
@@ -96,7 +96,7 @@ const NewAssignmentButton = ({
   )
 }
 
-const TeacherAssignmentsView = ({
+export const TeacherAssignmentsView = ({
   org,
   classroom,
 }: {
@@ -106,10 +106,14 @@ const TeacherAssignmentsView = ({
   const { t } = useTranslation()
   const { data: classData, isLoading: assignmentsLoading } =
     useGetClassroomAssignments(org, classroom)
-  const { students, isLoading: studentsLoading } = useGetStudents(
-    org,
-    classroom,
-  )
+  // Authoritative student-role count for the header and the table denominator,
+  // so neither counts instructors/TAs. The count comes from team membership
+  // (one source); roster.csv identity is fetched by useStudentCount internally.
+  const {
+    studentCount,
+    isLoading: studentsLoading,
+    isError: studentCountError,
+  } = useStudentCount(org, classroom)
   const { data: classroomData, isLoading: classroomLoading } = useGetClassroom(
     org,
     classroom,
@@ -156,9 +160,9 @@ const TeacherAssignmentsView = ({
         subtitle={
           <>
             {classroomData?.term ? `${classroomData?.term} • ` : ""}
-            {studentsLoading
+            {studentsLoading || studentCountError
               ? "…"
-              : t("assignments.studentCount", { count: students.length })}
+              : t("assignments.studentCount", { count: studentCount ?? 0 })}
           </>
         }
         action={
@@ -215,7 +219,7 @@ const TeacherAssignmentsView = ({
           org={org}
           classroom={classroom}
           assignments={hasAssignments ? visible : sourceAssignments}
-          students={students}
+          studentCount={studentCount}
           loading={assignmentsLoading}
           archived={archived}
         />

@@ -17,7 +17,7 @@ import {
   type DeleteAssignmentInput,
 } from "@/api/mutations/assignments"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import type { Assignment, Student } from "@/types/classroom"
+import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Button } from "@/components/ui"
 
@@ -161,14 +161,16 @@ const AssignmentsTable = ({
   org,
   classroom,
   assignments,
-  students = [],
+  studentCount,
   loading = false,
   archived = false,
 }: {
   org: string
   classroom: string
   assignments?: Assignment[]
-  students?: Student[]
+  // Authoritative student-role count (from useStudentCount), the denominator for
+  // the submission ratio. undefined while the count is still resolving.
+  studentCount?: number
   loading?: boolean
   // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
   // stays available.
@@ -293,15 +295,22 @@ const AssignmentsTable = ({
                       )
                     }
 
+                    // Denominator is the authoritative student-role count, not
+                    // the roster row count (which includes staff). The
+                    // numerator is a repo-count from scores.json with no role
+                    // join, so a submission from a non-student repo could push
+                    // it past the denominator — clamp the displayed fraction and
+                    // the bar to 100% (KTD4). undefined count reads as 0 until it
+                    // resolves.
+                    const denominator = studentCount ?? 0
+                    const shown = Math.min(submitted, denominator)
                     return (
                       <>
-                        {submitted} / {students.length}{" "}
+                        {shown} / {denominator}{" "}
                         <progress
                           className="progress progress-info w-56"
                           value={
-                            students.length === 0
-                              ? 0
-                              : (submitted / students.length) * 100
+                            denominator === 0 ? 0 : (shown / denominator) * 100
                           }
                           max="100"
                         ></progress>
