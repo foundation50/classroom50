@@ -1,24 +1,34 @@
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
+import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
+import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Classroom50OrgSummary } from "@/hooks/github/queries"
-import useGetOrgs from "@/hooks/useGetOrgs"
+import type { GitHubOrgMembership } from "@/hooks/github/types"
+import useGetOrgs, {
+  orgMembershipsQueryKey,
+  usePendingOrgInvites,
+} from "@/hooks/useGetOrgs"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
-import { useQueryClient } from "@tanstack/react-query"
-import { Link } from "@tanstack/react-router"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronDown,
   ExternalLink,
   Info,
   Lock,
+  MailOpen,
   Plus,
   RefreshCw,
+  ShieldCheck,
+  User,
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
-import { Button, Card, Toolbar } from "@/components/ui"
+import { Badge, Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
@@ -81,6 +91,135 @@ function MissingOrgNotice({
           {t("orgs.missingNotice.manageOauth")}
           <ExternalLink aria-hidden="true" className="size-4" />
         </a>
+      </div>
+    </details>
+  )
+}
+
+// A single pending org invitation: org identity from the membership record
+// (avatar/name/description) plus an inline accept-and-verify. Pending members
+// can't read the classroom50 repo, so there's no status probe here — accepting
+// moves the org into the active list, where the classroom50 summary is built.
+function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
+  const { t } = useTranslation()
+  const client = useGitHubClient()
+  const queryClient = useQueryClient()
+  const navigate = useNavigate()
+  const { notify } = useToast()
+  const org = invite.organization
+  const isOwner = invite.role === "admin"
+
+  const accept = useMutation({
+    mutationFn: () => acceptAndVerifyOrgMembership(client, org.login),
+    onSuccess: () => {
+      notify({
+        tone: "success",
+        message: t("orgs.invites.accepted", { org: org.login }),
+      })
+      queryClient.invalidateQueries({ queryKey: orgMembershipsQueryKey })
+      queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      navigate({ to: "/$org", params: { org: org.login } })
+    },
+    onError: () => {
+      notify({
+        tone: "error",
+        message: t("orgs.invites.acceptError", { org: org.login }),
+      })
+    },
+  })
+
+  return (
+    <Card
+      as={EnterDiv}
+      radius="xl"
+      shadow={false}
+      className="col-span-12 border-warning/40 bg-warning/5 md:col-span-6"
+    >
+      <Card.Body className="justify-between">
+        <div className="flex gap-4">
+          <img
+            src={org.avatar_url}
+            alt=""
+            className="size-12 rounded-xl border border-base-300"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-center gap-2">
+              <h2 className="truncate text-lg font-bold">{org.login}</h2>
+              <Badge tone="warning" size="sm">
+                {t("orgs.invites.pendingBadge")}
+              </Badge>
+              {isOwner ? (
+                <Badge tone="primary" size="sm" className="gap-1">
+                  <ShieldCheck aria-hidden="true" className="size-3" />
+                  {t("orgs.invites.roleAdmin")}
+                </Badge>
+              ) : (
+                <Badge tone="neutral" size="sm" className="gap-1">
+                  <User aria-hidden="true" className="size-3" />
+                  {t("orgs.invites.roleMember")}
+                </Badge>
+              )}
+            </div>
+            {org.description && (
+              <p className="mt-1 line-clamp-2 text-sm text-base-content/70">
+                {org.description}
+              </p>
+            )}
+            <p className="mt-1 text-xs text-base-content/50">
+              {isOwner
+                ? t("orgs.invites.roleAdminHint")
+                : t("orgs.invites.roleMemberHint")}
+            </p>
+          </div>
+        </div>
+
+        <Card.Actions className="mt-5 items-center justify-end gap-2">
+          <GitHubLink
+            href={`https://github.com/orgs/${org.login}/invitation`}
+            label={t("orgs.invites.viewOnGitHub")}
+            title={t("orgs.invites.openInviteOnGitHub", { org: org.login })}
+            className="shrink-0"
+            showLogo={false}
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            loading={accept.isPending}
+            loadingLabel={t("orgs.invites.accepting")}
+            onClick={() => accept.mutate()}
+          >
+            {t("orgs.invites.acceptOpen")}
+          </Button>
+        </Card.Actions>
+      </Card.Body>
+    </Card>
+  )
+}
+
+// Collapsed by default so a stack of invites doesn't dominate the home page;
+// the summary announces the count and expands to the accept cards.
+function PendingInvites({ invites }: { invites: GitHubOrgMembership[] }) {
+  const { t } = useTranslation()
+  if (invites.length === 0) return null
+  return (
+    <details className="group rounded-xl border border-warning/40 bg-warning/5">
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
+        <MailOpen aria-hidden="true" className="size-4 shrink-0 text-warning" />
+        <span className="min-w-0 flex-1 truncate font-medium text-base-content">
+          {t("orgs.invites.summary", { count: invites.length })}
+        </span>
+        <ChevronDown
+          aria-hidden="true"
+          className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
+        />
+      </summary>
+
+      <div className="border-t border-warning/20 p-4">
+        <div className="grid grid-cols-12 gap-4">
+          {invites.map((invite) => (
+            <PendingInviteCard key={invite.organization.id} invite={invite} />
+          ))}
+        </div>
       </div>
     </details>
   )
@@ -266,6 +405,7 @@ const OrgsPage = () => {
   useDocumentTitle(t("documentTitle.organizations"))
   const queryClient = useQueryClient()
   const { data: orgs = [], isLoading, isFetching } = useGetOrgs()
+  const { data: pendingInvites = [] } = usePendingOrgInvites()
 
   const { viewMode, sortKey, changeView, changeSort } =
     useListPrefsState(orgListPrefs)
@@ -344,6 +484,8 @@ const OrgsPage = () => {
     queryClient.invalidateQueries({ queryKey: ["orgs"] })
 
   const hasAnyOrgs = cl50Orgs.length > 0
+  const hasInvites = pendingInvites.length > 0
+  const hasContent = hasAnyOrgs || hasInvites
   const noSearchResults = hasAnyOrgs && sorted.length === 0
 
   return (
@@ -370,7 +512,9 @@ const OrgsPage = () => {
               onRefresh={handleRefresh}
             />
 
-            {hasAnyOrgs && (
+            {hasInvites && <PendingInvites invites={pendingInvites} />}
+
+            {hasContent && (
               <Toolbar className="flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <Toolbar.Search
                   inputSize="md"
@@ -461,7 +605,7 @@ const OrgsPage = () => {
                   </Button>
                 }
               />
-            ) : (
+            ) : hasInvites ? null : (
               <EmptyState
                 title={t("orgs.emptyTitle")}
                 body={t("orgs.emptyBody")}

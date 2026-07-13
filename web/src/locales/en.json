@@ -660,6 +660,22 @@
       "openOnGitHub": "Open {{org}} on GitHub",
       "open": "Open",
       "updatedAgo": "Updated {{when}}"
+    },
+    "invites": {
+      "summary_one": "You have {{count}} pending invitation",
+      "summary_other": "You have {{count}} pending invitations",
+      "pendingBadge": "Invited",
+      "roleAdmin": "Owner",
+      "roleMember": "Member",
+      "roleAdminHint": "You're invited as an owner — you'll be able to set up classrooms, assignments, and manage this organization.",
+      "roleMemberHint": "You're invited as a member — accept to join and see this organization's classrooms and assignments.",
+      "accept": "Accept invitation",
+      "acceptOpen": "Accept & Open",
+      "accepting": "Accepting…",
+      "accepted": "Joined {{org}}.",
+      "acceptError": "Couldn't accept the invitation to {{org}}. It may need SSO authorization on GitHub, or try again.",
+      "viewOnGitHub": "View invite on GitHub",
+      "openInviteOnGitHub": "Open the {{org}} invitation on GitHub"
     }
   },
   "assignments": {
