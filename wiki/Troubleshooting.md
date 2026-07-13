@@ -80,7 +80,7 @@ The instructor's autograder workflow has a YAML syntax error. `gh student` valid
 
 ## Submit pushed a commit but the teacher doesn't see new work
 
-`gh student submit` pushes to the assignment repo's `main` branch (hardcoded for now). If your template uses `master` or `develop`, the first submit creates a new `main` branch alongside it. Make sure the assignment repo's default branch on GitHub is the one you (and the teacher's download flow) expect.
+`gh student submit` pushes to the assignment repo's actual default branch (resolved from the repo — `master`, `develop`, or `main`), and the autograde workflow triggers on that same branch, so grading fires regardless of the branch name. If a submission still isn't graded, confirm the push landed on the repo's default branch on GitHub and that the autograde workflow ran under the repo's Actions tab.
 
 ## `gh teacher download` clones nothing
 

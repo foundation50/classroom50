@@ -13,7 +13,7 @@ Run `gh student <command> --help` for the live flag list. Errors always go to st
 | `gh student logout` | Log out of GitHub via `gh auth logout`. |
 | `gh student accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept any pending org invite, create a private repo (a copy of the assignment's template, or an empty repo if the assignment is template-less), keep the student as `admin` (so a group founder can `gh student invite` teammates), write `.classroom50.yaml`, and print clone instructions. |
 | `gh student invite <org>/<repo> <user>` | Invite a classmate or TA to the repo with `push` permission. For group assignments, the founder uses this to add each teammate. |
-| `gh student submit` | Snapshot the current branch and push it as a new commit on top of the assignment repo's `main` branch (refreshing the instructor's `.gitignore` and `.github/` from the template first, when the assignment has one). The autograde workflow tags and grades automatically. |
+| `gh student submit` | Snapshot the current branch and push it as a new commit on top of the assignment repo's default branch (refreshing the instructor's `.gitignore` and `.github/` from the template first, when the assignment has one). The autograde workflow tags and grades automatically. |
 
 ## `gh student accept`
 
@@ -67,7 +67,7 @@ Invites a classmate or TA to a repo with `push` permission. Calls `PUT /repos/{o
 gh student submit
 ```
 
-Run from inside a cloned assignment repo. Snapshots the current working tree and pushes it as a new commit on top of `main`. The autograde workflow in the student repo listens for the push, creates its own `submit/<UTC-timestamp>-<short-sha>` tag, and publishes a scored Release at that tag a minute or two later.
+Run from inside a cloned assignment repo. Snapshots the current working tree and pushes it as a new commit on top of the repo's default branch (which may be `master` if the template used it). The autograde workflow in the student repo listens for the push, creates its own `submit/<UTC-timestamp>-<short-sha>` tag, and publishes a scored Release at that tag a minute or two later.
 
 Functionally equivalent to `git commit -am "Submit" && git push`, with the template `.gitignore`/`.github/` refresh as the only delta (skipped for a template-less assignment) — submit doesn't manage tags, manifests, or the autograde workflow shim itself.
 
@@ -83,7 +83,7 @@ The commit is authored with the user's GitHub login and noreply email (`<id>+<lo
 
 Tagging is the runner's job — the autograde workflow's first step creates `submit/<UTC-timestamp>-<short-sha>` at the just-pushed SHA. That gives each submission an immutable history entry plus its own Release without `gh student submit` having to know anything about tags. The one exception is the **acceptance commit** (the commit `gh student accept` lands to set the repo up): it fires the workflow but has no work to grade, so the runner detects it and skips tagging, grading, and the release. Your first real `gh student submit` is always graded.
 
-The hardcoded `main` push target means templates whose default branch is `master`/`develop` end up with a separate `main` after the first submit.
+`gh student submit` pushes to the assignment repo's **actual default branch** (resolved from the repo, not hardcoded), so a template whose default branch is `master`/`develop` grades correctly without a stray `main` branch appearing. The autograde workflow's push trigger targets that same branch.
 
 **Feedback PR timing.** If your teacher enabled feedback, a single long-lived **Feedback** pull request appears on your **first submission that adds work** — not at accept time. (GitHub can't open a pull request with no changes to show, and right after accepting there's nothing yet.) Unlike GitHub Classroom — which opens the feedback PR the moment you accept — Classroom 50 waits for real work, so the diff your teacher reviews never includes the setup files (`.classroom50.yaml`, the autograde workflow). A side benefit: if you ever change those setup files, it stands out in the diff. The one PR is reused for every later submission.
 
