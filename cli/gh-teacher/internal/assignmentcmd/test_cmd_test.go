@@ -611,6 +611,72 @@ func archivedClassroomAddServer(t *testing.T, fix *testCmdFixture) *httptest.Ser
 	return server
 }
 
+// TestRunAssignmentAdd_WarnsOnNonMainTemplateBranch pins the U7 warning:
+// a template whose default branch isn't `main` still succeeds, but the teacher
+// is warned that the assignment (and student autograding) key off that branch.
+func TestRunAssignmentAdd_WarnsOnNonMainTemplateBranch(t *testing.T) {
+	// A dedicated server whose template probe reports a master default branch.
+	mux := http.NewServeMux()
+	mux.HandleFunc("/repos/o/classroom50", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
+	})
+	mux.HandleFunc("/repos/o/classroom50/contents/cs-principles/assignments.json", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"type":     "file",
+			"content":  base64.StdEncoding.EncodeToString([]byte(helloAssignments(""))),
+			"encoding": "base64",
+		})
+	})
+	mux.HandleFunc("/repos/cs50/hello-template", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"is_template": true, "default_branch": "master"})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": "parent-sha"}})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/commits/parent-sha", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"tree": map[string]string{"sha": "parent-tree"}})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/blobs", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob-sha"})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/trees", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-tree-sha"})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/commits", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"sha": "new-commit-sha"})
+	})
+	masterServer := httptest.NewServer(mux)
+	t.Cleanup(masterServer.Close)
+	client := githubtest.NewTestClient(t, masterServer)
+
+	var stdout, stderr bytes.Buffer
+	if err := runAssignmentAdd(client, &stdout, &stderr, helloAddParams()); err != nil {
+		t.Fatalf("runAssignmentAdd(master template): %v", err)
+	}
+	if !strings.Contains(stderr.String(), `default branch "master"`) {
+		t.Errorf("expected a non-main branch warning, stderr = %q", stderr.String())
+	}
+}
+
+// TestRunAssignmentAdd_NoWarnOnMainTemplateBranch is the negative: a `main`
+// template default branch adds no warning.
+func TestRunAssignmentAdd_NoWarnOnMainTemplateBranch(t *testing.T) {
+	server, _ := newTestCmdServer(t, helloAssignments(""), false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	if err := runAssignmentAdd(client, &stdout, &stderr, helloAddParams()); err != nil {
+		t.Fatalf("runAssignmentAdd(main template): %v", err)
+	}
+	if strings.Contains(stderr.String(), "not \"main\"") {
+		t.Errorf("main template should not warn, stderr = %q", stderr.String())
+	}
+}
+
 // TestRunAssignmentAdd_RefusesArchivedTarget pins the add-path archived
 // refusal branch (assignment.go ensureClassroomActive): `assignment add`
 // into an archived (active:false) classroom is refused and lands no blob,

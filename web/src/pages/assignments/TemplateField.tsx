@@ -176,6 +176,47 @@ const TemplateVerificationNote = ({
 
   const fallbackOrg = org ?? t("assignments.template.fallbackOrg")
 
+  // Working assumption is `main`. When a verified template resolves to another
+  // default branch, the assignment (and student autograding) key off that
+  // branch — warn without blocking. Only kinds that carry a resolved branch.
+  const resolvedBranch =
+    "branch" in verification ? verification.branch : undefined
+  const nonMainNote =
+    resolvedBranch && resolvedBranch !== "main" ? (
+      <Note tone="warning" icon={Info}>
+        {t("assignments.template.nonMainBranch_1")}{" "}
+        <Code>{resolvedBranch}</Code>
+        {t("assignments.template.nonMainBranch_2")}
+      </Note>
+    ) : null
+
+  const verdict = renderTemplateVerdict({
+    verification,
+    t,
+    fallbackOrg,
+    teamHasAccess,
+  })
+
+  if (!nonMainNote) return verdict
+  return (
+    <>
+      {verdict}
+      {nonMainNote}
+    </>
+  )
+}
+
+function renderTemplateVerdict({
+  verification,
+  t,
+  fallbackOrg,
+  teamHasAccess,
+}: {
+  verification: Exclude<TemplateAccessVerification, { kind: "empty" }>
+  t: ReturnType<typeof useTranslation>["t"]
+  fallbackOrg: string
+  teamHasAccess?: boolean
+}): ReactNode {
   switch (verification.kind) {
     case "ok": {
       // Students can't read an in-org private template directly; the classroom

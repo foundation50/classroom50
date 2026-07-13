@@ -492,6 +492,14 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 			return fmt.Errorf("template `%s/%s` is private and outside the org %s — students can't be granted access to it, so `gh student accept` would fail. Copy it into %s and reference the copy, or make the template public",
 				ref.Owner, ref.Repo, org, org)
 		}
+		// Working assumption is `main`. A non-main template default branch is
+		// supported (student repos inherit it), but warn so the teacher knows
+		// autograde/submit will key off that branch, not `main`.
+		if ref.Branch != "main" {
+			_, _ = fmt.Fprintf(errOut,
+				"Warning: template %s/%s uses default branch %q, not \"main\". The assignment will use %q; students' repos and autograding key off that branch.\n",
+				ref.Owner, ref.Repo, ref.Branch, ref.Branch)
+		}
 		resolved = &ref
 	}
 

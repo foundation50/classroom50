@@ -883,6 +883,8 @@
       "okPrefixPublicInOrg": "Public template, branch",
       "okPrefixPrivateInOrg": "Private template, branch",
       "okSuffix": ". Students can access it.",
+      "nonMainBranch_1": "This template's default branch is",
+      "nonMainBranch_2": ", not \"main\". The assignment will use it, and student autograding keys off that branch.",
       "okVerify_1": "Reachable in {{owner}} (branch",
       "okVerify_2": "). If {{owner}} restricts third-party apps, students can't copy it until an owner approves Classroom 50.",
       "notVisible": "{{owner}}/{{repo}} isn't visible to you. Make it public or copy it into {{org}}.",
