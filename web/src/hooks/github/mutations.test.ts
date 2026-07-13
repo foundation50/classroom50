@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import {
   buildClassroomUpdate,
   editClassroom,
+  ensureClassroom50Repo,
   ensurePages,
   ensureSkeletonFiles,
   ensureWorkflowPermissions,
@@ -112,6 +113,9 @@ describe("editClassroom archived read-only guard", () => {
       return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
     })
     const request = vi.fn().mockImplementation((path: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(path)) {
+        return Promise.resolve({ default_branch: "main" })
+      }
       if (path.endsWith("/git/ref/heads/main")) {
         return Promise.resolve({ object: { sha: "base-sha" } })
       }
@@ -675,6 +679,120 @@ describe("findStaleSkeletonFiles", () => {
     const byPath = Object.fromEntries(stale.map((f) => [f.path, f.exists]))
     expect(byPath[drifted]).toBe(true)
     expect(byPath[missing]).toBe(false)
+  })
+
+  // A master-default config repo: the tree read must resolve heads/master, not
+  // heads/main. This is the #233 regression — a hardcoded heads/main 404s here.
+  it("reads the config repo's actual default branch (master) for the tree", async () => {
+    const refBranches: string[] = []
+    const request = vi.fn(async (url: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: "master" }
+      }
+      const m = url.match(/\/git\/ref\/heads\/([^/?]+)/)
+      if (m) {
+        refBranches.push(decodeURIComponent(m[1]))
+        return { object: { sha: "refsha" } }
+      }
+      if (url.includes("/git/commits/")) return { tree: { sha: "treesha" } }
+      if (url.includes("/git/trees/")) return { truncated: false, tree: [] }
+      throw new Error(`unexpected request: ${url}`)
+    })
+    await findStaleSkeletonFiles({ request } as unknown as GitHubClient, org)
+    expect(refBranches).toContain("master")
+    expect(refBranches).not.toContain("main")
+  })
+})
+
+// U1: the config repo is normalized to `main` (guarded rename) and the org
+// default-branch setting is steered to `main`, both best-effort.
+describe("ensureClassroom50Repo branch normalization", () => {
+  const org = "acme"
+
+  function makeClient(opts: {
+    existingDefaultBranch?: string | null
+    renameFails?: boolean
+  }) {
+    const calls: string[] = []
+    const request = vi.fn(async (url: string, o?: { method?: string }) => {
+      const method = o?.method ?? "GET"
+      calls.push(`${method} ${url}`)
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        if (opts.existingDefaultBranch === null) {
+          throw new GitHubAPIError({
+            status: 404,
+            url,
+            message: "Not Found",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          })
+        }
+        return { default_branch: opts.existingDefaultBranch ?? "main" }
+      }
+      if (method === "POST" && url.endsWith("/repos")) {
+        return { default_branch: opts.existingDefaultBranch ?? "main" }
+      }
+      if (
+        method === "POST" &&
+        url.includes("/branches/") &&
+        url.endsWith("/rename")
+      ) {
+        if (opts.renameFails) {
+          throw new GitHubAPIError({
+            status: 403,
+            url,
+            message: "Forbidden",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          })
+        }
+        return { default_branch: "main" }
+      }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+    return { client: { request } as unknown as GitHubClient, calls }
+  }
+
+  it("renames the branch to main when an existing repo defaults to master", async () => {
+    const { client, calls } = makeClient({ existingDefaultBranch: "master" })
+    const result = await ensureClassroom50Repo(client, org)
+    expect(
+      calls.some(
+        (c) => c === `POST /repos/${org}/classroom50/branches/master/rename`,
+      ),
+    ).toBe(true)
+    expect(result.repo.default_branch).toBe("main")
+  })
+
+  it("does NOT call rename when the repo already defaults to main", async () => {
+    const { client, calls } = makeClient({ existingDefaultBranch: "main" })
+    await ensureClassroom50Repo(client, org)
+    expect(calls.some((c) => c.includes("/rename"))).toBe(false)
+  })
+
+  it("swallows a rename failure and still resolves", async () => {
+    const { client } = makeClient({
+      existingDefaultBranch: "master",
+      renameFails: true,
+    })
+    const result = await ensureClassroom50Repo(client, org)
+    // Rename failed, so the reported branch stays master (defense-in-depth
+    // reads resolve it); the step does not throw.
+    expect(result.repo.default_branch).toBe("master")
   })
 })
 

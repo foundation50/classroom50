@@ -28,6 +28,11 @@ import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 const logWorkflows = logger.scope("github:workflows")
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
+// The branch Classroom 50 standardizes the config repo (and its skeleton
+// workflows/Pages/branch protection) on. New config repos are normalized to
+// this; the org default-branch setting is steered here too.
+const CONFIG_REPO_BRANCH = "main"
+
 const ASSIGNMENTS_TEMPLATE = {
   schema: "classroom50/assignments/v1",
   assignments: [],
@@ -285,9 +290,14 @@ export function createCommitForAssignment(params: {
   )
 }
 
-export function updateRef(client: GitHubClient, org: string, sha: string) {
+export function updateRef(
+  client: GitHubClient,
+  org: string,
+  sha: string,
+  branch = "main",
+) {
   return client.request<GitHubMoveBranch>(
-    `/repos/${org}/classroom50/git/refs/heads/main`,
+    `/repos/${org}/classroom50/git/refs/heads/${encodeURIComponent(branch)}`,
     {
       method: "PATCH",
       body: {
@@ -1149,7 +1159,7 @@ export type InitStepStatus =
   "pending" | "running" | "complete" | "warning" | "error" | "skipped"
 
 export async function createOrgRepo(client: GitHubClient, org: string) {
-  return client.request(`/orgs/${org}/repos`, {
+  return client.request<GitHubRepo>(`/orgs/${org}/repos`, {
     method: "POST",
     body: {
       name: "classroom50",
@@ -1161,14 +1171,73 @@ export async function createOrgRepo(client: GitHubClient, org: string) {
   })
 }
 
+// Rename the config repo's default branch to `main` when GitHub seeded it with
+// something else (an org whose default-branch-name policy is `master` etc.).
+// Best-effort and guarded: no API call when the branch is already `main`, and a
+// failure (missing admin, protected branch, enterprise lock) is swallowed so
+// setup proceeds — the downstream reads resolve the real branch regardless.
+async function normalizeConfigRepoBranch(
+  client: GitHubClient,
+  org: string,
+  repo: GitHubRepo,
+): Promise<GitHubRepo> {
+  const current = repo.default_branch
+  if (!current || current === CONFIG_REPO_BRANCH) {
+    return repo
+  }
+
+  try {
+    const renamed = await client.request<GitHubRepo>(
+      `/repos/${org}/${CONFIG_REPO}/branches/${encodePathPart(current)}/rename`,
+      { method: "POST", body: { new_name: CONFIG_REPO_BRANCH } },
+    )
+    logSetup.info("config repo default branch renamed to main", {
+      org,
+      from: current,
+    })
+    return renamed
+  } catch (err) {
+    logSetup.warn("config repo branch rename to main failed (continuing)", {
+      org,
+      from: current,
+      err,
+    })
+    return repo
+  }
+}
+
+// Best-effort: steer the org's default repository branch name to `main` so
+// future repos (config repo re-creates, student assignment repos) seed on
+// `main`. Only affects future repos and needs org-owner rights (can be
+// enterprise-locked), so any failure is swallowed — it never blocks setup.
+async function ensureOrgDefaultBranch(
+  client: GitHubClient,
+  org: string,
+): Promise<void> {
+  try {
+    await client.request(`/orgs/${org}`, {
+      method: "PATCH",
+      body: { default_repository_branch: CONFIG_REPO_BRANCH },
+    })
+    logSetup.info("org default repository branch set to main", { org })
+  } catch (err) {
+    logSetup.warn("could not set org default repository branch (continuing)", {
+      org,
+      err,
+    })
+  }
+}
+
 export async function ensureClassroom50Repo(client: GitHubClient, org: string) {
   const existing = await getRepo(client, org, "classroom50")
 
   if (existing) {
-    return { status: "complete" as const, created: false, repo: existing }
+    const repo = await normalizeConfigRepoBranch(client, org, existing)
+    return { status: "complete" as const, created: false, repo }
   }
 
-  const repo = await createOrgRepo(client, org)
+  const created = await createOrgRepo(client, org)
+  const repo = await normalizeConfigRepoBranch(client, org, created)
 
   return { status: "complete" as const, created: true, repo }
 }
@@ -1185,11 +1254,11 @@ export type GitHubTreeResponse = {
 async function listTargetRepoBlobs(
   client: GitHubClient,
   org: string,
-  branch = "main",
+  branch: string,
 ): Promise<Map<string, string>> {
   const ref = await client.request<{
     object: { sha: string }
-  }>(`/repos/${org}/${CONFIG_REPO}/git/ref/heads/${branch}`)
+  }>(`/repos/${org}/${CONFIG_REPO}/git/ref/heads/${encodePathPart(branch)}`)
 
   const commit = await client.request<{
     tree: { sha: string }
@@ -1258,13 +1327,21 @@ export async function findStaleSkeletonFiles(
   client: GitHubClient,
   org: string,
 ): Promise<StaleSkeletonFile[]> {
-  // The tree read and the default-branch read are independent — overlap them.
-  const [existingBlobs, repo] = await Promise.all([
-    listTargetRepoBlobs(client, org),
-    client.request<GitHubRepo>(`/repos/${org}/${CONFIG_REPO}`),
-  ])
-  // Use the config repo's actual default branch (org policy can rename `main`).
-  const defaultBranch = repo.default_branch || "main"
+  return (await findStaleSkeleton(client, org)).stale
+}
+
+// Like findStaleSkeletonFiles but also returns the config repo's resolved
+// default branch, so the write path commits onto the same branch it diffed
+// against. The repo read must precede the tree read — the tree read needs the
+// branch name, which org policy can set to something other than `main`.
+async function findStaleSkeleton(
+  client: GitHubClient,
+  org: string,
+): Promise<{ stale: StaleSkeletonFile[]; branch: string }> {
+  const repo = await client.request<GitHubRepo>(`/repos/${org}/${CONFIG_REPO}`)
+  const defaultBranch = repo.default_branch || CONFIG_REPO_BRANCH
+
+  const existingBlobs = await listTargetRepoBlobs(client, org, defaultBranch)
 
   // From the bundled skeleton — no runtime fetch from the CLI repo.
   const bundled = buildSkeletonFiles(defaultBranch)
@@ -1281,7 +1358,7 @@ export async function findStaleSkeletonFiles(
       stale.push({ ...file, exists: true })
     }
   })
-  return stale
+  return { stale, branch: defaultBranch }
 }
 
 // Commits missing skeleton files and refreshes drifted ones. Overwriting an
@@ -1295,7 +1372,7 @@ export async function ensureSkeletonFiles(
   org: string,
   confirmOverwrite?: (paths: string[]) => Promise<boolean>,
 ) {
-  const stale = await findStaleSkeletonFiles(client, org)
+  const { stale, branch: configBranch } = await findStaleSkeleton(client, org)
 
   if (stale.length === 0) {
     return { status: "complete" as const, created: [], skippedOverwrite: [] }
@@ -1355,7 +1432,7 @@ export async function ensureSkeletonFiles(
     }
     changed = stillStale.map((f) => f.path)
 
-    const branch = await getBranchRef(client, org)
+    const branch = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, branch.object.sha)
 
     const tree = await createTreeRepo(client, {
@@ -1383,7 +1460,7 @@ export async function ensureSkeletonFiles(
         client,
         owner: org,
         repo: "classroom50",
-        branch: "main",
+        branch: configBranch,
         commitSha: newCommit.sha,
       })
       break
@@ -2491,6 +2568,9 @@ export async function initClassroom50({
     id: "orgDefaults",
     onStepUpdate,
     fn: async () => {
+      // Steer the org's default branch name to main (best-effort; only affects
+      // future repos). Runs alongside the member-privilege defaults repair.
+      await ensureOrgDefaultBranch(client, org)
       const result = await repairOrgDefaults(client, org, plan)
       // Forward the whole result (not just status/message) so the board can list
       // the specific unenforced settings, and warn on ANY unenforced field so it
@@ -2568,7 +2648,9 @@ export async function initClassroom50({
   results.branchProtection = await tryStep({
     id: "branchProtection",
     onStepUpdate,
-    fn: () => ensureBranchProtection(client, org, "classroom50", "main"),
+    // Omit the branch so ensureBranchProtection resolves the config repo's
+    // actual default branch (org policy can seed it as `master`).
+    fn: () => ensureBranchProtection(client, org, "classroom50"),
   })
 
   results.rulesets = await tryStep({
@@ -2740,7 +2822,13 @@ export async function editClassroom(
 ) {
   const { org, slug, term, name, active } = input
 
-  const ref = await getBranchRef(client, org)
+  // Resolve the config repo's default branch once; org policy can seed it as
+  // something other than `main`, so both the ref read and the write must target
+  // the real branch.
+  const configBranch =
+    (await getRepo(client, org, "classroom50"))?.default_branch || "main"
+
+  const ref = await getBranchRef(client, org, configBranch)
 
   const commit = await getCommit(client, org, ref.object.sha)
 
@@ -2801,7 +2889,7 @@ export async function editClassroom(
     classroom: slug,
   })
 
-  const updatedRef = await updateRef(client, org, newCommit.sha)
+  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   return {
     previousCommitSha: ref.object.sha,
