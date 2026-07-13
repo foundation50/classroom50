@@ -15,8 +15,7 @@ const log = logger.scope("permission-error-boundary")
 // so the user sees a friendly message instead of the app-wide crash screen.
 function isPermissionError(error: unknown): boolean {
   return (
-    error instanceof GitHubAPIError &&
-    (error.status === 403 || error.status === 404)
+    error instanceof GitHubAPIError && (error.isForbidden || error.isNotFound)
   )
 }
 

@@ -7,11 +7,8 @@ export const Route = createFileRoute("/_authed/$org/$classroom")({
 })
 
 // Classroom boundary: resolve the effective classroom role ONCE and share it
-// with every child page + guard via context. Child surfaces read the role from
-// context rather than each re-running resolution. The permission-error boundary
-// catches instructor/owner-only 403/404 that slip past pre-flight gating (a
-// role change mid-session, a direct-URL navigation) and renders a friendly
-// message instead of the app-wide crash screen.
+// with every child page + guard via context, so child surfaces read the role
+// from context rather than each re-running resolution.
 function ClassroomLayout() {
   const { org, classroom } = useParams({ from: "/_authed/$org/$classroom" })
   return (

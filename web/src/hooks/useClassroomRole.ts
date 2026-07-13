@@ -124,13 +124,10 @@ export function useClassroomRole(
     taQuery.fetchStatus === "fetching" ||
     studentQuery.fetchStatus === "fetching"
 
-  // An ELEVATION read (instructor/ta) that settled in a non-definitive error
-  // (retries exhausted, not fetching) leaves the role `unresolved` with nothing
-  // left in flight. Surface that so a guard can show an error+retry affordance
-  // instead of an indefinite spinner. A definitive 404 is not `isError` (React
-  // Query treats a no-retry rejection as an error, but membershipFromQuery
-  // already reduced it to a definitive `non-member`, so the role resolves) — so
-  // only report the strand when the role is genuinely still `unresolved`.
+  // Surface a settled elevation error (retries exhausted, role still
+  // `unresolved`) so the guard can offer retry instead of an endless spinner. A
+  // definitive 404 already reduced to `non-member` (the role resolves), so gate
+  // on the role still being `unresolved`, not on `isError` alone.
   const isError =
     actualRole === "unresolved" &&
     !isLoading &&

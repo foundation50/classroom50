@@ -347,7 +347,7 @@ const AssignmentSidebarMenu = ({
 }) => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
-  const { showTeacherUi, roleResolved } = useClassroomRoleContext()
+  const { showTeacherUi, roleResolved, actualRole } = useClassroomRoleContext()
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
@@ -373,7 +373,6 @@ const AssignmentSidebarMenu = ({
     org,
     studentRepoNameForSecret,
   )
-  const { actualRole } = useClassroomRoleContext()
   const isActuallyStaff = isStaffRole(actualRole) && actualRole !== "unresolved"
   const { data: classroomMeta } = useGetClassroom(org, classroom, {
     enabled: isActuallyStaff,

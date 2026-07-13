@@ -29,17 +29,10 @@ export type ClassroomRoleInput = {
   student: Membership
 }
 
-// Pure classroom role resolution from the three per-classroom teams
-// (instructor > ta > student). A confirmed team member resolves positively; a
-// definitive non-member of all three is a student (the safe default). Fail
-// posture is asymmetric by design: a needed ELEVATION read (instructor/ta) that
-// is still in flight yields `unresolved` (fail-closed — a transient blip must
-// never demote a real staffer to student). The STUDENTS-team read is a safe
-// signal that can only ever confirm the default role, never grant access, so an
-// in-flight/errored students read does NOT hold — it falls through to the
-// `student` default (fail-open-to-student), so a real student is never stranded
-// on a spinner by a students-team blip. NOTE (KTD-4): org-admin status is NOT a
-// classroom role — that capability is OrgRole, resolved at the org boundary.
+// Pure classroom role from the three per-classroom teams (instructor > ta >
+// student). Fail posture is asymmetric: an in-flight ELEVATION read holds
+// (`unresolved`, fail-closed); an in-flight students read can't grant access so
+// it falls through to the safe `student` default (fail-open). See inline notes.
 export function resolveClassroomRole(input: ClassroomRoleInput): EffectiveRole {
   const { org, classroom, instructor, ta, student } = input
 
@@ -80,8 +73,7 @@ export function resolveOrgRole(input: {
   if (state === "active" && role === "admin") return "owner"
   const definitiveNonOwner =
     isSuccess ||
-    (error instanceof GitHubAPIError &&
-      (error.status === 403 || error.status === 404))
+    (error instanceof GitHubAPIError && (error.isForbidden || error.isNotFound))
   return definitiveNonOwner ? "member" : "unresolved"
 }
 
@@ -116,9 +108,8 @@ export function applyViewAs(
   return ROLE_RANK[viewAs] < ROLE_RANK[actual] ? viewAs : actual
 }
 
-// Translation key for the human role label: instructor => "nav.roleInstructor",
-// ta => "nav.roleTa", student => "nav.roleStudent", unresolved => null (so
-// callers show a skeleton mid-load). Pass through t().
+// Translation key for the human role label; null while `unresolved` so callers
+// show a skeleton mid-load. Pass through t().
 export function roleLabelKey(role: EffectiveRole): string | null {
   switch (role) {
     case "instructor":
@@ -139,7 +130,7 @@ export function membershipFromQuery(
   error: unknown,
 ): Membership {
   if (isSuccess) return "member"
-  if (error instanceof GitHubAPIError && error.status === 404) {
+  if (error instanceof GitHubAPIError && error.isNotFound) {
     return "non-member"
   }
   // Any other error (or no answer yet) is transient — don't demote.
@@ -188,8 +179,8 @@ export function resolveTeacherVerdict(
       permissions?.pull,
     )
 
-  const isStudent = error instanceof GitHubAPIError && error.status === 404
-  const isBlocked = error instanceof GitHubAPIError && error.status === 403
+  const isStudent = error instanceof GitHubAPIError && error.isNotFound
+  const isBlocked = error instanceof GitHubAPIError && error.isForbidden
 
   const roleResolved = !org || isSuccess || isStudent || isBlocked
   const showTeacherUi = Boolean(org) && isTeacher

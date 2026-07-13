@@ -2,9 +2,7 @@ import type { EffectiveRole, OrgRole } from "@/util/resolveRole"
 
 // The capability vocabulary — WHAT a viewer can do, decoupled from WHICH role
 // they hold. Consumers ask `can("editClassroomSettings")` instead of comparing
-// role literals, so a policy change lives in one place. Deny-by-default: an
-// `unresolved` role denies (callers pair the check with a resolved signal to
-// hold a spinner rather than flash a 404).
+// role literals, so a policy change lives in one place.
 export type Capability =
   // Org-wide (org admin only).
   | "manageOrg" // org settings / members / activity
@@ -44,8 +42,6 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
     case "viewOrgStaffContent":
       return orgStaff === true
     case "viewClassroomStaffContent":
-      // instructor | ta. `unresolved` is denied here (fail-closed); the caller's
-      // `resolved` gate holds a spinner rather than flashing NotFound.
       return classroomRole === "instructor" || classroomRole === "ta"
     case "editClassroomSettings":
       return classroomRole === "instructor"

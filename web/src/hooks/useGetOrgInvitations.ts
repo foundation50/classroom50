@@ -9,17 +9,11 @@ import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 
-// Owner-only endpoints; a non-owner token gets 403, surfaced as `isForbidden`
-// so the UI can explain why invite status is hidden. 403/404 stay definitive
-// (no retry) so isForbidden resolves at once; a transient 5xx/429 self-heals
-// rather than silently rendering zero pending (the roster treats an empty
-// invitations list as authoritative).
-//
-// PRE-FLIGHT GATE: only an org owner may read these. A TA/instructor is a
-// definitive non-owner, so firing the request just to catch the inevitable 403
-// wastes a call and pollutes the console; gate `enabled` on the `manageOrg`
-// capability and treat a non-owner as forbidden without a request. `unresolved`
-// holds the read (fail-closed) until ownership is known.
+// Owner-only endpoints. Gate `enabled` on the manageOrg capability so a
+// definitive non-owner never fires the guaranteed 403 and is treated as
+// `isForbidden` without a request; `unresolved` holds until ownership is known.
+// A transient 5xx/429 self-heals rather than silently rendering zero pending
+// (the roster treats an empty invitations list as authoritative).
 const useGetOrgInvitations = (org: string) => {
   const client = useGitHubClient()
   const { orgRole } = useOrgRole()

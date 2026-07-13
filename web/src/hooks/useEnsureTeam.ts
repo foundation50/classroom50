@@ -5,15 +5,11 @@ import { retryTransientGitHubError } from "./github/errors"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 
-// ensureTeam performs a WRITE (POST /orgs/{org}/teams) — creating a team is
-// owner-only. Gate the query on the manageOrg capability so a TA/instructor
-// never fires a guaranteed-403 team creation, and use the fail-closed retry
-// predicate so a definitive 403/404 doesn't retry (a plain useQuery otherwise
-// retries the forbidden write with backoff). `unresolved` holds until ownership
-// is known. Because the queryFn is a WRITE living in a read cache, disable the
-// focus/reconnect refetches a plain useQuery does by default so a window
-// refocus can't silently re-fire the POST (ensureTeam is idempotent — get-first
-// + 422-adopt — so this is belt-and-suspenders, not the only guard).
+// ensureTeam is a WRITE (POST /orgs/{org}/teams) living in a useQuery: gate
+// `enabled` on the manageOrg capability so a non-owner never fires a
+// guaranteed-403 creation, and disable focus/reconnect refetch so a refocus
+// can't re-fire the POST. The fail-closed retry predicate stops a definitive
+// 403/404 from retrying; `unresolved` holds until ownership is known.
 const useEnsureTeam = (org: string, classroom: string) => {
   const client = useGitHubClient()
   const { orgRole } = useOrgRole()
