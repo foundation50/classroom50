@@ -36,6 +36,7 @@ history is unavailable or baseline == commit).
 from __future__ import annotations
 
 import datetime
+import importlib.util
 import io
 import json
 import os
@@ -1275,21 +1276,15 @@ _PYTEST_DEPS = {"pytest": "pytest", "pytest_jsonreport": "pytest-json-report"}
 
 def _ensure_pytest(cwd: pathlib.Path, timeout: int) -> None:
     """Best-effort: make pytest + pytest-json-report importable before a
-    `python` test runs. Idempotent -- probes each dep against the grading
-    interpreter and installs only what's missing, so a teacher-pinned version
-    (from a setup command or requirements.txt) is left untouched. Never raises:
-    a locked-down or offline runner degrades to _grade_python's fallback
-    scoring rather than erroring the whole submission. Lives here (not in the
-    workflow) because runner.py is fetched from Pages each run, so the fix
-    reaches every classroom on next submission with no per-repo edit."""
-    missing = []
-    for module, package in _PYTEST_DEPS.items():
-        probe = f"{shlex.quote(sys.executable)} -c {shlex.quote(f'import {module}')}"
-        try:
-            if _run_command(probe, cwd, timeout).returncode != 0:
-                missing.append(package)
-        except (subprocess.SubprocessError, OSError):
-            missing.append(package)
+    `python` test runs. Idempotent -- installs only the deps missing from the
+    grading interpreter, so a teacher-pinned version (from a setup command or
+    requirements.txt) is left untouched. Never raises: a locked-down or offline
+    runner degrades to _grade_python's fallback scoring rather than erroring the
+    whole submission. Lives here (not in the workflow) because runner.py is
+    fetched from Pages each run, so the fix reaches every classroom on next
+    submission with no per-repo edit."""
+    missing = [package for module, package in _PYTEST_DEPS.items()
+               if importlib.util.find_spec(module) is None]
     if not missing:
         return
     install = (f"{shlex.quote(sys.executable)} -m pip install --quiet "

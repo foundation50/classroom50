@@ -2,13 +2,15 @@
 
 Focus is _ensure_pytest (issue #212): actions/setup-python provides only bare
 CPython, so a `python` test must have pytest + pytest-json-report installed
-before it runs. _ensure_pytest probes each dep against the grading interpreter
+before it runs. _ensure_pytest checks each dep against the grading interpreter
 and installs only what's missing, best-effort, without breaking per-case
 scoring when the report is present.
 """
 
 from __future__ import annotations
 
+import json
+import pathlib
 import subprocess
 
 from conftest import _load_module, _SCRIPTS_DIR
@@ -21,28 +23,24 @@ def _completed(returncode: int) -> subprocess.CompletedProcess[str]:
                                        stdout="", stderr="")
 
 
-class _CommandRecorder:
-    """Stand-in for runner._run_command. Answers `import <module>` probes from
-    `importable` and records every command it's asked to run."""
+class _InstallRecorder:
+    """Stand-in for runner._run_command that records the install commands it's
+    asked to run (the only thing _ensure_pytest still shells out for)."""
 
-    def __init__(self, importable):
-        self.importable = set(importable)
-        self.commands: list[str] = []
+    def __init__(self):
+        self.installs: list[str] = []
 
     def __call__(self, command, cwd, timeout, stdin=""):
-        self.commands.append(command)
-        for module in ("pytest_jsonreport", "pytest"):
-            if f"import {module}" in command:
-                return _completed(0 if module in self.importable else 1)
+        self.installs.append(command)
         return _completed(0)
-
-    @property
-    def installs(self) -> list[str]:
-        return [c for c in self.commands if "pip install" in c]
 
 
 def _run_ensure(monkeypatch, importable):
-    rec = _CommandRecorder(importable)
+    importable = set(importable)
+    monkeypatch.setattr(
+        runner.importlib.util, "find_spec",
+        lambda module: object() if module in importable else None)
+    rec = _InstallRecorder()
     monkeypatch.setattr(runner, "_run_command", rec)
     runner._ensure_pytest(cwd=None, timeout=30)
     return rec
@@ -76,21 +74,13 @@ def test_installs_both_when_both_missing(monkeypatch):
 
 
 def test_swallows_install_failure(monkeypatch):
+    monkeypatch.setattr(runner.importlib.util, "find_spec", lambda module: None)
+
     def boom(command, cwd, timeout, stdin=""):
-        if "pip install" in command:
-            raise OSError("no network")
-        return _completed(1)
+        raise OSError("no network")
 
     monkeypatch.setattr(runner, "_run_command", boom)
     # Must not raise -- an offline runner degrades to fallback scoring.
-    runner._ensure_pytest(cwd=None, timeout=30)
-
-
-def test_swallows_probe_failure(monkeypatch):
-    def boom(command, cwd, timeout, stdin=""):
-        raise subprocess.SubprocessError("probe blew up")
-
-    monkeypatch.setattr(runner, "_run_command", boom)
     runner._ensure_pytest(cwd=None, timeout=30)
 
 
@@ -106,8 +96,6 @@ def test_grade_python_per_case_scoring_unaffected(monkeypatch, tmp_path):
         for token in command.split():
             if token.startswith("--json-report-file="):
                 path = token.split("=", 1)[1].strip("'\"")
-                import json
-                import pathlib
                 pathlib.Path(path).write_text(
                     json.dumps({"summary": {"total": 4, "passed": 3}}))
         return _completed(1)
