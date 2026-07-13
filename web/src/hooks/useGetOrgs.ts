@@ -23,7 +23,7 @@ const useGetOrgs = () => {
   const client = useGitHubClient()
   const memberships = useOrgMemberships(client)
 
-  return useQuery({
+  const summaries = useQuery({
     queryKey: ["orgs", "active-summaries"],
     enabled: memberships.data !== undefined,
     queryFn: () => {
@@ -38,6 +38,15 @@ const useGetOrgs = () => {
     },
     staleTime: 10 * 60 * 1000,
   })
+
+  return {
+    ...summaries,
+    // The summaries query is disabled until memberships resolve; a disabled
+    // query reports isLoading=false, so fold in the memberships fetch to keep
+    // the page's spinner covering the whole chain (no empty-state flash).
+    isLoading: memberships.isLoading || summaries.isLoading,
+    isFetching: memberships.isFetching || summaries.isFetching,
+  }
 }
 
 // Orgs the viewer has been invited to but hasn't joined yet. Pending members
