@@ -70,10 +70,9 @@ func TestAssertModeCoherentForCreate(t *testing.T) {
 	}
 }
 
-// TestPermissionSatisfies pins the read-back decision, including the boundary
-// the guard exists to enforce: a `maintain` founder (which GitHub's legacy
-// field collapses to "write") must FAIL a `push` target, so an ignored
-// self-downgrade to a still-over-privileged role is caught, not passed green.
+// TestPermissionSatisfies pins the read-back decision, incl. the guard's
+// boundary: a `maintain` founder (legacy collapses to "write") must FAIL a
+// `push` target, so an ignored self-downgrade isn't passed green.
 func TestPermissionSatisfies(t *testing.T) {
 	cases := []struct {
 		name     string
@@ -103,11 +102,8 @@ func TestPermissionSatisfies(t *testing.T) {
 }
 
 // TestFounderPermission pins the mode→role mapping: individual (and
-// empty/unknown, which default to individual) gets least-privilege `push` —
-// enough to push and trigger autograding but not to delete/transfer the repo
-// or manage collaborators — while group gets `admin` so the founder can add
-// teammates via `gh student invite`. A regression here either over-privileges
-// individual students or silently breaks the group-invite flow.
+// empty/unknown, which default to individual) gets least-privilege `push`,
+// group gets `admin` so the founder can add teammates via `gh student invite`.
 func TestFounderPermission(t *testing.T) {
 	cases := []struct {
 		mode string
@@ -127,10 +123,9 @@ func TestFounderPermission(t *testing.T) {
 	}
 }
 
-// TestInviteFounder pins the founder grant + verification: accept PUTs the
-// student at the requested role, then reads the effective permission back and
-// succeeds only when it matches (a push grant reads back as the legacy `write`
-// role). Asserts the exact PUT path/body so a wrong verb/path/role regresses.
+// TestInviteFounder pins the grant + verification: accept PUTs the student at
+// the requested role, then succeeds only when the read-back matches (a push
+// grant reads back as legacy `write`). Asserts the exact PUT path/body.
 func TestInviteFounder(t *testing.T) {
 	const (
 		org      = "cs50"
@@ -187,9 +182,8 @@ func TestInviteFounder(t *testing.T) {
 }
 
 // TestInviteFounder_VerificationFails proves the demotion is verified, not
-// fire-and-forget: when the read-back still reports admin after we set push
-// (the self-downgrade was ignored), inviteFounder returns an actionable error
-// rather than silently reporting success.
+// fire-and-forget: a read-back still reporting admin after a push grant must
+// return an actionable error, not silently report success.
 func TestInviteFounder_VerificationFails(t *testing.T) {
 	const (
 		org      = "cs50"

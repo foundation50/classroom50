@@ -1136,7 +1136,7 @@ describe("resolveTemplate (create/edit blocking path)", () => {
 // Mirrors gh-student's TestFounderPermission: individual gets least-privilege
 // `push` (enough to push and trigger autograding, not to delete/transfer or
 // manage collaborators); group gets `admin` for the founder-driven invite flow.
-describe("founderPermission — accept-time repo role (issue #213)", () => {
+describe("founderPermission — accept-time repo role", () => {
   it("grants push for individual assignments", () => {
     expect(founderPermission("individual")).toBe("push")
   })
@@ -1146,10 +1146,10 @@ describe("founderPermission — accept-time repo role (issue #213)", () => {
   })
 })
 
-// Mirrors gh-student's checkAcceptableMode group-coherence gate: a group-shaped
-// entry (max_group_size >= 2) whose mode isn't `group` is rejected so the
-// founder isn't silently under-privileged (push instead of admin).
-describe("assertAssignmentModeCoherent (issue #213 / review #3)", () => {
+// Mirrors gh-student's assertModeCoherentForCreate: a group-shaped entry
+// (max_group_size >= 2) whose mode isn't `group` is rejected so the founder
+// isn't silently under-privileged (push instead of admin).
+describe("assertAssignmentModeCoherent", () => {
   it("accepts a coherent group entry", () => {
     expect(() => assertAssignmentModeCoherent("hw", "group", 3)).not.toThrow()
   })
@@ -1173,7 +1173,7 @@ describe("assertAssignmentModeCoherent (issue #213 / review #3)", () => {
 // permissionSatisfies decides whether the read-back after the grant matches the
 // role we set, accounting for GitHub collapsing push -> legacy "write". Guards
 // the verified self-demotion (a repo creator is admin until this downgrades it).
-describe("permissionSatisfies — verified founder demotion (issue #213)", () => {
+describe("permissionSatisfies — verified founder demotion", () => {
   it("accepts a push grant that reads back as legacy write", () => {
     expect(permissionSatisfies("write", "write", "push")).toBe(true)
     expect(permissionSatisfies("write", "push", "push")).toBe(true)
@@ -1209,10 +1209,8 @@ describe("permissionSatisfies — verified founder demotion (issue #213)", () =>
 })
 
 // Drives addFounderCollaborator end-to-end (PUT grant -> read-back -> throw),
-// the web mirror of gh-student's TestInviteFounder / _VerificationFails: the
-// pure permissionSatisfies is unit-tested above, but this pins the wiring
-// (getRepoPermissionForUser -> compare -> throw) that isolation can't reach.
-describe("addFounderCollaborator — grant + read-back verification (issue #213)", () => {
+// the web mirror of gh-student's TestInviteFounder / _VerificationFails.
+describe("addFounderCollaborator — grant + read-back verification", () => {
   const owner = "cs50"
   const repo = "cs50-fall-2026-hello-alice"
   const username = "alice"

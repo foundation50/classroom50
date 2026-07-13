@@ -1767,8 +1767,7 @@ export function founderPermission(mode: AssignmentMode): "push" | "admin" {
 }
 
 // Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't `group`:
-// its published metadata is inconsistent and the founder would be
-// under-privileged. Mirrors gh-student's checkAcceptableMode.
+// the founder would be under-privileged. Mirrors gh-student's assertModeCoherentForCreate.
 export function assertAssignmentModeCoherent(
   slug: string,
   mode: AssignmentMode,
@@ -1935,11 +1934,8 @@ type AcceptAssignmentResult = {
   cloneCommand: string
 }
 
-// Provision a just-created (or partially-provisioned) student repo: patch its
-// surface, grant the student their repo role (push for individual, admin for
-// group), and land the .classroom50.yaml + autograde shim through GitHub's
-// post-generate lag. Every step is idempotent, so it's safe to re-run when
-// healing a repo whose earlier accept failed mid-flow.
+// Provision (or heal) a just-created student repo — grant the founder role,
+// land the control files. Idempotent, so safe to re-run mid-flow.
 async function provisionAcceptedRepo(params: {
   client: GitHubClient
   org: string
@@ -2161,10 +2157,8 @@ export async function acceptAssignment(params: {
     const provisioned = hasMetadata && hasWorkflow
 
     if (provisioned) {
-      // Genuinely already accepted and healthy: reconcile the founder's role
-      // best-effort (heals a stale admin grant down). A transient/SSO-403/
-      // left-org failure must not fail a re-run that previously always
-      // succeeded, so swallow it and report already-accepted.
+      // Healthy already-accepted: reconcile the founder role best-effort. A
+      // transient failure must not fail a re-run that previously succeeded.
       try {
         await addFounderCollaborator({
           client,

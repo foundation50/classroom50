@@ -225,8 +225,7 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 }
 
 // checkAcceptableMode rejects an unrecognized mode (which can't map to a repo
-// role). Pure helper, unit-testable. Group-shape coherence is a separate,
-// fresh-create-only check (assertModeCoherentForCreate).
+// role). Group-shape coherence is a separate check (assertModeCoherentForCreate).
 func checkAcceptableMode(assignment, mode string) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup {
 		return fmt.Errorf("assignment %q has unsupported mode %q", assignment, mode)
@@ -236,9 +235,8 @@ func checkAcceptableMode(assignment, mode string) error {
 
 // assertModeCoherentForCreate rejects a group-shaped entry (max_group_size >= 2)
 // whose mode isn't `group`: fresh-founding it would under-privilege the founder
-// (push, not admin) and break `gh student invite`. Enforced only on a fresh
-// create — a healthy already-accepted repo must still reconcile/heal even if a
-// later-published entry drifted incoherent. Pure helper, unit-testable.
+// and break `gh student invite`. Only on fresh create — a healthy repo must
+// still reconcile even if a later-published entry drifted incoherent.
 func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) error {
 	if maxGroupSize > 0 && mode != contract.ModeGroup {
 		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your instructor to re-run `gh teacher assignment add`",
