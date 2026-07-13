@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { findStaleSkeletonFiles } from "./github/mutations"
 import { githubKeys } from "./github/queries"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
+import { resolveOrgRole } from "@/util/resolveRole"
 import { can } from "@/util/capabilities"
 
 // State subset the verdict depends on — structural so the fail-open logic stays
@@ -32,7 +33,15 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 // dead-end their CTA on a NotFound.
 export function useSkeletonDrift(org: string | undefined) {
   const client = useGitHubClient()
-  const { orgRole } = useOrgRole()
+  // Resolve the role from the membership read, not useOrgRole(): this banner
+  // mounts above the OrgRoleProvider, so the context would always be unresolved.
+  const membership = useGetOwnOrgMembership(org)
+  const orgRole = resolveOrgRole({
+    isSuccess: membership.isSuccess,
+    role: membership.data?.role,
+    state: membership.data?.state,
+    error: membership.error,
+  })
   const isOwner = can("manageOrg", { orgRole })
 
   const query = useQuery({
