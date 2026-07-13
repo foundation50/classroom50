@@ -1806,17 +1806,21 @@ function pagesAutograderUrl(params: {
   return `https://${org}.github.io/classroom50/${segment}/autograders/${name}.yaml`
 }
 
-function defaultAutograderWorkflow(org: string) {
+function defaultAutograderWorkflow(
+  org: string,
+  branch: string,
+  configBranch: string,
+) {
   return `name: Autograde
 
 on:
   push:
-    branches: [main]
+    branches: [${branch}]
     tags: ["submit/*"]
 
 jobs:
   grade:
-    uses: "${org}/classroom50/.github/workflows/autograde-runner.yaml@main"
+    uses: "${org}/classroom50/.github/workflows/autograde-runner.yaml@${configBranch}"
     permissions:
       contents: write
       statuses: write
@@ -1827,25 +1831,59 @@ jobs:
 `
 }
 
+// Whether an autograder name uses the built-in default shim (templated by
+// branch here) vs a teacher-authored one fetched from Pages (branch-agnostic).
+function isDefaultAutograder(autograder?: string): boolean {
+  return !autograder || autograder === "default"
+}
+
+// The config repo's default branch, for the default shim's reusable-workflow
+// `uses:` ref. Best-effort: any failure (or empty value) falls back to "main",
+// keeping the shim's `@<branch>` ref valid even if a config-repo rename to main
+// could not land.
+async function resolveConfigRepoDefaultBranch(
+  client: GitHubClient,
+  org: string,
+): Promise<string> {
+  try {
+    const repo = await getRepo(client, org, "classroom50")
+    return repo?.default_branch || "main"
+  } catch {
+    return "main"
+  }
+}
+
 export async function resolveAutograderWorkflow(params: {
   org: string
   classroom: string
   autograder?: string
   secret?: string
+  // The assignment repo's default branch (the shim's push trigger) and the
+  // config repo's default branch (the reusable-workflow ref). Only used for the
+  // built-in default shim; teacher-authored autograders are branch-agnostic.
+  branch?: string
+  configBranch?: string
 }): Promise<string> {
-  const { org, classroom, autograder, secret } = params
-  if (!autograder || autograder === "default") {
-    return defaultAutograderWorkflow(org)
+  const { org, classroom, autograder, secret, branch, configBranch } = params
+  if (isDefaultAutograder(autograder)) {
+    return defaultAutograderWorkflow(
+      org,
+      branch || "main",
+      configBranch || "main",
+    )
   }
+  // Narrowed: isDefaultAutograder returns true for undefined/"default", so a
+  // non-default autograder name is a non-empty string here.
+  const autograderName = autograder as string
 
   const workflow = await fetchTextWithFriendlyErrors(
-    pagesAutograderUrl({ org, classroom, name: autograder, secret }),
-    `autograder ${autograder}`,
+    pagesAutograderUrl({ org, classroom, name: autograderName, secret }),
+    `autograder ${autograderName}`,
   )
 
   if (!workflow.includes("jobs:")) {
     throw new Error(
-      `Autograder ${autograder} may be malformed YAML. Ask your instructor to check the file in the config repo.`,
+      `Autograder ${autograderName} may be malformed YAML. Ask your instructor to check the file in the config repo.`,
     )
   }
 
@@ -2078,7 +2116,7 @@ export async function acceptAssignment(params: {
     }
   }
 
-  const autogradeYaml = await withAcceptStep(
+  let autogradeYaml = await withAcceptStep(
     {
       id: "autograder",
       label: "Resolving the autograder",
@@ -2092,6 +2130,9 @@ export async function acceptAssignment(params: {
         classroom,
         autograder: assignment.autograder,
         secret,
+        // Preliminary branch; the default shim is re-rendered post-create with
+        // the assignment repo's actual default branch (below).
+        branch: sourceBranch || "main",
       }),
   )
 
@@ -2132,6 +2173,20 @@ export async function acceptAssignment(params: {
         fallbackBranch: sourceBranch || "main",
       }),
   )
+
+  // The default shim's push-trigger branch must match the assignment repo's
+  // actual default branch (which GitHub, not the template, decides — a `main`
+  // template generated into a `master`-default org yields a `master` repo), and
+  // its reusable-workflow `uses:` ref must match the config repo's branch. Both
+  // are only knowable after the repo exists, so re-render here.
+  if (isDefaultAutograder(assignment.autograder)) {
+    const resolvedBranch =
+      created.kind === "fallback-empty"
+        ? created.branch
+        : created.repo.default_branch || sourceBranch || "main"
+    const configBranch = await resolveConfigRepoDefaultBranch(client, org)
+    autogradeYaml = defaultAutograderWorkflow(org, resolvedBranch, configBranch)
+  }
 
   if (created.kind === "already-accepted") {
     // The repo exists, but a prior accept may have failed AFTER creating it but

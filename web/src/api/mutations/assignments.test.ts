@@ -10,6 +10,7 @@ import {
   nextAvailableSlug,
   permissionSatisfies,
   preserveUnmanagedAssignmentKeys,
+  resolveAutograderWorkflow,
   resolveTemplate,
   verifyTemplateAccess,
 } from "./assignments"
@@ -1297,5 +1298,49 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         permission: "push",
       }),
     ).rejects.toThrow(/"push"/)
+  })
+})
+
+// The default autograder shim is templated by the assignment repo's default
+// branch (its push trigger) and the config repo's branch (its reusable-workflow
+// ref), so autograde fires on a master-default repo and the @<branch> ref
+// resolves even if the config-repo rename to main did not land.
+describe("resolveAutograderWorkflow default shim branch templating", () => {
+  it("templates the push-trigger branch and the runner ref (master)", async () => {
+    const yaml = await resolveAutograderWorkflow({
+      org: "cs50",
+      classroom: "cs101",
+      autograder: "default",
+      branch: "master",
+      configBranch: "master",
+    })
+    expect(yaml).toContain("branches: [master]")
+    expect(yaml).toContain(
+      'uses: "cs50/classroom50/.github/workflows/autograde-runner.yaml@master"',
+    )
+  })
+
+  it("defaults to main when no branch is supplied", async () => {
+    const yaml = await resolveAutograderWorkflow({
+      org: "cs50",
+      classroom: "cs101",
+      autograder: "default",
+    })
+    expect(yaml).toContain("branches: [main]")
+    expect(yaml).toContain("autograde-runner.yaml@main")
+  })
+
+  it("does not fetch from Pages for the default autograder", async () => {
+    // Passing no client proves the default path never makes a network call
+    // (a Pages fetch would dereference the undefined client and throw).
+    await expect(
+      resolveAutograderWorkflow({
+        org: "cs50",
+        classroom: "cs101",
+        autograder: undefined,
+        branch: "main",
+        configBranch: "main",
+      }),
+    ).resolves.toContain("branches: [main]")
   })
 })
