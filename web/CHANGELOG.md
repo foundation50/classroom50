@@ -17,6 +17,33 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.4.0](https://github.com/foundation50/classroom50/compare/web-v1.3.0...web-v1.4.0) (2026-07-13)
+
+
+### Features
+
+* migrate students.csv to roster.csv on write ([#219](https://github.com/foundation50/classroom50/issues/219)) ([86fd1d9](https://github.com/foundation50/classroom50/commit/86fd1d9dd5c7b97e7bc3c3f03e29236512115e68))
+* rename students.csv to roster.csv with read-fallback and migrator ([#215](https://github.com/foundation50/classroom50/issues/215)) ([aca0711](https://github.com/foundation50/classroom50/commit/aca071166068c1fd89359630c16eac463f6516dd))
+* sync instructors/TAs into roster.csv and add a best-effort role column ([#216](https://github.com/foundation50/classroom50/issues/216)) ([af17992](https://github.com/foundation50/classroom50/commit/af17992da0fbc21063050c45da707aab9bf370e2))
+* team-driven roster with role-aware upload and self-healing roster.csv ([#217](https://github.com/foundation50/classroom50/issues/217)) ([30d8c89](https://github.com/foundation50/classroom50/commit/30d8c891bcb48c2be1526bfd6f2ce9c296eb8dc0))
+* **web:** add search/sort/filter toolbar to assignments view ([#202](https://github.com/foundation50/classroom50/issues/202)) ([cfa58b2](https://github.com/foundation50/classroom50/commit/cfa58b2a5aabf47ca1a3d5ba2fc6cb0cc36eccd7))
+* **web:** animate inline alerts in/out ([#189](https://github.com/foundation50/classroom50/issues/189)) ([cd4e90f](https://github.com/foundation50/classroom50/commit/cd4e90f1dd69eda378c19de5a9671023a15ed1b2))
+* **web:** complete invite & membership lifecycle across all roles ([#223](https://github.com/foundation50/classroom50/issues/223)) ([afdd337](https://github.com/foundation50/classroom50/commit/afdd337f62f3d5f59ee954cc9740b8d57c807bf8))
+* **web:** make activity banner reflect state and surface poll errors ([#193](https://github.com/foundation50/classroom50/issues/193)) ([aeeb70c](https://github.com/foundation50/classroom50/commit/aeeb70cab3051fc3dc41f2d9919a3f9d96b93f11))
+* **web:** resolve effective role once at route boundaries ([#227](https://github.com/foundation50/classroom50/issues/227)) ([b284a7f](https://github.com/foundation50/classroom50/commit/b284a7fdaba7b8c576366f123bdd0caee27aeac0))
+* **web:** unified roster upload with auto-detect and bulk email invites ([#222](https://github.com/foundation50/classroom50/issues/222)) ([23a5faf](https://github.com/foundation50/classroom50/commit/23a5faf3ec9bebc4aacbc57466fe57fe198bcd41))
+* **web:** unify Students nav into a Roster of all classroom members with pending invites ([#208](https://github.com/foundation50/classroom50/issues/208)) ([63f81d8](https://github.com/foundation50/classroom50/commit/63f81d8cde5f4b6b8e26a14455b971cd4083d128))
+
+
+### Bug Fixes
+
+* **cli:** auto-install pytest + pytest-json-report for python autograding ([#229](https://github.com/foundation50/classroom50/issues/229)) ([15f936d](https://github.com/foundation50/classroom50/commit/15f936d1463381b8635a0f8c41b46cbd1610df3d))
+* patch dependabot security alerts in x/crypto and happy-dom ([#224](https://github.com/foundation50/classroom50/issues/224)) ([5f51ba0](https://github.com/foundation50/classroom50/commit/5f51ba0a8033717d35ef1758c95c0cec72dc1d5e))
+* **web:** fix roster profile edit modal getting stuck and Save not disabling ([#221](https://github.com/foundation50/classroom50/issues/221)) ([64d28c0](https://github.com/foundation50/classroom50/commit/64d28c0718f448c5331b88c14ed952c8de2aad9f))
+* **web:** harden Modal close lock and Button form-submit type ([#197](https://github.com/foundation50/classroom50/issues/197)) ([9346c1d](https://github.com/foundation50/classroom50/commit/9346c1da0cbdf3c3a2661ea9a3f37b4b91f5a78d))
+* **web:** make assignment due date optional and rework the form layout ([#201](https://github.com/foundation50/classroom50/issues/201)) ([bfbeb80](https://github.com/foundation50/classroom50/commit/bfbeb8083ce0e179ff732000c6b3d9af13f7d87b))
+* **web:** stop unenrolled students and non-students from reappearing ([#209](https://github.com/foundation50/classroom50/issues/209)) ([#214](https://github.com/foundation50/classroom50/issues/214)) ([c4bdbbf](https://github.com/foundation50/classroom50/commit/c4bdbbf3f2c56f6d5738c3b269ad8ede15a0e62c))
+
 ## [1.3.0](https://github.com/foundation50/classroom50/compare/web-v1.2.0...web-v1.3.0) (2026-07-09)
 
 
