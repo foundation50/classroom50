@@ -143,6 +143,7 @@ export function useTeamRoster(
     invitations,
     failedInvitations,
     isLoading: invitesLoading,
+    isError: invitesError,
     isForbidden: invitesForbidden,
   } = useGetOrgInvitations(org)
 
@@ -272,8 +273,17 @@ export function useTeamRoster(
 
   // Any team-member fetch (student or staff) failing for a non-404 reason is a
   // real error — surface it rather than rendering a partial roster as "empty".
-  const isError =
-    membersError || instructorMembersQuery.isError || taMembersQuery.isError
+  // The invitations read counts too when it's READABLE (an owner): a transient
+  // 5xx there returns an empty list that would otherwise render as authoritative
+  // "zero pending" for an owner who does have invites. A non-owner's definitive
+  // 403 is `pendingHidden`, not an error (pending is hidden by design), so it's
+  // excluded.
+  const isError = Boolean(
+    membersError ||
+    instructorMembersQuery.isError ||
+    taMembersQuery.isError ||
+    (!pendingHidden && invitesError),
+  )
 
   // Wait on every team-member fetch (student + staff) so the roster appears
   // atomically rather than flashing empty then popping staff in. The invite

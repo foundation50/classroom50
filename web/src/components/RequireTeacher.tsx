@@ -99,13 +99,16 @@ const RequireClassroomStaff = ({ children }: { children: ReactNode }) => {
 
 const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
   const { org } = useParams({ strict: false })
-  const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
+  const { showTeacherUi, roleResolved, isError, refetch } =
+    useConfigRepoAccess(org)
   return (
     <RoleGate
       resolved={roleResolved}
       permitted={can("viewOrgStaffContent", {
         orgStaff: showTeacherUi,
       })}
+      errored={isError}
+      onRetry={refetch}
     >
       {children}
     </RoleGate>
@@ -135,13 +138,16 @@ const RequireInstructor = ({ children }: { children: ReactNode }) => {
 }
 
 // Owner gate: org admin, read from the org-role context. Org-wide, independent
-// of any classroom.
+// of any classroom. A settled transient membership error surfaces a retryable
+// error instead of an indefinite spinner (mirrors the classroom gates).
 const RequireOwner = ({ children }: { children: ReactNode }) => {
-  const { orgRole } = useOrgRole()
+  const { orgRole, isError, retry } = useOrgRole()
   return (
     <RoleGate
       resolved={orgRole !== "unresolved"}
       permitted={can("manageOrg", { orgRole })}
+      errored={isError}
+      onRetry={retry}
     >
       {children}
     </RoleGate>

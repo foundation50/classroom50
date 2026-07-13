@@ -92,12 +92,6 @@ export function isStaffRole(role: EffectiveRole): boolean {
   return role === "instructor" || role === "ta" || role === "unresolved"
 }
 
-// Whether a classroom role may see/do instructor-only surfaces (classroom
-// settings). TAs are excluded; `unresolved` is permissive (see isStaffRole).
-export function isInstructorRole(role: EffectiveRole): boolean {
-  return role === "instructor" || role === "unresolved"
-}
-
 // The roles an instructor can preview the app AS. A client-side lens for
 // verifying what each role sees — never escalates.
 export type ViewAsRole = "ta" | "student"

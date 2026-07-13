@@ -193,6 +193,17 @@ describe("RequireTeacher — owner gate on org-level routes", () => {
     render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
     expect(shown()).toBe("spinner")
   })
+
+  it("shows a retryable error (not an infinite spinner) when the membership read settles in error", () => {
+    paramsMock.mockReturnValue({ org: "acme" })
+    orgRoleMock.mockReturnValue({
+      orgRole: "unresolved",
+      isError: true,
+      retry: () => {},
+    })
+    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    expect(shown()).toBe("error")
+  })
 })
 
 describe("RequireTeacher — staff gate on an org-level route (no classroom)", () => {
@@ -208,5 +219,17 @@ describe("RequireTeacher — staff gate on an org-level route (no classroom)", (
     configRepoMock.mockReturnValue({ showTeacherUi: false, roleResolved: true })
     render(<RequireTeacher>{child}</RequireTeacher>)
     expect(shown()).toBe("notfound")
+  })
+
+  it("shows a retryable error when the config-repo read settles in error", () => {
+    paramsMock.mockReturnValue({ org: "acme" })
+    configRepoMock.mockReturnValue({
+      showTeacherUi: false,
+      roleResolved: false,
+      isError: true,
+      refetch: () => {},
+    })
+    render(<RequireTeacher>{child}</RequireTeacher>)
+    expect(shown()).toBe("error")
   })
 })

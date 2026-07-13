@@ -21,5 +21,10 @@ export function useConfigRepoAccess(org: string | undefined) {
     error: repoQuery.error,
   })
 
-  return { ...repoQuery, ...verdict }
+  // A settled transient error leaves the verdict unresolved (a definitive
+  // success/404/403 resolves it); surface it so the org-staff gate offers a
+  // retry rather than an indefinite spinner (mirrors the classroom gates).
+  const isError = !verdict.roleResolved && repoQuery.isError
+
+  return { ...repoQuery, ...verdict, isError }
 }

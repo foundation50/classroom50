@@ -29,21 +29,30 @@ const apiError = (status: number) =>
   })
 
 const Probe = () => {
-  const { orgRole } = useOrgRole()
-  return <div data-testid="role">{orgRole}</div>
+  const { orgRole, isError } = useOrgRole()
+  return (
+    <div>
+      <div data-testid="role">{orgRole}</div>
+      <div data-testid="error">{String(isError)}</div>
+    </div>
+  )
 }
 
 const renderWithMembership = (
   membership: Partial<{
     isSuccess: boolean
+    isError: boolean
     data: { role?: string; state?: string }
     error: unknown
+    refetch: () => void
   }>,
 ) => {
   membershipMock.mockReturnValue({
     isSuccess: false,
+    isError: false,
     data: undefined,
     error: null,
+    refetch: () => {},
     ...membership,
   })
   render(
@@ -89,11 +98,26 @@ describe("OrgRoleProvider", () => {
     cleanup()
     expect(renderWithMembership({ error: apiError(500) })).toBe("unresolved")
   })
+
+  it("isError only when a settled transient error leaves the role unresolved", () => {
+    // Settled transient error, role still unresolved -> the owner gate shows a
+    // retry surface rather than an indefinite spinner.
+    renderWithMembership({ isError: true, error: apiError(500) })
+    expect(screen.getByTestId("role").textContent).toBe("unresolved")
+    expect(screen.getByTestId("error").textContent).toBe("true")
+    cleanup()
+    // A definitive 403 resolves to `member` (roleResolved), so it is NOT an
+    // error strand even though the query technically errored.
+    renderWithMembership({ isError: true, error: apiError(403) })
+    expect(screen.getByTestId("role").textContent).toBe("member")
+    expect(screen.getByTestId("error").textContent).toBe("false")
+  })
 })
 
 describe("useOrgRole off-route default", () => {
   it("returns unresolved when no provider is mounted (fail-closed)", () => {
     render(<Probe />)
     expect(screen.getByTestId("role").textContent).toBe("unresolved")
+    expect(screen.getByTestId("error").textContent).toBe("false")
   })
 })

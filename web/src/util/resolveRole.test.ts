@@ -3,7 +3,6 @@ import {
   resolveClassroomRole,
   resolveOrgRole,
   isStaffRole,
-  isInstructorRole,
   applyViewAs,
   roleLabelKey,
   membershipFromQuery,
@@ -207,13 +206,6 @@ describe("role predicates", () => {
     expect(isStaffRole("ta")).toBe(true)
     expect(isStaffRole("unresolved")).toBe(true) // permissive: let page load
     expect(isStaffRole("student")).toBe(false)
-  })
-
-  it("isInstructorRole: instructor/unresolved true; ta/student false", () => {
-    expect(isInstructorRole("instructor")).toBe(true)
-    expect(isInstructorRole("unresolved")).toBe(true)
-    expect(isInstructorRole("ta")).toBe(false)
-    expect(isInstructorRole("student")).toBe(false)
   })
 
   it("roleLabelKey: instructor => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {

@@ -44,13 +44,27 @@ vi.mock("@/hooks/useGetClassroom", () => ({
   default: () => ({ data: undefined }),
 }))
 
+// The invitations read, overridable per test. Default: readable (owner) with no
+// pending and no error. A test sets `invitesOverride` to simulate a transient
+// 5xx (isError) or a non-owner forbidden (pendingHidden).
+type InvitesShape = {
+  invitations: unknown[]
+  failedInvitations: unknown[]
+  isLoading: boolean
+  isError: boolean
+  isForbidden: boolean
+}
+const invitesDefault: InvitesShape = {
+  invitations: [],
+  failedInvitations: [],
+  isLoading: false,
+  isError: false,
+  isForbidden: false,
+}
+let invitesOverride: InvitesShape | null = null
+
 vi.mock("@/hooks/useGetOrgInvitations", () => ({
-  default: () => ({
-    invitations: [],
-    failedInvitations: [],
-    isLoading: false,
-    isForbidden: false,
-  }),
+  default: () => invitesOverride ?? invitesDefault,
 }))
 
 // Imported AFTER the mocks so the hook picks up the mocked dependencies.
@@ -90,5 +104,47 @@ describe("useTeamRoster — staff-team failure surfacing and recovery", () => {
     result.current.refetch()
 
     await waitFor(() => expect(result.current.isError).toBe(false))
+  })
+})
+
+// A readable (owner) invitations read failing on a transient 5xx must surface
+// isError rather than render an authoritative "zero pending" — a non-owner's
+// definitive 403 is `pendingHidden`, not an error.
+describe("useTeamRoster — invitations transient failure surfacing", () => {
+  beforeEach(() => {
+    taMembersShouldFail = false
+    request.mockClear()
+  })
+
+  it("folds a readable invitations transient error into isError", async () => {
+    invitesOverride = {
+      invitations: [],
+      failedInvitations: [],
+      isLoading: false,
+      isError: true,
+      isForbidden: false, // owner: readable, so not pendingHidden
+    }
+    const { result } = renderHook(() => useTeamRoster("acme", "cs101", []), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    invitesOverride = null
+  })
+
+  it("does NOT treat a non-owner's forbidden invitations as an error (pendingHidden)", async () => {
+    invitesOverride = {
+      invitations: [],
+      failedInvitations: [],
+      isLoading: false,
+      isError: true,
+      isForbidden: true, // non-owner: pending hidden by design, not an error
+    }
+    const { result } = renderHook(() => useTeamRoster("acme", "cs101", []), {
+      wrapper,
+    })
+    await waitFor(() => expect(result.current.isLoading).toBe(false))
+    expect(result.current.isError).toBe(false)
+    expect(result.current.pendingHidden).toBe(true)
+    invitesOverride = null
   })
 })

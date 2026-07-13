@@ -1,5 +1,6 @@
 import {
   createContext,
+  useCallback,
   useContext,
   useMemo,
   type PropsWithChildren,
@@ -15,6 +16,14 @@ import { resolveOrgRole, type OrgRole } from "@/util/resolveRole"
 // classroom boundary (see ClassroomRoleProvider).
 type OrgRoleContextValue = {
   orgRole: OrgRole
+  // The membership read settled in a transient error (retries exhausted) with
+  // the role still `unresolved` — the owner gate shows a retryable error surface
+  // instead of holding a spinner forever (mirrors the classroom gates). A
+  // definitive 403/404 is NOT `isError` here (resolveOrgRole already reduced it
+  // to `member`, so the role resolved).
+  isError: boolean
+  // Re-run the membership read (the error surface's retry).
+  retry: () => void
 }
 
 const OrgRoleContext = createContext<OrgRoleContextValue | null>(null)
@@ -35,17 +44,35 @@ export function OrgRoleProvider({
     error: membership.error,
   })
 
-  const value = useMemo(() => ({ orgRole }), [orgRole])
+  // A settled transient error leaves the role `unresolved` with nothing in
+  // flight; surface it so the owner gate offers a retry rather than an
+  // indefinite spinner (mirrors useClassroomRole's `isError`).
+  const isError = orgRole === "unresolved" && membership.isError
+  const { refetch } = membership
+  const retry = useCallback(() => {
+    void refetch()
+  }, [refetch])
+
+  const value = useMemo(
+    () => ({ orgRole, isError, retry }),
+    [orgRole, isError, retry],
+  )
 
   return (
     <OrgRoleContext.Provider value={value}>{children}</OrgRoleContext.Provider>
   )
 }
 
-// Read the org-wide role. Returns `unresolved` off-route (no provider mounted),
-// so org-level guards never null-check — and a missing provider fails closed
-// (holds rather than grants) rather than throwing. Mirrors useRoleView's safe
-// default.
+// Read the org-wide role. Returns a safe default off-route (no provider
+// mounted), so org-level guards never null-check — and a missing provider fails
+// closed (holds rather than grants) rather than throwing. Mirrors useRoleView's
+// safe default.
 export function useOrgRole(): OrgRoleContextValue {
-  return useContext(OrgRoleContext) ?? { orgRole: "unresolved" }
+  return (
+    useContext(OrgRoleContext) ?? {
+      orgRole: "unresolved",
+      isError: false,
+      retry: () => {},
+    }
+  )
 }
