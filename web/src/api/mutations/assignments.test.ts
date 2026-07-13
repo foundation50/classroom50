@@ -4,6 +4,7 @@ import {
   buildReusedEntry,
   copyAssignmentToClassroom,
   editAssignment,
+  founderPermission,
   nextAvailableSlug,
   preserveUnmanagedAssignmentKeys,
   resolveTemplate,
@@ -1126,5 +1127,24 @@ describe("resolveTemplate (create/edit blocking path)", () => {
     const result = await resolveTemplate(client, ORG, ref(ORG, "tmpl"))
 
     expect(result.template?.repo).toBe("tmpl")
+  })
+})
+
+// Mirrors gh-student's TestFounderPermission: individual (and empty/unknown,
+// which default to individual) gets least-privilege `write` — enough to push
+// and trigger autograding but not to delete/transfer the repo or manage
+// collaborators — while group keeps `admin` for the founder-driven invite flow.
+describe("founderPermission — accept-time repo role (issue #213)", () => {
+  it("grants write for individual assignments", () => {
+    expect(founderPermission("individual")).toBe("write")
+  })
+
+  it("grants admin for group assignments (founder manages collaborators)", () => {
+    expect(founderPermission("group")).toBe("admin")
+  })
+
+  it("defaults an absent or unknown mode to write (least privilege)", () => {
+    expect(founderPermission(undefined)).toBe("write")
+    expect(founderPermission("team")).toBe("write")
   })
 })

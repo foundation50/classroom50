@@ -86,10 +86,11 @@ func acceptCmd() *cobra.Command {
 			"propagate on the next submission without ever touching the\n" +
 			"student repo.\n\n" +
 			"If the student has a pending org invite it is auto-accepted first.\n" +
-			"After creating the repo, the student is added as an `admin`\n" +
-			"collaborator (so they can manage collaborators for group\n" +
-			"assignments), and `.classroom50.yaml` and the autograde\n" +
-			"workflow are written in a single Tree commit, then verified.\n\n" +
+			"After creating the repo, the student is added as a collaborator on\n" +
+			"their own repo (`write` for an individual assignment; `admin` for a\n" +
+			"group assignment, so the founder can add teammates), and\n" +
+			"`.classroom50.yaml` and the autograde workflow are written in a\n" +
+			"single Tree commit, then verified.\n\n" +
 			"Re-running is safe and self-healing: an already-accepted repo\n" +
 			"that is fully provisioned is left untouched, but one whose\n" +
 			"setup never finished (a prior run interrupted after the repo\n" +
@@ -334,6 +335,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		org:            org,
 		classroom:      classroom,
 		assignment:     assignment,
+		mode:           entry.Mode,
 		secret:         secret,
 		username:       username,
 		ownerID:        &ownerID,
@@ -357,6 +359,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 // Pages fetch.
 type acceptRepoParams struct {
 	org, classroom, assignment string
+	mode                       string
 	secret                     string
 	username, repoName, branch string
 	ownerID                    *int64
@@ -426,7 +429,9 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // provisionAcceptedRepo brings a just-created (or partially-provisioned)
 // student repo to a healthy, autogradable state and is safe to re-run:
 //
-//  1. Grant the founder `admin` (PUT collaborators is an upsert).
+//  1. Grant the founder their repo role (PUT collaborators is an upsert):
+//     `write` for an individual assignment, `admin` for group (only an admin
+//     can manage collaborators for the founder-driven invite flow).
 //  2. Land .classroom50.yaml + the autograde shim in one Tree commit,
 //     riding out GitHub's post-create git-data lag.
 //  3. Verify the accept marker is readable before declaring success, so
@@ -436,11 +441,12 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // paths. Mirrors the GUI's provisionAcceptedRepo so CLI and GUI heal a
 // half-finished accept identically.
 func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, cfg classroomcfg.Config) error {
-	// Founder stays repo `admin` (upsert) so they can manage collaborators —
-	// a group founder adds teammates via `gh student invite`, which only an
-	// admin can do. The org-level lockdown in `gh teacher init` defangs the
-	// admin's delete/transfer/visibility powers org-wide.
-	if err := inviteUserAsAdmin(client, u, verbose, p.username, p.org, p.repoName); err != nil {
+	// Individual founders get `write` (least privilege — enough to push and
+	// trigger autograding, but not to delete/transfer the repo or manage
+	// collaborators). Group founders keep `admin` so they can add teammates
+	// via `gh student invite`, which only an admin can do. The org-level
+	// lockdown in `gh teacher init` defangs the admin's org-wide danger.
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil {
 		return err
 	}
 
@@ -738,20 +744,29 @@ func defaultBranchOrMain(branch string) string {
 	return branch
 }
 
-// inviteUserAsAdmin keeps username as a repo `admin` collaborator on
-// org/repoName. PUT collaborators is an upsert, so re-running is a no-op.
-// Admin (not maintain) is required because only an admin can manage
-// collaborator access — a group founder uses `gh student invite` to add
-// teammates. The org-level member-privilege lockdown in `gh teacher init`
-// removes the org-wide danger of repo-admin (no delete/transfer/visibility
-// change), so admin-on-own-repo is safe.
-func inviteUserAsAdmin(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName string) error {
-	if _, err := githubapi.SetCollaborator(client, org, repoName, username, "admin"); err != nil {
+// founderPermission is the repo collaborator role granted to the founder on
+// accept: `write` for an individual assignment (least privilege — enough to
+// push and trigger autograding), `admin` for group (only an admin can manage
+// collaborators for `gh student invite`). An empty/unknown mode defaults to
+// individual, matching checkAcceptableMode.
+func founderPermission(mode string) string {
+	if mode == contract.ModeGroup {
+		return "admin"
+	}
+	return "write"
+}
+
+// inviteFounder grants username the given collaborator permission on
+// org/repoName. PUT collaborators is an upsert, so re-running is a no-op — and
+// a re-run after a permission change (e.g. a group founder who was previously
+// granted admin) upserts to the new role.
+func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
+	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
 		return err
 	}
 
 	if verbose {
-		u.Detail("invited %s to %s/%s with admin permission", username, org, repoName)
+		u.Detail("invited %s to %s/%s with %s permission", username, org, repoName, permission)
 	}
 
 	return nil

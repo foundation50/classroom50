@@ -514,9 +514,10 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 
 	t.Run("freshly created (not alreadyExisted) -> provisions and reports accepted", func(t *testing.T) {
 		var (
-			collaboratorPut bool
-			treeWrite       bool
-			refPatched      bool
+			collaboratorPut  bool
+			collaboratorPerm string
+			treeWrite        bool
+			refPatched       bool
 		)
 		mux := http.NewServeMux()
 		// Fresh create skips the fork's marker probe; the marker is only
@@ -525,8 +526,12 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
 		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
 			collaboratorPut = true
+			var body map[string]any
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			collaboratorPerm, _ = body["permission"].(string)
 			w.WriteHeader(http.StatusNoContent)
 		})
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
@@ -566,6 +571,11 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 		if !collaboratorPut || !treeWrite || !refPatched {
 			t.Errorf("fresh path must provision (collaboratorPut=%v treeWrite=%v refPatched=%v)", collaboratorPut, treeWrite, refPatched)
+		}
+		// baseParams leaves mode empty (individual): the founder gets
+		// least-privilege `write`, not `admin`.
+		if collaboratorPerm != "write" {
+			t.Errorf("individual founder permission = %q, want \"write\"", collaboratorPerm)
 		}
 		// A first-time accept reports "Assignment accepted:", NOT the
 		// "already accepted" wording the alreadyExisted branches use.

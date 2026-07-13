@@ -1707,23 +1707,35 @@ export async function deleteAssignment(
   }
 }
 
-// Grant the student `admin` (not `maintain`) on their own repo. Intentional and
-// CLI-aligned: only an admin can manage collaborators for the founder-driven
-// group-invite flow (`gh student invite`).
-async function addAdminCollaborator(params: {
+// Grant the founder their repo role on their own repo. `write` for an
+// individual assignment (least privilege — enough to push and trigger
+// autograding, but not to delete/transfer the repo or manage collaborators);
+// `admin` for group, because only an admin can manage collaborators for the
+// founder-driven group-invite flow (`gh student invite`). CLI-aligned with
+// founderPermission in gh-student's accept.go.
+async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
   username: string
+  permission: "write" | "admin"
 }) {
-  const { client, owner, repo, username } = params
+  const { client, owner, repo, username, permission } = params
 
   await client.request(`/repos/${owner}/${repo}/collaborators/${username}`, {
     method: "PUT",
     body: {
-      permission: "admin",
+      permission,
     },
   })
+}
+
+// founderPermission maps an assignment mode to the founder's repo role:
+// least-privilege `write` for individual (and any unknown/absent mode), `admin`
+// for group. Mirrors gh-student's founderPermission so CLI and GUI grant the
+// same access.
+export function founderPermission(mode: string | undefined): "write" | "admin" {
+  return mode === "group" ? "admin" : "write"
 }
 
 async function patchRepoSurface(
@@ -1881,14 +1893,16 @@ type AcceptAssignmentResult = {
 }
 
 // Provision a just-created (or partially-provisioned) student repo: patch its
-// surface, grant the student admin, and land the .classroom50.yaml + autograde
-// shim through GitHub's post-generate lag. Every step is idempotent, so it's
-// safe to re-run when healing a repo whose earlier accept failed mid-flow.
+// surface, grant the student their repo role (write for individual, admin for
+// group), and land the .classroom50.yaml + autograde shim through GitHub's
+// post-generate lag. Every step is idempotent, so it's safe to re-run when
+// healing a repo whose earlier accept failed mid-flow.
 async function provisionAcceptedRepo(params: {
   client: GitHubClient
   org: string
   repo: GitHubRepo
   username: string
+  mode: string | undefined
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -1899,6 +1913,7 @@ async function provisionAcceptedRepo(params: {
     org,
     repo,
     username,
+    mode,
     branch,
     metadataYaml,
     autogradeYaml,
@@ -1915,11 +1930,12 @@ async function provisionAcceptedRepo(params: {
     },
     async () => {
       await patchRepoSurface(client, org, repo.name)
-      await addAdminCollaborator({
+      await addFounderCollaborator({
         client,
         owner: org,
         repo: repo.name,
         username,
+        permission: founderPermission(mode),
       })
     },
   )
@@ -2130,6 +2146,7 @@ export async function acceptAssignment(params: {
       org,
       repo: created.repo,
       username,
+      mode: assignment.mode,
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
@@ -2155,6 +2172,7 @@ export async function acceptAssignment(params: {
     org,
     repo,
     username,
+    mode: assignment.mode,
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
