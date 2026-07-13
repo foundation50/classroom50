@@ -13,32 +13,90 @@ import (
 )
 
 // TestCheckAcceptableMode pins the accept mode gate: individual, group, and
-// empty (defaults to individual) are accepted; an unknown mode errors; and a
-// group-shaped entry (max_group_size >= 2) whose mode isn't `group` is rejected
-// as inconsistent metadata (the founder would be under-privileged).
+// empty (defaults to individual) are accepted; only an unknown mode errors.
+// Group-shape coherence is a separate check (TestAssertModeCoherentForCreate).
 func TestCheckAcceptableMode(t *testing.T) {
+	cases := []struct {
+		name    string
+		mode    string
+		wantErr bool
+	}{
+		{"empty", "", false},
+		{"individual", "individual", false},
+		{"group", "group", false},
+		{"unknown mode", "team", true},
+		{"uppercase group is not canonical", "GROUP", true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkAcceptableMode("hello", tc.mode)
+			if tc.wantErr && err == nil {
+				t.Errorf("mode %q: expected an error, got nil", tc.mode)
+			}
+			if !tc.wantErr && err != nil {
+				t.Errorf("mode %q: unexpected error %v", tc.mode, err)
+			}
+		})
+	}
+}
+
+// TestAssertModeCoherentForCreate pins the fresh-create coherence gate: a
+// group-shaped entry (max_group_size >= 2) whose mode isn't `group` is rejected
+// (the founder would be under-privileged), while coherent and non-group-shaped
+// entries pass. This gate must NOT run on the already-accepted reconcile path.
+func TestAssertModeCoherentForCreate(t *testing.T) {
 	cases := []struct {
 		name         string
 		mode         string
 		maxGroupSize int
 		wantErr      bool
 	}{
-		{"empty", "", 0, false},
-		{"individual", "individual", 0, false},
-		{"group", "group", 3, false},
-		{"unknown mode", "team", 0, true},
-		{"uppercase group is not canonical", "GROUP", 0, true},
+		{"individual no size", "individual", 0, false},
+		{"group with size", "group", 3, false},
+		{"empty no size", "", 0, false},
 		{"group size but empty mode is inconsistent", "", 3, true},
 		{"group size but individual mode is inconsistent", "individual", 2, true},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			err := checkAcceptableMode("hello", tc.mode, tc.maxGroupSize)
+			err := assertModeCoherentForCreate("hello", tc.mode, tc.maxGroupSize)
 			if tc.wantErr && err == nil {
 				t.Errorf("mode %q size %d: expected an error, got nil", tc.mode, tc.maxGroupSize)
 			}
 			if !tc.wantErr && err != nil {
 				t.Errorf("mode %q size %d: unexpected error %v", tc.mode, tc.maxGroupSize, err)
+			}
+		})
+	}
+}
+
+// TestPermissionSatisfies pins the read-back decision, including the boundary
+// the guard exists to enforce: a `maintain` founder (which GitHub's legacy
+// field collapses to "write") must FAIL a `push` target, so an ignored
+// self-downgrade to a still-over-privileged role is caught, not passed green.
+func TestPermissionSatisfies(t *testing.T) {
+	cases := []struct {
+		name     string
+		legacy   string
+		roleName string
+		want     string
+		ok       bool
+	}{
+		{"push grant reads role_name push", "write", "push", "push", true},
+		{"push grant reads role_name write", "write", "write", "push", true},
+		{"maintain must fail a push target", "write", "maintain", "push", false},
+		{"admin must fail a push target", "admin", "admin", "push", false},
+		{"read must fail a push target", "read", "read", "push", false},
+		{"admin grant reads role_name admin", "admin", "admin", "admin", true},
+		{"push must fail an admin target", "write", "push", "admin", false},
+		{"empty role_name falls back to legacy write for push", "write", "", "push", true},
+		{"empty role_name falls back to legacy admin for admin", "admin", "", "admin", true},
+		{"empty role_name legacy write must fail admin", "write", "", "admin", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := permissionSatisfies(tc.legacy, tc.roleName, tc.want); got != tc.ok {
+				t.Errorf("permissionSatisfies(%q,%q,%q) = %v, want %v", tc.legacy, tc.roleName, tc.want, got, tc.ok)
 			}
 		})
 	}

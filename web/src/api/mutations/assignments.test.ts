@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  addFounderCollaborator,
   assertAssignmentModeCoherent,
   buildReusedEntry,
   copyAssignmentToClassroom,
@@ -1186,7 +1187,117 @@ describe("permissionSatisfies — verified founder demotion (issue #213)", () =>
     expect(permissionSatisfies("admin", "admin", "push")).toBe(false)
   })
 
+  it("rejects a maintain read-back for a push target (the guard's boundary)", () => {
+    // GitHub collapses maintain->legacy "write", so legacy alone would pass;
+    // the authoritative role_name must catch the still-over-privileged founder.
+    expect(permissionSatisfies("write", "maintain", "push")).toBe(false)
+  })
+
+  it("rejects a push read-back for an admin target (group under-grant)", () => {
+    expect(permissionSatisfies("write", "push", "admin")).toBe(false)
+  })
+
+  it("falls back to the legacy field when role_name is absent", () => {
+    expect(permissionSatisfies("write", undefined, "push")).toBe(true)
+    expect(permissionSatisfies("admin", undefined, "admin")).toBe(true)
+    expect(permissionSatisfies("write", undefined, "admin")).toBe(false)
+  })
+
   it("rejects an under-grant (read only) for a push target", () => {
     expect(permissionSatisfies("read", "read", "push")).toBe(false)
+  })
+})
+
+// Drives addFounderCollaborator end-to-end (PUT grant -> read-back -> throw),
+// the web mirror of gh-student's TestInviteFounder / _VerificationFails: the
+// pure permissionSatisfies is unit-tested above, but this pins the wiring
+// (getRepoPermissionForUser -> compare -> throw) that isolation can't reach.
+describe("addFounderCollaborator — grant + read-back verification (issue #213)", () => {
+  const owner = "cs50"
+  const repo = "cs50-fall-2026-hello-alice"
+  const username = "alice"
+  const collabPath = `/repos/${owner}/${repo}/collaborators/${username}`
+  const permPath = `${collabPath}/permission`
+
+  // A mock client that records the collaborator PUT body and answers the
+  // permission read-back with `readback`.
+  function makeClient(readback: { permission?: string; role_name?: string }) {
+    const put = vi.fn()
+    const request = vi.fn(async (path: string, opts?: { method?: string }) => {
+      if (path === collabPath && opts?.method === "PUT") {
+        put(opts)
+        return undefined
+      }
+      if (path === permPath) return readback
+      throw new Error(`unexpected request: ${opts?.method ?? "GET"} ${path}`)
+    })
+    return { client: { request } as unknown as GitHubClient, request, put }
+  }
+
+  it("PUTs push and succeeds when the read-back satisfies", async () => {
+    const { client, request } = makeClient({
+      permission: "write",
+      role_name: "push",
+    })
+    await expect(
+      addFounderCollaborator({
+        client,
+        owner,
+        repo,
+        username,
+        permission: "push",
+      }),
+    ).resolves.toBeUndefined()
+    expect(request).toHaveBeenCalledWith(collabPath, {
+      method: "PUT",
+      body: { permission: "push" },
+    })
+  })
+
+  it("PUTs admin for a group founder", async () => {
+    const { client, request } = makeClient({
+      permission: "admin",
+      role_name: "admin",
+    })
+    await addFounderCollaborator({
+      client,
+      owner,
+      repo,
+      username,
+      permission: "admin",
+    })
+    expect(request).toHaveBeenCalledWith(collabPath, {
+      method: "PUT",
+      body: { permission: "admin" },
+    })
+  })
+
+  it("throws when the read-back still reports admin after a push grant", async () => {
+    const { client } = makeClient({ permission: "admin", role_name: "admin" })
+    await expect(
+      addFounderCollaborator({
+        client,
+        owner,
+        repo,
+        username,
+        permission: "push",
+      }),
+    ).rejects.toThrow(/"push"/)
+  })
+
+  it("throws when the read-back is maintain for a push grant (the guard's boundary)", async () => {
+    const { client } = makeClient({
+      permission: "write",
+      role_name: "maintain",
+    })
+    await expect(
+      addFounderCollaborator({
+        client,
+        owner,
+        repo,
+        username,
+        permission: "push",
+      }),
+    ).rejects.toThrow(/"push"/)
   })
 })

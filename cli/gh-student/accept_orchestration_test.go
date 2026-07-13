@@ -444,6 +444,59 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	})
 
+	t.Run("already accepted group repo -> reconciles founder to admin", func(t *testing.T) {
+		var collaboratorPerm string
+		mux := http.NewServeMux()
+		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, collaboratorPerm)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
+			var body map[string]any
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			collaboratorPerm, _ = body["permission"].(string)
+			w.WriteHeader(http.StatusNoContent)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		p := baseParams()
+		p.mode = "group"
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p); err != nil {
+			t.Fatalf("acceptIntoRepo (group already-accepted): unexpected error: %v", err)
+		}
+		// A group founder must stay admin on reconcile, else `gh student invite` breaks.
+		if collaboratorPerm != "admin" {
+			t.Errorf("reconciled group founder permission = %q, want \"admin\"", collaboratorPerm)
+		}
+	})
+
+	t.Run("already accepted repo still reports success when the best-effort reconcile fails", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+		})
+		// Reconcile fails (e.g. transient 5xx / SSO 403 / departed founder): a
+		// healthy already-accepted repo must NOT fail the re-run over it.
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusServiceUnavailable)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		if err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, baseParams()); err != nil {
+			t.Fatalf("a healthy already-accepted repo must not fail when the reconcile errs: %v", err)
+		}
+		if !strings.Contains(out.String(), "already accepted") {
+			t.Errorf("expected an already-accepted report despite the reconcile failure:\n%s", out.String())
+		}
+	})
+
 	t.Run("half-provisioned (marker missing) -> re-provisions and repairs", func(t *testing.T) {
 		var (
 			markerReads     int

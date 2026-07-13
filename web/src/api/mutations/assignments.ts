@@ -1708,13 +1708,10 @@ export async function deleteAssignment(
   }
 }
 
-// Grant the founder their repo role: `push` for individual (least privilege),
-// `admin` for group (needed to manage collaborators for `gh student invite`).
-// The student is repo admin the moment they create it, so for individual this
-// is an explicit self-demotion; we read the effective permission back and throw
-// if it didn't take, since a silently-ignored downgrade looks like success.
-// CLI-aligned with inviteFounder in gh-student's accept.go.
-async function addFounderCollaborator(params: {
+// Grant the founder their repo role and verify it took: a repo creator holds
+// admin, so an individual self-downgrade GitHub silently ignores looks like
+// success. CLI-aligned with inviteFounder in gh-student's accept.go.
+export async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
@@ -1746,18 +1743,20 @@ async function addFounderCollaborator(params: {
   }
 }
 
-// Whether the effective permission (legacy `permission` + granular `role_name`)
-// matches the role we set. The legacy field collapses maintain->write and
-// triage->read, so a `push` grant reads back as legacy `write`. Mirrors
-// gh-student's permissionSatisfies.
+// Whether the read-back matches the role we set. role_name is authoritative
+// when present: a push target accepts push/write but must reject the
+// more-privileged maintain/admin the legacy field would hide (GitHub collapses
+// maintain->write, admin->admin). Mirrors gh-student's permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
   want: "push" | "admin",
 ): boolean {
-  if (roleName === want) return true
+  if (roleName) {
+    if (want === "admin") return roleName === "admin"
+    return roleName === "push" || roleName === "write"
+  }
   if (want === "admin") return legacy === "admin"
-  // push grant reads back as the legacy "write" role.
   return legacy === "write"
 }
 
@@ -2064,16 +2063,6 @@ export async function acceptAssignment(params: {
     () => fetchAssignmentFromPages(org, classroom, assignmentSlug, secret),
   )
 
-  // A group-shaped entry (max_group_size >= 2) whose mode isn't `group` has
-  // inconsistent published metadata: the founder would be under-privileged
-  // (push, not admin) and unable to add teammates. CLI-aligned with
-  // checkAcceptableMode in gh-student's accept.go.
-  assertAssignmentModeCoherent(
-    assignment.slug,
-    assignment.mode,
-    assignment.max_group_size,
-  )
-
   const sourceOwner = assignment.template?.owner
   const sourceRepo = assignment.template?.repo
   const sourceBranch = assignment.template?.branch ?? "main"
@@ -2172,16 +2161,25 @@ export async function acceptAssignment(params: {
     const provisioned = hasMetadata && hasWorkflow
 
     if (provisioned) {
-      // Genuinely already accepted — reconcile only the founder's role (an
-      // older release granted admin; the idempotent PUT downgrades it to the
-      // mode's least-privilege role), then mark the remaining steps complete.
-      await addFounderCollaborator({
-        client,
-        owner: org,
-        repo: created.repo.name,
-        username,
-        permission: founderPermission(assignment.mode),
-      })
+      // Genuinely already accepted and healthy: reconcile the founder's role
+      // best-effort (heals a stale admin grant down). A transient/SSO-403/
+      // left-org failure must not fail a re-run that previously always
+      // succeeded, so swallow it and report already-accepted.
+      try {
+        await addFounderCollaborator({
+          client,
+          owner: org,
+          repo: created.repo.name,
+          username,
+          permission: founderPermission(assignment.mode),
+        })
+      } catch (err) {
+        log.debug("accept: best-effort role reconcile failed (non-fatal)", {
+          org,
+          repo: created.repo.name,
+          err,
+        })
+      }
       onStepUpdate?.({
         id: "repo",
         status: "complete",
@@ -2196,7 +2194,14 @@ export async function acceptAssignment(params: {
       }
     }
 
-    // Half-finished prior accept — re-provision to repair it.
+    // Half-finished prior accept — re-provision to repair it. Re-founding a
+    // group-shaped-but-non-group entry would under-privilege the founder, so
+    // reject incoherent metadata here (not on the healthy path above).
+    assertAssignmentModeCoherent(
+      assignment.slug,
+      assignment.mode,
+      assignment.max_group_size,
+    )
     onStepUpdate?.({
       id: "repo",
       status: "complete",
@@ -2223,6 +2228,14 @@ export async function acceptAssignment(params: {
   }
 
   const repo = created.repo
+
+  // Fresh create: reject a group-shaped-but-non-group entry that would found
+  // the repo under-privileged (mirrors the half-finished path above).
+  assertAssignmentModeCoherent(
+    assignment.slug,
+    assignment.mode,
+    assignment.max_group_size,
+  )
 
   const targetBranch =
     created.kind === "fallback-empty"

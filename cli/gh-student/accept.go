@@ -92,10 +92,11 @@ func acceptCmd() *cobra.Command {
 			"`.classroom50.yaml` and the autograde workflow are written in a\n" +
 			"single Tree commit, then verified.\n\n" +
 			"Re-running is safe and self-healing: an already-accepted repo\n" +
-			"that is fully provisioned is left untouched, but one whose\n" +
-			"setup never finished (a prior run interrupted after the repo\n" +
-			"was created but before the control files landed) is repaired by\n" +
-			"re-running the idempotent provisioning. accept only reports\n" +
+			"that is fully provisioned is left in place (its founder role is\n" +
+			"reconciled best-effort), but one whose setup never finished (a\n" +
+			"prior run interrupted after the repo was created but before the\n" +
+			"control files landed) is repaired by re-running the idempotent\n" +
+			"provisioning. accept only reports\n" +
 			"success once both control files are confirmed present, so an\n" +
 			"\"accepted\" repo always autogrades.",
 		Example: "  gh student accept cs50 cs50-fall-2026 hello\n" +
@@ -223,15 +224,22 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 	return AcceptStatus{StatusCode: http.StatusOK}, nil
 }
 
-// checkAcceptableMode gates `gh student accept` by assignment mode: individual
-// and group (and empty, defaulting to individual) are accepted; an unrecognized
-// mode is rejected. A group-shaped entry (max_group_size >= 2) whose mode isn't
-// `group` is also rejected: the founder would be under-privileged (push, not
-// admin) and unable to run `gh student invite`. Pure helper, unit-testable.
-func checkAcceptableMode(assignment, mode string, maxGroupSize int) error {
+// checkAcceptableMode rejects an unrecognized mode (which can't map to a repo
+// role). Pure helper, unit-testable. Group-shape coherence is a separate,
+// fresh-create-only check (assertModeCoherentForCreate).
+func checkAcceptableMode(assignment, mode string) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup {
 		return fmt.Errorf("assignment %q has unsupported mode %q", assignment, mode)
 	}
+	return nil
+}
+
+// assertModeCoherentForCreate rejects a group-shaped entry (max_group_size >= 2)
+// whose mode isn't `group`: fresh-founding it would under-privilege the founder
+// (push, not admin) and break `gh student invite`. Enforced only on a fresh
+// create — a healthy already-accepted repo must still reconcile/heal even if a
+// later-published entry drifted incoherent. Pure helper, unit-testable.
+func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) error {
 	if maxGroupSize > 0 && mode != contract.ModeGroup {
 		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your instructor to re-run `gh teacher assignment add`",
 			assignment, maxGroupSize, mode, contract.ModeGroup)
@@ -266,7 +274,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// The first accepter accepts a group assignment normally: the repo is
 	// created under their name and they add teammates via
 	// `gh student invite <org>/<repo> <teammate>`. Only an unknown mode errors.
-	if err := checkAcceptableMode(assignment, entry.Mode, entry.MaxGroupSize); err != nil {
+	if err := checkAcceptableMode(assignment, entry.Mode); err != nil {
 		return err
 	}
 	// A template, when present, must be complete. A template-less assignment
@@ -342,6 +350,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		classroom:      classroom,
 		assignment:     assignment,
 		mode:           entry.Mode,
+		maxGroupSize:   entry.MaxGroupSize,
 		secret:         secret,
 		username:       username,
 		ownerID:        &ownerID,
@@ -366,6 +375,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 type acceptRepoParams struct {
 	org, classroom, assignment string
 	mode                       string
+	maxGroupSize               int
 	secret                     string
 	username, repoName, branch string
 	ownerID                    *int64
@@ -382,19 +392,12 @@ type acceptRepoParams struct {
 // provisioning, runs the idempotent provisioning when it does, and emits the
 // final report. It is the self-healing fork:
 //
-//   - alreadyExisted + marker present → already accepted; reconcile only the
-//     founder's collaborator role (downgrades a repo granted admin under an
-//     older release to the mode's least-privilege role), then leave untouched.
+//   - alreadyExisted + marker present → already accepted; best-effort reconcile
+//     of the founder's role (heals a stale admin grant down), then report.
 //   - alreadyExisted + marker missing → half-finished prior accept; re-run
 //     the idempotent provisioning to repair it.
 //   - freshly created → provision normally.
 func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
-	// An existing repo with .classroom50.yaml present is already accepted, so
-	// skip the (heavier) file-provisioning — but still reconcile the founder's
-	// role: a repo accepted under an older release holds admin, and the
-	// idempotent PUT downgrades it to the mode's least-privilege role. A
-	// missing marker means a half-finished prior accept; fall through to
-	// re-provision and repair.
 	if p.alreadyExisted {
 		provisioned, perr := repoFileExists(client, p.org, p.repoName, classroomcfg.MetadataPath)
 		if perr != nil {
@@ -402,9 +405,11 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			return perr
 		}
 		if provisioned {
-			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil {
-				p.createSp.Fail(p.createMsg)
-				return err
+			// Already accepted: reconcile the role best-effort. The repo is
+			// already healthy, so a transient/SSO-403/left-org failure must not
+			// fail a re-run that previously always succeeded — warn and report.
+			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil && verbose {
+				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
@@ -415,6 +420,13 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 		p.createSp.Stop(fmt.Sprintf("Found incomplete setup: %s", p.fullName))
 	} else {
 		p.createSp.Stop(fmt.Sprintf("Created %s", p.fullName))
+	}
+
+	// Fresh create (or heal of a never-finished accept): a group-shaped entry
+	// whose mode isn't group would found the repo under-privileged, so reject
+	// incoherent metadata here — not on the already-accepted path above.
+	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize); err != nil {
+		return err
 	}
 
 	// Provision (or repair) the repo. Every step is idempotent, so this is
@@ -766,13 +778,9 @@ func founderPermission(mode string) string {
 	return "push"
 }
 
-// inviteFounder sets username's collaborator role on org/repoName to permission
-// and verifies it took effect. The student is repo `admin` the moment they
-// create the repo (GitHub grants the creator admin), so for an individual
-// assignment this is an explicit self-demotion to `push`; the PUT is an
-// idempotent upsert. Because a silently-ignored downgrade would otherwise look
-// identical to success, we read the effective permission back and fail loudly
-// if the student is still over-privileged.
+// inviteFounder sets username's collaborator role and verifies it took effect.
+// A repo creator holds admin, so an individual self-downgrade GitHub silently
+// ignores would otherwise look identical to success.
 func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
 	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
 		return err
@@ -789,15 +797,9 @@ func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, or
 	return nil
 }
 
-// verifyFounderPermission reads username's effective permission back and errors
-// if it doesn't match the role we just set. This catches the case that
-// motivates the whole demotion: the creator holds admin, and if GitHub ever
-// ignores the self-downgrade the student would silently keep it.
-//
-// GET .../collaborators/{username}/permission reports the legacy role in
-// `permission` (admin/write/read/none), where our `push` grant reads back as
-// `write` and `maintain` as `write`; the granular role is in `role_name`. We
-// compare against both so a `push`→`write` mapping isn't misread as a failure.
+// verifyFounderPermission reads the effective permission back and errors if it
+// doesn't match the role we set (permissionSatisfies handles GitHub's legacy
+// role collapse), so a silently-ignored downgrade fails loud instead.
 func verifyFounderPermission(client githubapi.Client, org, repoName, username, want string) error {
 	path := fmt.Sprintf("repos/%s/%s/collaborators/%s/permission",
 		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(username))
@@ -815,19 +817,25 @@ func verifyFounderPermission(client githubapi.Client, org, repoName, username, w
 		username, want, org, repoName, got.Permission, got.RoleName, want)
 }
 
-// permissionSatisfies reports whether the effective permission (legacy
-// `permission` + granular `role_name`) matches the role we set. The legacy
-// field collapses maintain→write and triage→read, so `push` is satisfied by a
-// legacy `write`; `admin` requires admin.
+// permissionSatisfies reports whether the read-back matches the role we set.
+// role_name is authoritative when present: a push target accepts push/write
+// but must reject the more-privileged maintain/admin, which the legacy field
+// would otherwise hide (GitHub collapses maintain→write, admin→admin).
 func permissionSatisfies(legacy, roleName, want string) bool {
-	if roleName == want {
-		return true
+	if roleName != "" {
+		switch want {
+		case "admin":
+			return roleName == "admin"
+		case "push":
+			return roleName == "push" || roleName == "write"
+		default:
+			return roleName == want
+		}
 	}
 	switch want {
 	case "admin":
 		return legacy == "admin"
 	case "push":
-		// A push grant reads back as the legacy "write" role.
 		return legacy == "write"
 	default:
 		return legacy == want
