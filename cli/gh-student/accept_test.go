@@ -85,7 +85,7 @@ func TestInviteFounder(t *testing.T) {
 	// want is the role we set; legacyBack is what GitHub reports on the
 	// read-back (push collapses to the legacy "write" role).
 	cases := []struct {
-		want      string
+		want       string
 		legacyBack string
 	}{
 		{"push", "write"},
