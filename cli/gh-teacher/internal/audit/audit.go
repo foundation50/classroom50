@@ -14,6 +14,7 @@ import (
 
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
 	"github.com/foundation50/gh-teacher/internal/orgpolicy"
 	"github.com/foundation50/gh-teacher/internal/ui"
@@ -124,6 +125,12 @@ type auditReport struct {
 	DefaultBranchRec string `json:"default_branch_recommendation,omitempty"`
 	// RepositoryDefaultsURL is the settings page for the default-branch fix.
 	RepositoryDefaultsURL string `json:"repository_defaults_url,omitempty"`
+	// ConfigRepoBranchRec: advisory-only. When set, the classroom50 config
+	// repo's default branch (this value) isn't `main`; recommended, never a
+	// failure. Renameable in the web app; hand-fix link here.
+	ConfigRepoBranchRec string `json:"config_repo_branch_recommendation,omitempty"`
+	// ConfigRepoBranchesURL is the config repo's branches settings page.
+	ConfigRepoBranchesURL string `json:"config_repo_branches_url,omitempty"`
 	// SettingsURL is the org member-privileges page every item lives on.
 	SettingsURL string `json:"settings_url"`
 }
@@ -179,6 +186,17 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 	if rec := orgpolicy.OrgDefaultBranchRecommendation(live); rec != "" {
 		report.DefaultBranchRec = rec
 		report.RepositoryDefaultsURL = orgpolicy.OrgRepositoryDefaultsURL(org)
+	}
+
+	// Advisory-only: the classroom50 config repo drifted off `main`. Renameable
+	// in the web app; here we only recommend + link. A read failure (e.g. repo
+	// not yet initialized) simply omits the recommendation — it never gates the
+	// verdict.
+	if branch, err := configrepo.ResolveConfigRepoBranch(client, org); err == nil {
+		if rec := orgpolicy.ConfigRepoDefaultBranchRecommendation(branch); rec != "" {
+			report.ConfigRepoBranchRec = rec
+			report.ConfigRepoBranchesURL = orgpolicy.ConfigRepoBranchesURL(org)
+		}
 	}
 	return report
 }
@@ -258,10 +276,17 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 	}
 
 	// Advisory recommendation — highly recommended, never a failure.
-	if r.DefaultBranchRec != "" {
+	if r.DefaultBranchRec != "" || r.ConfigRepoBranchRec != "" {
 		u.Heading("Recommended (not required)")
+	}
+	if r.DefaultBranchRec != "" {
 		u.Detail("Your org's default branch name for new repositories is %q; we recommend %q so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected.",
 			r.DefaultBranchRec, orgpolicy.RecommendedOrgDefaultBranch)
 		u.Detail("Change it at %s", r.RepositoryDefaultsURL)
+	}
+	if r.ConfigRepoBranchRec != "" {
+		u.Detail("The classroom50 config repo's default branch is %q, not %q; everything still works (reads/writes target the real branch), but renaming it matches Classroom 50's convention. The web app can rename it for you.",
+			r.ConfigRepoBranchRec, orgpolicy.RecommendedOrgDefaultBranch)
+		u.Detail("Rename it at %s", r.ConfigRepoBranchesURL)
 	}
 }

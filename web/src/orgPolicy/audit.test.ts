@@ -33,6 +33,9 @@ function httpError(status: number): GitHubAPIError {
 
 type Routes = {
   orgDefaults?: Record<string, unknown> | GitHubAPIError
+  // The classroom50 config repo's default branch (or an error to simulate an
+  // unreadable/uninitialized repo). Defaults to "main" (no recommendation).
+  configRepoBranch?: string | GitHubAPIError
 }
 
 // A fully-enforced fake org: every check returns its desired value, both
@@ -52,6 +55,11 @@ function makeClient(overrides: Routes = {}): GitHubClient {
         if (overrides.orgDefaults instanceof GitHubAPIError)
           return reject(overrides.orgDefaults)
         return ok(overrides.orgDefaults ?? enforcedDefaults)
+      }
+      if (path === "/repos/acme/classroom50") {
+        if (overrides.configRepoBranch instanceof GitHubAPIError)
+          return reject(overrides.configRepoBranch)
+        return ok({ default_branch: overrides.configRepoBranch ?? "main" })
       }
       if (path.endsWith("/actions/permissions"))
         return ok({ enabled_repositories: "all", allowed_actions: "all" })
@@ -134,6 +142,65 @@ describe("buildOrgAuditReport", () => {
       "team",
     )
     expect(report.recommendations).toHaveLength(0)
+  })
+
+  it("recommends renaming a non-main config repo branch without failing", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({ configRepoBranch: "master" }),
+      "acme",
+      "team",
+    )
+    // Advisory only — a drifted config-repo branch never fails the verdict.
+    expect(report.verdict).toBe("ok")
+    const rec = report.recommendations.find(
+      (r) => r.id === "configRepoDefaultBranch",
+    )
+    expect(rec).toBeDefined()
+    expect(rec?.detail).toBe("master")
+    expect(rec?.settingsUrl).toBe(
+      "https://github.com/acme/classroom50/settings/branches",
+    )
+  })
+
+  it("no config-repo recommendation when it is already main or unreadable", async () => {
+    const onMain = await buildOrgAuditReport(
+      makeClient({ configRepoBranch: "main" }),
+      "acme",
+      "team",
+    )
+    expect(
+      onMain.recommendations.some((r) => r.id === "configRepoDefaultBranch"),
+    ).toBe(false)
+
+    // A read failure (e.g. repo not initialized) suppresses the advisory rec.
+    const unreadable = await buildOrgAuditReport(
+      makeClient({ configRepoBranch: httpError(404) }),
+      "acme",
+      "team",
+    )
+    expect(unreadable.verdict).toBe("ok")
+    expect(
+      unreadable.recommendations.some(
+        (r) => r.id === "configRepoDefaultBranch",
+      ),
+    ).toBe(false)
+  })
+
+  it("lists the config-repo rename recommendation first (it's the actionable one)", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({
+        configRepoBranch: "master",
+        orgDefaults: driftedDefaults((live) => {
+          live.default_repository_branch = "master"
+        }),
+      }),
+      "acme",
+      "team",
+    )
+    expect(report.recommendations.map((r) => r.id)).toEqual([
+      "configRepoDefaultBranch",
+      "orgDefaultBranch",
+    ])
   })
 
   it("verdict fail when a critical member-default drifts", async () => {

@@ -12,7 +12,9 @@ import {
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { renameConfigRepoToMain } from "@/hooks/github/mutations"
 import { Button, Spinner } from "@/components/ui"
+import { ConfirmModal } from "@/components/modals"
 import PlanBadge from "@/components/PlanBadge"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
@@ -23,6 +25,7 @@ import type {
   ConcernCheck,
   ConcernId,
   OrgAuditReport,
+  OrgRecommendation,
 } from "@/orgPolicy/audit"
 import { REPAIRABLE_CONCERNS, repairConcern } from "@/orgPolicy/repair"
 import type { RepairResult } from "@/orgPolicy/repair"
@@ -208,20 +211,82 @@ export function ConcernRow({
   )
 }
 
+function RecommendationRow({
+  rec,
+  canFix,
+  fixing,
+  onRenameConfigRepo,
+}: {
+  rec: OrgRecommendation
+  canFix: boolean
+  fixing: boolean
+  onRenameConfigRepo: () => void
+}) {
+  const { t } = useTranslation()
+  const isConfigRepo = rec.id === "configRepoDefaultBranch"
+  return (
+    <div className="flex items-start justify-between gap-4 rounded-lg border border-warning/40 bg-warning/5 p-3">
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 text-sm font-semibold text-base-content/80">
+          <TriangleAlert
+            aria-hidden="true"
+            className="size-4 shrink-0 text-warning"
+          />
+          {rec.title}
+        </div>
+        <p className="mt-0.5 text-xs text-base-content/70">
+          {isConfigRepo
+            ? t("orgSettings.audit.configBranchRec", { current: rec.detail })
+            : t("orgSettings.audit.defaultBranchRec", { current: rec.detail })}
+        </p>
+        <a
+          href={rec.settingsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+        >
+          {t("orgSettings.audit.viewOnGitHub")}
+          <ExternalLink aria-hidden="true" className="size-3" />
+        </a>
+      </div>
+      <div className="flex shrink-0 items-center gap-2">
+        {isConfigRepo && canFix && (
+          <Button
+            variant="primary"
+            size="xs"
+            loading={fixing}
+            disabled={fixing}
+            onClick={onRenameConfigRepo}
+          >
+            {fixing ? null : t("orgSettings.audit.renameToMain")}
+          </Button>
+        )}
+        <span className="badge badge-warning badge-soft">
+          {t("orgSettings.audit.recommended")}
+        </span>
+      </div>
+    </div>
+  )
+}
+
 function AuditBody({
   report,
   canFix,
   fixingId,
+  fixingConfigBranch,
   enterprisePinned,
   unresolvedConcerns,
   onFix,
+  onRenameConfigRepo,
 }: {
   report: OrgAuditReport
   canFix: boolean
   fixingId: ConcernId | null
+  fixingConfigBranch: boolean
   enterprisePinned: Set<string>
   unresolvedConcerns: Map<ConcernId, string>
   onFix: (id: ConcernId) => void
+  onRenameConfigRepo: () => void
 }) {
   const { t } = useTranslation()
   const banner = VERDICT_BANNER[report.verdict]
@@ -260,37 +325,13 @@ function AuditBody({
         <div className="mt-4">
           <div className="grid gap-2">
             {report.recommendations.map((rec) => (
-              <div
+              <RecommendationRow
                 key={rec.id}
-                className="flex items-start justify-between gap-4 rounded-lg border border-warning/40 bg-warning/5 p-3"
-              >
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5 text-sm font-semibold text-base-content/80">
-                    <TriangleAlert
-                      aria-hidden="true"
-                      className="size-4 shrink-0 text-warning"
-                    />
-                    {rec.title}
-                  </div>
-                  <p className="mt-0.5 text-xs text-base-content/70">
-                    {t("orgSettings.audit.defaultBranchRec", {
-                      current: rec.detail,
-                    })}
-                  </p>
-                  <a
-                    href={rec.settingsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
-                  >
-                    {t("orgSettings.audit.viewOnGitHub")}
-                    <ExternalLink aria-hidden="true" className="size-3" />
-                  </a>
-                </div>
-                <span className="badge badge-warning badge-soft shrink-0">
-                  {t("orgSettings.audit.recommended")}
-                </span>
-              </div>
+                rec={rec}
+                canFix={canFix}
+                fixing={fixingConfigBranch}
+                onRenameConfigRepo={onRenameConfigRepo}
+              />
             ))}
           </div>
         </div>
@@ -478,6 +519,19 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
     ? (fixMutation.variables ?? null)
     : null
 
+  // Renaming the config repo to `main` is a separate flow: it's a recommendation
+  // (not a concern) and destructive to already-accepted student shims, so it's
+  // gated behind a confirm modal rather than an inline Fix-it.
+  const [confirmRename, setConfirmRename] = useState(false)
+  const renameMutation = useMutation({
+    mutationFn: () => renameConfigRepoToMain(client, org),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgAuditPrefix(org),
+      })
+    },
+  })
+
   return (
     <SettingsSection
       title={t("orgSettings.audit.title")}
@@ -544,14 +598,27 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
           report={report}
           canFix={Boolean(isOwner)}
           fixingId={fixingId}
+          fixingConfigBranch={renameMutation.isPending}
           enterprisePinned={enterprisePinned}
           unresolvedConcerns={unresolvedConcerns}
           onFix={(id) => {
             if (!fixMutation.isPending)
               void runFix(() => fixMutation.mutateAsync(id))
           }}
+          onRenameConfigRepo={() => setConfirmRename(true)}
         />
       )}
+
+      <ConfirmModal
+        open={confirmRename}
+        title={t("orgSettings.audit.renameModalTitle")}
+        description={t("orgSettings.audit.renameModalBody")}
+        confirmLabel={t("orgSettings.audit.renameToMain")}
+        dangerous
+        needsConfirm={false}
+        onConfirm={() => renameMutation.mutateAsync().then(() => undefined)}
+        onClose={() => setConfirmRename(false)}
+      />
     </SettingsSection>
   )
 }

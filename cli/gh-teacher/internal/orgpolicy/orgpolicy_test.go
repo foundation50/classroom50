@@ -200,3 +200,23 @@ func TestOrgDefaultBranchRecommendation(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigRepoDefaultBranchRecommendation(t *testing.T) {
+	cases := []struct {
+		name   string
+		branch string
+		want   string
+	}{
+		{"master recommends renaming", "master", "master"},
+		{"develop recommends renaming", "develop", "develop"},
+		{"main is fine", "main", ""},
+		{"empty is fine", "", ""},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := ConfigRepoDefaultBranchRecommendation(tc.branch); got != tc.want {
+				t.Errorf("ConfigRepoDefaultBranchRecommendation = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

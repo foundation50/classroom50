@@ -1238,6 +1238,28 @@ export async function ensureClassroom50Repo(client: GitHubClient, org: string) {
   return { status: "complete" as const, created: true, repo }
 }
 
+// Rename the classroom50 config repo's default branch to `main` on demand (the
+// audit pane's one-click fix for a repo that drifted onto `master`). Unlike
+// normalizeConfigRepoBranch this runs on an EXISTING repo, so the caller must
+// warn first: already-accepted student repos pin the old branch in their frozen
+// autograde-shim `uses:@<branch>` ref and would stop grading after the rename.
+// A no-op (already `main`) resolves without a request.
+export async function renameConfigRepoToMain(
+  client: GitHubClient,
+  org: string,
+): Promise<{ renamed: boolean; from: string }> {
+  const current =
+    (await getRepo(client, org, "classroom50"))?.default_branch || "main"
+  if (current === CONFIG_REPO_BRANCH) {
+    return { renamed: false, from: current }
+  }
+  await client.request(
+    `/repos/${org}/${CONFIG_REPO}/branches/${encodePathPart(current)}/rename`,
+    { method: "POST", body: { new_name: CONFIG_REPO_BRANCH } },
+  )
+  return { renamed: true, from: current }
+}
+
 export type GitHubTreeResponse = {
   tree: Array<{
     path: string

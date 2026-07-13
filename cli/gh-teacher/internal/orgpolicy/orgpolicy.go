@@ -264,6 +264,24 @@ func OrgDefaultBranchRecommendation(live map[string]any) string {
 	return branch
 }
 
+// ConfigRepoDefaultBranchRecommendation returns the config repo's current
+// default branch when it differs from RecommendedOrgDefaultBranch (so callers
+// can advise renaming it), or "" when it already matches / is unset / couldn't
+// be read. Unlike the org-default recommendation this branch IS API-renameable,
+// but the CLI audit is read-only, so both surface it identically as advice.
+func ConfigRepoDefaultBranchRecommendation(branch string) string {
+	if branch == "" || branch == RecommendedOrgDefaultBranch {
+		return ""
+	}
+	return branch
+}
+
+// ConfigRepoBranchesURL is the config repo's branches settings page where a
+// teacher can rename the default branch to `main`.
+func ConfigRepoBranchesURL(org string) string {
+	return fmt.Sprintf("https://github.com/%s/classroom50/settings/branches", org)
+}
+
 // OrgRepositoryDefaultsURL is the org settings page where the default branch
 // name is changed (the one setting with no REST write path).
 func OrgRepositoryDefaultsURL(org string) string {

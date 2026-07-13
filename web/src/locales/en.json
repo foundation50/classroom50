@@ -1157,6 +1157,10 @@
       "confirmManually": "Confirm manually",
       "recommended": "Recommended",
       "defaultBranchRec": "Your org's default branch name for new repositories is \"{{current}}\". We recommend \"main\" so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected and keep working.",
+      "configBranchRec": "The classroom50 config repo's default branch is \"{{current}}\", not \"main\". Everything still works (reads and writes target the real branch), but renaming it to \"main\" matches Classroom 50's convention.",
+      "renameToMain": "Rename to main",
+      "renameModalTitle": "Rename the config repo's default branch to main?",
+      "renameModalBody": "This renames the classroom50 config repo's default branch to \"main\". If any students have already accepted assignments, their autograde workflow pins the current branch name and will stop grading until they re-accept or you re-point their shim. Prefer this only before students accept, or be ready to re-run their setup.",
       "memberPermsToggle": "Member permissions we configure",
       "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Drifted ones are called out above."
     },

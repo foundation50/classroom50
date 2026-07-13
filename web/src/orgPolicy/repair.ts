@@ -65,12 +65,9 @@ export async function repairConcern(
       await ensureOrgCanCreatePullRequests(client, org)
       return { unfixableFields: [] }
     case "branchProtection": {
-      const result = await ensureBranchProtection(
-        client,
-        org,
-        CONFIG_REPO,
-        "main",
-      )
+      // No branch: ensureBranchProtection resolves the config repo's actual
+      // default branch, since org policy can seed it as `master`.
+      const result = await ensureBranchProtection(client, org, CONFIG_REPO)
       if (result.status === "warning") {
         // branch_not_found means the repo is still initializing — transient, so
         // the UI offers a retry rather than flipping to manual setup.

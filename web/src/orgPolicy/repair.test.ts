@@ -33,7 +33,10 @@ function httpError(status: number): GitHubAPIError {
   })
 }
 
-function makeClient(): { client: GitHubClient; calls: Recorded[] } {
+function makeClient(configRepoBranch = "main"): {
+  client: GitHubClient
+  calls: Recorded[]
+} {
   const calls: Recorded[] = []
   const request = vi
     .fn()
@@ -45,6 +48,10 @@ function makeClient(): { client: GitHubClient; calls: Recorded[] } {
         const live: Record<string, unknown> = {}
         for (const s of memberDefaultSettings("team")) live[s.field] = s.value
         return Promise.resolve(live)
+      }
+      // ensureBranchProtection resolves the config repo's real default branch.
+      if (method === "GET" && path === "/repos/acme/classroom50") {
+        return Promise.resolve({ default_branch: configRepoBranch })
       }
       if (method === "GET" && path.includes("/rulesets")) {
         return Promise.resolve([
@@ -91,6 +98,17 @@ describe("repairConcern", () => {
     const { client, calls } = makeClient()
     await repairConcern(client, "acme", "branchProtection", "team")
     expect(writePaths(calls)).toContain(
+      "PUT /repos/acme/classroom50/branches/main/protection",
+    )
+  })
+
+  it("branchProtection targets the config repo's real default branch (master)", async () => {
+    const { client, calls } = makeClient("master")
+    await repairConcern(client, "acme", "branchProtection", "team")
+    expect(writePaths(calls)).toContain(
+      "PUT /repos/acme/classroom50/branches/master/protection",
+    )
+    expect(writePaths(calls)).not.toContain(
       "PUT /repos/acme/classroom50/branches/main/protection",
     )
   })

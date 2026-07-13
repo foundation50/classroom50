@@ -172,6 +172,51 @@ describe("checkBranchProtection", () => {
       "unenforced",
     )
   })
+
+  it("resolves the config repo's real default branch (master), not main", async () => {
+    const requested: string[] = []
+    const client: GitHubClient = {
+      request: <T>(path: string) => {
+        requested.push(path)
+        if (path === "/repos/acme/classroom50")
+          return Promise.resolve({ default_branch: "master" } as T)
+        if (path.includes("/branches/master/protection"))
+          return Promise.resolve({
+            allow_force_pushes: { enabled: false },
+            allow_deletions: { enabled: false },
+          } as T)
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+    expect((await checkBranchProtection(client, "acme")).state).toBe("enforced")
+    expect(
+      requested.some((p) => p.includes("/branches/master/protection")),
+    ).toBe(true)
+    expect(requested.some((p) => p.includes("/branches/main/"))).toBe(false)
+  })
+
+  it("honors an explicit branch argument over the repo default", async () => {
+    const requested: string[] = []
+    const client: GitHubClient = {
+      request: <T>(path: string) => {
+        requested.push(path)
+        if (path.includes("/branches/develop/protection"))
+          return Promise.resolve({
+            allow_force_pushes: { enabled: false },
+            allow_deletions: { enabled: false },
+          } as T)
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+    expect(
+      (await checkBranchProtection(client, "acme", "classroom50", "develop"))
+        .state,
+    ).toBe("enforced")
+    // No repo read when the branch is given explicitly.
+    expect(requested.some((p) => p === "/repos/acme/classroom50")).toBe(false)
+  })
 })
 
 describe("checkReusableWorkflowAccess", () => {

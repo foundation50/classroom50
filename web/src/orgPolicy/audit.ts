@@ -5,6 +5,7 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import {
   checkBranchProtection,
+  checkConfigRepoDefaultBranch,
   checkOrgActions,
   checkOrgDefaultBranch,
   checkOrgDefaults,
@@ -70,13 +71,25 @@ export type OrgAuditReport = {
 }
 
 // A non-blocking, highly-recommended hand-fix surfaced by the audit (never
-// affects the verdict) — e.g. the org default branch name isn't `main`.
-export type OrgRecommendation = {
-  id: "orgDefaultBranch"
-  title: string
-  detail: string
-  settingsUrl: string
-}
+// affects the verdict). Two kinds:
+//   - orgDefaultBranch: the org's default-branch *setting* isn't `main`. Not
+//     API-writable (PATCH /orgs ignores it), so hand-fix only.
+//   - configRepoDefaultBranch: the classroom50 config *repo* drifted off `main`.
+//     API-renameable, so the pane offers a one-click rename (behind a warning:
+//     already-accepted student shims pin the old branch).
+export type OrgRecommendation =
+  | {
+      id: "orgDefaultBranch"
+      title: string
+      detail: string
+      settingsUrl: string
+    }
+  | {
+      id: "configRepoDefaultBranch"
+      title: string
+      detail: string
+      settingsUrl: string
+    }
 
 const CONCERN_TITLES: Record<ConcernId, string> = {
   orgDefaults: "Member-privilege lockdown",
@@ -146,6 +159,7 @@ export async function buildOrgAuditReport(
     pages,
     rulesets,
     orgDefaultBranch,
+    configRepoDefaultBranch,
   ] = await Promise.all([
     checkOrgDefaults(client, org, plan),
     checkOrgActions(client, org),
@@ -156,6 +170,7 @@ export async function buildOrgAuditReport(
     checkPages(client, org),
     checkRulesets(client, org),
     checkOrgDefaultBranch(client, org),
+    checkConfigRepoDefaultBranch(client, org),
   ])
 
   const readOk = defaults.verdict.state !== "unreadable"
@@ -190,9 +205,24 @@ export async function buildOrgAuditReport(
   // Sort alphabetically by title for predictable scanning.
   concerns.sort((a, b) => a.title.localeCompare(b.title))
 
-  // Advisory-only: the org default branch name isn't `main`. Never affects the
-  // verdict (GitHub has no API to set it, so we can't "fix it" — only remind).
+  // Advisory-only recommendations — never affect the verdict.
   const recommendations: OrgRecommendation[] = []
+  // The classroom50 config repo drifted off `main`. API-renameable, so the pane
+  // offers a one-click rename (guarded: it may strand student shim refs). Listed
+  // first — it's the actionable one.
+  if (
+    configRepoDefaultBranch !== null &&
+    configRepoDefaultBranch !== RECOMMENDED_ORG_DEFAULT_BRANCH
+  ) {
+    recommendations.push({
+      id: "configRepoDefaultBranch",
+      title: "Config repo default branch",
+      detail: configRepoDefaultBranch,
+      settingsUrl: `https://github.com/${org}/classroom50/settings/branches`,
+    })
+  }
+  // The org default branch *setting* isn't `main`. GitHub has no API to set it,
+  // so we can't "fix it" — only remind.
   if (
     orgDefaultBranch !== null &&
     orgDefaultBranch !== RECOMMENDED_ORG_DEFAULT_BRANCH

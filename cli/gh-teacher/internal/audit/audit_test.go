@@ -94,6 +94,56 @@ func TestBuildAuditReport_NoRecommendationWhenDefaultBranchIsMain(t *testing.T) 
 	}
 }
 
+func TestBuildAuditReport_RecommendsNonMainConfigRepoBranch(t *testing.T) {
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/repos/") {
+			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "master"})
+			return
+		}
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	// Advisory only — a non-main config-repo branch never fails the lockdown.
+	if !report.LockdownComplete {
+		t.Errorf("LockdownComplete = false; a non-main config-repo branch must not fail the audit")
+	}
+	if report.ConfigRepoBranchRec != "master" {
+		t.Errorf("ConfigRepoBranchRec = %q, want %q", report.ConfigRepoBranchRec, "master")
+	}
+	if !strings.Contains(report.ConfigRepoBranchesURL, "/classroom50/settings/branches") {
+		t.Errorf("ConfigRepoBranchesURL = %q, want the config repo branches page", report.ConfigRepoBranchesURL)
+	}
+}
+
+func TestBuildAuditReport_NoConfigRepoRecommendationWhenUnreadable(t *testing.T) {
+	// A config-repo read failure (e.g. repo not initialized) must omit the
+	// recommendation without failing the audit — it's advisory.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, "/repos/") {
+			w.WriteHeader(http.StatusNotFound)
+			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
+			return
+		}
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+	if report.ConfigRepoBranchRec != "" {
+		t.Errorf("ConfigRepoBranchRec = %q, want empty when the config repo can't be read", report.ConfigRepoBranchRec)
+	}
+	if !report.LockdownComplete {
+		t.Errorf("a config-repo read failure must not fail the lockdown verdict")
+	}
+}
+
 func TestBuildAuditReport_CriticalDriftFails(t *testing.T) {
 	// A teacher who re-checked "delete or transfer repositories" leaves a
 	// critical lockdown field un-set: audit must flag it and report the

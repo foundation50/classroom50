@@ -9,6 +9,7 @@ import {
   ensureWorkflowPermissions,
   findStaleSkeletonFiles,
   gitBlobSha,
+  renameConfigRepoToMain,
   resendOrgInvitation,
   triggerRegrade,
   validateServiceToken,
@@ -808,6 +809,70 @@ describe("ensureClassroom50Repo branch normalization", () => {
     // Rename failed, so the reported branch stays master (defense-in-depth
     // reads resolve it); the step does not throw.
     expect(result.repo.default_branch).toBe("master")
+  })
+})
+
+// The audit pane's on-demand rename: unlike ensureClassroom50Repo this DOES
+// rename an existing non-main repo (the teacher confirmed the shim-breaking
+// risk in a modal). A no-op when already main; a failure propagates so the
+// modal can surface it.
+describe("renameConfigRepoToMain", () => {
+  const org = "acme"
+
+  function makeClient(opts: { defaultBranch: string; renameFails?: boolean }) {
+    const calls: string[] = []
+    const request = vi.fn(async (url: string, o?: { method?: string }) => {
+      const method = o?.method ?? "GET"
+      calls.push(`${method} ${url}`)
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: opts.defaultBranch }
+      }
+      if (method === "POST" && url.endsWith("/rename")) {
+        if (opts.renameFails) {
+          throw new GitHubAPIError({
+            status: 403,
+            url,
+            message: "Forbidden",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          })
+        }
+        return { default_branch: "main" }
+      }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+    return { client: { request } as unknown as GitHubClient, calls }
+  }
+
+  it("renames a master default branch to main", async () => {
+    const { client, calls } = makeClient({ defaultBranch: "master" })
+    const result = await renameConfigRepoToMain(client, org)
+    expect(result).toEqual({ renamed: true, from: "master" })
+    expect(calls).toContain(
+      `POST /repos/${org}/classroom50/branches/master/rename`,
+    )
+  })
+
+  it("is a no-op (no request) when already on main", async () => {
+    const { client, calls } = makeClient({ defaultBranch: "main" })
+    const result = await renameConfigRepoToMain(client, org)
+    expect(result).toEqual({ renamed: false, from: "main" })
+    expect(calls.some((c) => c.includes("/rename"))).toBe(false)
+  })
+
+  it("propagates a rename failure so the caller can surface it", async () => {
+    const { client } = makeClient({
+      defaultBranch: "master",
+      renameFails: true,
+    })
+    await expect(renameConfigRepoToMain(client, org)).rejects.toThrow()
   })
 })
 

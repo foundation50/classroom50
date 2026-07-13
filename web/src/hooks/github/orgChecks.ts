@@ -85,6 +85,24 @@ export async function checkOrgDefaultBranch(
   }
 }
 
+// The classroom50 config repo's live default branch. Returns it so the audit can
+// recommend renaming to `main` when it drifted (org policy can seed a repo on
+// `master`). null when the read failed or the repo doesn't exist yet — the
+// recommendation is advisory and suppressed in both cases.
+export async function checkConfigRepoDefaultBranch(
+  client: GitHubClient,
+  org: string,
+): Promise<string | null> {
+  try {
+    const repo = await client.request<{ default_branch?: string }>(
+      `/repos/${org}/${CONFIG_REPO}`,
+    )
+    return repo.default_branch ?? null
+  } catch {
+    return null
+  }
+}
+
 type OrgActionsPermissions = {
   enabled_repositories: "all" | "none" | "selected"
   allowed_actions?: "all" | "local_only" | "selected"
@@ -142,16 +160,20 @@ type BranchProtection = {
 }
 
 // branchProtection: GET /repos/{org}/{repo}/branches/{branch}/protection —
-// enforced when force-pushes and deletions are both disabled.
+// enforced when force-pushes and deletions are both disabled. When no branch is
+// given, resolves the repo's actual default branch (org policy can seed the
+// config repo on `master`), falling back to `main` only if that read fails.
 export async function checkBranchProtection(
   client: GitHubClient,
   org: string,
   repo: string = CONFIG_REPO,
-  branch: string = "main",
+  branch?: string,
 ): Promise<CheckVerdict> {
   try {
+    const targetBranch =
+      branch ?? (await resolveRepoDefaultBranch(client, org, repo))
     const protection = await client.request<BranchProtection>(
-      `/repos/${org}/${repo}/branches/${encodeURIComponent(branch)}/protection`,
+      `/repos/${org}/${repo}/branches/${encodeURIComponent(targetBranch)}/protection`,
     )
     const enforced =
       protection.allow_force_pushes?.enabled === false &&
@@ -159,6 +181,24 @@ export async function checkBranchProtection(
     return { state: enforced ? "enforced" : "unenforced" }
   } catch (err) {
     return unreadableFrom(err)
+  }
+}
+
+// The repo's live default branch, falling back to `main` when the read fails —
+// so a branch-relative check/audit targets the real branch even on a `master`
+// config repo, without letting an advisory read outage throw.
+async function resolveRepoDefaultBranch(
+  client: GitHubClient,
+  org: string,
+  repo: string,
+): Promise<string> {
+  try {
+    const data = await client.request<{ default_branch?: string }>(
+      `/repos/${org}/${repo}`,
+    )
+    return data.default_branch || "main"
+  } catch {
+    return "main"
   }
 }
 
