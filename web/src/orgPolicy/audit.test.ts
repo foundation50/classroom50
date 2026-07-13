@@ -103,6 +103,39 @@ describe("buildOrgAuditReport", () => {
     expect(report.defaultVerdicts.every((v) => v.enforced)).toBe(true)
   })
 
+  it("recommends switching a non-main org default branch without failing", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({
+        orgDefaults: driftedDefaults((live) => {
+          live.default_repository_branch = "master"
+        }),
+      }),
+      "acme",
+      "team",
+    )
+    // Advisory only — a non-main default branch never fails the verdict.
+    expect(report.verdict).toBe("ok")
+    expect(report.recommendations).toHaveLength(1)
+    expect(report.recommendations[0].id).toBe("orgDefaultBranch")
+    expect(report.recommendations[0].detail).toBe("master")
+    expect(report.recommendations[0].settingsUrl).toContain(
+      "/settings/repository-defaults",
+    )
+  })
+
+  it("no recommendation when the org default branch is already main", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({
+        orgDefaults: driftedDefaults((live) => {
+          live.default_repository_branch = "main"
+        }),
+      }),
+      "acme",
+      "team",
+    )
+    expect(report.recommendations).toHaveLength(0)
+  })
+
   it("verdict fail when a critical member-default drifts", async () => {
     const report = await buildOrgAuditReport(
       makeClient({

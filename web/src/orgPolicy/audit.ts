@@ -6,11 +6,13 @@ import type { GitHubClient } from "@/hooks/github/client"
 import {
   checkBranchProtection,
   checkOrgActions,
+  checkOrgDefaultBranch,
   checkOrgDefaults,
   checkOrgPrCreation,
   checkPages,
   checkReusableWorkflowAccess,
   checkWorkflowPermissions,
+  RECOMMENDED_ORG_DEFAULT_BRANCH,
   type CheckVerdict,
 } from "@/hooks/github/orgChecks"
 import { checkRulesets } from "@/hooks/github/rulesets"
@@ -61,6 +63,21 @@ export type OrgAuditReport = {
   concerns: ConcernCheck[]
   // The four API-less settings the teacher confirms by hand; never fail.
   manualUnreadable: ManualStep[]
+  // Advisory recommendations that never affect `verdict` — e.g. the org's
+  // default repository branch name isn't `main`. Not enforceable via API, so
+  // surfaced as a "highly recommended, not required" hand-fix.
+  recommendations: OrgRecommendation[]
+}
+
+// A non-blocking, highly-recommended hand-fix surfaced by the audit. Distinct
+// from ConcernCheck (which fails the verdict) and ManualStep (member-privilege
+// settings we can't read): a recommendation is read from the live org but is
+// advisory only.
+export type OrgRecommendation = {
+  id: "orgDefaultBranch"
+  title: string
+  detail: string
+  settingsUrl: string
 }
 
 const CONCERN_TITLES: Record<ConcernId, string> = {
@@ -130,6 +147,7 @@ export async function buildOrgAuditReport(
     reusableAccess,
     pages,
     rulesets,
+    orgDefaultBranch,
   ] = await Promise.all([
     checkOrgDefaults(client, org, plan),
     checkOrgActions(client, org),
@@ -139,6 +157,7 @@ export async function buildOrgAuditReport(
     checkReusableWorkflowAccess(client, org),
     checkPages(client, org),
     checkRulesets(client, org),
+    checkOrgDefaultBranch(client, org),
   ])
 
   const readOk = defaults.verdict.state !== "unreadable"
@@ -173,6 +192,21 @@ export async function buildOrgAuditReport(
   // Sort alphabetically by title for predictable scanning.
   concerns.sort((a, b) => a.title.localeCompare(b.title))
 
+  // Advisory-only: the org default branch name isn't `main`. Never affects the
+  // verdict (GitHub has no API to set it, so we can't "fix it" — only remind).
+  const recommendations: OrgRecommendation[] = []
+  if (
+    orgDefaultBranch !== null &&
+    orgDefaultBranch !== RECOMMENDED_ORG_DEFAULT_BRANCH
+  ) {
+    recommendations.push({
+      id: "orgDefaultBranch",
+      title: "Repository default branch",
+      detail: orgDefaultBranch,
+      settingsUrl: `https://github.com/organizations/${org}/settings/repository-defaults`,
+    })
+  }
+
   return {
     org,
     plan,
@@ -183,5 +217,6 @@ export async function buildOrgAuditReport(
     defaultVerdicts,
     concerns,
     manualUnreadable: manualHardeningSteps(org),
+    recommendations,
   }
 }

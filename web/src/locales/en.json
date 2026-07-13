@@ -1155,6 +1155,10 @@
       "confirmByHand": "Confirm by hand",
       "confirmByHandBody": "GitHub exposes no API to read these settings, so we can't verify them automatically — confirm each one on the member privileges page.",
       "confirmManually": "Confirm manually",
+      "recommendedTitle": "Recommended",
+      "recommendedBody": "Not required, but we highly recommend these — GitHub exposes no API to set them, so change them by hand.",
+      "recommended": "Recommended",
+      "defaultBranchRec": "Your org's default branch name for new repositories is \"{{current}}\". We recommend \"main\" so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected and keep working.",
       "memberPermsToggle": "Member permissions we configure",
       "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Drifted ones are called out above."
     },

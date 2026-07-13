@@ -18,6 +18,12 @@ const log = logger.scope("github:orgChecks")
 
 export const CONFIG_REPO = "classroom50"
 
+// The org "Repository default branch name" we recommend. Not enforceable via
+// API (PATCH /orgs ignores default_repository_branch — it's a web-UI-only
+// setting), so this is surfaced as an advisory recommendation, never a
+// failing/critical concern.
+export const RECOMMENDED_ORG_DEFAULT_BRANCH = "main"
+
 // A concern's read-only state: enforced means the live value already matches
 // the desired policy; unenforced means it drifted; unreadable means the read
 // itself failed (permission/transient) so the verdict is inconclusive.
@@ -60,6 +66,24 @@ export async function checkOrgDefaults(
     return { verdict: { state }, classification }
   } catch (err) {
     return { verdict: unreadableFrom(err) }
+  }
+}
+
+// The org's live "Repository default branch name" (default_repository_branch on
+// GET /orgs/{org}). Returns the value so the audit can recommend switching to
+// `main` when it differs. null when the org read failed (recommendation is then
+// suppressed — it's advisory, not worth surfacing on a read outage).
+export async function checkOrgDefaultBranch(
+  client: GitHubClient,
+  org: string,
+): Promise<string | null> {
+  try {
+    const live = await client.request<{ default_repository_branch?: string }>(
+      `/orgs/${org}`,
+    )
+    return live.default_repository_branch ?? null
+  } catch {
+    return null
   }
 }
 

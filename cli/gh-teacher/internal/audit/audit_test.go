@@ -56,6 +56,44 @@ func TestBuildAuditReport_AllEnforced(t *testing.T) {
 	}
 }
 
+func TestBuildAuditReport_RecommendsNonMainDefaultBranch(t *testing.T) {
+	live := orgLiveFromSettings("team")
+	live["default_repository_branch"] = "master"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	// Advisory only — a non-main default branch never fails the lockdown.
+	if !report.LockdownComplete {
+		t.Errorf("LockdownComplete = false; a non-main default branch must not fail the audit")
+	}
+	if report.DefaultBranchRec != "master" {
+		t.Errorf("DefaultBranchRec = %q, want %q", report.DefaultBranchRec, "master")
+	}
+	if !strings.Contains(report.RepositoryDefaultsURL, "/settings/repository-defaults") {
+		t.Errorf("RepositoryDefaultsURL = %q, want the repository-defaults settings page", report.RepositoryDefaultsURL)
+	}
+}
+
+func TestBuildAuditReport_NoRecommendationWhenDefaultBranchIsMain(t *testing.T) {
+	live := orgLiveFromSettings("team")
+	live["default_repository_branch"] = "main"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+	if report.DefaultBranchRec != "" {
+		t.Errorf("DefaultBranchRec = %q, want empty when already main", report.DefaultBranchRec)
+	}
+}
+
 func TestBuildAuditReport_CriticalDriftFails(t *testing.T) {
 	// A teacher who re-checked "delete or transfer repositories" leaves a
 	// critical lockdown field un-set: audit must flag it and report the

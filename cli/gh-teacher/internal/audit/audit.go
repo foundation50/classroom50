@@ -119,6 +119,11 @@ type auditReport struct {
 	// ManualUnreadable: web-UI-only settings with no REST field; audit can't
 	// confirm them and asks the teacher to eyeball them.
 	ManualUnreadable []orgpolicy.ManualStep `json:"manual_unreadable"`
+	// DefaultBranchRec: advisory-only. When set, the org's default repository
+	// branch name (this value) isn't `main`; recommended, never a failure.
+	DefaultBranchRec string `json:"default_branch_recommendation,omitempty"`
+	// RepositoryDefaultsURL is the settings page for the default-branch fix.
+	RepositoryDefaultsURL string `json:"repository_defaults_url,omitempty"`
 	// SettingsURL is the org member-privileges page every item lives on.
 	SettingsURL string `json:"settings_url"`
 }
@@ -168,6 +173,13 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 	// Any drift fails (match the web GUI). The per-setting Critical flag is
 	// still surfaced for ordering/labeling but no longer gates the verdict.
 	report.LockdownComplete = len(report.Unenforced) == 0
+
+	// Advisory-only: the org default branch name isn't `main`. Never gates the
+	// verdict (GitHub has no API to set it — only a hand-fix reminder).
+	if rec := orgpolicy.OrgDefaultBranchRecommendation(live); rec != "" {
+		report.DefaultBranchRec = rec
+		report.RepositoryDefaultsURL = orgpolicy.OrgRepositoryDefaultsURL(org)
+	}
 	return report
 }
 
@@ -243,5 +255,13 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 		for i, m := range r.ManualUnreadable {
 			u.Numbered(i+1, "%s", m.Setting)
 		}
+	}
+
+	// Advisory recommendation — highly recommended, never a failure.
+	if r.DefaultBranchRec != "" {
+		u.Heading("Recommended (not required)")
+		u.Detail("Your org's default branch name for new repositories is %q; we recommend %q so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected.",
+			r.DefaultBranchRec, orgpolicy.RecommendedOrgDefaultBranch)
+		u.Detail("Change it at %s", r.RepositoryDefaultsURL)
 	}
 }

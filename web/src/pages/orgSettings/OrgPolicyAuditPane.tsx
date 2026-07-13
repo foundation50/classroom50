@@ -311,6 +311,48 @@ function AuditBody({
         </div>
       )}
 
+      {report.recommendations.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold">
+            {t("orgSettings.audit.recommendedTitle")}
+          </h3>
+          <p className="mt-1 text-xs text-base-content/70">
+            {t("orgSettings.audit.recommendedBody")}
+          </p>
+          <div className="mt-2 grid gap-2">
+            {report.recommendations.map((rec) => (
+              <div
+                key={rec.id}
+                className="flex items-start justify-between gap-4 rounded-lg border border-warning/40 bg-warning/5 p-3"
+              >
+                <div className="min-w-0">
+                  <div className="text-sm font-semibold text-base-content/80">
+                    {rec.title}
+                  </div>
+                  <p className="mt-0.5 text-xs text-base-content/70">
+                    {t("orgSettings.audit.defaultBranchRec", {
+                      current: rec.detail,
+                    })}
+                  </p>
+                  <a
+                    href={rec.settingsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+                  >
+                    {t("orgSettings.audit.viewOnGitHub")}
+                    <ExternalLink aria-hidden="true" className="size-3" />
+                  </a>
+                </div>
+                <span className="badge badge-warning badge-soft shrink-0">
+                  {t("orgSettings.audit.recommended")}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {report.defaultVerdicts.length > 0 && (
         <div className="mt-6">
           <button

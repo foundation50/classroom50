@@ -30,7 +30,7 @@ const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
 // The branch Classroom 50 standardizes the config repo (and its skeleton
 // workflows/Pages/branch protection) on. New config repos are normalized to
-// this; the org default-branch setting is steered here too.
+// this via a guarded rename.
 const CONFIG_REPO_BRANCH = "main"
 
 const ASSIGNMENTS_TEMPLATE = {
@@ -1203,28 +1203,6 @@ async function normalizeConfigRepoBranch(
       err,
     })
     return repo
-  }
-}
-
-// Best-effort: steer the org's default repository branch name to `main` so
-// future repos (config repo re-creates, student assignment repos) seed on
-// `main`. Only affects future repos and needs org-owner rights (can be
-// enterprise-locked), so any failure is swallowed — it never blocks setup.
-async function ensureOrgDefaultBranch(
-  client: GitHubClient,
-  org: string,
-): Promise<void> {
-  try {
-    await client.request(`/orgs/${org}`, {
-      method: "PATCH",
-      body: { default_repository_branch: CONFIG_REPO_BRANCH },
-    })
-    logSetup.info("org default repository branch set to main", { org })
-  } catch (err) {
-    logSetup.warn("could not set org default repository branch (continuing)", {
-      org,
-      err,
-    })
   }
 }
 
@@ -2568,9 +2546,6 @@ export async function initClassroom50({
     id: "orgDefaults",
     onStepUpdate,
     fn: async () => {
-      // Steer the org's default branch name to main (best-effort; only affects
-      // future repos). Runs alongside the member-privilege defaults repair.
-      await ensureOrgDefaultBranch(client, org)
       const result = await repairOrgDefaults(client, org, plan)
       // Forward the whole result (not just status/message) so the board can list
       // the specific unenforced settings, and warn on ANY unenforced field so it

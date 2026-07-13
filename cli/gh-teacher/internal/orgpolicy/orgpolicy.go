@@ -246,6 +246,30 @@ type ManualStep struct {
 	URL     string `json:"url"`
 }
 
+// RecommendedOrgDefaultBranch is the org "Repository default branch name" we
+// recommend. GitHub exposes no REST field to set it (PATCH /orgs ignores
+// default_repository_branch — it's web-UI-only), so this is surfaced as an
+// advisory recommendation, never an enforced/critical setting.
+const RecommendedOrgDefaultBranch = "main"
+
+// OrgDefaultBranchRecommendation returns the org's current default branch name
+// when it differs from RecommendedOrgDefaultBranch (so callers can advise a
+// hand-fix), or "" when it already matches / is unset / unreadable. `live` is
+// the raw GET /orgs/{org} map.
+func OrgDefaultBranchRecommendation(live map[string]any) string {
+	branch, ok := live["default_repository_branch"].(string)
+	if !ok || branch == "" || branch == RecommendedOrgDefaultBranch {
+		return ""
+	}
+	return branch
+}
+
+// OrgRepositoryDefaultsURL is the org settings page where the default branch
+// name is changed (the one setting with no REST write path).
+func OrgRepositoryDefaultsURL(org string) string {
+	return fmt.Sprintf("https://github.com/organizations/%s/settings/repository-defaults", org)
+}
+
 // ManualHardeningSteps is the canonical list of the four member-privilege
 // settings with no REST API (single-sourced so init's reminder, init's JSON,
 // and audit's list can't drift). Each instruction is verb-first with the
