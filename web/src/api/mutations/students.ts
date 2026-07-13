@@ -160,6 +160,61 @@ export async function resolveClassroomPendingInvite(
   }
 }
 
+// Unenroll's invite-cancel policy, shared by the single and bulk paths: cancel a
+// pending invite only when it belongs solely to this classroom (see
+// resolveClassroomPendingInvite); otherwise keep it and warn (a multi-classroom
+// invite or an unconfirmable scope must not revoke a sibling classroom's
+// onboarding). Returns the non-fatal warning(s) for the caller to collect; never
+// throws — a resolve/cancel failure is a warning, not a thrown error, so a
+// commit that already landed stays non-fatal. Callers own the self-guard and the
+// pending-state gate.
+async function cancelSoleClassroomInviteOnUnenroll(
+  client: GitHubClient,
+  input: {
+    org: string
+    classroom: string
+    // Resolve key — matched against the team invite's login (trimmed/cased there).
+    username: string
+    // Name shown in warnings; defaults to `username`.
+    displayName?: string
+    teamSlug?: string
+    logContext: string
+  },
+): Promise<string[]> {
+  const { org, classroom, username, teamSlug, logContext } = input
+  const displayName = input.displayName ?? username
+  const invite = await resolveClassroomPendingInvite(client, {
+    org,
+    classroom,
+    username,
+    teamSlug,
+  })
+
+  if (!invite.soleClassroom || invite.invitationId === undefined) {
+    return [
+      `${displayName} was removed from this classroom, but their pending ` +
+        `organization invite was kept because it also grants access to other ` +
+        `classrooms (or its scope couldn't be confirmed). Cancel it from the ` +
+        `organization's people page if it's no longer needed.`,
+    ]
+  }
+
+  try {
+    await cancelOrgInvitation(client, {
+      org,
+      invitationId: invite.invitationId,
+    })
+    return []
+  } catch (err) {
+    log.error(logContext, { err })
+    return [
+      `${displayName} was removed from the roster, but cancelling their ` +
+        `pending org invite failed (${getErrorMessage(err)}); retry from the ` +
+        `organization's people page.`,
+    ]
+  }
+}
+
 // Slug + numeric id from a single classroom.json read (404 -> derived slug,
 // other errors propagate; id is undefined when absent).
 async function resolveClassroomTeam(
@@ -2364,37 +2419,16 @@ export async function unenrollStudent(
     )
   } else if (shouldCancelInvite) {
     const teamSlug = await teamSlugPromise.catch(() => undefined)
-    const invite = await resolveClassroomPendingInvite(client, {
-      org,
-      classroom,
-      username: normalizedUsername,
-      teamSlug,
-    })
-    if (invite.soleClassroom && invite.invitationId !== undefined) {
-      try {
-        await cancelOrgInvitation(client, {
-          org,
-          invitationId: invite.invitationId,
-        })
-      } catch (err) {
-        log.error("org invite cancellation failed (student unenrolled)", {
-          err,
-        })
-        const detail = getErrorMessage(err)
-        warnings.push(
-          `${toRemoveStudent.username} was removed from the roster, but ` +
-            `cancelling their pending org invite failed (${detail}); retry from ` +
-            `the organization's people page.`,
-        )
-      }
-    } else {
-      warnings.push(
-        `${toRemoveStudent.username} was removed from this classroom, but their ` +
-          `pending organization invite was kept because it also grants access ` +
-          `to other classrooms (or its scope couldn't be confirmed). Cancel it ` +
-          `from the organization's people page if it's no longer needed.`,
-      )
-    }
+    warnings.push(
+      ...(await cancelSoleClassroomInviteOnUnenroll(client, {
+        org,
+        classroom,
+        username: normalizedUsername,
+        displayName: toRemoveStudent.username,
+        teamSlug,
+        logContext: "org invite cancellation failed (student unenrolled)",
+      })),
+    )
   }
 
   log.info("unenroll student: completed", {
@@ -2581,37 +2615,16 @@ export async function bulkUnenrollStudents(
         () => null,
       )
       if (orgState === "pending" && !isSameGitHubUser(viewer, student)) {
-        const invite = await resolveClassroomPendingInvite(client, {
-          org,
-          classroom,
-          username,
-          teamSlug,
-        })
-        if (invite.soleClassroom && invite.invitationId !== undefined) {
-          try {
-            await cancelOrgInvitation(client, {
-              org,
-              invitationId: invite.invitationId,
-            })
-          } catch (err) {
-            log.error(
+        warnings.push(
+          ...(await cancelSoleClassroomInviteOnUnenroll(client, {
+            org,
+            classroom,
+            username,
+            teamSlug,
+            logContext:
               "org invite cancellation failed (student bulk-unenrolled)",
-              { err },
-            )
-            warnings.push(
-              `${username} was removed from the roster, but cancelling their ` +
-                `pending org invite failed (${getErrorMessage(err)}); retry from ` +
-                `the organization's people page.`,
-            )
-          }
-        } else {
-          warnings.push(
-            `${username} was removed from this classroom, but their pending org ` +
-              `invite was kept because it also grants access to other classrooms ` +
-              `(or its scope couldn't be confirmed). Cancel it from the ` +
-              `organization's people page if it's no longer needed.`,
-          )
-        }
+          })),
+        )
       } else if (orgState === "pending" && isSameGitHubUser(viewer, student)) {
         warnings.push(
           `${username} was removed from the roster. Their pending organization ` +
