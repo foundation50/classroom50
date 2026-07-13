@@ -540,13 +540,13 @@ describe("buildTeamRoster — roles (union across student + staff teams)", () =>
 })
 
 describe("rowsNeedingBackfill", () => {
-  it("flags a login-only row on a team (blank github_id) — the rliu50 case", () => {
+  it("flags a login-only row on a team (blank github_id) — the login-only-row case", () => {
     const needing = rowsNeedingBackfill(
-      [member(127826836, "rliu50")],
+      [member(127826836, "student1")],
       {},
-      [csvRow({ username: "rliu50" })], // blank github_id + blank role
+      [csvRow({ username: "student1" })], // blank github_id + blank role
     )
-    expect(needing.map((s) => s.username)).toEqual(["rliu50"])
+    expect(needing.map((s) => s.username)).toEqual(["student1"])
   })
 
   it("flags a row whose recorded role is stale vs the team", () => {

@@ -508,7 +508,7 @@ const EnrolledStudents = ({
     if (migrateSettledFor !== classroom) return
     // Sync when there's drift to fix: a team member with no CSV row (missing),
     // OR an existing CSV row that's stale against the team (blank github_id or a
-    // wrong role — the login-only `rliu50` case). Without the backfill term a
+    // wrong role — the login-only row case). Without the backfill term a
     // login-only row would never converge, since it isn't "missing". BOTH terms
     // drop suppressed (just-unenrolled) logins so a stale row lingering during
     // the eventual-consistency window can't re-fire a resurrecting sync.

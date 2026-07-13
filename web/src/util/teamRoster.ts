@@ -471,7 +471,7 @@ export function teamMembersMissingFromCsv(
 // primary role. These need the same server-side backfill sync performs, but
 // they aren't "missing" (teamMembersMissingFromCsv skips them because their
 // login/id is claimed), so the drift trigger would otherwise never fire for a
-// login-only row like `rliu50,,,,,,`. `staffMembers` is keyed by role so the
+// login-only row like `student1,,,,,,`. `staffMembers` is keyed by role so the
 // primary role can be derived (instructor > ta > student). Pure + testable.
 export function rowsNeedingBackfill(
   members: GitHubUser[],

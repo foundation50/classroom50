@@ -2067,13 +2067,13 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
   })
 
-  it("backfills a blank github_id on a login-matched row (the rliu50 case)", async () => {
+  it("backfills a blank github_id on a login-matched row (the login-only-row case)", async () => {
     // Teacher wrote a bare username, invited, the student joined the team — but
     // the row still has no github_id. Sync must fill it in from the team member.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "rliu50,,,,,,\n",
+      startingCsv: HEADER + "student1,,,,,,\n",
       users: {},
-      teamHas: [{ login: "rliu50", id: 127826836 }],
+      teamHas: [{ login: "student1", id: 127826836 }],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2082,11 +2082,11 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
 
     expect(result.noop).toBe(false)
-    const rliu = rowsFromCsv(committed.content!).find(
-      (r) => r.username === "rliu50",
+    const backfilled = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "student1",
     )
-    expect(rliu).toMatchObject({
-      username: "rliu50",
+    expect(backfilled).toMatchObject({
+      username: "student1",
       github_id: "127826836",
       role: "student",
     })
@@ -2096,9 +2096,9 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     // The CSV row already has an id; a team member sharing the login but a
     // DIFFERENT id must not repoint the row onto the other account.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "rliu50,,,,,999,student\n",
+      startingCsv: HEADER + "student1,,,,,999,student\n",
       users: {},
-      teamHas: [{ login: "rliu50", id: 127826836 }],
+      teamHas: [{ login: "student1", id: 127826836 }],
     })
 
     const result = await syncRosterFromTeam(client, {
@@ -2108,10 +2108,10 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
 
     // Role already correct + id must be preserved -> nothing to change.
     expect(result.noop).toBe(true)
-    const rliu = rowsFromCsv(
-      committed.content ?? HEADER + "rliu50,,,,,999,student\n",
-    ).find((r) => r.username === "rliu50")
-    expect(rliu?.github_id).toBe("999")
+    const preserved = rowsFromCsv(
+      committed.content ?? HEADER + "student1,,,,,999,student\n",
+    ).find((r) => r.username === "student1")
+    expect(preserved?.github_id).toBe("999")
   })
 
   it("leaves a blank-id row untouched when its login is on no team", async () => {
@@ -2456,7 +2456,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
     // writeback must NOT silently rewrite (positional re-serialize would corrupt
     // the bad row) nor swallow — it raises a typed error the caller surfaces.
     const { client, committed } = makeTeamClient({
-      startingCsv: HEADER + "prof,,,,,9,\n" + "rliu50,,,,,,,\n",
+      startingCsv: HEADER + "prof,,,,,9,\n" + "student1,,,,,,,\n",
       users: {},
       teamHas: [],
     })
@@ -2556,13 +2556,13 @@ describe("parseStudentsCsv — short-row tolerance is trailing-only", () => {
 describe("parseRosterCsv — structured per-line problems", () => {
   const HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 
-  it("reports the exact malformed line for a too-many-fields row (the rliu50 case)", () => {
+  it("reports the exact malformed line for a too-many-fields row (the login-only-row case)", () => {
     // The real bug: a hand-written row with one comma too many (8 fields vs 7).
     const csv =
-      HEADER + "rongxin-liu,,,,,10591665,instructor\n" + "rliu50,,,,,,,\n"
+      HEADER + "rongxin-liu,,,,,10591665,instructor\n" + "student1,,,,,,,\n"
     const { rows, problems } = parseRosterCsv(csv)
     expect(problems).toHaveLength(1)
-    // Header is line 1; rongxin-liu line 2; the malformed rliu50 row is line 3.
+    // Header is line 1; rongxin-liu line 2; the malformed student1 row is line 3.
     expect(problems[0].line).toBe(3)
     expect(problems[0].message).toMatch(/too many fields/i)
     // Rows are still returned (the view stays tolerant) — the good row parses.

@@ -248,7 +248,7 @@ export function useTeamRoster(
   )
 
   // Rows already in the CSV but stale against team membership (blank github_id
-  // or a role that differs from the team's) — the login-only `rliu50` case.
+  // or a role that differs from the team's) — the login-only row case.
   // These need the same sync backfill but aren't "missing", so they must feed
   // the sync trigger separately, else a login-only row would never converge.
   const backfillNeeded = useMemo(
