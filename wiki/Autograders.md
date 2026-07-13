@@ -104,10 +104,11 @@ Or set the whole array at once with `gh teacher assignment add ... --tests <file
     "run": "./hello", "input": "Alice\n", "expected": "^hello,\\s+Alice\\b",
     "comparison": "regex", "points": 2 },
   { "name": "pytest suite", "type": "python",
-    "setup": "pip install --quiet pytest pytest-json-report",
     "run": "python -m pytest -q", "timeout": 120, "points": 10 }
 ]
 ```
+
+> The runner auto-installs `pytest` and `pytest-json-report` for `python` tests, so no `setup` install line is needed. Add one (e.g. `"setup": "pip install --quiet pytest==8.* pytest-json-report"`) only to pin a version — the runner leaves an already-importable version untouched.
 
 ### How it flows
 
@@ -121,7 +122,7 @@ Test commands are teacher-authored shell, executed at the same privilege as a ha
 |---|---|---|
 | `io` | stdout of `run` matches `expected` per `comparison` | `input` / `input-file`, `expected` / `expected-file`, `comparison` |
 | `run` | exit code of `run` equals `exit-code` (default 0) | `exit-code` |
-| `python` | pytest passes; points split across cases as `points × passed/total` (needs `pytest-json-report`; without it, all-or-nothing on exit code) | — |
+| `python` | pytest passes; points split across cases as `points × passed/total`. The runner auto-installs `pytest` + `pytest-json-report`; if a report still can't be produced (e.g. an offline runner), it falls back to all-or-nothing on the exit code | — |
 
 ### Fields
 

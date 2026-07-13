@@ -796,7 +796,7 @@
       "exitCode": "Required Exit Code",
       "exitCodeHint": "Leave empty to require a successful exit (0).",
       "pythonNote_prefix": "The run command should invoke pytest (e.g.",
-      "pythonNote_suffix": ") against test files in the assignment template. Points are split across the cases pytest discovers.",
+      "pythonNote_suffix": ") against test files in the assignment template. pytest and pytest-json-report are installed automatically. Points are split across the cases pytest discovers.",
       "timeout": "Timeout (seconds)",
       "timeoutHint": "0 = default (10s)",
       "points": "Points",
