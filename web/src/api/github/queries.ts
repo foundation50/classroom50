@@ -23,7 +23,7 @@ export function getBranchRef(
   branch?: string,
 ) {
   return client.request<GitHubBranchRef>(
-    `/repos/${org}/classroom50/git/ref/heads/${branch ?? "main"}`,
+    `/repos/${org}/classroom50/git/ref/heads/${encodeURIComponent(branch ?? "main")}`,
   )
 }
 

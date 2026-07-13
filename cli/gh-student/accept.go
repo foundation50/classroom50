@@ -821,12 +821,11 @@ func resolveConfigRepoBranch(client githubapi.Client, org string) (string, error
 	return defaultBranchOrMain(repo.DefaultBranch), nil
 }
 
-// defaultBranchOrMain guards against an empty default_branch in the
-// (HasTemplate-guaranteed non-empty) template ref; the empty-repo path has no
-// such guarantee, so an empty value would flow into WaitForStableBranch("")
-// and 404-loop to an opaque "did not stabilize" failure, leaving a
-// created-but-shimless repo. "main" is GitHub's default for an auto_init repo
-// and matches what `gh student submit` pushes to.
+// defaultBranchOrMain guards against an empty default_branch in a create/GET
+// response: an empty value flowing into WaitForStableBranch("") would 404-loop
+// to an opaque "did not stabilize" failure, leaving a created-but-shimless
+// repo. "main" is GitHub's default for an auto_init repo and matches what
+// `gh student submit` pushes to.
 func defaultBranchOrMain(branch string) string {
 	if branch == "" {
 		return "main"

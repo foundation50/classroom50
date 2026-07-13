@@ -11,7 +11,12 @@ import {
 } from "./types"
 import { GitHubAPIError } from "./errors"
 import sodium from "libsodium-wrappers"
-import { getBranchRef, getClassroomJson, getCommit } from "@/api/github/queries"
+import {
+  getBranchRef,
+  getClassroomJson,
+  getCommit,
+  getConfigRepoBranch,
+} from "@/api/github/queries"
 import type { CreateClassroomInput } from "@/api/mutations/classrooms"
 import type { StaffRole } from "@/types/classroom"
 import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
@@ -1329,8 +1334,7 @@ async function findStaleSkeleton(
   client: GitHubClient,
   org: string,
 ): Promise<{ stale: StaleSkeletonFile[]; branch: string }> {
-  const repo = await client.request<GitHubRepo>(`/repos/${org}/${CONFIG_REPO}`)
-  const defaultBranch = repo.default_branch || CONFIG_REPO_BRANCH
+  const defaultBranch = await getConfigRepoBranch(client, org)
 
   const existingBlobs = await listTargetRepoBlobs(client, org, defaultBranch)
 
@@ -2636,8 +2640,8 @@ export async function initClassroom50({
   results.branchProtection = await tryStep({
     id: "branchProtection",
     onStepUpdate,
-    // Omit the branch so ensureBranchProtection resolves the config repo's
-    // actual default branch (org policy can seed it as `master`).
+    // No branch: ensureBranchProtection resolves the config repo's actual
+    // default branch, since org policy can seed it as `master`.
     fn: () => ensureBranchProtection(client, org, "classroom50"),
   })
 
@@ -2810,11 +2814,9 @@ export async function editClassroom(
 ) {
   const { org, slug, term, name, active } = input
 
-  // Resolve the config repo's default branch once; org policy can seed it as
-  // something other than `main`, so both the ref read and the write must target
-  // the real branch.
-  const configBranch =
-    (await getRepo(client, org, "classroom50"))?.default_branch || "main"
+  // Org policy can seed the config repo on a non-`main` branch, so both the ref
+  // read and the write must target the real branch.
+  const configBranch = await getConfigRepoBranch(client, org)
 
   const ref = await getBranchRef(client, org, configBranch)
 
