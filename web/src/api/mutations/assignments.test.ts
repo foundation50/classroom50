@@ -7,6 +7,7 @@ import {
   editAssignment,
   founderPermission,
   nextAvailableSlug,
+  permissionSatisfies,
   preserveUnmanagedAssignmentKeys,
   resolveTemplate,
   verifyTemplateAccess,
@@ -1165,5 +1166,27 @@ describe("assertAssignmentModeCoherent (issue #213 / review #3)", () => {
     expect(() => assertAssignmentModeCoherent("hw", "individual", 2)).toThrow(
       /max_group_size 2 but mode "individual"/,
     )
+  })
+})
+
+// permissionSatisfies decides whether the read-back after the grant matches the
+// role we set, accounting for GitHub collapsing push -> legacy "write". Guards
+// the verified self-demotion (a repo creator is admin until this downgrades it).
+describe("permissionSatisfies — verified founder demotion (issue #213)", () => {
+  it("accepts a push grant that reads back as legacy write", () => {
+    expect(permissionSatisfies("write", "write", "push")).toBe(true)
+    expect(permissionSatisfies("write", "push", "push")).toBe(true)
+  })
+
+  it("accepts an admin grant that reads back as admin", () => {
+    expect(permissionSatisfies("admin", "admin", "admin")).toBe(true)
+  })
+
+  it("rejects a still-admin read-back after a push grant (downgrade ignored)", () => {
+    expect(permissionSatisfies("admin", "admin", "push")).toBe(false)
+  })
+
+  it("rejects an under-grant (read only) for a push target", () => {
+    expect(permissionSatisfies("read", "read", "push")).toBe(false)
   })
 })

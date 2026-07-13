@@ -16,6 +16,18 @@ import (
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
+// writePermissionReadback answers GET .../collaborators/{u}/permission with the
+// effective role GitHub would report for a grant of `set`: push collapses to
+// the legacy "write" role, admin stays admin. Lets the accept tests satisfy
+// inviteFounder's post-grant verification.
+func writePermissionReadback(w http.ResponseWriter, set string) {
+	legacy, role := set, set
+	if set == "push" {
+		legacy, role = "write", "push"
+	}
+	_ = json.NewEncoder(w).Encode(map[string]any{"permission": legacy, "role_name": role})
+}
+
 func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 	tmpl := assignments.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"}
 
@@ -393,6 +405,9 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		})
 		// The founder role is reconciled (idempotent PUT downgrades a repo
 		// granted admin under an older release); capture the permission.
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, collaboratorPerm)
+		})
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
 			collaboratorPut = true
 			var body map[string]any
@@ -447,7 +462,10 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 			}
 			w.WriteHeader(http.StatusNotFound)
 		})
-		// Provisioning: admin grant.
+		// Provisioning: role grant (baseParams mode is empty -> push).
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			writePermissionReadback(w, "push")
+		})
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
 			collaboratorPut = true
 			w.WriteHeader(http.StatusNoContent)
@@ -549,6 +567,9 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 				// present (the commit just landed it).
 				mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
 					_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+					writePermissionReadback(w, collaboratorPerm)
 				})
 				mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
 					collaboratorPut = true

@@ -1444,10 +1444,10 @@ export async function getRepoPermissionForUser(params: {
   org: string
   repo: string
   username: string
-}) {
+}): Promise<{ permission?: string; role_name?: string }> {
   const { client, org, repo, username } = params
 
-  return client.request(
+  return client.request<{ permission?: string; role_name?: string }>(
     `/repos/${org}/${repo}/collaborators/${username}/permission`,
   )
 }

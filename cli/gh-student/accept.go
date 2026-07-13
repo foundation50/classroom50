@@ -766,17 +766,70 @@ func founderPermission(mode string) string {
 	return "push"
 }
 
-// inviteFounder upserts username as an org/repoName collaborator at permission.
-// The PUT is idempotent, so a re-run after a role change upserts to the new
-// role (e.g. downgrading a repo granted admin under an older release).
+// inviteFounder sets username's collaborator role on org/repoName to permission
+// and verifies it took effect. The student is repo `admin` the moment they
+// create the repo (GitHub grants the creator admin), so for an individual
+// assignment this is an explicit self-demotion to `push`; the PUT is an
+// idempotent upsert. Because a silently-ignored downgrade would otherwise look
+// identical to success, we read the effective permission back and fail loudly
+// if the student is still over-privileged.
 func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
 	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
 		return err
 	}
 
+	if err := verifyFounderPermission(client, org, repoName, username, permission); err != nil {
+		return err
+	}
+
 	if verbose {
-		u.Detail("invited %s to %s/%s with %s permission", username, org, repoName, permission)
+		u.Detail("set %s to %s on %s/%s", username, permission, org, repoName)
 	}
 
 	return nil
+}
+
+// verifyFounderPermission reads username's effective permission back and errors
+// if it doesn't match the role we just set. This catches the case that
+// motivates the whole demotion: the creator holds admin, and if GitHub ever
+// ignores the self-downgrade the student would silently keep it.
+//
+// GET .../collaborators/{username}/permission reports the legacy role in
+// `permission` (admin/write/read/none), where our `push` grant reads back as
+// `write` and `maintain` as `write`; the granular role is in `role_name`. We
+// compare against both so a `push`→`write` mapping isn't misread as a failure.
+func verifyFounderPermission(client githubapi.Client, org, repoName, username, want string) error {
+	path := fmt.Sprintf("repos/%s/%s/collaborators/%s/permission",
+		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(username))
+	var got struct {
+		Permission string `json:"permission"`
+		RoleName   string `json:"role_name"`
+	}
+	if err := client.Get(path, &got); err != nil {
+		return fmt.Errorf("verifying %s's permission on %s/%s: %w", username, org, repoName, err)
+	}
+	if permissionSatisfies(got.Permission, got.RoleName, want) {
+		return nil
+	}
+	return fmt.Errorf("expected %s to have %q access on %s/%s after setup, but GitHub reports %q (role %q) — a repo creator holds admin and a self-downgrade may be blocked by org policy; ask your instructor to set your access to %q",
+		username, want, org, repoName, got.Permission, got.RoleName, want)
+}
+
+// permissionSatisfies reports whether the effective permission (legacy
+// `permission` + granular `role_name`) matches the role we set. The legacy
+// field collapses maintain→write and triage→read, so `push` is satisfied by a
+// legacy `write`; `admin` requires admin.
+func permissionSatisfies(legacy, roleName, want string) bool {
+	if roleName == want {
+		return true
+	}
+	switch want {
+	case "admin":
+		return legacy == "admin"
+	case "push":
+		// A push grant reads back as the legacy "write" role.
+		return legacy == "write"
+	default:
+		return legacy == want
+	}
 }

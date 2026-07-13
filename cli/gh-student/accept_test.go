@@ -6,6 +6,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/foundation50/gh-student/internal/ui"
@@ -68,45 +69,95 @@ func TestFounderPermission(t *testing.T) {
 	}
 }
 
-// TestInviteFounder pins the founder collaborator grant: accept must PUT the
-// student as a collaborator at the requested permission. Assert the exact PUT
-// path and request body so a regression to a wrong verb/path/role is caught.
+// TestInviteFounder pins the founder grant + verification: accept PUTs the
+// student at the requested role, then reads the effective permission back and
+// succeeds only when it matches (a push grant reads back as the legacy `write`
+// role). Asserts the exact PUT path/body so a wrong verb/path/role regresses.
 func TestInviteFounder(t *testing.T) {
 	const (
 		org      = "cs50"
 		repoName = "cs50-fall-2026-hello-alice"
 		username = "alice"
 	)
-	wantPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
+	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
+	permPath := collabPath + "/permission"
 
-	for _, permission := range []string{"push", "admin"} {
-		t.Run(permission, func(t *testing.T) {
-			var gotPath, gotMethod string
+	// want is the role we set; legacyBack is what GitHub reports on the
+	// read-back (push collapses to the legacy "write" role).
+	cases := []struct {
+		want      string
+		legacyBack string
+	}{
+		{"push", "write"},
+		{"admin", "admin"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.want, func(t *testing.T) {
+			var gotPutPath, gotMethod string
 			var gotBody map[string]any
-			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				gotPath = r.URL.Path
+			mux := http.NewServeMux()
+			mux.HandleFunc(permPath, func(w http.ResponseWriter, _ *http.Request) {
+				_ = json.NewEncoder(w).Encode(map[string]any{"permission": tc.legacyBack, "role_name": tc.want})
+			})
+			mux.HandleFunc(collabPath, func(w http.ResponseWriter, r *http.Request) {
+				gotPutPath = r.URL.Path
 				gotMethod = r.Method
 				raw, _ := io.ReadAll(r.Body)
 				_ = json.Unmarshal(raw, &gotBody)
-				w.WriteHeader(http.StatusNoContent) // 204: added directly
-			}))
+				w.WriteHeader(http.StatusNoContent) // 204: updated directly
+			})
+			server := httptest.NewServer(mux)
 			t.Cleanup(server.Close)
 			client := newTestRESTClient(t, server)
 
 			var out bytes.Buffer
-			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, permission); err != nil {
+			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, tc.want); err != nil {
 				t.Fatalf("inviteFounder returned error: %v", err)
 			}
 
 			if gotMethod != http.MethodPut {
 				t.Errorf("method = %q, want PUT", gotMethod)
 			}
-			if gotPath != wantPath {
-				t.Errorf("path = %q, want %q", gotPath, wantPath)
+			if gotPutPath != collabPath {
+				t.Errorf("path = %q, want %q", gotPutPath, collabPath)
 			}
-			if perm := gotBody["permission"]; perm != permission {
-				t.Errorf("collaborator permission = %v, want %q", perm, permission)
+			if perm := gotBody["permission"]; perm != tc.want {
+				t.Errorf("collaborator permission = %v, want %q", perm, tc.want)
 			}
 		})
+	}
+}
+
+// TestInviteFounder_VerificationFails proves the demotion is verified, not
+// fire-and-forget: when the read-back still reports admin after we set push
+// (the self-downgrade was ignored), inviteFounder returns an actionable error
+// rather than silently reporting success.
+func TestInviteFounder_VerificationFails(t *testing.T) {
+	const (
+		org      = "cs50"
+		repoName = "cs50-fall-2026-hello-alice"
+		username = "alice"
+	)
+	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(collabPath+"/permission", func(w http.ResponseWriter, _ *http.Request) {
+		// The downgrade didn't take — student is still admin.
+		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "admin", "role_name": "admin"})
+	})
+	mux.HandleFunc(collabPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	var out bytes.Buffer
+	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push")
+	if err == nil {
+		t.Fatalf("expected an error when the effective permission stays admin after a push grant, got nil")
+	}
+	if !strings.Contains(err.Error(), "push") || !strings.Contains(err.Error(), "admin") {
+		t.Errorf("error should name the wanted (push) and actual (admin) roles, got: %v", err)
 	}
 }

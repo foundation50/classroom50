@@ -59,6 +59,7 @@ import {
   getBranchRefRepo,
   getCommitByRepo,
   getRepo,
+  getRepoPermissionForUser,
   withFreshRepoRetry,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "../queries/users"
@@ -1709,7 +1710,10 @@ export async function deleteAssignment(
 
 // Grant the founder their repo role: `push` for individual (least privilege),
 // `admin` for group (needed to manage collaborators for `gh student invite`).
-// CLI-aligned with founderPermission in gh-student's accept.go.
+// The student is repo admin the moment they create it, so for individual this
+// is an explicit self-demotion; we read the effective permission back and throw
+// if it didn't take, since a silently-ignored downgrade looks like success.
+// CLI-aligned with inviteFounder in gh-student's accept.go.
 async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
@@ -1725,6 +1729,36 @@ async function addFounderCollaborator(params: {
       permission,
     },
   })
+
+  const effective = await getRepoPermissionForUser({
+    client,
+    org: owner,
+    repo,
+    username,
+  })
+
+  if (
+    !permissionSatisfies(effective.permission, effective.role_name, permission)
+  ) {
+    throw new Error(
+      `Expected ${username} to have "${permission}" access on ${owner}/${repo}, but GitHub reports "${effective.permission}" (role "${effective.role_name}") — a repo creator holds admin and a self-downgrade may be blocked by org policy. Ask your instructor to set your access to "${permission}".`,
+    )
+  }
+}
+
+// Whether the effective permission (legacy `permission` + granular `role_name`)
+// matches the role we set. The legacy field collapses maintain->write and
+// triage->read, so a `push` grant reads back as legacy `write`. Mirrors
+// gh-student's permissionSatisfies.
+export function permissionSatisfies(
+  legacy: string | undefined,
+  roleName: string | undefined,
+  want: "push" | "admin",
+): boolean {
+  if (roleName === want) return true
+  if (want === "admin") return legacy === "admin"
+  // push grant reads back as the legacy "write" role.
+  return legacy === "write"
 }
 
 // Maps assignment mode to the founder's repo role: least-privilege `push` for
