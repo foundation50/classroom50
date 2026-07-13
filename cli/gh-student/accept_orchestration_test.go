@@ -384,17 +384,24 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	}
 
-	t.Run("already accepted (marker present) -> untouched, no provisioning", func(t *testing.T) {
+	t.Run("already accepted (marker present) -> reconciles founder role, no file re-provision", func(t *testing.T) {
+		var collaboratorPerm string
 		var collaboratorPut, treeWrite bool
 		mux := http.NewServeMux()
 		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
 		})
-		// Any provisioning call here is a bug — the repo is already done.
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+		// The founder role is reconciled (idempotent PUT downgrades a repo
+		// granted admin under an older release); capture the permission.
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
 			collaboratorPut = true
+			var body map[string]any
+			raw, _ := io.ReadAll(r.Body)
+			_ = json.Unmarshal(raw, &body)
+			collaboratorPerm, _ = body["permission"].(string)
 			w.WriteHeader(http.StatusNoContent)
 		})
+		// Any file re-provision (tree commit) here is a bug — the repo is done.
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/trees", func(w http.ResponseWriter, _ *http.Request) {
 			treeWrite = true
 			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "t"})
@@ -407,8 +414,15 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		if err != nil {
 			t.Fatalf("acceptIntoRepo: unexpected error: %v", err)
 		}
-		if collaboratorPut || treeWrite {
-			t.Errorf("an already-provisioned repo must be left untouched (collaboratorPut=%v treeWrite=%v)", collaboratorPut, treeWrite)
+		if !collaboratorPut {
+			t.Errorf("an already-provisioned repo must still reconcile the founder role (no collaborator PUT issued)")
+		}
+		// baseParams leaves mode empty (individual): reconcile downgrades to push.
+		if collaboratorPerm != "push" {
+			t.Errorf("reconciled individual founder permission = %q, want \"push\" (heals a stale admin grant down)", collaboratorPerm)
+		}
+		if treeWrite {
+			t.Errorf("an already-provisioned repo must not re-provision files (unexpected tree write)")
 		}
 		if !strings.Contains(out.String(), "already accepted") {
 			t.Errorf("expected an already-accepted report on stdout:\n%s", out.String())
@@ -512,78 +526,89 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		}
 	})
 
-	t.Run("freshly created (not alreadyExisted) -> provisions and reports accepted", func(t *testing.T) {
-		var (
-			collaboratorPut  bool
-			collaboratorPerm string
-			treeWrite        bool
-			refPatched       bool
-		)
-		mux := http.NewServeMux()
-		// Fresh create skips the fork's marker probe; the marker is only
-		// read by the post-provision verifyProvisioned, and must be
-		// present (the commit just landed it).
-		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
-			collaboratorPut = true
-			var body map[string]any
-			raw, _ := io.ReadAll(r.Body)
-			_ = json.Unmarshal(raw, &body)
-			collaboratorPerm, _ = body["permission"].(string)
-			w.WriteHeader(http.StatusNoContent)
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "stable"}})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
-			switch r.Method {
-			case http.MethodGet:
-				_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": "parent"}})
-			case http.MethodPatch:
-				refPatched = true
-				w.WriteHeader(http.StatusOK)
-			}
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits/parent", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]any{"tree": map[string]string{"sha": "parent-tree"}})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/blobs", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob"})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/trees", func(w http.ResponseWriter, _ *http.Request) {
-			treeWrite = true
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "tree"})
-		})
-		mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits", func(w http.ResponseWriter, _ *http.Request) {
-			_ = json.NewEncoder(w).Encode(map[string]string{"sha": "commit"})
-		})
-		server := httptest.NewServer(mux)
-		t.Cleanup(server.Close)
+	t.Run("freshly created (not alreadyExisted) -> provisions with the mode's role", func(t *testing.T) {
+		cases := []struct {
+			name     string
+			mode     string
+			wantPerm string
+		}{
+			{"individual grants push", "", "push"},
+			{"group grants admin", "group", "admin"},
+		}
+		for _, tc := range cases {
+			t.Run(tc.name, func(t *testing.T) {
+				var (
+					collaboratorPut  bool
+					collaboratorPerm string
+					treeWrite        bool
+					refPatched       bool
+				)
+				mux := http.NewServeMux()
+				// Fresh create skips the fork's marker probe; the marker is only
+				// read by the post-provision verifyProvisioned, and must be
+				// present (the commit just landed it).
+				mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
+					collaboratorPut = true
+					var body map[string]any
+					raw, _ := io.ReadAll(r.Body)
+					_ = json.Unmarshal(raw, &body)
+					collaboratorPerm, _ = body["permission"].(string)
+					w.WriteHeader(http.StatusNoContent)
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/branches/main", func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]any{"commit": map[string]any{"sha": "stable"}})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
+					switch r.Method {
+					case http.MethodGet:
+						_ = json.NewEncoder(w).Encode(map[string]any{"object": map[string]string{"sha": "parent"}})
+					case http.MethodPatch:
+						refPatched = true
+						w.WriteHeader(http.StatusOK)
+					}
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits/parent", func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]any{"tree": map[string]string{"sha": "parent-tree"}})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/blobs", func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]string{"sha": "blob"})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/trees", func(w http.ResponseWriter, _ *http.Request) {
+					treeWrite = true
+					_ = json.NewEncoder(w).Encode(map[string]string{"sha": "tree"})
+				})
+				mux.HandleFunc("/repos/"+org+"/"+repoName+"/git/commits", func(w http.ResponseWriter, _ *http.Request) {
+					_ = json.NewEncoder(w).Encode(map[string]string{"sha": "commit"})
+				})
+				server := httptest.NewServer(mux)
+				t.Cleanup(server.Close)
 
-		p := baseParams()
-		p.alreadyExisted = false
-		var out bytes.Buffer
-		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p)
-		if err != nil {
-			t.Fatalf("acceptIntoRepo (fresh): unexpected error: %v", err)
-		}
-		if !collaboratorPut || !treeWrite || !refPatched {
-			t.Errorf("fresh path must provision (collaboratorPut=%v treeWrite=%v refPatched=%v)", collaboratorPut, treeWrite, refPatched)
-		}
-		// baseParams leaves mode empty (individual): the founder gets
-		// least-privilege `write`, not `admin`.
-		if collaboratorPerm != "write" {
-			t.Errorf("individual founder permission = %q, want \"write\"", collaboratorPerm)
-		}
-		// A first-time accept reports "Assignment accepted:", NOT the
-		// "already accepted" wording the alreadyExisted branches use.
-		if !strings.Contains(out.String(), "Assignment accepted:") {
-			t.Errorf("a fresh accept should report 'Assignment accepted:':\n%s", out.String())
-		}
-		if strings.Contains(out.String(), "already accepted") {
-			t.Errorf("a fresh accept must not use the already-accepted wording:\n%s", out.String())
+				p := baseParams()
+				p.alreadyExisted = false
+				p.mode = tc.mode
+				var out bytes.Buffer
+				err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p)
+				if err != nil {
+					t.Fatalf("acceptIntoRepo (fresh): unexpected error: %v", err)
+				}
+				if !collaboratorPut || !treeWrite || !refPatched {
+					t.Errorf("fresh path must provision (collaboratorPut=%v treeWrite=%v refPatched=%v)", collaboratorPut, treeWrite, refPatched)
+				}
+				if collaboratorPerm != tc.wantPerm {
+					t.Errorf("mode %q founder permission = %q, want %q", tc.mode, collaboratorPerm, tc.wantPerm)
+				}
+				// A first-time accept reports "Assignment accepted:", NOT the
+				// "already accepted" wording the alreadyExisted branches use.
+				if !strings.Contains(out.String(), "Assignment accepted:") {
+					t.Errorf("a fresh accept should report 'Assignment accepted:':\n%s", out.String())
+				}
+				if strings.Contains(out.String(), "already accepted") {
+					t.Errorf("a fresh accept must not use the already-accepted wording:\n%s", out.String())
+				}
+			})
 		}
 	})
 }

@@ -46,7 +46,8 @@ type OrgRulesetBody = {
 
 // OrganizationAdmin (actor_id 1) is the org-owner role — the teacher — so they
 // can merge the Feedback PR and force-push/delete in a pinch, while students
-// (maintain, no bypass) cannot.
+// (a repo `push` or `admin` collaborator, but never OrganizationAdmin) get no
+// bypass entry and stay bound by the rules.
 const ADMIN_BYPASS: RulesetBypassActor[] = [
   { actor_id: 1, actor_type: "OrganizationAdmin", bypass_mode: "always" },
 ]

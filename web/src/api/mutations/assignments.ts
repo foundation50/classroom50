@@ -1,5 +1,5 @@
 import type { GitHubClient } from "@/hooks/github/client"
-import type { Assignment } from "@/types/classroom"
+import type { Assignment, AssignmentMode } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
   GROUP_SIZE_MIN,
@@ -1707,18 +1707,15 @@ export async function deleteAssignment(
   }
 }
 
-// Grant the founder their repo role on their own repo. `write` for an
-// individual assignment (least privilege — enough to push and trigger
-// autograding, but not to delete/transfer the repo or manage collaborators);
-// `admin` for group, because only an admin can manage collaborators for the
-// founder-driven group-invite flow (`gh student invite`). CLI-aligned with
-// founderPermission in gh-student's accept.go.
+// Grant the founder their repo role: `push` for individual (least privilege),
+// `admin` for group (needed to manage collaborators for `gh student invite`).
+// CLI-aligned with founderPermission in gh-student's accept.go.
 async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
   username: string
-  permission: "write" | "admin"
+  permission: "push" | "admin"
 }) {
   const { client, owner, repo, username, permission } = params
 
@@ -1730,12 +1727,25 @@ async function addFounderCollaborator(params: {
   })
 }
 
-// founderPermission maps an assignment mode to the founder's repo role:
-// least-privilege `write` for individual (and any unknown/absent mode), `admin`
-// for group. Mirrors gh-student's founderPermission so CLI and GUI grant the
-// same access.
-export function founderPermission(mode: string | undefined): "write" | "admin" {
-  return mode === "group" ? "admin" : "write"
+// Maps assignment mode to the founder's repo role: least-privilege `push` for
+// individual, `admin` for group. Mirrors gh-student's founderPermission.
+export function founderPermission(mode: AssignmentMode): "push" | "admin" {
+  return mode === "group" ? "admin" : "push"
+}
+
+// Rejects a group-shaped entry (max_group_size >= 2) whose mode isn't `group`:
+// its published metadata is inconsistent and the founder would be
+// under-privileged. Mirrors gh-student's checkAcceptableMode.
+export function assertAssignmentModeCoherent(
+  slug: string,
+  mode: AssignmentMode,
+  maxGroupSize: number | undefined,
+): void {
+  if ((maxGroupSize ?? 0) > 0 && mode !== "group") {
+    throw new Error(
+      `Assignment "${slug}" has max_group_size ${maxGroupSize} but mode "${mode}" (want "group") — its published metadata is inconsistent. Ask your instructor to re-run assignment setup.`,
+    )
+  }
 }
 
 async function patchRepoSurface(
@@ -1893,7 +1903,7 @@ type AcceptAssignmentResult = {
 }
 
 // Provision a just-created (or partially-provisioned) student repo: patch its
-// surface, grant the student their repo role (write for individual, admin for
+// surface, grant the student their repo role (push for individual, admin for
 // group), and land the .classroom50.yaml + autograde shim through GitHub's
 // post-generate lag. Every step is idempotent, so it's safe to re-run when
 // healing a repo whose earlier accept failed mid-flow.
@@ -1902,7 +1912,7 @@ async function provisionAcceptedRepo(params: {
   org: string
   repo: GitHubRepo
   username: string
-  mode: string | undefined
+  mode: AssignmentMode
   branch: string
   metadataYaml: string
   autogradeYaml: string
@@ -2020,6 +2030,16 @@ export async function acceptAssignment(params: {
     () => fetchAssignmentFromPages(org, classroom, assignmentSlug, secret),
   )
 
+  // A group-shaped entry (max_group_size >= 2) whose mode isn't `group` has
+  // inconsistent published metadata: the founder would be under-privileged
+  // (push, not admin) and unable to add teammates. CLI-aligned with
+  // checkAcceptableMode in gh-student's accept.go.
+  assertAssignmentModeCoherent(
+    assignment.slug,
+    assignment.mode,
+    assignment.max_group_size,
+  )
+
   const sourceOwner = assignment.template?.owner
   const sourceRepo = assignment.template?.repo
   const sourceBranch = assignment.template?.branch ?? "main"
@@ -2118,8 +2138,16 @@ export async function acceptAssignment(params: {
     const provisioned = hasMetadata && hasWorkflow
 
     if (provisioned) {
-      // Genuinely already accepted — mark the remaining steps complete so the
-      // checklist doesn't look stuck.
+      // Genuinely already accepted — reconcile only the founder's role (an
+      // older release granted admin; the idempotent PUT downgrades it to the
+      // mode's least-privilege role), then mark the remaining steps complete.
+      await addFounderCollaborator({
+        client,
+        owner: org,
+        repo: created.repo.name,
+        username,
+        permission: founderPermission(assignment.mode),
+      })
       onStepUpdate?.({
         id: "repo",
         status: "complete",

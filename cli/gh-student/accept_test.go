@@ -11,37 +11,42 @@ import (
 	"github.com/foundation50/gh-student/internal/ui"
 )
 
-// TestCheckAcceptableMode pins the lifted accept seam: group is now accepted
-// (previously rejected), individual and empty are accepted, and only an
-// unrecognized mode errors.
+// TestCheckAcceptableMode pins the accept mode gate: individual, group, and
+// empty (defaults to individual) are accepted; an unknown mode errors; and a
+// group-shaped entry (max_group_size >= 2) whose mode isn't `group` is rejected
+// as inconsistent metadata (the founder would be under-privileged).
 func TestCheckAcceptableMode(t *testing.T) {
 	cases := []struct {
-		mode    string
-		wantErr bool
+		name         string
+		mode         string
+		maxGroupSize int
+		wantErr      bool
 	}{
-		{"", false},
-		{"individual", false},
-		{"group", false},
-		{"team", true},
-		{"GROUP", true}, // case-sensitive; the canonical value is lowercase
+		{"empty", "", 0, false},
+		{"individual", "individual", 0, false},
+		{"group", "group", 3, false},
+		{"unknown mode", "team", 0, true},
+		{"uppercase group is not canonical", "GROUP", 0, true},
+		{"group size but empty mode is inconsistent", "", 3, true},
+		{"group size but individual mode is inconsistent", "individual", 2, true},
 	}
 	for _, tc := range cases {
-		t.Run(tc.mode, func(t *testing.T) {
-			err := checkAcceptableMode("hello", tc.mode)
+		t.Run(tc.name, func(t *testing.T) {
+			err := checkAcceptableMode("hello", tc.mode, tc.maxGroupSize)
 			if tc.wantErr && err == nil {
-				t.Errorf("mode %q: expected an error, got nil", tc.mode)
+				t.Errorf("mode %q size %d: expected an error, got nil", tc.mode, tc.maxGroupSize)
 			}
 			if !tc.wantErr && err != nil {
-				t.Errorf("mode %q: unexpected error %v", tc.mode, err)
+				t.Errorf("mode %q size %d: unexpected error %v", tc.mode, tc.maxGroupSize, err)
 			}
 		})
 	}
 }
 
 // TestFounderPermission pins the mode→role mapping: individual (and
-// empty/unknown, which default to individual) gets least-privilege `write` —
+// empty/unknown, which default to individual) gets least-privilege `push` —
 // enough to push and trigger autograding but not to delete/transfer the repo
-// or manage collaborators — while group keeps `admin` so the founder can add
+// or manage collaborators — while group gets `admin` so the founder can add
 // teammates via `gh student invite`. A regression here either over-privileges
 // individual students or silently breaks the group-invite flow.
 func TestFounderPermission(t *testing.T) {
@@ -49,9 +54,9 @@ func TestFounderPermission(t *testing.T) {
 		mode string
 		want string
 	}{
-		{"individual", "write"},
-		{"", "write"},
-		{"team", "write"}, // unknown modes default to individual (least privilege)
+		{"individual", "push"},
+		{"", "push"},
+		{"team", "push"}, // unknown modes default to individual (least privilege)
 		{"group", "admin"},
 	}
 	for _, tc := range cases {
@@ -74,7 +79,7 @@ func TestInviteFounder(t *testing.T) {
 	)
 	wantPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
 
-	for _, permission := range []string{"write", "admin"} {
+	for _, permission := range []string{"push", "admin"} {
 		t.Run(permission, func(t *testing.T) {
 			var gotPath, gotMethod string
 			var gotBody map[string]any

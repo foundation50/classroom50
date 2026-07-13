@@ -87,7 +87,7 @@ func acceptCmd() *cobra.Command {
 			"student repo.\n\n" +
 			"If the student has a pending org invite it is auto-accepted first.\n" +
 			"After creating the repo, the student is added as a collaborator on\n" +
-			"their own repo (`write` for an individual assignment; `admin` for a\n" +
+			"their own repo (`push` for an individual assignment; `admin` for a\n" +
 			"group assignment, so the founder can add teammates), and\n" +
 			"`.classroom50.yaml` and the autograde workflow are written in a\n" +
 			"single Tree commit, then verified.\n\n" +
@@ -224,11 +224,17 @@ func acceptOrgInvite(client githubapi.Client, org string) (AcceptStatus, error) 
 }
 
 // checkAcceptableMode gates `gh student accept` by assignment mode: individual
-// and group (and empty, defaulting to individual) are accepted; only an
-// unrecognized mode is rejected. Pure helper so the group seam is unit-testable.
-func checkAcceptableMode(assignment, mode string) error {
+// and group (and empty, defaulting to individual) are accepted; an unrecognized
+// mode is rejected. A group-shaped entry (max_group_size >= 2) whose mode isn't
+// `group` is also rejected: the founder would be under-privileged (push, not
+// admin) and unable to run `gh student invite`. Pure helper, unit-testable.
+func checkAcceptableMode(assignment, mode string, maxGroupSize int) error {
 	if mode != "" && mode != contract.ModeIndividual && mode != contract.ModeGroup {
 		return fmt.Errorf("assignment %q has unsupported mode %q", assignment, mode)
+	}
+	if maxGroupSize > 0 && mode != contract.ModeGroup {
+		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your instructor to re-run `gh teacher assignment add`",
+			assignment, maxGroupSize, mode, contract.ModeGroup)
 	}
 	return nil
 }
@@ -260,7 +266,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// The first accepter accepts a group assignment normally: the repo is
 	// created under their name and they add teammates via
 	// `gh student invite <org>/<repo> <teammate>`. Only an unknown mode errors.
-	if err := checkAcceptableMode(assignment, entry.Mode); err != nil {
+	if err := checkAcceptableMode(assignment, entry.Mode, entry.MaxGroupSize); err != nil {
 		return err
 	}
 	// A template, when present, must be complete. A template-less assignment
@@ -376,14 +382,19 @@ type acceptRepoParams struct {
 // provisioning, runs the idempotent provisioning when it does, and emits the
 // final report. It is the self-healing fork:
 //
-//   - alreadyExisted + marker present → already accepted, leave untouched.
+//   - alreadyExisted + marker present → already accepted; reconcile only the
+//     founder's collaborator role (downgrades a repo granted admin under an
+//     older release to the mode's least-privilege role), then leave untouched.
 //   - alreadyExisted + marker missing → half-finished prior accept; re-run
 //     the idempotent provisioning to repair it.
 //   - freshly created → provision normally.
 func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
-	// An existing repo with .classroom50.yaml present is already accepted —
-	// leave it untouched. A missing marker means a half-finished prior
-	// accept; fall through to re-provision and repair.
+	// An existing repo with .classroom50.yaml present is already accepted, so
+	// skip the (heavier) file-provisioning — but still reconcile the founder's
+	// role: a repo accepted under an older release holds admin, and the
+	// idempotent PUT downgrades it to the mode's least-privilege role. A
+	// missing marker means a half-finished prior accept; fall through to
+	// re-provision and repair.
 	if p.alreadyExisted {
 		provisioned, perr := repoFileExists(client, p.org, p.repoName, classroomcfg.MetadataPath)
 		if perr != nil {
@@ -391,6 +402,10 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			return perr
 		}
 		if provisioned {
+			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil {
+				p.createSp.Fail(p.createMsg)
+				return err
+			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 		}
@@ -430,8 +445,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // student repo to a healthy, autogradable state and is safe to re-run:
 //
 //  1. Grant the founder their repo role (PUT collaborators is an upsert):
-//     `write` for an individual assignment, `admin` for group (only an admin
-//     can manage collaborators for the founder-driven invite flow).
+//     `push` for an individual assignment, `admin` for group.
 //  2. Land .classroom50.yaml + the autograde shim in one Tree commit,
 //     riding out GitHub's post-create git-data lag.
 //  3. Verify the accept marker is readable before declaring success, so
@@ -441,11 +455,9 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // paths. Mirrors the GUI's provisionAcceptedRepo so CLI and GUI heal a
 // half-finished accept identically.
 func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, cfg classroomcfg.Config) error {
-	// Individual founders get `write` (least privilege — enough to push and
-	// trigger autograding, but not to delete/transfer the repo or manage
-	// collaborators). Group founders keep `admin` so they can add teammates
-	// via `gh student invite`, which only an admin can do. The org-level
-	// lockdown in `gh teacher init` defangs the admin's org-wide danger.
+	// Individual founders get least-privilege `push` (enough to push and
+	// trigger autograding); group founders get `admin` (needed to manage
+	// collaborators for `gh student invite`). See founderPermission.
 	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil {
 		return err
 	}
@@ -744,22 +756,19 @@ func defaultBranchOrMain(branch string) string {
 	return branch
 }
 
-// founderPermission is the repo collaborator role granted to the founder on
-// accept: `write` for an individual assignment (least privilege — enough to
-// push and trigger autograding), `admin` for group (only an admin can manage
-// collaborators for `gh student invite`). An empty/unknown mode defaults to
-// individual, matching checkAcceptableMode.
+// founderPermission maps an assignment mode to the founder's accept-time repo
+// role: least-privilege `push` for individual, `admin` for group (which needs
+// to manage collaborators for `gh student invite`).
 func founderPermission(mode string) string {
 	if mode == contract.ModeGroup {
 		return "admin"
 	}
-	return "write"
+	return "push"
 }
 
-// inviteFounder grants username the given collaborator permission on
-// org/repoName. PUT collaborators is an upsert, so re-running is a no-op — and
-// a re-run after a permission change (e.g. a group founder who was previously
-// granted admin) upserts to the new role.
+// inviteFounder upserts username as an org/repoName collaborator at permission.
+// The PUT is idempotent, so a re-run after a role change upserts to the new
+// role (e.g. downgrading a repo granted admin under an older release).
 func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
 	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
 		return err

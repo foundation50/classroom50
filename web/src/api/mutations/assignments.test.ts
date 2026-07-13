@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  assertAssignmentModeCoherent,
   buildReusedEntry,
   copyAssignmentToClassroom,
   editAssignment,
@@ -1130,21 +1131,39 @@ describe("resolveTemplate (create/edit blocking path)", () => {
   })
 })
 
-// Mirrors gh-student's TestFounderPermission: individual (and empty/unknown,
-// which default to individual) gets least-privilege `write` — enough to push
-// and trigger autograding but not to delete/transfer the repo or manage
-// collaborators — while group keeps `admin` for the founder-driven invite flow.
+// Mirrors gh-student's TestFounderPermission: individual gets least-privilege
+// `push` (enough to push and trigger autograding, not to delete/transfer or
+// manage collaborators); group gets `admin` for the founder-driven invite flow.
 describe("founderPermission — accept-time repo role (issue #213)", () => {
-  it("grants write for individual assignments", () => {
-    expect(founderPermission("individual")).toBe("write")
+  it("grants push for individual assignments", () => {
+    expect(founderPermission("individual")).toBe("push")
   })
 
   it("grants admin for group assignments (founder manages collaborators)", () => {
     expect(founderPermission("group")).toBe("admin")
   })
+})
 
-  it("defaults an absent or unknown mode to write (least privilege)", () => {
-    expect(founderPermission(undefined)).toBe("write")
-    expect(founderPermission("team")).toBe("write")
+// Mirrors gh-student's checkAcceptableMode group-coherence gate: a group-shaped
+// entry (max_group_size >= 2) whose mode isn't `group` is rejected so the
+// founder isn't silently under-privileged (push instead of admin).
+describe("assertAssignmentModeCoherent (issue #213 / review #3)", () => {
+  it("accepts a coherent group entry", () => {
+    expect(() => assertAssignmentModeCoherent("hw", "group", 3)).not.toThrow()
+  })
+
+  it("accepts an individual entry with no group size", () => {
+    expect(() =>
+      assertAssignmentModeCoherent("hw", "individual", undefined),
+    ).not.toThrow()
+    expect(() =>
+      assertAssignmentModeCoherent("hw", "individual", 0),
+    ).not.toThrow()
+  })
+
+  it("rejects a group-shaped size with a non-group mode", () => {
+    expect(() => assertAssignmentModeCoherent("hw", "individual", 2)).toThrow(
+      /max_group_size 2 but mode "individual"/,
+    )
   })
 })
