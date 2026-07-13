@@ -1,7 +1,12 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubMoveBranch } from "@/hooks/github/types"
-import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
+import {
+  getBranchRef,
+  getClassroomJson,
+  getCommit,
+  getConfigRepoBranch,
+} from "../github/queries"
 import { sleep } from "@/hooks/github/queries"
 import { isClassroomArchived } from "@/types/classroom"
 import {
@@ -84,7 +89,8 @@ export async function createClassroomFiles(
   // just-created teams rather than deleting them out from under the retry.
   let ref, commit, tree, newCommit, updatedRef
   try {
-    ref = await getBranchRef(client, input.org)
+    const configBranch = await getConfigRepoBranch(client, input.org)
+    ref = await getBranchRef(client, input.org, configBranch)
     commit = await getCommit(client, input.org, ref.object.sha)
     tree = await createTree(client, {
       ...input,
@@ -98,7 +104,7 @@ export async function createClassroomFiles(
       tree_sha: tree.sha,
       parents: [ref.object.sha],
     })
-    updatedRef = await updateRef(client, input.org, newCommit.sha)
+    updatedRef = await updateRef(client, input.org, newCommit.sha, configBranch)
   } catch (err) {
     if (!(err instanceof GitHubAPIError && err.status === 409)) {
       log.warn("create classroom: scaffolding failed, rolling back teams", {

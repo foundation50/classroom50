@@ -75,6 +75,73 @@ func TestCreateTemplatedPrivateAssignmentRepoInOrg(t *testing.T) {
 		}
 	})
 
+	t.Run("master-default org: generated repo's branch (not the template's) is returned", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"full_name":      "o/cs-principles-hello-alice",
+				"html_url":       "https://github.com/o/cs-principles-hello-alice",
+				"default_branch": "master",
+			})
+		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"full_name":      "o/cs-principles-hello-alice",
+				"html_url":       "https://github.com/o/cs-principles-hello-alice",
+				"default_branch": "master",
+			})
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if branch != "master" {
+			t.Errorf("branch = %q, want master (the generated repo's default branch)", branch)
+		}
+	})
+
+	t.Run("empty default_branch in both echoes: confirming GET resolves it", func(t *testing.T) {
+		var confirmGets int
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/cs50/hello-template/generate", func(w http.ResponseWriter, r *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"full_name": "o/cs-principles-hello-alice",
+				"html_url":  "https://github.com/o/cs-principles-hello-alice",
+			})
+		})
+		mux.HandleFunc("/repos/o/cs-principles-hello-alice", func(w http.ResponseWriter, r *http.Request) {
+			// PATCH and the initial echoes omit default_branch; the confirming GET
+			// (issued only when both are empty) returns the settled branch.
+			body := map[string]string{
+				"full_name": "o/cs-principles-hello-alice",
+				"html_url":  "https://github.com/o/cs-principles-hello-alice",
+			}
+			if r.Method == http.MethodGet {
+				confirmGets++
+				body["default_branch"] = "master"
+			}
+			_ = json.NewEncoder(w).Encode(body)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		_, _, branch, _, err := createTemplatedPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "hello", "o", tmpl)
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if confirmGets == 0 {
+			t.Error("expected a confirming GET when both echoes omit default_branch")
+		}
+		if branch != "master" {
+			t.Errorf("branch = %q, want master from the confirming GET", branch)
+		}
+	})
+
 	t.Run("422 already-exists short-circuits to alreadyExisted via follow-up GET", func(t *testing.T) {
 		var patchAttempted bool
 		mux := http.NewServeMux()

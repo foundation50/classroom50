@@ -711,6 +711,7 @@ describe("ensureClassroom50Repo branch normalization", () => {
 
   function makeClient(opts: {
     existingDefaultBranch?: string | null
+    createdDefaultBranch?: string
     renameFails?: boolean
   }) {
     const calls: string[] = []
@@ -737,7 +738,7 @@ describe("ensureClassroom50Repo branch normalization", () => {
         return { default_branch: opts.existingDefaultBranch ?? "main" }
       }
       if (method === "POST" && url.endsWith("/repos")) {
-        return { default_branch: opts.existingDefaultBranch ?? "main" }
+        return { default_branch: opts.createdDefaultBranch ?? "main" }
       }
       if (
         method === "POST" &&
@@ -767,8 +768,12 @@ describe("ensureClassroom50Repo branch normalization", () => {
     return { client: { request } as unknown as GitHubClient, calls }
   }
 
-  it("renames the branch to main when an existing repo defaults to master", async () => {
-    const { client, calls } = makeClient({ existingDefaultBranch: "master" })
+  it("renames a freshly-created repo to main when GitHub seeds it on master", async () => {
+    // existing 404 -> created via POST /repos on master -> rename fires.
+    const { client, calls } = makeClient({
+      existingDefaultBranch: null,
+      createdDefaultBranch: "master",
+    })
     const result = await ensureClassroom50Repo(client, org)
     expect(
       calls.some(
@@ -778,15 +783,25 @@ describe("ensureClassroom50Repo branch normalization", () => {
     expect(result.repo.default_branch).toBe("main")
   })
 
+  it("does NOT rename an EXISTING master repo (may have student repos referencing it)", async () => {
+    const { client, calls } = makeClient({ existingDefaultBranch: "master" })
+    const result = await ensureClassroom50Repo(client, org)
+    // Skip the rename to avoid stranding already-accepted repos' frozen shim
+    // refs; the branch stays master and reads/writes resolve it.
+    expect(calls.some((c) => c.includes("/rename"))).toBe(false)
+    expect(result.repo.default_branch).toBe("master")
+  })
+
   it("does NOT call rename when the repo already defaults to main", async () => {
     const { client, calls } = makeClient({ existingDefaultBranch: "main" })
     await ensureClassroom50Repo(client, org)
     expect(calls.some((c) => c.includes("/rename"))).toBe(false)
   })
 
-  it("swallows a rename failure and still resolves", async () => {
+  it("swallows a rename failure on a fresh repo and still resolves", async () => {
     const { client } = makeClient({
-      existingDefaultBranch: "master",
+      existingDefaultBranch: null,
+      createdDefaultBranch: "master",
       renameFails: true,
     })
     const result = await ensureClassroom50Repo(client, org)

@@ -7,7 +7,12 @@ import {
   PASS_THRESHOLD_MIN,
   assertAssignmentMode,
 } from "@/types/classroom"
-import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
+import {
+  getBranchRef,
+  getClassroomJson,
+  getCommit,
+  getConfigRepoBranch,
+} from "../github/queries"
 import { getUser } from "@/hooks/github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
@@ -555,10 +560,11 @@ export async function editAssignment(
   // The archive guard is independent of the org ref read, so run them
   // concurrently — Promise.all rejects on the first rejection, so an archived
   // classroom still fails closed before any write.
-  const [, ref] = await Promise.all([
+  const [, configBranch] = await Promise.all([
     assertClassroomNotArchived(client, org, classroom),
-    getBranchRef(client, org),
+    getConfigRepoBranch(client, org),
   ])
+  const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
   const assignmentsFilePath = `${classroom}/assignments.json`
@@ -620,7 +626,12 @@ export async function editAssignment(
     tree_sha: tree.sha,
     parents: [ref.object.sha],
   })
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
+  const updatedRef = await updateRef(
+    client,
+    input.org,
+    newCommit.sha,
+    configBranch,
+  )
 
   // Grant the (possibly changed) in-org private template a team read — a
   // non-fatal warning, never thrown (the edit already committed). needsTeamGrant
@@ -989,11 +1000,13 @@ export async function createAssignment(
   // The archive guard, entry build, and org ref read are independent, so run
   // them concurrently — Promise.all rejects on the first rejection, so an
   // archived classroom still fails closed before any write.
-  const [, { entry: assignmentBody, needsTeamGrant }, ref] = await Promise.all([
-    assertClassroomNotArchived(client, input.org, input.classroom),
-    buildAssignmentEntry(client, input),
-    getBranchRef(client, input.org),
-  ])
+  const [, { entry: assignmentBody, needsTeamGrant }, configBranch] =
+    await Promise.all([
+      assertClassroomNotArchived(client, input.org, input.classroom),
+      buildAssignmentEntry(client, input),
+      getConfigRepoBranch(client, input.org),
+    ])
+  const ref = await getBranchRef(client, input.org, configBranch)
 
   const commit = await getCommit(client, input.org, ref.object.sha)
 
@@ -1037,7 +1050,12 @@ export async function createAssignment(
     tree_sha: tree.sha,
     parents: [ref.object.sha],
   })
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
+  const updatedRef = await updateRef(
+    client,
+    input.org,
+    newCommit.sha,
+    configBranch,
+  )
 
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && assignmentBody.template) {
@@ -1433,13 +1451,14 @@ export async function copyAssignmentToClassroom(
   // run them concurrently — one fewer serial round-trip per retry attempt.
   // Promise.all rejects on the first rejection, so an archived classroom or bad
   // template throws before any write.
-  const [, repo, ref] = await Promise.all([
+  const [, repo, configBranch] = await Promise.all([
     assertClassroomNotArchived(client, org, targetClassroom),
     entry.template
       ? getRepo(client, entry.template.owner, entry.template.repo)
       : Promise.resolve(null),
-    getBranchRef(client, org),
+    getConfigRepoBranch(client, org),
   ])
+  const ref = await getBranchRef(client, org, configBranch)
 
   // Re-check the template live (mirrors create): public/missing -> no grant;
   // private in-org -> needs grant; private out-of-org -> refuse.
@@ -1524,7 +1543,7 @@ export async function copyAssignmentToClassroom(
     tree_sha: tree.sha,
     parents: [ref.object.sha],
   })
-  const updatedRef = await updateRef(client, org, newCommit.sha)
+  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && entry.template) {
@@ -1650,10 +1669,11 @@ export async function deleteAssignment(
 
   // Refuse a delete into an archived classroom (write-path guard); run the
   // check concurrently with the ref read.
-  const [, ref] = await Promise.all([
+  const [, configBranch] = await Promise.all([
     assertClassroomNotArchived(client, org, classroom),
-    getBranchRef(client, org),
+    getConfigRepoBranch(client, org),
   ])
+  const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
   const assignmentsFilePath = `${classroom}/assignments.json`
@@ -1697,7 +1717,12 @@ export async function deleteAssignment(
     tree_sha: tree.sha,
     parents: [ref.object.sha],
   })
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
+  const updatedRef = await updateRef(
+    client,
+    input.org,
+    newCommit.sha,
+    configBranch,
+  )
 
   return {
     previousCommitSha: ref.object.sha,
@@ -1815,7 +1840,7 @@ function defaultAutograderWorkflow(
 
 on:
   push:
-    branches: [${branch}]
+    branches: ["${branch}"]
     tags: ["submit/*"]
 
 jobs:
@@ -1838,18 +1863,20 @@ function isDefaultAutograder(autograder?: string): boolean {
 }
 
 // The config repo's default branch, for the default shim's reusable-workflow
-// `uses:` ref. Best-effort: any failure (or empty value) falls back to "main",
-// keeping the shim's `@<branch>` ref valid even if a config-repo rename to main
-// could not land.
+// `uses:` ref. On a read failure, fall back to `fallbackBranch` (the assignment
+// repo's own branch) rather than a hardcoded `main` — a wrong `@main` ref would
+// 404 the runner and silently skip grading on a master-default org. A 404
+// (getRepo returns null) or empty value falls back to `main`.
 async function resolveConfigRepoDefaultBranch(
   client: GitHubClient,
   org: string,
+  fallbackBranch: string,
 ): Promise<string> {
   try {
     const repo = await getRepo(client, org, "classroom50")
     return repo?.default_branch || "main"
   } catch {
-    return "main"
+    return fallbackBranch
   }
 }
 
@@ -2184,7 +2211,11 @@ export async function acceptAssignment(params: {
       created.kind === "fallback-empty"
         ? created.branch
         : created.repo.default_branch || sourceBranch || "main"
-    const configBranch = await resolveConfigRepoDefaultBranch(client, org)
+    const configBranch = await resolveConfigRepoDefaultBranch(
+      client,
+      org,
+      resolvedBranch,
+    )
     autogradeYaml = defaultAutograderWorkflow(org, resolvedBranch, configBranch)
   }
 

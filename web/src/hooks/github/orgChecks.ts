@@ -18,10 +18,8 @@ const log = logger.scope("github:orgChecks")
 
 export const CONFIG_REPO = "classroom50"
 
-// The org "Repository default branch name" we recommend. Not enforceable via
-// API (PATCH /orgs ignores default_repository_branch — it's a web-UI-only
-// setting), so this is surfaced as an advisory recommendation, never a
-// failing/critical concern.
+// The org "Repository default branch name" we recommend. Not API-writable
+// (PATCH /orgs ignores it), so it's surfaced as an advisory recommendation only.
 export const RECOMMENDED_ORG_DEFAULT_BRANCH = "main"
 
 // A concern's read-only state: enforced means the live value already matches

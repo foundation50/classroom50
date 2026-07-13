@@ -1171,18 +1171,31 @@ export async function createOrgRepo(client: GitHubClient, org: string) {
   })
 }
 
-// Rename the config repo's default branch to `main` when GitHub seeded it with
-// something else (an org whose default-branch-name policy is `master` etc.).
-// Best-effort and guarded: no API call when the branch is already `main`, and a
-// failure (missing admin, protected branch, enterprise lock) is swallowed so
-// setup proceeds — the downstream reads resolve the real branch regardless.
+// Rename the config repo's default branch to `main` (org policy can seed it as
+// `master`). Guarded (skips when already main) and best-effort; failure swallowed.
+// `freshlyCreated` gates the rename: an existing config repo may already have
+// student repos whose frozen shim `uses:@<branch>` ref would dangle after a
+// rename, so we only auto-rename a brand-new repo and warn otherwise.
 async function normalizeConfigRepoBranch(
   client: GitHubClient,
   org: string,
   repo: GitHubRepo,
+  freshlyCreated: boolean,
 ): Promise<GitHubRepo> {
   const current = repo.default_branch
   if (!current || current === CONFIG_REPO_BRANCH) {
+    return repo
+  }
+
+  if (!freshlyCreated) {
+    // Existing repo on a non-main branch: renaming now could strand the
+    // `@<branch>` reusable-workflow ref frozen in already-accepted student
+    // repos. Leave it (reads/writes resolve the real branch) and let the audit
+    // recommendation nudge the teacher to fix the org default by hand.
+    logSetup.warn(
+      "config repo default branch is not main; skipping rename on an existing repo (may have student repos referencing it)",
+      { org, current },
+    )
     return repo
   }
 
@@ -1210,12 +1223,12 @@ export async function ensureClassroom50Repo(client: GitHubClient, org: string) {
   const existing = await getRepo(client, org, "classroom50")
 
   if (existing) {
-    const repo = await normalizeConfigRepoBranch(client, org, existing)
+    const repo = await normalizeConfigRepoBranch(client, org, existing, false)
     return { status: "complete" as const, created: false, repo }
   }
 
   const created = await createOrgRepo(client, org)
-  const repo = await normalizeConfigRepoBranch(client, org, created)
+  const repo = await normalizeConfigRepoBranch(client, org, created, true)
 
   return { status: "complete" as const, created: true, repo }
 }

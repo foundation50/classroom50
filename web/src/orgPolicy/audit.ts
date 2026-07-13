@@ -69,10 +69,8 @@ export type OrgAuditReport = {
   recommendations: OrgRecommendation[]
 }
 
-// A non-blocking, highly-recommended hand-fix surfaced by the audit. Distinct
-// from ConcernCheck (which fails the verdict) and ManualStep (member-privilege
-// settings we can't read): a recommendation is read from the live org but is
-// advisory only.
+// A non-blocking, highly-recommended hand-fix surfaced by the audit (never
+// affects the verdict) — e.g. the org default branch name isn't `main`.
 export type OrgRecommendation = {
   id: "orgDefaultBranch"
   title: string

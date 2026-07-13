@@ -69,6 +69,8 @@ const makeClient = (opts: {
   const request = vi
     .fn()
     .mockImplementation((path: string, options?: { body?: unknown }) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(path))
+        return { default_branch: "main" }
       if (path.includes("/contents/") && path.includes("roster.csv")) {
         return Promise.resolve(csvFile())
       }
@@ -191,6 +193,8 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         // Un-migrated classroom: roster.csv 404s, only students.csv exists.
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           return Promise.reject(
@@ -316,6 +320,8 @@ describe("roster write target — commits roster.csv, never students.csv", () =>
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           rosterContentsReads++
           // First read 404s (lag); the tree-confirmed re-read succeeds.
@@ -505,6 +511,8 @@ describe("inviteByEmail — org invite only, no CSV write", () => {
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         if (path.endsWith("/git/trees")) {
           state.csvWritten = true
           return Promise.resolve({ sha: "tree-sha" })
@@ -654,6 +662,8 @@ describe("bulkInviteByEmail — bulk org invites by email, no CSV write", () => 
       .fn()
       .mockImplementation(
         (path: string, options?: { body?: unknown; method?: string }) => {
+          if (/\/repos\/[^/]+\/classroom50$/.test(path))
+            return { default_branch: "main" }
           if (path.endsWith("/git/trees")) {
             state.csvWritten = true
             return Promise.resolve({ sha: "tree-sha" })
@@ -1137,6 +1147,8 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
       return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
     })
     const request = vi.fn().mockImplementation((path: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(path))
+        return { default_branch: "main" }
       if (path.includes("/git/trees")) {
         committed.content = "should-not-write"
       }
@@ -1323,6 +1335,8 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           return Promise.resolve({
             type: "file",
@@ -1378,6 +1392,8 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         if (path.includes("/contents/") && path.includes("roster.csv")) {
           // On retry, serve the already-committed CSV if present.
           const csv = committed.content ?? HEADER + aliceRow
@@ -1473,6 +1489,8 @@ describe("unenrollStudent — classroom-scoped, no active-member org removal", (
       .fn()
       .mockImplementation(
         (path: string, options?: { method?: string; body?: unknown }) => {
+          if (/\/repos\/[^/]+\/classroom50$/.test(path))
+            return { default_branch: "main" }
           if (path.includes("/contents/") && path.includes("roster.csv")) {
             const csv = committed.content ?? opts.startingCsv
             return Promise.resolve({
@@ -1821,6 +1839,8 @@ const makeTeamClient = (opts: {
   const request = vi
     .fn()
     .mockImplementation((path: string, options?: { method?: string }) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(path))
+        return { default_branch: "main" }
       if (path.includes("/contents/") && path.includes("roster.csv")) {
         const csv = committed.content ?? opts.startingCsv
         return Promise.resolve({
@@ -2639,6 +2659,8 @@ const makeInviteClient = (opts: {
   const request = vi
     .fn()
     .mockImplementation((path: string, options?: { method?: string }) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(path))
+        return { default_branch: "main" }
       if (path.startsWith("/users/")) {
         const login = decodeURIComponent(path.slice("/users/".length))
         const u = opts.users?.[login]
@@ -3046,6 +3068,8 @@ describe("migrateRosterFile — converge students.csv onto roster.csv", () => {
     const request = vi
       .fn()
       .mockImplementation((path: string, options?: { body?: unknown }) => {
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         if (path.includes("/contents/")) {
           const match = path.match(/\/contents\/(.+?)(\?|$)/)
           const rel = match ? decodeURIComponent(match[1]) : ""
@@ -3276,6 +3300,8 @@ const makeRoleChangeClient = (opts: {
     .mockImplementation(
       (path: string, options?: { method?: string; body?: unknown }) => {
         const method = options?.method ?? "GET"
+        if (/\/repos\/[^/]+\/classroom50$/.test(path))
+          return { default_branch: "main" }
         // Authenticated viewer (getAuthenticatedUser) for the self-demote guard.
         if (path === "/user") {
           return Promise.resolve({ id: 1, login: viewerLogin })

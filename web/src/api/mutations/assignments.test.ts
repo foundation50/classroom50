@@ -364,6 +364,9 @@ describe("editAssignment (preserved-entry integration)", () => {
 
     const request = vi.fn(async (url: string, init?: { method?: string }) => {
       const method = init?.method ?? "GET"
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: "main" }
+      }
       if (method === "GET" && url.includes("/git/ref/heads/main")) {
         return { object: { sha: "refsha" } }
       }
@@ -503,6 +506,9 @@ describe("editAssignment (preserved-entry integration)", () => {
     let capturedContent = ""
     const request = vi.fn(async (url: string, init?: { method?: string }) => {
       const method = init?.method ?? "GET"
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: "main" }
+      }
       if (method === "GET" && url.includes("/git/ref/heads/main")) {
         return { object: { sha: "refsha" } }
       }
@@ -645,6 +651,8 @@ describe("editAssignment (preserved-entry integration)", () => {
     const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
     const request = vi.fn(async (url: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(url))
+        return { default_branch: "main" }
       if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
       if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
       if (url.includes("/contents/cs50/assignments.json")) {
@@ -714,6 +722,8 @@ describe("copyAssignmentToClassroom (reuse fork guard)", () => {
   // guard throws before any commit, so no write routes are needed.
   function makeClient(repo: unknown): GitHubClient {
     const request = vi.fn(async (url: string) => {
+      if (/\/repos\/[^/]+\/classroom50$/.test(url))
+        return { default_branch: "main" }
       if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
       if (url.includes("/repos/")) return repo
       throw new Error(`unexpected request: ${url}`)
@@ -1314,7 +1324,7 @@ describe("resolveAutograderWorkflow default shim branch templating", () => {
       branch: "master",
       configBranch: "master",
     })
-    expect(yaml).toContain("branches: [master]")
+    expect(yaml).toContain('branches: ["master"]')
     expect(yaml).toContain(
       'uses: "cs50/classroom50/.github/workflows/autograde-runner.yaml@master"',
     )
@@ -1326,8 +1336,21 @@ describe("resolveAutograderWorkflow default shim branch templating", () => {
       classroom: "cs101",
       autograder: "default",
     })
-    expect(yaml).toContain("branches: [main]")
+    expect(yaml).toContain('branches: ["main"]')
     expect(yaml).toContain("autograde-runner.yaml@main")
+  })
+
+  it("quotes a YAML-hostile branch name so it stays a string", async () => {
+    // An unquoted `branches: [off]` would parse as boolean false; quoting keeps
+    // it a branch name. Matches the CLI embed's quoted form.
+    const yaml = await resolveAutograderWorkflow({
+      org: "cs50",
+      classroom: "cs101",
+      autograder: "default",
+      branch: "off",
+      configBranch: "main",
+    })
+    expect(yaml).toContain('branches: ["off"]')
   })
 
   it("does not fetch from Pages for the default autograder", async () => {
@@ -1341,6 +1364,6 @@ describe("resolveAutograderWorkflow default shim branch templating", () => {
         branch: "main",
         configBranch: "main",
       }),
-    ).resolves.toContain("branches: [main]")
+    ).resolves.toContain('branches: ["main"]')
   })
 })

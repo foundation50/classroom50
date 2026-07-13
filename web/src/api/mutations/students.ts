@@ -35,7 +35,12 @@ import {
   REPO_READ_CONCURRENCY,
 } from "@/hooks/github/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
-import { getBranchRef, getClassroomJson, getCommit } from "../github/queries"
+import {
+  getBranchRef,
+  getClassroomJson,
+  getCommit,
+  getConfigRepoBranch,
+} from "../github/queries"
 import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
 import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
@@ -235,7 +240,8 @@ export async function addStudentToClassroom(
 
   await assertClassroomNotArchived(client, input.org, input.classroom)
 
-  const ref = await getBranchRef(client, input.org)
+  const configBranch = await getConfigRepoBranch(client, input.org)
+  const ref = await getBranchRef(client, input.org, configBranch)
   const commit = await getCommit(client, input.org, ref.object.sha)
 
   const studentsFilePath = rosterPath(input.classroom)
@@ -291,7 +297,12 @@ export async function addStudentToClassroom(
     parents: [ref.object.sha],
   })
 
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
+  const updatedRef = await updateRef(
+    client,
+    input.org,
+    newCommit.sha,
+    configBranch,
+  )
 
   return {
     previousCommitSha: ref.object.sha,
@@ -598,7 +609,8 @@ export async function addStudentsToClassroom(
     message: "Reading current roster.csv...",
   })
 
-  const ref = await getBranchRef(client, input.org)
+  const configBranch = await getConfigRepoBranch(client, input.org)
+  const ref = await getBranchRef(client, input.org, configBranch)
   const commit = await getCommit(client, input.org, ref.object.sha)
 
   const studentsFilePath = rosterPath(input.classroom)
@@ -741,7 +753,12 @@ export async function addStudentsToClassroom(
     parents: [ref.object.sha],
   })
 
-  const updatedRef = await updateRef(client, input.org, newCommit.sha)
+  const updatedRef = await updateRef(
+    client,
+    input.org,
+    newCommit.sha,
+    configBranch,
+  )
 
   input.onProgress?.({
     processed: normalizedRows.length,
@@ -936,10 +953,12 @@ export async function syncRosterFromTeam(
   return withGitConflictRetry(async () => {
     // Re-read teams + CSV on every attempt so the diff is always against the
     // latest state (a concurrent add/edit can't be clobbered or duplicated).
-    const [{ members, fullyRead, pendingRoleKeys }, ref] = await Promise.all([
-      listClassroomMembersWithRoles(client, org, slugs),
-      getBranchRef(client, org),
-    ])
+    const [{ members, fullyRead, pendingRoleKeys }, configBranch] =
+      await Promise.all([
+        listClassroomMembersWithRoles(client, org, slugs),
+        getConfigRepoBranch(client, org),
+      ])
+    const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
 
     const studentsFilePath = rosterPath(classroom)
@@ -1083,7 +1102,7 @@ export async function syncRosterFromTeam(
       parents: [ref.object.sha],
     })
 
-    await updateRef(client, org, newCommit.sha)
+    await updateRef(client, org, newCommit.sha, configBranch)
 
     log.info("sync roster from team: completed", {
       org,
@@ -1141,7 +1160,8 @@ export async function writeRosterRoles(
   if (roleByLogin.size === 0) return { changed: 0 }
 
   return withGitConflictRetry(async () => {
-    const ref = await getBranchRef(client, org)
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
     const studentsFilePath = rosterPath(classroom)
     const currentCsv = await getRawFileWithFallbackSource(client, {
@@ -1189,7 +1209,7 @@ export async function writeRosterRoles(
       tree_sha: tree.sha,
       parents: [ref.object.sha],
     })
-    await updateRef(client, org, newCommit.sha)
+    await updateRef(client, org, newCommit.sha, configBranch)
     log.info("write roster roles: committed", { org, classroom, changed })
     return { changed }
   })
@@ -1233,7 +1253,8 @@ export async function migrateRosterFile(
   const legacyPath = legacyRosterPath(classroom)
 
   return withGitConflictRetry(async () => {
-    const ref = await getBranchRef(client, org)
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
 
     // Read both files' presence at the same commit. roster.csv present -> the
@@ -1264,7 +1285,7 @@ export async function migrateRosterFile(
       parents: [ref.object.sha],
     })
 
-    await updateRef(client, org, newCommit.sha)
+    await updateRef(client, org, newCommit.sha, configBranch)
 
     log.info("migrate roster file: renamed students.csv -> roster.csv", {
       org,
@@ -2194,7 +2215,8 @@ export async function unenrollStudent(
   const viewerPromise = getAuthenticatedUser(client)
   viewerPromise.catch(() => {})
 
-  const ref = await getBranchRef(client, org)
+  const configBranch = await getConfigRepoBranch(client, org)
+  const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
   const studentsFilePath = rosterPath(classroom)
@@ -2238,7 +2260,7 @@ export async function unenrollStudent(
     parents: [ref.object.sha],
   })
 
-  const updatedRef = await updateRef(client, org, newCommit.sha)
+  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   // Commit landed, so every org-side step below is a non-fatal warning.
   const warnings: string[] = []
@@ -2390,7 +2412,8 @@ export async function bulkUnenrollStudents(
   let newCommitSha: string | undefined
 
   await withGitConflictRetry(async () => {
-    const ref = await getBranchRef(client, org)
+    const configBranch = await getConfigRepoBranch(client, org)
+    const ref = await getBranchRef(client, org, configBranch)
     const commit = await getCommit(client, org, ref.object.sha)
     const currentCsv = await getRawFileWithFallbackSource(client, {
       org,
@@ -2429,7 +2452,7 @@ export async function bulkUnenrollStudents(
       tree_sha: tree.sha,
       parents: [ref.object.sha],
     })
-    await updateRef(client, org, newCommit.sha)
+    await updateRef(client, org, newCommit.sha, configBranch)
     newCommitSha = newCommit.sha
   })
 
@@ -2564,7 +2587,8 @@ export async function updateStudent(
 
   await assertClassroomNotArchived(client, org, classroom)
 
-  const ref = await getBranchRef(client, org)
+  const configBranch = await getConfigRepoBranch(client, org)
+  const ref = await getBranchRef(client, org, configBranch)
   const commit = await getCommit(client, org, ref.object.sha)
 
   const studentsFilePath = rosterPath(classroom)
@@ -2658,7 +2682,7 @@ export async function updateStudent(
     parents: [ref.object.sha],
   })
 
-  const updatedRef = await updateRef(client, org, newCommit.sha)
+  const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   return {
     previousCommitSha: ref.object.sha,

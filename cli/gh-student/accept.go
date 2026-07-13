@@ -365,10 +365,19 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 
 	// Render the default shim now that the assignment repo's default branch is
 	// known: `on: push: branches` targets commitBranch, and the reusable-workflow
-	// `uses:` ref targets the config repo's actual default branch (best-effort;
-	// defaults to main when it can't be read).
+	// `uses:` ref targets the config repo's actual default branch. On a read
+	// failure, fall back to the assignment repo's own branch (commitBranch), not
+	// a hardcoded `main` — a wrong `@main` ref would 404 the runner and silently
+	// skip grading on a master-default org.
 	if useDefaultShim {
-		shim = renderEmbeddedShim(org, commitBranch, resolveConfigRepoBranch(client, org))
+		configBranch, cbErr := resolveConfigRepoBranch(client, org)
+		if cbErr != nil {
+			if verbose {
+				u.Detail("could not read %s/classroom50 default branch (%v); pinning shim to %q", org, cbErr, commitBranch)
+			}
+			configBranch = commitBranch
+		}
+		shim = renderEmbeddedShim(org, commitBranch, configBranch)
 	}
 
 	repoName := reponame.Name(classroom, assignment, username)
@@ -727,6 +736,15 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	if genBranch == "" {
 		genBranch = created.DefaultBranch
 	}
+	// Both echoes can briefly omit default_branch right after generate; confirm
+	// with a GET before falling back to `main`, so the shim's push-trigger branch
+	// matches the repo's real default rather than a wrong `main`.
+	if genBranch == "" {
+		var fresh GeneratedRepo
+		if getErr := client.Get(patchPath, &fresh); getErr == nil {
+			genBranch = fresh.DefaultBranch
+		}
+	}
 	return updated.HTMLURL, updated.FullName, defaultBranchOrMain(genBranch), false, nil
 }
 
@@ -789,17 +807,18 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 }
 
 // resolveConfigRepoBranch returns the org's classroom50 config repo default
-// branch for the shim's reusable-workflow `uses:` ref. Best-effort: any failure
-// (or empty value) falls back to "main". This keeps the shim's `@<branch>` ref
-// valid even when a config-repo rename to main could not land.
-func resolveConfigRepoBranch(client githubapi.Client, org string) string {
+// branch for the shim's reusable-workflow `uses:` ref. A read failure is
+// returned as an error so the caller can fall back to the assignment repo's own
+// branch rather than a wrong `@main` ref that would 404 the runner; an empty
+// value falls back to "main" (an auto_init repo's default).
+func resolveConfigRepoBranch(client githubapi.Client, org string) (string, error) {
 	var repo struct {
 		DefaultBranch string `json:"default_branch"`
 	}
 	if err := client.Get(fmt.Sprintf("repos/%s/classroom50", url.PathEscape(org)), &repo); err != nil {
-		return defaultConfigRepoBranch
+		return "", err
 	}
-	return defaultBranchOrMain(repo.DefaultBranch)
+	return defaultBranchOrMain(repo.DefaultBranch), nil
 }
 
 // defaultBranchOrMain guards against an empty default_branch in the
