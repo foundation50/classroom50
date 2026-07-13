@@ -16,6 +16,7 @@ import {
 } from "@/lib/classroomListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { ClassroomCard, ClassroomRow } from "@/pages/classes/ClassroomCard"
+import { StudentCountProbes } from "@/pages/classes/StudentCountProbes"
 
 type ClassFilter = "active" | "archived" | "all"
 
@@ -42,10 +43,32 @@ const ClassroomList = ({
   const [termFilter, setTermFilter] = useState<string>("all")
   const [search, setSearch] = useState("")
 
-  const summaries = useClassroomSummaries(
-    org,
-    dirs,
-    sortKey === "student-count",
+  const summariesRaw = useClassroomSummaries(org, dirs)
+
+  // Role-aware student counts for the sort, collected via keyed probes (see
+  // StudentCountProbes) only while the student-count sort is active. Merge them
+  // onto the summaries so the sort and search/filter operate on one shape.
+  const sortByStudents = sortKey === "student-count"
+  const [studentCounts, setStudentCounts] = useState<
+    Record<string, number | undefined>
+  >({})
+  const handleStudentCount = useCallback(
+    (path: string, count: number | undefined) => {
+      setStudentCounts((prev) =>
+        prev[path] === count ? prev : { ...prev, [path]: count },
+      )
+    },
+    [],
+  )
+  const summaries = useMemo(
+    () =>
+      sortByStudents
+        ? summariesRaw.map((s) => ({
+            ...s,
+            studentCount: studentCounts[s.path],
+          }))
+        : summariesRaw,
+    [summariesRaw, sortByStudents, studentCounts],
   )
 
   // Distinct non-empty terms across the (resolved) classrooms, for the term
@@ -131,6 +154,13 @@ const ClassroomList = ({
 
   return (
     <div className="space-y-4">
+      {sortByStudents && (
+        <StudentCountProbes
+          org={org}
+          paths={dirs.map((d) => d.path)}
+          onCount={handleStudentCount}
+        />
+      )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-base-300 bg-base-100 p-2">
         <label className="input input-sm input-bordered flex min-w-48 flex-1 items-center gap-2">
           <Search aria-hidden="true" className="size-4 text-base-content/50" />
