@@ -1266,12 +1266,48 @@ def _run_setup(setup: str, cwd: pathlib.Path, timeout: int) -> str | None:
     return None
 
 
+# import name -> pip package. actions/setup-python provisions only bare
+# CPython, so a `python` test with no install step has neither pytest nor the
+# JSON-report plugin -- the historical cause of `pytest: not found` (exit 127)
+# and silent all-or-nothing scoring (issue #212).
+_PYTEST_DEPS = {"pytest": "pytest", "pytest_jsonreport": "pytest-json-report"}
+
+
+def _ensure_pytest(cwd: pathlib.Path, timeout: int) -> None:
+    """Best-effort: make pytest + pytest-json-report importable before a
+    `python` test runs. Idempotent -- probes each dep against the grading
+    interpreter and installs only what's missing, so a teacher-pinned version
+    (from a setup command or requirements.txt) is left untouched. Never raises:
+    a locked-down or offline runner degrades to _grade_python's fallback
+    scoring rather than erroring the whole submission. Lives here (not in the
+    workflow) because runner.py is fetched from Pages each run, so the fix
+    reaches every classroom on next submission with no per-repo edit."""
+    missing = []
+    for module, package in _PYTEST_DEPS.items():
+        probe = f"{shlex.quote(sys.executable)} -c {shlex.quote(f'import {module}')}"
+        try:
+            if _run_command(probe, cwd, timeout).returncode != 0:
+                missing.append(package)
+        except (subprocess.SubprocessError, OSError):
+            missing.append(package)
+    if not missing:
+        return
+    install = (f"{shlex.quote(sys.executable)} -m pip install --quiet "
+               + " ".join(shlex.quote(p) for p in missing))
+    try:
+        _run_command(install, cwd, timeout)
+    except (subprocess.SubprocessError, OSError):
+        pass
+
+
 def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
                   points: int, name: str) -> dict[str, Any]:
     """Run a pytest command and split `points` across discovered cases (GitHub
-    Classroom's points/num_tests model) via pytest-json-report. Falls back to
-    all-or-nothing exit-code scoring when no JSON report is produced (e.g. the
-    plugin isn't installed)."""
+    Classroom's points/num_tests model) via pytest-json-report. Auto-installs
+    pytest + the plugin when absent (see _ensure_pytest); falls back to
+    all-or-nothing exit-code scoring only when a report still isn't produced
+    (e.g. an offline runner couldn't install the plugin)."""
+    _ensure_pytest(cwd, timeout)
     report_dir = pathlib.Path(tempfile.mkdtemp(prefix="classroom50-pytest-"))
     report = report_dir / "report.json"
     # Skip appending when the teacher's command already configures the plugin
@@ -1313,10 +1349,12 @@ def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
             detail += "\n" + _clip(rp.stdout or rp.stderr)
         return _make_outcome(name, points, passed, detail, score=score)
 
-    # Fallback: no parseable report -> all-or-nothing on the exit code.
+    # Fallback: no parseable report -> all-or-nothing on the exit code. Reached
+    # only when pytest-json-report still isn't loadable (e.g. an offline runner
+    # blocked _ensure_pytest's install).
     passed = rp.returncode == 0
     detail = (f"pytest exit {rp.returncode} "
-              f"(no JSON report; install pytest-json-report for per-case scoring)")
+              f"(no JSON report from pytest-json-report; scored on exit code)")
     if not passed:
         detail += "\n" + _clip(rp.stdout or rp.stderr)
     return _make_outcome(name, points, passed, detail)
