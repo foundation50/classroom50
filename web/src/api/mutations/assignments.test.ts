@@ -5,6 +5,7 @@ import {
   assertAssignmentModeCoherent,
   buildReusedEntry,
   copyAssignmentToClassroom,
+  createAssignmentRepo,
   editAssignment,
   founderPermission,
   nextAvailableSlug,
@@ -1308,6 +1309,91 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         permission: "push",
       }),
     ).rejects.toThrow(/"push"/)
+  })
+})
+
+// createAssignmentRepo trusts GitHub's POST .../generate response, whose
+// default_branch can be a stale `main` before the real branch (e.g. `master`
+// from a master-default template) settles. A confirming GET fixes it so the
+// downstream commit targets the repo's actual default branch.
+describe("createAssignmentRepo generated default-branch confirmation", () => {
+  it("confirms the real default branch when generate reports a stale main", async () => {
+    const paths: string[] = []
+    const client: GitHubClient = {
+      request: <T>(path: string, opts?: { method?: string }) => {
+        paths.push(`${opts?.method ?? "GET"} ${path}`)
+        if (path.endsWith("/generate")) {
+          // Stale echo: claims main, but the repo really defaults to master.
+          return Promise.resolve({
+            name: "hw1-alice",
+            default_branch: "main",
+          } as T)
+        }
+        if (path === "/repos/acme/hw1-alice") {
+          return Promise.resolve({
+            name: "hw1-alice",
+            default_branch: "master",
+          } as T)
+        }
+        return Promise.reject(new Error(`unexpected: ${path}`))
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+
+    const result = await createAssignmentRepo({
+      client,
+      templateOwner: "acme",
+      templateRepo: "master-template",
+      owner: "acme",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+    })
+
+    expect(result.kind).toBe("generated")
+    expect(result.repo.default_branch).toBe("master")
+    expect(paths).toContain("GET /repos/acme/hw1-alice")
+  })
+
+  it("keeps the generate branch when the confirming read fails", async () => {
+    const client: GitHubClient = {
+      request: <T>(path: string) => {
+        if (path.endsWith("/generate"))
+          return Promise.resolve({
+            name: "hw1-alice",
+            default_branch: "develop",
+          } as T)
+        // getRepo is 404-tolerant → returns null → keep the echo.
+        return Promise.reject(
+          new GitHubAPIError({
+            status: 404,
+            url: path,
+            message: "Not Found",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          }),
+        ) as Promise<T>
+      },
+      requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+    }
+
+    const result = await createAssignmentRepo({
+      client,
+      templateOwner: "acme",
+      templateRepo: "starter",
+      owner: "acme",
+      name: "hw1-alice",
+      fallbackBranch: "main",
+    })
+
+    expect(result.kind).toBe("generated")
+    expect(result.repo.default_branch).toBe("develop")
   })
 })
 

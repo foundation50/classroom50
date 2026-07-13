@@ -1082,6 +1082,30 @@ const extractTemplate = (template: string) => {
   if (!/\//.test(template)) return template
   return template.split("/")?.[1] ?? template
 }
+// GitHub's POST .../generate response reports a stale/default `default_branch`
+// (often `main`) before the generated repo's real branch settles — so a
+// `master`-default template can yield a response claiming `main` while the only
+// branch is `master`, sending the downstream commit at a nonexistent `heads/main`
+// ref (a 409/404 stabilize loop). Confirm the real branch with a follow-up GET,
+// falling back to the generate response's value when the read is unavailable.
+async function confirmGeneratedDefaultBranch(
+  client: GitHubClient,
+  owner: string,
+  name: string,
+  generated: GitHubRepo,
+): Promise<GitHubRepo> {
+  try {
+    const confirmed = await getRepo(client, owner, name)
+    const branch = confirmed?.default_branch
+    if (branch && branch !== generated.default_branch) {
+      return { ...generated, default_branch: branch }
+    }
+  } catch {
+    // Fall through: keep the generate response's branch on a read failure.
+  }
+  return generated
+}
+
 export async function createAssignmentRepo(params: {
   client: GitHubClient
   templateOwner?: string
@@ -1114,7 +1138,7 @@ export async function createAssignmentRepo(params: {
 
       return {
         kind: "generated",
-        repo,
+        repo: await confirmGeneratedDefaultBranch(client, owner, name, repo),
       }
     } catch (err) {
       if (!(err instanceof GitHubAPIError)) {

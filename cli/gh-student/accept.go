@@ -736,14 +736,13 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	if genBranch == "" {
 		genBranch = created.DefaultBranch
 	}
-	// Both echoes can briefly omit default_branch right after generate; confirm
-	// with a GET before falling back to `main`, so the shim's push-trigger branch
-	// matches the repo's real default rather than a wrong `main`.
-	if genBranch == "" {
-		var fresh GeneratedRepo
-		if getErr := client.Get(patchPath, &fresh); getErr == nil {
-			genBranch = fresh.DefaultBranch
-		}
+	// The generate/PATCH echoes can report a stale default_branch (empty, or a
+	// default `main`) before the real branch settles, so confirm with a GET and
+	// prefer its value — otherwise a `master`-default template can send the shim
+	// commit at a nonexistent `heads/main` ref. A read failure keeps the echo.
+	var fresh GeneratedRepo
+	if getErr := client.Get(patchPath, &fresh); getErr == nil && fresh.DefaultBranch != "" {
+		genBranch = fresh.DefaultBranch
 	}
 	return updated.HTMLURL, updated.FullName, defaultBranchOrMain(genBranch), false, nil
 }
