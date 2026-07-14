@@ -18,7 +18,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 const updateStudentWithConflictRetry = vi.fn()
-vi.mock("@/api/mutations/students", () => ({
+vi.mock("@/domain/students", () => ({
   updateStudentWithConflictRetry: (...args: unknown[]) =>
     updateStudentWithConflictRetry(...args),
 }))

@@ -6,10 +6,7 @@ import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
-import {
-  enrollStudentInClassroom,
-  inviteByEmail,
-} from "@/api/mutations/students"
+import { enrollStudentInClassroom, inviteByEmail } from "@/domain/students"
 import { splitName, toStudent } from "@/util/roster"
 
 export type EnrollOrInviteFormValues = {

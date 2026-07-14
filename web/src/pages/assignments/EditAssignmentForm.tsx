@@ -7,7 +7,7 @@ import {
   editAssignmentWithConflictRetry,
   type CreateAssignmentInput,
   type CreateAssignmentResult,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"

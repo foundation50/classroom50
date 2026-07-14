@@ -2,7 +2,7 @@ import {
   deleteClassroom,
   editClassroomWithConflictRetry,
   type DeleteClassroomInput,
-} from "@/api/mutations/classrooms"
+} from "@/domain/classrooms"
 import { ConfirmModal } from "@/components/modals"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { useGitHubClient } from "@/context/github/GitHubProvider"

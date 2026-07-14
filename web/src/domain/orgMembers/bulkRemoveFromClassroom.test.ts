@@ -10,7 +10,7 @@ import type { Student } from "@/types/classroom"
 // per-row outcomes.
 const bulkUnenrollMock = vi.fn()
 
-vi.mock("@/api/mutations/students", () => ({
+vi.mock("@/domain/students", () => ({
   bulkUnenrollStudents: (...args: unknown[]) => bulkUnenrollMock(...args),
 }))
 vi.mock("@/github-core/errorMessage", () => ({

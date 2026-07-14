@@ -23,9 +23,8 @@ const resolveRosterUploadPreflight = vi.fn()
 const inviteRosterStudents = vi.fn()
 const bulkEnrollStudentsInClassroom = vi.fn()
 
-vi.mock("@/api/mutations/students", async (importOriginal) => {
-  const actual =
-    await importOriginal<typeof import("@/api/mutations/students")>()
+vi.mock("@/domain/students", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/domain/students")>()
   return {
     ...actual,
     bulkInviteByEmail: (...args: unknown[]) => bulkInviteByEmail(...args),

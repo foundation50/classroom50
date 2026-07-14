@@ -5,16 +5,16 @@ import { Plus, UserMinus, X } from "lucide-react"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
-import type { StudentCsvRow } from "@/api/mutations/students"
+import type { StudentCsvRow } from "@/domain/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import {
   bulkAddToClassroom,
   type BulkAddToClassroomResult,
-} from "@/pages/orgMembers/bulkAddToClassroom"
+} from "@/domain/orgMembers/bulkAddToClassroom"
 import {
   bulkRemoveFromClassroom,
   type BulkRemoveFromClassroomResult,
-} from "@/pages/orgMembers/bulkRemoveFromClassroom"
+} from "@/domain/orgMembers/bulkRemoveFromClassroom"
 import { ConfirmModal } from "@/components/modals"
 import { logger } from "@/lib/logger"
 import {

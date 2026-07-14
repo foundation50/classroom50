@@ -18,7 +18,7 @@ import {
   resendOrgInvitation,
   cancelOrgInvitation,
 } from "@/github-core/mutations"
-import { resolveTeamIdForRoleRead } from "@/api/mutations/students"
+import { resolveTeamIdForRoleRead } from "@/domain/students"
 import { orgRoleForRole } from "@/util/teamRoster"
 import {
   useAddStaffMember,

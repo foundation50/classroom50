@@ -15,7 +15,7 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import {
   verifyTemplateAccess,
   type TemplateAccessVerification,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 import { teamHasRepoAccess } from "@/github-core/queries"
 import {
   useDebouncedValue,

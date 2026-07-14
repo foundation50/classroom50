@@ -14,8 +14,8 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
-} from "@/pages/students/bulkUnenrollRoster"
-import { resolveTeamIdForRoleRead } from "@/api/mutations/students"
+} from "@/domain/roster/bulkUnenrollRoster"
+import { resolveTeamIdForRoleRead } from "@/domain/students"
 import { parseGitHubId } from "@/util/students"
 import { orgRoleForRole, sortRolesByRank } from "@/util/teamRoster"
 import {

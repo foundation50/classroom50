@@ -110,13 +110,13 @@ export default defineConfig([
       ],
     },
   },
-  // Guard the data-layer boundary: no runtime import cycle. The api/ <-> data
+  // Guard the data-layer boundary: no runtime import cycle. The old api/ <-> data
   // layer once cycled (barrel re-exports + a TDZ workaround), as did the two
   // data-layer giants (mutations.ts <-> queries.ts) via shared primitives; both
   // are now broken (primitives extracted into leaf modules) and this keeps them
-  // broken. Scoped to the data layer where cycles are the real risk; unbounded
-  // (no maxDepth) so a cycle that closes through a longer detour can't hide —
-  // measured negligible over this ~35-file scope, and ignoreExternal keeps
+  // broken. Scoped to github-core/ + domain/ where cycles are the real risk;
+  // unbounded (no maxDepth) so a cycle that closes through a longer detour can't
+  // hide — measured negligible over this scope, and ignoreExternal keeps
   // node_modules out of the walk. Type-only imports are ignored by the rule, so
   // the remaining `import type` edges don't trip it.
   //
@@ -128,7 +128,7 @@ export default defineConfig([
   // instead of no-cycle silently going inert. Verified against an injected
   // fixture cycle before trusting it.
   {
-    files: ["src/github-core/**/*.{ts,tsx}", "src/api/**/*.{ts,tsx}"],
+    files: ["src/github-core/**/*.{ts,tsx}", "src/domain/**/*.{ts,tsx}"],
     plugins: { "import-x": importX },
     settings: {
       "import-x/parsers": {

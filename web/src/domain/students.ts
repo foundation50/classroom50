@@ -33,7 +33,7 @@ import {
   sleep,
   REPO_READ_CONCURRENCY,
 } from "@/github-core/queries"
-import { getAuthenticatedUser } from "@/api/queries/users"
+import { getAuthenticatedUser } from "@/domain/queries/users"
 import {
   getBranchRef,
   getClassroomJson,
@@ -324,7 +324,7 @@ async function tryAddUserToTeam(
 
 // The roster.csv parse/serialize layer lives in util/rosterCsv (pure, no
 // GitHubClient dependency). Re-exported here so existing importers of these
-// symbols from "@/api/mutations/students" keep working unchanged.
+// symbols from "@/domain/students" keep working unchanged.
 export {
   STUDENT_CSV_FIELDS,
   normalizeStudentRow,

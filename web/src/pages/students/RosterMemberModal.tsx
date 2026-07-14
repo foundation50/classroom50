@@ -23,7 +23,7 @@ import {
   resolveTeamIdForRoleRead,
   unenrollStudent,
   type StudentCsvRow,
-} from "@/api/mutations/students"
+} from "@/domain/students"
 import {
   resendOrgInvitation,
   cancelOrgInvitation,

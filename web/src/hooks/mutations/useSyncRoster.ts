@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { syncRosterFromTeam } from "@/api/mutations/students"
+import { syncRosterFromTeam } from "@/domain/students"
 import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { CONFIG_REPO } from "@/util/configRepo"

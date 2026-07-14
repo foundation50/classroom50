@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 
-import { createClassroomFilesWithConflictRetry } from "@/api/mutations/classrooms"
+import { createClassroomFilesWithConflictRetry } from "@/domain/classrooms"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -21,7 +21,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 import type {
   CreateClassroomInput,
   CreateClassroomResult,
-} from "@/api/mutations/classrooms"
+} from "@/domain/classrooms"
 
 const log = logger.scope("CreateClassroomPage")
 

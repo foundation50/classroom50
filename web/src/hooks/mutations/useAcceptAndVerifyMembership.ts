@@ -1,7 +1,7 @@
 import { useEffect } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
+import { acceptAndVerifyOrgMembership } from "@/domain/users"
 import type { GitHubOrgMembership } from "@/github-core/types"
 
 // The shared membership query key, read by useGetOwnOrgMembership on both the

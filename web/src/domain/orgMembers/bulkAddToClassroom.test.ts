@@ -12,7 +12,7 @@ const bulkEnrollMock = vi.fn()
 const getUserByIdMock = vi.fn()
 const isActiveMemberMock = vi.fn()
 
-vi.mock("@/api/mutations/students", () => ({
+vi.mock("@/domain/students", () => ({
   bulkEnrollStudentsInClassroom: (...args: unknown[]) =>
     bulkEnrollMock(...args),
 }))

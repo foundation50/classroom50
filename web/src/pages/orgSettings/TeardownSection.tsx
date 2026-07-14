@@ -12,7 +12,7 @@ import {
   TeardownRateLimitError,
   TeardownScopeError,
   type TeardownPlan,
-} from "@/api/mutations/teardown"
+} from "@/domain/teardown"
 import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
 import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import SettingsSection from "./SettingsSection"

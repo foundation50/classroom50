@@ -11,7 +11,7 @@ import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { GitHubAPIError } from "@/github-core/errors"
-import { createAssignment } from "@/api/mutations/assignments"
+import { createAssignment } from "@/domain/assignments"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
@@ -25,7 +25,7 @@ import { useTranslation } from "react-i18next"
 import type {
   CreateAssignmentInput,
   CreateAssignmentResult,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 
 const log = logger.scope("CreateAssignmentPage")
 

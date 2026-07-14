@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { StudentAlreadyEnrolledError } from "@/api/mutations/students"
+import { StudentAlreadyEnrolledError } from "@/domain/students"
 import { isValidEmail } from "@/util/orgMembership"
 import { AnimatedAlert, Button, Modal } from "@/components/ui"
 

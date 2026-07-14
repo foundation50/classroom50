@@ -1,6 +1,6 @@
 import type { GitHubClient } from "@/github-core/client"
-import { bulkEnrollStudentsInClassroom } from "@/api/mutations/students"
-import type { BulkEnrollStudentsResult } from "@/api/mutations/students"
+import { bulkEnrollStudentsInClassroom } from "@/domain/students"
+import type { BulkEnrollStudentsResult } from "@/domain/students"
 import { getUserById } from "@/github-core/queries"
 import { isActiveMember } from "@/github-core/mutations"
 import { parseGitHubId } from "@/util/students"

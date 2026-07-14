@@ -18,7 +18,7 @@ import {
   getCommit,
   getConfigRepoBranch,
 } from "./configRepoReads"
-import type { CreateClassroomInput } from "@/api/mutations/classrooms"
+import type { CreateClassroomInput } from "@/domain/classrooms"
 import type { StaffRole } from "@/types/classroom"
 import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"

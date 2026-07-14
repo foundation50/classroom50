@@ -8,7 +8,7 @@ import {
   copyAssignmentWithConflictRetry,
   nextAvailableSlug,
   type CopyAssignmentInput,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 import { slugify } from "@/util/slug"
 import type { Assignment } from "@/types/classroom"
 

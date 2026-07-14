@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query"
-import { planTeardown } from "@/api/mutations/teardown"
+import { planTeardown } from "@/domain/teardown"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Plan a teardown: enumerate the org's repos + classroom teams for the confirm

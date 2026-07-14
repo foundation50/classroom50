@@ -1,4 +1,4 @@
-import type { TemplateAccessVerification } from "@/api/mutations/assignments"
+import type { TemplateAccessVerification } from "@/domain/assignments"
 
 // Pure view-model for the two data-branched template verdicts (tone + i18n key),
 // so the decision is one testable source of truth (mirrors classifyMembershipError).

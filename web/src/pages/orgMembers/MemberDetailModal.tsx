@@ -6,7 +6,7 @@ import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { Button, Modal } from "@/components/ui"
-import { removeMemberFromOrg } from "@/pages/orgMembers/removeMemberFromOrg"
+import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
   runInviteMember,

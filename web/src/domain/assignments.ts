@@ -56,7 +56,7 @@ import {
   fetchTextWithFriendlyErrors,
   getAssignmentsFile,
   type AssignmentsFile,
-} from "../queries/assignments"
+} from "./queries/assignments"
 import {
   withGitConflictRetry,
   assertClassroomNotArchived,
@@ -69,7 +69,7 @@ import {
   getRepoPermissionForUser,
   withFreshRepoRetry,
 } from "@/github-core/queries"
-import { getAuthenticatedUser } from "../queries/users"
+import { getAuthenticatedUser } from "./queries/users"
 import { acceptAndVerifyOrgMembership } from "./users"
 import {
   TemplateAccessError,

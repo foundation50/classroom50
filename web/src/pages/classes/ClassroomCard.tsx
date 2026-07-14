@@ -1,7 +1,7 @@
 import {
   deleteClassroom,
   editClassroomWithConflictRetry,
-} from "@/api/mutations/classrooms"
+} from "@/domain/classrooms"
 import { ConfirmModal } from "@/components/modals"
 import { Button, Card } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"

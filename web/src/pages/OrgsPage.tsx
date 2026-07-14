@@ -1,7 +1,7 @@
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
+import { acceptAndVerifyOrgMembership } from "@/domain/users"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"

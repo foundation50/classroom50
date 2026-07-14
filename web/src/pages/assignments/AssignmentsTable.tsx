@@ -16,7 +16,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   deleteAssignment,
   type DeleteAssignmentInput,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"

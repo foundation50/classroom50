@@ -5,7 +5,7 @@ import { AlertTriangle, Info, ShieldCheck } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import type { GitHubClient } from "@/github-core/client"
 import type { NotifyInput } from "@/context/notifications/NotificationProvider"
-import { inviteMemberToOrg } from "@/pages/orgMembers/inviteMemberToOrg"
+import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
 import type { MemberListRow } from "@/util/memberRow"
 import type { OrgMemberRow } from "@/util/orgMembers"
 

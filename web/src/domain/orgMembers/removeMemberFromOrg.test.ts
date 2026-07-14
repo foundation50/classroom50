@@ -10,7 +10,7 @@ const unenrollMock = vi.fn()
 const removeOrgMembershipMock = vi.fn()
 const getAuthenticatedUserMock = vi.fn()
 
-vi.mock("@/api/mutations/students", () => ({
+vi.mock("@/domain/students", () => ({
   unenrollStudent: (...args: unknown[]) => unenrollMock(...args),
 }))
 vi.mock("@/github-core/mutations", () => ({
@@ -20,7 +20,7 @@ vi.mock("@/github-core/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))
-vi.mock("@/api/queries/users", () => ({
+vi.mock("@/domain/queries/users", () => ({
   getAuthenticatedUser: (...args: unknown[]) =>
     getAuthenticatedUserMock(...args),
 }))

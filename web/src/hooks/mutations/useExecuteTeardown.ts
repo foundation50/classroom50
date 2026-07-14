@@ -3,7 +3,7 @@ import {
   executeTeardown,
   TeardownRateLimitError,
   type TeardownPlan,
-} from "@/api/mutations/teardown"
+} from "@/domain/teardown"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Execute a teardown (delete every repo + classroom team, marker deleted last).

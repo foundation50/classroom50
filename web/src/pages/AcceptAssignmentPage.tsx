@@ -23,7 +23,7 @@ import {
   acceptAssignment,
   type AcceptStepId,
   type AcceptStepStatus,
-} from "@/api/mutations/assignments"
+} from "@/domain/assignments"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,

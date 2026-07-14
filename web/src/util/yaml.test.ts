@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { parseClassroom50Yaml } from "./yaml"
-import { createClassroom50Yaml } from "@/api/mutations/assignments"
+import { createClassroom50Yaml } from "@/domain/assignments"
 
 describe("parseClassroom50Yaml back-compat", () => {
   it("parses a pre-v1 file with only classroom + assignment", () => {

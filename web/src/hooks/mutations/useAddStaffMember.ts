@@ -8,8 +8,8 @@ import {
   grantTeamConfigRepoWrite,
   removeUserFromTeam,
 } from "@/github-core/mutations"
-import { syncRosterFromTeam } from "@/api/mutations/students"
-import { normalizeGithubUsername } from "@/api/mutations/students"
+import { syncRosterFromTeam } from "@/domain/students"
+import { normalizeGithubUsername } from "@/domain/students"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { rosterPath } from "@/util/rosterPath"
 import { CONFIG_REPO } from "@/util/configRepo"

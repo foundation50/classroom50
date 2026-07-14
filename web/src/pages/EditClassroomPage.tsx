@@ -17,7 +17,7 @@ import {
   type EditClassroomInput,
   type EditClassroomResult,
 } from "@/github-core/mutations"
-import { editClassroomWithConflictRetry } from "@/api/mutations/classrooms"
+import { editClassroomWithConflictRetry } from "@/domain/classrooms"
 import { isClassroomArchived } from "@/types/classroom"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"

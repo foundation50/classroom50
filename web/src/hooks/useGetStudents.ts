@@ -10,7 +10,7 @@ import {
 import { CONFIG_REPO } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
-import { parseRosterCsv, type RosterCsvProblem } from "@/api/mutations/students"
+import { parseRosterCsv, type RosterCsvProblem } from "@/domain/students"
 import type { Student } from "@/types/classroom"
 
 const rosterKey = (org: string, classroom: string) =>

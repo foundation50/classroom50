@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query"
-import { migrateRosterFile } from "@/api/mutations/students"
+import { migrateRosterFile } from "@/domain/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Auto-migrate on open: converge a classroom bootstrapped before the roster

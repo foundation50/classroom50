@@ -1,8 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  inviteRosterStudents,
-  bulkInviteByEmail,
-} from "@/api/mutations/students"
+import { inviteRosterStudents, bulkInviteByEmail } from "@/domain/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"

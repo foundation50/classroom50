@@ -1,5 +1,5 @@
 import type { GitHubClient } from "@/github-core/client"
-import { bulkUnenrollStudents } from "@/api/mutations/students"
+import { bulkUnenrollStudents } from "@/domain/students"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { studentKey } from "@/util/identity"
 import type { Student } from "@/types/classroom"

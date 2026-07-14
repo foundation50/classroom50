@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Alert, Button, Select } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
 import type { RosterRole } from "@/util/teamRoster"
-import type { BulkInviteByEmailResult } from "@/api/mutations/students"
+import type { BulkInviteByEmailResult } from "@/domain/students"
 import type { UploadKind } from "@/pages/students/uploadClassify"
 
 // The "Detected format" header + override picker, rendered once above the
