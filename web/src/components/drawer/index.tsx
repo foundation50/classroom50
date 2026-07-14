@@ -677,11 +677,13 @@ export const SidebarFooter = () => {
       })
     }
   }
-  // Org-owner signal for org-level routes (no classroom): only an owner gets a
-  // definite "Instructor" label. A non-owner staffer's role is per-classroom, so
-  // leave it blank rather than mislabel a TA as Instructor. Reads the shared
-  // org-role verdict (fail-closed) rather than re-deriving role === "admin".
-  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
+  // Org-owner signal for org-level routes (no classroom); see orgFooterRoleLabel
+  // for the labeling rule.
+  const {
+    isOwner,
+    isPending: ownerPending,
+    isError: ownerError,
+  } = useIsOrgOwner()
 
   // Role label per product mapping (owner shows as Instructor). On a classroom
   // route use the precise role; org-level routes delegate to the pure helper.
@@ -697,6 +699,7 @@ export const SidebarFooter = () => {
       isOrgSetup,
       isOwner,
       ownerPending,
+      ownerError,
       isStudent,
       roleLoading,
     })

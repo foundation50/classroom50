@@ -6,6 +6,7 @@ const base = {
   isOrgSetup: false,
   isOwner: false,
   ownerPending: false,
+  ownerError: false,
   isStudent: false,
   roleLoading: false,
 }
@@ -56,6 +57,26 @@ describe("orgFooterRoleLabel", () => {
     ).toEqual({
       labelKey: null,
       pending: false,
+    })
+  })
+
+  it("settled owner-error + config 404 => blank, not Student (don't mislabel a real owner)", () => {
+    expect(
+      orgFooterRoleLabel({ ...base, ownerError: true, isStudent: true }),
+    ).toEqual({
+      // A settled owner-error means the verdict is untrustworthy; suppress the
+      // Student fallback. Not pending (error is settled), so no spinner.
+      labelKey: null,
+      pending: false,
+    })
+  })
+
+  it("config-repo role loading => pending, Student suppressed until it resolves", () => {
+    expect(
+      orgFooterRoleLabel({ ...base, roleLoading: true, isStudent: true }),
+    ).toEqual({
+      labelKey: null,
+      pending: true,
     })
   })
 })
