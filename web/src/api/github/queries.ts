@@ -5,7 +5,7 @@ import type {
   GitHubRepo,
 } from "@/hooks/github/types"
 import type { Classroom } from "@/types/classroom"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
 // The classroom50 config repo's default branch. Org policy can seed a new repo
 // on `master`, so config-repo reads/writes must target the real branch, not a
@@ -15,7 +15,7 @@ export async function getConfigRepoBranch(
   org: string,
 ): Promise<string> {
   const repo = await client.request<GitHubRepo>(`/repos/${org}/${CONFIG_REPO}`)
-  return repo.default_branch || "main"
+  return repo.default_branch || DEFAULT_BRANCH
 }
 
 export function getBranchRef(
@@ -24,7 +24,7 @@ export function getBranchRef(
   branch?: string,
 ) {
   return client.request<GitHubBranchRef>(
-    `/repos/${org}/${CONFIG_REPO}/git/ref/heads/${encodeURIComponent(branch ?? "main")}`,
+    `/repos/${org}/${CONFIG_REPO}/git/ref/heads/${encodeURIComponent(branch ?? DEFAULT_BRANCH)}`,
   )
 }
 

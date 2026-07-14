@@ -1,6 +1,6 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { GitHubAPIError } from "@/hooks/github/errors"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import type { GitHubMoveBranch } from "@/hooks/github/types"
 import {
   getBranchRef,
@@ -368,7 +368,7 @@ export async function deleteClassroom(
   client: GitHubClient,
   input: DeleteClassroomInput,
 ) {
-  const { org, classroom, branch = "main" } = input
+  const { org, classroom, branch = DEFAULT_BRANCH } = input
   const prefix = `${classroom}/`
 
   log.info("delete classroom: started", { org, classroom })

@@ -23,7 +23,7 @@ import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
 import { STUDENT_CSV_FIELDS } from "@/api/mutations/students"
 import { getRepo } from "./queries"
 import { checkPages, repairOrgDefaults } from "./orgChecks"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "./rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
@@ -37,7 +37,7 @@ const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 // The branch Classroom 50 standardizes the config repo (and its skeleton
 // workflows/Pages/branch protection) on. New config repos are normalized to
 // this via a guarded rename.
-const CONFIG_REPO_BRANCH = "main"
+const CONFIG_REPO_BRANCH = DEFAULT_BRANCH
 
 const ASSIGNMENTS_TEMPLATE = {
   schema: "classroom50/assignments/v1",
@@ -300,7 +300,7 @@ export function updateRef(
   client: GitHubClient,
   org: string,
   sha: string,
-  branch = "main",
+  branch = DEFAULT_BRANCH,
 ) {
   return client.request<GitHubMoveBranch>(
     `/repos/${org}/${CONFIG_REPO}/git/refs/heads/${encodeURIComponent(branch)}`,
@@ -1230,7 +1230,7 @@ export async function renameConfigRepoToMain(
   org: string,
 ): Promise<{ renamed: boolean; from: string }> {
   const current =
-    (await getRepo(client, org, CONFIG_REPO))?.default_branch || "main"
+    (await getRepo(client, org, CONFIG_REPO))?.default_branch || DEFAULT_BRANCH
   if (current === CONFIG_REPO_BRANCH) {
     return { renamed: false, from: current }
   }
@@ -2138,7 +2138,7 @@ export async function triggerScoreCollection(
       `${org}/classroom50 not found; run setup for this org first`,
     )
   }
-  const ref = repo.default_branch || "main"
+  const ref = repo.default_branch || DEFAULT_BRANCH
 
   // Snapshot the newest dispatch run id before the POST. Run ids are monotonic,
   // so the run this POST creates is the oldest dispatch run whose id exceeds it.
@@ -2209,7 +2209,7 @@ export async function triggerRegrade(
       `${org}/classroom50 not found; run setup for this org first`,
     )
   }
-  const ref = repo.default_branch || "main"
+  const ref = repo.default_branch || DEFAULT_BRANCH
   const sinceRunId = baseline.workflow_runs?.[0]?.id ?? null
 
   // The workflow's `owner` input is optional; only send it when scoping to a

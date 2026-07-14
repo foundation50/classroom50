@@ -18,7 +18,7 @@ import type {
 } from "./types"
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import {
   GitHubAPIError,
   retryTransientGitHubError,
@@ -367,7 +367,7 @@ export function branchRefQuery(client: GitHubClient, org: string) {
     queryKey: githubKeys.branchRef(org),
     queryFn: ({ signal }) =>
       client.request<GitHubBranchRef>(
-        `/repos/${org}/${CONFIG_REPO}/git/ref/heads/main`,
+        `/repos/${org}/${CONFIG_REPO}/git/ref/heads/${DEFAULT_BRANCH}`,
         { method: "GET", signal },
       ),
     enabled: Boolean(org),

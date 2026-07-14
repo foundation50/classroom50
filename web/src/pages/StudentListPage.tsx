@@ -17,7 +17,7 @@ import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
 import { invalidateInviteQueries } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireTeacher from "@/components/RequireTeacher"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
 import { Badge } from "@/components/ui"
@@ -113,7 +113,7 @@ const StudentListContent = ({
               ·
             </span>
             <GitHubLink
-              href={`https://github.com/${org}/${CONFIG_REPO}/blob/main/${rosterPath(classroom)}`}
+              href={`https://github.com/${org}/${CONFIG_REPO}/blob/${DEFAULT_BRANCH}/${rosterPath(classroom)}`}
               label={t("students.viewCsvOnGitHub")}
               title={t("students.viewCsvOnGitHub")}
             />

@@ -36,7 +36,7 @@ import {
   githubKeys,
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
 } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import {
@@ -691,7 +691,7 @@ const EnrolledStudents = ({
               ))}
             </ul>
             <a
-              href={`https://github.com/${encodeURIComponent(org)}/${CONFIG_REPO}/edit/main/${rosterPath(
+              href={`https://github.com/${encodeURIComponent(org)}/${CONFIG_REPO}/edit/${DEFAULT_BRANCH}/${rosterPath(
                 classroom,
               )
                 .split("/")

@@ -14,7 +14,7 @@ import {
   getConfigRepoBranch,
 } from "../github/queries"
 import { getUser } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -1225,7 +1225,7 @@ async function createEmptyAssignmentRepo(params: {
 
   // Commit onto the repo's real default branch (GitHub picks it for an
   // auto_init repo); fall back to the requested branch, then "main".
-  const targetBranch = repo.default_branch || branch || "main"
+  const targetBranch = repo.default_branch || branch || DEFAULT_BRANCH
   return {
     kind: "fallback-empty",
     repo: {
@@ -1875,7 +1875,7 @@ async function resolveConfigRepoDefaultBranch(
 ): Promise<string> {
   try {
     const repo = await getRepo(client, org, CONFIG_REPO)
-    return repo?.default_branch || "main"
+    return repo?.default_branch || DEFAULT_BRANCH
   } catch {
     return fallbackBranch
   }
@@ -1896,8 +1896,8 @@ export async function resolveAutograderWorkflow(params: {
   if (isDefaultAutograder(autograder)) {
     return defaultAutograderWorkflow(
       org,
-      branch || "main",
-      configBranch || "main",
+      branch || DEFAULT_BRANCH,
+      configBranch || DEFAULT_BRANCH,
     )
   }
   // Narrowed: isDefaultAutograder returns true for undefined/"default", so a

@@ -13,13 +13,13 @@ import {
   type MemberDefaultSetting,
 } from "@/orgPolicy/desiredState"
 import { logger } from "@/lib/logger"
-import { CONFIG_REPO } from "@/util/configRepo"
+import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
 const log = logger.scope("github:orgChecks")
 
 // The org "Repository default branch name" we recommend. Not API-writable
 // (PATCH /orgs ignores it), so it's surfaced as an advisory recommendation only.
-export const RECOMMENDED_ORG_DEFAULT_BRANCH = "main"
+export const RECOMMENDED_ORG_DEFAULT_BRANCH = DEFAULT_BRANCH
 
 // A concern's read-only state: enforced means the live value already matches
 // the desired policy; unenforced means it drifted; unreadable means the read
@@ -195,9 +195,9 @@ async function resolveRepoDefaultBranch(
     const data = await client.request<{ default_branch?: string }>(
       `/repos/${org}/${repo}`,
     )
-    return data.default_branch || "main"
+    return data.default_branch || DEFAULT_BRANCH
   } catch {
-    return "main"
+    return DEFAULT_BRANCH
   }
 }
 
