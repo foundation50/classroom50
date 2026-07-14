@@ -10,11 +10,9 @@ import {
 import { githubKeys } from "@/github-core/queries"
 
 // Self-repair "claim instructor": ensure-and-grant the classroom's instructor
-// team, then idempotently add the acting owner to it. Per the TanStack split
-// (see hooks/mutations), the hook owns only the invalidation that must always
-// run (the instructor team's members + the viewer's team-membership, which the
-// role context reads); the caller passes success/error toasts via `mutate` so
-// they skip when unmounted.
+// team, then idempotently add the acting owner to it. Hook invalidates the
+// instructor team's members + the viewer's team-membership (what the role
+// context reads); success/error toasts stay at the call site (see ./README.md).
 export function useClaimInstructor(
   org: string,
   classroom: string,

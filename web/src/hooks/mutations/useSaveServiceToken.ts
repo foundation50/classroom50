@@ -5,11 +5,9 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Validate a service PAT and store it as the config repo's
-// CLASSROOM50_SERVICE_TOKEN secret. Per the TanStack split (see
-// hooks/mutations), the hook owns only the invalidation that must always run
-// (the org list + this org's service-token status); the caller passes the
-// field-clear / saved-kind / onSubmit UI effects via `mutate` so they skip when
-// unmounted (and composes useSafeSubmit around the call).
+// CLASSROOM50_SERVICE_TOKEN secret. Hook invalidates the org list + this org's
+// service-token status; the field-clear/saved-kind/onSubmit UI effects (and the
+// useSafeSubmit composition) stay at the call site (see ./README.md).
 export function useSaveServiceToken(org: string | undefined) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()

@@ -45,10 +45,9 @@ export async function syncRosterAfterStaffChange(
 // Add a staff member (instructor/ta) to a classroom's role team. The multi-step
 // chain — verify the account exists, ensure-and-grant the role team, strip the
 // auto-added creator on a fresh team, add the target — lives here behind one
-// named mutation. Per the TanStack split (see hooks/mutations), the hook owns
-// only what must always run (team-members invalidation + best-effort roster
-// sync); the caller passes an empty-the-field / toast / error-map `onSuccess`
-// and `onError` to `mutate` so those UI effects skip when unmounted.
+// named mutation. Hook invalidates team-members + best-effort roster sync; the
+// empty-the-field/toast/error-map effects stay at the call site (see
+// ./README.md).
 export function useAddStaffMember(
   org: string,
   classroom: string,

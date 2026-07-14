@@ -21,11 +21,10 @@ export type EnrollOrInviteFormValues = {
 
 // Add one student: a username enrolls via GitHub (resolve, team-add, org
 // invite) and stores the email; an email-only value sends a pure org invite
-// carrying the classroom team (no roster.csv write). Per the TanStack split
-// (see hooks/mutations), the hook owns only the cache reconcile that must
-// always run — invite-query invalidation plus the optimistic
-// seed-and-reconcile of the enrolled roster; the caller passes toast/success/
-// warning + form reset via `mutate`'s callbacks so those skip when unmounted.
+// carrying the classroom team (no roster.csv write). Hook owns the cache
+// reconcile — invite-query invalidation plus the optimistic seed-and-reconcile
+// of the enrolled roster; toast/success/warning + form reset stay at the call
+// site (see ./README.md).
 export function useEnrollOrInviteStudent(
   org: string,
   classroom: string,

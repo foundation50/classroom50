@@ -34,10 +34,9 @@ export function assertInviteSent(
 // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue an
 // equivalent fresh invite — same classroom role (instructor -> org OWNER), by
 // username when known (carries the team) else by email. A login-less,
-// email-less invite can't be re-issued (dismiss-only). Per the TanStack split
-// (see hooks/mutations), the hook owns only the invite-query invalidation that
-// must always run; the caller passes the error toast via `mutate` so it skips
-// when unmounted.
+// email-less invite can't be re-issued (dismiss-only). Hook owns the
+// invite-query invalidation; the error toast stays at the call site (see
+// ./README.md).
 export function useReinviteFailedInvite(
   org: string,
   classroom: string,

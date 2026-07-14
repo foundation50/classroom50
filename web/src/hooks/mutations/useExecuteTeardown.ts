@@ -7,12 +7,11 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Execute a teardown (delete every repo + classroom team, marker deleted last).
-// Per the TanStack split (see hooks/mutations), the hook owns only the org-list
-// invalidation that must always run: on success unconditionally, and on a
-// rate-limit failure (which may have already deleted some repos). It does NOT
-// swallow the error — mutateAsync still REJECTS so the caller's ConfirmModal can
-// show the failure inline (the re-throw contract); the conditional home-redirect
-// on a clean run also stays at the call site.
+// Hook invalidates the org list on success AND on a rate-limit failure (which
+// may have already deleted some repos). It does NOT swallow the error —
+// mutateAsync still REJECTS so the caller's ConfirmModal shows the failure
+// inline (the re-throw contract); the clean-run home-redirect stays at the call
+// site (see ./README.md).
 export function useExecuteTeardown(plan: TeardownPlan | null) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
