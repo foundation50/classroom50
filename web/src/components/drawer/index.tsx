@@ -37,11 +37,12 @@ import {
   useClassroomRoleContextOptional,
 } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import { can } from "@/util/capabilities"
+import { orgFooterRoleLabel } from "./footerRoleLabel"
 import { roleLabelKey, isStaffRole, type ViewAsRole } from "@/util/resolveRole"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import useGetOrgMembership from "@/hooks/useGetOrgMembership"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
@@ -676,30 +677,32 @@ export const SidebarFooter = () => {
       })
     }
   }
-  // Org-admin signal for org-level routes (no classroom): only an owner gets a
+  // Org-owner signal for org-level routes (no classroom): only an owner gets a
   // definite "Instructor" label. A non-owner staffer's role is per-classroom, so
-  // leave it blank rather than mislabel a TA as Instructor.
-  const { data: orgMembership, isLoading: orgMembershipLoading } =
-    useGetOrgMembership(org)
-  const isOwner = orgMembership?.role === "admin"
+  // leave it blank rather than mislabel a TA as Instructor. Reads the shared
+  // org-role verdict (fail-closed) rather than re-deriving role === "admin".
+  const { isOwner, isPending: ownerPending } = useIsOrgOwner()
 
   // Role label per product mapping (owner shows as Instructor). On a classroom
-  // route use the precise role; on org-level routes assert only owner or a
-  // definite student, else blank.
+  // route use the precise role; org-level routes delegate to the pure helper.
   let roleLabelText: string | null
+  let labelPending: boolean
   if (classroom) {
     const key = classroomRoleLoading ? null : roleLabelKey(classroomRole)
     roleLabelText = key ? t(key) : null
-  } else if (isOrgSetup || isOwner) {
-    roleLabelText = t("nav.roleInstructor")
-  } else if (!orgMembershipLoading && !roleLoading && isStudent) {
-    roleLabelText = t("nav.roleStudent")
+    labelPending = classroomRoleLoading
   } else {
-    roleLabelText = null
+    const orgLabel = orgFooterRoleLabel({
+      hasOrg: Boolean(org),
+      isOrgSetup,
+      isOwner,
+      ownerPending,
+      isStudent,
+      roleLoading,
+    })
+    roleLabelText = orgLabel.labelKey ? t(orgLabel.labelKey) : null
+    labelPending = orgLabel.pending
   }
-  const labelPending = classroom
-    ? classroomRoleLoading
-    : roleLoading || orgMembershipLoading
 
   const [menuOpen, setMenuOpen] = useState(false)
   const footerRef = useRef<HTMLDivElement | null>(null)
