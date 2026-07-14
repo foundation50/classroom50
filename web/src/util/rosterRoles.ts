@@ -10,9 +10,8 @@ import {
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
 // surfaces can't drift on tone or precedence (AGENTS.md: one recipe, one source).
-// ROLE_RANK and sortRolesByRank live in teamRoster (next to the row type they
-// order) and are re-exported here so UI callers have one import for all role
-// presentation.
+// ROLE_RANK and sortRolesByRank are single-sourced in util/roles and re-exported
+// here (via teamRoster) so UI callers have one import for all role presentation.
 export { ROLE_RANK, sortRolesByRank }
 
 // i18n key per role for row badges and filter labels.

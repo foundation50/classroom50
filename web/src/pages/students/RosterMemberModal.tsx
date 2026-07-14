@@ -238,7 +238,9 @@ const RosterMemberModal = ({
     canManage && isSelf && row.state === "enrolled" && Boolean(row.username)
   const selectedRole = pendingRole ?? currentRole
   const roleChanged = selectedRole !== currentRole
-  const roleGrantsOwner = selectedRole === "instructor"
+  // Single-sourced with the write mapping: a role grants org owner iff its
+  // invite carries the "admin" org role (currently only instructor).
+  const roleGrantsOwner = orgRoleForRole(selectedRole) === "admin"
   const canApplyRole = roleChanged && (!roleGrantsOwner || roleOwnerConfirmed)
 
   const handleAssignRole = async () => {

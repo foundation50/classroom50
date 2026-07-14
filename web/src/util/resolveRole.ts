@@ -1,22 +1,16 @@
 import { GitHubAPIError } from "@/github-core/errors"
+import type {
+  EffectiveRole,
+  OrgRole,
+  Membership,
+  ViewAsRole,
+} from "@/util/roles"
+import { ROLE_RANK } from "@/util/roles"
 
-// The viewer's effective role WITHIN a classroom, used by route guards and UI
-// visibility. Precedence (highest first): instructor > ta > student. Org-admin
-// status is NOT a classroom role (see resolveClassroomRole for the KTD-4
-// rationale). `unresolved` is a fail-closed sentinel: a needed signal hit a
-// transient error, so callers treat it as "don't redirect; let the page load"
-// rather than demoting a real staff member on a blip.
-export type EffectiveRole = "instructor" | "ta" | "student" | "unresolved"
-
-// The viewer's ORG-wide capability, independent of any classroom. `owner` (org
-// admin) gates org settings, member management, and classroom creation.
-// `unresolved` is the same fail-closed sentinel as EffectiveRole.
-export type OrgRole = "owner" | "member" | "unresolved"
-
-// A tri-state membership signal: definitively in / definitively out / couldn't
-// tell (transient). Fail-closed: a blip reads as `unresolved`, never as a
-// definitive verdict (see membershipFromQuery).
-export type Membership = "member" | "non-member" | "unresolved"
+// Role types are single-sourced in util/roles; re-exported here because the
+// resolution logic below is their primary consumer and guards/UI reach for the
+// type alongside these resolvers.
+export type { EffectiveRole, OrgRole, Membership, ViewAsRole }
 
 // Structural inputs so the verdict is a pure, unit-testable function (no React
 // Query). Each signal is pre-reduced to its tri-state.
@@ -82,18 +76,6 @@ export function resolveOrgRole(input: {
 // load".
 export function isStaffRole(role: EffectiveRole): boolean {
   return role === "instructor" || role === "ta" || role === "unresolved"
-}
-
-// The roles an instructor can preview the app AS. A client-side lens for
-// verifying what each role sees — never escalates.
-export type ViewAsRole = "ta" | "student"
-
-// Rank for the downgrade-only clamp. `unresolved` is intentionally absent — we
-// never clamp an in-flight role (the guard is still showing a spinner).
-const ROLE_RANK: Record<Exclude<EffectiveRole, "unresolved">, number> = {
-  instructor: 2,
-  ta: 1,
-  student: 0,
 }
 
 // Apply a "view as" preview to an actual role. DOWNGRADE-ONLY: the preview can

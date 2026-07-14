@@ -2,6 +2,24 @@ import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { rosterClaimSet } from "@/util/identity"
+import {
+  type RosterRole,
+  ROLE_RANK,
+  sortRolesByRank,
+  orgRoleForRole,
+  roleForOrgRole,
+} from "@/util/roles"
+
+// Role vocabulary is single-sourced in util/roles. Re-exported here because the
+// roster row logic below is its primary consumer and callers naturally reach for
+// these alongside TeamRosterRow; roles.ts stays the definition home.
+export {
+  type RosterRole,
+  ROLE_RANK,
+  sortRolesByRank,
+  orgRoleForRole,
+  roleForOrgRole,
+}
 
 // Team-driven roster: the classroom GitHub team is the source of truth for
 // enrollment and role, not roster.csv. Enrolled/pending rows come from team
@@ -29,37 +47,6 @@ export type TeamRosterRowState =
   | "pending"
   | "needs_attention_in_org"
   | "needs_attention_not_in_org"
-
-// A person's classroom role(s). "student" = classroom team; "instructor"/"ta"
-// = the per-classroom staff teams. A person can hold several (an instructor
-// also on the student team), so a row carries a set, unioned across teams.
-export type RosterRole = StaffRole | "student"
-
-// Precedence for the primary badge / role sort: instructor > ta > student.
-// Exported so the shared role-presentation module (rosterRoles) re-exports it
-// rather than defining a second copy.
-export const ROLE_RANK: Record<RosterRole, number> = {
-  instructor: 2,
-  ta: 1,
-  student: 0,
-}
-
-// The GitHub org membership role an invite/role-change carries for a classroom
-// role: an instructor becomes an org OWNER ("admin"); student/ta are plain
-// members. One source for this security-sensitive mapping (who gets org owner)
-// so a missed hand-copy can't silently mis-scope admin access.
-export function orgRoleForRole(role: RosterRole): "admin" | "direct_member" {
-  return role === "instructor" ? "admin" : "direct_member"
-}
-
-// Inverse of orgRoleForRole: the classroom role implied by a GitHub org
-// membership role on an existing invitation. "admin" means the invite grants
-// org OWNER, i.e. an instructor; anything else re-invites as a plain student
-// (org role alone can't distinguish TA from student, and student is the safe
-// default a re-invite lands on — a TA re-invite would just be re-assigned).
-export function roleForOrgRole(orgRole: string): RosterRole {
-  return orgRole === "admin" ? "instructor" : "student"
-}
 
 export type TeamRosterRow = {
   // Stable identity for React keys and joins: github_id || login || email.
@@ -375,13 +362,6 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 function addRole(row: TeamRosterRow, role: RosterRole): void {
   if (row.roles.includes(role)) return
   row.roles = sortRolesByRank([...row.roles, role])
-}
-
-// Sort a role set by precedence (highest first). Pure; returns a new array.
-// Lives here beside ROLE_RANK (its only dependency) so the rank comparator has
-// a single home; rosterRoles re-exports it for UI callers.
-export function sortRolesByRank(roles: RosterRole[]): RosterRole[] {
-  return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
 // Display name for sorting: "Last, First" folded to a comparable string, else
