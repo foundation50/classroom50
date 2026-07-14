@@ -83,12 +83,15 @@ export async function createClassroomFiles(
     }
   }
 
-  // GitHub auto-adds the authenticated creator as a maintainer of every team the
-  // create-team POST makes, so the creator lands on the students and both staff
-  // teams — but their only intended role is instructor. Drop them from the
-  // students and TA teams so the team-driven roster doesn't count the owner as an
-  // enrolled student/TA. Best-effort and idempotent (404 = already absent); a
-  // failure just leaves them harmlessly on a team.
+  // The creator must never hold a student or TA role — mixed roles aren't
+  // allowed, and the team-driven roster would otherwise count the owner as an
+  // enrolled student/TA. GitHub silently adds the creator as a maintainer of
+  // every team the create POST makes, so drop them from the students and TA
+  // teams unconditionally: the drop is deliberately NOT gated on whether we
+  // created vs adopted the team — an owner sitting on an adopted students/TA
+  // team is exactly the mixed-role state we're clearing. Best-effort and
+  // idempotent (404 = already absent); a failure just leaves them on a team,
+  // where the roster's per-role badges surface it for manual cleanup.
   if (input.creator) {
     const dropSlugs = [team.slug, teams.ta?.slug].filter(
       (slug): slug is string => Boolean(slug),

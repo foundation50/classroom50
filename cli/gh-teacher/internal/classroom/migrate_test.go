@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"sort"
 	"strings"
 	"sync"
 	"testing"
@@ -251,6 +253,14 @@ func TestRunMigrate_NonDryRun_HappyPath(t *testing.T) {
 		}
 	}
 
+	// The creator is dropped from the students + TA teams (mixed roles aren't
+	// allowed) but NEVER the instructor team — the owner's only role.
+	sort.Strings(state.membershipDeleted)
+	wantDropped := []string{"classroom50-classroom50test", "classroom50-classroom50test-ta"}
+	if !reflect.DeepEqual(state.membershipDeleted, wantDropped) {
+		t.Errorf("membership DELETEs = %v, want %v (students + ta, never instructor)", state.membershipDeleted, wantDropped)
+	}
+
 	// Final stdout line is parseable; commit SHA appears.
 	if !strings.Contains(stdout.String(), "cs50-fall-2026/classroom50/classroom50test: migrated from classroom 95884") {
 		t.Errorf("stdout missing parseable migration result line:\n%s", stdout.String())
@@ -389,11 +399,12 @@ type migrateE2EState struct {
 	existingDirs     map[string]bool // <short-name> → already exists in target classroom50 (default false)
 
 	// Captured side-effects.
-	generated        map[string]bool   // "owner/repo" → was generated
-	markedAsTemplate map[string]bool   // "owner/repo" → got is_template PATCH
-	uploadedFiles    map[string]string // git tree path → blob content
-	commitsCreated   int
-	teamsCreated     int // count of POST /orgs/{org}/teams (students + staff)
+	generated         map[string]bool   // "owner/repo" → was generated
+	markedAsTemplate  map[string]bool   // "owner/repo" → got is_template PATCH
+	uploadedFiles     map[string]string // git tree path → blob content
+	commitsCreated    int
+	teamsCreated      int      // count of POST /orgs/{org}/teams (students + staff)
+	membershipDeleted []string // slugs that received a DELETE .../memberships/{user}
 
 	parentSHA     string
 	parentTreeSHA string
@@ -612,9 +623,14 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 		writeJSON(t, w, map[string]any{"state": "active"})
 
 	// Target-side: membership DELETE — dropping the creator from the
-	// students + TA teams (undoing GitHub's implicit creator-as-maintainer
-	// grant on team create). Idempotent; 204 = removed.
+	// students + TA teams (they must not hold a student/TA role). Idempotent;
+	// 204 = removed. Record the targeted slug so the test can assert WHICH
+	// teams are dropped (students + ta, never instructor).
 	case strings.HasPrefix(path, "/orgs/"+s.targetOrg()+"/teams/") && strings.Contains(path, "/memberships/") && r.Method == http.MethodDelete:
+		if slug, _, ok := strings.Cut(strings.TrimPrefix(path, "/orgs/"+s.targetOrg()+"/teams/"), "/memberships/"); ok {
+			// dispatch runs under s.mu (see handler), so append directly.
+			s.membershipDeleted = append(s.membershipDeleted, slug)
+		}
 		w.WriteHeader(http.StatusNoContent)
 
 	default:

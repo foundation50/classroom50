@@ -120,6 +120,9 @@ describe("createClassroomFiles creator team cleanup", () => {
   const routingClient = (opts: {
     onDelete: (path: string) => void
     deleteThrows?: boolean
+    // When true, the students-team create POST returns 422 so the flow adopts a
+    // pre-existing team (created: false) instead of creating it.
+    adoptStudentsTeam?: boolean
   }): GitHubClient => {
     const request = vi.fn(
       async (path: string, options?: GitHubRequestOptions) => {
@@ -130,9 +133,20 @@ describe("createClassroomFiles creator team cleanup", () => {
           if (opts.deleteThrows) throw apiError(403)
           return undefined
         }
-        // Team create/adopt -> { id, slug } derived from the POSTed name.
+        // Adopt path: the students-team GET returns the pre-existing secret team.
+        if (
+          method === "GET" &&
+          /\/orgs\/[^/]+\/teams\/classroom50-cs101$/.test(path)
+        ) {
+          return { id: 7, slug: "classroom50-cs101", privacy: "secret" }
+        }
+        // Team create/adopt -> { id, slug } derived from the POSTed name. When
+        // adoptStudentsTeam is set, the students team POST 422s (already exists).
         if (method === "POST" && /\/orgs\/[^/]+\/teams$/.test(path)) {
           const name = (options?.body as { name?: string })?.name ?? "team"
+          if (opts.adoptStudentsTeam && name === "classroom50-cs101") {
+            throw apiError(422)
+          }
           return { id: 1, slug: name }
         }
         // Config-repo read (getConfigRepoBranch).
@@ -211,5 +225,26 @@ describe("createClassroomFiles creator team cleanup", () => {
     await createClassroomFiles(client, { ...input, creator: undefined })
 
     expect(deleted).toHaveLength(0)
+  })
+
+  it("still drops the creator from an ADOPTED students team (mixed roles aren't allowed)", async () => {
+    // The students team already exists (POST 422 -> adopt). Mixed roles are
+    // disallowed, so the creator must be dropped regardless of whether we
+    // created or adopted the team — the drop is intentionally not gated on the
+    // created flag.
+    const deleted: string[] = []
+    const client = routingClient({
+      onDelete: (p) => deleted.push(p),
+      adoptStudentsTeam: true,
+    })
+
+    await createClassroomFiles(client, input)
+
+    expect(deleted).toContain(
+      "/orgs/acme/teams/classroom50-cs101/memberships/prof",
+    )
+    expect(deleted).toContain(
+      "/orgs/acme/teams/classroom50-cs101-ta/memberships/prof",
+    )
   })
 })

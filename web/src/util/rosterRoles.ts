@@ -49,14 +49,6 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
   needs_attention_not_in_org: "students.statusNeedsAttentionNotInOrg",
 }
 
-// A row's single highest-precedence role for the primary badge (instructor >
-// ta > student). Roles are stored ROLE_RANK-sorted (see addRole in teamRoster),
-// so the first is the highest; this is a named accessor so callers don't reach
-// into roles[0] and re-encode the sort assumption.
-export function primaryRole(row: Pick<TeamRosterRow, "roles">): RosterRole {
-  return sortRolesByRank(row.roles)[0]
-}
-
 // Whether a row carries a student enrollment (a roster.csv row + student-team
 // membership). True for a plain student AND for a student who is also staff.
 // The single definition of "can be unenrolled": unenroll drops only the student

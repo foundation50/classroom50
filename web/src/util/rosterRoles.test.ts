@@ -3,7 +3,6 @@ import {
   countByRole,
   enrolledCountsByRole,
   hasStudentEnrollment,
-  primaryRole,
   sortRolesByRank,
 } from "./rosterRoles"
 import type {
@@ -39,18 +38,6 @@ describe("hasStudentEnrollment", () => {
   })
   it("is true for a student who is also staff (unenroll drops only the student side)", () => {
     expect(hasStudentEnrollment(row(["instructor", "student"]))).toBe(true)
-  })
-})
-
-describe("primaryRole", () => {
-  it("returns the sole role", () => {
-    expect(primaryRole(row(["student"]))).toBe("student")
-    expect(primaryRole(row(["ta"]))).toBe("ta")
-  })
-  it("picks the highest-precedence role (instructor > ta > student)", () => {
-    expect(primaryRole(row(["student", "instructor"]))).toBe("instructor")
-    expect(primaryRole(row(["student", "ta"]))).toBe("ta")
-    expect(primaryRole(row(["ta", "instructor", "student"]))).toBe("instructor")
   })
 })
 

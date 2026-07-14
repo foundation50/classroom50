@@ -217,11 +217,13 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 		return err
 	}
 
-	// GitHub auto-adds the authenticated creator as a maintainer of every team
-	// the create POST makes, so the acting teacher lands on the students and both
-	// staff teams — but their only intended role is instructor. Drop them from
-	// the students and TA teams so the team-driven roster doesn't count the owner
-	// as an enrolled student/TA. Best-effort, mirroring the web.
+	// The acting teacher must never hold a student or TA role — mixed roles
+	// aren't allowed, and the team-driven roster would otherwise count the owner
+	// as an enrolled student/TA. GitHub silently adds the creator as a maintainer
+	// of every team the create POST makes, so drop them from the students and TA
+	// teams unconditionally (not gated on created-vs-adopted: an owner on an
+	// adopted students/TA team is the same mixed-role state we clear). Best-effort,
+	// mirroring the web.
 	dropCreatorFromNonInstructorTeams(client, errOut, org, login, team.Slug, staffTeams)
 
 	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)
@@ -293,11 +295,13 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 }
 
 // dropCreatorFromNonInstructorTeams removes the acting teacher from the students
-// team and the TA team, undoing GitHub's implicit "creator becomes maintainer"
-// grant on team create so the owner's only role is instructor. Best-effort and
-// idempotent (RemoveTeamMembership treats 404 as success): a failure warns but
-// leaves the owner harmlessly on the team. A no-op when the login couldn't be
-// resolved.
+// team and the TA team so the owner's only role is instructor — mixed roles
+// aren't allowed. Unconditional by design: GitHub auto-adds the creator on teams
+// it creates, and an owner already sitting on an adopted students/TA team is the
+// same mixed-role state we clear, so neither case should be preserved.
+// Best-effort and idempotent (RemoveTeamMembership treats 404 as success): a
+// failure warns but leaves the owner on the team, where the roster's per-role
+// badges surface it. A no-op when the login couldn't be resolved.
 func dropCreatorFromNonInstructorTeams(client githubapi.Client, errOut io.Writer, org, login, studentsSlug string, staffTeams *configrepo.StaffTeamsRef) {
 	if login == "" {
 		return

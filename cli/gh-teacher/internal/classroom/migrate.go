@@ -240,8 +240,8 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 		return err
 	}
 
-	// Undo GitHub's implicit creator-as-maintainer grant on the students + TA
-	// teams so the owner's only role is instructor, same as `classroom add`.
+	// Drop the acting teacher from the students + TA teams so their only role is
+	// instructor — mixed roles aren't allowed, same as `classroom add`.
 	dropCreatorFromNonInstructorTeams(client, errOut, plan.TargetOrg, login, team.Slug, staffTeams)
 
 	build := func(parentSHA string) (map[string]string, error) {
