@@ -41,7 +41,11 @@ import {
   getCommit,
   getConfigRepoBranch,
 } from "../github/queries"
-import { GitHubAPIError, isDefinitiveGitHubStatus } from "@/hooks/github/errors"
+import {
+  GitHubAPIError,
+  isDefinitiveGitHubStatus,
+  tolerateGitHubError,
+} from "@/hooks/github/errors"
 import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"
@@ -250,13 +254,10 @@ export async function resolveTeamIdForRoleRead(
   if (role === "student") {
     return (await resolveClassroomTeam(client, org, classroom)).id
   }
-  try {
+  return tolerateGitHubError(async () => {
     const classroomJson = await getClassroomJson(client, { org, classroom })
     return classroomJson.teams?.[role]?.id
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) return undefined
-    throw err
-  }
+  }, undefined)
 }
 
 // Resolve the classroom team, retrying only TRANSIENT read failures (5xx / 429 /
@@ -1339,12 +1340,7 @@ async function readFileOrNull(
   path: string,
   ref: string,
 ): Promise<string | null> {
-  try {
-    return await getRawFile(client, { org, path, ref })
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) return null
-    throw err
-  }
+  return tolerateGitHubError(() => getRawFile(client, { org, path, ref }), null)
 }
 
 // Converge a classroom bootstrapped before the roster rename onto roster.csv,

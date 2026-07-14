@@ -5,6 +5,7 @@ import {
   isDefinitiveGitHubStatus,
   parseSsoAuthorizationUrl,
   retryTransientGitHubError,
+  tolerateGitHubError,
 } from "./errors"
 
 const apiError = (status: number, ssoHeader?: string | null) =>
@@ -243,5 +244,66 @@ describe("requestId", () => {
     const error = apiError(403, "required; url=https://github.com/orgs/a/sso")
     expect(error.requestId).toBeNull()
     expect(error.isSsoRequired).toBe(true)
+  })
+})
+
+describe("tolerateGitHubError", () => {
+  it("returns the op result on success", async () => {
+    expect(await tolerateGitHubError(async () => 42, -1)).toBe(42)
+  })
+
+  it("returns the fallback on a tolerated 404 (default predicate)", async () => {
+    const result = await tolerateGitHubError(async () => {
+      throw apiError(404)
+    }, [] as number[])
+    expect(result).toEqual([])
+  })
+
+  it("runs onCaught then returns the fallback", async () => {
+    let caught: GitHubAPIError | null = null
+    const result = await tolerateGitHubError(
+      async () => {
+        throw apiError(404)
+      },
+      null,
+      { onCaught: (e) => (caught = e) },
+    )
+    expect(result).toBeNull()
+    expect(caught).not.toBeNull()
+  })
+
+  it("widens with a predicate (tolerates 403)", async () => {
+    const result = await tolerateGitHubError(
+      async () => {
+        throw apiError(403)
+      },
+      [] as string[],
+      { predicate: (e) => e.isForbidden || e.isNotFound },
+    )
+    expect(result).toEqual([])
+  })
+
+  it("rethrows a non-tolerated status (500)", async () => {
+    await expect(
+      tolerateGitHubError(async () => {
+        throw apiError(500)
+      }, null),
+    ).rejects.toThrow("HTTP 500")
+  })
+
+  it("does not tolerate 403 under the default (404-only) predicate", async () => {
+    await expect(
+      tolerateGitHubError(async () => {
+        throw apiError(403)
+      }, null),
+    ).rejects.toBeInstanceOf(GitHubAPIError)
+  })
+
+  it("rethrows a non-GitHubAPIError throw unchanged", async () => {
+    await expect(
+      tolerateGitHubError(async () => {
+        throw new Error("network")
+      }, null),
+    ).rejects.toThrow("network")
   })
 })

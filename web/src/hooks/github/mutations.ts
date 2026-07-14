@@ -9,7 +9,7 @@ import {
   type GitHubOrgMembership,
   type GitHubBlob,
 } from "./types"
-import { GitHubAPIError } from "./errors"
+import { GitHubAPIError, tolerateGitHubError } from "./errors"
 import sodium from "libsodium-wrappers"
 import {
   getBranchRef,
@@ -639,19 +639,16 @@ export async function deleteClassroomTeam(
     throw err
   }
 
-  try {
-    await client.request(
-      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
-      {
-        method: "DELETE",
-      },
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return
-    }
-    throw err
-  }
+  await tolerateGitHubError(
+    () =>
+      client.request(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(team.slug)}`,
+        {
+          method: "DELETE",
+        },
+      ),
+    undefined,
+  )
 }
 
 export function addRepositoryToTeam(
@@ -712,19 +709,16 @@ export async function removeUserFromTeam(
 ): Promise<void> {
   const { org, teamSlug, username } = input
 
-  try {
-    await client.request(
-      `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
-        teamSlug,
-      )}/memberships/${encodeURIComponent(username)}`,
-      { method: "DELETE" },
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return
-    }
-    throw err
-  }
+  await tolerateGitHubError(
+    () =>
+      client.request(
+        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+          teamSlug,
+        )}/memberships/${encodeURIComponent(username)}`,
+        { method: "DELETE" },
+      ),
+    undefined,
+  )
 }
 
 // POST /orgs/{org}/invitations by invitee_id or email. An optional team_ids
@@ -774,17 +768,15 @@ export async function cancelOrgInvitation(
 ): Promise<{ cancelled: boolean }> {
   const { org, invitationId } = input
 
-  try {
-    await client.request(`/orgs/${org}/invitations/${invitationId}`, {
-      method: "DELETE",
-    })
-    return { cancelled: true }
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return { cancelled: false }
-    }
-    throw err
-  }
+  return tolerateGitHubError<{ cancelled: boolean }>(
+    async () => {
+      await client.request(`/orgs/${org}/invitations/${invitationId}`, {
+        method: "DELETE",
+      })
+      return { cancelled: true }
+    },
+    { cancelled: false },
+  )
 }
 
 // DELETE /orgs/{org}/memberships/{username}: removes an active member or
@@ -795,16 +787,13 @@ export async function removeOrgMembership(
 ): Promise<void> {
   const { org, username } = input
 
-  try {
-    await client.request(`/orgs/${org}/memberships/${username}`, {
-      method: "DELETE",
-    })
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return
-    }
-    throw err
-  }
+  await tolerateGitHubError(
+    () =>
+      client.request(`/orgs/${org}/memberships/${username}`, {
+        method: "DELETE",
+      }),
+    undefined,
+  )
 }
 
 export type OrgMembershipState = "active" | "pending"
@@ -837,17 +826,14 @@ export async function archiveRepo(
 ): Promise<void> {
   const { owner, repo } = input
 
-  try {
-    await client.request(`/repos/${owner}/${repo}`, {
-      method: "PATCH",
-      body: { archived: true },
-    })
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return
-    }
-    throw err
-  }
+  await tolerateGitHubError(
+    () =>
+      client.request(`/repos/${owner}/${repo}`, {
+        method: "PATCH",
+        body: { archived: true },
+      }),
+    undefined,
+  )
 }
 
 // DELETE /repos/{owner}/{repo}. Needs the delete_repo OAuth scope. A token
@@ -860,16 +846,13 @@ export async function deleteRepo(
 ): Promise<void> {
   const { owner, repo } = input
 
-  try {
-    await client.request(`/repos/${owner}/${repo}`, {
-      method: "DELETE",
-    })
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
-      return
-    }
-    throw err
-  }
+  await tolerateGitHubError(
+    () =>
+      client.request(`/repos/${owner}/${repo}`, {
+        method: "DELETE",
+      }),
+    undefined,
+  )
 }
 
 // GET /orgs/{org}/memberships/{username} -> the raw membership state. A 404
@@ -882,17 +865,14 @@ export async function readOrgMembershipState(
   org: string,
   username: string,
 ): Promise<OrgMembershipState | null> {
-  try {
+  return tolerateGitHubError(async () => {
     const membership = await client.request<{ state?: OrgMembershipState }>(
       `/orgs/${encodeURIComponent(org)}/memberships/${encodeURIComponent(
         username,
       )}`,
     )
     return membership.state ?? null
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) return null
-    throw err
-  }
+  }, null)
 }
 
 // GET /orgs/{org}/memberships/{username} -> state, or null on 404/error. The

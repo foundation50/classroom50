@@ -18,7 +18,11 @@ import type {
 } from "./types"
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
-import { GitHubAPIError, retryTransientGitHubError } from "./errors"
+import {
+  GitHubAPIError,
+  retryTransientGitHubError,
+  tolerateGitHubError,
+} from "./errors"
 import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
@@ -497,8 +501,11 @@ export function releasesQuery(
 ) {
   return queryOptions({
     queryKey: githubKeys.releases(owner, repo),
-    queryFn: async ({ signal }): Promise<GitHubRelease[]> => {
-      try {
+    queryFn: ({ signal }): Promise<GitHubRelease[]> =>
+      // A missing repo (student hasn't accepted, or a previewing teacher with
+      // no repo) 404s here — no releases, so [] falls through to the empty
+      // state. Other errors throw.
+      tolerateGitHubError(async () => {
         const releases = await client.request<GitHubRelease[]>(
           `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
             repo,
@@ -509,16 +516,7 @@ export function releasesQuery(
         return releases
           .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
           .sort((a, b) => releaseTime(b) - releaseTime(a))
-      } catch (err) {
-        // A missing repo (student hasn't accepted, or a previewing teacher with
-        // no repo) 404s here — no releases. Return [] so the page falls through
-        // to its empty state. Other errors throw.
-        if (err instanceof GitHubAPIError && err.status === 404) {
-          return []
-        }
-        throw err
-      }
-    },
+      }, []),
     enabled: Boolean(owner && repo),
     staleTime: 5 * 60 * 1000,
     retry: false,
@@ -539,19 +537,17 @@ export function configCommitsQuery(
 ) {
   return queryOptions({
     queryKey: githubKeys.configCommits(org ?? "", perPage),
-    queryFn: async ({ signal }): Promise<GitHubCommit[]> => {
-      try {
-        return await client.request<GitHubCommit[]>(
-          `/repos/${encodeURIComponent(
-            org ?? "",
-          )}/classroom50/commits?per_page=${perPage}`,
-          { method: "GET", signal },
-        )
-      } catch (err) {
-        if (err instanceof GitHubAPIError && err.status === 404) return []
-        throw err
-      }
-    },
+    queryFn: ({ signal }): Promise<GitHubCommit[]> =>
+      tolerateGitHubError(
+        () =>
+          client.request<GitHubCommit[]>(
+            `/repos/${encodeURIComponent(
+              org ?? "",
+            )}/classroom50/commits?per_page=${perPage}`,
+            { method: "GET", signal },
+          ),
+        [],
+      ),
     enabled: Boolean(org),
     staleTime: 60 * 1000,
     retry: false,
@@ -811,21 +807,16 @@ export async function listOrgAdmins(
   client: GitHubClient,
   org: string,
 ): Promise<GitHubUser[]> {
-  try {
-    return await paginateAll<GitHubUser>(
-      client,
-      (page) =>
-        `/orgs/${encodeURIComponent(org)}/members?role=admin&per_page=100&page=${page}`,
-    )
-  } catch (error) {
-    if (
-      error instanceof GitHubAPIError &&
-      (error.status === 403 || error.status === 404)
-    ) {
-      return []
-    }
-    throw error
-  }
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubUser>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/members?role=admin&per_page=100&page=${page}`,
+      ),
+    [],
+    { predicate: (e) => e.isForbidden || e.isNotFound },
+  )
 }
 
 export function orgAdminsQuery(client: GitHubClient, org: string) {
@@ -935,15 +926,10 @@ export async function getTeam(
 ) {
   const teamSlug = `classroom50-${classroom}`
 
-  try {
-    return await client.request<GitHubTeam>(`/orgs/${org}/teams/${teamSlug}`)
-  } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) {
-      return null
-    }
-
-    throw error
-  }
+  return tolerateGitHubError(
+    () => client.request<GitHubTeam>(`/orgs/${org}/teams/${teamSlug}`),
+    null,
+  )
 }
 
 // Whether the classroom team already has access to a repo (the in-org private
@@ -956,17 +942,12 @@ export async function teamHasRepoAccess(
   const { org, classroom, owner, repo } = input
   const teamSlug = `classroom50-${classroom}`
 
-  try {
+  return tolerateGitHubError(async () => {
     await client.request(
       `/orgs/${org}/teams/${teamSlug}/repos/${owner}/${repo}`,
     )
     return true
-  } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) {
-      return false
-    }
-    throw error
-  }
+  }, false)
 }
 
 export async function ensureTeam(
@@ -1218,14 +1199,10 @@ export async function getRepo(
   owner: string,
   repo: string,
 ) {
-  try {
-    return await client.request<GitHubRepo>(`/repos/${owner}/${repo}`)
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return null
-    }
-    throw err
-  }
+  return tolerateGitHubError(
+    () => client.request<GitHubRepo>(`/repos/${owner}/${repo}`),
+    null,
+  )
 }
 
 // List a team's members across all pages. 404 (team doesn't exist yet) returns
@@ -1235,18 +1212,17 @@ export async function listTeamMembers(
   org: string,
   teamSlug: string,
 ): Promise<GitHubUser[]> {
-  try {
-    return await paginateAll<GitHubUser>(
-      client,
-      (page) =>
-        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
-          teamSlug,
-        )}/members?per_page=100&page=${page}`,
-    )
-  } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) return []
-    throw error
-  }
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubUser>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+            teamSlug,
+          )}/members?per_page=100&page=${page}`,
+      ),
+    [],
+  )
 }
 
 export function teamMembersQuery(
@@ -1273,18 +1249,17 @@ export async function listTeamInvitations(
   org: string,
   teamSlug: string,
 ): Promise<GitHubOrgInvitation[]> {
-  try {
-    return await paginateAll<GitHubOrgInvitation>(
-      client,
-      (page) =>
-        `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
-          teamSlug,
-        )}/invitations?per_page=100&page=${page}`,
-    )
-  } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) return []
-    throw error
-  }
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubOrgInvitation>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams/${encodeURIComponent(
+            teamSlug,
+          )}/invitations?per_page=100&page=${page}`,
+      ),
+    [],
+  )
 }
 
 export function teamInvitationsQuery(
@@ -1332,16 +1307,15 @@ export async function listOrgTeams(
   client: GitHubClient,
   org: string,
 ): Promise<GitHubTeam[]> {
-  try {
-    return await paginateAll<GitHubTeam>(
-      client,
-      (page) =>
-        `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
-    )
-  } catch (error) {
-    if (error instanceof GitHubAPIError && error.status === 404) return []
-    throw error
-  }
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubTeam>(
+        client,
+        (page) =>
+          `/orgs/${encodeURIComponent(org)}/teams?per_page=100&page=${page}`,
+      ),
+    [],
+  )
 }
 
 export function orgTeamsQuery(client: GitHubClient, org: string) {
@@ -1372,35 +1346,29 @@ export async function getOpenPullRequests(
   repo: string,
   signal?: AbortSignal,
 ) {
-  try {
-    return await client.request<GitHubPullRequest[]>(
-      `/repos/${owner}/${repo}/pulls?state=open&per_page=10`,
-      { method: "GET", signal },
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return []
-    }
-    throw err
-  }
+  return tolerateGitHubError(
+    () =>
+      client.request<GitHubPullRequest[]>(
+        `/repos/${owner}/${repo}/pulls?state=open&per_page=10`,
+        { method: "GET", signal },
+      ),
+    [] as GitHubPullRequest[],
+  )
 }
 
 export async function getOrgRepos(client: GitHubClient, owner: string) {
-  try {
-    // Paginate to exhaustion: a single per_page=100 page silently under-counts
-    // orgs with >100 repos, making repo-list-derived signals (e.g. assignment
-    // acceptance on the submissions dashboard) miss students in large orgs. A
-    // first-page failure still surfaces a 404 as null below.
-    return await paginateAll<GitHubRepo>(
-      client,
-      (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
-    )
-  } catch (err) {
-    if (err instanceof GitHubAPIError && err.status === 404) {
-      return null
-    }
-    throw err
-  }
+  // Paginate to exhaustion: a single per_page=100 page silently under-counts
+  // orgs with >100 repos, making repo-list-derived signals (e.g. assignment
+  // acceptance on the submissions dashboard) miss students in large orgs. A
+  // first-page 404 surfaces as null.
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubRepo>(
+        client,
+        (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
+      ),
+    null as GitHubRepo[] | null,
+  )
 }
 
 type RepositorySecret = {
