@@ -491,7 +491,7 @@ func TestSeedStaffTeams_MaintainerAddFailureIsBestEffort(t *testing.T) {
 	client := githubtest.NewTestClient(t, server)
 
 	var errOut bytes.Buffer
-	refs, err := seedStaffTeams(client, &errOut, "o", "cs-principles")
+	refs, _, err := seedStaffTeams(client, &errOut, "o", "cs-principles")
 	if err != nil {
 		t.Fatalf("seedStaffTeams must not fail on a best-effort maintainer-add error: %v", err)
 	}
@@ -500,6 +500,112 @@ func TestSeedStaffTeams_MaintainerAddFailureIsBestEffort(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "couldn't add you") {
 		t.Errorf("stderr = %q, want a best-effort maintainer-add warning", errOut.String())
+	}
+}
+
+// TestDropCreatorFromNonInstructorTeams_RemovesStudentsAndTA pins that the
+// creator is dropped from the students and TA teams (undoing GitHub's implicit
+// creator-as-maintainer grant on team create) but NEVER from the instructor
+// team — the owner's only intended role.
+func TestDropCreatorFromNonInstructorTeams_RemovesStudentsAndTA(t *testing.T) {
+	var deleted []string
+	mux := http.NewServeMux()
+	mux.HandleFunc("/orgs/o/teams/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/memberships/") {
+			deleted = append(deleted, r.URL.Path)
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	staffTeams := &configrepo.StaffTeamsRef{
+		Instructor: &configrepo.TeamRef{ID: 1, Slug: "classroom50-cs-principles-instructor"},
+		TA:         &configrepo.TeamRef{ID: 2, Slug: "classroom50-cs-principles-ta"},
+	}
+
+	var errOut bytes.Buffer
+	dropCreatorFromNonInstructorTeams(client, &errOut, "o", "teacher", "classroom50-cs-principles", staffTeams)
+
+	want := []string{
+		"/orgs/o/teams/classroom50-cs-principles/memberships/teacher",
+		"/orgs/o/teams/classroom50-cs-principles-ta/memberships/teacher",
+	}
+	if len(deleted) != len(want) {
+		t.Fatalf("DELETEs = %v, want %v", deleted, want)
+	}
+	for _, w := range want {
+		found := false
+		for _, d := range deleted {
+			if d == w {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("missing DELETE %s (got %v)", w, deleted)
+		}
+	}
+	for _, d := range deleted {
+		if strings.Contains(d, "-instructor/") {
+			t.Errorf("must not drop the creator from the instructor team, got %s", d)
+		}
+	}
+}
+
+// TestDropCreatorFromNonInstructorTeams_BestEffort pins that a removal failure
+// warns but does not panic/fail — the owner is left harmlessly on the team.
+func TestDropCreatorFromNonInstructorTeams_BestEffort(t *testing.T) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/orgs/o/teams/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodDelete && strings.Contains(r.URL.Path, "/memberships/") {
+			http.Error(w, `{"message":"forbidden"}`, http.StatusForbidden)
+			return
+		}
+		http.NotFound(w, r)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	staffTeams := &configrepo.StaffTeamsRef{
+		Instructor: &configrepo.TeamRef{ID: 1, Slug: "classroom50-cs-principles-instructor"},
+		TA:         &configrepo.TeamRef{ID: 2, Slug: "classroom50-cs-principles-ta"},
+	}
+
+	var errOut bytes.Buffer
+	dropCreatorFromNonInstructorTeams(client, &errOut, "o", "teacher", "classroom50-cs-principles", staffTeams)
+
+	if !strings.Contains(errOut.String(), "couldn't remove you") {
+		t.Errorf("stderr = %q, want a best-effort removal warning", errOut.String())
+	}
+}
+
+// TestDropCreatorFromNonInstructorTeams_NoLogin pins that an unresolved login
+// (empty string) is a no-op — nothing to remove, no request.
+func TestDropCreatorFromNonInstructorTeams_NoLogin(t *testing.T) {
+	var hit bool
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		hit = true
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	staffTeams := &configrepo.StaffTeamsRef{
+		Instructor: &configrepo.TeamRef{ID: 1, Slug: "classroom50-cs-principles-instructor"},
+		TA:         &configrepo.TeamRef{ID: 2, Slug: "classroom50-cs-principles-ta"},
+	}
+
+	var errOut bytes.Buffer
+	dropCreatorFromNonInstructorTeams(client, &errOut, "o", "", "classroom50-cs-principles", staffTeams)
+
+	if hit {
+		t.Errorf("an empty login must make no request, but the server was hit")
 	}
 }
 

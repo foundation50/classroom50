@@ -212,10 +212,17 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 	// Create (or adopt) the staff teams (instructor, ta), grant each write on
 	// the config repo, and seed the acting teacher as instructor maintainer,
 	// mirroring the web.
-	staffTeams, err := seedStaffTeams(client, errOut, org, shortName)
+	staffTeams, login, err := seedStaffTeams(client, errOut, org, shortName)
 	if err != nil {
 		return err
 	}
+
+	// GitHub auto-adds the authenticated creator as a maintainer of every team
+	// the create POST makes, so the acting teacher lands on the students and both
+	// staff teams — but their only intended role is instructor. Drop them from
+	// the students and TA teams so the team-driven roster doesn't count the owner
+	// as an enrolled student/TA. Best-effort, mirroring the web.
+	dropCreatorFromNonInstructorTeams(client, errOut, org, login, team.Slug, staffTeams)
 
 	files, err := classroomScaffold(org, shortName, name, term, secret, nil, nil, &team, staffTeams)
 	if err != nil {
@@ -258,29 +265,56 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 
 // seedStaffTeams creates (or adopts) the instructor + ta teams, grants each
 // write on the config repo, and adds the acting teacher as instructor
-// maintainer — shared by `classroom add` and `classroom migrate`. The
-// maintainer add is best-effort: a CurrentUser/membership failure warns but
-// doesn't fail creation (the teacher can self-add via the web).
-func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, error) {
+// maintainer — shared by `classroom add` and `classroom migrate`. Returns the
+// resolved acting login (empty when it couldn't be read) so the caller can drop
+// that same user from the non-instructor teams. The maintainer add is
+// best-effort: a CurrentUser/membership failure warns but doesn't fail creation
+// (the teacher can self-add via the web).
+func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName string) (*configrepo.StaffTeamsRef, string, error) {
 	staffTeams, err := configrepo.EnsureStaffTeams(client, org, shortName)
 	if err != nil {
-		return nil, fmt.Errorf("create staff teams: %w", err)
+		return nil, "", fmt.Errorf("create staff teams: %w", err)
 	}
 	if staffTeams.Instructor == nil {
-		return staffTeams, nil
+		return staffTeams, "", nil
 	}
 	login, _, uerr := githubapi.CurrentUser(client)
 	if uerr != nil || login == "" {
 		// Surface the skip so a silent CurrentUser failure isn't invisible.
 		_, _ = fmt.Fprintf(errOut, "Warning: created the instructor team but couldn't resolve your GitHub login to add you (%v); add yourself at https://github.com/orgs/%s/teams/%s.\n",
 			uerr, org, staffTeams.Instructor.Slug)
-		return staffTeams, nil
+		return staffTeams, "", nil
 	}
 	if merr := configrepo.AddTeamMembershipWithRole(client, org, staffTeams.Instructor.Slug, login, configrepo.TeamMaintainer); merr != nil {
 		_, _ = fmt.Fprintf(errOut, "Warning: created the instructor team but couldn't add you (%s) to it (%v); add yourself at https://github.com/orgs/%s/teams/%s.\n",
 			login, merr, org, staffTeams.Instructor.Slug)
 	}
-	return staffTeams, nil
+	return staffTeams, login, nil
+}
+
+// dropCreatorFromNonInstructorTeams removes the acting teacher from the students
+// team and the TA team, undoing GitHub's implicit "creator becomes maintainer"
+// grant on team create so the owner's only role is instructor. Best-effort and
+// idempotent (RemoveTeamMembership treats 404 as success): a failure warns but
+// leaves the owner harmlessly on the team. A no-op when the login couldn't be
+// resolved.
+func dropCreatorFromNonInstructorTeams(client githubapi.Client, errOut io.Writer, org, login, studentsSlug string, staffTeams *configrepo.StaffTeamsRef) {
+	if login == "" {
+		return
+	}
+	slugs := []string{studentsSlug}
+	if staffTeams != nil && staffTeams.TA != nil {
+		slugs = append(slugs, staffTeams.TA.Slug)
+	}
+	for _, slug := range slugs {
+		if slug == "" {
+			continue
+		}
+		if err := configrepo.RemoveTeamMembership(client, org, slug, login); err != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: couldn't remove you (%s) from team %s (%v); you were auto-added when it was created — remove yourself at https://github.com/orgs/%s/teams/%s if you don't want to appear on its roster.\n",
+				login, slug, err, org, slug)
+		}
+	}
 }
 
 // classroomSummary is the per-classroom view for `classroom list --json`: the

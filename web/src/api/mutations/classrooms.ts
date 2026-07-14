@@ -17,6 +17,7 @@ import {
   ensureClassroomTeam,
   ensureStaffTeams,
   addUserToTeam,
+  removeUserFromTeam,
   isDeletableClassroomTeamRef,
   isNonFastForward,
   updateRef,
@@ -79,6 +80,35 @@ export async function createClassroomFiles(
         creator: input.creator,
       })
       // Non-fatal; surface nothing — the classroom still scaffolds.
+    }
+  }
+
+  // GitHub auto-adds the authenticated creator as a maintainer of every team the
+  // create-team POST makes, so the creator lands on the students and both staff
+  // teams — but their only intended role is instructor. Drop them from the
+  // students and TA teams so the team-driven roster doesn't count the owner as an
+  // enrolled student/TA. Best-effort and idempotent (404 = already absent); a
+  // failure just leaves them harmlessly on a team.
+  if (input.creator) {
+    const dropSlugs = [team.slug, teams.ta?.slug].filter(
+      (slug): slug is string => Boolean(slug),
+    )
+    for (const teamSlug of dropSlugs) {
+      try {
+        await removeUserFromTeam(client, {
+          org: input.org,
+          teamSlug,
+          username: input.creator,
+        })
+      } catch {
+        log.warn("create classroom: dropping creator from team failed", {
+          org: input.org,
+          classroom: input.classroom,
+          creator: input.creator,
+          teamSlug,
+        })
+        // Non-fatal; the classroom still scaffolds.
+      }
     }
   }
 

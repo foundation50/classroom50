@@ -611,6 +611,12 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 		w.WriteHeader(http.StatusOK)
 		writeJSON(t, w, map[string]any{"state": "active"})
 
+	// Target-side: membership DELETE — dropping the creator from the
+	// students + TA teams (undoing GitHub's implicit creator-as-maintainer
+	// grant on team create). Idempotent; 204 = removed.
+	case strings.HasPrefix(path, "/orgs/"+s.targetOrg()+"/teams/") && strings.Contains(path, "/memberships/") && r.Method == http.MethodDelete:
+		w.WriteHeader(http.StatusNoContent)
+
 	default:
 		t.Errorf("unexpected path %q method %s", path, r.Method)
 		http.NotFound(w, r)
