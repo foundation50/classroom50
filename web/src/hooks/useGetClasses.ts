@@ -1,12 +1,13 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
 import { jsonFileQuery } from "./github/queries"
+import { CONFIG_REPO } from "./github/orgChecks"
 import type { GitHubFileListing } from "./github/types"
 
 const useGetClasses = (org: string | undefined) => {
   const client = useGitHubClient()
   const classesQuery = useQuery(
-    jsonFileQuery<GitHubFileListing[]>(client, org ?? "", "classroom50", ""),
+    jsonFileQuery<GitHubFileListing[]>(client, org ?? "", CONFIG_REPO, ""),
   )
 
   return {

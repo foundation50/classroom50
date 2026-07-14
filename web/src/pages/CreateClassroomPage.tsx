@@ -17,6 +17,7 @@ import { logger } from "@/lib/logger"
 import RequireTeacher from "@/components/RequireTeacher"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import type {
   CreateClassroomInput,
   CreateClassroomResult,
@@ -58,7 +59,7 @@ const CreateClassroomPage = () => {
     },
     onSuccess: (result, variables) => {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
+        queryKey: githubKeys.jsonFile(org ?? "", CONFIG_REPO),
       })
       // Track the publish-pages deploy this commit triggers, anchored on SHA.
       if (org && result.newCommitSha) {

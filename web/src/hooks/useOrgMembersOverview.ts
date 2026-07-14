@@ -9,6 +9,7 @@ import {
   orgMembersAllQuery,
   teamMembersQuery,
 } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { toStudent } from "@/util/roster"
@@ -68,7 +69,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
       ...jsonFileQuery<Classroom>(
         client,
         org ?? "",
-        "classroom50",
+        CONFIG_REPO,
         `${name}/classroom.json`,
       ),
       enabled: Boolean(org),
@@ -80,7 +81,7 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
       ...csvFileQuery<Student>(
         client,
         org ?? "",
-        "classroom50",
+        CONFIG_REPO,
         rosterPath(name),
         undefined,
         legacyRosterPath(name),

@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 
@@ -44,7 +45,7 @@ const useClassroomSummaries = (
       jsonFileQuery<Classroom>(
         client,
         org ?? "",
-        "classroom50",
+        CONFIG_REPO,
         `${dir.path}/classroom.json`,
       ),
     ),

@@ -14,6 +14,7 @@ import {
   getUserQuery,
   getUser,
 } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
@@ -61,7 +62,7 @@ async function syncRosterAfterStaffChange(
   try {
     await syncRosterFromTeam(client, { org, classroom })
     await queryClient.invalidateQueries({
-      queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
+      queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
     })
   } catch (err) {
     // Best-effort; the roster page's auto-sync converges it on next open. Log

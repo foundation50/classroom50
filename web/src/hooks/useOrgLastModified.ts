@@ -2,6 +2,7 @@ import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { repoQuery } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 
 // Reads each org's `classroom50` config-repo `pushed_at` to drive the home
 // page's "last modified" sort. Uses `repoQuery` so the result shares the
@@ -19,7 +20,7 @@ const useOrgLastModified = (
 
   const results = useQueries({
     queries: logins.map((login) => ({
-      ...repoQuery(client, login, "classroom50"),
+      ...repoQuery(client, login, CONFIG_REPO),
       enabled: enabled && Boolean(login),
     })),
   })

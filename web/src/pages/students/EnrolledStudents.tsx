@@ -36,6 +36,7 @@ import {
   githubKeys,
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
 } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import {
@@ -473,7 +474,7 @@ const EnrolledStudents = ({
           : t("students.syncAdded", { count: result.addedUsernames.length }),
       })
       void queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
+        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       })
     },
     onError: (err) => {

@@ -14,6 +14,7 @@ import {
   getConfigRepoBranch,
 } from "../github/queries"
 import { getUser } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -523,7 +524,7 @@ async function contentsPathExists(
   org: string,
   path: string,
 ): Promise<boolean> {
-  return repoContentsPathExists(client, org, "classroom50", path)
+  return repoContentsPathExists(client, org, CONFIG_REPO, path)
 }
 
 // Check whether a path exists in an arbitrary repo. 404 -> false, 200 -> true.
@@ -1873,7 +1874,7 @@ async function resolveConfigRepoDefaultBranch(
   fallbackBranch: string,
 ): Promise<string> {
   try {
-    const repo = await getRepo(client, org, "classroom50")
+    const repo = await getRepo(client, org, CONFIG_REPO)
     return repo?.default_branch || "main"
   } catch {
     return fallbackBranch

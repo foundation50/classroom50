@@ -11,6 +11,7 @@ import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {
   deleteAssignment,
@@ -378,7 +379,7 @@ const AssignmentsTable = ({
                           queryClient.invalidateQueries({
                             queryKey: githubKeys.jsonFile(
                               org,
-                              "classroom50",
+                              CONFIG_REPO,
                               `${classroom}/assignments.json`,
                             ),
                           })

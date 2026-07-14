@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "./github/queries"
+import { CONFIG_REPO } from "./github/orgChecks"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"
 
@@ -173,7 +174,7 @@ const useGetScores = (
     ...jsonFileQuery<ScoresSchema>(
       client,
       org ?? "",
-      "classroom50",
+      CONFIG_REPO,
       `${classroom ?? ""}/scores.json`,
     ),
     select: normalizeScores,

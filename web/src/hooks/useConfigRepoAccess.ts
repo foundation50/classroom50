@@ -1,5 +1,6 @@
 import { useGitHubRepo } from "./github/hooks"
 import { retryTransientGitHubError } from "./github/errors"
+import { CONFIG_REPO } from "./github/orgChecks"
 import { resolveTeacherVerdict } from "@/util/resolveRole"
 
 // Org-scoped coarse staff verdict from the `classroom50` config repo: teacher =
@@ -10,7 +11,7 @@ import { resolveTeacherVerdict } from "@/util/resolveRole"
 // role resolves from per-classroom team membership — NOT this config-repo
 // verdict. No "view as" clamp applies here — the preview is classroom-scoped.
 export function useConfigRepoAccess(org: string | undefined) {
-  const repoQuery = useGitHubRepo(org, "classroom50", {
+  const repoQuery = useGitHubRepo(org, CONFIG_REPO, {
     retry: retryTransientGitHubError,
   })
 

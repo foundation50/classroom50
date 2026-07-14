@@ -20,6 +20,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
 import { githubKeys, invalidateInviteQueries } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
@@ -130,13 +131,13 @@ const OrgMembersPage = () => {
     if (!org) return
     if (!opts?.skipCsv) {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
+        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       })
     }
     queryClient.invalidateQueries({
       queryKey: githubKeys.jsonFile(
         org,
-        "classroom50",
+        CONFIG_REPO,
         `${classroom}/classroom.json`,
       ),
     })
@@ -153,7 +154,7 @@ const OrgMembersPage = () => {
       removed.map((r) => r.username?.trim().toLowerCase()).filter(Boolean),
     )
     queryClient.setQueryData<StudentCsvRow[]>(
-      githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
+      githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       (current) =>
         current?.filter(
           (s) =>
@@ -177,7 +178,7 @@ const OrgMembersPage = () => {
     if (!org) return
     window.setTimeout(() => {
       queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, "classroom50", rosterPath(classroom)),
+        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
       })
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(org, teamSlugFor(classroom)),
@@ -198,11 +199,7 @@ const OrgMembersPage = () => {
     const { classroom, action, addedStudents, affectedKeys } = input
 
     if (action === "add" && addedStudents.length > 0) {
-      const csvKey = githubKeys.csvFile(
-        org,
-        "classroom50",
-        rosterPath(classroom),
-      )
+      const csvKey = githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
       queryClient.setQueryData<StudentCsvRow[]>(csvKey, (current) => {
         const list = current ?? []
         const seen = new Set(

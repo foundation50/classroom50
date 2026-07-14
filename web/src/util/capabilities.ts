@@ -6,7 +6,6 @@ import type { EffectiveRole, OrgRole } from "@/util/resolveRole"
 export type Capability =
   // Org-wide (org admin only).
   | "manageOrg" // org settings / members / activity
-  | "createClassroom"
   // Org-scoped staff signal for surfaces with no classroom in scope (e.g. the
   // org "Published" page), backed by the config-repo verdict.
   | "viewOrgStaffContent"
@@ -37,7 +36,6 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
   const { orgRole, classroomRole, orgStaff } = input
   switch (cap) {
     case "manageOrg":
-    case "createClassroom":
       return orgRole === "owner"
     case "viewOrgStaffContent":
       return orgStaff === true

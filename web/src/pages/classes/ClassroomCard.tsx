@@ -7,6 +7,7 @@ import { Button, Card } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -210,7 +211,7 @@ function ClassroomMenu({
     onMutate: (active: boolean) => {
       const key = githubKeys.jsonFile(
         org,
-        "classroom50",
+        CONFIG_REPO,
         `${slug}/classroom.json`,
       )
       const prev = queryClient.getQueryData(key)
@@ -223,7 +224,7 @@ function ClassroomMenu({
       // Do NOT invalidate this exact key (GitHub contents is read-after-write
       // eventual). Repartition the list via the list-level key instead.
       queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, "classroom50"),
+        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
       return { key, prev }
     },
@@ -267,7 +268,7 @@ function ClassroomMenu({
           message: t("classes.deleteNoop", { classroom: slug }),
         })
         queryClient.invalidateQueries({
-          queryKey: githubKeys.jsonFile(org, "classroom50"),
+          queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
         })
         return
       }
@@ -275,14 +276,14 @@ function ClassroomMenu({
       // at once — the Contents API is read-after-write eventual, so an immediate
       // refetch can still return the just-deleted dir. Then invalidate to
       // reconcile.
-      const listKey = githubKeys.jsonFile(org, "classroom50", "")
+      const listKey = githubKeys.jsonFile(org, CONFIG_REPO, "")
       queryClient.setQueryData(
         listKey,
         (prev: GitHubFileListing[] | undefined) =>
           prev ? prev.filter((entry) => entry.path !== slug) : prev,
       )
       queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, "classroom50"),
+        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
       // The list flow stays put (no navigate), so it is the natural place to
       // finally surface the non-fatal team-cleanup warning that the edit page

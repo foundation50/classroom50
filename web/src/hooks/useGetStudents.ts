@@ -3,13 +3,14 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { csvFileQuery, githubKeys, rosterRawFileQuery } from "./github/queries"
+import { CONFIG_REPO } from "./github/orgChecks"
 import { toStudent } from "@/util/roster"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { parseRosterCsv, type RosterCsvProblem } from "@/api/mutations/students"
 import type { Student } from "@/types/classroom"
 
 const rosterKey = (org: string, classroom: string) =>
-  githubKeys.csvFile(org, "classroom50", rosterPath(classroom))
+  githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom))
 
 // Module-level so the reference is stable: react-query memoizes a `select`
 // result only while the selector identity is unchanged. An inline arrow would
@@ -33,7 +34,7 @@ const useGetStudents = (
     ...csvFileQuery<Student>(
       client,
       org ?? "",
-      "classroom50",
+      CONFIG_REPO,
       rosterPath(classroom ?? ""),
       undefined,
       legacyRosterPath(classroom ?? ""),
@@ -53,7 +54,7 @@ const useGetStudents = (
     rosterRawFileQuery(
       client,
       org ?? "",
-      "classroom50",
+      CONFIG_REPO,
       rosterPath(classroom ?? ""),
       legacyRosterPath(classroom ?? ""),
     ),

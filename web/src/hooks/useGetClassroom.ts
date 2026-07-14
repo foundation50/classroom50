@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { jsonFileQuery } from "./github/queries"
+import { CONFIG_REPO } from "./github/orgChecks"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Classroom } from "@/types/classroom"
 
@@ -13,7 +14,7 @@ const useGetClassroom = (
     ...jsonFileQuery<Classroom>(
       client,
       org ?? "",
-      "classroom50",
+      CONFIG_REPO,
       `${classroom ?? ""}/classroom.json`,
     ),
     // classroom.json lives in the private config repo, so a student fetch is a

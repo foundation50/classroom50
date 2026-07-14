@@ -7,6 +7,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useParams } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { putRepoSecret, validateServiceToken } from "@/hooks/github/mutations"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { githubKeys } from "@/hooks/github/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -203,7 +204,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
       return putRepoSecret(
         client,
         org,
-        "classroom50",
+        CONFIG_REPO,
         "CLASSROOM50_SERVICE_TOKEN",
         serviceToken,
       )

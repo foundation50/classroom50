@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import {
   copyAssignmentWithConflictRetry,
   nextAvailableSlug,
@@ -76,7 +77,7 @@ export function useReuseAssignment({
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(
           org,
-          "classroom50",
+          CONFIG_REPO,
           `${targetClassroom}/assignments.json`,
         ),
       })

@@ -15,17 +15,15 @@ const classroomRoles: EffectiveRole[] = [
 ]
 
 describe("can — org capabilities", () => {
-  for (const cap of ["manageOrg", "createClassroom"] as const) {
-    it(`${cap}: only an org owner`, () => {
-      expect(can(cap, { orgRole: "owner" })).toBe(true)
-      expect(can(cap, { orgRole: "member" })).toBe(false)
-      expect(can(cap, { orgRole: "unresolved" })).toBe(false)
-      // Classroom role is irrelevant to org capabilities.
-      for (const classroomRole of classroomRoles) {
-        expect(can(cap, { orgRole: "member", classroomRole })).toBe(false)
-      }
-    })
-  }
+  it("manageOrg: only an org owner", () => {
+    expect(can("manageOrg", { orgRole: "owner" })).toBe(true)
+    expect(can("manageOrg", { orgRole: "member" })).toBe(false)
+    expect(can("manageOrg", { orgRole: "unresolved" })).toBe(false)
+    // Classroom role is irrelevant to org capabilities.
+    for (const classroomRole of classroomRoles) {
+      expect(can("manageOrg", { orgRole: "member", classroomRole })).toBe(false)
+    }
+  })
 
   it("viewOrgStaffContent: keyed on the org-scoped config-repo staff verdict", () => {
     expect(can("viewOrgStaffContent", { orgStaff: true })).toBe(true)
@@ -109,7 +107,6 @@ describe("can — claimInstructor (KTD-4 self-repair)", () => {
 describe("deny-by-default coverage across the whole matrix", () => {
   const caps: Capability[] = [
     "manageOrg",
-    "createClassroom",
     "viewOrgStaffContent",
     "viewClassroomStaffContent",
     "editClassroomSettings",

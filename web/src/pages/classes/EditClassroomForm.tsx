@@ -8,6 +8,7 @@ import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { useForm } from "@tanstack/react-form"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "@tanstack/react-router"
@@ -130,7 +131,7 @@ const ArchiveClassroomButton = ({
       // reconciles later.
       const key = githubKeys.jsonFile(
         org,
-        "classroom50",
+        CONFIG_REPO,
         `${classroom}/classroom.json`,
       )
       queryClient.setQueryData(
@@ -141,7 +142,7 @@ const ArchiveClassroomButton = ({
       // Repartition the classes list (Active/Archived/All) — a different query
       // than the per-classroom classroom.json above.
       queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, "classroom50"),
+        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
       })
     },
   })
@@ -313,7 +314,7 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               classroom={classroom}
               onDeleteClassroom={() => {
                 queryClient.invalidateQueries({
-                  queryKey: githubKeys.jsonFile(org, "classroom50"),
+                  queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
                 })
                 navigate({ to: "/$org", params: { org } })
               }}

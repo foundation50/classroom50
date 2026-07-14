@@ -10,6 +10,7 @@ import ClassroomStaffSection from "./classes/ClassroomStaffSection"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { useTranslation } from "react-i18next"
 import {
@@ -65,12 +66,12 @@ const EditClassroomContent = ({
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(
           org ?? "",
-          "classroom50",
+          CONFIG_REPO,
           `${classroom}/classroom.json`,
         ),
       })
       queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org ?? "", "classroom50"),
+        queryKey: githubKeys.jsonFile(org ?? "", CONFIG_REPO),
       })
       // A classroom.json write triggers a publish-pages deploy — surface it in
       // the global activity banner, anchored on the commit SHA.

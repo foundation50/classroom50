@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { jsonFileQuery } from "./github/queries"
+import { CONFIG_REPO } from "./github/orgChecks"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Assignment } from "@/types/classroom"
 
@@ -19,7 +20,7 @@ const useGetClassroomAssignments = (
   const query = jsonFileQuery<AssignmentsSchema>(
     client,
     org ?? "",
-    "classroom50",
+    CONFIG_REPO,
     `${classroom ?? ""}/assignments.json`,
   )
   return useQuery({

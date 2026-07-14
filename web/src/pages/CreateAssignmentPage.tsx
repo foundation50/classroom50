@@ -18,6 +18,7 @@ import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvi
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
+import { CONFIG_REPO } from "@/hooks/github/orgChecks"
 import { logger } from "@/lib/logger"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -68,7 +69,7 @@ const CreateAssignmentPage = () => {
       queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(
           org ?? "",
-          "classroom50",
+          CONFIG_REPO,
           `${classroom ?? ""}/assignments.json`,
         ),
       })
