@@ -1,6 +1,6 @@
 import { AlertTriangle, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { Card, CopyableDetails, Button } from "@/components/ui"
 

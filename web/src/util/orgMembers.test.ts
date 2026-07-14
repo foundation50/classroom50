@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 import { aggregateOrgMembers, type ClassroomRoster } from "./orgMembers"
 import type { Student } from "@/types/classroom"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 
 const member = (id: number, login: string, name?: string): GitHubUser =>
   ({

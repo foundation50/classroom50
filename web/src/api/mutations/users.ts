@@ -1,6 +1,6 @@
-import type { GitHubClient } from "@/hooks/github/client"
-import { getPendingOrgInvite } from "@/hooks/github/mutations"
-import type { GitHubOrgMembership } from "@/hooks/github/types"
+import type { GitHubClient } from "@/github-core/client"
+import { getPendingOrgInvite } from "@/github-core/mutations"
+import type { GitHubOrgMembership } from "@/github-core/types"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("mutations:users")

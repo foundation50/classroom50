@@ -1,6 +1,6 @@
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
-import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
+import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { rosterClaimSet } from "@/util/identity"
 
 // Team-driven roster: the classroom GitHub team is the source of truth for

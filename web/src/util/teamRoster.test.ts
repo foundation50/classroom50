@@ -11,7 +11,7 @@ import {
 import { enrolledCountsByRole } from "./rosterRoles"
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"
-import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
+import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 
 const member = (id: number, login: string, over: Partial<GitHubUser> = {}) =>
   ({

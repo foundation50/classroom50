@@ -2,7 +2,7 @@
 // Deliberate divergence: the CLI is three-state (OK / WARN / FAIL), but the GUI
 // collapses WARN into FAIL — any drift is actionable (deriveVerdict).
 
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import {
   checkBranchProtection,
   checkConfigRepoDefaultBranch,
@@ -15,8 +15,8 @@ import {
   checkWorkflowPermissions,
   RECOMMENDED_ORG_DEFAULT_BRANCH,
   type CheckVerdict,
-} from "@/hooks/github/orgChecks"
-import { checkRulesets } from "@/hooks/github/rulesets"
+} from "@/github-core/orgChecks"
+import { checkRulesets } from "@/github-core/rulesets"
 import { CONFIG_REPO } from "@/util/configRepo"
 import {
   manualHardeningSteps,

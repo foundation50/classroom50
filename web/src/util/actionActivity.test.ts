@@ -12,7 +12,7 @@ import {
   trackerPhase,
   workflowFile,
 } from "./actionActivity"
-import type { GitHubWorkflowRun } from "@/hooks/github/types"
+import type { GitHubWorkflowRun } from "@/github-core/types"
 import type { ActionOperation } from "@/context/actions/ActionActivityProvider"
 import en from "@/locales/en.json"
 import { flattenBundle } from "@/i18n/customLocale"

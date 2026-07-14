@@ -7,7 +7,7 @@
 // Dev-diagnostic only: this is not persisted and carries no PII — just the
 // x-ratelimit-* counters GitHub returns on every response.
 
-import type { GitHubRateLimit } from "@/hooks/github/errors"
+import type { GitHubRateLimit } from "@/github-core/errors"
 
 // The stored snapshot plus when we observed it (epoch ms), so the overlay can
 // show "as of Ns ago" and a reset countdown.

@@ -1,6 +1,6 @@
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import { bulkUnenrollStudents } from "@/api/mutations/students"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import { studentKey } from "@/util/identity"
 import { rowToStudent, type TeamRosterRow } from "@/util/teamRoster"
 import { logger } from "@/lib/logger"

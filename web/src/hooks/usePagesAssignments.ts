@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { fetchPagesAssignments } from "./github/queries"
+import { fetchPagesAssignments } from "@/github-core/queries"
 
 const usePagesAssignments = (
   org: string | undefined,

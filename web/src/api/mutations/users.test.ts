@@ -5,8 +5,8 @@ import {
   acceptPendingOrgInviteOrThrow,
   NotActiveMemberError,
 } from "./users"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import type { GitHubClient } from "@/hooks/github/client"
+import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubClient } from "@/github-core/client"
 
 // acceptAndVerifyOrgMembership is the single verified-accept path: PATCH the
 // membership to "active", re-read it, and assert active. These tests pin the

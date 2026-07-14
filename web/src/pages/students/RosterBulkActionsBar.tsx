@@ -2,15 +2,15 @@ import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, Send, Upload, UserMinus, X, XCircle } from "lucide-react"
 
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   resendOrgInvitation,
   cancelOrgInvitation,
-} from "@/hooks/github/mutations"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
+} from "@/github-core/mutations"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,

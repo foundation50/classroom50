@@ -1,10 +1,10 @@
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import {
   extractAssignments,
   fetchJson,
   pagesAssignmentUrl,
   type AssignmentsJson,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
 import { CONFIG_REPO } from "@/util/configRepo"

@@ -5,7 +5,7 @@ import {
   getOpenPullRequests,
   githubKeys,
   type GitHubPullRequest,
-} from "./github/queries"
+} from "@/github-core/queries"
 
 // The Feedback PR for a student/group repo: the open PR the autograde workflow
 // opens after an accept. Returns the first open PR (there's at most one), or null

@@ -1,7 +1,7 @@
 import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import type { GitHubOrgDetails } from "@/hooks/github/types"
+import type { GitHubOrgDetails } from "@/github-core/types"
 
 // Batch plan-name fetches for a set of org logins. Only the "needs setup" subset
 // of the home view is passed in — every such org is admin-owned, so `plan` is

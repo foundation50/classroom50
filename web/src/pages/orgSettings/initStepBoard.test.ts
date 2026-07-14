@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { InitStepId } from "@/hooks/github/mutations"
+import type { InitStepId } from "@/github-core/mutations"
 import {
   INIT_STEP_META,
   INIT_STEP_ORDER,

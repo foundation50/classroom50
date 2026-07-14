@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { GitHubCommit, GitHubWorkflowRun } from "@/hooks/github/types"
+import type { GitHubCommit, GitHubWorkflowRun } from "@/github-core/types"
 import type { ActivityEntry } from "@/lib/activity/activityStore"
 import {
   classifyConfigCommit,

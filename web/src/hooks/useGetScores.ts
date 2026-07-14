@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { jsonFileQuery } from "./github/queries"
+import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_QUERIES } from "@/lib/logScopes"

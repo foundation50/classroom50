@@ -126,7 +126,7 @@ export default defineConfig([
   // instead of no-cycle silently going inert. Verified against an injected
   // fixture cycle before trusting it.
   {
-    files: ["src/hooks/github/**/*.ts", "src/api/**/*.ts"],
+    files: ["src/github-core/**/*.ts", "src/api/**/*.ts"],
     plugins: { "import-x": importX },
     settings: {
       "import-x/parsers": {

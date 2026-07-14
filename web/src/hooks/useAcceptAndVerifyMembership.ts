@@ -2,7 +2,7 @@ import { useEffect } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
-import type { GitHubOrgMembership } from "@/hooks/github/types"
+import type { GitHubOrgMembership } from "@/github-core/types"
 
 // The shared membership query key, read by useGetOwnOrgMembership on both the
 // /onboard and accept pages. Kept here so success can seed it directly.

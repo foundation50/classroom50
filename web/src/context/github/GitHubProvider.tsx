@@ -10,7 +10,7 @@ import {
   createGitHubClient,
   type GitHubClient,
   type GitHubResponseSignal,
-} from "@/hooks/github/client"
+} from "@/github-core/client"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { missingScopes } from "@/auth/scopes"
 import { observeResponse } from "@/lib/diagnostics/observed"

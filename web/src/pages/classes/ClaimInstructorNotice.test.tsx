@@ -32,7 +32,7 @@ vi.mock("@/auth/useGithubAuth", () => ({
 vi.mock("@/context/notifications/NotificationProvider", () => ({
   useToast: () => ({ notify: notifyMock }),
 }))
-vi.mock("@/hooks/github/mutations", () => ({
+vi.mock("@/github-core/mutations", () => ({
   ensureClassroomRoleTeam: (...a: unknown[]) => ensureTeamMock(...a),
   grantTeamConfigRepoWrite: (...a: unknown[]) => grantWriteMock(...a),
   addUserToTeam: (...a: unknown[]) => addUserMock(...a),

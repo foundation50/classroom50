@@ -10,8 +10,8 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 }))
 
 import { useGroupRepoMemberLogins } from "./useGroupRepoMembers"
-import { githubKeys } from "./github/queries"
-import type { GitHubUser } from "./github/types"
+import { githubKeys } from "@/github-core/queries"
+import type { GitHubUser } from "@/github-core/types"
 
 const user = (login: string): GitHubUser => ({ login }) as GitHubUser
 

@@ -9,7 +9,7 @@ import {
   rawFileQuery,
   repoQuery,
   viewerQuery,
-} from "./queries"
+} from "@/github-core/queries"
 
 export function useGitHubViewer() {
   const client = useGitHubClient()

@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
-import { getPendingOrgInvite } from "./github/mutations"
-import { retryTransientGitHubError } from "./github/errors"
+import { getPendingOrgInvite } from "@/github-core/mutations"
+import { retryTransientGitHubError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Reads the authenticated user's OWN membership in `org` (GET

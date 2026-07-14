@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup, act } from "@testing-library/react"
 import type { ClassroomSummary } from "@/hooks/useClassroomSummaries"
-import type { GitHubFileListing } from "@/hooks/github/types"
+import type { GitHubFileListing } from "@/github-core/types"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()

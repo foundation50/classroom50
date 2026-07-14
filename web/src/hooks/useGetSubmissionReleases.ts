@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { releasesQuery } from "./github/queries"
+import { releasesQuery } from "@/github-core/queries"
 import { studentRepoName } from "@/util/studentRepo"
 
 // The student's graded-submission releases (`submit/*` tags) for an assignment,

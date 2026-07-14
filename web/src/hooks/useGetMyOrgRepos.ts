@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { getOrgRepos } from "./github/queries"
+import { getOrgRepos } from "@/github-core/queries"
 
 const useGetOrgRepos = (org: string) => {
   const client = useGitHubClient()

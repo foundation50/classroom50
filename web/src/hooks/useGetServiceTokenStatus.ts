@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { getServiceTokenStatus, githubKeys } from "./github/queries"
+import { getServiceTokenStatus, githubKeys } from "@/github-core/queries"
 
 const useGetServiceTokenStatus = (org: string) => {
   const client = useGitHubClient()

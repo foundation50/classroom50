@@ -11,8 +11,8 @@ import {
 } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/hooks/github/queries"
-import { renameConfigRepoToMain } from "@/hooks/github/mutations"
+import { githubKeys } from "@/github-core/queries"
+import { renameConfigRepoToMain } from "@/github-core/mutations"
 import { Button, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import PlanBadge from "@/components/PlanBadge"
@@ -30,7 +30,7 @@ import type {
 import { REPAIRABLE_CONCERNS, repairConcern } from "@/orgPolicy/repair"
 import type { RepairResult } from "@/orgPolicy/repair"
 import { mergeUnresolved, readUnresolved } from "@/orgPolicy/unresolvedStore"
-import type { CheckState } from "@/hooks/github/orgChecks"
+import type { CheckState } from "@/github-core/orgChecks"
 import SettingsSection from "./SettingsSection"
 import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
 import {

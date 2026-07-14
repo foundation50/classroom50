@@ -8,15 +8,15 @@ import { useParams } from "@tanstack/react-router"
 import EditClassroomForm from "./classes/EditClassroomForm"
 import ClassroomStaffSection from "./classes/ClassroomStaffSection"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import { githubKeys } from "@/hooks/github/queries"
+import { GitHubAPIError } from "@/github-core/errors"
+import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { useTranslation } from "react-i18next"
 import {
   type EditClassroomInput,
   type EditClassroomResult,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import { editClassroomWithConflictRetry } from "@/api/mutations/classrooms"
 import { isClassroomArchived } from "@/types/classroom"
 import { useGitHubClient } from "@/context/github/GitHubProvider"

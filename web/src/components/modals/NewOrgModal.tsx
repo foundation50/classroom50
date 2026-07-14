@@ -5,7 +5,7 @@ import { useTranslation } from "react-i18next"
 
 import PlanBadge from "@/components/PlanBadge"
 import { Modal } from "@/components/ui"
-import type { Classroom50OrgSummary } from "@/hooks/github/queries"
+import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import { classifyPlan } from "@/lib/orgPlan"
 

@@ -13,10 +13,10 @@ const getAuthenticatedUserMock = vi.fn()
 vi.mock("@/api/mutations/students", () => ({
   unenrollStudent: (...args: unknown[]) => unenrollMock(...args),
 }))
-vi.mock("@/hooks/github/mutations", () => ({
+vi.mock("@/github-core/mutations", () => ({
   removeOrgMembership: (...args: unknown[]) => removeOrgMembershipMock(...args),
 }))
-vi.mock("@/hooks/github/errorMessage", () => ({
+vi.mock("@/github-core/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))

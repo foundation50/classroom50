@@ -14,11 +14,11 @@ import { DiagnosticsDialog } from "@/components/DiagnosticsDialog"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { configCommitsQuery } from "@/hooks/github/queries"
+import { configCommitsQuery } from "@/github-core/queries"
 import {
   listWorkflowRunsPage,
   workflowRunsPageKey,
-} from "@/hooks/github/activityRuns"
+} from "@/github-core/activityRuns"
 import { useActivity } from "@/lib/activity/useActivity"
 import {
   commitToItem,

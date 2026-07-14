@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { verifyClassroom50ConfigRepo } from "./github/queries"
+import { verifyClassroom50ConfigRepo } from "@/github-core/queries"
 
 export type OrgClassroom50Status = "ready" | "missing" | "unknown"
 

@@ -9,7 +9,7 @@ import {
   resolveTeacherVerdict,
   type ClassroomRoleInput,
 } from "./resolveRole"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const apiError = (status: number) =>
   new GitHubAPIError({

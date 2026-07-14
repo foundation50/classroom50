@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, Info, ShieldCheck } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import type { NotifyInput } from "@/context/notifications/NotificationProvider"
 import { inviteMemberToOrg } from "@/pages/orgMembers/inviteMemberToOrg"
 import type { MemberListRow } from "@/util/memberRow"

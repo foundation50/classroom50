@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it } from "vitest"
 
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   activityForOrg,
   clearActivity,

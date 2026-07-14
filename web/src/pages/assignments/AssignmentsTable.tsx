@@ -10,7 +10,7 @@ import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
-import { githubKeys } from "@/hooks/github/queries"
+import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import {

@@ -12,7 +12,7 @@ import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
 import useAddRepoCollaborator from "@/hooks/useAddRepoCollaborator"
 import useRemoveRepoCollaborator from "@/hooks/useRemoveRepoCollaborator"
 import { getName } from "@/util/students"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import type { Student } from "@/types/classroom"
 import { GROUP_SIZE_MIN } from "@/types/classroom"
 

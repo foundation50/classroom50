@@ -6,7 +6,7 @@
 // unit-testable in isolation.
 
 import type { ActivityEntry } from "@/lib/activity/activityStore"
-import type { GitHubCommit, GitHubWorkflowRun } from "@/hooks/github/types"
+import type { GitHubCommit, GitHubWorkflowRun } from "@/github-core/types"
 import { COMMIT_PREFIX } from "@/util/commit"
 import { escapeCsvFormulaInjection } from "@/util/csv"
 import { runTimes, trackerPhase, workflowFile } from "@/util/actionActivity"

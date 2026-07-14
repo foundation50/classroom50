@@ -1,7 +1,7 @@
 import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { repoQuery } from "@/hooks/github/queries"
+import { repoQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Reads each org's `classroom50` config-repo `pushed_at` to drive the home

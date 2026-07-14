@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { assertClassroomNotArchived, createClassroomFiles } from "./classrooms"
-import { GitHubAPIError, type GitHubRateLimit } from "@/hooks/github/errors"
-import type { GitHubClient, GitHubRequestOptions } from "@/hooks/github/client"
+import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
+import type { GitHubClient, GitHubRequestOptions } from "@/github-core/client"
 
 // assertClassroomNotArchived is the authoritative write-path guard fanned out
 // across ~11 assignment + roster mutations, so its branch matrix is

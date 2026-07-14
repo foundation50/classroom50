@@ -1,14 +1,14 @@
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import type {
   GitHubBranchRef,
   GitHubCommitRef,
   GitHubRepo,
-} from "@/hooks/github/types"
+} from "@/github-core/types"
 import type { Classroom } from "@/types/classroom"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
 // Low-level config-repo read primitives, consumed by the domain operations in
-// api/mutations/* — which import them downward, so the api/ <-> hooks/github
+// api/mutations/* — which import them downward, so the api/ <-> github-core
 // cycle stays broken.
 
 // The classroom50 config repo's default branch. Org policy can seed a new repo

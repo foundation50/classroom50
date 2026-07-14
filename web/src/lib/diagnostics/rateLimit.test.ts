@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import type { GitHubRateLimit } from "@/hooks/github/errors"
+import type { GitHubRateLimit } from "@/github-core/errors"
 import {
   countApiCall,
   getApiCallCount,

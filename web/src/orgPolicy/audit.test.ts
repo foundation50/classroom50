@@ -3,12 +3,12 @@ import { describe, expect, it } from "vitest"
 import { buildOrgAuditReport } from "./audit"
 import type { ConcernId } from "./audit"
 import { memberDefaultSettings } from "./desiredState"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   RULESET_NAME_FEEDBACK_BASE,
   RULESET_NAME_SUBMISSION_HISTORY,
-} from "@/hooks/github/rulesets"
-import type { GitHubClient } from "@/hooks/github/client"
+} from "@/github-core/rulesets"
+import type { GitHubClient } from "@/github-core/client"
 
 // The audit assembles checkOrgDefaults + the per-concern checks into a verdict.
 // The GUI is stricter than the CLI: ANY drift (critical or not) fails; a read

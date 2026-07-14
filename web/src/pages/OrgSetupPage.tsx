@@ -16,7 +16,7 @@ import {
   initClassroom50,
   type InitStepId,
   type InitStepUpdate,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { OrgSettingsPane } from "./OrgSettingsPage"

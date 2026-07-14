@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { getTeam } from "./github/queries"
+import { getTeam } from "@/github-core/queries"
 
 const useGetTeam = (org: string | undefined, classroom: string | undefined) => {
   const client = useGitHubClient()

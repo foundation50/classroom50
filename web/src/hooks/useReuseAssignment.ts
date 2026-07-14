@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/hooks/github/queries"
+import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import {
   copyAssignmentWithConflictRetry,

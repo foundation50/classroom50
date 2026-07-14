@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { logger } from "./logger"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import { clearActivity, readActivity } from "@/lib/activity/activityStore"
 
 // Under Vitest import.meta.env.DEV === true, so the module's MIN_LEVEL is

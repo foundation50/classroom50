@@ -1,11 +1,11 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import type { GitHubClient } from "@/hooks/github/client"
-import type { GitHubOrgMembership } from "@/hooks/github/types"
+import type { GitHubClient } from "@/github-core/client"
+import type { GitHubOrgMembership } from "@/github-core/types"
 import {
   getClassroom50OrgSummary,
   listAuthedOrgMemberships,
-} from "./github/queries"
+} from "@/github-core/queries"
 
 // One fetch of /user/memberships/orgs backs both the active-org list and the
 // pending-invite list, so the two hooks share a cache entry instead of racing

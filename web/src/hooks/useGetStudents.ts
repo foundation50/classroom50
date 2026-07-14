@@ -2,7 +2,11 @@ import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { csvFileQuery, githubKeys, rosterRawFileQuery } from "./github/queries"
+import {
+  csvFileQuery,
+  githubKeys,
+  rosterRawFileQuery,
+} from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"

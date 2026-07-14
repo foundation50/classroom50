@@ -13,7 +13,7 @@ import type {
   InitStepId,
   InitStepStatus,
   InitStepUpdate,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import { UnenforcedDefaultsList } from "./UnenforcedDefaultsList"
 import {
   isOrgDefaultsStepData,

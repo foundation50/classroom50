@@ -1,4 +1,4 @@
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import type { Assignment, AssignmentMode } from "@/types/classroom"
 import {
   GROUP_SIZE_MAX,
@@ -12,11 +12,11 @@ import {
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "@/hooks/github/configRepoReads"
-import { getUser } from "@/hooks/github/queries"
+} from "@/github-core/configRepoReads"
+import { getUser } from "@/github-core/queries"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import { draftToTest, makeSetupTest } from "@/util/assignmentTests"
@@ -48,9 +48,9 @@ import {
   createTreeForAssignment,
   updateRef,
   updateRefForRepo,
-} from "@/hooks/github/mutations"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
-import { getRepo } from "@/hooks/github/repoReads"
+} from "@/github-core/mutations"
+import { getErrorMessage } from "@/github-core/errorMessage"
+import { getRepo } from "@/github-core/repoReads"
 import {
   fetchAssignmentFromPages,
   fetchTextWithFriendlyErrors,
@@ -62,13 +62,13 @@ import {
   assertClassroomNotArchived,
   type CreateClassroomResult,
 } from "./classrooms"
-import type { GitHubRepo } from "@/hooks/github/types"
+import type { GitHubRepo } from "@/github-core/types"
 import {
   getBranchRefRepo,
   getCommitByRepo,
   getRepoPermissionForUser,
   withFreshRepoRetry,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "./users"
 import {

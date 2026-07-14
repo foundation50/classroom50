@@ -9,8 +9,8 @@ import {
   planTeardown,
   type TeardownResult,
 } from "./teardown"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import type { GitHubClient } from "@/hooks/github/client"
+import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubClient } from "@/github-core/client"
 
 // Teardown mirrors the CLI: marker-gated (refuse orgs without classroom50),
 // delete ALL org repos, marker deleted last (re-runnable), 403 = scope wall.

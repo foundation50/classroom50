@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { githubKeys, listOrgMembers } from "./github/queries"
+import { githubKeys, listOrgMembers } from "@/github-core/queries"
 
 const useGetOrgMembers = (org: string) => {
   const client = useGitHubClient()

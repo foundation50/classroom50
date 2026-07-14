@@ -15,7 +15,7 @@
 // derived `ssoRequired` / `scopeGap` booleans, the request-id, status, endpoint,
 // name, and message.
 
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 export type ActivityKind = "error" | "action"
 

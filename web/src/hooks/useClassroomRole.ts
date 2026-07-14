@@ -1,7 +1,7 @@
 import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
+import { GitHubAPIError, retryTransientGitHubError } from "@/github-core/errors"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import {
@@ -10,7 +10,7 @@ import {
   membershipFromQuery,
   type EffectiveRole,
 } from "@/util/resolveRole"
-import type { GitHubClient } from "./github/client"
+import type { GitHubClient } from "@/github-core/client"
 import type { StaffRole } from "@/types/classroom"
 
 // Team-membership query: 2xx + active => member, 404 => definitive non-member,

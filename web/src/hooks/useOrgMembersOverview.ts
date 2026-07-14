@@ -8,7 +8,7 @@ import {
   orgAdminsQuery,
   orgMembersAllQuery,
   teamMembersQuery,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlug } from "@/util/teamSlug"
@@ -21,7 +21,7 @@ import {
 } from "@/types/classroom"
 import { aggregateOrgMembers, type OrgMemberRow } from "@/util/orgMembers"
 import { memberIdSet } from "@/util/identity"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 
 export type OrgMembersOverview = {
   rows: OrgMemberRow[]

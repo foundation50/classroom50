@@ -1,7 +1,7 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { githubKeys } from "./github/queries"
-import type { GitHubUser } from "./github/types"
+import { githubKeys } from "@/github-core/queries"
+import type { GitHubUser } from "@/github-core/types"
 
 const useGetRepoCollaborators = (
   org: string,

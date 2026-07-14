@@ -13,7 +13,7 @@ import {
   teamInvitationsQuery,
   getUserQuery,
   getUser,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import {
@@ -23,7 +23,7 @@ import {
   resendOrgInvitation,
   cancelOrgInvitation,
   grantTeamConfigRepoWrite,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import {
   normalizeGithubUsername,
   resolveTeamIdForRoleRead,
@@ -31,10 +31,10 @@ import {
 } from "@/api/mutations/students"
 import { rosterPath } from "@/util/rosterPath"
 import { orgRoleForRole } from "@/util/teamRoster"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
-import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
+import type { GitHubClient } from "@/github-core/client"
 import type { QueryClient } from "@tanstack/react-query"
 import { logger } from "@/lib/logger"
 import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"

@@ -3,7 +3,7 @@
 // classification is reusable and testable.
 
 import type { SubmissionRow } from "@/hooks/useGetScores"
-import type { GitHubRepo } from "@/hooks/github/types"
+import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
 import { getName } from "@/util/students"

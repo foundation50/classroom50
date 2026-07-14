@@ -13,7 +13,7 @@ const bulkUnenrollMock = vi.fn()
 vi.mock("@/api/mutations/students", () => ({
   bulkUnenrollStudents: (...args: unknown[]) => bulkUnenrollMock(...args),
 }))
-vi.mock("@/hooks/github/errorMessage", () => ({
+vi.mock("@/github-core/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))

@@ -49,7 +49,7 @@ export const SKELETON_PATHS = [
 // merely owns a repo named `classroom50`. Typed as a SKELETON_PATHS member so a
 // rename that drops the workflow fails the build here instead of silently
 // hiding every real teacher's org behind a 404 (see verifyClassroom50ConfigRepo
-// in hooks/github/queries.ts).
+// in github-core/queries.ts).
 export const CONFIG_REPO_MARKER_REL: (typeof SKELETON_PATHS)[number] =
   "workflows/autograde-runner.yaml"
 

@@ -1,4 +1,4 @@
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 
 // Canonical identity helpers relating GitHub accounts, org members, and roster
 // rows — one home so id/login/"claimed" logic can't drift across callers.

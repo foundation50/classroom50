@@ -1,4 +1,4 @@
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 
 // Auth status as surfaced by useGithubAuth().status — the router guards branch
 // on these exact values.

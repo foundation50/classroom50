@@ -6,9 +6,9 @@ import { memberDefaultSettings } from "./desiredState"
 import {
   RULESET_NAME_FEEDBACK_BASE,
   RULESET_NAME_SUBMISSION_HISTORY,
-} from "@/hooks/github/rulesets"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import type { GitHubClient } from "@/hooks/github/client"
+} from "@/github-core/rulesets"
+import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubClient } from "@/github-core/client"
 
 // repairConcern dispatches each audit concern to the mutation that restores its
 // setting. The fake client records write paths/methods so each case can assert

@@ -9,7 +9,7 @@ import {
   Loader2,
   ServerCog,
 } from "lucide-react"
-import { orgRunnersQuery } from "@/hooks/github/queries"
+import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Button, HelpTooltip } from "@/components/ui"
 import {

@@ -1,8 +1,8 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { findStaleSkeletonFiles } from "./github/mutations"
-import { githubKeys } from "./github/queries"
+import { findStaleSkeletonFiles } from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { resolveOrgRole } from "@/util/resolveRole"
 import { can } from "@/util/capabilities"

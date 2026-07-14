@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { renderHook } from "@testing-library/react"
 
-import type { GitHubFileListing } from "@/hooks/github/types"
+import type { GitHubFileListing } from "@/github-core/types"
 
 const useQueriesMock = vi.fn()
 vi.mock("@tanstack/react-query", () => ({
@@ -11,7 +11,7 @@ vi.mock("@tanstack/react-query", () => ({
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))
-vi.mock("@/hooks/github/queries", () => ({
+vi.mock("@/github-core/queries", () => ({
   jsonFileQuery: () => ({}),
 }))
 

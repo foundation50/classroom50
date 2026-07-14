@@ -5,14 +5,14 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
-import { invalidateInviteQueries } from "@/hooks/github/queries"
+import { invalidateInviteQueries } from "@/github-core/queries"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
 import { enrollStudentInClassroom } from "@/api/mutations/students"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   inviteByEmail,
   StudentAlreadyEnrolledError,

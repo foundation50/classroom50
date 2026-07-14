@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // Drive each team-membership request by team slug. `<classroom>-instructor` and
 // `<classroom>-ta` are the elevation teams; `<classroom>` (no role suffix) is

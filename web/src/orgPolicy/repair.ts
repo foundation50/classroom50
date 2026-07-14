@@ -4,7 +4,7 @@
 // avoid an import cycle: mutations.ts already imports orgChecks.ts for
 // repairOrgDefaults.
 
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import {
   ensureBranchProtection,
   ensureOrgActionsEnabled,
@@ -12,10 +12,10 @@ import {
   ensurePages,
   ensureReusableWorkflowAccess,
   ensureWorkflowPermissions,
-} from "@/hooks/github/mutations"
-import { repairOrgDefaults } from "@/hooks/github/orgChecks"
+} from "@/github-core/mutations"
+import { repairOrgDefaults } from "@/github-core/orgChecks"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { repairRulesets } from "@/hooks/github/rulesets"
+import { repairRulesets } from "@/github-core/rulesets"
 import type { ConcernId } from "./audit"
 
 // Whether a concern can be repaired by an API call. The four manual-only

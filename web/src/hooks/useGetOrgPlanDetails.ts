@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import type { GitHubOrgDetails } from "./github/types"
+import type { GitHubOrgDetails } from "@/github-core/types"
 
 const useGetOrgPlanDetails = (org?: string) => {
   const client = useGitHubClient()

@@ -1,7 +1,7 @@
 import { CheckCircle } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 import { Alert, Button } from "@/components/ui"
 
 export function GitHubAuthedPanel({

@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { getLastCollectScoresRun, githubKeys } from "./github/queries"
+import { getLastCollectScoresRun, githubKeys } from "@/github-core/queries"
 
 const useGetLastCollectScoresRun = (org: string | undefined) => {
   const client = useGitHubClient()

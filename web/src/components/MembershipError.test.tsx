@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { classifyMembershipError } from "./MembershipError"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const rateLimit = {
   limit: null,

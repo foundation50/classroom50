@@ -6,14 +6,14 @@ import type { OrgMemberRow } from "@/util/orgMembers"
 const createOrgInvitationMock = vi.fn()
 const getUserByIdMock = vi.fn()
 
-vi.mock("@/hooks/github/mutations", () => ({
+vi.mock("@/github-core/mutations", () => ({
   createOrgInvitation: (...args: unknown[]) => createOrgInvitationMock(...args),
 }))
-vi.mock("@/hooks/github/errorMessage", () => ({
+vi.mock("@/github-core/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))
-vi.mock("@/hooks/github/queries", () => ({
+vi.mock("@/github-core/queries", () => ({
   getUserById: (...args: unknown[]) => getUserByIdMock(...args),
 }))
 

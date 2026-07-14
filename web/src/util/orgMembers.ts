@@ -1,5 +1,5 @@
 import type { Student } from "@/types/classroom"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 import { memberIdSet, studentKey } from "@/util/identity"
 
 // Per-classroom enrollment state for an aggregated member, mirroring

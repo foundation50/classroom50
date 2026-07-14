@@ -12,8 +12,8 @@ import {
   addUserToTeam,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoWrite,
-} from "@/hooks/github/mutations"
-import { githubKeys } from "@/hooks/github/queries"
+} from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import { Alert, Button } from "@/components/ui"
 import { logger } from "@/lib/logger"
 

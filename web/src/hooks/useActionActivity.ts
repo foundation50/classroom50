@@ -6,9 +6,9 @@ import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import {
   activityRunsKey,
   listActiveAndRecentRuns,
-} from "@/hooks/github/activityRuns"
-import { rerunFailedRun } from "@/hooks/github/mutations"
-import type { GitHubWorkflowRun } from "@/hooks/github/types"
+} from "@/github-core/activityRuns"
+import { rerunFailedRun } from "@/github-core/mutations"
+import type { GitHubWorkflowRun } from "@/github-core/types"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useOptionalToast } from "@/context/notifications/NotificationProvider"
 import { useActiveOrg } from "@/hooks/useActiveOrg"

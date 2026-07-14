@@ -2,8 +2,8 @@ import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, REPO_READ_CONCURRENCY } from "./github/queries"
-import type { GitHubUser } from "./github/types"
+import { githubKeys, REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import type { GitHubUser } from "@/github-core/types"
 import { mapWithConcurrency } from "@/util/concurrency"
 
 type GroupRepoRef = { owner: string; repoName: string }

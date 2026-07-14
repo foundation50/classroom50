@@ -16,7 +16,7 @@ import {
   verifyTemplateAccess,
   type TemplateAccessVerification,
 } from "@/api/mutations/assignments"
-import { teamHasRepoAccess } from "@/hooks/github/queries"
+import { teamHasRepoAccess } from "@/github-core/queries"
 import {
   useDebouncedValue,
   normalizeOnBlur,

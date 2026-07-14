@@ -15,8 +15,8 @@ import {
   resolveTemplate,
   verifyTemplateAccess,
 } from "./assignments"
-import type { GitHubClient } from "@/hooks/github/client"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 import type { Assignment } from "@/types/classroom"
 
 const fullSource: Assignment = {

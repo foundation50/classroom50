@@ -1,4 +1,4 @@
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // Whether a membership-read error should surface the error screen. A definitive
 // 404 is NOT a read failure — it is GitHub's authoritative "no membership

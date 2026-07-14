@@ -6,22 +6,22 @@
 // irreversible — the caller gates it behind a typed-org-name ConfirmModal that
 // lists exactly what will be deleted.
 
-import type { GitHubClient } from "@/hooks/github/client"
-import { getClassroomJson } from "@/hooks/github/configRepoReads"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import type { GitHubClient } from "@/github-core/client"
+import { getClassroomJson } from "@/github-core/configRepoReads"
+import { GitHubAPIError } from "@/github-core/errors"
 import {
   deleteClassroomTeam,
   deleteRepo,
   isDeletableClassroomTeamRef,
   type ClassroomTeamRef,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import {
   getOrgRepos,
   listClassroomDirs,
   REPO_READ_CONCURRENCY,
   sleep,
-} from "@/hooks/github/queries"
-import { getRepo } from "@/hooks/github/repoReads"
+} from "@/github-core/queries"
+import { getRepo } from "@/github-core/repoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { logger } from "@/lib/logger"

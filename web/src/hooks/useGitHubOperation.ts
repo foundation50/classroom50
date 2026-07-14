@@ -1,7 +1,7 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 
-import type { GitHubWorkflowRun } from "./github/types"
+import type { GitHubWorkflowRun } from "@/github-core/types"
 
 // Lifecycle phase of a tracked workflow_dispatch operation, shared by every
 // dispatch-and-track hook (collect scores, regrade).

@@ -10,8 +10,8 @@ import {
   teamInvitationsQuery,
   teamFailedInvitationsQuery,
   orgMembersAllQuery,
-} from "@/hooks/github/queries"
-import { GitHubAPIError } from "@/hooks/github/errors"
+} from "@/github-core/queries"
+import { GitHubAPIError } from "@/github-core/errors"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   buildTeamRoster,
@@ -25,7 +25,7 @@ import {
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
 import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
-import type { GitHubUser, GitHubOrgInvitation } from "@/hooks/github/types"
+import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 
 // Pending is owner-only. The manageOrg capability is the authoritative owner
 // check (a non-owner can't read invitations at all), so we hide all pending

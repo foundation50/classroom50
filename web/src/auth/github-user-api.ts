@@ -1,5 +1,5 @@
-import type { GitHubUser } from "@/hooks/github/types"
-import { DEFAULT_REQUEST_TIMEOUT_MS } from "@/hooks/github/client"
+import type { GitHubUser } from "@/github-core/types"
+import { DEFAULT_REQUEST_TIMEOUT_MS } from "@/github-core/client"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 

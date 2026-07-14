@@ -2,7 +2,7 @@ import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { ShieldAlert } from "lucide-react"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import { Alert } from "@/components/ui"
 import { logger } from "@/lib/logger"
 

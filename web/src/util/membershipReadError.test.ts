@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { isMembershipReadError } from "./membershipReadError"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const apiError = (status: number) =>
   new GitHubAPIError({

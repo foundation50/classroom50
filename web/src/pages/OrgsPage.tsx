@@ -4,8 +4,8 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { acceptAndVerifyOrgMembership } from "@/api/mutations/users"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import type { Classroom50OrgSummary } from "@/hooks/github/queries"
-import type { GitHubOrgMembership } from "@/hooks/github/types"
+import type { Classroom50OrgSummary } from "@/github-core/queries"
+import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, {
   orgMembershipsQueryKey,
   usePendingOrgInvites,

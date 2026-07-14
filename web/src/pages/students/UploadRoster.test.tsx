@@ -38,7 +38,7 @@ vi.mock("@/api/mutations/students", async (importOriginal) => {
 })
 
 import UploadRoster from "./UploadRoster"
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 
 afterEach(() => {
   cleanup()

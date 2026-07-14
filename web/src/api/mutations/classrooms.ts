@@ -1,14 +1,14 @@
-import type { GitHubClient } from "@/hooks/github/client"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import type { GitHubClient } from "@/github-core/client"
+import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
-import type { GitHubMoveBranch } from "@/hooks/github/types"
+import type { GitHubMoveBranch } from "@/github-core/types"
 import {
   getBranchRef,
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "@/hooks/github/configRepoReads"
-import { sleep } from "@/hooks/github/queries"
+} from "@/github-core/configRepoReads"
+import { sleep } from "@/github-core/queries"
 import { isClassroomArchived } from "@/types/classroom"
 import {
   createCommit,
@@ -27,7 +27,7 @@ import {
   type GitTreeEntry,
   type GitTreeFileMode,
   type StaffTeamRefs,
-} from "@/hooks/github/mutations"
+} from "@/github-core/mutations"
 import { prefixCommit } from "@/util/commit"
 import { logger } from "@/lib/logger"
 

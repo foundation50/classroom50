@@ -9,8 +9,8 @@ import {
   initClassroom50,
   type InitStepId,
   type InitStepUpdate,
-} from "@/hooks/github/mutations"
-import { githubKeys } from "@/hooks/github/queries"
+} from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {

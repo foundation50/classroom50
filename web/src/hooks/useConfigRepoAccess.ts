@@ -1,5 +1,5 @@
-import { useGitHubRepo } from "./github/hooks"
-import { retryTransientGitHubError } from "./github/errors"
+import { useGitHubRepo } from "./useGitHubResources"
+import { retryTransientGitHubError } from "@/github-core/errors"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { resolveTeacherVerdict } from "@/util/resolveRole"
 

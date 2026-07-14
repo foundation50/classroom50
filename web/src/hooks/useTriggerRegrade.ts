@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useRegradeCoordinator } from "@/context/regrade/RegradeCoordinator"
-import { triggerRegrade } from "./github/mutations"
-import { REGRADE_WORKFLOW } from "./github/workflows"
-import { getRegradeRunAfterId, githubKeys } from "./github/queries"
+import { triggerRegrade } from "@/github-core/mutations"
+import { REGRADE_WORKFLOW } from "@/github-core/workflows"
+import { getRegradeRunAfterId, githubKeys } from "@/github-core/queries"
 import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 
 export type RegradePhase = OperationPhase

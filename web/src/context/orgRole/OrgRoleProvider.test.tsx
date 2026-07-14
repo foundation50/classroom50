@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // Mock the membership read so the provider's resolution is driven by fixture
 // data rather than a live query.

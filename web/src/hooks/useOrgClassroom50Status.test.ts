@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { probeOrgClassroom50Status } from "./useOrgClassroom50Status"
-import { GitHubAPIError } from "./github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 
 // The /$org/* gate redirects an admin to /setup only on "missing", and fails

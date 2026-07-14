@@ -1,7 +1,7 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
 
-import { githubKeys } from "./github/queries"
+import { githubKeys } from "@/github-core/queries"
 import { buildOrgAuditReport } from "@/orgPolicy/audit"
 
 // Read-only org policy audit. Plan-aware (enterprise unlocks the 4

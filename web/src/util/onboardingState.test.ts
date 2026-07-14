@@ -5,7 +5,7 @@ import {
   type OnboardingStateInput,
 } from "./onboardingState"
 import { isMembershipReadError } from "./membershipReadError"
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const base: OnboardingStateInput = {
   loadingMembership: false,

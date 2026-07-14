@@ -9,7 +9,7 @@ import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
 } from "@/hooks/useClassroomSummaries"
-import type { GitHubFileListing } from "@/hooks/github/types"
+import type { GitHubFileListing } from "@/github-core/types"
 import {
   classroomListPrefs,
   type ClassroomSortKey,

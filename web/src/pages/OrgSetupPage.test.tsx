@@ -40,7 +40,7 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 vi.mock("@/hooks/useGetOrgPlanDetails", () => ({
   default: () => ({ data: { plan: { name: "team" } }, isLoading: false }),
 }))
-vi.mock("@/hooks/github/mutations", () => ({
+vi.mock("@/github-core/mutations", () => ({
   initClassroom50: async () => ({ status: "ok" }),
 }))
 vi.mock("./orgSettings/skeletonOverwriteUi", () => ({

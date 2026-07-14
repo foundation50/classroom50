@@ -7,9 +7,9 @@ import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { ensureSkeletonFiles } from "@/hooks/github/mutations"
-import type { StaleSkeletonFile } from "@/hooks/github/mutations"
-import { githubKeys } from "@/hooks/github/queries"
+import { ensureSkeletonFiles } from "@/github-core/mutations"
+import type { StaleSkeletonFile } from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import {

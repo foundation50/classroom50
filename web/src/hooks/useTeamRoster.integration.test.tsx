@@ -5,7 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 const apiError = (status: number, url: string) =>
   new GitHubAPIError({

@@ -63,7 +63,7 @@ import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
-} from "@/hooks/github/workflows"
+} from "@/github-core/workflows"
 import {
   formatDueDateTime,
   formatRelativeToNow,

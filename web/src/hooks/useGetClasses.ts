@@ -1,8 +1,8 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { jsonFileQuery } from "./github/queries"
+import { jsonFileQuery } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
-import type { GitHubFileListing } from "./github/types"
+import type { GitHubFileListing } from "@/github-core/types"
 
 const useGetClasses = (org: string | undefined) => {
   const client = useGitHubClient()

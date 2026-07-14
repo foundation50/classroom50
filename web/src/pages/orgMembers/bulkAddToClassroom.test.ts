@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { bulkAddToClassroom } from "./bulkAddToClassroom"
 import type { OrgMemberRow } from "@/util/orgMembers"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubUser } from "@/github-core/types"
 
 // The engine (bulkEnrollStudentsInClassroom), getUserById, and isActiveMember
 // are stubbed: this orchestrator's contract is the pre-filter, resolving the
@@ -16,10 +16,10 @@ vi.mock("@/api/mutations/students", () => ({
   bulkEnrollStudentsInClassroom: (...args: unknown[]) =>
     bulkEnrollMock(...args),
 }))
-vi.mock("@/hooks/github/queries", () => ({
+vi.mock("@/github-core/queries", () => ({
   getUserById: (...args: unknown[]) => getUserByIdMock(...args),
 }))
-vi.mock("@/hooks/github/mutations", () => ({
+vi.mock("@/github-core/mutations", () => ({
   isActiveMember: (...args: unknown[]) => isActiveMemberMock(...args),
 }))
 

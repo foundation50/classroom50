@@ -22,7 +22,7 @@ import {
   fetchGithubUserWithScopes,
   GitHubUserFetchError,
 } from "./github-user-api"
-import { isDefinitiveGitHubStatus } from "@/hooks/github/errors"
+import { isDefinitiveGitHubStatus } from "@/github-core/errors"
 import router from "@/router"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_AUTH } from "@/lib/logScopes"

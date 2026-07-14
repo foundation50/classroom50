@@ -3,8 +3,8 @@ import { useTranslation } from "react-i18next"
 import { Plus, UserMinus, X } from "lucide-react"
 
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
-import type { GitHubClient } from "@/hooks/github/client"
-import type { GitHubUser } from "@/hooks/github/types"
+import type { GitHubClient } from "@/github-core/client"
+import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/api/mutations/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import {

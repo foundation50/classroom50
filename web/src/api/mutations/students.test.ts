@@ -24,8 +24,8 @@ import {
   STUDENT_CSV_FIELDS,
   StudentAlreadyEnrolledError,
 } from "./students"
-import { GitHubAPIError } from "@/hooks/github/errors"
-import type { GitHubClient } from "@/hooks/github/client"
+import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubClient } from "@/github-core/client"
 
 // An already-org-member must land `enrolled` (not stuck "awaiting"), the per-row
 // confirm must refuse a non-member, and an already-member email invite must

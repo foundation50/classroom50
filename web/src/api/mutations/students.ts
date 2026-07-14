@@ -1,4 +1,4 @@
-import type { GitHubClient } from "@/hooks/github/client"
+import type { GitHubClient } from "@/github-core/client"
 import {
   addUserToTeam,
   cancelOrgInvitation,
@@ -15,8 +15,8 @@ import {
   setOrgMembershipRole,
   updateRef,
   type GitTreeEntry,
-} from "@/hooks/github/mutations"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
+} from "@/github-core/mutations"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   withGitConflictRetry,
   assertClassroomNotArchived,
@@ -32,19 +32,19 @@ import {
   listTeamMembers,
   sleep,
   REPO_READ_CONCURRENCY,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import { getAuthenticatedUser } from "@/api/queries/users"
 import {
   getBranchRef,
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "@/hooks/github/configRepoReads"
+} from "@/github-core/configRepoReads"
 import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,
   tolerateGitHubError,
-} from "@/hooks/github/errors"
+} from "@/github-core/errors"
 import { isSameGitHubUser, parseGitHubId } from "@/util/students"
 import { studentKey, rosterClaimSet } from "@/util/identity"
 import { mapWithConcurrency } from "@/util/concurrency"

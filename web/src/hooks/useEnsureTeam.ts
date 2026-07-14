@@ -1,7 +1,7 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { ensureTeam } from "./github/queries"
-import { retryTransientGitHubError } from "./github/errors"
+import { ensureTeam } from "@/github-core/queries"
+import { retryTransientGitHubError } from "@/github-core/errors"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 

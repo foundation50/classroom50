@@ -27,16 +27,16 @@ import {
   bulkInviteByEmail,
 } from "@/api/mutations/students"
 import type { RosterCsvProblem } from "@/api/mutations/students"
-import { cancelOrgInvitation } from "@/hooks/github/mutations"
-import { getErrorMessage } from "@/hooks/github/errorMessage"
+import { cancelOrgInvitation } from "@/github-core/mutations"
+import { getErrorMessage } from "@/github-core/errorMessage"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useGitHubViewer } from "@/hooks/github/hooks"
-import type { GitHubOrgInvitation } from "@/hooks/github/types"
+import { useGitHubViewer } from "@/hooks/useGitHubResources"
+import type { GitHubOrgInvitation } from "@/github-core/types"
 import {
   githubKeys,
   invalidateInviteQueries as invalidateInviteQueriesForOrg,
-} from "@/hooks/github/queries"
+} from "@/github-core/queries"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"

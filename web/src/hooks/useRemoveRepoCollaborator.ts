@@ -1,7 +1,7 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { githubKeys } from "./github/queries"
-import { removeRepoCollaborator } from "./github/mutations"
+import { githubKeys } from "@/github-core/queries"
+import { removeRepoCollaborator } from "@/github-core/mutations"
 
 export function useRemoveRepoCollaborator() {
   const client = useGitHubClient()

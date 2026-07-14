@@ -1,4 +1,4 @@
-import { GitHubAPIError } from "@/hooks/github/errors"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // The viewer's effective role WITHIN a classroom, used by route guards and UI
 // visibility. Precedence (highest first): instructor > ta > student. Org-admin
