@@ -6,10 +6,7 @@
 // in the org-checks graph.
 export const CONFIG_REPO = "classroom50"
 
-// The default branch Classroom 50 standardizes on and recommends: the config
-// repo is normalized to it, new repos are recommended to use it, and it's the
-// last-resort fallback for any Classroom-50-created/managed repo whose live
-// `default_branch` and requested branch are both unavailable. Named so a future
-// world where GitHub's default is no longer "main" is a one-line change. NOT the
-// branch of a template/source repo (that's read from the template).
+// The branch Classroom 50 standardizes/recommends and falls back to. Named so a
+// future where GitHub's default isn't "main" is a one-line change. NOT a
+// template/source repo's branch (that's read from the template).
 export const DEFAULT_BRANCH = "main"

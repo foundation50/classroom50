@@ -1224,7 +1224,7 @@ async function createEmptyAssignmentRepo(params: {
   }
 
   // Commit onto the repo's real default branch (GitHub picks it for an
-  // auto_init repo); fall back to the requested branch, then "main".
+  // auto_init repo); fall back to the requested branch, then DEFAULT_BRANCH.
   const targetBranch = repo.default_branch || branch || DEFAULT_BRANCH
   return {
     kind: "fallback-empty",

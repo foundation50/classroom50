@@ -9,7 +9,7 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
 // The classroom50 config repo's default branch. Org policy can seed a new repo
 // on `master`, so config-repo reads/writes must target the real branch, not a
-// hardcoded `main`. Falls back to `main` only when the value is empty.
+// hardcoded default. Falls back to DEFAULT_BRANCH only when the value is empty.
 export async function getConfigRepoBranch(
   client: GitHubClient,
   org: string,

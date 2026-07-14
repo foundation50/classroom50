@@ -34,9 +34,7 @@ import { LOG_SCOPE_GITHUB_SETUP } from "@/lib/logScopes"
 const logWorkflows = logger.scope("github:workflows")
 const logSetup = logger.scope(LOG_SCOPE_GITHUB_SETUP)
 
-// The branch Classroom 50 standardizes the config repo (and its skeleton
-// workflows/Pages/branch protection) on. New config repos are normalized to
-// this via a guarded rename.
+// The branch a config repo's default is renamed TO when normalizing it.
 const CONFIG_REPO_BRANCH = DEFAULT_BRANCH
 
 const ASSIGNMENTS_TEMPLATE = {
