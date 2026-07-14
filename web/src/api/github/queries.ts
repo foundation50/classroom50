@@ -5,6 +5,7 @@ import type {
   GitHubRepo,
 } from "@/hooks/github/types"
 import type { Classroom } from "@/types/classroom"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // The classroom50 config repo's default branch. Org policy can seed a new repo
 // on `master`, so config-repo reads/writes must target the real branch, not a
@@ -13,7 +14,7 @@ export async function getConfigRepoBranch(
   client: GitHubClient,
   org: string,
 ): Promise<string> {
-  const repo = await client.request<GitHubRepo>(`/repos/${org}/classroom50`)
+  const repo = await client.request<GitHubRepo>(`/repos/${org}/${CONFIG_REPO}`)
   return repo.default_branch || "main"
 }
 
@@ -23,7 +24,7 @@ export function getBranchRef(
   branch?: string,
 ) {
   return client.request<GitHubBranchRef>(
-    `/repos/${org}/classroom50/git/ref/heads/${encodeURIComponent(branch ?? "main")}`,
+    `/repos/${org}/${CONFIG_REPO}/git/ref/heads/${encodeURIComponent(branch ?? "main")}`,
   )
 }
 
@@ -33,7 +34,7 @@ export function getCommit(
   branchSha: string,
 ) {
   return client.request<GitHubCommitRef>(
-    `/repos/${org}/classroom50/git/commits/${branchSha}`,
+    `/repos/${org}/${CONFIG_REPO}/git/commits/${branchSha}`,
   )
 }
 
@@ -49,7 +50,7 @@ export async function getClassroomJson(
   const query = input.ref ? `?ref=${encodeURIComponent(input.ref)}` : ""
 
   const raw = await client.requestRaw(
-    `/repos/${input.org}/classroom50/contents/${path}${query}`,
+    `/repos/${input.org}/${CONFIG_REPO}/contents/${path}${query}`,
   )
 
   return JSON.parse(raw)

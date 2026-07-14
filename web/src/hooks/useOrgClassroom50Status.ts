@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
-import { CONFIG_REPO } from "./github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { verifyClassroom50ConfigRepo } from "./github/queries"
 
 export type OrgClassroom50Status = "ready" | "missing" | "unknown"
@@ -22,7 +22,7 @@ export async function probeOrgClassroom50Status(
   org: string,
 ): Promise<OrgClassroom50Probe> {
   try {
-    await client.request(`/repos/${org}/classroom50`)
+    await client.request(`/repos/${org}/${CONFIG_REPO}`)
     const isConfigRepo = await verifyClassroom50ConfigRepo(client, org)
     return isConfigRepo ? "ready" : "missing"
   } catch (error) {

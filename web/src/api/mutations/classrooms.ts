@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { GitHubAPIError } from "@/hooks/github/errors"
+import { CONFIG_REPO } from "@/util/configRepo"
 import type { GitHubMoveBranch } from "@/hooks/github/types"
 import {
   getBranchRef,
@@ -409,7 +410,7 @@ export async function deleteClassroom(
       sha: string
     }>
     truncated: boolean
-  }>(`/repos/${org}/classroom50/git/trees/${commit.tree.sha}?recursive=1`)
+  }>(`/repos/${org}/${CONFIG_REPO}/git/trees/${commit.tree.sha}?recursive=1`)
 
   if (currentTree.truncated) {
     throw new Error(
@@ -438,7 +439,7 @@ export async function deleteClassroom(
 
   const newTree = await client.request<{
     sha: string
-  }>(`/repos/${org}/classroom50/git/trees`, {
+  }>(`/repos/${org}/${CONFIG_REPO}/git/trees`, {
     method: "POST",
     body: {
       base_tree: commit.tree.sha,
@@ -448,7 +449,7 @@ export async function deleteClassroom(
 
   const newCommit = await client.request<{
     sha: string
-  }>(`/repos/${org}/classroom50/git/commits`, {
+  }>(`/repos/${org}/${CONFIG_REPO}/git/commits`, {
     method: "POST",
     body: {
       message: prefixCommit(`Delete classroom ${classroom}`),
@@ -457,13 +458,16 @@ export async function deleteClassroom(
     },
   })
 
-  await client.request(`/repos/${org}/classroom50/git/refs/heads/${branch}`, {
-    method: "PATCH",
-    body: {
-      sha: newCommit.sha,
-      force: false,
+  await client.request(
+    `/repos/${org}/${CONFIG_REPO}/git/refs/heads/${branch}`,
+    {
+      method: "PATCH",
+      body: {
+        sha: newCommit.sha,
+        force: false,
+      },
     },
-  })
+  )
 
   // Delete the per-classroom teams (idempotent; 404 = already gone): students
   // plus staff. Filtered through the shared guard so a drifted/hand-edited ref

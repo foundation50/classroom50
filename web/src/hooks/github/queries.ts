@@ -18,6 +18,7 @@ import type {
 } from "./types"
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
+import { CONFIG_REPO } from "@/util/configRepo"
 import {
   GitHubAPIError,
   retryTransientGitHubError,
@@ -366,7 +367,7 @@ export function branchRefQuery(client: GitHubClient, org: string) {
     queryKey: githubKeys.branchRef(org),
     queryFn: ({ signal }) =>
       client.request<GitHubBranchRef>(
-        `/repos/${org}/classroom50/git/ref/heads/main`,
+        `/repos/${org}/${CONFIG_REPO}/git/ref/heads/main`,
         { method: "GET", signal },
       ),
     enabled: Boolean(org),
@@ -394,7 +395,7 @@ export function commitQuery(
     queryKey: githubKeys.commitTree(org, branchSha),
     queryFn: ({ signal }) =>
       client.request<GitHubCommitRef>(
-        `/repos/${org}/classroom50/git/commits/${branchSha}`,
+        `/repos/${org}/${CONFIG_REPO}/git/commits/${branchSha}`,
         { method: "GET", signal },
       ),
     enabled: Boolean(org && branchSha),
@@ -543,7 +544,7 @@ export function configCommitsQuery(
           client.request<GitHubCommit[]>(
             `/repos/${encodeURIComponent(
               org ?? "",
-            )}/classroom50/commits?per_page=${perPage}`,
+            )}/${CONFIG_REPO}/commits?per_page=${perPage}`,
             { method: "GET", signal },
           ),
         [],
@@ -685,7 +686,7 @@ export async function getRawFile(
     encoding: "base64"
     content: string
   }>(
-    `/repos/${org}/classroom50/contents/${path}?ref=${encodeURIComponent(ref)}`,
+    `/repos/${org}/${CONFIG_REPO}/contents/${path}?ref=${encodeURIComponent(ref)}`,
   )
 
   if (file.type !== "file") {
@@ -741,7 +742,7 @@ async function pathInCommitTree(
 ): Promise<boolean> {
   const commit = await getCommit(client, org, ref)
   const tree = await client.request<GitHubTreeResponse>(
-    `/repos/${org}/classroom50/git/trees/${commit.tree.sha}?recursive=1`,
+    `/repos/${org}/${CONFIG_REPO}/git/trees/${commit.tree.sha}?recursive=1`,
   )
   if (tree.truncated) return false
   return tree.tree.some((e) => e.type === "blob" && e.path === path)
@@ -836,7 +837,7 @@ export async function listClassroomDirs(
   ref?: string,
 ): Promise<GitHubFileListing[]> {
   const raw = await client.requestRaw(
-    `/repos/${encodeURIComponent(org)}/classroom50/contents/${
+    `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}/contents/${
       ref ? `?ref=${encodeURIComponent(ref)}` : ""
     }`,
     { method: "GET" },
@@ -996,14 +997,14 @@ export function pagesAssignmentUrl(
   secret?: string,
 ) {
   const segment = classroomPagesSegment(classroom, secret)
-  return `https://${org}.github.io/classroom50/${segment}/assignments.json`
+  return `https://${org}.github.io/${CONFIG_REPO}/${segment}/assignments.json`
 }
 
 // Public, unauthenticated signal that an org is a real Classroom50 org: the
 // classroom50 Pages site publishes this index, so a student who can't read the
 // private config repo can still distinguish a genuine Classroom50 org.
 export function classroomsIndexUrl(org: string) {
-  return `https://${org}.github.io/classroom50/classrooms-index.json`
+  return `https://${org}.github.io/${CONFIG_REPO}/classrooms-index.json`
 }
 
 export async function orgPublishesClassroom50Pages(
@@ -1119,7 +1120,7 @@ export async function verifyClassroom50ConfigRepo(
 ): Promise<boolean> {
   try {
     await client.request(
-      `/repos/${org}/classroom50/contents/${CONFIG_REPO_MARKER_PATH}`,
+      `/repos/${org}/${CONFIG_REPO}/contents/${CONFIG_REPO_MARKER_PATH}`,
     )
     return true
   } catch (error) {
@@ -1141,7 +1142,7 @@ export async function getClassroom50OrgSummary(
   let status: Classroom50Status
 
   try {
-    await client.request(`/repos/${org.login}/classroom50`)
+    await client.request(`/repos/${org.login}/${CONFIG_REPO}`)
     canAccessRepo = true
 
     const isConfigRepo = await verifyClassroom50ConfigRepo(client, org.login)
@@ -1184,7 +1185,7 @@ export async function getClassroom50OrgSummary(
       canAccessRepo,
       canInitialize:
         membership.state === "active" && membership.role === "admin",
-      pagesUrl: `https://${org.login}.github.io/classroom50/`,
+      pagesUrl: `https://${org.login}.github.io/${CONFIG_REPO}/`,
     },
   }
 }
@@ -1403,7 +1404,7 @@ export async function getServiceTokenStatus(
 ): Promise<ServiceTokenStatus> {
   try {
     const secret = await client.request<RepositorySecret>(
-      `/repos/${org}/classroom50/actions/secrets/${SERVICE_TOKEN_SECRET_NAME}`,
+      `/repos/${org}/${CONFIG_REPO}/actions/secrets/${SERVICE_TOKEN_SECRET_NAME}`,
     )
 
     return {
@@ -1487,7 +1488,7 @@ async function listLatestWorkflowRun(
   if (filters.page) params.set("page", String(filters.page))
 
   const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
-    `/repos/${org}/classroom50/actions/workflows/${workflow}/runs?${params.toString()}`,
+    `/repos/${org}/${CONFIG_REPO}/actions/workflows/${workflow}/runs?${params.toString()}`,
     { method: "GET", signal },
   )
 

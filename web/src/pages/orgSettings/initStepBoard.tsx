@@ -20,6 +20,7 @@ import {
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
 import { Spinner } from "@/components/ui"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
 // re-run action on Org Settings. One source of truth for step order, titles,
@@ -56,7 +57,7 @@ type InitStepMeta = {
 const orgSettingsBase = (org: string) =>
   `https://github.com/organizations/${org}/settings`
 const repoSettingsBase = (org: string) =>
-  `https://github.com/${org}/classroom50/settings`
+  `https://github.com/${org}/${CONFIG_REPO}/settings`
 
 export const INIT_STEP_META: Record<InitStepId, InitStepMeta> = {
   orgDefaults: {

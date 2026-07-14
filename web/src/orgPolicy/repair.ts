@@ -13,7 +13,8 @@ import {
   ensureReusableWorkflowAccess,
   ensureWorkflowPermissions,
 } from "@/hooks/github/mutations"
-import { CONFIG_REPO, repairOrgDefaults } from "@/hooks/github/orgChecks"
+import { repairOrgDefaults } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { repairRulesets } from "@/hooks/github/rulesets"
 import type { ConcernId } from "./audit"
 

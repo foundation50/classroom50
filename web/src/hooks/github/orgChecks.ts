@@ -13,10 +13,9 @@ import {
   type MemberDefaultSetting,
 } from "@/orgPolicy/desiredState"
 import { logger } from "@/lib/logger"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 const log = logger.scope("github:orgChecks")
-
-export const CONFIG_REPO = "classroom50"
 
 // The org "Repository default branch name" we recommend. Not API-writable
 // (PATCH /orgs ignores it), so it's surfaced as an advisory recommendation only.

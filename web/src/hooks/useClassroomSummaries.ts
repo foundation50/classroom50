@@ -2,7 +2,7 @@ import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { jsonFileQuery } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import type { GitHubFileListing } from "@/hooks/github/types"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 

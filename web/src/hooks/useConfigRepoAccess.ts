@@ -1,6 +1,6 @@
 import { useGitHubRepo } from "./github/hooks"
 import { retryTransientGitHubError } from "./github/errors"
-import { CONFIG_REPO } from "./github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { resolveTeacherVerdict } from "@/util/resolveRole"
 
 // Org-scoped coarse staff verdict from the `classroom50` config repo: teacher =

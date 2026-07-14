@@ -1,5 +1,6 @@
 import type { GitHubWorkflowRun } from "@/hooks/github/types"
 import type { ActionOperation } from "@/context/actions/ActionActivityProvider"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // Pure helpers behind the activity banner, split out so run-attribution and
 // org-parsing are testable without React / the router.
@@ -34,7 +35,7 @@ export function nowMs(): number {
 // The run page URL for a run in <org>/classroom50, built from the run id so a
 // tracker keeps a stable "View run" link even when a poll omits the run object.
 export function runUrl(org: string, runId: number): string {
-  return `https://github.com/${org}/classroom50/actions/runs/${runId}`
+  return `https://github.com/${org}/${CONFIG_REPO}/actions/runs/${runId}`
 }
 
 // Parse an ISO timestamp to epoch ms, or undefined when absent/unparseable.

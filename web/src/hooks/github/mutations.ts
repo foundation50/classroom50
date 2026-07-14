@@ -22,7 +22,8 @@ import type { StaffRole } from "@/types/classroom"
 import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
 import { STUDENT_CSV_FIELDS } from "@/api/mutations/students"
 import { getRepo } from "./queries"
-import { CONFIG_REPO, checkPages, repairOrgDefaults } from "./orgChecks"
+import { checkPages, repairOrgDefaults } from "./orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "./rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
@@ -148,7 +149,7 @@ export function createTree(
 ) {
   const { base_tree, org, classroom, name, term, team, teams } = input
   return client.request<GitHubCreateTree>(
-    `/repos/${org}/classroom50/git/trees`,
+    `/repos/${org}/${CONFIG_REPO}/git/trees`,
     {
       method: "POST",
       body: createClassroomBody(
@@ -233,7 +234,7 @@ export function createCommit(
 ) {
   const { classroom, tree_sha, org, parents, message } = input
   return client.request<GitHubCreateCommit>(
-    `/repos/${org}/classroom50/git/commits`,
+    `/repos/${org}/${CONFIG_REPO}/git/commits`,
     {
       method: "POST",
       body: {
@@ -302,7 +303,7 @@ export function updateRef(
   branch = "main",
 ) {
   return client.request<GitHubMoveBranch>(
-    `/repos/${org}/classroom50/git/refs/heads/${encodeURIComponent(branch)}`,
+    `/repos/${org}/${CONFIG_REPO}/git/refs/heads/${encodeURIComponent(branch)}`,
     {
       method: "PATCH",
       body: {
@@ -364,7 +365,7 @@ export function createGitTree(client: GitHubClient, input: CreateGitTreeInput) {
   const { org, base_tree, tree } = input
 
   return client.request<GitHubCreateTree>(
-    `/repos/${org}/classroom50/git/trees`,
+    `/repos/${org}/${CONFIG_REPO}/git/trees`,
     {
       method: "POST",
       body: {
@@ -388,7 +389,7 @@ export function createGitCommit(
   const { org, message, tree_sha, parents } = input
 
   return client.request<GitHubCreateCommit>(
-    `/repos/${org}/classroom50/git/commits`,
+    `/repos/${org}/${CONFIG_REPO}/git/commits`,
     {
       method: "POST",
       body: {
@@ -1499,7 +1500,7 @@ export type EnsurePagesResult = {
 }
 
 function expectedPagesUrl(org: string): string {
-  return `https://${org}.github.io/classroom50/`
+  return `https://${org}.github.io/${CONFIG_REPO}/`
 }
 
 function pagesSettingsUrl(owner: string, repo: string): string {
@@ -2016,7 +2017,7 @@ export async function validateServiceToken(
     // admin === can administer).
     repo = await tokenClient.request<{
       permissions?: { push?: boolean; admin?: boolean }
-    }>(`/repos/${org}/classroom50`)
+    }>(`/repos/${org}/${CONFIG_REPO}`)
   } catch (err) {
     if (err instanceof GitHubAPIError) {
       if (err.status === 401) {
@@ -2142,12 +2143,12 @@ export async function triggerScoreCollection(
   // Snapshot the newest dispatch run id before the POST. Run ids are monotonic,
   // so the run this POST creates is the oldest dispatch run whose id exceeds it.
   const baseline = await client.request<{ workflow_runs: { id: number }[] }>(
-    `/repos/${org}/classroom50/actions/workflows/${COLLECT_SCORES_WORKFLOW}/runs?event=workflow_dispatch&per_page=1`,
+    `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/runs?event=workflow_dispatch&per_page=1`,
   )
   const sinceRunId = baseline.workflow_runs?.[0]?.id ?? null
 
   await client.request(
-    `/repos/${org}/classroom50/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
+    `/repos/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}/dispatches`,
     {
       method: "POST",
       body: {
@@ -2200,7 +2201,7 @@ export async function triggerRegrade(
   const [repo, baseline] = await Promise.all([
     getRepo(client, org, CONFIG_REPO),
     client.request<{ workflow_runs: { id: number }[] }>(
-      `/repos/${org}/classroom50/actions/workflows/${REGRADE_WORKFLOW}/runs?event=workflow_dispatch&per_page=1`,
+      `/repos/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}/runs?event=workflow_dispatch&per_page=1`,
     ),
   ])
   if (!repo) {
@@ -2217,7 +2218,7 @@ export async function triggerRegrade(
   if (owner) inputs.owner = owner
 
   await client.request(
-    `/repos/${org}/classroom50/actions/workflows/${REGRADE_WORKFLOW}/dispatches`,
+    `/repos/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}/dispatches`,
     {
       method: "POST",
       body: { ref, inputs },
@@ -2244,7 +2245,7 @@ export async function rerunFailedRun(
 ): Promise<void> {
   logWorkflows.info("re-running failed jobs", { org, runId })
   await client.request(
-    `/repos/${org}/classroom50/actions/runs/${runId}/rerun-failed-jobs`,
+    `/repos/${org}/${CONFIG_REPO}/actions/runs/${runId}/rerun-failed-jobs`,
     { method: "POST" },
   )
 }
@@ -2571,7 +2572,7 @@ export async function initClassroom50({
     repo: CONFIG_REPO,
     ...results,
     status,
-    pagesUrl: `https://${org}.github.io/classroom50/`,
+    pagesUrl: `https://${org}.github.io/${CONFIG_REPO}/`,
   })
 
   results.orgDefaults = await tryStep({
@@ -2727,7 +2728,7 @@ export async function createBlob(
   },
 ) {
   return client.request<GitHubBlob>(
-    `/repos/${input.org}/classroom50/git/blobs`,
+    `/repos/${input.org}/${CONFIG_REPO}/git/blobs`,
     {
       method: "POST",
       body: {
@@ -2752,7 +2753,7 @@ export async function createTreeFromEntries(
   },
 ) {
   return client.request<GitHubTree>(
-    `/repos/${input.org}/classroom50/git/trees`,
+    `/repos/${input.org}/${CONFIG_REPO}/git/trees`,
     {
       method: "POST",
       body: {

@@ -9,7 +9,7 @@ import {
   orgMembersAllQuery,
   teamMembersQuery,
 } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClasses from "@/hooks/useGetClasses"
 import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
 import { toStudent } from "@/util/roster"

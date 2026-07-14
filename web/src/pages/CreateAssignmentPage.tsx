@@ -18,7 +18,7 @@ import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvi
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { githubKeys } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"

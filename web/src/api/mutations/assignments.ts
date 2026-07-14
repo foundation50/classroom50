@@ -14,7 +14,7 @@ import {
   getConfigRepoBranch,
 } from "../github/queries"
 import { getUser } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -1829,7 +1829,7 @@ function pagesAutograderUrl(params: {
 }) {
   const { org, classroom, name, secret } = params
   const segment = classroomPagesSegment(classroom, secret)
-  return `https://${org}.github.io/classroom50/${segment}/autograders/${name}.yaml`
+  return `https://${org}.github.io/${CONFIG_REPO}/${segment}/autograders/${name}.yaml`
 }
 
 function defaultAutograderWorkflow(
@@ -1846,7 +1846,7 @@ on:
 
 jobs:
   grade:
-    uses: "${org}/classroom50/.github/workflows/autograde-runner.yaml@${configBranch}"
+    uses: "${org}/${CONFIG_REPO}/.github/workflows/autograde-runner.yaml@${configBranch}"
     permissions:
       contents: write
       statuses: write

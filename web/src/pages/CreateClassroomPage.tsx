@@ -17,7 +17,7 @@ import { logger } from "@/lib/logger"
 import RequireTeacher from "@/components/RequireTeacher"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 import { githubKeys } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import type {
   CreateClassroomInput,
   CreateClassroomResult,

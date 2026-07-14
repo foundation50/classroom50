@@ -1,6 +1,7 @@
 import type { GitHubClient } from "./client"
 import type { GitHubWorkflowRun } from "./types"
 import { GitHubAPIError } from "./errors"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // Repo-wide Actions runs for the org's classroom50 config repo, powering the
 // activity banner. Split out of queries.ts so this self-contained cluster (its
@@ -29,7 +30,7 @@ async function fetchRunsPage(
 ): Promise<GitHubWorkflowRun[]> {
   try {
     const res = await client.request<{ workflow_runs: GitHubWorkflowRun[] }>(
-      `/repos/${encodeURIComponent(org)}/classroom50/actions/runs?${query}`,
+      `/repos/${encodeURIComponent(org)}/${CONFIG_REPO}/actions/runs?${query}`,
       { method: "GET", signal },
     )
     return (res.workflow_runs ?? []).sort((a, b) => b.id - a.id)

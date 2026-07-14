@@ -26,11 +26,12 @@ import usePagesAssignments from "@/hooks/usePagesAssignments"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 import { classroomPagesSegment } from "@/util/secret"
 import { githubOrgUrl } from "@/util/orgUrl"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 // Pages base for an org's classroom50 config repo. `classroom50` is the fixed
 // repo name, not the org name. Single-sourced so every row derives from it.
 function pagesBaseUrl(org: string) {
-  return `https://${org}.github.io/classroom50`
+  return `https://${org}.github.io/${CONFIG_REPO}`
 }
 
 // "engine" = generic, org-agnostic bootstrap code (identical for every org);

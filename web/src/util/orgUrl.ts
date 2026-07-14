@@ -1,5 +1,7 @@
 // Context-relevant github.com deep-links for an org login, built here rather
 // than inline so the heading/subtitle links stay consistent across pages.
+import { CONFIG_REPO } from "@/util/configRepo"
+
 export const githubOrgUrl = (org: string): string =>
   `https://github.com/orgs/${org}/repositories`
 
@@ -11,7 +13,7 @@ export const githubOrgSettingsUrl = (org: string): string =>
 
 // The private config repo's directory for a classroom slug.
 export const classroomConfigTreeUrl = (org: string, slug: string): string =>
-  `https://github.com/${org}/classroom50/tree/main/${slug}`
+  `https://github.com/${org}/${CONFIG_REPO}/tree/main/${slug}`
 
 // An assignment's starter-code (template) repo. Built from `template.owner`, not
 // the classroom org — a template can live under a different owner. Deep-links to

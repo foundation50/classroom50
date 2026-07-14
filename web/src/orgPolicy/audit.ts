@@ -17,6 +17,7 @@ import {
   type CheckVerdict,
 } from "@/hooks/github/orgChecks"
 import { checkRulesets } from "@/hooks/github/rulesets"
+import { CONFIG_REPO } from "@/util/configRepo"
 import {
   manualHardeningSteps,
   memberPrivilegesUrl,
@@ -107,7 +108,7 @@ const CONCERN_TITLES: Record<ConcernId, string> = {
 // concerns at the classroom50 config repo.
 function concernSettingsUrl(id: ConcernId, org: string): string {
   const orgBase = `https://github.com/organizations/${org}/settings`
-  const repoBase = `https://github.com/${org}/classroom50/settings`
+  const repoBase = `https://github.com/${org}/${CONFIG_REPO}/settings`
   switch (id) {
     case "orgDefaults":
       return memberPrivilegesUrl(org)
@@ -218,7 +219,7 @@ export async function buildOrgAuditReport(
       id: "configRepoDefaultBranch",
       title: "Config repo default branch",
       detail: configRepoDefaultBranch,
-      settingsUrl: `https://github.com/${org}/classroom50/settings/branches`,
+      settingsUrl: `https://github.com/${org}/${CONFIG_REPO}/settings/branches`,
     })
   }
   // The org default branch *setting* isn't `main`. GitHub has no API to set it,

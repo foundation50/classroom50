@@ -22,7 +22,7 @@ import {
   REPO_READ_CONCURRENCY,
   sleep,
 } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { logger } from "@/lib/logger"
 

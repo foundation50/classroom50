@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { jsonFileQuery } from "./github/queries"
-import { CONFIG_REPO } from "./github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Classroom } from "@/types/classroom"
 

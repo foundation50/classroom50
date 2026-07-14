@@ -14,7 +14,7 @@ import {
   getUserQuery,
   getUser,
 } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,

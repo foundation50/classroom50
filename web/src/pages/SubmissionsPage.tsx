@@ -71,6 +71,7 @@ import {
   dueDeadlineInstant,
 } from "@/util/formatDate"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
+import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
 
 // Re-renders so a relative "updated X ago" label stays live, at a cadence that
@@ -448,8 +449,8 @@ const SubmissionsPageContent = () => {
     regradeAll.phase === "dispatching" || regradeAll.phase === "running"
   const { data: lastRun, refetch: refetchLastRun } =
     useGetLastCollectScoresRun(org)
-  const collectWorkflowUrl = `https://github.com/${org}/classroom50/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
-  const regradeWorkflowUrl = `https://github.com/${org}/classroom50/actions/workflows/${REGRADE_WORKFLOW}`
+  const collectWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
+  const regradeWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}`
   const collecting =
     collectScores.phase === "dispatching" || collectScores.phase === "running"
 

@@ -10,7 +10,7 @@ import ClassroomStaffSection from "./classes/ClassroomStaffSection"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import { githubKeys } from "@/hooks/github/queries"
-import { CONFIG_REPO } from "@/hooks/github/orgChecks"
+import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { useTranslation } from "react-i18next"
 import {

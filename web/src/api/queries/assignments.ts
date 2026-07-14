@@ -7,6 +7,7 @@ import {
 } from "@/hooks/github/queries"
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
+import { CONFIG_REPO } from "@/util/configRepo"
 
 export type GetAssignmentsFileInput = {
   org: string
@@ -28,7 +29,7 @@ export async function getAssignmentsFile(
     encoding: "base64"
     content: string
   }>(
-    `/repos/${org}/classroom50/contents/${path}?ref=${encodeURIComponent(ref)}`,
+    `/repos/${org}/${CONFIG_REPO}/contents/${path}?ref=${encodeURIComponent(ref)}`,
   )
 
   if (file.type !== "file") {
