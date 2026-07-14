@@ -114,9 +114,11 @@ export default defineConfig([
   // layer once cycled (barrel re-exports + a TDZ workaround), as did the two
   // data-layer giants (mutations.ts <-> queries.ts) via shared primitives; both
   // are now broken (primitives extracted into leaf modules) and this keeps them
-  // broken. Scoped to the data layer where cycles are the real risk;
-  // maxDepth-bounded because no-cycle is O(N*M^2). Type-only imports are ignored
-  // by the rule, so the remaining `import type` edges don't trip it.
+  // broken. Scoped to the data layer where cycles are the real risk; unbounded
+  // (no maxDepth) so a cycle that closes through a longer detour can't hide —
+  // measured negligible over this ~35-file scope, and ignoreExternal keeps
+  // node_modules out of the walk. Type-only imports are ignored by the rule, so
+  // the remaining `import type` edges don't trip it.
   //
   // no-cycle is inert without BOTH a parser (import-x/parsers) AND a resolver
   // that understands the `@/*` tsconfig alias every data-layer edge uses —
@@ -126,7 +128,7 @@ export default defineConfig([
   // instead of no-cycle silently going inert. Verified against an injected
   // fixture cycle before trusting it.
   {
-    files: ["src/github-core/**/*.ts", "src/api/**/*.ts"],
+    files: ["src/github-core/**/*.{ts,tsx}", "src/api/**/*.{ts,tsx}"],
     plugins: { "import-x": importX },
     settings: {
       "import-x/parsers": {
@@ -142,7 +144,7 @@ export default defineConfig([
     },
     rules: {
       "import-x/no-unresolved": "error",
-      "import-x/no-cycle": ["error", { maxDepth: 4, ignoreExternal: true }],
+      "import-x/no-cycle": ["error", { ignoreExternal: true }],
     },
   },
   // The only files allowed to touch `console` directly: the logger wrapper
