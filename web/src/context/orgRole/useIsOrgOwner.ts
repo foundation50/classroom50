@@ -1,13 +1,10 @@
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 
-// The org-owner UX gate as a single tri-state, so every owner-gated surface
-// reads the same fail-closed verdict instead of re-deriving `role === "admin"`.
-// `isPending` holds (spinner) while the read is in flight; `isError` (retries
-// exhausted, role still unresolved) drives a retryable surface via `retry`
-// rather than stranding a real owner in an indefinite spinner. Backed by
-// useOrgRole, so it fetches nothing itself and returns the safe `unresolved`
-// default off the $org boundary.
+// One shared org-owner UX verdict over useOrgRole, so owner-gated surfaces read
+// a single fail-closed answer instead of re-deriving `role === "admin"`. Safe to
+// call behind a RequireOwner route gate — such consumers can ignore
+// isPending/isError (the gate holds/errors before they render).
 export function useIsOrgOwner(): {
   isOwner: boolean
   isPending: boolean

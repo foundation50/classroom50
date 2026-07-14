@@ -3,7 +3,7 @@ import { useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import { can } from "@/util/capabilities"
 import NotFound from "@/components/NotFound"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
@@ -141,11 +141,11 @@ const RequireInstructor = ({ children }: { children: ReactNode }) => {
 // of any classroom. A settled transient membership error surfaces a retryable
 // error instead of an indefinite spinner (mirrors the classroom gates).
 const RequireOwner = ({ children }: { children: ReactNode }) => {
-  const { orgRole, isError, retry } = useOrgRole()
+  const { isOwner, isPending, isError, retry } = useIsOrgOwner()
   return (
     <RoleGate
-      resolved={orgRole !== "unresolved"}
-      permitted={can("manageOrg", { orgRole })}
+      resolved={!isPending}
+      permitted={isOwner}
       errored={isError}
       onRetry={retry}
     >

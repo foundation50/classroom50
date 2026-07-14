@@ -1,15 +1,11 @@
-// Pure derivation of the sidebar footer's ORG-LEVEL role label (the branch U1
-// changed), split out so its logic is unit-testable without rendering the whole
-// drawer. The classroom-route branch stays inline in the component because it
-// maps a resolved classroom role through roleLabelKey/i18n.
+// Pure derivation of the sidebar footer's org-level role label, split from the
+// component so its branching is unit-testable. The classroom-route branch stays
+// inline in the component (it maps a resolved classroom role through
+// roleLabelKey/i18n; this helper has no "owner" concept to reuse there).
 //
-// Rule: only a confirmed org owner shows "Instructor" (a non-owner staffer's
-// role is per-classroom, so we leave it blank rather than mislabel a TA).
-// While the owner verdict is unsettled — pending OR a settled transient error —
-// suppress the Student fallback too, so a real owner whose read errored isn't
-// mislabeled "Student". Owner-pending only counts as a spinner when an org is
-// in scope: off the $org boundary useOrgRole stays `unresolved` forever, so
-// gating on `org` prevents a permanent spinner on the org-less /orgs list.
+// Non-obvious gotcha: owner-pending only counts as a spinner when an org is in
+// scope. Off the $org boundary useOrgRole stays `unresolved` forever, so gating
+// on `hasOrg` prevents a permanent spinner on the org-less /orgs list.
 
 export type OrgFooterLabelInput = {
   hasOrg: boolean
