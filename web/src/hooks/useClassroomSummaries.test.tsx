@@ -40,8 +40,9 @@ describe("useClassroomSummaries", () => {
       archived: false,
       loading: false,
     })
-    // Count is no longer sourced here — it's collected by the list's probes.
-    expect(result.current[0].studentCount).toBeUndefined()
+    // Count is no longer sourced here — the type has no studentCount; it's
+    // collected by ClassroomList's probes for the sort only.
+    expect(result.current[0]).not.toHaveProperty("studentCount")
   })
 
   it("keeps a row (with {path}) when classroom.json is unreadable", () => {

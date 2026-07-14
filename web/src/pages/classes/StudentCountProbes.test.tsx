@@ -55,4 +55,38 @@ describe("StudentCountProbes", () => {
     render(<StudentCountProbes org="acme" paths={[]} onCount={() => {}} />)
     expect(studentCount).not.toHaveBeenCalled()
   })
+
+  it("reports undefined while the count is loading", async () => {
+    studentCount.mockReturnValue({
+      studentCount: undefined,
+      isLoading: true,
+      isError: false,
+    })
+    const onCount = vi.fn()
+    render(
+      <StudentCountProbes org="acme" paths={["cs101"]} onCount={onCount} />,
+    )
+    await waitFor(() =>
+      expect(onCount).toHaveBeenCalledWith("cs101", undefined),
+    )
+  })
+
+  it("reports undefined on error, never the errored 0, so the sort treats it as unknown", async () => {
+    // A settled team-membership error resolves studentCount to 0 with
+    // isError:true; the probe must NOT report that 0 (it would sort as a real
+    // zero-student classroom instead of pinning to the unknown bucket).
+    studentCount.mockReturnValue({
+      studentCount: 0,
+      isLoading: false,
+      isError: true,
+    })
+    const onCount = vi.fn()
+    render(
+      <StudentCountProbes org="acme" paths={["cs101"]} onCount={onCount} />,
+    )
+    await waitFor(() =>
+      expect(onCount).toHaveBeenCalledWith("cs101", undefined),
+    )
+    expect(onCount).not.toHaveBeenCalledWith("cs101", 0)
+  })
 })

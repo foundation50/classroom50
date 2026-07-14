@@ -15,9 +15,6 @@ export type ClassroomSummary = {
   // Archived lifecycle derived from classroom.json's `active` flag via
   // isClassroomArchived; an unresolved/errored read is treated as active.
   archived: boolean
-  // studentCount undefined while pending/unreadable (or when counts aren't
-  // requested); callers pin undefined to the bottom in name order.
-  studentCount?: number
   // Distinct from a resolved-but-empty classroom.json read.
   loading: boolean
 }
@@ -30,7 +27,8 @@ export type ClassroomSummary = {
 // needs an authoritative role-aware count (useStudentCount), and calling a hook
 // per dir in this hook would violate the Rules of Hooks when the classroom list
 // grows/shrinks without a remount. ClassroomList collects those counts via
-// keyed probe components instead and merges them in (see useStudentCountsByDir).
+// keyed probe components instead and merges them in (see StudentCountProbes and
+// useStudentCount).
 //
 // jsonFileQuery uses retry:false, so a dir with a missing/malformed
 // classroom.json resolves to data===undefined: we keep {path} and mark the rest

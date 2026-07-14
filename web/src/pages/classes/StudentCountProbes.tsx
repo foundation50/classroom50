@@ -21,10 +21,13 @@ const StudentCountProbe = memo(function StudentCountProbe({
   path: string
   onCount: (path: string, count: number | undefined) => void
 }) {
-  const { studentCount } = useStudentCount(org, path)
+  const { studentCount, isError } = useStudentCount(org, path)
   useEffect(() => {
-    onCount(path, studentCount)
-  }, [path, studentCount, onCount])
+    // Report undefined on error so the sort pins the classroom to the unknown
+    // bucket (bottom) rather than treating a failed read as an authoritative 0,
+    // matching the card/header degradation (R6).
+    onCount(path, isError ? undefined : studentCount)
+  }, [path, studentCount, isError, onCount])
   return null
 })
 
