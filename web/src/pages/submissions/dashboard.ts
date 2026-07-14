@@ -228,6 +228,46 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
   return accepted.has(username.trim().toLowerCase())
 }
 
+// An existing group repo derived from the org repo list, keyed by its founder
+// (the `<owner>` segment of `<classroom>-<assignment>-<owner>`). `submitted` is
+// true when a graded push already recorded scores for it — the dashboard folds
+// submitted groups into the normal score rows and surfaces only the rest, so a
+// teacher can see teams that formed but haven't pushed yet (#245).
+export type GroupRepo = { owner: string; repoName: string; submitted: boolean }
+
+// Group repos that exist for the assignment. Unlike individual acceptance, the
+// founder logins aren't known up front (group repos are named after whoever
+// created the group), so we must reverse-parse the `<classroom>-<assignment>-`
+// prefix rather than forward-construct per student. The sibling-slug hazard the
+// individual path avoids (assignment "hw" capturing "cs-hw-bonus-alice") is not
+// a false positive here: `cs-hw-bonus-alice` yields founder `bonus-alice`, a
+// real distinct repo, so it simply isn't matched as a submitted owner unless it
+// truly is one. Empty owner segments (a bare `<classroom>-<assignment>-`) are
+// rejected. `submittedOwners` is the set of lowercased founders that already
+// have a score row.
+export function existingGroupRepos(
+  repos: GitHubRepo[] | null | undefined,
+  classroom: string,
+  assignment: string,
+  submittedOwners: Set<string>,
+): GroupRepo[] {
+  if (!repos) return []
+  const prefix = `${classroom}-${assignment}-`.toLowerCase()
+  const out: GroupRepo[] = []
+  for (const repo of repos) {
+    const name = repo.name.toLowerCase()
+    if (!name.startsWith(prefix)) continue
+    const owner = name.slice(prefix.length)
+    if (!owner) continue
+    out.push({
+      owner,
+      repoName: name,
+      submitted: submittedOwners.has(owner),
+    })
+  }
+  return out
+}
+
 // Per-row status for a roster student with no submission row. Distinguishes the
 // three states that would otherwise collapse into a flat "Not submitted":
 //   - no-group: group assignment — the student isn't credited on any submitting

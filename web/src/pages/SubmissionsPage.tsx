@@ -27,6 +27,7 @@ import {
   classAverage,
   computeStats,
   distinctSections,
+  existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -44,6 +45,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { rowToStudent } from "@/util/teamRoster"
+import { getName } from "@/util/students"
 import { hasStudentEnrollment } from "@/util/rosterRoles"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
@@ -249,6 +251,28 @@ const SubmissionsPageContent = () => {
   )
   const acceptedAvailable = !isGroupAssignment && orgRepos != null
 
+  // Group repos that exist but have no submission yet: for group assignments the
+  // repo is named after the founder (not each member), so acceptance can't be
+  // derived per student — instead surface every group repo from the org list
+  // (#245) so teachers can see teams that formed before anyone pushes. Submitted
+  // groups already show as score rows, so drop them here.
+  const submittedGroupOwners = useMemo(
+    () => new Set(scoresInfo.map((row) => row.owner.toLowerCase())),
+    [scoresInfo],
+  )
+  const unsubmittedGroupRepos = useMemo(
+    () =>
+      isGroupAssignment
+        ? existingGroupRepos(
+            orgRepos,
+            classroom ?? "",
+            assignment ?? "",
+            submittedGroupOwners,
+          ).filter((repo) => !repo.submitted)
+        : [],
+    [isGroupAssignment, orgRepos, classroom, assignment, submittedGroupOwners],
+  )
+
   // Section filtering: distinct sections for the dropdown, plus a username ->
   // section lookup so submitted rows (which carry only logins) can be matched.
   const sections = useMemo(() => distinctSections(students), [students])
@@ -363,6 +387,21 @@ const SubmissionsPageContent = () => {
         : [],
     [effectiveFilters, nonSubmitters, query, acceptedSet],
   )
+
+  // Group repos without a submission, gated like non-submitters (hidden while a
+  // narrowing filter other than "not submitted" is active) and matched against
+  // the search by founder login or roster name. Section isn't filtered — a group
+  // repo carries no single section.
+  const visibleGroupRepos = useMemo(() => {
+    if (!showsNonSubmitters(effectiveFilters)) return []
+    const q = query.trim().toLowerCase()
+    if (!q) return unsubmittedGroupRepos
+    return unsubmittedGroupRepos.filter((repo) => {
+      if (repo.owner.includes(q)) return true
+      const name = getName(repo.owner, students).toLowerCase()
+      return name.length > 0 && name.includes(q)
+    })
+  }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
   const collectScores = useTriggerScoreCollection(org)
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
@@ -687,6 +726,7 @@ const SubmissionsPageContent = () => {
         scores={visibleRows}
         students={students}
         nonSubmitters={visibleNonSubmitters}
+        unsubmittedGroupRepos={visibleGroupRepos}
         isGroup={isGroupAssignment}
         org={org}
         classroom={classroom}

@@ -12,6 +12,7 @@ import {
   buildSectionLookup,
   computeStats,
   distinctSections,
+  existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
@@ -375,6 +376,70 @@ describe("acceptedUsernames / hasAccepted / acceptedRosterCount", () => {
   it("counts roster students who accepted", () => {
     const set = acceptedUsernames(repos, "cs101", "hw1", roster)
     expect(acceptedRosterCount(roster, set)).toBe(2)
+  })
+})
+
+describe("existingGroupRepos", () => {
+  const repos = [
+    repo("cs101-hw1-alice"),
+    repo("cs101-hw1-bob-team"),
+    repo("cs101-hw2-alice"),
+    repo("cs101-hw1"),
+    repo("unrelated-repo"),
+  ]
+
+  it("lists group repos for the exact classroom+assignment, keyed by founder", () => {
+    const out = existingGroupRepos(repos, "cs101", "hw1", new Set())
+    expect(out.map((r) => r.owner).sort()).toEqual(["alice", "bob-team"])
+  })
+
+  it("marks repos with a recorded submission as submitted", () => {
+    const out = existingGroupRepos(repos, "cs101", "hw1", new Set(["alice"]))
+    const alice = out.find((r) => r.owner === "alice")
+    const bob = out.find((r) => r.owner === "bob-team")
+    expect(alice?.submitted).toBe(true)
+    expect(bob?.submitted).toBe(false)
+  })
+
+  it("rejects a bare `<classroom>-<assignment>-` with an empty owner segment", () => {
+    const out = existingGroupRepos(
+      [repo("cs101-hw1-")],
+      "cs101",
+      "hw1",
+      new Set(),
+    )
+    expect(out).toEqual([])
+  })
+
+  it("is case-insensitive on the repo name and founder", () => {
+    const out = existingGroupRepos(
+      [repo("CS101-HW1-TeamRocket")],
+      "cs101",
+      "hw1",
+      new Set(["teamrocket"]),
+    )
+    expect(out).toEqual([
+      {
+        owner: "teamrocket",
+        repoName: "cs101-hw1-teamrocket",
+        submitted: true,
+      },
+    ])
+  })
+
+  it("does not match a numeric-adjacent slug (hw1 vs hw10)", () => {
+    const out = existingGroupRepos(
+      [repo("cs101-hw10-team")],
+      "cs101",
+      "hw1",
+      new Set(),
+    )
+    expect(out).toEqual([])
+  })
+
+  it("returns an empty list for null/undefined repos", () => {
+    expect(existingGroupRepos(null, "cs101", "hw1", new Set())).toEqual([])
+    expect(existingGroupRepos(undefined, "cs101", "hw1", new Set())).toEqual([])
   })
 })
 

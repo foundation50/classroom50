@@ -23,6 +23,7 @@ import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
 import { Badge, Button, Modal } from "@/components/ui"
 import { nonSubmitterStatus, scoreTone } from "@/pages/submissions/dashboard"
+import type { GroupRepo } from "@/pages/submissions/dashboard"
 import { ConfirmModal } from "@/components/modals"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
@@ -198,9 +199,10 @@ const HistoryLink = ({
   )
 
 // Compact group identity: shared repo + stacked avatars. Renders from the
-// scores.json `usernames` snapshot and never fetches (enabled: false) to avoid a
-// per-row GitHub call; reads the shared collaborators cache so avatars upgrade to
-// live data once the Members modal populates it.
+// scores.json `usernames` snapshot; by default never fetches (reads the shared
+// collaborators cache so avatars upgrade once the Members modal populates it).
+// A group repo with no submission yet has no `usernames`, so it opts into a live
+// collaborators fetch via `fetchMembers`.
 const MAX_VISIBLE_AVATARS = 4
 
 const GroupMembers = ({
@@ -210,6 +212,7 @@ const GroupMembers = ({
   students,
   repoHref,
   repoLabel,
+  fetchMembers = false,
 }: {
   org: string
   repoName: string
@@ -217,11 +220,14 @@ const GroupMembers = ({
   students: Student[]
   repoHref: string
   repoLabel: string
+  // Fetch collaborators live rather than only reading the modal-populated cache.
+  // Needed for a group repo with no submission yet: `usernames` (from
+  // scores.json) is empty, so members are only known from the repo itself.
+  fetchMembers?: boolean
 }) => {
   const { t } = useTranslation()
-  // enabled: false — reads the cache the Members modal populates, never fetches.
   const { data: liveCollaborators } = useGetRepoCollaborators(org, repoName, {
-    enabled: false,
+    enabled: fetchMembers,
   })
   const memberLogins =
     liveCollaborators && liveCollaborators.length > 0
@@ -552,6 +558,7 @@ const SubmissionsTable = ({
   scores,
   students,
   nonSubmitters = [],
+  unsubmittedGroupRepos = [],
   isGroup = false,
   org,
   classroom,
@@ -566,6 +573,9 @@ const SubmissionsTable = ({
   scores: SubmissionRow[]
   students: Student[]
   nonSubmitters?: Student[]
+  // Group repos that exist but have no submission yet (group assignments only).
+  // Rendered as extra rows so teachers see teams that formed before any push.
+  unsubmittedGroupRepos?: GroupRepo[]
   isGroup?: boolean
   org: string
   classroom: string
@@ -638,51 +648,53 @@ const SubmissionsTable = ({
             </tr>
           </thead>
           <tbody>
-            {!scores?.length && !nonSubmitters.length && (
-              <tr>
-                <td colSpan={5} className="py-10 text-center">
-                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
-                    {filtered ? (
-                      <>
-                        <SearchX
-                          aria-hidden="true"
-                          className="size-8 text-base-content/40"
-                        />
-                        <p className="font-medium">
-                          {t("submissions.table.emptyFilteredTitle")}
-                        </p>
-                        <p className="text-sm text-base-content/70">
-                          {t("submissions.table.emptyFilteredBody")}
-                        </p>
-                        {onClearFilters && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="mt-1"
-                            onClick={onClearFilters}
-                          >
-                            {t("submissions.table.emptyClearFilters")}
-                          </Button>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <Inbox
-                          aria-hidden="true"
-                          className="size-8 text-base-content/40"
-                        />
-                        <p className="font-medium">
-                          {t("submissions.table.emptyNoDataTitle")}
-                        </p>
-                        <p className="text-sm text-base-content/70">
-                          {t("submissions.table.emptyNoDataBody")}
-                        </p>
-                      </>
-                    )}
-                  </div>
-                </td>
-              </tr>
-            )}
+            {!scores?.length &&
+              !nonSubmitters.length &&
+              !unsubmittedGroupRepos.length && (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center">
+                    <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+                      {filtered ? (
+                        <>
+                          <SearchX
+                            aria-hidden="true"
+                            className="size-8 text-base-content/40"
+                          />
+                          <p className="font-medium">
+                            {t("submissions.table.emptyFilteredTitle")}
+                          </p>
+                          <p className="text-sm text-base-content/70">
+                            {t("submissions.table.emptyFilteredBody")}
+                          </p>
+                          {onClearFilters && (
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="mt-1"
+                              onClick={onClearFilters}
+                            >
+                              {t("submissions.table.emptyClearFilters")}
+                            </Button>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <Inbox
+                            aria-hidden="true"
+                            className="size-8 text-base-content/40"
+                          />
+                          <p className="font-medium">
+                            {t("submissions.table.emptyNoDataTitle")}
+                          </p>
+                          <p className="text-sm text-base-content/70">
+                            {t("submissions.table.emptyNoDataBody")}
+                          </p>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )}
             {scores.map(
               ({
                 usernames,
@@ -869,40 +881,120 @@ const SubmissionsTable = ({
                 )
               },
             )}
-            {nonSubmitters.map((student) => (
-              <tr
-                key={`missing-${student.username || student.email || student.github_id}`}
-                className="opacity-60"
-              >
-                <td>
-                  <Avatar
-                    name={getName(student.username, students)}
-                    initials={getInitials(student.username, students)}
-                    github={student.username || student.email}
-                    subtitle={identitySubtitle(
-                      getName(student.username, students),
-                      student.username,
-                      student.section,
+            {nonSubmitters.map((student) => {
+              const accepted =
+                !isGroup &&
+                Boolean(
+                  student.username &&
+                  acceptedUsernames?.has(student.username.toLowerCase()),
+                )
+              const repo = accepted
+                ? studentRepoName(classroom, assignment, student.username)
+                : null
+              const repoHref = accepted
+                ? studentRepoUrl(org, classroom, assignment, student.username)
+                : null
+              return (
+                <tr
+                  key={`missing-${student.username || student.email || student.github_id}`}
+                >
+                  <td>
+                    <Avatar
+                      name={getName(student.username, students)}
+                      initials={getInitials(student.username, students)}
+                      github={student.username || student.email}
+                      subtitle={identitySubtitle(
+                        getName(student.username, students),
+                        student.username,
+                        student.section,
+                      )}
+                      onClick={
+                        student.username
+                          ? () => setProfileUsername(student.username)
+                          : undefined
+                      }
+                    />
+                  </td>
+                  <td>
+                    <NonSubmitterStatusBadge
+                      username={student.username}
+                      isGroup={isGroup}
+                      acceptedUsernames={acceptedUsernames}
+                    />
+                  </td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>
+                    {repo && repoHref ? (
+                      <ActionIconLink
+                        href={repoHref}
+                        icon={GitHub}
+                        label={t("submissions.table.openRepoLabel", { repo })}
+                        title={t("submissions.table.viewRepo")}
+                        emptyLabel={t("submissions.table.openRepoLabel", {
+                          repo,
+                        })}
+                        emptyTitle={t("submissions.table.viewRepo")}
+                      />
+                    ) : (
+                      "—"
                     )}
-                    onClick={
-                      student.username
-                        ? () => setProfileUsername(student.username)
-                        : undefined
-                    }
-                  />
-                </td>
-                <td>
-                  <NonSubmitterStatusBadge
-                    username={student.username}
-                    isGroup={isGroup}
-                    acceptedUsernames={acceptedUsernames}
-                  />
-                </td>
-                <td>—</td>
-                <td>—</td>
-                <td>—</td>
-              </tr>
-            ))}
+                  </td>
+                </tr>
+              )
+            })}
+            {unsubmittedGroupRepos.map(({ owner, repoName }) => {
+              const repoHref = studentRepoUrl(org, classroom, assignment, owner)
+              return (
+                <tr key={`group-${repoName}`}>
+                  <td>
+                    <GroupMembers
+                      org={org}
+                      repoName={repoName}
+                      usernames={[]}
+                      students={students}
+                      repoHref={repoHref}
+                      repoLabel={repoName}
+                      fetchMembers
+                    />
+                  </td>
+                  <td>
+                    <Badge tone="warning" className="whitespace-nowrap">
+                      {t("submissions.table.acceptedAwaiting")}
+                    </Badge>
+                  </td>
+                  <td>—</td>
+                  <td>—</td>
+                  <td>
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        shape="square"
+                        className="text-base-content/70"
+                        onClick={() => setManageOwner(owner)}
+                        aria-label={t("submissions.table.membersAria")}
+                        title={t("submissions.table.members")}
+                      >
+                        <UsersRound aria-hidden="true" className="size-4" />
+                      </Button>
+                      <ActionIconLink
+                        href={repoHref}
+                        icon={GitHub}
+                        label={t("submissions.table.openRepoLabel", {
+                          repo: repoName,
+                        })}
+                        title={t("submissions.table.viewRepo")}
+                        emptyLabel={t("submissions.table.openRepoLabel", {
+                          repo: repoName,
+                        })}
+                        emptyTitle={t("submissions.table.viewRepo")}
+                      />
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
           </tbody>
         </table>
       </EnterDiv>
