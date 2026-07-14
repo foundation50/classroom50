@@ -14,21 +14,20 @@ import type { GitHubOrgInvitation } from "@/github-core/types"
 // happened. Throw a specific error unless exactly one invite actually landed
 // (fresh invite or an already-active/pending skip), so a re-invite that only
 // deferred/failed routes to the error path instead of a false success.
-export function assertInviteSent(
+function assertInviteSent(
   res: {
     invited: unknown[]
     skipped: unknown[]
     failed: { message: string }[]
     deferred: unknown[]
   },
-  who: string,
+  messages: { rateLimited: string; notSent: string },
 ): void {
   const failure = res.failed[0]
   if (failure) throw new Error(failure.message)
-  if (res.deferred.length > 0)
-    throw new Error(`GitHub rate-limited the re-invite to ${who} — try again.`)
+  if (res.deferred.length > 0) throw new Error(messages.rateLimited)
   if (res.invited.length === 0 && res.skipped.length === 0)
-    throw new Error(`No invitation was sent to ${who} — try again.`)
+    throw new Error(messages.notSent)
 }
 
 // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue an
@@ -40,7 +39,13 @@ export function assertInviteSent(
 export function useReinviteFailedInvite(
   org: string,
   classroom: string,
-  messages: { noTarget: string },
+  messages: {
+    noTarget: string
+    // Built with `who` (login/email/id) inside the hook, so these are
+    // functions the call site fills via t() — keeps the hook t()-free.
+    rateLimited: (who: string) => string
+    notSent: (who: string) => string
+  },
 ) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -50,20 +55,24 @@ export function useReinviteFailedInvite(
       const who = inv.login || inv.email || String(inv.id)
       await cancelOrgInvitation(client, { org, invitationId: inv.id })
       const role = roleForOrgRole(inv.role)
+      const sent = {
+        rateLimited: messages.rateLimited(who),
+        notSent: messages.notSent(who),
+      }
       if (inv.login) {
         const res = await inviteRosterStudents(client, {
           org,
           classroom,
           students: [{ username: inv.login, role }],
         })
-        assertInviteSent(res, who)
+        assertInviteSent(res, sent)
       } else if (inv.email) {
         const res = await bulkInviteByEmail(client, {
           org,
           classroom,
           invites: [{ email: inv.email, role }],
         })
-        assertInviteSent(res, who)
+        assertInviteSent(res, sent)
       } else {
         throw new Error(messages.noTarget)
       }

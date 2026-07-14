@@ -289,6 +289,8 @@
     "failedInviteDismissError": "Couldn't dismiss the failed invitation: {{error}}",
     "reinvite": "Re-invite",
     "failedInviteReinviteError": "Couldn't re-invite: {{error}}",
+    "failedInviteRateLimited": "GitHub rate-limited the re-invite to {{who}} — try again.",
+    "failedInviteNotSent": "No invitation was sent to {{who}} — try again.",
     "failedInviteNoTarget": "This invitation has no GitHub username or email, so it can't be re-invited — dismiss it and re-add the person.",
     "pendingReview": "Review",
     "inviteLinksHint": "Share either link with students so they can join this classroom.",

@@ -211,6 +211,8 @@ const EnrolledStudents = ({
   // unmounted.
   const reinviteFailedInvite = useReinviteFailedInvite(org, classroom, {
     noTarget: t("students.failedInviteNoTarget"),
+    rateLimited: (who) => t("students.failedInviteRateLimited", { who }),
+    notSent: (who) => t("students.failedInviteNotSent", { who }),
   })
   const reinvite = (inv: GitHubOrgInvitation) =>
     reinviteFailedInvite.mutate(inv, {
