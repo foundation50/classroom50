@@ -1528,6 +1528,14 @@
     "errorTitle": "Could not accept assignment",
     "errorGeneric": "Something went wrong while accepting the assignment.",
     "errorRetryHint": "This is safe to retry — address anything noted above if you can, then use the button below. Some errors (rate limits, GitHub hiccups) just need a moment before retrying.",
+    "loadError": {
+      "badge": "Assignment temporarily unavailable",
+      "title": "Couldn't load assignment",
+      "body": "Classroom 50 couldn't load the published assignment information. Check your connection and try again.",
+      "hint": "If this keeps happening, ask your instructor to confirm that the assignment was published successfully.",
+      "retry": "Try again",
+      "retrying": "Trying again"
+    },
     "openRepository": "Open repository",
     "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",

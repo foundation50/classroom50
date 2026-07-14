@@ -215,6 +215,65 @@ const AssignmentNotFound = ({
   )
 }
 
+const AssignmentLoadError = ({
+  user,
+  onRetry,
+  retrying,
+}: {
+  user: GitHubUser | null
+  onRetry: () => void
+  retrying: boolean
+}) => {
+  const { t } = useTranslation()
+  return (
+    <AcceptLayout>
+      <AcceptCard>
+        <Card.Body className="gap-8">
+          <div>
+            <span className="badge badge-warning badge-soft gap-2">
+              <AlertTriangle aria-hidden="true" className="size-4" />
+              {t("accept.loadError.badge")}
+            </span>
+
+            <h1 className="mt-6 text-2xl font-bold">
+              {t("accept.loadError.title")}
+            </h1>
+
+            <p className="mt-2 text-base text-base-content/70">
+              {t("accept.loadError.body")}
+            </p>
+          </div>
+
+          <Alert tone="warning" className="items-start">
+            <AlertTriangle aria-hidden="true" className="size-5 shrink-0" />
+            <div>{t("accept.loadError.hint")}</div>
+          </Alert>
+
+          <Button
+            variant="primary"
+            className="w-full"
+            loading={retrying}
+            loadingLabel={t("accept.loadError.retrying")}
+            onClick={onRetry}
+          >
+            {t("accept.loadError.retry")}
+          </Button>
+
+          <div className="divider my-0" />
+
+          <div className="space-y-3">
+            <div className="label p-0 text-base font-semibold">
+              {t("accept.signedInAs")}
+            </div>
+
+            <UserInfo user={user} />
+          </div>
+        </Card.Body>
+      </AcceptCard>
+    </AcceptLayout>
+  )
+}
+
 const modeLabelKey: Record<string, string> = {
   individual: "accept.modeIndividual",
   group: "accept.modeGroup",
@@ -529,8 +588,13 @@ const AcceptAssignmentPage = () => {
   const { user } = useGithubAuth()
   const username = user?.login
 
-  const { data: assignmentsData, isLoading: loadingAssignments } =
-    usePagesAssignments(org, classroom, secret)
+  const {
+    data: assignmentsData,
+    isPending: pendingAssignments,
+    isFetching: fetchingAssignments,
+    error: assignmentsError,
+    refetch: refetchAssignments,
+  } = usePagesAssignments(org, classroom, secret)
   const {
     data: orgInvite,
     isLoading: loadingOrgMembership,
@@ -599,7 +663,7 @@ const AcceptAssignmentPage = () => {
     },
   })
 
-  if (loadingAssignments || isLoadingRepo || loadingOrgMembership) {
+  if (pendingAssignments || isLoadingRepo || loadingOrgMembership) {
     return (
       <AcceptLayout>
         <Spinner size="xl" label={t("accept.loadingAssignment")} />
@@ -671,6 +735,20 @@ const AcceptAssignmentPage = () => {
       <AcceptLayout>
         <Spinner size="xl" label={t("accept.loadingAssignment")} />
       </AcceptLayout>
+    )
+  }
+
+  // A failed Pages request is not evidence that the assignment slug is absent.
+  // Keep transport/HTTP/JSON errors retryable and reserve "not found" for a
+  // successfully loaded manifest that genuinely lacks the requested slug.
+  // Do not render the raw error: fetch errors can contain the capability URL.
+  if (assignmentsError && assignmentsData === undefined) {
+    return (
+      <AssignmentLoadError
+        user={user}
+        retrying={fetchingAssignments}
+        onRetry={() => void refetchAssignments()}
+      />
     )
   }
 
