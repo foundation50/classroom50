@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
-import { useReuseAssignment } from "@/hooks/useReuseAssignment"
+import { useReuseAssignment } from "@/hooks/mutations/useReuseAssignment"
 import {
   ReuseModalShell,
   reuseSlugStatus,

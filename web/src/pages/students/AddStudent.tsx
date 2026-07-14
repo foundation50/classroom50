@@ -1,25 +1,13 @@
 import { Mail, UserRound, Users } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
-import { invalidateInviteQueries } from "@/github-core/queries"
-import { useUpdateRosterCache } from "@/hooks/useGetStudents"
-import {
-  useInvalidateTeamRoster,
-  useSeedTeamMember,
-} from "@/hooks/useTeamRoster"
-import { enrollStudentInClassroom } from "@/api/mutations/students"
+import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import {
-  inviteByEmail,
-  StudentAlreadyEnrolledError,
-} from "@/api/mutations/students"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { StudentAlreadyEnrolledError } from "@/api/mutations/students"
 import { isValidEmail } from "@/util/orgMembership"
-import { splitName, toStudent } from "@/util/roster"
 import { AnimatedAlert, Button, Modal } from "@/components/ui"
 
 type AddStudentProps = {
@@ -51,111 +39,12 @@ const AddStudent = ({
   onEnrolled,
 }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
-  const queryClient = useQueryClient()
-  const githubClient = useGitHubClient()
-  const updateRosterCache = useUpdateRosterCache(org, classroom)
-  const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
-  const seedTeamMember = useSeedTeamMember(org, classroom)
   const { t } = useTranslation()
   const titleId = useId()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
 
-  const addMutation = useMutation({
-    mutationFn: async (value: AddStudentFormValues) => {
-      const { first_name, last_name } = splitName(value.name)
-      const username = value.username.trim()
-      const email = value.email.trim()
-      const section = value.section.trim()
-
-      // Username present -> GitHub enrolment (carry the email onto the row).
-      if (username) {
-        const result = await enrollStudentInClassroom(githubClient, {
-          org,
-          classroom,
-          username,
-          first_name,
-          last_name,
-          email: email || undefined,
-          section: section || undefined,
-        })
-        return {
-          kind: "username" as const,
-          label: username,
-          warning: result?.teamWarning ?? "",
-          student: toStudent(result.student),
-          // Already-active member: team-added directly (no invite), so seed the
-          // members cache to avoid a "not in org" flash.
-          enrolledMember: result.enrolled
-            ? {
-                id: Number(result.student.github_id),
-                login: result.student.username,
-              }
-            : null,
-        }
-      }
-
-      // Email-only -> a pure GitHub org invite (carrying the classroom team) and
-      // NO roster.csv write: the team is the enrollment source of truth and an
-      // email carries no reliable identity. The invite surfaces in the roster's
-      // "pending" section via the org pending-invitations list; name/section are
-      // captured later by adding the student by username or uploading a roster.
-      const result = await inviteByEmail(githubClient, {
-        org,
-        classroom,
-        email,
-      })
-      return {
-        kind: "email" as const,
-        label: email,
-        warning: result?.inviteWarning ?? "",
-      }
-    },
-    onSuccess: (result) => {
-      setWarning(result.warning)
-      // Clear the form so the next student starts clean and a stray re-click
-      // can't resubmit into a duplicate error.
-      setSuccess(
-        result.kind === "email"
-          ? t("students.invited", { label: result.label })
-          : t("students.added", { label: result.label }),
-      )
-      form.reset()
-      invalidateInviteQueries(queryClient, org)
-      if (result.kind === "username") {
-        // Show the new row immediately (see useUpdateRosterCache).
-        updateRosterCache((current) => [...current, result.student])
-        // Clear any earlier unenroll suppression for this login so the roster's
-        // auto-backfills treat the re-added student as enrolled again.
-        onEnrolled?.(result.student.username)
-        // Enrolled member -> seed the team-members cache so the row shows
-        // enrolled at once; the invited path already shows a pending invite, so
-        // just invalidate.
-        if (result.enrolledMember) {
-          seedTeamMember(result.enrolledMember)
-        } else {
-          invalidateTeamRoster()
-        }
-      } else {
-        // Email invite writes no CSV row; just refresh so the new pending
-        // org-invitation shows in the roster.
-        invalidateTeamRoster()
-      }
-    },
-    onError: (err, value) => {
-      // Surface every failure as a non-blocking warning, keeping the modal and
-      // form intact so the teacher can fix the entry or add someone else.
-      setSuccess("")
-      const label = value.username.trim() || value.email.trim()
-      if (err instanceof StudentAlreadyEnrolledError) {
-        setWarning(t("students.alreadyEnrolled", { label: err.login }))
-        return
-      }
-      setWarning(
-        t("students.addFailed", { label, message: getErrorMessage(err) }),
-      )
-    },
-  })
+  const addMutation = useEnrollOrInviteStudent(org, classroom, onEnrolled)
 
   const form = useForm({
     defaultValues: {
@@ -188,8 +77,38 @@ const AddStudent = ({
       setWarning("")
       setSuccess("")
       // onError already surfaces failures; swallow the rejection so it isn't
-      // also recorded as a form-level error.
-      await addMutation.mutateAsync(value).catch(() => {})
+      // also recorded as a form-level error. UI effects (success/warning + form
+      // reset) live here so they skip when the modal unmounts; the hook's
+      // onSuccess owns the roster cache reconcile that must always run.
+      await addMutation
+        .mutateAsync(value, {
+          onSuccess: (result) => {
+            setWarning(result.warning)
+            // Clear the form so the next student starts clean and a stray
+            // re-click can't resubmit into a duplicate error.
+            setSuccess(
+              result.kind === "email"
+                ? t("students.invited", { label: result.label })
+                : t("students.added", { label: result.label }),
+            )
+            form.reset()
+          },
+          onError: (err) => {
+            // Surface every failure as a non-blocking warning, keeping the modal
+            // and form intact so the teacher can fix the entry or add someone
+            // else.
+            setSuccess("")
+            const label = value.username.trim() || value.email.trim()
+            if (err instanceof StudentAlreadyEnrolledError) {
+              setWarning(t("students.alreadyEnrolled", { label: err.login }))
+              return
+            }
+            setWarning(
+              t("students.addFailed", { label, message: getErrorMessage(err) }),
+            )
+          },
+        })
+        .catch(() => {})
     },
   })
 

@@ -1,19 +1,10 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { Loader2, ShieldPlus } from "lucide-react"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/util/capabilities"
-import { classroomTeamSlug } from "@/util/teamSlug"
-import {
-  addUserToTeam,
-  ensureClassroomRoleTeam,
-  grantTeamConfigRepoWrite,
-} from "@/github-core/mutations"
-import { githubKeys } from "@/github-core/queries"
+import { useClaimInstructor } from "@/hooks/mutations/useClaimInstructor"
 import { Alert, Button } from "@/components/ui"
 import { logger } from "@/lib/logger"
 
@@ -34,65 +25,35 @@ export function ClaimInstructorNotice({
   classroom: string
 }) {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { notify } = useToast()
-  const { user } = useGithubAuth()
   const { orgRole } = useOrgRole()
   const { actualRole } = useClassroomRoleContext()
 
-  const claimMutation = useMutation({
-    mutationFn: async () => {
-      const username = user?.login
-      if (!username) throw new Error(t("classes.somethingWentWrong"))
-      const team = await ensureClassroomRoleTeam(
-        client,
-        org,
-        classroom,
-        "instructor",
-      )
-      await grantTeamConfigRepoWrite(client, org, team.slug)
-      // Idempotent: PUT membership is a no-op (200) if already a member.
-      await addUserToTeam(client, {
-        org,
-        teamSlug: team.slug,
-        username,
-        role: "maintainer",
-      })
-    },
-    onSuccess: () => {
-      const username = user?.login ?? ""
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(
-          org,
-          classroomTeamSlug(classroom, "instructor"),
-        ),
-      })
-      // Re-resolve the viewer's classroom role: their instructor-team membership
-      // is what the role context reads.
-      queryClient.invalidateQueries({
-        queryKey: [
-          "team-membership",
-          org,
-          classroomTeamSlug(classroom, "instructor"),
-          username,
-        ],
-      })
-      notify({ tone: "success", message: t("classes.claimInstructor.success") })
-    },
-    onError: (err) => {
-      log.warn("claim instructor failed", { org, classroom, err })
-      notify({
-        tone: "error",
-        message: t("classes.claimInstructor.failed", {
-          message:
-            err instanceof Error
-              ? err.message
-              : t("classes.somethingWentWrong"),
-        }),
-      })
-    },
+  const claimMutation = useClaimInstructor(org, classroom, {
+    somethingWentWrong: t("classes.somethingWentWrong"),
   })
+
+  const claim = () =>
+    claimMutation.mutate(undefined, {
+      onSuccess: () => {
+        notify({
+          tone: "success",
+          message: t("classes.claimInstructor.success"),
+        })
+      },
+      onError: (err) => {
+        log.warn("claim instructor failed", { org, classroom, err })
+        notify({
+          tone: "error",
+          message: t("classes.claimInstructor.failed", {
+            message:
+              err instanceof Error
+                ? err.message
+                : t("classes.somethingWentWrong"),
+          }),
+        })
+      },
+    })
 
   // Only an org owner who currently resolves to `student` here needs repair. A
   // TA/instructor of this classroom, or a non-owner, never sees it. `unresolved`
@@ -113,7 +74,7 @@ export function ClaimInstructorNotice({
         variant="primary"
         size="sm"
         disabled={claimMutation.isPending}
-        onClick={() => claimMutation.mutate()}
+        onClick={() => claim()}
       >
         {claimMutation.isPending ? (
           <Loader2 aria-hidden="true" className="size-4 animate-spin" />

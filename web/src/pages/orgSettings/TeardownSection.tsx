@@ -1,22 +1,20 @@
 import { useState } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useNavigate } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
 import { Button } from "@/components/ui"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import {
-  executeTeardown,
   formatTeardownResult,
-  planTeardown,
   TeardownMarkerError,
   TeardownRateLimitError,
   TeardownScopeError,
   type TeardownPlan,
 } from "@/api/mutations/teardown"
+import { usePlanTeardown } from "@/hooks/mutations/usePlanTeardown"
+import { useExecuteTeardown } from "@/hooks/mutations/useExecuteTeardown"
 import SettingsSection from "./SettingsSection"
 import { CalloutDiv, CalloutText } from "@/lib/motionComponents"
 import { logger } from "@/lib/logger"
@@ -28,8 +26,6 @@ const log = logger.scope("orgSettings:TeardownSection")
 // Owner-gated; destructive and irreversible.
 const TeardownSection = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
 
   // Owner gate. Redundant with the page's <RequireTeacher allow="owner">
@@ -43,60 +39,25 @@ const TeardownSection = ({ org }: { org: string }) => {
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState<string | null>(null)
 
-  const openMutation = useMutation({
-    mutationFn: () => planTeardown(client, org),
-    onSuccess: (p) => {
-      setPlan(p)
-      setError(null)
-      setOpen(true)
-    },
-    onError: (err) => {
-      log.warn("teardown plan failed", { org, err })
-      setError(
-        err instanceof TeardownMarkerError
-          ? err.message
-          : t("orgSettings.teardown.prepareError"),
-      )
-    },
-  })
-
-  const runMutation = useMutation({
-    mutationFn: async () => {
-      if (!plan) return
-      const result = await executeTeardown(client, plan)
-      return result
-    },
-    onSuccess: (result) => {
-      setOpen(false)
-      if (!result) {
-        setDone(null)
-      } else {
-        setDone(
-          formatTeardownResult(result, `https://github.com/orgs/${org}/teams`),
+  const openMutation = usePlanTeardown(org)
+  const openTeardown = () =>
+    openMutation.mutate(undefined, {
+      onSuccess: (p) => {
+        setPlan(p)
+        setError(null)
+        setOpen(true)
+      },
+      onError: (err) => {
+        log.warn("teardown plan failed", { org, err })
+        setError(
+          err instanceof TeardownMarkerError
+            ? err.message
+            : t("orgSettings.teardown.prepareError"),
         )
-      }
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      // Redirect home only on a fully-clean run. executeTeardown RESOLVES on
-      // partial failure (marker retained, re-runnable); on that path the `done`
-      // banner carries the re-run remedy, so stay to show it.
-      const cleanRun =
-        !!result &&
-        result.markerDeleted &&
-        result.failed.length === 0 &&
-        result.teamsFailed.length === 0
-      if (cleanRun) {
-        void navigate({ to: "/" })
-      }
-    },
-    onError: (err) => {
-      // onConfirm rethrows so ConfirmModal owns failure display; here we only
-      // refresh the org view, since a scope/rate-limit failure may have already
-      // deleted some repos.
-      if (err instanceof TeardownRateLimitError) {
-        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      }
-    },
-  })
+      },
+    })
+
+  const runMutation = useExecuteTeardown(plan)
 
   return (
     <SettingsSection
@@ -132,7 +93,7 @@ const TeardownSection = ({ org }: { org: string }) => {
           isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")
         }
         onClick={() => {
-          if (!openMutation.isPending) openMutation.mutate()
+          if (!openMutation.isPending) openTeardown()
         }}
       >
         {openMutation.isPending
@@ -204,9 +165,37 @@ const TeardownSection = ({ org }: { org: string }) => {
           // Let a failure REJECT so ConfirmModal's catch keeps the modal open
           // with the error inline (its submittingRef guards double submits).
           // Scope/rate-limit errors carry user-facing messages; anything else is
-          // normalized.
+          // normalized. The success UI (close, done banner, clean-run redirect)
+          // lives in the mutate callback so it skips when unmounted; the hook's
+          // onSuccess owns the org-list invalidation.
           try {
-            await runMutation.mutateAsync()
+            await runMutation.mutateAsync(undefined, {
+              onSuccess: (result) => {
+                setOpen(false)
+                if (!result) {
+                  setDone(null)
+                } else {
+                  setDone(
+                    formatTeardownResult(
+                      result,
+                      `https://github.com/orgs/${org}/teams`,
+                    ),
+                  )
+                }
+                // Redirect home only on a fully-clean run. executeTeardown
+                // RESOLVES on partial failure (marker retained, re-runnable); on
+                // that path the `done` banner carries the re-run remedy, so stay
+                // to show it.
+                const cleanRun =
+                  !!result &&
+                  result.markerDeleted &&
+                  result.failed.length === 0 &&
+                  result.teamsFailed.length === 0
+                if (cleanRun) {
+                  void navigate({ to: "/" })
+                }
+              },
+            })
           } catch (err) {
             if (
               err instanceof TeardownScopeError ||

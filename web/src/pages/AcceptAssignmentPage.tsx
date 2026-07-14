@@ -24,7 +24,7 @@ import {
   type AcceptStepId,
   type AcceptStepStatus,
 } from "@/api/mutations/assignments"
-import { useAcceptAndVerifyMembership } from "@/hooks/useAcceptAndVerifyMembership"
+import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,
   MembershipError,

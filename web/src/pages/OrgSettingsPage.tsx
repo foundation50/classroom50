@@ -5,12 +5,8 @@ import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useParams } from "@tanstack/react-router"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { putRepoSecret, validateServiceToken } from "@/github-core/mutations"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import { githubKeys } from "@/github-core/queries"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import RequireTeacher from "@/components/RequireTeacher"
 import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
@@ -144,8 +140,6 @@ export function ServiceTokenInfo() {
 
 export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const runPat = useSafeSubmit()
   const { org } = useParams({ strict: false })
   const [serviceToken, setServiceToken] = useState("")
@@ -198,27 +192,7 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
       members: "read",
     }).toString()
 
-  const patMutation = useMutation({
-    mutationFn: async () => {
-      await validateServiceToken(serviceToken, org)
-      return putRepoSecret(
-        client,
-        org,
-        CONFIG_REPO,
-        "CLASSROOM50_SERVICE_TOKEN",
-        serviceToken,
-      )
-    },
-    onSuccess: () => {
-      setServiceToken("")
-      setSavedKind(tokenAlreadySet ? "updated" : "saved")
-      onSubmit?.()
-      queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.serviceToken(org ?? ""),
-      })
-    },
-  })
+  const patMutation = useSaveServiceToken(org)
 
   return (
     <SettingsSection
@@ -425,7 +399,15 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
               e.preventDefault()
               e.stopPropagation()
               if (!patMutation.isPending)
-                void runPat(() => patMutation.mutateAsync())
+                void runPat(() =>
+                  patMutation.mutateAsync(serviceToken, {
+                    onSuccess: () => {
+                      setServiceToken("")
+                      setSavedKind(tokenAlreadySet ? "updated" : "saved")
+                      onSubmit?.()
+                    },
+                  }),
+                )
             }}
           >
             <div className="flex flex-col gap-2 w-full pb-10">

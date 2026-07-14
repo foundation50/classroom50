@@ -4,39 +4,29 @@ import { useTranslation } from "react-i18next"
 import { Loader2, Send, ShieldCheck, UserPlus, X, XCircle } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { ConfirmModal } from "@/components/modals"
 import {
   githubKeys,
   teamMembersQuery,
   teamInvitationsQuery,
-  getUserQuery,
   getUser,
 } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import {
-  addUserToTeam,
-  ensureClassroomRoleTeam,
   removeUserFromTeam,
   resendOrgInvitation,
   cancelOrgInvitation,
-  grantTeamConfigRepoWrite,
 } from "@/github-core/mutations"
-import {
-  normalizeGithubUsername,
-  resolveTeamIdForRoleRead,
-  syncRosterFromTeam,
-} from "@/api/mutations/students"
-import { rosterPath } from "@/util/rosterPath"
+import { resolveTeamIdForRoleRead } from "@/api/mutations/students"
 import { orgRoleForRole } from "@/util/teamRoster"
+import {
+  useAddStaffMember,
+  syncRosterAfterStaffChange,
+} from "@/hooks/mutations/useAddStaffMember"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
-import type { GitHubClient } from "@/github-core/client"
-import type { QueryClient } from "@tanstack/react-query"
-import { logger } from "@/lib/logger"
 import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 
 // i18n key for each role's singular label. A map (not inline t()) so it works in
@@ -44,35 +34,6 @@ import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 const ROLE_LABEL_KEY: Record<StaffRole, string> = {
   instructor: "classes.staff.roleInstructor",
   ta: "classes.staff.roleTa",
-}
-
-const log = logger.scope("classroom:staff")
-
-// Best-effort roster.csv convergence after a staff membership change: the roster
-// records a `role` per member (team is the authority), so adding/removing staff
-// should proactively sync roster.csv rather than waiting for the next roster
-// open. Failure is non-fatal — the roster page auto-syncs on open — so this
-// never blocks or surfaces an error on the staff action itself.
-async function syncRosterAfterStaffChange(
-  client: GitHubClient,
-  queryClient: QueryClient,
-  org: string,
-  classroom: string,
-): Promise<void> {
-  try {
-    await syncRosterFromTeam(client, { org, classroom })
-    await queryClient.invalidateQueries({
-      queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
-    })
-  } catch (err) {
-    // Best-effort; the roster page's auto-sync converges it on next open. Log
-    // so a persistently failing convergence is diagnosable.
-    log.debug("roster sync after staff change failed (non-fatal)", {
-      org,
-      classroom,
-      err,
-    })
-  }
 }
 
 // Manage a classroom's staff (instructor / TA), backed by the per-classroom
@@ -142,84 +103,12 @@ const AddStaff = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { notify } = useToast()
-  const { user } = useGithubAuth()
   const [username, setUsername] = useState("")
   const [role, setRole] = useState<StaffRole>("ta")
 
-  const addMutation = useMutation({
-    mutationFn: async (input: { username: string; role: StaffRole }) => {
-      const trimmed = normalizeGithubUsername(input.username)
-      if (!trimmed) throw new Error(t("classes.staff.enterUsername"))
-      // Verify the account exists for a clear error (vs. a confusing team 422).
-      await queryClient.ensureQueryData(getUserQuery(client, trimmed))
-      // Ensure-as-preflight: create the team if missing + (re)grant config write.
-      const team = await ensureClassroomRoleTeam(
-        client,
-        org,
-        classroom,
-        input.role,
-      )
-      await grantTeamConfigRepoWrite(client, org, team.slug)
-      // GitHub auto-adds the team CREATOR as maintainer. If this action just
-      // created the team, remove the acting user unless they're the target — so
-      // adding a TA doesn't also make the instructor a TA.
-      if (
-        team.created &&
-        user?.login &&
-        user.login.toLowerCase() !== trimmed.toLowerCase()
-      ) {
-        try {
-          await removeUserFromTeam(client, {
-            org,
-            teamSlug: team.slug,
-            username: user.login,
-          })
-        } catch {
-          // Best-effort; the actor can remove themselves via this same UI.
-        }
-      }
-      await addUserToTeam(client, {
-        org,
-        teamSlug: team.slug,
-        username: trimmed,
-        role: "member",
-      })
-      return { trimmed, role: input.role }
-    },
-    onSuccess: ({ trimmed, role: addedRole }) => {
-      setUsername("")
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(
-          org,
-          classroomTeamSlug(classroom, addedRole),
-        ),
-      })
-      // Record the new staffer's role in roster.csv now (best-effort).
-      void syncRosterAfterStaffChange(client, queryClient, org, classroom)
-      notify({
-        tone: "success",
-        durationMs: 5000,
-        message: t("toasts.staffAdded", {
-          username: trimmed,
-          role: t(ROLE_LABEL_KEY[addedRole]),
-        }),
-      })
-    },
-    onError: (err) => {
-      const message =
-        err instanceof GitHubAPIError && err.status === 404
-          ? t("classes.staff.noSuchUser")
-          : err instanceof Error
-            ? err.message
-            : t("classes.somethingWentWrong")
-      notify({
-        tone: "error",
-        message: t("classes.staff.addFailed", { message }),
-      })
-    },
+  const addMutation = useAddStaffMember(org, classroom, {
+    enterUsername: t("classes.staff.enterUsername"),
   })
 
   return (
@@ -228,7 +117,34 @@ const AddStaff = ({
       onSubmit={(e) => {
         e.preventDefault()
         if (disabled) return
-        addMutation.mutate({ username, role })
+        addMutation.mutate(
+          { username, role },
+          {
+            onSuccess: ({ trimmed, role: addedRole }) => {
+              setUsername("")
+              notify({
+                tone: "success",
+                durationMs: 5000,
+                message: t("toasts.staffAdded", {
+                  username: trimmed,
+                  role: t(ROLE_LABEL_KEY[addedRole]),
+                }),
+              })
+            },
+            onError: (err) => {
+              const message =
+                err instanceof GitHubAPIError && err.status === 404
+                  ? t("classes.staff.noSuchUser")
+                  : err instanceof Error
+                    ? err.message
+                    : t("classes.somethingWentWrong")
+              notify({
+                tone: "error",
+                message: t("classes.staff.addFailed", { message }),
+              })
+            },
+          },
+        )
       }}
     >
       <div className="grow min-w-[12rem]">

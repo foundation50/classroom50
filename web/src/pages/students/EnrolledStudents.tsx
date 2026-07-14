@@ -21,11 +21,6 @@ import Avatar from "@/components/avatar"
 import { RoleBadges } from "./RoleBadges"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
-import {
-  inviteRosterStudents,
-  bulkInviteByEmail,
-} from "@/api/mutations/students"
 import type { RosterCsvProblem } from "@/api/mutations/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -33,19 +28,18 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import type { GitHubOrgInvitation } from "@/github-core/types"
-import {
-  githubKeys,
-  invalidateInviteQueries as invalidateInviteQueriesForOrg,
-} from "@/github-core/queries"
+import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/github-core/queries"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
+import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
+import { useMigrateRoster } from "@/hooks/mutations/useMigrateRoster"
+import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
 import {
   dropSuppressed,
   type SuppressedLogins,
 } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, RosterRole } from "@/util/teamRoster"
-import { roleForOrgRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
@@ -117,28 +111,6 @@ export function nextSelectedKeyAfterSave(
 ): string | null {
   if (!nextRowKey || nextRowKey === savedRowKey) return prev
   return prev === savedRowKey ? nextRowKey : prev
-}
-
-// The invite mutations bucket a rate-limited/failed target rather than throwing,
-// so a caller that ignores the result would report success on a send that never
-// happened. Throw a specific error unless exactly one invite actually landed
-// (fresh invite or an already-active/pending skip), so a re-invite that only
-// deferred/failed routes to the error path instead of a false success.
-function assertInviteSent(
-  res: {
-    invited: unknown[]
-    skipped: unknown[]
-    failed: { message: string }[]
-    deferred: unknown[]
-  },
-  who: string,
-): void {
-  const failure = res.failed[0]
-  if (failure) throw new Error(failure.message)
-  if (res.deferred.length > 0)
-    throw new Error(`GitHub rate-limited the re-invite to ${who} — try again.`)
-  if (res.invited.length === 0 && res.skipped.length === 0)
-    throw new Error(`No invitation was sent to ${who} — try again.`)
 }
 
 const EnrolledStudents = ({
@@ -234,42 +206,22 @@ const EnrolledStudents = ({
   // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
   // an equivalent fresh invite — same classroom role (instructor -> org OWNER),
   // by username when known (carries the team) else by email. A login-less,
-  // email-less invite can't be re-issued (dismiss-only). The invite functions
-  // don't throw on a rate-limited/failed target — they bucket it — so inspect
-  // the result and throw, otherwise a re-issue that didn't actually send would
-  // report success while the dismissed invite is already gone (an orphan).
-  const reinviteFailedInvite = useMutation({
-    mutationFn: async (inv: GitHubOrgInvitation) => {
-      const who = inv.login || inv.email || String(inv.id)
-      await cancelOrgInvitation(client, { org, invitationId: inv.id })
-      const role = roleForOrgRole(inv.role)
-      if (inv.login) {
-        const res = await inviteRosterStudents(client, {
-          org,
-          classroom,
-          students: [{ username: inv.login, role }],
-        })
-        assertInviteSent(res, who)
-      } else if (inv.email) {
-        const res = await bulkInviteByEmail(client, {
-          org,
-          classroom,
-          invites: [{ email: inv.email, role }],
-        })
-        assertInviteSent(res, who)
-      } else {
-        throw new Error(t("students.failedInviteNoTarget"))
-      }
-    },
-    onSuccess: () => invalidateInviteQueries(),
-    onError: (err) =>
-      notify({
-        tone: "error",
-        message: t("students.failedInviteReinviteError", {
-          error: getErrorMessage(err),
-        }),
-      }),
+  // email-less invite can't be re-issued (dismiss-only). The hook owns the
+  // invite-query invalidation; the error toast lives here so it skips when
+  // unmounted.
+  const reinviteFailedInvite = useReinviteFailedInvite(org, classroom, {
+    noTarget: t("students.failedInviteNoTarget"),
   })
+  const reinvite = (inv: GitHubOrgInvitation) =>
+    reinviteFailedInvite.mutate(inv, {
+      onError: (err) =>
+        notify({
+          tone: "error",
+          message: t("students.failedInviteReinviteError", {
+            error: getErrorMessage(err),
+          }),
+        }),
+    })
 
   // A row is selectable unless it's the signed-in teacher (can't bulk-unenroll
   // yourself), mirroring Org Members' self-exclusion. A pure staff row (no
@@ -443,14 +395,7 @@ const EnrolledStudents = ({
   const [migrateSettledFor, setMigrateSettledFor] = useState<string | null>(
     null,
   )
-  const migrateMutation = useMutation({
-    mutationFn: () => migrateRosterFile(client, { org, classroom }),
-    onSettled: () => setMigrateSettledFor(classroom),
-    // Best-effort convergence: a failure is non-fatal (reads still fall back to
-    // the legacy name), so it's logged by the mutation layer, not surfaced —
-    // and onSettled still unblocks auto-sync so a migrate hiccup can't strand
-    // it.
-  })
+  const migrateMutation = useMigrateRoster(org, classroom)
   // Fire once per classroom (the component instance is reused across a
   // $classroom param switch, so a boolean would skip later classrooms).
   const migratedForRef = useRef<string | null>(null)
@@ -459,32 +404,36 @@ const EnrolledStudents = ({
     if (migratedForRef.current === classroom) return
     migratedForRef.current = classroom
     setMigrateSettledFor(null)
-    migrateMutation.mutate()
+    // onSettled unblocks auto-sync (mount-fired UI coordination) so it lives at
+    // the call site; even a migrate hiccup must still release the gate.
+    migrateMutation.mutate(undefined, {
+      onSettled: () => setMigrateSettledFor(classroom),
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [classroom, isLoading, isError])
 
-  // Explicit teacher-triggered CSV backfill (also auto-run on open).
-  const syncMutation = useMutation({
-    mutationFn: () => syncRosterFromTeam(client, { org, classroom }),
-    onSuccess: (result) => {
-      notify({
-        tone: "success",
-        durationMs: 5000,
-        message: result.noop
-          ? t("students.syncUpToDate")
-          : t("students.syncAdded", { count: result.addedUsernames.length }),
-      })
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.csvFile(org, CONFIG_REPO, rosterPath(classroom)),
-      })
-    },
-    onError: (err) => {
-      notify({
-        tone: "error",
-        message: t("students.syncFailed", { error: getErrorMessage(err) }),
-      })
-    },
-  })
+  // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
+  // owns the roster-file invalidation that must always run; the toasts live
+  // here so they skip when unmounted.
+  const syncMutation = useSyncRoster(org, classroom)
+  const runSync = () =>
+    syncMutation.mutate(undefined, {
+      onSuccess: (result) => {
+        notify({
+          tone: "success",
+          durationMs: 5000,
+          message: result.noop
+            ? t("students.syncUpToDate")
+            : t("students.syncAdded", { count: result.addedUsernames.length }),
+        })
+      },
+      onError: (err) => {
+        notify({
+          tone: "error",
+          message: t("students.syncFailed", { error: getErrorMessage(err) }),
+        })
+      },
+    })
 
   // Auto-sync on open: append team members lacking a CSV row (fire once per
   // drift episode, per classroom; re-arm when the drift clears). Gated on
@@ -524,7 +473,7 @@ const EnrolledStudents = ({
     }
     if (autoSyncedForRef.current === classroom || syncMutation.isPending) return
     autoSyncedForRef.current = classroom
-    syncMutation.mutate()
+    runSync()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     csvMissingKey,
@@ -834,7 +783,7 @@ const EnrolledStudents = ({
                           reinviteFailedInvite.isPending ||
                           dismissFailedInvite.isPending
                         }
-                        onClick={() => reinviteFailedInvite.mutate(inv)}
+                        onClick={() => reinvite(inv)}
                       >
                         {t("students.reinvite")}
                       </Button>
@@ -927,7 +876,7 @@ const EnrolledStudents = ({
                 // teacher's deliberate Sync always runs (re-adding any drifted
                 // team members, even ones removed earlier this session).
                 suppressedLogins.clear()
-                syncMutation.mutate()
+                runSync()
               }}
               aria-label={t("students.syncRosterTitle")}
               title={t("students.syncRosterTitle")}
