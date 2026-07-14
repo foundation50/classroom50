@@ -199,7 +199,8 @@ export const DEFAULT_SORT: SubmissionSort = "recent"
 // a `<classroom>-<assignment>-` prefix: prefix-stripping over-matches a sibling
 // whose slug extends this one (assignment "hw" would capture `cs-hw-bonus-alice`
 // from "hw-bonus"), polluting the set and risking a 404 when the modal rebuilds
-// a URL. (See docs/solutions/.../forward-only-cross-binary-repo-name-contract.md.)
+// a URL. (existingGroupRepos below must reverse-parse and so guards this
+// explicitly against the sibling assignment list.)
 //
 // Group assignments are excluded (repo named after the owner, not each member),
 // so callers offer the accepted filter for individual assignments only.
@@ -229,41 +230,42 @@ export function hasAccepted(username: string, accepted: Set<string>): boolean {
 }
 
 // An existing group repo derived from the org repo list, keyed by its founder
-// (the `<owner>` segment of `<classroom>-<assignment>-<owner>`). `submitted` is
-// true when a graded push already recorded scores for it — the dashboard folds
-// submitted groups into the normal score rows and surfaces only the rest, so a
-// teacher can see teams that formed but haven't pushed yet (#245).
-export type GroupRepo = { owner: string; repoName: string; submitted: boolean }
+// (the `<owner>` segment of `<classroom>-<assignment>-<owner>`).
+export type GroupRepo = { owner: string; repoName: string }
 
 // Group repos that exist for the assignment. Unlike individual acceptance, the
 // founder logins aren't known up front (group repos are named after whoever
 // created the group), so we must reverse-parse the `<classroom>-<assignment>-`
-// prefix rather than forward-construct per student. The sibling-slug hazard the
-// individual path avoids (assignment "hw" capturing "cs-hw-bonus-alice") is not
-// a false positive here: `cs-hw-bonus-alice` yields founder `bonus-alice`, a
-// real distinct repo, so it simply isn't matched as a submitted owner unless it
-// truly is one. Empty owner segments (a bare `<classroom>-<assignment>-`) are
-// rejected. `submittedOwners` is the set of lowercased founders that already
-// have a score row.
+// prefix rather than forward-construct per student. Prefix-stripping alone
+// over-matches a sibling whose slug extends this one (assignment "hw1" capturing
+// `cs101-hw1-bonus-alice` from "hw1-bonus"), so reject any repo that belongs to
+// a longer sibling assignment: `siblingSlugs` is the classroom's other slugs, and
+// a repo under `<classroom>-<sibling>-` where `<sibling>` extends `<assignment>-`
+// is that sibling's, not ours. Empty owner segments (a bare
+// `<classroom>-<assignment>-`) are rejected.
 export function existingGroupRepos(
   repos: GitHubRepo[] | null | undefined,
   classroom: string,
   assignment: string,
-  submittedOwners: Set<string>,
+  siblingSlugs: string[] = [],
 ): GroupRepo[] {
   if (!repos) return []
   const prefix = `${classroom}-${assignment}-`.toLowerCase()
+  // Prefixes of sibling assignments whose slug strictly extends this one; a repo
+  // under any of these was created for the sibling, not this assignment.
+  const overlapPrefixes = siblingSlugs
+    .map((slug) => slug.toLowerCase())
+    .filter((slug) => slug !== assignment.toLowerCase())
+    .map((slug) => `${classroom}-${slug}-`.toLowerCase())
+    .filter((siblingPrefix) => siblingPrefix.startsWith(prefix))
   const out: GroupRepo[] = []
   for (const repo of repos) {
     const name = repo.name.toLowerCase()
     if (!name.startsWith(prefix)) continue
+    if (overlapPrefixes.some((sibling) => name.startsWith(sibling))) continue
     const owner = name.slice(prefix.length)
     if (!owner) continue
-    out.push({
-      owner,
-      repoName: name,
-      submitted: submittedOwners.has(owner),
-    })
+    out.push({ owner, repoName: name })
   }
   return out
 }

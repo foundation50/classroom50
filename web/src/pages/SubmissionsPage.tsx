@@ -52,6 +52,7 @@ import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
+import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
 import useTriggerScoreCollection from "@/hooks/useTriggerScoreCollection"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
@@ -208,9 +209,15 @@ const SubmissionsPageContent = () => {
 
   // Group repos that already exist for this assignment, derived from the org
   // repo list (empty for individual assignments). Named after the founder, so
-  // the `owner` segment is a roster login when the founder is enrolled. Computed
-  // here so both the non-submitter list (to avoid double-listing a founder who
-  // has a repo) and the group-repo rows below share one derivation.
+  // the `owner` segment is a roster login when the founder is enrolled. Sibling
+  // assignment slugs are passed so a repo of a slug-extending sibling
+  // ("hw1-bonus" under "hw1") isn't mis-attributed here. Computed once so both
+  // the non-submitter list (to avoid double-listing a member who has a repo) and
+  // the group-repo rows below share one derivation.
+  const siblingSlugs = useMemo(
+    () => (assignmentData?.assignments ?? []).map((a) => a.slug),
+    [assignmentData],
+  )
   const groupRepoList = useMemo(
     () =>
       isGroupAssignment
@@ -218,14 +225,24 @@ const SubmissionsPageContent = () => {
             orgRepos,
             classroom ?? "",
             assignment ?? "",
-            new Set(),
+            siblingSlugs,
           )
         : [],
-    [isGroupAssignment, orgRepos, classroom, assignment],
+    [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
   )
+  // Members of every existing group repo, fetched (bounded) and reconciled so
+  // the "no group" list is accurate on load: the union of founders (known from
+  // the repo name) plus each repo's collaborators means a teammate on a
+  // formed-but-unsubmitted group isn't also listed as "no group" (#245). The
+  // fetch is throttled and shares the collaborators cache with the rows/modal.
+  const groupRepoMembers = useGroupRepoMemberLogins(org ?? "", groupRepoList)
   const groupRepoFounders = useMemo(
-    () => new Set(groupRepoList.map((repo) => repo.owner)),
-    [groupRepoList],
+    () =>
+      new Set([
+        ...groupRepoList.map((repo) => repo.owner),
+        ...groupRepoMembers,
+      ]),
+    [groupRepoList, groupRepoMembers],
   )
 
   // Roster students with no submission. "Credited" = login appears in any row's
@@ -233,10 +250,11 @@ const SubmissionsPageContent = () => {
   // aren't falsely flagged. For groups, uncredited students surface as
   // "No group · not submitted" (see #174) — a student who never joined a
   // submitting group has no repo, so the row makes the omission explicit
-  // instead of vanishing. A founder whose group repo exists but hasn't submitted
-  // is excluded here — they already appear as a group-repo row (#245), so listing
-  // them as "no group" too would double-count them. Gated on scores having
-  // loaded — until then scoresInfo is empty and would flag the whole roster.
+  // instead of vanishing. A member of an existing group repo (its founder, or
+  // any cached collaborator) is excluded here — they already appear as that
+  // group's row (#245), so listing them as "no group" too would double-count
+  // them. Gated on scores having loaded — until then scoresInfo is empty and
+  // would flag the whole roster.
   const scoresLoaded = scoresData !== undefined
   const nonSubmitters = useMemo(() => {
     if (!scoresLoaded) return []

@@ -389,25 +389,37 @@ describe("existingGroupRepos", () => {
   ]
 
   it("lists group repos for the exact classroom+assignment, keyed by founder", () => {
-    const out = existingGroupRepos(repos, "cs101", "hw1", new Set())
+    const out = existingGroupRepos(repos, "cs101", "hw1")
     expect(out.map((r) => r.owner).sort()).toEqual(["alice", "bob-team"])
   })
 
-  it("marks repos with a recorded submission as submitted", () => {
-    const out = existingGroupRepos(repos, "cs101", "hw1", new Set(["alice"]))
-    const alice = out.find((r) => r.owner === "alice")
-    const bob = out.find((r) => r.owner === "bob-team")
-    expect(alice?.submitted).toBe(true)
-    expect(bob?.submitted).toBe(false)
+  it("returns the repo name alongside the founder", () => {
+    const out = existingGroupRepos([repo("cs101-hw1-alice")], "cs101", "hw1")
+    expect(out).toEqual([{ owner: "alice", repoName: "cs101-hw1-alice" }])
+  })
+
+  it("rejects a slug-extending sibling assignment's repos (hw1 vs hw1-bonus)", () => {
+    const out = existingGroupRepos(
+      [repo("cs101-hw1-alice"), repo("cs101-hw1-bonus-alice")],
+      "cs101",
+      "hw1",
+      ["hw1", "hw1-bonus"],
+    )
+    // Without the sibling guard, `bonus-alice` would leak in as a phantom row.
+    expect(out.map((r) => r.owner)).toEqual(["alice"])
+  })
+
+  it("keeps a sibling repo when the sibling slug isn't a prefix extension", () => {
+    // `hw1b` is not `hw1-<something>`, so it never shares the `cs101-hw1-` prefix.
+    const out = existingGroupRepos([repo("cs101-hw1-alice")], "cs101", "hw1", [
+      "hw1",
+      "hw1b",
+    ])
+    expect(out.map((r) => r.owner)).toEqual(["alice"])
   })
 
   it("rejects a bare `<classroom>-<assignment>-` with an empty owner segment", () => {
-    const out = existingGroupRepos(
-      [repo("cs101-hw1-")],
-      "cs101",
-      "hw1",
-      new Set(),
-    )
+    const out = existingGroupRepos([repo("cs101-hw1-")], "cs101", "hw1")
     expect(out).toEqual([])
   })
 
@@ -416,30 +428,20 @@ describe("existingGroupRepos", () => {
       [repo("CS101-HW1-TeamRocket")],
       "cs101",
       "hw1",
-      new Set(["teamrocket"]),
     )
     expect(out).toEqual([
-      {
-        owner: "teamrocket",
-        repoName: "cs101-hw1-teamrocket",
-        submitted: true,
-      },
+      { owner: "teamrocket", repoName: "cs101-hw1-teamrocket" },
     ])
   })
 
   it("does not match a numeric-adjacent slug (hw1 vs hw10)", () => {
-    const out = existingGroupRepos(
-      [repo("cs101-hw10-team")],
-      "cs101",
-      "hw1",
-      new Set(),
-    )
+    const out = existingGroupRepos([repo("cs101-hw10-team")], "cs101", "hw1")
     expect(out).toEqual([])
   })
 
   it("returns an empty list for null/undefined repos", () => {
-    expect(existingGroupRepos(null, "cs101", "hw1", new Set())).toEqual([])
-    expect(existingGroupRepos(undefined, "cs101", "hw1", new Set())).toEqual([])
+    expect(existingGroupRepos(null, "cs101", "hw1")).toEqual([])
+    expect(existingGroupRepos(undefined, "cs101", "hw1")).toEqual([])
   })
 })
 

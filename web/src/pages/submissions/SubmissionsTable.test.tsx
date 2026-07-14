@@ -99,7 +99,6 @@ describe("SubmissionsTable non-submitter repo links", () => {
           {
             owner: "team-rocket",
             repoName: "cs101-hw1-team-rocket",
-            submitted: false,
           },
         ]}
       />,
@@ -110,12 +109,15 @@ describe("SubmissionsTable non-submitter repo links", () => {
     expect(link.getAttribute("href")).toBe(
       "https://github.com/acme/cs101-hw1-team-rocket",
     )
-    // Live collaborators fetch is enabled for a group repo with no submission.
+    // The empty-state row must not render alongside group-repo rows.
+    expect(screen.queryByText("submissions.table.emptyNoDataTitle")).toBeNull()
+    // Members are loaded lazily (via the Members modal), not eagerly per row,
+    // so the row's collaborators query stays cache-only (enabled: false).
     expect(collaborators).toHaveBeenCalledWith(
       "acme",
       "cs101-hw1-team-rocket",
       {
-        enabled: true,
+        enabled: false,
       },
     )
   })

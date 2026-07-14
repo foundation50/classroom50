@@ -21,7 +21,7 @@ const useGetRepoCollaborators = (
         `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repoName)}/collaborators?affiliation=direct`,
       )
     },
-    staleTime: 10 * 60 * 1000,
+    staleTime: 60 * 1000,
     enabled: Boolean(org && repoName) && (options?.enabled ?? true),
   })
 }
