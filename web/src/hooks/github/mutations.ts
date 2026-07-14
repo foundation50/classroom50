@@ -445,7 +445,7 @@ export function isDeletableClassroomTeamRef(
 ): team is ClassroomTeamRef {
   return (
     typeof team?.slug === "string" &&
-    team.slug.startsWith("classroom50-") &&
+    team.slug.startsWith(`${CONFIG_REPO}-`) &&
     Number.isInteger(team.id) &&
     (team.id as number) > 0
   )
