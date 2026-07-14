@@ -1,11 +1,9 @@
 import { CONFIG_REPO } from "@/util/configRepo"
 import type { StaffRole } from "@/types/classroom"
 
-// The roles a per-classroom GitHub team can back. Broader than StaffRole because
-// it also covers the students team — which is a real team but NOT a staff role
-// (it carries no `-<role>` suffix and isn't stored under classroom.json.teams).
-// Keeping StaffRole as the sole "who is a teacher" authority, this just layers
-// `student` on top; a future head-ta added to StaffRole is picked up for free.
+// Roles a per-classroom team can back. Broader than StaffRole: also the students
+// team, a real team but not a staff role (no `-<role>` suffix, absent from
+// classroom.json.teams). Layered on StaffRole so a future head-ta flows in free.
 export type ClassroomTeamRole = "student" | StaffRole
 
 // The single derivation of a per-classroom team's slug (== name, given the
