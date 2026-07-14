@@ -7,8 +7,9 @@ import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card } from "@/components/ui"
+import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import useGetOrgMembership from "@/hooks/useGetOrgMembership"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useState } from "react"
 import {
@@ -153,7 +154,6 @@ const OrgSetupPage = () => {
   const { org } = useParams({ strict: false })
   const [steps, setSteps] =
     useState<Record<InitStepId, InitStepUpdate>>(initialInitSteps)
-  const { data: orgMembership, isLoading } = useGetOrgMembership(org)
   const { data: orgPlanDetails, isLoading: isLoadingPlanDetails } =
     useGetOrgPlanDetails(org)
   const [nextStep, setNextStep] = useState(false)
@@ -202,7 +202,11 @@ const OrgSetupPage = () => {
     },
   })
 
-  const isOwner = orgMembership?.role === "admin"
+  // Owner gate via the shared fail-closed verdict. /setup is NOT behind
+  // RequireOwner, so this page owns the pending/error/deny branches: hold a
+  // spinner while unresolved, offer a retry on a settled transient error, and
+  // only assert "not an admin" on a definitive non-owner (never mid-load).
+  const { isOwner, isPending: ownerPending, isError, retry } = useIsOrgOwner()
   const isTeamOrEnterprise =
     orgPlanDetails?.plan?.name === "team" ||
     orgPlanDetails?.plan?.name === "enterprise"
@@ -216,9 +220,15 @@ const OrgSetupPage = () => {
       {!isLoadingPlanDetails && !isTeamOrEnterprise && (
         <NotTeamOrEnterpriseNotice />
       )}
-      {isLoading && <Spinner label={t("setup.loadingSetup")} />}
-      {!isLoading && !isOwner && <NotAdminAlert />}
-      {!isLoading && isOwner && (
+      {ownerPending && <Spinner label={t("setup.loadingSetup")} />}
+      {isError && (
+        <QueryErrorAlert
+          message={t("error.roleResolveFailed")}
+          onRetry={retry}
+        />
+      )}
+      {!ownerPending && !isError && !isOwner && <NotAdminAlert />}
+      {!ownerPending && !isError && isOwner && (
         <OrgSteps
           steps={steps}
           mutation={mutation}
