@@ -17,6 +17,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   nonSubmitterStatus,
+  reconcileNonSubmitters,
   rosterScopedRows,
   rowMatchesQuery,
   rowOnRoster,
@@ -442,6 +443,46 @@ describe("existingGroupRepos", () => {
   it("returns an empty list for null/undefined repos", () => {
     expect(existingGroupRepos(null, "cs101", "hw1")).toEqual([])
     expect(existingGroupRepos(undefined, "cs101", "hw1")).toEqual([])
+  })
+})
+
+describe("reconcileNonSubmitters", () => {
+  const roster = [
+    student({ username: "alice" }),
+    student({ username: "bob" }),
+    student({ username: "carol" }),
+  ]
+
+  it("excludes students credited on a score row", () => {
+    const out = reconcileNonSubmitters(
+      roster,
+      [{ usernames: ["alice"] }],
+      new Set(),
+    )
+    expect(out.map((s) => s.username).sort()).toEqual(["bob", "carol"])
+  })
+
+  it("excludes a group-repo member so they aren't double-listed as no-group (#245)", () => {
+    // bob is a teammate on a formed-but-unsubmitted group repo (no score row
+    // yet); he must not surface as "no group".
+    const out = reconcileNonSubmitters(roster, [], new Set(["bob"]))
+    expect(out.map((s) => s.username).sort()).toEqual(["alice", "carol"])
+  })
+
+  it("re-lists a teammate as no-group when the member set is empty (fetch failed)", () => {
+    // Guards the failure-mode contract: an empty groupRepoMembers (e.g. the
+    // bounded fetch errored) degrades to listing everyone uncredited.
+    const out = reconcileNonSubmitters(roster, [], new Set())
+    expect(out.map((s) => s.username).sort()).toEqual(["alice", "bob", "carol"])
+  })
+
+  it("matches credit and membership case-insensitively", () => {
+    const out = reconcileNonSubmitters(
+      [student({ username: "Alice" }), student({ username: "Bob" })],
+      [{ usernames: ["ALICE"] }],
+      new Set(["bob"]),
+    )
+    expect(out).toEqual([])
   })
 })
 

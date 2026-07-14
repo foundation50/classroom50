@@ -31,6 +31,7 @@ import {
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
+  reconcileNonSubmitters,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
@@ -258,13 +259,7 @@ const SubmissionsPageContent = () => {
   const scoresLoaded = scoresData !== undefined
   const nonSubmitters = useMemo(() => {
     if (!scoresLoaded) return []
-    const credited = new Set(
-      scoresInfo.flatMap((row) => row.usernames.map((u) => u.toLowerCase())),
-    )
-    return students.filter((student) => {
-      const login = student.username.toLowerCase()
-      return !credited.has(login) && !groupRepoFounders.has(login)
-    })
+    return reconcileNonSubmitters(students, scoresInfo, groupRepoFounders)
   }, [scoresLoaded, scoresInfo, students, groupRepoFounders])
 
   // Dashboard controls — all client-side over already-loaded data.

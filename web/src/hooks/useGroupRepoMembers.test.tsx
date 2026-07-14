@@ -69,6 +69,25 @@ describe("useGroupRepoMemberLogins", () => {
     )
   })
 
+  it("keeps the union from surviving repos when one repo's read fails", async () => {
+    // mapWithConcurrency is all-or-nothing; the hook wraps each read so a single
+    // repo's 404/403/429 can't void the whole union (#245 regression guard).
+    request.mockImplementation((url: string) =>
+      url.includes("cs101-hw1-alice")
+        ? Promise.reject(new Error("404"))
+        : Promise.resolve([user("carol")]),
+    )
+    const { result } = renderHook(
+      () =>
+        useGroupRepoMemberLogins("acme", [
+          { owner: "alice", repoName: "cs101-hw1-alice" },
+          { owner: "dave", repoName: "cs101-hw1-dave" },
+        ]),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect([...result.current].sort()).toEqual(["carol"]))
+  })
+
   it("does not fetch when there are no group repos", () => {
     const { result } = renderHook(() => useGroupRepoMemberLogins("acme", []), {
       wrapper: wrapper(makeClient()),

@@ -71,9 +71,6 @@ const ScoreBadge = ({
   )
 }
 
-// Per-row status chip for a roster student with no submission: distinguishes
-// accepted-but-not-submitted, never-accepted, and (group) no-group from a flat
-// "Not submitted", so a teacher can nudge accepters vs chase non-accepters.
 type IconComponent = React.ComponentType<{ className?: string }>
 
 // Inline commit/details link in the expanded history row: external link when a

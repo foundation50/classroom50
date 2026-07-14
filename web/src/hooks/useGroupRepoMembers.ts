@@ -39,17 +39,26 @@ export function useGroupRepoMemberLogins(
         repoNames,
         REPO_READ_CONCURRENCY,
         async (repo) => {
-          // affiliation=direct excludes org-inherited access (owners/admins),
-          // matching useGetRepoCollaborators so both share one cache entry.
-          const collaborators = await client.request<GitHubUser[]>(
-            `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
-          )
-          // Prime the per-repo cache the rows and Members modal read from.
-          queryClient.setQueryData(
-            githubKeys.collaborators(org, repo),
-            collaborators,
-          )
-          for (const c of collaborators) logins.add(c.login.toLowerCase())
+          // Tolerate a single repo's failure (deleted repo 404, 403, or 429
+          // after retries): mapWithConcurrency is all-or-nothing, so an
+          // unhandled rejection would void the whole union and re-list every
+          // teammate as "no group" — the exact #245 state this exists to fix.
+          // Degrade to "that repo's members unknown" instead.
+          try {
+            // affiliation=direct excludes org-inherited access (owners/admins),
+            // matching useGetRepoCollaborators so both share one cache entry.
+            const collaborators = await client.request<GitHubUser[]>(
+              `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+            )
+            // Prime the per-repo cache the rows and Members modal read from.
+            queryClient.setQueryData(
+              githubKeys.collaborators(org, repo),
+              collaborators,
+            )
+            for (const c of collaborators) logins.add(c.login.toLowerCase())
+          } catch {
+            // Leave this repo's members out of the union; other repos still count.
+          }
         },
       )
       return logins

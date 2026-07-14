@@ -270,6 +270,27 @@ export function existingGroupRepos(
   return out
 }
 
+// Roster students with no submission, with group-repo members excluded (#245).
+// "Credited" = login appears in any score row's `usernames` (member_usernames
+// for groups, else [owner]). A login in `groupRepoMembers` (an existing group
+// repo's founder or a fetched collaborator) is also excluded — they already
+// appear as that group's repo row, so listing them as "no group" too would
+// double-count them. Pure derivation extracted from SubmissionsPage so the
+// reconciliation is unit-testable.
+export function reconcileNonSubmitters(
+  students: Student[],
+  scoreRows: { usernames: string[] }[],
+  groupRepoMembers: Set<string>,
+): Student[] {
+  const credited = new Set(
+    scoreRows.flatMap((row) => row.usernames.map((u) => u.toLowerCase())),
+  )
+  return students.filter((student) => {
+    const login = student.username.toLowerCase()
+    return !credited.has(login) && !groupRepoMembers.has(login)
+  })
+}
+
 // Per-row status for a roster student with no submission row. Distinguishes the
 // three states that would otherwise collapse into a flat "Not submitted":
 //   - no-group: group assignment — the student isn't credited on any submitting
