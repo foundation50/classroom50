@@ -364,14 +364,15 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 
 
 def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
-    """Slugs worth collecting: non-empty strings, in manifest order. main()'s
-    zero-submission guard counts these; the collect loop applies the same
-    predicate inline (it also needs each entry's `due`), so both agree on what
-    counts as collectable."""
+    """Slugs worth collecting: non-empty strings, in manifest order, excluding
+    empty_repo assignments (their bare repos never autograde, so polling them
+    would only produce dead gradebook rows). main()'s zero-submission guard
+    counts these; the collect loop applies the same predicate inline (it also
+    needs each entry's `due`), so both agree on what counts as collectable."""
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
-        if isinstance(slug, str) and slug:
+        if isinstance(slug, str) and slug and not entry.get("empty_repo"):
             slugs.append(slug)
     return slugs
 
@@ -450,6 +451,14 @@ def collect_classroom(
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
         if not isinstance(slug, str) or not slug:
+            continue
+        # empty_repo assignments never autograde — same predicate as
+        # valid_assignment_slugs, kept in lockstep.
+        if entry.get("empty_repo"):
+            print(
+                f"{classroom_short}/{slug}: empty_repo assignment — autograding "
+                f"is disabled; skipping collection"
+            )
             continue
 
         due_raw = entry.get("due")

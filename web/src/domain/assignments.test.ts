@@ -632,6 +632,147 @@ describe("editAssignment (preserved-entry integration)", () => {
     ).rejects.toThrow(/runtime\.runs-on/i)
   })
 
+  it("rejects flipping empty_repo on after creation (immutable)", async () => {
+    // existingEntry has no empty_repo (false); the edit tries to enable it.
+    const { client } = makeClient()
+    await expect(
+      editAssignment(client, editInput({ empty_repo: true })),
+    ).rejects.toThrow(/empty_repo cannot be changed after creation/)
+  })
+
+  it("rejects flipping empty_repo off after creation (immutable)", async () => {
+    const bareEntry: Assignment = {
+      slug: SLUG,
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+    }
+    const { client } = makeBareClient(bareEntry)
+    // Form sends empty_repo: false (or omits it) — either way it's a flip.
+    await expect(
+      editAssignment(client, editInput({ empty_repo: false })),
+    ).rejects.toThrow(/empty_repo cannot be changed after creation/)
+  })
+
+  it("preserves empty_repo and forces feedback_pr off on a same-value edit", async () => {
+    const bareEntry: Assignment = {
+      slug: SLUG,
+      name: "Actions Lab",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+    }
+    const { client, committedContent } = makeBareClient(bareEntry)
+
+    await editAssignment(
+      client,
+      editInput({ name: "Actions Lab (edited)", empty_repo: true }),
+    )
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.empty_repo).toBe(true)
+    expect(edited.name).toBe("Actions Lab (edited)")
+    // feedback_pr stays structurally off even though the input omitted it
+    // (the ?? true default must not apply to an empty repo).
+    expect(edited.feedback_pr).toBe(false)
+  })
+
+  it("rejects grading-adjacent fields alongside empty_repo (mutual exclusion)", async () => {
+    const bareEntry: Assignment = {
+      slug: SLUG,
+      name: "Actions Lab",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+    }
+    const cases: [Record<string, unknown>, RegExp][] = [
+      [{ template_repo: "acme/starter" }, /can't use a template/],
+      [{ setup_command: "make" }, /never autogrades/],
+      [{ feedback_pr: true }, /no baseline commit/],
+      [{ allowed_files: "*.py" }, /restrict allowed files/],
+      [{ pass_threshold: 70 }, /passing threshold/],
+    ]
+    for (const [overrides, want] of cases) {
+      const { client } = makeBareClient(bareEntry)
+      await expect(
+        editAssignment(client, editInput({ empty_repo: true, ...overrides })),
+      ).rejects.toThrow(want)
+    }
+  })
+
+  // Route-table client like makeClient(), but seeded with a caller-supplied
+  // existing entry (the empty_repo tests need a bare one).
+  function makeBareClient(entry: Assignment): {
+    client: GitHubClient
+    committedContent: () => string
+  } {
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [entry],
+    }
+    const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+    let committedContent = ""
+
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      if (method === "GET" && /\/repos\/[^/]+\/classroom50$/.test(url)) {
+        return { default_branch: "main" }
+      }
+      if (method === "GET" && url.includes("/git/ref/heads/main")) {
+        return { object: { sha: "refsha" } }
+      }
+      if (method === "GET" && url.includes("/git/commits/refsha")) {
+        return { tree: { sha: "basetree" } }
+      }
+      if (method === "GET" && url.includes("/contents/cs50/assignments.json")) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: b64(JSON.stringify(assignmentsFile)),
+        }
+      }
+      if (method === "POST" && url.endsWith("/git/trees")) {
+        const body = (init as { body?: { tree: { content: string }[] } }).body
+        committedContent = body!.tree[0].content
+        return { sha: "newtree" }
+      }
+      if (method === "POST" && url.endsWith("/git/commits")) {
+        return { sha: "newcommit" }
+      }
+      if (method === "PATCH" && url.includes("/git/refs/heads/main")) {
+        return { object: { sha: "newcommit" } }
+      }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+    const requestRaw = vi.fn(async () => {
+      throw new GitHubAPIError({
+        status: 404,
+        url: "classroom.json",
+        message: "Not Found",
+        body: null,
+        rateLimit: {
+          limit: null,
+          remaining: null,
+          used: null,
+          reset: null,
+          resource: null,
+          retryAfter: null,
+        },
+      })
+    })
+    return {
+      client: { request, requestRaw } as unknown as GitHubClient,
+      committedContent: () => committedContent,
+    }
+  }
+
   it("re-validates an unchanged stored ref and blocks a now-cross-org private fork", async () => {
     // An assignment whose stored template is an in-org private fork of a private
     // cross-org upstream (created before the fork guard shipped, or a parent

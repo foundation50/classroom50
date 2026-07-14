@@ -89,6 +89,10 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   autograder: "managed",
   max_group_size: "managed",
   feedback_pr: "managed",
+  // Managed (rebuilt from input) but IMMUTABLE: editAssignment rejects an edit
+  // whose empty_repo differs from the stored entry, so the rebuild can only
+  // ever re-write the same value. The edit form shows it read-only.
+  empty_repo: "managed",
   // Fully managed AND a closed object: the CLI decodes runtime strictly
   // (RuntimeRef has no Extra, DisallowUnknownFields; schema additionalProperties
   // false), so the rebuilt runtime must win and any unknown sub-key drops rather
@@ -165,6 +169,17 @@ export async function editAssignment(
   )
   if (!targetAssignment) {
     throw new Error(`Existing assignment matching ${slug} was not found.`)
+  }
+
+  // empty_repo is immutable: student repos were provisioned (or left bare) at
+  // accept time and are never retrofitted, so flipping the flag would strand
+  // every already-accepted repo on the old behavior. Mirrors the CLI's
+  // ValidateEmptyRepoUnchanged. Checked before the build so the error names
+  // the real constraint rather than a mutual-exclusion side effect.
+  if (Boolean(input.empty_repo) !== Boolean(targetAssignment.empty_repo)) {
+    throw new Error(
+      `empty_repo cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Delete the assignment and create a new one instead.`,
+    )
   }
 
   // Normalize the edit like create so it never leaves stray non-schema keys
@@ -291,6 +306,38 @@ async function buildAssignmentEntry(
     ? [makeSetupTest(setupCommand), ...userTests]
     : userTests
 
+  // empty_repo rules out every grading-adjacent field — a bare repo never
+  // carries the autograde shim, so none of them could take effect. Mirrors the
+  // CLI's validateEmptyRepoFlags; the form disables these inputs, this is the
+  // authoritative backstop.
+  if (input.empty_repo) {
+    if (input.template_repo.trim()) {
+      throw new Error(
+        "empty_repo: an empty repository can't use a template — it starts with no content at all.",
+      )
+    }
+    if (tests.length > 0) {
+      throw new Error(
+        "empty_repo: an empty repository can't have autograding tests or a setup command — it never autogrades.",
+      )
+    }
+    if (input.feedback_pr) {
+      throw new Error(
+        "empty_repo: an empty repository can't open a Feedback PR — it has no baseline commit.",
+      )
+    }
+    if (input.allowed_files?.trim()) {
+      throw new Error(
+        "empty_repo: an empty repository can't restrict allowed files — it never autogrades.",
+      )
+    }
+    if (input.pass_threshold !== undefined) {
+      throw new Error(
+        "empty_repo: an empty repository can't have a passing threshold — it never autogrades.",
+      )
+    }
+  }
+
   if (tests.length > 0) {
     await ensureDeclarativeTestsWritable(
       client,
@@ -333,8 +380,13 @@ async function buildAssignmentEntry(
     name: input.name,
     mode: assertAssignmentMode(input.mode),
     autograder: "default",
-    // Mirrors the CLI's `--feedback-pr` default of true.
-    feedback_pr: input.feedback_pr ?? true,
+    // Mirrors the CLI's `--feedback-pr` default of true — except for an empty
+    // repo, where the feature is structurally impossible (no baseline commit).
+    feedback_pr: input.empty_repo ? false : (input.feedback_pr ?? true),
+  }
+  // Written only when true, matching the CLI's omitempty.
+  if (input.empty_repo) {
+    entry.empty_repo = true
   }
   // Omit the template block entirely for a template-less assignment, matching
   // the CLI's nil TemplateRef.

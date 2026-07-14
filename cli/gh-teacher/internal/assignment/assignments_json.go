@@ -82,6 +82,14 @@ type AssignmentsJSON struct {
 // AllowedFiles is ordered .gitignore-style patterns for which files belong to
 // the submission (last match wins, `!` re-includes); empty/absent allows all.
 // The runner enforces it by removing disallowed files before grading.
+//
+// EmptyRepo opts into truly bare student repos: accept creates the repo with
+// no initial commit and lands NO control files (no README, no
+// .classroom50.yaml marker, no autograde shim), so autograding and the
+// Feedback PR never run. Mutually exclusive with Template, Tests, FeedbackPR,
+// AllowedFiles, and PassThreshold, and IMMUTABLE once the entry exists —
+// flipping it later would mean retrofitting every already-accepted repo.
+// Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 type AssignmentEntry struct {
 	Slug          string           `json:"slug"`
 	Name          string           `json:"name"`
@@ -95,6 +103,7 @@ type AssignmentEntry struct {
 	Runtime       *RuntimeRef      `json:"runtime,omitempty"`
 	Tests         []TestSpec       `json:"tests,omitempty"`
 	FeedbackPR    bool             `json:"feedback_pr,omitempty"`
+	EmptyRepo     bool             `json:"empty_repo,omitempty"`
 	AllowedFiles  []string         `json:"allowed_files,omitempty"`
 	PassThreshold *int             `json:"pass_threshold,omitempty"`
 	MigratedFrom  *MigratedFromRef `json:"migrated_from,omitempty"`
@@ -110,8 +119,8 @@ type AssignmentEntry struct {
 var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
-	"runtime": {}, "tests": {}, "feedback_pr": {}, "allowed_files": {},
-	"pass_threshold": {}, "migrated_from": {},
+	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
+	"allowed_files": {}, "pass_threshold": {}, "migrated_from": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -734,6 +743,45 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
+	if entry.EmptyRepo {
+		if err := validateEmptyRepoExclusions(entry); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateEmptyRepoExclusions rejects the combinations empty_repo rules out.
+// A bare repo never carries the autograde shim, so every grading-adjacent
+// field is meaningless alongside it. Error wording references CLI flags
+// (write-path convention); the parse path wraps with the entry context.
+func validateEmptyRepoExclusions(entry AssignmentEntry) error {
+	if entry.Template != nil {
+		return errors.New("empty_repo is mutually exclusive with template (--empty-repo vs --template)")
+	}
+	if len(entry.Tests) > 0 {
+		return errors.New("empty_repo is mutually exclusive with tests (--empty-repo vs --tests): a bare repo never autogrades")
+	}
+	if entry.FeedbackPR {
+		return errors.New("empty_repo is mutually exclusive with feedback_pr (--empty-repo vs --feedback-pr): a bare repo has no baseline for the Feedback PR")
+	}
+	if len(entry.AllowedFiles) > 0 {
+		return errors.New("empty_repo is mutually exclusive with allowed_files (--empty-repo vs --allowed-files): a bare repo never autogrades")
+	}
+	if entry.PassThreshold != nil {
+		return errors.New("empty_repo is mutually exclusive with pass_threshold (--empty-repo vs --pass-threshold): a bare repo never autogrades")
+	}
+	return nil
+}
+
+// ValidateEmptyRepoUnchanged enforces empty_repo's immutability on upsert:
+// student repos are provisioned (or not) at accept time, so flipping the flag
+// after creation would strand every already-accepted repo on the old
+// behavior. Callers run it before UpsertAssignment when replacing an entry.
+func ValidateEmptyRepoUnchanged(existing, updated AssignmentEntry) error {
+	if existing.EmptyRepo != updated.EmptyRepo {
+		return fmt.Errorf("empty_repo cannot be changed after creation (assignment %q): student repos already accepted under the old setting are not retrofitted — remove the assignment and add it under a new slug instead", existing.Slug)
+	}
 	return nil
 }
 
@@ -812,6 +860,11 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if entry.EmptyRepo {
+		if err := validateEmptyRepoExclusions(entry); err != nil {
+			return fmt.Errorf("entry %q: %w", entry.Slug, err)
+		}
 	}
 	return nil
 }

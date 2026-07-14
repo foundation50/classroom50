@@ -75,6 +75,7 @@ const EditAssignmentForm = ({
                 due_date: values.due_date,
                 max_group_size: values.max_group_size,
                 feedback_pr: values.feedback_pr,
+                empty_repo: values.empty_repo,
                 runs_on: values.runs_on,
                 container_image: values.container_image,
                 container_user: values.container_user,

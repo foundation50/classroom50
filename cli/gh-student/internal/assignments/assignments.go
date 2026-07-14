@@ -43,6 +43,12 @@ type Entry struct {
 	Template     *TemplateRef `json:"template,omitempty"`
 	Autograder   string       `json:"autograder"`
 	AllowedFiles []string     `json:"allowed_files,omitempty"`
+
+	// EmptyRepo marks a truly-bare assignment: accept creates the repo with
+	// no initial commit and lands NO control files (no .classroom50.yaml, no
+	// autograde shim), so the assignment never autogrades. Absent reads as
+	// false (the teacher CLI omits it when false).
+	EmptyRepo bool `json:"empty_repo,omitempty"`
 }
 
 // defaultAutograderName is the fallback when Entry.Autograder is empty.

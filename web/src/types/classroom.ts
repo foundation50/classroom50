@@ -88,6 +88,12 @@ export type Assignment = {
   autograder: string
   max_group_size?: number
   feedback_pr?: boolean
+  // Truly bare student repos: accept creates the repo with no initial commit
+  // and NO control files (no .classroom50.yaml, no autograde workflow), so the
+  // assignment never autogrades and the Feedback PR is off. Mutually exclusive
+  // with template/tests/feedback_pr/allowed_files/pass_threshold and IMMUTABLE
+  // after creation. Omitted when false (CLI omitempty); absent reads as false.
+  empty_repo?: boolean
   // Mirrors classroom50/assignments/v1's `runtime` block and the CLI's
   // RuntimeRef. `runs-on`/`container` select the runner; python/node/java/go/rust
   // pick the setup-X toolchain version the autograder provisions; apt installs

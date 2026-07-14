@@ -236,7 +236,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o")
+		htmlURL, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -277,7 +277,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o")
+		_, _, branch, _, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -309,7 +309,7 @@ func TestCreateEmptyPrivateAssignmentRepoInOrg(t *testing.T) {
 		client := newTestRESTClient(t, server)
 
 		var out bytes.Buffer
-		_, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o")
+		_, fullName, branch, already, err := createEmptyPrivateAssignmentRepoInOrg(client, ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", true)
 		if err != nil {
 			t.Fatalf("unexpected error: %v", err)
 		}
@@ -768,4 +768,164 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 			})
 		}
 	})
+}
+
+// TestAcceptIntoBareRepo: the empty_repo path never touches git-data — the
+// only provisioning is the founder grant (least-privilege `push` for an
+// individual assignment) — and reports bare-specific guidance on a fresh
+// create, already-accepted on an existing repo.
+func TestAcceptIntoBareRepo(t *testing.T) {
+	const (
+		org      = "o"
+		repoName = "cs-principles-actions-lab-alice"
+	)
+
+	bareParams := func(alreadyExisted bool) acceptRepoParams {
+		var errBuf bytes.Buffer
+		ownerID := int64(4242)
+		return acceptRepoParams{
+			org:            org,
+			classroom:      "cs-principles",
+			assignment:     "actions-lab",
+			mode:           "individual",
+			username:       "alice",
+			ownerID:        &ownerID,
+			acceptedAt:     "2026-07-01T14:33:11Z",
+			repoName:       repoName,
+			branch:         "main",
+			shim:           "", // never resolved for empty_repo
+			autograderName: "default",
+			emptyRepo:      true,
+			fullName:       org + "/" + repoName,
+			htmlURL:        "https://github.com/" + org + "/" + repoName,
+			alreadyExisted: alreadyExisted,
+			createSp:       ui.NewForced(&errBuf, false).Spinner("Creating"),
+			createMsg:      "Creating",
+		}
+	}
+
+	// Handler set shared by both subtests: founder grant PUT + inviteFounder's
+	// permission read-back OK; every git-data or contents endpoint trips the
+	// flag — the bare path must never call them.
+	newMux := func(collaboratorPut *bool, grantedPermission *string, forbiddenCall *bool) *http.ServeMux {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, r *http.Request) {
+			*collaboratorPut = true
+			var body struct {
+				Permission string `json:"permission"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			*grantedPermission = body.Permission
+			w.WriteHeader(http.StatusNoContent)
+		})
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice/permission", func(w http.ResponseWriter, _ *http.Request) {
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"permission": *grantedPermission,
+				"role_name":  *grantedPermission,
+			})
+		})
+		for _, path := range []string{
+			"/repos/" + org + "/" + repoName + "/contents/.classroom50.yaml",
+			"/repos/" + org + "/" + repoName + "/git/trees",
+			"/repos/" + org + "/" + repoName + "/git/blobs",
+			"/repos/" + org + "/" + repoName + "/git/commits",
+			"/repos/" + org + "/" + repoName + "/branches/main",
+		} {
+			mux.HandleFunc(path, func(w http.ResponseWriter, _ *http.Request) {
+				*forbiddenCall = true
+				w.WriteHeader(http.StatusNotFound)
+			})
+		}
+		return mux
+	}
+
+	t.Run("fresh create -> push grant only, bare guidance", func(t *testing.T) {
+		var (
+			collaboratorPut, forbiddenCall bool
+			grantedPermission              string
+		)
+		server := httptest.NewServer(newMux(&collaboratorPut, &grantedPermission, &forbiddenCall))
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, bareParams(false))
+		if err != nil {
+			t.Fatalf("acceptIntoRepo(bare): unexpected error: %v", err)
+		}
+		if !collaboratorPut {
+			t.Error("bare accept must still grant the founder their role")
+		}
+		if grantedPermission != "push" {
+			t.Errorf("individual bare accept granted %q, want least-privilege push", grantedPermission)
+		}
+		if forbiddenCall {
+			t.Error("bare accept must not touch contents/git-data endpoints (no marker probe, no commit, no verify)")
+		}
+		if !strings.Contains(out.String(), "Assignment accepted") {
+			t.Errorf("expected an accepted report on stdout:\n%s", out.String())
+		}
+		if !strings.Contains(out.String(), "autograding is disabled") {
+			t.Errorf("bare accept should tell the student autograding is off:\n%s", out.String())
+		}
+	})
+
+	t.Run("already exists -> already accepted, grant re-run, no probe", func(t *testing.T) {
+		var (
+			collaboratorPut, forbiddenCall bool
+			grantedPermission              string
+		)
+		server := httptest.NewServer(newMux(&collaboratorPut, &grantedPermission, &forbiddenCall))
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, bareParams(true))
+		if err != nil {
+			t.Fatalf("acceptIntoRepo(bare, existing): unexpected error: %v", err)
+		}
+		if !collaboratorPut {
+			t.Error("the idempotent founder grant should re-run to heal a create-then-die accept")
+		}
+		if forbiddenCall {
+			t.Error("an existing bare repo must not be probed for the marker (it never has one)")
+		}
+		if !strings.Contains(out.String(), "already accepted") {
+			t.Errorf("expected an already-accepted report on stdout:\n%s", out.String())
+		}
+	})
+}
+
+// TestCreateEmptyPrivateAssignmentRepoInOrg_Bare: autoInit=false posts
+// auto_init:false — the empty_repo wire contract.
+func TestCreateEmptyPrivateAssignmentRepoInOrg_Bare(t *testing.T) {
+	var createBody map[string]any
+	mux := http.NewServeMux()
+	mux.HandleFunc("/orgs/o/repos", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&createBody)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"full_name":      "o/cs-principles-solo-alice",
+			"html_url":       "https://github.com/o/cs-principles-solo-alice",
+			"default_branch": "main",
+		})
+	})
+	mux.HandleFunc("/repos/o/cs-principles-solo-alice", func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"full_name":      "o/cs-principles-solo-alice",
+			"html_url":       "https://github.com/o/cs-principles-solo-alice",
+			"default_branch": "main",
+		})
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+
+	var out bytes.Buffer
+	_, _, _, already, err := createEmptyPrivateAssignmentRepoInOrg(newTestRESTClient(t, server), ui.NewForced(&out, false), false, "alice", "cs-principles", "solo", "o", false)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if already {
+		t.Error("alreadyExisted = true, want false on a fresh create")
+	}
+	if createBody["auto_init"] != false {
+		t.Errorf("create body = %v, want auto_init:false for a bare repo", createBody)
+	}
 }

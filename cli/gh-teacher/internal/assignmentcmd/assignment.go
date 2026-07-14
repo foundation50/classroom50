@@ -72,6 +72,7 @@ func assignmentAddCmd() *cobra.Command {
 		runtimeFile   string
 		testsFile     string
 		feedbackPR    bool
+		emptyRepo     bool
 		allowedFiles  []string
 		passThreshold int
 	)
@@ -87,6 +88,15 @@ func assignmentAddCmd() *cobra.Command {
 			"--template. If the assignment slug already exists in\n" +
 			"assignments.json, this command replaces the entry in place\n" +
 			"(idempotent for repeated edits to the same assignment).\n\n" +
+			"--empty-repo creates truly bare student repos: no README, no\n" +
+			".classroom50.yaml marker, no autograde workflow — for assignments\n" +
+			"where students build everything (including their own GitHub\n" +
+			"Actions) from scratch. Autograding and the Feedback PR are\n" +
+			"disabled, and the setting is immutable after creation: enabling\n" +
+			"autograding later would require retrofitting control files into\n" +
+			"every already-accepted repo, which classroom50 does not do.\n" +
+			"Mutually exclusive with --template, --tests, --feedback-pr,\n" +
+			"--allowed-files, and --pass-threshold.\n\n" +
 			"--template parses `<owner>/<repo>` or `<owner>/<repo>@<branch>`.\n" +
 			"When the branch is omitted, the template repo's default branch is\n" +
 			"used. The template repo must be marked `is_template: true` (set\n" +
@@ -152,6 +162,22 @@ func assignmentAddCmd() *cobra.Command {
 				return errors.New("--name is required")
 			}
 			templateVal := strings.TrimSpace(template)
+			// --empty-repo rules out every grading-adjacent flag. Checked at
+			// the flag layer (before any parsing/network) so the error names
+			// the flags the teacher actually typed; ValidateAssignmentEntry
+			// re-checks the built entry as the backstop.
+			feedbackPRVal, err := validateEmptyRepoFlags(emptyRepoFlagState{
+				EmptyRepo:            emptyRepo,
+				Template:             templateVal != "",
+				Tests:                strings.TrimSpace(testsFile) != "",
+				AllowedFiles:         len(allowedFiles) > 0,
+				PassThresholdChanged: cmd.Flags().Changed("pass-threshold"),
+				FeedbackPR:           feedbackPR,
+				FeedbackPRChanged:    cmd.Flags().Changed("feedback-pr"),
+			})
+			if err != nil {
+				return err
+			}
 			modeVal, err := validateModeAndSizeFlags(mode, maxGroupSize, cmd.Flags().Changed("max-group-size"))
 			if err != nil {
 				return err
@@ -210,7 +236,8 @@ func assignmentAddCmd() *cobra.Command {
 					Autograder:    autograderVal,
 					Runtime:       runtime,
 					Tests:         tests,
-					FeedbackPR:    feedbackPR,
+					FeedbackPR:    feedbackPRVal,
+					EmptyRepo:     emptyRepo,
 					AllowedFiles:  allowedFiles,
 					PassThreshold: passThresholdPtr,
 				})
@@ -227,6 +254,7 @@ func assignmentAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&runtimeFile, "runtime", "", "Path to a JSON file describing the runtime environment (runs-on as a single label or an array of labels for self-hosted runners, python/node/java/go/rust versions, apt packages, or container image), or `-` to read from stdin. Omit for ubuntu-latest + Python 3.12.")
 	cmd.Flags().StringVar(&testsFile, "tests", "", "Path to a JSON file with a bare array of declarative test specs (io/run/python), or `-` to read from stdin. Sets the assignment's `tests` block; mutually exclusive with a per-assignment autograder.py. See `gh teacher assignment test --help`.")
 	cmd.Flags().BoolVar(&feedbackPR, "feedback-pr", true, "Open one long-lived Feedback pull request per student repo so you can leave inline review comments on the full starter→submission diff. The autograde runner freezes a base branch at the baseline commit and opens the PR on the first submission that has a diff. Default on; pass --feedback-pr=false to disable. Requires `gh teacher init` to have set up the org prerequisites.")
+	cmd.Flags().BoolVar(&emptyRepo, "empty-repo", false, "Create truly bare student repos: no README/initial commit, no .classroom50.yaml marker, no autograde workflow — for assignments where students build the repo (including their own GitHub Actions) from scratch. Autograding and the Feedback PR are disabled and cannot be enabled later (the setting is immutable after creation). Mutually exclusive with --template, --tests, --feedback-pr, --allowed-files, and --pass-threshold.")
 	cmd.Flags().StringArrayVar(&allowedFiles, "allowed-files", nil, "Ordered .gitignore-style pattern (repeatable, order preserved) defining which files belong to the submission. Last match wins; `!` re-includes. Pass `--allowed-files '*' --allowed-files '!hello.py'` to allow only hello.py. The autograde runner removes disallowed files before grading (control files are always kept); `gh student submit` filters them too. Omit to allow every file.")
 	cmd.Flags().IntVar(&passThreshold, "pass-threshold", 0, "Opt-in passing bar as a percentage of max score (0–100): at/above it a gradebook client shows a submission as passing. Advisory/display-only — it does not change a student's score. Omit to leave it off (no passing concept); pass --pass-threshold 0 for an explicit 0%.")
 	return cmd
@@ -417,6 +445,50 @@ func validateModeAndSizeFlags(mode string, maxGroupSize int, sizeProvided bool) 
 	return modeVal, nil
 }
 
+// emptyRepoFlagState is the flag-layer view validateEmptyRepoFlags checks:
+// booleans for "was this conflicting flag used", plus the --feedback-pr
+// value/changed pair (it defaults to true, so only an EXPLICIT --feedback-pr
+// conflicts; the silent default is coerced off instead).
+type emptyRepoFlagState struct {
+	EmptyRepo            bool
+	Template             bool
+	Tests                bool
+	AllowedFiles         bool
+	PassThresholdChanged bool
+	FeedbackPR           bool
+	FeedbackPRChanged    bool
+}
+
+// validateEmptyRepoFlags enforces --empty-repo's mutual exclusions at the flag
+// layer and returns the feedback_pr value to write. Without --empty-repo the
+// flag value passes through untouched. With it, conflicting flags error —
+// except the defaulted-on --feedback-pr, which only errors when the teacher
+// explicitly passed --feedback-pr=true (an untouched default silently becomes
+// false, since demanding --feedback-pr=false alongside --empty-repo would be
+// pedantry). Extracted as a pure function so the flag contract is
+// unit-testable, mirroring validateModeAndSizeFlags.
+func validateEmptyRepoFlags(s emptyRepoFlagState) (feedbackPR bool, err error) {
+	if !s.EmptyRepo {
+		return s.FeedbackPR, nil
+	}
+	if s.Template {
+		return false, errors.New("--empty-repo is mutually exclusive with --template: a bare repo starts with no content at all")
+	}
+	if s.Tests {
+		return false, errors.New("--empty-repo is mutually exclusive with --tests: a bare repo has no autograde workflow, so tests would never run")
+	}
+	if s.AllowedFiles {
+		return false, errors.New("--empty-repo is mutually exclusive with --allowed-files: a bare repo never autogrades, so there is no submission to filter")
+	}
+	if s.PassThresholdChanged {
+		return false, errors.New("--empty-repo is mutually exclusive with --pass-threshold: a bare repo never autogrades, so there are no scores to grade against")
+	}
+	if s.FeedbackPRChanged && s.FeedbackPR {
+		return false, errors.New("--empty-repo is mutually exclusive with --feedback-pr: a bare repo has no baseline commit for the Feedback PR")
+	}
+	return false, nil
+}
+
 // passThresholdFromFlag maps --pass-threshold to the optional *int: an omitted
 // flag stays nil (off); an explicit --pass-threshold 0 is *int(0), a real 0%
 // bar distinct from off.
@@ -447,6 +519,7 @@ type addAssignmentParams struct {
 	Runtime       *assignment.RuntimeRef
 	Tests         []assignment.TestSpec
 	FeedbackPR    bool
+	EmptyRepo     bool
 	AllowedFiles  []string
 	PassThreshold *int
 }
@@ -516,6 +589,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		Runtime:       runtime,
 		Tests:         tests,
 		FeedbackPR:    feedbackPR,
+		EmptyRepo:     p.EmptyRepo,
 		AllowedFiles:  allowedFiles,
 		PassThreshold: passThreshold,
 	}
@@ -578,6 +652,14 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		// One lookup of the entry this upsert replaces, shared by the
 		// wholesale-replace footgun checks and the Extra carry-forward.
 		prevIdx, hasPrev := assignment.FindAssignment(file.Assignments, slug)
+		// empty_repo is immutable: student repos were provisioned (or left
+		// bare) at accept time and are never retrofitted. Checked at parentSHA
+		// inside the build so a concurrent add/remove is observed on retry.
+		if hasPrev {
+			if err := assignment.ValidateEmptyRepoUnchanged(file.Assignments[prevIdx], entry); err != nil {
+				return nil, err
+			}
+		}
 		// Upsert replaces the whole entry, so re-running add without --tests
 		// drops tests authored via `assignment test add`. Count them for the
 		// warning. nil = flag omitted; an explicit `[]` is a deliberate clear.
@@ -631,6 +713,9 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	}
 
 	templateDesc := "no template"
+	if entry.EmptyRepo {
+		templateDesc = "empty repo, autograding disabled"
+	}
 	if resolved != nil {
 		templateDesc = fmt.Sprintf("template %s/%s@%s", resolved.Owner, resolved.Repo, resolved.Branch)
 	}

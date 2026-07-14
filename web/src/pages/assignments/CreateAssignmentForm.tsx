@@ -66,6 +66,12 @@ export type CreateAssignmentFormValues = {
   due_date: string
   max_group_size: number
   feedback_pr: boolean
+  // Truly bare student repos: no starter content, no control files, autograding
+  // and the Feedback PR off. Immutable after creation (the edit form renders it
+  // locked). While checked, the template/autograding/advanced grading sections
+  // are hidden and their values cleared on submit, mirroring runtime_env's
+  // conditional-clear idiom.
+  empty_repo: boolean
   // UI-only: which runtime environment the teacher is configuring. Selects
   // which fields render and get written; never sent to the wire. "hosted" uses
   // a GitHub Actions runner (runs-on + apt); "container" grades inside a Docker
@@ -114,6 +120,7 @@ const useAssignmentForm = (
       due_date: utcIsoToDatetimeLocalValue(defaultValues?.due_date),
       max_group_size: defaultValues?.max_group_size || 2,
       feedback_pr: defaultValues?.feedback_pr ?? true,
+      empty_repo: defaultValues?.empty_repo ?? false,
       runtime_env: defaultValues?.runtime_env || "hosted",
       runs_on: defaultValues?.runs_on || "",
       container_image: defaultValues?.container_image || "",
@@ -268,15 +275,21 @@ const useAssignmentForm = (
       // (a container job can target a specific runner; setup-* runs inside a
       // container), so they always pass through.
       const isContainer = value.runtime_env === "container"
+      // An empty repo never autogrades, so every grading-adjacent field is
+      // cleared on submit — the sections are hidden while the toggle is on,
+      // and a stale value from before toggling must not reach the wire (the
+      // mutation layer rejects the combination).
+      const isEmptyRepo = value.empty_repo
       await onSubmit({
         name: value.name.trim(),
         slug: slugify(value.slug),
         description: value.description.trim(),
         mode: value.mode,
-        template_repo: value.template_repo.trim(),
+        template_repo: isEmptyRepo ? "" : value.template_repo.trim(),
         due_date: value.due_date.trim(),
         max_group_size: value.max_group_size,
-        feedback_pr: value.feedback_pr,
+        feedback_pr: isEmptyRepo ? false : value.feedback_pr,
+        empty_repo: isEmptyRepo,
         runtime_env: value.runtime_env,
         runs_on: value.runs_on.trim(),
         container_image: isContainer ? value.container_image.trim() : "",
@@ -287,11 +300,13 @@ const useAssignmentForm = (
         runtime_go: value.runtime_go.trim(),
         runtime_rust: value.runtime_rust.trim(),
         runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
-        setup_command: value.setup_command.trim(),
-        allowed_files: value.allowed_files,
-        pass_threshold_enabled: value.pass_threshold_enabled,
+        setup_command: isEmptyRepo ? "" : value.setup_command.trim(),
+        allowed_files: isEmptyRepo ? "" : value.allowed_files,
+        pass_threshold_enabled: isEmptyRepo
+          ? false
+          : value.pass_threshold_enabled,
         pass_threshold: Number(value.pass_threshold),
-        tests: value.tests,
+        tests: isEmptyRepo ? [] : value.tests,
       })
     },
   })
@@ -358,6 +373,7 @@ export const assignmentToFormValues = (
     due_date: utcIsoToDatetimeLocalValue(assignment.due),
     max_group_size: assignment.max_group_size ?? 2,
     feedback_pr: assignment.feedback_pr ?? true,
+    empty_repo: assignment.empty_repo ?? false,
     // A stored container block means the assignment was configured in container
     // mode; otherwise it's the hosted runner (the default).
     runtime_env: assignment.runtime?.container ? "container" : "hosted",
@@ -547,18 +563,27 @@ const CreateAssignmentForm = ({
               )}
             </form.Field>
 
-            <div className="mt-4">
-              <form.Field name="template_repo">
-                {(field) => (
-                  <TemplateField
-                    field={field}
-                    org={org}
-                    classroom={classroom}
-                    slug={slug}
-                  />
-                )}
-              </form.Field>
-            </div>
+            {/* An empty repo starts with no content, so the template picker
+                is hidden while the toggle is on (the submit path clears the
+                value too). */}
+            <form.Subscribe selector={(state) => state.values.empty_repo}>
+              {(emptyRepo) =>
+                emptyRepo ? null : (
+                  <div className="mt-4">
+                    <form.Field name="template_repo">
+                      {(field) => (
+                        <TemplateField
+                          field={field}
+                          org={org}
+                          classroom={classroom}
+                          slug={slug}
+                        />
+                      )}
+                    </form.Field>
+                  </div>
+                )
+              }
+            </form.Subscribe>
 
             <div className="divider my-2" />
             <h3 className="text-lg font-bold pb-2">
@@ -656,16 +681,57 @@ const CreateAssignmentForm = ({
               </div>
 
               <div className="flex flex-col gap-4">
-                <form.Field name="feedback_pr">
+                {/* An empty repo has no baseline commit, so the Feedback PR is
+                    structurally off: render the toggle locked-off (not hidden)
+                    so the trade-off stays visible. */}
+                <form.Subscribe selector={(state) => state.values.empty_repo}>
+                  {(emptyRepo) => (
+                    <form.Field name="feedback_pr">
+                      {(field) => (
+                        <div
+                          className={
+                            emptyRepo ? "pointer-events-none opacity-50" : ""
+                          }
+                          aria-disabled={emptyRepo}
+                        >
+                          <ToggleRow
+                            id={field.name}
+                            checked={emptyRepo ? false : field.state.value}
+                            onChange={(checked) => field.handleChange(checked)}
+                            onBlur={field.handleBlur}
+                            label={t("assignments.form.feedbackPr")}
+                            help={
+                              emptyRepo
+                                ? t("assignments.form.feedbackPrEmptyRepoHelp")
+                                : t("assignments.form.feedbackPrHelp")
+                            }
+                          />
+                        </div>
+                      )}
+                    </form.Field>
+                  )}
+                </form.Subscribe>
+
+                {/* Immutable after creation: locked in edit mode. */}
+                <form.Field name="empty_repo">
                   {(field) => (
-                    <ToggleRow
-                      id={field.name}
-                      checked={field.state.value}
-                      onChange={(checked) => field.handleChange(checked)}
-                      onBlur={field.handleBlur}
-                      label={t("assignments.form.feedbackPr")}
-                      help={t("assignments.form.feedbackPrHelp")}
-                    />
+                    <div
+                      className={edit ? "pointer-events-none opacity-50" : ""}
+                      aria-disabled={edit}
+                    >
+                      <ToggleRow
+                        id={field.name}
+                        checked={field.state.value}
+                        onChange={(checked) => field.handleChange(checked)}
+                        onBlur={field.handleBlur}
+                        label={t("assignments.form.emptyRepo")}
+                        help={
+                          edit
+                            ? `${t("assignments.form.emptyRepoHelp")} ${t("assignments.form.emptyRepoLocked")}`
+                            : t("assignments.form.emptyRepoHelp")
+                        }
+                      />
+                    </div>
                   )}
                 </form.Field>
 
@@ -812,6 +878,13 @@ const CreateAssignmentForm = ({
                 }
               </form.Subscribe>
 
+              {/* Grading-only settings: a bare repo never autogrades, so the
+                  setup command, allowed-files allowlist, and passing threshold
+                  are hidden while empty_repo is on (submit clears them). */}
+              <form.Subscribe selector={(state) => state.values.empty_repo}>
+                {(emptyRepo) =>
+                  emptyRepo ? null : (
+                    <>
               <form.Field name="setup_command">
                 {(field) => (
                   <div className="mt-4">
@@ -954,11 +1027,21 @@ const CreateAssignmentForm = ({
                   </div>
                 )}
               </form.Field>
+                    </>
+                  )
+                }
+              </form.Subscribe>
             </details>
           </Card.Body>
         </Card>
 
-        <AutogradingTestsPane form={form} />
+        {/* Declarative tests can never run in a bare repo (no autograde
+            workflow), so the whole pane is hidden while empty_repo is on. */}
+        <form.Subscribe selector={(state) => state.values.empty_repo}>
+          {(emptyRepo) =>
+            emptyRepo ? null : <AutogradingTestsPane form={form} />
+          }
+        </form.Subscribe>
       </fieldset>
       <div className="divider" />
       <div className="card-actions justify-end p-2">

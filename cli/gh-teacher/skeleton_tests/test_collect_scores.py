@@ -2216,6 +2216,44 @@ class TestCollectClassroomModeFlip:
         assert "NONE were creditable" not in err
 
 
+# empty_repo skip -------------------------------------------------------------
+
+
+def test_valid_assignment_slugs_excludes_empty_repo():
+    # empty_repo assignments never autograde, so they don't count toward the
+    # "collectable assignments" total main() uses for its zero-submission guard.
+    assignments = {
+        "assignments": [
+            {"slug": "hello"},
+            {"slug": "actions-lab", "empty_repo": True},
+            {"slug": "world", "empty_repo": False},
+        ]
+    }
+    assert cs.valid_assignment_slugs(assignments) == ["hello", "world"]
+
+
+def test_collect_classroom_skips_empty_repo_assignment(monkeypatch, capsys):
+    # An empty_repo assignment is skipped with a log line: its bare repos are
+    # never polled for releases, so no dead gradebook rows are produced.
+    def fail_releases(*args, **kwargs):
+        raise AssertionError("empty_repo repos must not be polled for releases")
+
+    monkeypatch.setattr(cs, "all_submit_releases", fail_releases)
+    stub_team_members(monkeypatch, ["alice"])
+
+    results, _ = cs.collect_classroom(
+        api_url="https://api.github.com",
+        org="cs50",
+        classroom_short="cs-principles",
+        classroom_meta={},
+        assignments={"assignments": [{"slug": "actions-lab", "empty_repo": True}]},
+        service_token="token",
+    )
+
+    assert results == []
+    assert "empty_repo" in capsys.readouterr().out
+
+
 # Staff-team repo-access grant ------------------------------------------------
 
 

@@ -384,6 +384,7 @@ const SubmissionsTable = ({
   thresholdFraction,
   filtered = false,
   onClearFilters,
+  emptyRepo = false,
 }: {
   scores: SubmissionRow[]
   students: Student[]
@@ -411,6 +412,9 @@ const SubmissionsTable = ({
   filtered?: boolean
   // Clears the active search + filters (wired to the controls' clearAll).
   onClearFilters?: () => void
+  // empty_repo assignment: never autogrades, so score badges and the
+  // Feedback-PR/regrade actions are hidden (repos + accept state stay useful).
+  emptyRepo?: boolean
 }) => {
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
@@ -585,11 +589,20 @@ const SubmissionsTable = ({
                         )}
                       </td>
                       <td>
-                        <ScoreBadge
-                          score={score}
-                          max={rest["max-score"]}
-                          thresholdFraction={passBar}
-                        />
+                        {emptyRepo ? (
+                          <span
+                            className="text-base-content/50"
+                            title={t("submissions.table.noGradingTitle")}
+                          >
+                            —
+                          </span>
+                        ) : (
+                          <ScoreBadge
+                            score={score}
+                            max={rest["max-score"]}
+                            thresholdFraction={passBar}
+                          />
+                        )}
                       </td>
                       <td>
                         <div className="flex flex-col gap-0.5">
@@ -649,26 +662,33 @@ const SubmissionsTable = ({
                             emptyLabel={t("submissions.table.noCommit")}
                             emptyTitle={t("submissions.table.noCommit")}
                           />
-                          <ReviewButton org={org} repo={repo} />
-                          <ActionIconLink
-                            href={safeHttpUrl(rest.release)}
-                            icon={ScrollText}
-                            label={t("submissions.table.viewDetails")}
-                            title={t("submissions.table.details")}
-                            emptyLabel={t("submissions.table.noDetailsLabel")}
-                            emptyTitle={t("submissions.table.noDetails")}
-                          />
-                          <RegradeButton
-                            org={org}
-                            classroom={classroom}
-                            assignment={assignment}
-                            owner={rest.owner}
-                            displayName={
-                              isGroup
-                                ? undefined
-                                : getName(rest.owner, students) || undefined
-                            }
-                          />
+                          {!emptyRepo && (
+                            <>
+                              <ReviewButton org={org} repo={repo} />
+                              <ActionIconLink
+                                href={safeHttpUrl(rest.release)}
+                                icon={ScrollText}
+                                label={t("submissions.table.viewDetails")}
+                                title={t("submissions.table.details")}
+                                emptyLabel={t(
+                                  "submissions.table.noDetailsLabel",
+                                )}
+                                emptyTitle={t("submissions.table.noDetails")}
+                              />
+                              <RegradeButton
+                                org={org}
+                                classroom={classroom}
+                                assignment={assignment}
+                                owner={rest.owner}
+                                displayName={
+                                  isGroup
+                                    ? undefined
+                                    : getName(rest.owner, students) ||
+                                      undefined
+                                }
+                              />
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

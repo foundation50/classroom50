@@ -299,3 +299,47 @@ class TestSchemaRejects:
 
     def test_wrong_schema_sentinel(self):
         assert _errors({"schema": "v2", "assignments": []}) != []
+
+
+class TestEmptyRepo:
+    def _bare_entry(self, **overrides):
+        # An empty_repo entry has no template and no grading-adjacent fields.
+        entry = _entry(empty_repo=True)
+        del entry["template"]
+        entry.update(overrides)
+        return entry
+
+    def test_empty_repo_accepted(self):
+        assert _errors(_manifest(self._bare_entry())) == []
+
+    def test_empty_repo_false_accepted_alongside_template(self):
+        # The GUI may write an explicit false; it must not trigger the
+        # mutual-exclusion conditional.
+        assert _errors(_manifest(_entry(empty_repo=False))) == []
+
+    def test_empty_repo_must_be_boolean(self):
+        assert _errors(_manifest(self._bare_entry(empty_repo="yes"))) != []
+
+    def test_empty_repo_rejects_template(self):
+        entry = self._bare_entry()
+        entry["template"] = {"owner": "o", "repo": "t", "branch": "main"}
+        assert _errors(_manifest(entry)) != []
+
+    def test_empty_repo_rejects_tests(self):
+        entry = self._bare_entry(
+            tests=[{"name": "t", "type": "run", "run": "true", "points": 1}]
+        )
+        assert _errors(_manifest(entry)) != []
+
+    def test_empty_repo_rejects_feedback_pr_true(self):
+        assert _errors(_manifest(self._bare_entry(feedback_pr=True))) != []
+
+    def test_empty_repo_allows_feedback_pr_false(self):
+        # The GUI writes feedback_pr: false explicitly for an empty repo.
+        assert _errors(_manifest(self._bare_entry(feedback_pr=False))) == []
+
+    def test_empty_repo_rejects_allowed_files(self):
+        assert _errors(_manifest(self._bare_entry(allowed_files=["*"]))) != []
+
+    def test_empty_repo_rejects_pass_threshold(self):
+        assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []

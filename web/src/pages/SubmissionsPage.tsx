@@ -185,6 +185,11 @@ const SubmissionsPageContent = () => {
     (a) => a.slug === assignment,
   )
   const isGroupAssignment = assignmentInfo?.mode === "group"
+  // empty_repo assignments never autograde: repos were created bare, with no
+  // autograde workflow. Grading UI (Regrade all, per-row regrade, scores,
+  // Feedback PR) is hidden and a notice explains why. Collect stays enabled —
+  // it's org-wide and collect_scores.py skips this assignment itself.
+  const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
   // to unscoped rows rather than blanking a populated gradebook.
@@ -621,15 +626,25 @@ const SubmissionsPageContent = () => {
         }
       />
       {/* Thin collection note with last-collected recency. Actions moved into
-          the toolbar menu below so the roster surfaces near the top. */}
+          the toolbar menu below so the roster surfaces near the top. An
+          empty_repo assignment never autogrades, so the note explains that
+          instead of promising score collection. */}
       <div className="flex items-start gap-2 text-sm text-base-content/70">
         <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
         <p>
-          {t("submissions.collectionNote")}{" "}
-          {lastCollectedLabel && (
-            <span>
-              {t("submissions.lastCollected", { when: lastCollectedLabel })}
-            </span>
+          {isEmptyRepoAssignment ? (
+            t("submissions.emptyRepoNote")
+          ) : (
+            <>
+              {t("submissions.collectionNote")}{" "}
+              {lastCollectedLabel && (
+                <span>
+                  {t("submissions.lastCollected", {
+                    when: lastCollectedLabel,
+                  })}
+                </span>
+              )}
+            </>
           )}
         </p>
       </div>
@@ -747,6 +762,7 @@ const SubmissionsPageContent = () => {
               regrading={regrading}
               regradeAllActive={regradeAllActive}
               emptyRoster={emptyRoster.show}
+              emptyRepo={isEmptyRepoAssignment}
               onCollect={() => collectScores.collect()}
               onRegradeAll={() => setRegradeConfirmOpen(true)}
               viewHref={viewRun?.html_url || viewWorkflowUrl}
@@ -772,6 +788,7 @@ const SubmissionsPageContent = () => {
         thresholdFraction={thresholdFraction}
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
+        emptyRepo={isEmptyRepoAssignment}
       />
       <ConfirmModal
         open={regradeConfirmOpen}

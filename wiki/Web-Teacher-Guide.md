@@ -121,6 +121,7 @@ Click the "+ Assignment" button on the classroom page to create a new assignment
 - **Due Date**: A specific date and time at which the assignment is due in your local timezone.
 - **Assignment Type**: Students may submit either **Individual** or **Group** assignments. In individual assignments, each repository belongs to only one student; in group assignments, students can collaborate on the same repository and submit their work together.
 - - **Feedback pull request**: This feature creates a pull request (PR) automatically for students when they submit, in order to provide a clean and flexible way for teachers to view a student's changes and provide feedback on their work.
+- **Empty repository**: Creates each student's repository completely empty — no starter files, no autograding setup, no feedback pull request. Use this for assignments where students build everything from scratch, including their own GitHub Actions workflows (which would otherwise conflict with the autograding setup). Because the repositories carry no grading machinery, autograding, scores, and the feedback PR are disabled for the assignment, and the submissions page shows who accepted rather than grades. **This choice is permanent**: it can't be toggled after the assignment is created, since repositories students have already accepted can't be retrofitted. Enabling it hides the template, autograding-test, and grading-related fields.
 
 ### Creating an Assignment - Advanced Settings
 

@@ -364,3 +364,77 @@ func TestAssignmentsFilePath(t *testing.T) {
 		}
 	}
 }
+
+func TestValidateEmptyRepoFlags(t *testing.T) {
+	cases := []struct {
+		name           string
+		state          emptyRepoFlagState
+		wantFeedbackPR bool
+		wantErrSub     string // empty = expect success
+	}{
+		{
+			name:           "off passes feedback_pr through (default true)",
+			state:          emptyRepoFlagState{EmptyRepo: false, FeedbackPR: true},
+			wantFeedbackPR: true,
+		},
+		{
+			name:           "off passes explicit feedback_pr=false through",
+			state:          emptyRepoFlagState{EmptyRepo: false, FeedbackPR: false, FeedbackPRChanged: true},
+			wantFeedbackPR: false,
+		},
+		{
+			name: "on with untouched feedback_pr default coerces to false",
+			// --feedback-pr defaults to true; without an explicit flag the
+			// default must be silently overridden, not an error.
+			state:          emptyRepoFlagState{EmptyRepo: true, FeedbackPR: true, FeedbackPRChanged: false},
+			wantFeedbackPR: false,
+		},
+		{
+			name:           "on with explicit feedback_pr=false is fine",
+			state:          emptyRepoFlagState{EmptyRepo: true, FeedbackPR: false, FeedbackPRChanged: true},
+			wantFeedbackPR: false,
+		},
+		{
+			name:       "on with explicit feedback_pr=true conflicts",
+			state:      emptyRepoFlagState{EmptyRepo: true, FeedbackPR: true, FeedbackPRChanged: true},
+			wantErrSub: "--feedback-pr",
+		},
+		{
+			name:       "on with template conflicts",
+			state:      emptyRepoFlagState{EmptyRepo: true, Template: true},
+			wantErrSub: "--template",
+		},
+		{
+			name:       "on with tests conflicts",
+			state:      emptyRepoFlagState{EmptyRepo: true, Tests: true},
+			wantErrSub: "--tests",
+		},
+		{
+			name:       "on with allowed-files conflicts",
+			state:      emptyRepoFlagState{EmptyRepo: true, AllowedFiles: true},
+			wantErrSub: "--allowed-files",
+		},
+		{
+			name:       "on with pass-threshold conflicts",
+			state:      emptyRepoFlagState{EmptyRepo: true, PassThresholdChanged: true},
+			wantErrSub: "--pass-threshold",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, err := validateEmptyRepoFlags(tc.state)
+			if tc.wantErrSub != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.wantErrSub) {
+					t.Fatalf("got err %v, want one mentioning %q", err, tc.wantErrSub)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatalf("unexpected error: %v", err)
+			}
+			if got != tc.wantFeedbackPR {
+				t.Errorf("feedbackPR = %v, want %v", got, tc.wantFeedbackPR)
+			}
+		})
+	}
+}

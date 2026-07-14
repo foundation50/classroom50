@@ -26,3 +26,4 @@ plans/
 
 # Git worktrees created for isolated task work.
 .worktrees/
+go.work.sum

@@ -18,6 +18,7 @@ export function SubmissionsActionsMenu({
   regrading,
   regradeAllActive,
   emptyRoster,
+  emptyRepo = false,
   onCollect,
   onRegradeAll,
   viewHref,
@@ -29,6 +30,9 @@ export function SubmissionsActionsMenu({
   regrading: boolean
   regradeAllActive: boolean
   emptyRoster: boolean
+  // empty_repo assignment: never autogrades, so the grading actions (Collect
+  // now / Regrade all / View workflow) are hidden — only the CSV export stays.
+  emptyRepo?: boolean
   onCollect: () => void
   onRegradeAll: () => void
   viewHref: string
@@ -78,53 +82,57 @@ export function SubmissionsActionsMenu({
         tabIndex={0}
         className="dropdown-content menu z-10 mt-1 w-64 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
       >
-        <li>
-          <button
-            type="button"
-            disabled={disabledActions}
-            title={collectTitle}
-            onClick={() => {
-              closeMenu()
-              if (disabledActions) return
-              onCollect()
-            }}
-          >
-            <DownloadCloud aria-hidden="true" className="size-4" />
-            {collecting
-              ? t("submissions.collect.active")
-              : t("submissions.collect.label")}
-          </button>
-        </li>
-        <li>
-          <button
-            type="button"
-            disabled={disabledActions}
-            title={regradeTitle}
-            onClick={() => {
-              closeMenu()
-              if (disabledActions) return
-              onRegradeAll()
-            }}
-          >
-            <RefreshCw
-              aria-hidden="true"
-              className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
+        {!emptyRepo && (
+          <>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={collectTitle}
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onCollect()
+                }}
+              >
+                <DownloadCloud aria-hidden="true" className="size-4" />
+                {collecting
+                  ? t("submissions.collect.active")
+                  : t("submissions.collect.label")}
+              </button>
+            </li>
+            <li>
+              <button
+                type="button"
+                disabled={disabledActions}
+                title={regradeTitle}
+                onClick={() => {
+                  closeMenu()
+                  if (disabledActions) return
+                  onRegradeAll()
+                }}
+              >
+                <RefreshCw
+                  aria-hidden="true"
+                  className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
+                />
+                {regradeAllActive
+                  ? t("submissions.regradeAll.active")
+                  : t("submissions.regradeAll.label")}
+              </button>
+            </li>
+            <li>
+              <a href={viewHref} target="_blank" rel="noreferrer">
+                <ExternalLink aria-hidden="true" className="size-4" />
+                {viewLabel}
+              </a>
+            </li>
+            <div
+              className="my-1 border-t border-base-content/10"
+              role="separator"
             />
-            {regradeAllActive
-              ? t("submissions.regradeAll.active")
-              : t("submissions.regradeAll.label")}
-          </button>
-        </li>
-        <li>
-          <a href={viewHref} target="_blank" rel="noreferrer">
-            <ExternalLink aria-hidden="true" className="size-4" />
-            {viewLabel}
-          </a>
-        </li>
-        <div
-          className="my-1 border-t border-base-content/10"
-          role="separator"
-        />
+          </>
+        )}
         <li>
           <button
             type="button"

@@ -21,9 +21,20 @@ export async function createAssignmentRepo(params: {
   owner: string
   name: string
   fallbackBranch: string
+  // empty_repo assignment: create bare (auto_init false, no commits). The
+  // mutual exclusion with template is enforced at write time, so template
+  // params are never set alongside this.
+  bare?: boolean
 }): Promise<AcceptRepoCreationResult> {
-  const { client, templateOwner, templateRepo, owner, name, fallbackBranch } =
-    params
+  const {
+    client,
+    templateOwner,
+    templateRepo,
+    owner,
+    name,
+    fallbackBranch,
+    bare,
+  } = params
 
   const cleanTemplateRepo = templateRepo
     ? extractTemplate(templateRepo)
@@ -94,12 +105,14 @@ export async function createAssignmentRepo(params: {
 
   // No template specified — create an empty starter repo. auto_init seeds the
   // initial commit; the metadata + shim land in the downstream tree commit (see
-  // provisionAcceptedRepo), all in one commit.
+  // provisionAcceptedRepo), all in one commit. An empty_repo assignment skips
+  // auto_init too: the repo stays commitless until the student's first push.
   return await createEmptyAssignmentRepo({
     client,
     owner,
     name,
     branch: fallbackBranch,
+    autoInit: !bare,
   })
 }
 
@@ -117,13 +130,22 @@ type AcceptRepoCreationResult =
       repo: GitHubRepo
       branch: string
     }
+  | {
+      // empty_repo assignment: created with auto_init false, so the repo has
+      // NO commits and no branches — the caller must not attempt any commit.
+      kind: "bare"
+      repo: GitHubRepo
+    }
 async function createEmptyAssignmentRepo(params: {
   client: GitHubClient
   owner: string
   name: string
   branch: string
+  // false = empty_repo assignment: no initial commit at all. The repo stays
+  // commitless until the student's first push.
+  autoInit?: boolean
 }): Promise<AcceptRepoCreationResult> {
-  const { client, owner, name, branch } = params
+  const { client, owner, name, branch, autoInit = true } = params
   let repo: GitHubRepo
 
   try {
@@ -131,12 +153,13 @@ async function createEmptyAssignmentRepo(params: {
     // autograde workflow share the runner's Feedback-PR baseline. auto_init
     // gives the initial commit to build that single tree commit on; committing
     // .classroom50.yaml alone first would split them and skew the baseline.
+    // (The bare empty_repo path passes autoInit false and commits nothing.)
     repo = await client.request<GitHubRepo>(`/orgs/${owner}/repos`, {
       method: "POST",
       body: {
         name,
         private: true,
-        auto_init: true,
+        auto_init: autoInit,
       },
     })
   } catch (err) {
@@ -178,6 +201,11 @@ export type CreateAssignmentInput = {
   org: string
   max_group_size: number
   feedback_pr?: boolean
+  // Truly bare student repos (no auto-init, no control files, autograding and
+  // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
+  // allowed_files/pass_threshold; immutable after creation (edit rejects a
+  // change). Mirrors the CLI's --empty-repo.
+  empty_repo?: boolean
   runs_on?: string
   container_image?: string
   container_user?: string

@@ -272,6 +272,11 @@ export async function acceptAssignment(params: {
   const sourceRepo = assignment.template?.repo
   const sourceBranch = assignment.template?.branch ?? "main"
 
+  // empty_repo assignment: the repo is created bare (no commits) and NO
+  // control files are ever committed, so the autograder resolution and the
+  // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
+  const isEmptyRepo = assignment.empty_repo === true
+
   // Best-effort: resolve the template owner's immutable id (org or user). Never
   // fail accept over this — a missing id is recorded as null.
   let sourceOwnerId: number | null = null
@@ -287,25 +292,37 @@ export async function acceptAssignment(params: {
     }
   }
 
-  let autogradeYaml = await withAcceptStep(
-    {
+  // A bare (empty_repo) repo carries no autograde workflow — mark the step
+  // complete (as skipped) so the checklist doesn't look stuck, and never fetch
+  // the shim.
+  let autogradeYaml = isEmptyRepo
+    ? ""
+    : await withAcceptStep(
+        {
+          id: "autograder",
+          label: "Resolving the autograder",
+          actions: `Couldn't resolve the autograder for "${assignmentSlug}". Ask your instructor to confirm it's published, then accept again.`,
+          doneMessage: "Resolved the autograder",
+          onStepUpdate,
+        },
+        () =>
+          resolveAutograderWorkflow({
+            org,
+            classroom,
+            autograder: assignment.autograder,
+            secret,
+            // Preliminary branch; the default shim is re-rendered post-create
+            // with the assignment repo's actual default branch (below).
+            branch: sourceBranch || "main",
+          }),
+      )
+  if (isEmptyRepo) {
+    onStepUpdate?.({
       id: "autograder",
-      label: "Resolving the autograder",
-      actions: `Couldn't resolve the autograder for "${assignmentSlug}". Ask your instructor to confirm it's published, then accept again.`,
-      doneMessage: "Resolved the autograder",
-      onStepUpdate,
-    },
-    () =>
-      resolveAutograderWorkflow({
-        org,
-        classroom,
-        autograder: assignment.autograder,
-        secret,
-        // Preliminary branch; the default shim is re-rendered post-create with
-        // the assignment repo's actual default branch (below).
-        branch: sourceBranch || "main",
-      }),
-  )
+      status: "complete",
+      message: "Autograding is disabled for this assignment",
+    })
+  }
 
   const studentRepoNameValue = studentRepoName(
     classroom,
@@ -342,8 +359,59 @@ export async function acceptAssignment(params: {
         owner: org,
         name: studentRepoNameValue,
         fallbackBranch: sourceBranch || "main",
+        bare: isEmptyRepo,
       }),
   )
+
+  // Bare (empty_repo) path: no control files exist or are ever committed, so
+  // the marker probe below is meaningless — an existing repo IS an accepted
+  // repo. The only provisioning is the surface patch + founder grant (both
+  // idempotent upserts — same least-privilege rule as the normal path), re-run
+  // unconditionally to heal a prior accept that died between create and grant.
+  // The "setup" step is marked complete (as skipped) so the checklist doesn't
+  // look stuck.
+  if (isEmptyRepo) {
+    const alreadyAccepted = created.kind === "already-accepted"
+    if (alreadyAccepted) {
+      onStepUpdate?.({
+        id: "repo",
+        status: "complete",
+        message: `Repository already exists: ${org}/${created.repo.name}`,
+      })
+    }
+
+    await withAcceptStep(
+      {
+        id: "access",
+        label: "Granting you access to your repository",
+        actions: `Your repository ${org}/${created.repo.name} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
+        doneMessage: "Granted you access to your repository",
+        onStepUpdate,
+      },
+      async () => {
+        await patchRepoSurface(client, org, created.repo.name)
+        await addFounderCollaborator({
+          client,
+          owner: org,
+          repo: created.repo.name,
+          username,
+          permission: founderPermission(assignment.mode),
+          isOwner,
+        })
+      },
+    )
+    onStepUpdate?.({
+      id: "setup",
+      status: "complete",
+      message: "No setup needed — this assignment uses an empty repository",
+    })
+
+    return {
+      status: alreadyAccepted ? "already-accepted" : "created",
+      repo: created.repo,
+      cloneCommand: `git clone ${created.repo.ssh_url}`,
+    }
+  }
 
   // The default shim's push-trigger branch must match the assignment repo's
   // actual default branch (which GitHub, not the template, decides — a `main`

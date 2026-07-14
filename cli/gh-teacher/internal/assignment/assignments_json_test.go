@@ -1238,3 +1238,153 @@ func TestNextAvailableSlug_OverflowsCap(t *testing.T) {
 		t.Errorf("error should point at --slug, got %v", err)
 	}
 }
+
+func TestParseAssignments_EmptyRepoRoundTrip(t *testing.T) {
+	// empty_repo=true parses, survives a re-encode/re-parse, and an entry
+	// without the field defaults to false. Mirrors the feedback_pr wire
+	// shape: omitempty, absent reads as false.
+	in := []byte(`{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [
+    {
+      "slug": "bare",
+      "name": "Bare",
+      "mode": "individual",
+      "autograder": "default",
+      "empty_repo": true
+    },
+    {
+      "slug": "world",
+      "name": "World",
+      "template": { "owner": "cs50", "repo": "world-template", "branch": "main" },
+      "mode": "individual",
+      "autograder": "default"
+    }
+  ]
+}`)
+	file, err := ParseAssignments(in)
+	if err != nil {
+		t.Fatalf("ParseAssignments: %v", err)
+	}
+	if !file.Assignments[0].EmptyRepo {
+		t.Errorf("bare.EmptyRepo = false, want true")
+	}
+	if file.Assignments[1].EmptyRepo {
+		t.Errorf("world.EmptyRepo = true, want false (field absent)")
+	}
+
+	encoded, err := EncodeAssignments(file)
+	if err != nil {
+		t.Fatalf("EncodeAssignments: %v", err)
+	}
+	// false omits from the wire (omitempty); true must persist.
+	if !strings.Contains(string(encoded), `"empty_repo": true`) {
+		t.Errorf("encoded missing empty_repo:\n%s", encoded)
+	}
+	if strings.Contains(string(encoded), `"empty_repo": false`) {
+		t.Errorf("empty_repo:false should omit, not serialize:\n%s", encoded)
+	}
+	again, err := ParseAssignments(encoded)
+	if err != nil {
+		t.Fatalf("re-parse: %v", err)
+	}
+	if !again.Assignments[0].EmptyRepo || again.Assignments[1].EmptyRepo {
+		t.Errorf("empty_repo not stable across round-trip: %#v", again.Assignments)
+	}
+}
+
+// TestValidateAssignmentEntry_EmptyRepoHappyPath: a bare empty_repo entry
+// (no template, no grading fields) passes both validators.
+func TestValidateAssignmentEntry_EmptyRepoHappyPath(t *testing.T) {
+	entry := AssignmentEntry{
+		Slug:       "bare",
+		Name:       "Bare",
+		Mode:       "individual",
+		Autograder: "default",
+		EmptyRepo:  true,
+	}
+	if err := ValidateAssignmentEntry(entry); err != nil {
+		t.Errorf("ValidateAssignmentEntry(empty_repo): %v", err)
+	}
+	if err := ValidateExistingEntry(entry); err != nil {
+		t.Errorf("ValidateExistingEntry(empty_repo): %v", err)
+	}
+}
+
+// TestValidateAssignmentEntry_EmptyRepoExclusions: every grading-adjacent
+// field is rejected alongside empty_repo, on both the write and parse paths.
+func TestValidateAssignmentEntry_EmptyRepoExclusions(t *testing.T) {
+	threshold := 70
+	base := AssignmentEntry{
+		Slug:       "bare",
+		Name:       "Bare",
+		Mode:       "individual",
+		Autograder: "default",
+		EmptyRepo:  true,
+	}
+	cases := []struct {
+		name    string
+		mutate  func(e *AssignmentEntry)
+		wantSub string
+	}{
+		{
+			name:    "template",
+			mutate:  func(e *AssignmentEntry) { e.Template = &TemplateRef{Owner: "o", Repo: "r", Branch: "main"} },
+			wantSub: "template",
+		},
+		{
+			name: "tests",
+			mutate: func(e *AssignmentEntry) {
+				e.Tests = []TestSpec{{Name: "t", Type: "run", Run: "true", Points: 1}}
+			},
+			wantSub: "tests",
+		},
+		{
+			name:    "feedback_pr",
+			mutate:  func(e *AssignmentEntry) { e.FeedbackPR = true },
+			wantSub: "feedback_pr",
+		},
+		{
+			name:    "allowed_files",
+			mutate:  func(e *AssignmentEntry) { e.AllowedFiles = []string{"*"} },
+			wantSub: "allowed_files",
+		},
+		{
+			name:    "pass_threshold",
+			mutate:  func(e *AssignmentEntry) { e.PassThreshold = &threshold },
+			wantSub: "pass_threshold",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			entry := base
+			tc.mutate(&entry)
+			if err := ValidateAssignmentEntry(entry); err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+				t.Errorf("write path: got %v, want an error mentioning %q", err, tc.wantSub)
+			}
+			if err := ValidateExistingEntry(entry); err == nil || !strings.Contains(err.Error(), tc.wantSub) {
+				t.Errorf("parse path: got %v, want an error mentioning %q", err, tc.wantSub)
+			}
+		})
+	}
+}
+
+// TestValidateEmptyRepoUnchanged: empty_repo is immutable on upsert — a flip
+// in either direction errors; same-value replacement is fine.
+func TestValidateEmptyRepoUnchanged(t *testing.T) {
+	bare := AssignmentEntry{Slug: "hw", EmptyRepo: true}
+	normal := AssignmentEntry{Slug: "hw", EmptyRepo: false}
+
+	if err := ValidateEmptyRepoUnchanged(bare, bare); err != nil {
+		t.Errorf("same value (true): %v", err)
+	}
+	if err := ValidateEmptyRepoUnchanged(normal, normal); err != nil {
+		t.Errorf("same value (false): %v", err)
+	}
+	if err := ValidateEmptyRepoUnchanged(bare, normal); err == nil || !strings.Contains(err.Error(), "empty_repo cannot be changed") {
+		t.Errorf("flip true->false: got %v, want the immutability error", err)
+	}
+	if err := ValidateEmptyRepoUnchanged(normal, bare); err == nil || !strings.Contains(err.Error(), "empty_repo cannot be changed") {
+		t.Errorf("flip false->true: got %v, want the immutability error", err)
+	}
+}

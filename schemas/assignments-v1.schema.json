@@ -92,6 +92,10 @@
           "type": "boolean",
           "description": "Opt the assignment into the Feedback Pull Request: the autograde runner opens one long-lived PR per student repo (base = a frozen branch at the baseline commit, head = the default branch) for inline instructor review of the full starter→submission diff. Product default is ON (both `gh teacher assignment add` and the GUI create it enabled). On the wire it is collapsed: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; the GUI may also write `false` explicitly, so accept both. Absent or false means the PR never opens."
         },
+        "empty_repo": {
+          "type": "boolean",
+          "description": "Opt the assignment into truly bare student repos: accept creates the repo with no initial commit (auto_init false) and commits NO control files — no README, no .classroom50.yaml accept marker, no .github/workflows/autograde.yaml shim. Autograding and the Feedback PR are disabled for the assignment; regrade and score collection skip it. Mutually exclusive with template, tests, feedback_pr, allowed_files, and pass_threshold (see the conditional at the assignment level). IMMUTABLE after creation: flipping it later would require retrofitting control files into (or stripping them from) every already-accepted student repo, so writers must reject an edit that changes it. On the wire it is collapsed like feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
+        },
         "allowed_files": {
           "type": "array",
           "maxItems": 100,
@@ -128,6 +132,18 @@
           "if": { "properties": { "mode": { "const": "group" } } },
           "then": { "required": ["max_group_size"] },
           "else": { "not": { "required": ["max_group_size"] } }
+        },
+        {
+          "if": { "properties": { "empty_repo": { "const": true } }, "required": ["empty_repo"] },
+          "then": {
+            "allOf": [
+              { "not": { "required": ["template"] } },
+              { "not": { "required": ["tests"] } },
+              { "not": { "required": ["allowed_files"] } },
+              { "not": { "required": ["pass_threshold"] } },
+              { "properties": { "feedback_pr": { "const": false } } }
+            ]
+          }
         }
       ]
     },

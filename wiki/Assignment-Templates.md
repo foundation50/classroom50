@@ -2,7 +2,7 @@
 
 An assignment's starter code in classroom50 is a normal GitHub repo with the "Template repository" flag turned on. `gh student accept` creates a fresh private copy of the template for each student; `gh student submit` fetches a couple of files back from it on every submit. This page describes the expected layout.
 
-> **Templates are optional.** An instructor can register an assignment without a template (`gh teacher assignment add` with no `--template`). Students then get an *empty* private repo containing only the autograder workflow shim — useful for write-from-scratch or short-answer work. The rest of this page applies only to assignments that *do* ship a template.
+> **Templates are optional.** An instructor can register an assignment without a template (`gh teacher assignment add` with no `--template`). Students then get an *empty* private repo containing only the autograder workflow shim — useful for write-from-scratch or short-answer work. For repos with *nothing at all* in them — no shim, no metadata, no autograding — pass `--empty-repo` instead (see the [teacher CLI guide](gh-teacher)). The rest of this page applies only to assignments that *do* ship a template.
 
 A worked example lives at [`templates/example-assignment/`](https://github.com/foundation50/classroom50/tree/main/templates/example-assignment).
 
