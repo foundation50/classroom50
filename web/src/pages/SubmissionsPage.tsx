@@ -190,6 +190,10 @@ const SubmissionsPageContent = () => {
     return rosterReady ? rosterScopedRows(rows, students) : rows
   }, [scoresData, assignment, rosterReady, students])
 
+  // Org repo list drives repo-existence signals (individual acceptance below and
+  // group-repo enumeration here).
+  const { data: orgRepos } = useGetOrgRepos(org ?? "")
+
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
   const lateCount = scoresInfo.filter((row) => row.late).length
@@ -202,23 +206,48 @@ const SubmissionsPageContent = () => {
     ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
     : null
 
+  // Group repos that already exist for this assignment, derived from the org
+  // repo list (empty for individual assignments). Named after the founder, so
+  // the `owner` segment is a roster login when the founder is enrolled. Computed
+  // here so both the non-submitter list (to avoid double-listing a founder who
+  // has a repo) and the group-repo rows below share one derivation.
+  const groupRepoList = useMemo(
+    () =>
+      isGroupAssignment
+        ? existingGroupRepos(
+            orgRepos,
+            classroom ?? "",
+            assignment ?? "",
+            new Set(),
+          )
+        : [],
+    [isGroupAssignment, orgRepos, classroom, assignment],
+  )
+  const groupRepoFounders = useMemo(
+    () => new Set(groupRepoList.map((repo) => repo.owner)),
+    [groupRepoList],
+  )
+
   // Roster students with no submission. "Credited" = login appears in any row's
   // `usernames` (member_usernames for groups, else [owner]), so group teammates
   // aren't falsely flagged. For groups, uncredited students surface as
   // "No group · not submitted" (see #174) — a student who never joined a
   // submitting group has no repo, so the row makes the omission explicit
-  // instead of vanishing. Gated on scores having loaded — until then scoresInfo
-  // is empty and would flag the whole roster.
+  // instead of vanishing. A founder whose group repo exists but hasn't submitted
+  // is excluded here — they already appear as a group-repo row (#245), so listing
+  // them as "no group" too would double-count them. Gated on scores having
+  // loaded — until then scoresInfo is empty and would flag the whole roster.
   const scoresLoaded = scoresData !== undefined
   const nonSubmitters = useMemo(() => {
     if (!scoresLoaded) return []
     const credited = new Set(
       scoresInfo.flatMap((row) => row.usernames.map((u) => u.toLowerCase())),
     )
-    return students.filter(
-      (student) => !credited.has(student.username.toLowerCase()),
-    )
-  }, [scoresLoaded, scoresInfo, students])
+    return students.filter((student) => {
+      const login = student.username.toLowerCase()
+      return !credited.has(login) && !groupRepoFounders.has(login)
+    })
+  }, [scoresLoaded, scoresInfo, students, groupRepoFounders])
 
   // Dashboard controls — all client-side over already-loaded data.
   const [query, setQuery] = useState("")
@@ -243,7 +272,6 @@ const SubmissionsPageContent = () => {
 
   // Deterministic acceptance from the org repo list (see acceptedUsernames);
   // individual assignments only, so gated on acceptedAvailable.
-  const { data: orgRepos } = useGetOrgRepos(org ?? "")
   const acceptedSet = useMemo(
     () =>
       acceptedUsernames(orgRepos, classroom ?? "", assignment ?? "", students),
@@ -261,16 +289,8 @@ const SubmissionsPageContent = () => {
     [scoresInfo],
   )
   const unsubmittedGroupRepos = useMemo(
-    () =>
-      isGroupAssignment
-        ? existingGroupRepos(
-            orgRepos,
-            classroom ?? "",
-            assignment ?? "",
-            submittedGroupOwners,
-          ).filter((repo) => !repo.submitted)
-        : [],
-    [isGroupAssignment, orgRepos, classroom, assignment, submittedGroupOwners],
+    () => groupRepoList.filter((repo) => !submittedGroupOwners.has(repo.owner)),
+    [groupRepoList, submittedGroupOwners],
   )
 
   // Section filtering: distinct sections for the dropdown, plus a username ->
