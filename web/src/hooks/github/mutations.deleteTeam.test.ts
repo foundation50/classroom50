@@ -147,4 +147,39 @@ describe("deleteClassroomTeam fail-closed guard", () => {
     ).resolves.toBeUndefined()
     expect(deletes).toEqual([])
   })
+
+  // The live-id GET matches, so we reach the DELETE; a 404 there (deleted
+  // between check and delete) is tolerated as success.
+  it("tolerates a 404 on the DELETE itself (gone between check and delete)", async () => {
+    const request = vi.fn(
+      async (_path: string, init?: { method?: string }): Promise<unknown> => {
+        if (init?.method === "DELETE") throw apiError(404)
+        return { id: 11 }
+      },
+    )
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      deleteClassroomTeam(client, "acme", {
+        id: 11,
+        slug: "classroom50-cs101-ta",
+      }),
+    ).resolves.toBeUndefined()
+  })
+
+  // A non-404 failure on the DELETE must propagate — never silently swallowed.
+  it("rethrows a non-404 error on the DELETE", async () => {
+    const request = vi.fn(
+      async (_path: string, init?: { method?: string }): Promise<unknown> => {
+        if (init?.method === "DELETE") throw apiError(500)
+        return { id: 11 }
+      },
+    )
+    const client = { request } as unknown as GitHubClient
+    await expect(
+      deleteClassroomTeam(client, "acme", {
+        id: 11,
+        slug: "classroom50-cs101-ta",
+      }),
+    ).rejects.toBeInstanceOf(GitHubAPIError)
+  })
 })

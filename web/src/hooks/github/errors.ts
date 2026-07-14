@@ -211,14 +211,18 @@ export function readGitHubRateLimitHeaders(res: Response): GitHubRateLimit {
 // caller can't read) and `onCaught` for a side-effect (e.g. log.warn) before
 // returning. Any error the predicate rejects, and any non-GitHubAPIError throw,
 // rethrows unchanged.
-export async function tolerateGitHubError<T>(
+//
+// `F` defaults to `T` but is separate so a fallback wider than the op result
+// (e.g. op yields `GitHubRepo[]`, fallback is `null`) types as `T | F` without a
+// cast at the call site.
+export async function tolerateGitHubError<T, F = T>(
   op: () => Promise<T>,
-  fallback: T,
+  fallback: F,
   opts?: {
     predicate?: (err: GitHubAPIError) => boolean
     onCaught?: (err: GitHubAPIError) => void
   },
-): Promise<T> {
+): Promise<T | F> {
   try {
     return await op()
   } catch (err) {

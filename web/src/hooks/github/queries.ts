@@ -1352,7 +1352,7 @@ export async function getOpenPullRequests(
         `/repos/${owner}/${repo}/pulls?state=open&per_page=10`,
         { method: "GET", signal },
       ),
-    [] as GitHubPullRequest[],
+    [],
   )
 }
 
@@ -1367,7 +1367,7 @@ export async function getOrgRepos(client: GitHubClient, owner: string) {
         client,
         (page) => `/orgs/${owner}/repos?per_page=100&page=${page}&type=all`,
       ),
-    null as GitHubRepo[] | null,
+    null,
   )
 }
 

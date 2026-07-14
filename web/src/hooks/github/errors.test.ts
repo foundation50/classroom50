@@ -306,4 +306,18 @@ describe("tolerateGitHubError", () => {
       }, null),
     ).rejects.toThrow("network")
   })
+
+  it("does not run onCaught on the rethrow path", async () => {
+    let ran = false
+    await expect(
+      tolerateGitHubError(
+        async () => {
+          throw apiError(500)
+        },
+        null,
+        { onCaught: () => (ran = true) },
+      ),
+    ).rejects.toThrow("HTTP 500")
+    expect(ran).toBe(false)
+  })
 })

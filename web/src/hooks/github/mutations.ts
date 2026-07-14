@@ -768,7 +768,7 @@ export async function cancelOrgInvitation(
 ): Promise<{ cancelled: boolean }> {
   const { org, invitationId } = input
 
-  return tolerateGitHubError<{ cancelled: boolean }>(
+  return tolerateGitHubError(
     async () => {
       await client.request(`/orgs/${org}/invitations/${invitationId}`, {
         method: "DELETE",
