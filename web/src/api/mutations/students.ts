@@ -39,7 +39,7 @@ import {
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "../github/queries"
+} from "@/hooks/github/configRepoReads"
 import {
   GitHubAPIError,
   isDefinitiveGitHubStatus,

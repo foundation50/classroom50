@@ -11,10 +11,8 @@ import {
   useInvalidateTeamRoster,
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
-import {
-  enrollStudentInClassroom,
-  getErrorMessage,
-} from "@/hooks/github/mutations"
+import { enrollStudentInClassroom } from "@/api/mutations/students"
+import { getErrorMessage } from "@/hooks/github/mutations"
 import {
   inviteByEmail,
   StudentAlreadyEnrolledError,

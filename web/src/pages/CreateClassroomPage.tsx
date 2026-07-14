@@ -2,7 +2,7 @@ import { useParams, useNavigate } from "@tanstack/react-router"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 
-import { createClassroomFilesWithConflictRetry } from "@/hooks/github/mutations"
+import { createClassroomFilesWithConflictRetry } from "@/api/mutations/classrooms"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useToast } from "@/context/notifications/NotificationProvider"

@@ -7,7 +7,7 @@ import {
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "../github/queries"
+} from "@/hooks/github/configRepoReads"
 import { sleep } from "@/hooks/github/queries"
 import { isClassroomArchived } from "@/types/classroom"
 import {

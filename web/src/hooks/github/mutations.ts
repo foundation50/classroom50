@@ -16,11 +16,11 @@ import {
   getClassroomJson,
   getCommit,
   getConfigRepoBranch,
-} from "@/api/github/queries"
+} from "./configRepoReads"
 import type { CreateClassroomInput } from "@/api/mutations/classrooms"
 import type { StaffRole } from "@/types/classroom"
 import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
-import { STUDENT_CSV_FIELDS } from "@/api/mutations/students"
+import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
 import { getRepo } from "./queries"
 import { checkPages, repairOrgDefaults } from "./orgChecks"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
@@ -70,10 +70,9 @@ const createClassroomMetadata = (
 })
 
 // Seed header for a new classroom's empty roster.csv. Derived from the single
-// source of truth (STUDENT_CSV_FIELDS) so it can't drift; computed lazily (not
-// at module-eval) to dodge the students.ts <-> mutations.ts circular-import TDZ.
-// The parser is header-based, so an older roster still parses.
-const studentsCsvHeader = () => STUDENT_CSV_FIELDS.join(",") + "\n"
+// source of truth (STUDENT_CSV_FIELDS) so it can't drift. The parser is
+// header-based, so an older roster still parses.
+const STUDENTS_CSV_HEADER = STUDENT_CSV_FIELDS.join(",") + "\n"
 const createClassroomBody = (
   base_tree: string,
   org: string,
@@ -100,7 +99,7 @@ const createClassroomBody = (
         path: `${classroom}/roster.csv`,
         mode,
         type,
-        content: studentsCsvHeader(),
+        content: STUDENTS_CSV_HEADER,
       },
       {
         path: `${classroom}/scores.json`,
@@ -342,11 +341,6 @@ export function updateRefForRepo(params: {
   )
 }
 
-export {
-  createClassroomFiles,
-  createClassroomFilesWithConflictRetry,
-} from "@/api/mutations/classrooms"
-
 // One entry in a git tree write. GitHub accepts either inline `content` or a
 // `sha` (existing blob, or `null` to delete the path).
 export type GitTreeFileMode = "100644" | "100755" | "120000"
@@ -399,11 +393,6 @@ export function createGitCommit(
     },
   )
 }
-
-export {
-  createAssignment,
-  createAssignmentWithConflictRetry,
-} from "@/api/mutations/assignments"
 
 export type CreateTeamInput = {
   org: string
@@ -1031,15 +1020,6 @@ export async function resendOrgInvitation(
 
   return result
 }
-
-export {
-  addStudentToClassroom,
-  addStudentToClassroomWithConflictRetry,
-  enrollStudentInClassroom,
-  addStudentsToClassroom,
-  bulkEnrollStudentsInClassroom,
-  addStudentsToClassroomWithConflictRetry,
-} from "@/api/mutations/students"
 
 export async function getPendingOrgInvite(client: GitHubClient, org: string) {
   return client.request<GitHubOrgMembership>(`/user/memberships/orgs/${org}`)

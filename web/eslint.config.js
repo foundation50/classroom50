@@ -3,6 +3,7 @@ import globals from "globals"
 import reactHooks from "eslint-plugin-react-hooks"
 import reactRefresh from "eslint-plugin-react-refresh"
 import jsxA11y from "eslint-plugin-jsx-a11y"
+import { importX } from "eslint-plugin-import-x"
 import tseslint from "typescript-eslint"
 import prettier from "eslint-config-prettier/flat"
 import { defineConfig, globalIgnores } from "eslint/config"
@@ -106,6 +107,18 @@ export default defineConfig([
             'A <Button> inside a <form> needs an explicit `type`: add type="submit" for the submit action or type="button" for a click handler. The <Button> default is "button", which silently disables implicit form submit.',
         },
       ],
+    },
+  },
+  // Guard the data-layer boundary: no runtime import cycle. The api/ <-> data
+  // layer once cycled (barrel re-exports + a TDZ workaround); this keeps it
+  // broken. Scoped to the data layer where cycles are the real risk and
+  // maxDepth-bounded because no-cycle is O(N*M^2). Type-only imports are
+  // ignored by the rule, so the remaining `import type` edges don't trip it.
+  {
+    files: ["src/hooks/github/**/*.ts", "src/api/**/*.ts"],
+    plugins: { "import-x": importX },
+    rules: {
+      "import-x/no-cycle": ["error", { maxDepth: 4, ignoreExternal: true }],
     },
   },
   // The only files allowed to touch `console` directly: the logger wrapper

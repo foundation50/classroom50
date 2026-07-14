@@ -7,7 +7,7 @@
 // lists exactly what will be deleted.
 
 import type { GitHubClient } from "@/hooks/github/client"
-import { getClassroomJson } from "@/api/github/queries"
+import { getClassroomJson } from "@/hooks/github/configRepoReads"
 import { GitHubAPIError } from "@/hooks/github/errors"
 import {
   deleteClassroomTeam,

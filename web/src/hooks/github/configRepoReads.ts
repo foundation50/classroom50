@@ -7,6 +7,11 @@ import type {
 import type { Classroom } from "@/types/classroom"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
+// Low-level config-repo read primitives. These live in the data layer beneath
+// the domain operations (api/mutations/*) that compose them, so the dependency
+// points downward — data layer -> transport — with no api/ <-> hooks/github
+// cycle. Moved here from api/github/queries.ts for that reason.
+
 // The classroom50 config repo's default branch. Org policy can seed a new repo
 // on `master`, so config-repo reads/writes must target the real branch, not a
 // hardcoded default. Falls back to DEFAULT_BRANCH only when the value is empty.

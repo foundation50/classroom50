@@ -34,7 +34,7 @@ import {
 } from "./mutations"
 import { decodeBase64Utf8 } from "@/util/github"
 import { mapWithConcurrency } from "@/util/concurrency"
-import { getCommit } from "@/api/github/queries"
+import { getCommit } from "./configRepoReads"
 import { classroomPagesSegment } from "@/util/secret"
 import type { GetAssignmentsFileInput } from "@/api/queries/assignments"
 import type { OrgRunner, OrgRunnersResult } from "@/util/runners"

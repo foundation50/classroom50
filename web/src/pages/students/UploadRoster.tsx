@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Upload } from "lucide-react"
 
 import Papa from "papaparse"
-import { bulkEnrollStudentsInClassroom } from "@/hooks/github/mutations"
+import { bulkEnrollStudentsInClassroom } from "@/api/mutations/students"
 import type { GitHubClient } from "@/hooks/github/client"
 import { Alert, Button, Modal, Select, Spinner } from "@/components/ui"
 import {
