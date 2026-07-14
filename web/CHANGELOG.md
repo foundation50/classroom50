@@ -17,6 +17,22 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.5.0](https://github.com/foundation50/classroom50/compare/web-v1.4.0...web-v1.5.0) (2026-07-14)
+
+
+### Features
+
+* grant students push (not admin) on individual assignment repos ([#231](https://github.com/foundation50/classroom50/issues/231)) ([052ce36](https://github.com/foundation50/classroom50/commit/052ce360eca39f4e90dcc981abc000d3ae9df627))
+* **web:** surface pending org invitations on the home page ([#239](https://github.com/foundation50/classroom50/issues/239)) ([02ef9cb](https://github.com/foundation50/classroom50/commit/02ef9cb7e3de1f4966020be2fd28843ccbb30668))
+
+
+### Bug Fixes
+
+* keep classroom creator on the instructor team only ([#243](https://github.com/foundation50/classroom50/issues/243)) ([511d3f0](https://github.com/foundation50/classroom50/commit/511d3f0fcc5f6b85a41db1ce5b11f199c475de6d))
+* support non-main default branches in org setup and submit ([#235](https://github.com/foundation50/classroom50/issues/235)) ([1b31591](https://github.com/foundation50/classroom50/commit/1b31591ae51e8f81cce71f0720caeafaa33ce430))
+* **web:** count only role=student in classroom student stats ([#241](https://github.com/foundation50/classroom50/issues/241)) ([c17f59e](https://github.com/foundation50/classroom50/commit/c17f59eb1446355cd0a08caa60a8c333baf4c2bb))
+* **web:** isolate classroom invitations per team (reads + unenroll) ([#237](https://github.com/foundation50/classroom50/issues/237)) ([3351eb5](https://github.com/foundation50/classroom50/commit/3351eb5c6939202f89f43fc8beb95971df584ebf))
+
 ## [1.4.0](https://github.com/foundation50/classroom50/compare/web-v1.3.0...web-v1.4.0) (2026-07-13)
 
 
