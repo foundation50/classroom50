@@ -18,6 +18,7 @@ import {
   Toolbar,
 } from "@/components/ui"
 import Avatar from "@/components/avatar"
+import { RoleBadges } from "./RoleBadges"
 import type { Student } from "@/types/classroom"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { syncRosterFromTeam, migrateRosterFile } from "@/api/mutations/students"
@@ -46,11 +47,9 @@ import { roleForOrgRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
-  ROLE_BADGE_TONE,
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
   hasStudentEnrollment,
-  primaryRole,
 } from "@/util/rosterRoles"
 import {
   filterRosterRows,
@@ -635,27 +634,16 @@ const EnrolledStudents = ({
         </div>
         <div className="flex shrink-0 items-center gap-2">
           {(() => {
-            // Enrolled/pending rows assert a role (the team is the authority),
-            // shown as the highest-precedence badge (instructor > ta > student;
-            // student uses the neutral ghost). Needs-attention rows have no
-            // team role yet, so they render no role badge.
+            // Enrolled/pending rows assert role(s) (the team is the authority),
+            // shown as one badge per role via RoleBadges. Needs-attention rows
+            // have no team role yet, so they render no role badge.
             if (
               row.state === "needs_attention_in_org" ||
               row.state === "needs_attention_not_in_org"
             ) {
               return null
             }
-            const role = primaryRole(row)
-            return (
-              <Badge
-                size="sm"
-                tone={ROLE_BADGE_TONE[role]}
-                ghost={role === "student"}
-                className="shrink-0"
-              >
-                {t(ROLE_LABEL_KEY[role])}
-              </Badge>
-            )
+            return <RoleBadges roles={row.roles} />
           })()}
           {row.section.trim() ? (
             <span className="badge badge-sm badge-info badge-soft shrink-0">
