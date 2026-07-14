@@ -15,6 +15,7 @@ import {
 } from "../github/queries"
 import { getUser } from "@/hooks/github/queries"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { GitHubAPIError } from "@/hooks/github/errors"
 
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
@@ -977,7 +978,7 @@ async function tryGrantTeamTemplateRead(
     return (
       `Assignment "${slug}" was saved, but granting the classroom team read on ` +
       `the private template ${template.owner}/${template.repo} failed (${detail}). ` +
-      `Students can't accept it until the classroom50-${classroom} team is granted ` +
+      `Students can't accept it until the ${classroomTeamSlug(classroom)} team is granted ` +
       `read on that repo — grant the team read on ${template.owner}/${template.repo} ` +
       `directly in GitHub (Settings -> Collaborators and teams), then students can accept.`
     )

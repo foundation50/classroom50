@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest"
-import {
-  classroomTeamSlugHeuristic,
-  isValidEmail,
-  normalizeEmail,
-} from "./orgMembership"
+import { isValidEmail, normalizeEmail } from "./orgMembership"
 
 describe("normalizeEmail", () => {
   it("lowercases and trims", () => {
@@ -27,13 +23,5 @@ describe("isValidEmail", () => {
     expect(isValidEmail("nope")).toBe(false)
     expect(isValidEmail("a@b")).toBe(false)
     expect(isValidEmail("a @b.com")).toBe(false)
-  })
-})
-
-describe("classroomTeamSlugHeuristic", () => {
-  it("derives classroom50-<classroom>", () => {
-    expect(classroomTeamSlugHeuristic("cs-principles")).toBe(
-      "classroom50-cs-principles",
-    )
   })
 })

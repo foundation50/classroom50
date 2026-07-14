@@ -14,7 +14,6 @@ import {
   readOrgMembershipState,
   removeUserFromTeam,
   setOrgMembershipRole,
-  staffTeamName,
   updateRef,
   type GitTreeEntry,
 } from "@/hooks/github/mutations"
@@ -61,6 +60,7 @@ import {
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { ROLE_RANK, orgRoleForRole, type RosterRole } from "@/util/teamRoster"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { memberIdentitySets } from "@/util/identity"
 import {
   classifyRosterUpload,
@@ -236,7 +236,7 @@ async function resolveClassroomTeam(
       throw err
     }
   }
-  return { slug: `classroom50-${classroom}` }
+  return { slug: classroomTeamSlug(classroom) }
 }
 
 // Read-only resolution of the GitHub team id for a role from classroom.json —
@@ -940,11 +940,12 @@ async function resolveClassroomTeamSlugs(
     }
   }
   return {
-    student: json?.team?.slug || `classroom50-${classroom}`,
+    student: json?.team?.slug || classroomTeamSlug(classroom),
     staff: {
       instructor:
-        json?.teams?.instructor?.slug || staffTeamName(classroom, "instructor"),
-      ta: json?.teams?.ta?.slug || staffTeamName(classroom, "ta"),
+        json?.teams?.instructor?.slug ||
+        classroomTeamSlug(classroom, "instructor"),
+      ta: json?.teams?.ta?.slug || classroomTeamSlug(classroom, "ta"),
     },
   }
 }

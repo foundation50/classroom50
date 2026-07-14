@@ -15,13 +15,13 @@ import {
   getUser,
 } from "@/hooks/github/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
   removeUserFromTeam,
   resendOrgInvitation,
   cancelOrgInvitation,
-  staffTeamName,
   grantTeamConfigRepoWrite,
 } from "@/hooks/github/mutations"
 import {
@@ -194,7 +194,7 @@ const AddStaff = ({
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(
           org,
-          staffTeamName(classroom, addedRole),
+          classroomTeamSlug(classroom, addedRole),
         ),
       })
       // Record the new staffer's role in roster.csv now (best-effort).
@@ -297,7 +297,7 @@ const StaffRoleList = ({
   const { t } = useTranslation()
   const client = useGitHubClient()
   const teamSlug = useMemo(
-    () => staffTeamName(classroom, role),
+    () => classroomTeamSlug(classroom, role),
     [classroom, role],
   )
   const membersQuery = useQuery(teamMembersQuery(client, org, teamSlug))
@@ -372,7 +372,7 @@ const StaffMemberRow = ({
   const queryClient = useQueryClient()
   const { notify } = useToast()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const teamSlug = staffTeamName(classroom, role)
+  const teamSlug = classroomTeamSlug(classroom, role)
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
   const rolePlural =
@@ -495,7 +495,7 @@ const PendingStaffRow = ({
   const client = useGitHubClient()
   const queryClient = useQueryClient()
   const { notify } = useToast()
-  const teamSlug = staffTeamName(classroom, role)
+  const teamSlug = classroomTeamSlug(classroom, role)
   const who = invite.login || invite.email || String(invite.id)
 
   const invalidate = () => {

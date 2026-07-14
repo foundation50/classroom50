@@ -7,11 +7,11 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/util/capabilities"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoWrite,
-  staffTeamName,
 } from "@/hooks/github/mutations"
 import { githubKeys } from "@/hooks/github/queries"
 import { Alert, Button } from "@/components/ui"
@@ -65,7 +65,7 @@ export function ClaimInstructorNotice({
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(
           org,
-          staffTeamName(classroom, "instructor"),
+          classroomTeamSlug(classroom, "instructor"),
         ),
       })
       // Re-resolve the viewer's classroom role: their instructor-team membership
@@ -74,7 +74,7 @@ export function ClaimInstructorNotice({
         queryKey: [
           "team-membership",
           org,
-          staffTeamName(classroom, "instructor"),
+          classroomTeamSlug(classroom, "instructor"),
           username,
         ],
       })

@@ -2,8 +2,7 @@ import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { GitHubAPIError, retryTransientGitHubError } from "./github/errors"
-import { staffTeamName } from "./github/mutations"
-import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import {
   resolveClassroomRole,
@@ -79,9 +78,8 @@ export function useClassroomRole(
   const { viewAs } = useRoleView()
 
   const teamSlug = (role: StaffRole) =>
-    org && classroom ? staffTeamName(classroom, role) : ""
-  const studentSlug =
-    org && classroom ? classroomTeamSlugHeuristic(classroom) : ""
+    org && classroom ? classroomTeamSlug(classroom, role) : ""
+  const studentSlug = org && classroom ? classroomTeamSlug(classroom) : ""
 
   const enabled = Boolean(org && classroom && username)
   const instructorQuery = useQuery({

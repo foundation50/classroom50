@@ -64,7 +64,7 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 }
 
 // staffTeamName derives the staff-role team name: `classroom50-<short>-<role>`.
-// Mirrors the web's staffTeamName. The short-name is canonical, so slug == name.
+// Mirrors the web's classroomTeamSlug(short, role). The short-name is canonical, so slug == name.
 func staffTeamName(shortName string, role StaffRole) string {
 	return "classroom50-" + shortName + "-" + string(role)
 }

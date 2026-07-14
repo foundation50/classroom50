@@ -36,8 +36,6 @@ vi.mock("@/hooks/github/mutations", () => ({
   ensureClassroomRoleTeam: (...a: unknown[]) => ensureTeamMock(...a),
   grantTeamConfigRepoWrite: (...a: unknown[]) => grantWriteMock(...a),
   addUserToTeam: (...a: unknown[]) => addUserMock(...a),
-  staffTeamName: (classroom: string, role: string) =>
-    `classroom50-${classroom}-${role}`,
 }))
 
 import { ClaimInstructorNotice } from "./ClaimInstructorNotice"

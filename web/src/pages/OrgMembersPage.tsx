@@ -21,6 +21,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"
 import { githubKeys, invalidateInviteQueries } from "@/hooks/github/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import useOrgMembersOverview from "@/hooks/useOrgMembersOverview"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { githubOrgPeopleUrl } from "@/util/orgUrl"
@@ -110,12 +111,12 @@ const OrgMembersPage = () => {
   }
 
   // Resolved GitHub team slug for a classroom (classroom.json.team.slug, else
-  // the classroom50-<classroom> heuristic). Must match the key
+  // the derived classroomTeamSlug). Must match the key
   // useOrgMembersOverview reads the team cache under, or optimistic writes below
   // target a cache nobody reads (a name-collision classroom's real slug differs
   // from the heuristic) and reintroduce the false "unprovisioned" flash.
   const teamSlugFor = (classroom: string) =>
-    teamSlugByClassroom.get(classroom) ?? `classroom50-${classroom}`
+    teamSlugByClassroom.get(classroom) ?? classroomTeamSlug(classroom)
 
   // Invalidate the non-racy caches a roster write touches: classroom.json and,
   // unless suppressed, the CSV. The team-members query is deliberately NOT

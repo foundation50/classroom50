@@ -1,15 +1,6 @@
-// Email + classroom-team-slug helpers shared by the CSV write path
-// (students.ts) and the student org-membership flow (/onboard and accept
-// pages). Survivors of the team-as-source-of-truth rework.
-
-// The classroom team slug a STUDENT derives (the authoritative slug is in the
-// private classroom.json they can't read). Safe-degrade: on a slug collision the
-// derived slug 404s and the membership read reports "not a member", so a miss
-// never grants false access. The teacher side reads the real slug via
-// resolveClassroomTeam.
-export function classroomTeamSlugHeuristic(classroom: string): string {
-  return `classroom50-${classroom}`
-}
+// Email helpers shared by the CSV write path (students.ts) and the student
+// org-membership flow (/onboard and accept pages). Survivors of the
+// team-as-source-of-truth rework.
 
 // Canonical form for email comparison. Lowercase + trim only: deliberately do
 // NOT strip Gmail-style `+tags` or dots — those are provider-specific and would

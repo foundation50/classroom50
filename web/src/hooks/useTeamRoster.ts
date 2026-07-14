@@ -12,8 +12,7 @@ import {
   orgMembersAllQuery,
 } from "@/hooks/github/queries"
 import { GitHubAPIError } from "@/hooks/github/errors"
-import { staffTeamName } from "@/hooks/github/mutations"
-import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   buildTeamRoster,
   countByState,
@@ -110,15 +109,14 @@ export function useTeamRoster(
   const isOwner = can("manageOrg", { orgRole })
 
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug =
-    classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
-  // Staff team slugs: prefer the classroom's stored slug, else the heuristic
-  // (same precedence as the student slug above).
+  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
+  // Staff team slugs: prefer the classroom's stored slug, else the derived
+  // classroomTeamSlug (same precedence as the student slug above).
   const instructorSlug =
     classroomJson?.teams?.instructor?.slug ||
-    staffTeamName(classroom, "instructor")
+    classroomTeamSlug(classroom, "instructor")
   const taSlug =
-    classroomJson?.teams?.ta?.slug || staffTeamName(classroom, "ta")
+    classroomJson?.teams?.ta?.slug || classroomTeamSlug(classroom, "ta")
 
   const {
     data: members,
@@ -375,8 +373,7 @@ export function useInvalidateTeamRoster(
 ): () => void {
   const queryClient = useQueryClient()
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug =
-    classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
+  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
 
   return useCallback(() => {
     void queryClient.invalidateQueries({
@@ -404,8 +401,7 @@ export function useSeedTeamMember(
 ): (member: OptimisticMember) => void {
   const queryClient = useQueryClient()
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug =
-    classroomJson?.team?.slug || classroomTeamSlugHeuristic(classroom)
+  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
 
   return useCallback(
     (member: OptimisticMember) => {

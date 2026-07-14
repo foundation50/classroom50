@@ -11,7 +11,7 @@ import {
 } from "@/hooks/github/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import useGetClasses from "@/hooks/useGetClasses"
-import { classroomTeamSlugHeuristic } from "@/util/orgMembership"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { toStudent } from "@/util/roster"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import {
@@ -34,7 +34,7 @@ export type OrgMembersOverview = {
   isLoading: boolean
   isError: boolean
   // classroom path -> resolved GitHub team slug (classroom.json.team.slug, else
-  // the classroom50-<classroom> heuristic). The SAME slug teamMembersByClassroom
+  // the derived classroomTeamSlug). The SAME slug teamMembersByClassroom
   // keys from, so optimistic team-cache writes on the Members page target the
   // cache this hook reads (a collided classroom's real slug can differ).
   teamSlugByClassroom: Map<string, string>
@@ -101,13 +101,13 @@ const useOrgMembersOverview = (org: string | undefined): OrgMembersOverview => {
   // Live members of each classroom's `classroom50-<classroom>` team — the
   // enrollment source of truth, cross-referenced against CSV-derived access to
   // surface drift. Slug resolves from classroom.json when present (GitHub may
-  // slugify a collided name differently), else the heuristic.
+  // slugify a collided name differently), else the derived classroomTeamSlug.
   const teamSlugs = useMemo(
     () =>
       classroomNames.map(
         (name, i) =>
           (metaQueries[i]?.data as Classroom | undefined)?.team?.slug ||
-          classroomTeamSlugHeuristic(name),
+          classroomTeamSlug(name),
       ),
     // metaQueries is a fresh array each render; depend on the stable signature.
     // eslint-disable-next-line react-hooks/exhaustive-deps

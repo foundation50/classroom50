@@ -19,6 +19,7 @@ import type {
 import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   GitHubAPIError,
   retryTransientGitHubError,
@@ -925,7 +926,7 @@ export async function getTeam(
   org: string,
   classroom: string,
 ) {
-  const teamSlug = `classroom50-${classroom}`
+  const teamSlug = classroomTeamSlug(classroom)
 
   return tolerateGitHubError(
     () => client.request<GitHubTeam>(`/orgs/${org}/teams/${teamSlug}`),
@@ -941,7 +942,7 @@ export async function teamHasRepoAccess(
   input: { org: string; classroom: string; owner: string; repo: string },
 ): Promise<boolean> {
   const { org, classroom, owner, repo } = input
-  const teamSlug = `classroom50-${classroom}`
+  const teamSlug = classroomTeamSlug(classroom)
 
   return tolerateGitHubError(async () => {
     await client.request(
@@ -961,7 +962,7 @@ export async function ensureTeam(
   if (existingTeam) return existingTeam
 
   try {
-    return await createTeam(client, { org, name: `classroom50-${classroom}` })
+    return await createTeam(client, { org, name: classroomTeamSlug(classroom) })
   } catch (error) {
     if (error instanceof GitHubAPIError && error.status === 422) {
       const team = await getTeam(client, org, classroom)

@@ -24,6 +24,7 @@ import { STUDENT_CSV_FIELDS } from "@/api/mutations/students"
 import { getRepo } from "./queries"
 import { checkPages, repairOrgDefaults } from "./orgChecks"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "./rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
@@ -516,19 +517,13 @@ export async function ensureClassroomTeam(
   classroom: string,
 ): Promise<ClassroomTeamRef & { created: boolean }> {
   assertCanonicalTeamShortName(classroom)
-  return ensureSecretTeamByName(client, org, `classroom50-${classroom}`)
+  return ensureSecretTeamByName(client, org, classroomTeamSlug(classroom))
 }
 
 // The per-classroom staff team refs persisted under classroom.json `teams`.
 export type StaffTeamRefs = {
   instructor?: ClassroomTeamRef
   ta?: ClassroomTeamRef
-}
-
-// The team name (== slug, given the canonical-short-name guard) for a staff
-// role: `classroom50-<classroom>-<role>`.
-export function staffTeamName(classroom: string, role: StaffRole): string {
-  return `classroom50-${classroom}-${role}`
 }
 
 // Create (or adopt) the per-classroom STAFF team for `role`, a `secret` team
@@ -541,7 +536,7 @@ export async function ensureClassroomRoleTeam(
   role: StaffRole,
 ): Promise<ClassroomTeamRef & { created: boolean }> {
   assertCanonicalTeamShortName(classroom)
-  return ensureSecretTeamByName(client, org, staffTeamName(classroom, role))
+  return ensureSecretTeamByName(client, org, classroomTeamSlug(classroom, role))
 }
 
 // Grant a team `push` (write) on the org's `classroom50` config repo, so its
