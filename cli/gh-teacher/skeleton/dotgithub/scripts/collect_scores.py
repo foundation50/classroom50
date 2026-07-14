@@ -71,13 +71,10 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
-# Repo permission collect-scores grants each staff role's team on every existing
-# student assignment repo and on private in-org templates. Hand-mirrored from Go
-# StaffTeamRepoPermissions in cli/gh-teacher/internal/configrepo/team.go (source
-# of truth) — keep in lockstep. A role absent here is granted nothing (the
-# instructor team gets its access at classroom setup; only the TA team needs a
-# collect-time grant today). A future head-TA write team is a one-line addition
-# here and in Go.
+# Repo permission the collect-time grant gives each staff role's team. Hand-
+# mirrored from Go StaffTeamRepoPermissions (source of truth; parity-tested) —
+# keep in lockstep. A role absent here gets nothing (the instructor team is
+# granted at classroom setup, so only TA needs a collect-time grant today).
 STAFF_TEAM_PERMISSIONS = {"ta": "pull"}
 
 RFC3339_RE = re.compile(
@@ -164,12 +161,10 @@ def main() -> int:
             failed_classrooms.append(classroom_short)
             continue
 
-        # Grant staff teams (e.g. TAs) repo access as a SEPARATE, non-fatal pass:
-        # it needs Administration, which collection does not, so a grant failure
-        # (a missing-Administration 403, a secret staff team, GitHub down) must
-        # NOT abort score collection — the core job — for this or any later
-        # classroom. Warn, mark the classroom failed so the run still exits
-        # non-zero (loud in CI), and fall through to collect.
+        # Staff-team grant is a SEPARATE, non-fatal pass: it needs Administration
+        # (collection doesn't), so its failure must not abort the core job. On
+        # failure, warn and mark the classroom failed (non-zero exit) but still
+        # collect — here and for every later classroom.
         try:
             grant_classroom_team_access(
                 api_url=api_url,
@@ -211,8 +206,8 @@ def main() -> int:
             # unreachable, so every remaining classroom would fail identically.
             # Abort the whole run loudly rather than warn-and-skip per classroom
             # (which would report a broken run as success that collected
-            # nothing). The staff-grant pass above is deliberately excluded from
-            # this abort — its Administration scope is not needed to collect.
+            # nothing). The staff-grant pass above is excluded — its
+            # Administration scope isn't needed to collect.
             if exc.code in (401, 403):
                 emit_error(
                     f"{classroom_short}: service token was rejected with HTTP {exc.code} "
@@ -732,17 +727,13 @@ def grant_classroom_team_access(
 ) -> None:
     """Grant each classroom staff team its mapped repo permission (see
     STAFF_TEAM_PERMISSIONS) on every EXISTING student assignment repo and on each
-    private, in-org assignment template. Additive + idempotent (grant_team_repo
-    skips a team that already has access), so re-running collection re-affirms
-    access cheaply.
+    private, in-org assignment template. Additive + idempotent, so re-running
+    collection re-affirms access cheaply.
 
-    Enrollment is team-driven, so the student-repo targets are the
-    (team member × assignment) product — the same set collect_classroom polls.
-    A per-repo 404/422 (repo not accepted yet, or template not org-owned) is
-    warned-and-skipped; a hard error (401/403 — e.g. the token lacks
-    Administration — or 599) propagates so main() aborts the run loudly.
-
-    A classroom with no `teams` block, or no mapped role present, is a no-op.
+    Student-repo targets are the (team member × assignment) product — the same
+    set collect_classroom polls. A per-repo 404/422 (repo not accepted yet, or
+    template not org-owned) is warned-and-skipped; a hard error (401/403/599)
+    propagates so main() aborts. A classroom with no mapped staff team is a no-op.
     """
     role_slugs = resolve_staff_team_slugs(classroom_meta)
     grant_slugs = {
@@ -850,7 +841,6 @@ def _dedupe_logins(logins: list[str]) -> list[str]:
         seen.add(key)
         out.append(login.strip())
     return out
-
 
 
 # Due-date / lateness ---------------------------------------------------------
@@ -1715,12 +1705,10 @@ def _http_send(
     body: bytes | None,
     _retries: int = 3,
 ) -> tuple[int, bytes]:
-    """Issue `method url` with bearer auth; return (status, body). Retries
-    5xx/429 with backoff (honoring Retry-After) and wraps a network stall into a
-    synthetic 599 so is_hard_http_error aborts the run. Routes through _OPENER so
-    a cross-host redirect strips Authorization. Mirrors regrade_repos.py's
-    transport; used only for the team-repo grant PUT/GET (collection itself is
-    GET-only via _http_get)."""
+    """Issue `method url` with bearer auth; return (status, body). Same
+    retry/backoff and synthetic-599 contract as _http_get_with_headers (and
+    _OPENER strips Authorization on a cross-host redirect). Mirrors
+    regrade_repos.py's transport; used only for the team-repo grant PUT/GET."""
     headers = {
         "Accept": accept,
         "Authorization": f"Bearer {token}",

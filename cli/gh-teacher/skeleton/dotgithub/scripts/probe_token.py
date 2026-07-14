@@ -360,15 +360,12 @@ def check_classroom_team(
 def check_staff_team_visible(
     api_url: str, org: str, token: str, classroom_short: str, role: str, team_slug: str
 ) -> Check:
-    """Staff-team visibility for the collect-time grant. `PUT /orgs/{org}/teams/
-    {slug}/repos/...` requires the token to SEE the team, not just repo
-    Administration — a scope the config-repo admin check can't prove. A secret
-    staff team the token can't see (or a Members-scope gap) would pass every
-    org/config check, then the grant's team_has_repo_access GET-404s -> PUT-404
-    is soft-skipped -> TAs silently get NO access while the run reports success.
-    Reading the staff team's members is the same visibility proxy used for the
-    student team; do it against the EXACT staff slug the grant targets so that
-    green-while-red gap fails RED here instead."""
+    """Staff-team visibility for the collect-time grant. `PUT .../teams/{slug}/
+    repos/...` needs the token to SEE the team — a scope the config-repo admin
+    check can't prove. Without this probe, a secret/invisible staff team passes
+    every other check, then the grant soft-skips its 404 and TAs silently get NO
+    access while the run reports success. Reading the team's members is the same
+    visibility proxy used for the student team, against the exact grant slug."""
     url = (
         f"{api_url}/orgs/{urllib.parse.quote(org, safe='')}/teams/"
         f"{urllib.parse.quote(team_slug, safe='')}/members?per_page=1"
@@ -465,9 +462,7 @@ def main() -> int:
             check = check_classroom_team(api_url, org, token, classroom_short, team_slug)
             print_check(check)
             checks.append(check)
-            # Also probe each staff team the collect-time grant targets, so a
-            # secret/invisible staff team fails RED here instead of silently
-            # granting TAs nothing at cron.
+            # Probe each staff team the grant targets (see check_staff_team_visible).
             for role, staff_slug in resolve_staff_team_slugs(meta).items():
                 staff_check = check_staff_team_visible(
                     api_url, org, token, classroom_short, role, staff_slug

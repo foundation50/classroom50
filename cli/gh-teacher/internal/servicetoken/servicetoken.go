@@ -136,13 +136,10 @@ func ValidateTokenVerbose(token []byte, org string, out io.Writer) error {
 // AND administer repos, then probes org members, mapping each failure mode to
 // an actionable error.
 //
-// GET /repos/{owner}/{repo} returns a `permissions` object for the
-// authenticated token; `push` is true only when it can write contents, and
-// `admin` is true only when it has the Administration permission. We assert
-// both so a Contents read-only PAT (can read the gradebook but can't push
-// submit/* tags) and an Administration-less PAT (can't grant staff teams repo
-// access at collect time) are rejected here; the read itself exercises
-// Contents: read.
+// GET /repos/{owner}/{repo} returns a `permissions` object for the token;
+// `push` is true only with Contents: write, `admin` only with Administration.
+// Asserting both rejects a read-only PAT and an Administration-less one here;
+// the read itself exercises Contents: read.
 //
 // GET /orgs/{org}/members then exercises Members: Read (not implied by any
 // Contents scope). A 403/404 is a definitive scope gap and rejected; any other
@@ -173,11 +170,9 @@ func validateTokenWithClient(tokenClient githubapi.Client, org string, out io.Wr
 		return fmt.Errorf("the supplied token can read %s/%s but lacks write access (Contents: write) — collecting scores needs read, but regrading needs to push submit/* tags to student repos. Re-create the fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write (regrade re-runs student autograde workflow runs; collect grants staff teams repo access)", org, configrepo.ConfigRepoName, org)
 	}
 
-	// Contents is proven, but collect grants staff teams repo access (PUT
-	// /orgs/{org}/teams/{slug}/repos/{owner}/{repo}), which needs the
-	// Administration permission — NOT implied by Contents. `permissions.admin`
-	// is true only with it, so an Administration-less PAT is rejected here, not
-	// as a cron 403 on the first collect grant.
+	// Contents is proven, but collect grants staff teams repo access, needing
+	// Administration (not implied by Contents); reject an admin-less PAT here
+	// rather than as a cron 403 on the first grant.
 	if !repo.Permissions.Admin {
 		return fmt.Errorf("the supplied token can read and write %s/%s but lacks admin access (Administration: write) — collecting scores grants staff teams (e.g. TAs) read access to student repos, which needs the Administration permission. Re-create the fine-grained PAT with Resource owner = %q, Repository access = All repositories, and Repository permissions -> Contents: Read and write AND Actions: Read and write AND Administration: Read and write", org, configrepo.ConfigRepoName, org)
 	}

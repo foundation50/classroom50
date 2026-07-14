@@ -2083,10 +2083,8 @@ export async function validateServiceToken(
     )
   }
 
-  // Contents is proven, but collect grants staff teams repo access (PUT
-  // /orgs/{org}/teams/{slug}/repos/{owner}/{repo}), which needs the
-  // Administration permission — NOT implied by Contents. permissions.admin is
-  // true only with it; reject an admin-less token here with the same scope hint.
+  // Contents is proven, but collect grants staff teams repo access, needing
+  // Administration (not implied by Contents); reject an admin-less token here.
   if (!repo.permissions?.admin) {
     throw new Error(
       `This token can read and write ${org}/classroom50 but lacks admin access — collecting scores grants staff teams (e.g. TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
