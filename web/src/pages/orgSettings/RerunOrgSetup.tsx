@@ -11,7 +11,7 @@ import {
   type InitStepUpdate,
 } from "@/hooks/github/mutations"
 import { githubKeys } from "@/hooks/github/queries"
-import useGetOrgMembership from "@/hooks/useGetOrgMembership"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
   INIT_STEP_ORDER,
@@ -63,9 +63,9 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
   const queryClient = useQueryClient()
   const runRerun = useSafeSubmit()
 
-  const { data: membership } = useGetOrgMembership(org)
   const { data: planDetails } = useGetOrgPlanDetails(org)
-  const isOwner = membership?.role === "admin"
+  // Owner gate; redundant with the page's RequireOwner (see TeardownSection).
+  const { isOwner } = useIsOrgOwner()
 
   const [steps, setSteps] =
     useState<Record<InitStepId, InitStepUpdate>>(initialInitSteps)

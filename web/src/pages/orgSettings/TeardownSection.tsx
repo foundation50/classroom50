@@ -7,7 +7,7 @@ import { TriangleAlert } from "lucide-react"
 import { ConfirmModal } from "@/components/modals"
 import { Button } from "@/components/ui"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import useGetOrgMembership from "@/hooks/useGetOrgMembership"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import {
   executeTeardown,
   formatTeardownResult,
@@ -32,8 +32,11 @@ const TeardownSection = ({ org }: { org: string }) => {
   const queryClient = useQueryClient()
   const navigate = useNavigate()
 
-  const { data: membership } = useGetOrgMembership(org)
-  const isOwner = membership?.role === "admin"
+  // Owner gate. Redundant with the page's <RequireTeacher allow="owner">
+  // (RequireOwner only renders children for a resolved owner, and shows a
+  // spinner/retry surface during pending/error), so this is a defensive belt —
+  // no pending/error handling needed here.
+  const { isOwner } = useIsOrgOwner()
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)

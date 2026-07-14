@@ -18,7 +18,7 @@ import { ConfirmModal } from "@/components/modals"
 import PlanBadge from "@/components/PlanBadge"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
-import useGetOrgMembership from "@/hooks/useGetOrgMembership"
+import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import type {
   AuditVerdict,
@@ -455,8 +455,8 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
   const queryClient = useQueryClient()
   const runFix = useSafeSubmit()
   const { data: planDetails } = useGetOrgPlanDetails(org)
-  const { data: membership } = useGetOrgMembership(org)
-  const isOwner = membership?.role === "admin"
+  // Owner gate; redundant with the page's RequireOwner (see TeardownSection).
+  const { isOwner } = useIsOrgOwner()
 
   // Fields a Fix it / re-run wrote that didn't stick on read-back; we stop
   // offering a Fix it for them since it can't work. (See OrgDefaultsStepData.)
