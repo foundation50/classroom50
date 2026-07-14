@@ -2028,13 +2028,13 @@ export async function validateServiceToken(
       }
       if (err.status === 403) {
         throw new Error(
-          `This token can't access ${org}/classroom50 (403). ${scopeHint}`,
+          `This token can't access ${org}/${CONFIG_REPO} (403). ${scopeHint}`,
           { cause: err },
         )
       }
       if (err.status === 404) {
         throw new Error(
-          `Couldn't find a classroom50 repository in ${org} (404). Check that the organization is correct and that setup has been run for it — this isn't necessarily a problem with the token itself.`,
+          `Couldn't find a ${CONFIG_REPO} repository in ${org} (404). Check that the organization is correct and that setup has been run for it — this isn't necessarily a problem with the token itself.`,
           { cause: err },
         )
       }
@@ -2048,7 +2048,7 @@ export async function validateServiceToken(
       )
     }
     throw new Error(
-      `Couldn't verify the token against ${org}/classroom50: ${getErrorMessage(
+      `Couldn't verify the token against ${org}/${CONFIG_REPO}: ${getErrorMessage(
         err,
       )}`,
       { cause: err },
@@ -2060,7 +2060,7 @@ export async function validateServiceToken(
   // it with the same actionable scope hint.
   if (!repo.permissions?.push) {
     throw new Error(
-      `This token can read ${org}/classroom50 but lacks write access — collecting scores needs read, but regrading needs write. ${scopeHint}`,
+      `This token can read ${org}/${CONFIG_REPO} but lacks write access — collecting scores needs read, but regrading needs write. ${scopeHint}`,
     )
   }
 
@@ -2068,7 +2068,7 @@ export async function validateServiceToken(
   // Administration (not implied by Contents); reject an admin-less token here.
   if (!repo.permissions?.admin) {
     throw new Error(
-      `This token can read and write ${org}/classroom50 but lacks admin access — collecting scores grants staff teams (e.g. TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
+      `This token can read and write ${org}/${CONFIG_REPO} but lacks admin access — collecting scores grants staff teams (e.g. TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
     )
   }
 
@@ -2095,7 +2095,7 @@ export async function validateServiceToken(
       (err.status === 403 || err.status === 404)
     ) {
       throw new Error(
-        `This token can read ${org}/classroom50 but can't read the org's members — collecting scores is team-driven and lists the classroom team, which needs Organization permissions → Members: Read. ${scopeHint}`,
+        `This token can read ${org}/${CONFIG_REPO} but can't read the org's members — collecting scores is team-driven and lists the classroom team, which needs Organization permissions → Members: Read. ${scopeHint}`,
         { cause: err },
       )
     }
@@ -2135,7 +2135,7 @@ export async function triggerScoreCollection(
   const repo = await getRepo(client, org, CONFIG_REPO)
   if (!repo) {
     throw new Error(
-      `${org}/classroom50 not found; run setup for this org first`,
+      `${org}/${CONFIG_REPO} not found; run setup for this org first`,
     )
   }
   const ref = repo.default_branch || DEFAULT_BRANCH
@@ -2206,7 +2206,7 @@ export async function triggerRegrade(
   ])
   if (!repo) {
     throw new Error(
-      `${org}/classroom50 not found; run setup for this org first`,
+      `${org}/${CONFIG_REPO} not found; run setup for this org first`,
     )
   }
   const ref = repo.default_branch || DEFAULT_BRANCH

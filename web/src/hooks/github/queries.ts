@@ -1412,7 +1412,7 @@ export async function getServiceTokenStatus(
       secretName: SERVICE_TOKEN_SECRET_NAME,
       createdAt: secret.created_at,
       updatedAt: secret.updated_at,
-      message: `Service token is set on the classroom50 config repo. Last updated ${new Date(
+      message: `Service token is set on the ${CONFIG_REPO} config repo. Last updated ${new Date(
         secret.updated_at,
       ).toLocaleString()}.`,
     }
@@ -1422,8 +1422,7 @@ export async function getServiceTokenStatus(
         return {
           status: "missing",
           secretName: SERVICE_TOKEN_SECRET_NAME,
-          message:
-            "Service token is not set on the classroom50 config repo. Score-collection and regrade workflows cannot access student repositories until a service token is set.",
+          message: `Service token is not set on the ${CONFIG_REPO} config repo. Score-collection and regrade workflows cannot access student repositories until a service token is set.`,
         }
       }
 
@@ -1432,8 +1431,7 @@ export async function getServiceTokenStatus(
           status: "unknown",
           secretName: SERVICE_TOKEN_SECRET_NAME,
           reason: "permission_denied",
-          message:
-            "Could not check the service token on the classroom50 config repo because this GitHub authorization cannot read repository Actions secrets.",
+          message: `Could not check the service token on the ${CONFIG_REPO} config repo because this GitHub authorization cannot read repository Actions secrets.`,
         }
       }
     }
@@ -1442,7 +1440,7 @@ export async function getServiceTokenStatus(
       status: "unknown",
       secretName: SERVICE_TOKEN_SECRET_NAME,
       reason: "unknown",
-      message: `Could not check the service token on the classroom50 config repo: ${getErrorMessage(
+      message: `Could not check the service token on the ${CONFIG_REPO} config repo: ${getErrorMessage(
         err,
       )}`,
     }

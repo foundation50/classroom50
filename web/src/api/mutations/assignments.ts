@@ -669,7 +669,7 @@ async function ensureDeclarativeTestsWritable(
   const materializeScript = ".github/scripts/materialize_tests.py"
   if (!(await contentsPathExists(client, org, materializeScript))) {
     throw new Error(
-      `${org}/classroom50 is missing ${materializeScript}, so autograding tests would never run. ` +
+      `${org}/${CONFIG_REPO} is missing ${materializeScript}, so autograding tests would never run. ` +
         "Re-initialize the organization (or run `gh teacher init`) to update the config repo, then retry.",
     )
   }
