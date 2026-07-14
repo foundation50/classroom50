@@ -5,7 +5,7 @@
 // divergence is a parity bug.
 
 import type { GitHubClient } from "./client"
-import { paginateAll } from "./queries"
+import { paginateAll } from "./paginate"
 import type { CheckVerdict } from "./orgChecks"
 import { readFailedDetail } from "./orgChecks"
 import { logger } from "@/lib/logger"

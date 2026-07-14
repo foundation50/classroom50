@@ -15,6 +15,8 @@ vi.mock("@/api/mutations/students", () => ({
 }))
 vi.mock("@/hooks/github/mutations", () => ({
   removeOrgMembership: (...args: unknown[]) => removeOrgMembershipMock(...args),
+}))
+vi.mock("@/hooks/github/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))

@@ -17,11 +17,11 @@ import {
 } from "@/hooks/github/mutations"
 import {
   getOrgRepos,
-  getRepo,
   listClassroomDirs,
   REPO_READ_CONCURRENCY,
   sleep,
 } from "@/hooks/github/queries"
+import { getRepo } from "@/hooks/github/repoReads"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { logger } from "@/lib/logger"

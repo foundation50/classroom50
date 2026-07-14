@@ -222,3 +222,12 @@ export type GitHubCommit = {
     avatar_url?: string
   } | null
 }
+
+export type GitHubTreeResponse = {
+  tree: Array<{
+    path: string
+    type: "blob" | "tree" | "commit"
+    sha: string
+  }>
+  truncated: boolean
+}

@@ -1,3 +1,7 @@
+// logger.ts -> activityStore.ts -> errors.ts is a known, deliberately-mitigated
+// init cycle (see the lazy `log` below); breaking it structurally is out of
+// scope for the data-layer guard, so the cycle rule is disabled on this edge.
+// eslint-disable-next-line import-x/no-cycle
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 

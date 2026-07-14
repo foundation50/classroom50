@@ -46,10 +46,11 @@ import {
   createGitCommit,
   createGitTree,
   createTreeForAssignment,
-  getErrorMessage,
   updateRef,
   updateRefForRepo,
 } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
+import { getRepo } from "@/hooks/github/repoReads"
 import {
   fetchAssignmentFromPages,
   fetchTextWithFriendlyErrors,
@@ -65,7 +66,6 @@ import type { GitHubRepo } from "@/hooks/github/types"
 import {
   getBranchRefRepo,
   getCommitByRepo,
-  getRepo,
   getRepoPermissionForUser,
   withFreshRepoRetry,
 } from "@/hooks/github/queries"

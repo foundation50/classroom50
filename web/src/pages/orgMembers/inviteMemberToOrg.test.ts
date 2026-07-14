@@ -8,6 +8,8 @@ const getUserByIdMock = vi.fn()
 
 vi.mock("@/hooks/github/mutations", () => ({
   createOrgInvitation: (...args: unknown[]) => createOrgInvitationMock(...args),
+}))
+vi.mock("@/hooks/github/errorMessage", () => ({
   getErrorMessage: (err: unknown) =>
     err instanceof Error ? err.message : String(err),
 }))

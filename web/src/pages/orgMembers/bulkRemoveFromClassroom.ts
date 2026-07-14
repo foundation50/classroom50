@@ -1,6 +1,6 @@
 import type { GitHubClient } from "@/hooks/github/client"
 import { bulkUnenrollStudents } from "@/api/mutations/students"
-import { getErrorMessage } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import { studentKey } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { OrgMemberRow } from "@/util/orgMembers"

@@ -1,5 +1,6 @@
 import type { GitHubClient } from "@/hooks/github/client"
-import { createOrgInvitation, getErrorMessage } from "@/hooks/github/mutations"
+import { createOrgInvitation } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import { getUserById } from "@/hooks/github/queries"
 import { parseGitHubId } from "@/util/students"
 import type { OrgMemberRow } from "@/util/orgMembers"

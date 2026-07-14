@@ -7,7 +7,6 @@ import {
   createOrgInvitation,
   ensureClassroomRoleTeam,
   ensureOrgMembership,
-  getErrorMessage,
   getOrgMembershipState,
   grantTeamConfigRepoWrite,
   isActiveMember,
@@ -17,6 +16,7 @@ import {
   updateRef,
   type GitTreeEntry,
 } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import {
   withGitConflictRetry,
   assertClassroomNotArchived,

@@ -1,10 +1,8 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useTranslation } from "react-i18next"
-import {
-  COLLECT_SCORES_WORKFLOW,
-  triggerScoreCollection,
-} from "./github/mutations"
+import { triggerScoreCollection } from "./github/mutations"
+import { COLLECT_SCORES_WORKFLOW } from "./github/workflows"
 import { getCollectScoresRunAfterId, githubKeys } from "./github/queries"
 import { useGitHubOperation, type OperationPhase } from "./useGitHubOperation"
 

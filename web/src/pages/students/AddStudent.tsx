@@ -12,7 +12,7 @@ import {
   useSeedTeamMember,
 } from "@/hooks/useTeamRoster"
 import { enrollStudentInClassroom } from "@/api/mutations/students"
-import { getErrorMessage } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import {
   inviteByEmail,
   StudentAlreadyEnrolledError,

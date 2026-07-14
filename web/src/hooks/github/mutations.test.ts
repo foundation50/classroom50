@@ -13,8 +13,8 @@ import {
   resendOrgInvitation,
   triggerRegrade,
   validateServiceToken,
-  REGRADE_WORKFLOW,
 } from "./mutations"
+import { REGRADE_WORKFLOW } from "./workflows"
 import { GitHubAPIError } from "./errors"
 import { createGitHubClient } from "./client"
 import { buildSkeletonFiles } from "@/skeleton/skeleton"

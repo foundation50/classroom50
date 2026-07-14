@@ -1,6 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
-import { getRepo } from "./github/queries"
+import { getRepo } from "./github/repoReads"
 
 const useGetRepo = (
   org: string | undefined,

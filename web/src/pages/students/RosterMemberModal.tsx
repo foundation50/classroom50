@@ -27,8 +27,8 @@ import {
 import {
   resendOrgInvitation,
   cancelOrgInvitation,
-  getErrorMessage,
 } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {

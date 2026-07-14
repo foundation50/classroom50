@@ -9,8 +9,8 @@ import { GitHubAPIError } from "@/hooks/github/errors"
 import {
   resendOrgInvitation,
   cancelOrgInvitation,
-  getErrorMessage,
 } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,

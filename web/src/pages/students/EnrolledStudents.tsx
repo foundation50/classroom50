@@ -27,7 +27,8 @@ import {
   bulkInviteByEmail,
 } from "@/api/mutations/students"
 import type { RosterCsvProblem } from "@/api/mutations/students"
-import { getErrorMessage, cancelOrgInvitation } from "@/hooks/github/mutations"
+import { cancelOrgInvitation } from "@/hooks/github/mutations"
+import { getErrorMessage } from "@/hooks/github/errorMessage"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/github/hooks"

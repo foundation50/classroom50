@@ -8,6 +8,7 @@ import {
   type GitHubRepo,
   type GitHubOrgMembership,
   type GitHubBlob,
+  type GitHubTreeResponse,
 } from "./types"
 import { GitHubAPIError, tolerateGitHubError } from "./errors"
 import sodium from "libsodium-wrappers"
@@ -21,7 +22,10 @@ import type { CreateClassroomInput } from "@/api/mutations/classrooms"
 import type { StaffRole } from "@/types/classroom"
 import { isClassroomArchived, STAFF_ROLES } from "@/types/classroom"
 import { STUDENT_CSV_FIELDS } from "@/util/rosterCsv"
-import { getRepo } from "./queries"
+import { getRepo } from "./repoReads"
+import { createTeam } from "./teamWrites"
+import { getErrorMessage } from "./errorMessage"
+import { COLLECT_SCORES_WORKFLOW, REGRADE_WORKFLOW } from "./workflows"
 import { checkPages, repairOrgDefaults } from "./orgChecks"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
@@ -392,27 +396,6 @@ export function createGitCommit(
       },
     },
   )
-}
-
-export type CreateTeamInput = {
-  org: string
-  name: string
-  description?: string
-  privacy?: "secret" | "closed"
-  maintainers?: string[]
-  repo_names?: string[]
-}
-export function createTeam(client: GitHubClient, input: CreateTeamInput) {
-  const { org, ...body } = input
-
-  return client.request<GitHubTeam>(`/orgs/${org}/teams`, {
-    method: "POST",
-    body: {
-      privacy: "closed",
-      notification_setting: "notifications_disabled",
-      ...body,
-    },
-  })
 }
 
 // Minimal team identity persisted in classroom.json. The slug is authoritative
@@ -1214,15 +1197,6 @@ export async function renameConfigRepoToMain(
   return { renamed: true, from: current }
 }
 
-export type GitHubTreeResponse = {
-  tree: Array<{
-    path: string
-    type: "blob" | "tree" | "commit"
-    sha: string
-  }>
-  truncated: boolean
-}
-
 async function listTargetRepoBlobs(
   client: GitHubClient,
   org: string,
@@ -1478,11 +1452,6 @@ function expectedPagesUrl(org: string): string {
 
 function pagesSettingsUrl(owner: string, repo: string): string {
   return `https://github.com/${owner}/${repo}/settings/pages`
-}
-
-export function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) return error.message
-  return "Unknown GitHub API error"
 }
 
 async function enableWorkflowPages(
@@ -2076,14 +2045,6 @@ export async function validateServiceToken(
     // token valid.
   }
 }
-
-export const COLLECT_SCORES_WORKFLOW = "collect-scores.yaml"
-
-// The regrade fan-out workflow in <org>/classroom50. Dispatched per assignment
-// (optionally per repo owner); it re-runs each student repo's autograde
-// workflow. Grading then happens asynchronously inside the student repos, so a
-// follow-up collect-scores run refreshes the gradebook.
-export const REGRADE_WORKFLOW = "regrade.yaml"
 
 /**
  * Dispatches the classroom50 repo's `collect-scores.yaml` workflow (the same
