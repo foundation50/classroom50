@@ -88,13 +88,16 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pytest web/src/locales/test_audit_i18n.py -v
 
-      # i18n coverage gate: fails if any t("...") in the source references a key
-      # missing from en.json (those render as a raw key / English fallback in
-      # every language). Dead keys and hardcoded user-facing strings are printed
-      # as advisory warnings only (default mode, not --strict), so they don't
-      # block merges. Uses the runner's preinstalled python3; the audit has no
-      # third-party deps. Run from the repo root since the script resolves web/src
-      # relative to itself.
+      # i18n coverage gate (--strict): fails on any of
+      #   1. MISSING keys  — a t("...") referencing a key absent from en.json
+      #      (renders the raw key / English fallback in every language),
+      #   2. DEAD keys      — an en.json key no source literal/prefix references
+      #      (translation dead weight; drifts packs), and
+      #   3. HARDCODED prose — user-facing string literals bypassing i18n.
+      # Dev-only UI (components/dev/) and a tiny allowlist of format examples are
+      # exempt from (3); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES. Uses the
+      # runner's preinstalled python3 (no third-party deps); run from the repo
+      # root since the script resolves web/src relative to itself.
       - name: i18n key audit
         working-directory: ${{ github.workspace }}
-        run: python3 web/src/locales/audit_i18n.py
+        run: python3 web/src/locales/audit_i18n.py --strict

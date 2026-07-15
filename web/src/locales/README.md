@@ -177,9 +177,9 @@ from storage. A pack is rejected when it breaks any of these:
   names, counts) into them. A translated value that drops or renames a
   placeholder will render incorrectly.
 - Plural forms use i18next's `_one` / `_other` key suffixes (e.g.
-  `students.count_one`, `students.count_other`). Languages with different
-  plural rules can use the other i18next plural suffixes (`_zero`, `_few`,
-  `_many`, ...) for the same base key.
+  `actionsBanner.totalActions_one`, `actionsBanner.totalActions_other`).
+  Languages with different plural rules can use the other i18next plural
+  suffixes (`_zero`, `_few`, `_many`, ...) for the same base key.
 - GitHub-sourced data (usernames, org/repo/classroom names) is interpolated,
   never translated.
 

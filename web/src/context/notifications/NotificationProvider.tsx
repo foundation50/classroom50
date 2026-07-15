@@ -9,6 +9,7 @@ import {
   type PropsWithChildren,
 } from "react"
 import { X } from "lucide-react"
+import { useTranslation } from "react-i18next"
 import { AnimatePresence, motion } from "motion/react"
 import { toastVariants } from "@/lib/motion"
 import { Button, alertToneClass } from "@/components/ui"
@@ -144,6 +145,7 @@ const ToastViewport = ({
   toasts: Toast[]
   onDismiss: (id: string) => void
 }) => {
+  const { t } = useTranslation()
   // Keep the container mounted even when empty so AnimatePresence can play the
   // exit animation of the last toast before it disappears.
   return (
@@ -165,7 +167,7 @@ const ToastViewport = ({
             <Button
               variant="ghost"
               size="xs"
-              aria-label="Dismiss notification"
+              aria-label={t("common.dismissNotification")}
               onClick={() => onDismiss(toast.id)}
             >
               <X aria-hidden="true" className="size-4" />

@@ -81,6 +81,21 @@ USERFACING_CALL_RE = re.compile(
 # literals that look like code/config, not prose worth translating
 CODEISH_RE = re.compile(r"^[a-z0-9]+(?:[-_/][a-z0-9]+)*$")  # ubuntu-latest, foo_bar
 
+# Source path prefixes exempt from the HARDCODED scan: dev-only UI that never
+# ships to end users (gated behind import.meta.env.DEV), so translating its
+# labels would be dead weight. Relative to the repo root, matched with
+# str.startswith on the rel() path (forward slashes).
+HARDCODED_IGNORE_PREFIXES = ("web/src/components/dev/",)
+
+# Specific literal values that are NOT translatable prose despite matching a
+# user-facing-attribute pattern — a format example / code sample identical in
+# every language. Keep this list tiny and justified; prefer i18n for real prose.
+HARDCODED_ALLOWED_VALUES = frozenset(
+    {
+        "ghp_…",  # GitHub PAT prefix shown as an input placeholder (a format hint)
+    }
+)
+
 
 def flatten(obj: dict, prefix: str = "") -> dict[str, object]:
     out: dict[str, object] = {}
@@ -185,17 +200,19 @@ def main() -> int:
         # Hardcoded JSX-attribute prose can appear in any component-bearing file
         # (a .ts helper returning JSX via createElement, not just .tsx), so scan
         # every source file; ATTR_RE is specific enough that non-JSX files match
-        # nothing.
+        # nothing. Dev-only UI is exempt (never user-facing).
+        if relpath.startswith(HARDCODED_IGNORE_PREFIXES):
+            continue
         for i, line in enumerate(text.splitlines(), 1):
             for m in ATTR_RE.finditer(line):
                 val = m.group(1).strip()
-                if CODEISH_RE.match(val):
+                if CODEISH_RE.match(val) or val in HARDCODED_ALLOWED_VALUES:
                     continue
                 hardcoded.append((relpath, i, val))
             for m in USERFACING_CALL_RE.finditer(line):
                 val = m.group(2)
                 # skip developer-only "must be used within" invariants
-                if "must be used" in val:
+                if "must be used" in val or val in HARDCODED_ALLOWED_VALUES:
                     continue
                 hardcoded.append((relpath, i, val))
 
