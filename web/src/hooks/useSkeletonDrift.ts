@@ -4,8 +4,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { findStaleSkeletonFiles } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
-import { resolveOrgRole } from "@/util/resolveRole"
-import { can } from "@/util/capabilities"
+import { resolveOrgRole, can } from "@/authz"
 
 // State subset the verdict depends on — structural so the fail-open logic stays
 // a pure, testable function.

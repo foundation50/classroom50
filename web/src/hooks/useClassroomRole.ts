@@ -9,7 +9,7 @@ import {
   applyViewAs,
   membershipFromQuery,
   type ResolvedRole,
-} from "@/util/resolveRole"
+} from "@/authz"
 import type { GitHubClient } from "@/github-core/client"
 import type { StaffRole } from "@/types/classroom"
 

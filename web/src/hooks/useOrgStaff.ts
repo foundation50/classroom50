@@ -3,7 +3,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { myTeamsQuery } from "@/github-core/queries"
 import { parseClassroomTeamSlug } from "@/util/teamSlug"
-import type { OrgStaffVerdict } from "@/util/resolveRole"
+import type { OrgStaffVerdict } from "@/authz"
 
 export type UseOrgStaffResult = OrgStaffVerdict & {
   isLoading: boolean

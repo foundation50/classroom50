@@ -149,6 +149,33 @@ export default defineConfig([
       "import-x/no-cycle": ["error", { ignoreExternal: true }],
     },
   },
+  // Enforce the authz module's public-API boundary: everything access-control
+  // (role vocabulary, resolution reducers, the can() policy) lives in src/authz/
+  // and is consumed ONLY through the barrel `@/authz`. Reaching into an internal
+  // file (`@/authz/roles`, `@/authz/resolveRole`, `@/authz/capabilities`) is
+  // forbidden, so the module's internals can be refactored without breaking
+  // callers and can() stays the single decision surface. The authz files
+  // themselves import each other by relative path (`./roles`), which this
+  // pattern doesn't match, so the module is free internally. Turns the
+  // single-source-of-truth from a convention into an enforced invariant.
+  {
+    files: ["**/*.{ts,tsx}"],
+    ignores: ["src/authz/**"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          patterns: [
+            {
+              group: ["@/authz/*"],
+              message:
+                "Import authz through the public barrel `@/authz`, not its internal files. The barrel is the module's only public API (see src/authz/index.ts).",
+            },
+          ],
+        },
+      ],
+    },
+  },
   // The only files allowed to touch `console` directly: the logger wrapper
   // (it IS the console centralisation point) and the main.tsx release banner
   // (a deliberate always-on marker so the deployed build is identifiable from

@@ -8,7 +8,7 @@ import {
   sortRolesByRank,
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
-} from "@/util/roles"
+} from "@/authz"
 
 // Role vocabulary is single-sourced in util/roles. Re-exported here because the
 // roster row logic below is its primary consumer and callers naturally reach for

@@ -22,7 +22,6 @@ import type { Assignment } from "@/types/classroom"
 import { CONFIG_REPO_MARKER_REL, ORG_GITHUB_DIR } from "@/skeleton/skeleton"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { classroomTeamSlug } from "@/util/teamSlug"
-import { isOwnerGitHubOrgRole } from "@/util/roles"
 import {
   GitHubAPIError,
   retryTransientGitHubError,
@@ -1116,13 +1115,13 @@ export async function getClassroom50OrgSummary(
   const org = membership.organization
 
   // The one owner test for this summary: an active org admin. Single-sourced
-  // here so the needs_setup branch and the canInitialize flag can't drift. The
-  // owner half routes through isOwnerGitHubOrgRole (roles.ts imports only a
-  // type, so it's cycle-free here); the active-state premise stays inline
-  // because it's specific to this summary. (Can't route through resolveOrgRole/
-  // can — those live in util/resolveRole, which imports github-core/errors.)
+  // here so the needs_setup branch and the canInitialize flag can't drift. This
+  // is a github-core data-layer reducer on the raw wire payload, so the
+  // wire-level `role === "admin"` check stays inline here (github-core is below
+  // the authz module and must not import up into it; the product-facing owner
+  // checks route through isOwnerGitHubOrgRole/can, this raw-payload one doesn't).
   const isActiveAdmin =
-    membership.state === "active" && isOwnerGitHubOrgRole(membership.role)
+    membership.state === "active" && membership.role === "admin"
 
   let canAccessRepo = false
   let status: Classroom50Status

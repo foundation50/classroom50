@@ -13,7 +13,7 @@ import {
   GitHubOrgRoleProvider,
   useGitHubOrgRole,
 } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
-import { can } from "@/util/capabilities"
+import { can } from "@/authz"
 
 export const Route = createFileRoute("/_authed/$org")({
   component: OrgLayout,

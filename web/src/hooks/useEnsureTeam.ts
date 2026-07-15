@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query"
 import { ensureTeam } from "@/github-core/queries"
 import { retryTransientGitHubError } from "@/github-core/errors"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
-import { can } from "@/util/capabilities"
+import { can } from "@/authz"
 
 // ensureTeam is a WRITE (POST /orgs/{org}/teams) living in a useQuery: gate
 // `enabled` on the manageOrg capability so a non-owner never fires a

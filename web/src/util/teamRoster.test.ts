@@ -8,7 +8,7 @@ import {
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
 } from "./teamRoster"
-import { isOwnerGitHubOrgRole } from "@/util/roles"
+import { isOwnerGitHubOrgRole } from "@/authz"
 import { enrolledCountsByRole } from "./classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"

@@ -59,7 +59,7 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { can } from "@/util/capabilities"
+import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
   COLLECT_SCORES_WORKFLOW,

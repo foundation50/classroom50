@@ -1,4 +1,4 @@
-import type { ResolvedRole, GitHubOrgRole } from "@/util/resolveRole"
+import type { ResolvedRole, GitHubOrgRole } from "./resolveRole"
 
 // The capability vocabulary — WHAT a viewer can do, decoupled from WHICH role
 // they hold. Consumers ask `can("editClassroomSettings")` instead of comparing

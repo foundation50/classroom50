@@ -8,7 +8,7 @@ import {
   useState,
   type PropsWithChildren,
 } from "react"
-import type { ViewAsRole } from "@/util/resolveRole"
+import type { ViewAsRole } from "@/authz"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("context:roleView")

@@ -1,5 +1,5 @@
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
-import { can } from "@/util/capabilities"
+import { can } from "@/authz"
 
 // One shared org-owner UX verdict over useGitHubOrgRole, so owner-gated surfaces
 // read a single fail-closed answer instead of re-deriving `role === "admin"`.

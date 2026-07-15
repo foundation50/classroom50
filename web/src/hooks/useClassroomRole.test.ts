@@ -4,7 +4,7 @@ import {
   applyViewAs,
   roleLabelKey,
   type ClassroomRoleInput,
-} from "@/util/resolveRole"
+} from "@/authz"
 
 // The pure resolution is exercised in depth in resolveRole.test.ts. This suite
 // pins the KTD-4 behavior change directly against the pure resolver: org-admin

@@ -6,7 +6,7 @@ import {
 } from "react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
-import { type ResolvedRole } from "@/util/resolveRole"
+import { type ResolvedRole } from "@/authz"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child

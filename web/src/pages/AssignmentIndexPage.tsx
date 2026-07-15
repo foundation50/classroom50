@@ -1,6 +1,6 @@
 import { Navigate, useParams } from "@tanstack/react-router"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { can } from "@/util/capabilities"
+import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 
 // The bare assignment route has no view of its own: it forwards to the

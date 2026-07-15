@@ -1,5 +1,5 @@
 import type { BadgeTone } from "@/components/ui"
-import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/util/roles"
+import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/authz"
 import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.

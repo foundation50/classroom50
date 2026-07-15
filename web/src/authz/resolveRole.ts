@@ -4,10 +4,10 @@ import type {
   GitHubOrgRole,
   GitHubTeamMembership,
   ViewAsRole,
-} from "@/util/roles"
-import { ROLE_RANK } from "@/util/roles"
+} from "./roles"
+import { ROLE_RANK } from "./roles"
 
-// Role types are single-sourced in util/roles; re-exported here because the
+// Role types are single-sourced in ./roles; re-exported here because the
 // resolution logic below is their primary consumer and guards/UI reach for the
 // type alongside these resolvers.
 export type { ResolvedRole, GitHubOrgRole, GitHubTeamMembership, ViewAsRole }

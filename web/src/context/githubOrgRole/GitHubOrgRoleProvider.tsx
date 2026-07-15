@@ -6,7 +6,7 @@ import {
   type PropsWithChildren,
 } from "react"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
-import { resolveOrgRole, type GitHubOrgRole } from "@/util/resolveRole"
+import { resolveOrgRole, type GitHubOrgRole } from "@/authz"
 
 // Org-wide capability, resolved ONCE at the $org boundary and shared with org-
 // level routes (settings, members, activity, create-classroom) that have no
