@@ -273,6 +273,17 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// the grant, `student accept` 404s generating from it. Gate on the TARGET
 	// repo's visibility, use the team's authoritative slug, and track failures
 	// so the exit code reflects a template students can't yet accept.
+	//
+	// The TA staff team gets the same read (best-effort) so a base-permission-
+	// `none` TA can read the template without waiting for collect-scores. The
+	// TA slug comes from the just-created staffTeams (classroom.json isn't
+	// committed until CommitTree above, so it can't be re-resolved here). A TA-
+	// grant failure only warns — it's not a student blocker, so it never adds to
+	// grantFailures or changes the exit code.
+	taSlug := ""
+	if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; ok && staffTeams != nil && staffTeams.TA != nil {
+		taSlug = staffTeams.TA.Slug
+	}
 	var grantFailures int
 	for i := range resolved {
 		rt := resolved[i]
@@ -289,6 +300,19 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 		if granted {
 			_, _ = fmt.Fprintf(out, "%s: granted classroom team %s read on private template %s/%s\n",
 				plan.TargetOrg, team.Slug, rt.Template.Owner, rt.Template.Repo)
+		}
+		if taSlug == "" {
+			continue
+		}
+		taGranted, taErr := configrepo.GrantTeamRepoRead(client, plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo)
+		if taErr != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not grant TA staff team %s read on private template %s/%s (%v); TAs get read at the next collect-scores run.\n",
+				plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo, taErr)
+			continue
+		}
+		if taGranted {
+			_, _ = fmt.Fprintf(out, "%s: granted TA staff team %s read on private template %s/%s\n",
+				plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo)
 		}
 	}
 

@@ -24,6 +24,8 @@ type reuseFixture struct {
 	treePath  string
 	// grantedRepo records a PUT classroom-team repo grant target, if any.
 	grantedRepo string
+	// grantedTATeam records a PUT TA-staff-team repo grant target, if any.
+	grantedTATeam string
 }
 
 // reuseServerConfig parameterizes the mock: the source/target classroom
@@ -45,6 +47,10 @@ type reuseServerConfig struct {
 	// template branch (warn, no grant). The source assignments body must
 	// reference the same owner.
 	templateOwner string
+	// taGrantStatus overrides the TA-staff-team grant PUT response; 0 =>
+	// the default 204 (success). Set to e.g. 500 to exercise the TA-grant
+	// failure path (which must warn, not fail the reuse).
+	taGrantStatus int
 }
 
 func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reuseFixture) {
@@ -103,6 +109,24 @@ func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reu
 			}
 			fix.mu.Lock()
 			fix.grantedRepo = "o/hello-template"
+			fix.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+
+	// TA-staff-team grant: GET probe + PUT grant. Fires only when the target
+	// classroom.json records a `teams.ta` block (older classrooms skip it).
+	mux.HandleFunc("/orgs/o/teams/classroom50-dst-ta/repos/o/hello-template", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+		case http.MethodPut:
+			if cfg.taGrantStatus != 0 {
+				w.WriteHeader(cfg.taGrantStatus)
+				return
+			}
+			fix.mu.Lock()
+			fix.grantedTATeam = "o/hello-template"
 			fix.mu.Unlock()
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -195,6 +219,25 @@ func targetClassroomBody(active *bool) string {
 	}
 	if active != nil {
 		doc["active"] = *active
+	}
+	b, _ := json.Marshal(doc)
+	return string(b)
+}
+
+// targetClassroomBodyWithTA is targetClassroomBody plus a recorded TA staff
+// team, so the reuse grant path also grants the TA team read on a private
+// in-org template.
+func targetClassroomBodyWithTA() string {
+	doc := map[string]any{
+		"schema":     "classroom50/classroom/v1",
+		"name":       "Dst",
+		"short_name": "dst",
+		"term":       "",
+		"org":        "o",
+		"team":       map[string]any{"id": 7, "slug": "classroom50-dst"},
+		"teams": map[string]any{
+			"ta": map[string]any{"id": 9, "slug": "classroom50-dst-ta"},
+		},
 	}
 	b, _ := json.Marshal(doc)
 	return string(b)
@@ -633,5 +676,87 @@ func TestRunAssignmentReuse_InPlaceWithSlug(t *testing.T) {
 	file := decodeReuse(t, fix)
 	if _, ok := assignment.FindAssignment(file.Assignments, "hello-redux"); !ok {
 		t.Errorf("expected in-place copy under hello-redux, got %d entries", len(file.Assignments))
+	}
+}
+
+// TestRunAssignmentReuse_GrantsTATeam: when the target classroom records a TA
+// staff team, a private in-org template grants both the student team and the
+// TA team read.
+func TestRunAssignmentReuse_GrantsTATeam(t *testing.T) {
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBodyWithTA(),
+		templatePrivate:   true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("runAssignmentReuse: %v", err)
+	}
+	fix.mu.Lock()
+	student, ta := fix.grantedRepo, fix.grantedTATeam
+	fix.mu.Unlock()
+	if student != "o/hello-template" {
+		t.Errorf("student team grant = %q, want o/hello-template", student)
+	}
+	if ta != "o/hello-template" {
+		t.Errorf("TA team grant = %q, want o/hello-template", ta)
+	}
+}
+
+// TestRunAssignmentReuse_NoTATeamSkips: a classroom with no recorded TA team
+// (older classroom) grants only the student team; no TA grant fires and no
+// error surfaces.
+func TestRunAssignmentReuse_NoTATeamSkips(t *testing.T) {
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil), // no teams.ta
+		templatePrivate:   true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("runAssignmentReuse: %v", err)
+	}
+	fix.mu.Lock()
+	student, ta := fix.grantedRepo, fix.grantedTATeam
+	fix.mu.Unlock()
+	if student != "o/hello-template" {
+		t.Errorf("student team grant = %q, want o/hello-template", student)
+	}
+	if ta != "" {
+		t.Errorf("no TA grant expected, got %q", ta)
+	}
+}
+
+// TestRunAssignmentReuse_TAGrantFailureIsNonFatal: when the student grant
+// succeeds but the TA grant PUT fails, the reuse still succeeds (student
+// success stands) and a warning is emitted to stderr.
+func TestRunAssignmentReuse_TAGrantFailureIsNonFatal(t *testing.T) {
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBodyWithTA(),
+		templatePrivate:   true,
+		taGrantStatus:     http.StatusInternalServerError,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("runAssignmentReuse should not fail on a TA-grant error, got %v", err)
+	}
+	fix.mu.Lock()
+	student := fix.grantedRepo
+	fix.mu.Unlock()
+	if student != "o/hello-template" {
+		t.Errorf("student team grant = %q, want o/hello-template", student)
+	}
+	if !strings.Contains(errOut.String(), "TA staff team") {
+		t.Errorf("expected a TA-grant warning on stderr, got %q", errOut.String())
 	}
 }

@@ -253,6 +253,16 @@ func TestRunMigrate_NonDryRun_HappyPath(t *testing.T) {
 		}
 	}
 
+	// The private migrated template grants read to BOTH the student classroom
+	// team and the TA staff team (eager grant at migrate, not only at
+	// collect-scores).
+	if got := state.templateGrants["classroom50-classroom50test"]; got != "cs50-fall-2026/readability" {
+		t.Errorf("student team template grant = %q, want cs50-fall-2026/readability", got)
+	}
+	if got := state.templateGrants["classroom50-classroom50test-ta"]; got != "cs50-fall-2026/readability" {
+		t.Errorf("TA team template grant = %q, want cs50-fall-2026/readability", got)
+	}
+
 	// The creator is dropped from the students + TA teams (mixed roles aren't
 	// allowed) but NEVER the instructor team — the owner's only role.
 	sort.Strings(state.membershipDeleted)
@@ -405,6 +415,9 @@ type migrateE2EState struct {
 	commitsCreated    int
 	teamsCreated      int      // count of POST /orgs/{org}/teams (students + staff)
 	membershipDeleted []string // slugs that received a DELETE .../memberships/{user}
+	// templateGrants records team-slug → repo grants (PUT .../teams/{slug}/repos/{owner}/{repo})
+	// so a test can assert which teams got read on a private migrated template.
+	templateGrants map[string]string
 
 	parentSHA     string
 	parentTreeSHA string
@@ -420,6 +433,7 @@ func newMigrateE2EState(classroom classroomDetail, assignments []classroomAssign
 		generated:        map[string]bool{},
 		markedAsTemplate: map[string]bool{},
 		uploadedFiles:    map[string]string{},
+		templateGrants:   map[string]string{},
 		parentSHA:        "parent-sha-1",
 		parentTreeSHA:    "parent-tree-1",
 		commitSHA:        "new-commit-sha",
@@ -595,6 +609,7 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 		case http.MethodGet:
 			w.WriteHeader(http.StatusNotFound)
 		case http.MethodPut:
+			s.templateGrants["classroom50-classroom50test"] = strings.TrimPrefix(path, "/orgs/"+s.targetOrg()+"/teams/classroom50-classroom50test/repos/")
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			t.Errorf("unexpected method %s on %s", r.Method, path)
@@ -608,11 +623,17 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 
 	// Target-side: staff-team config-repo grant probe/PUT and membership
 	// PUT (add instructor maintainer). Both live under a staff-team slug.
+	// A staff-team grant on the private template repo (readability) is the
+	// eager TA-team template read; record it so a test can assert it fired.
 	case strings.HasPrefix(path, "/orgs/"+s.targetOrg()+"/teams/") && strings.Contains(path, "/repos/"):
 		switch r.Method {
 		case http.MethodGet:
 			w.WriteHeader(http.StatusNotFound)
 		case http.MethodPut:
+			rest := strings.TrimPrefix(path, "/orgs/"+s.targetOrg()+"/teams/")
+			if slug, repoPath, ok := strings.Cut(rest, "/repos/"); ok && strings.HasSuffix(repoPath, "/readability") {
+				s.templateGrants[slug] = repoPath
+			}
 			w.WriteHeader(http.StatusNoContent)
 		default:
 			t.Errorf("unexpected method %s on %s", r.Method, path)

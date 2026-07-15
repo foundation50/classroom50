@@ -642,7 +642,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 	// students can generate from it. Idempotent. The team slug comes from
 	// classroom.json; a classroom with no team gets an actionable message.
 	if resolved != nil && templatePrivate && inOrg {
-		if err := grantClassroomTeamTemplateRead(client, out, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
+		if err := grantClassroomTeamTemplateRead(client, out, errOut, org, classroom, branch, slug, resolved.Owner, resolved.Repo,
 			grantContext{verb: "committed", classroomNoun: "classroom", rerunHint: ", then re-run `gh teacher assignment add`"}); err != nil {
 			return err
 		}
