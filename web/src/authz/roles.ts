@@ -1,13 +1,11 @@
 import type { StaffRole } from "@/types/classroom"
 
 // Single home for Classroom-50's role vocabulary and the app<->GitHub role
-// mappings. Three distinct concepts live below, each in its own section:
-// GitHubOrgRole (org standing), ClassroomRole (in-app role), and
-// GitHubTeamMembership (a per-team probe result that feeds ClassroomRole).
-// Every union derives from the one contract-frozen literal StaffRole (in
-// types/classroom.ts, mirroring the persisted `teams` schema), so adding a role
-// starts there. The admin<->owner correspondence lives only here
-// (githubOrgRoleForRole / roleForGitHubOrgRole).
+// mappings. Three concepts, each in its own section below: GitHubOrgRole (org
+// standing), ClassroomRole (in-app role), and GitHubTeamMembership (a per-team
+// probe result that feeds ClassroomRole). Every union derives from the
+// contract-frozen StaffRole (types/classroom.ts, mirroring the persisted `teams`
+// schema), so adding a role starts there.
 
 // --- 1. GitHub org standing -------------------------------------------------
 
@@ -20,9 +18,8 @@ export type GitHubOrgRole = "owner" | "member" | "non-member" | "unresolved"
 
 // --- 2. Classroom role ------------------------------------------------------
 
-// The sole non-staff classroom role. Named for symmetry with StaffRole so
-// ClassroomRole reads as "student or staff". Not exported — it's a building
-// block for ClassroomRole, which is the public type.
+// The sole non-staff classroom role. Internal — a building block for the public
+// ClassroomRole below.
 type StudentRole = "student"
 
 // A person's role WITHIN a classroom: student (classroom team) or a StaffRole
@@ -41,16 +38,14 @@ export type ResolvedRole = ClassroomRole | "unresolved"
 // can't drift: you can't preview as the top role.
 export type ViewAsRole = Exclude<ClassroomRole, "instructor">
 
-// Precedence for the primary badge / role sort and the view-as downgrade clamp:
-// instructor > ta > student. One rank map for both roster presentation and the
-// guard clamp.
+// Role precedence (instructor > ta > student), shared by the primary-badge/
+// roster sort and the view-as downgrade clamp so the two can't disagree.
 export const ROLE_RANK: Record<ClassroomRole, number> = {
   instructor: 2,
   ta: 1,
   student: 0,
 }
 
-// Sort a role set by precedence (highest first). Pure; returns a new array.
 export function sortRolesByRank(roles: ClassroomRole[]): ClassroomRole[] {
   return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
@@ -64,33 +59,29 @@ export function sortRolesByRank(roles: ClassroomRole[]): ClassroomRole[] {
 export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 
 // --- The app<->GitHub org-role mapping (both directions, single-sourced) -----
-// Security-sensitive: this is the ONLY place "who becomes an org owner" is
-// decided, so a missed hand-copy can't silently mis-scope admin access.
+// The ONLY place the admin<->owner correspondence is decided (GitHub wire
+// "admin" == product "owner", i.e. instructor). Security-sensitive: a missed
+// hand-copy elsewhere could silently mis-scope owner access, so all three
+// helpers below live here.
 
-// WRITE: the GitHub org membership role an invite/role-change carries for a
-// classroom role. An instructor becomes an org OWNER (wire "admin"); student/ta
-// are plain members ("direct_member").
+// WRITE: the org membership role an invite/role-change carries. Only instructor
+// maps to owner ("admin"); student/ta are "direct_member".
 export function githubOrgRoleForRole(
   role: ClassroomRole,
 ): "admin" | "direct_member" {
   return role === "instructor" ? "admin" : "direct_member"
 }
 
-// READ (inverse): the classroom role implied by an existing invitation's GitHub
-// org role. "admin" grants org OWNER, i.e. an instructor; anything else
-// re-invites as a plain student (org role alone can't distinguish TA from
-// student, and student is the safe default a re-invite lands on).
+// READ (inverse): the classroom role an existing invite's org role implies.
+// Anything but "admin" re-invites as a plain student — org role alone can't tell
+// TA from student, and student is the safe default.
 export function roleForGitHubOrgRole(githubOrgRole: string): ClassroomRole {
   return githubOrgRole === "admin" ? "instructor" : "student"
 }
 
-// Whether a GitHub org membership wire-role denotes an org OWNER. GitHub's org
-// membership role is `admin` (owner) or `member`; `owner` is our product name
-// for `admin`. The single home for the wire-level owner test, so pages reading
-// a raw membership/invite payload don't hand-copy `role === "admin"`. (For a
-// resolved viewer role use resolveOrgRole/can("manageOrg"); this is for raw
-// wire objects — a pending invite's role, a per-org summary — that don't go
-// through the provider.)
+// The wire-level owner test, for callers holding a raw membership/invite payload
+// (a pending invite, a per-org summary) that never reaches the provider. For a
+// resolved viewer role, use resolveOrgRole / can("manageOrg") instead.
 export function isOwnerGitHubOrgRole(githubOrgRole: string): boolean {
   return githubOrgRole === "admin"
 }

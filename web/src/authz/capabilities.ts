@@ -28,7 +28,6 @@ export type CapabilityInput = {
 }
 
 // Central policy: the single source of truth mapping roles to capabilities.
-// Mirrors the semantics that were previously scattered as role-literal checks.
 // Fail-closed and self-contained: an `unresolved` role is denied here (it does
 // NOT rely on callers to separately gate the sentinel). Route guards still pair
 // a `resolved` signal to decide spinner-vs-NotFound, but a consumer that reads
