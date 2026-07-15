@@ -66,7 +66,7 @@ describe("resolveClassroomRole", () => {
 
   // KTD-4: the key behavior change. An org owner not on THIS classroom's teams
   // resolves to `student` at classroom scope — org-admin status is not a
-  // classroom role. Org capability lives in OrgRole.
+  // classroom role. Org capability lives in GitHubOrgRole.
   it("org owner NOT on any classroom team is a student at classroom scope (KTD-4)", () => {
     // A real owner reads all three team memberships as definitive non-member.
     expect(resolveClassroomRole(base)).toBe("student")
