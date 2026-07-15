@@ -5,7 +5,6 @@ import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
 import { Button } from "@/components/ui"
-import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import {
   formatTeardownResult,
   TeardownMarkerError,
@@ -23,16 +22,12 @@ const log = logger.scope("orgSettings:TeardownSection")
 
 // Teardown / org reset: deletes ALL repos in the org (mirroring the CLI's
 // `gh teacher teardown`), marker-gated and behind a typed-org-name confirmation.
-// Owner-gated; destructive and irreversible.
+// Owner-gated by the page's <RequireTeacher allow="owner"> (RequireOwner renders
+// children only for a resolved owner, with its own spinner/retry surface), so no
+// inline owner re-check is needed here.
 const TeardownSection = ({ org }: { org: string }) => {
   const { t } = useTranslation()
   const navigate = useNavigate()
-
-  // Owner gate. Redundant with the page's <RequireTeacher allow="owner">
-  // (RequireOwner only renders children for a resolved owner, and shows a
-  // spinner/retry surface during pending/error), so this is a defensive belt —
-  // no pending/error handling needed here.
-  const { isOwner } = useIsOrgOwner()
 
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<TeardownPlan | null>(null)
@@ -88,10 +83,7 @@ const TeardownSection = ({ org }: { org: string }) => {
         variant="error"
         size="sm"
         className={error || done ? "mt-4" : ""}
-        disabled={!isOwner || openMutation.isPending}
-        title={
-          isOwner ? undefined : t("orgSettings.teardown.requiresOwnerTitle")
-        }
+        disabled={openMutation.isPending}
         onClick={() => {
           if (!openMutation.isPending) openTeardown()
         }}
@@ -100,12 +92,6 @@ const TeardownSection = ({ org }: { org: string }) => {
           ? t("orgSettings.teardown.preparing")
           : t("orgSettings.teardown.button")}
       </Button>
-
-      {!isOwner && (
-        <p className="mt-2 text-xs text-base-content/70">
-          {t("orgSettings.teardown.requiresOwnerNote")}
-        </p>
-      )}
 
       <ConfirmModal
         open={open}

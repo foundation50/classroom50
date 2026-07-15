@@ -105,7 +105,9 @@ export function useTeamRoster(
   const client = useGitHubClient()
   const { orgRole } = useOrgRole()
   // Team invitations are owner-only (like org invitations). Gate the reads on
-  // the manageOrg capability so a non-owner doesn't fire a guaranteed 403.
+  // the manageOrg capability so a non-owner doesn't fire a guaranteed 403. This
+  // gate stays IN the hook: a non-owner staffer (TA) legitimately uses the hook
+  // for the ungated member reads, so it can't move to a caller/owner guard.
   const isOwner = can("manageOrg", { orgRole })
 
   const { data: classroomJson } = useGetClassroom(org, classroom)

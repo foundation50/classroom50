@@ -11,7 +11,6 @@ import {
   type InitStepUpdate,
 } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
-import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
   INIT_STEP_ORDER,
@@ -54,8 +53,9 @@ const SummaryBanner = ({
 const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 
 // Re-run the org setup from Org Settings: re-invokes the idempotent
-// initClassroom50 to re-apply lockdown, rulesets, and repo settings. Owner-gated;
-// shows the wizard's badge board. The "repair everything" path complementing the
+// initClassroom50 to re-apply lockdown, rulesets, and repo settings. Owner-gated
+// by the page's <RequireTeacher allow="owner"> (see TeardownSection); shows the
+// wizard's badge board. The "repair everything" path complementing the
 // per-concern audit (U5/U6).
 const RerunOrgSetup = ({ org }: { org: string }) => {
   const { t } = useTranslation()
@@ -64,8 +64,6 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
   const runRerun = useSafeSubmit()
 
   const { data: planDetails } = useGetOrgPlanDetails(org)
-  // Owner gate; redundant with the page's RequireOwner (see TeardownSection).
-  const { isOwner } = useIsOrgOwner()
 
   const [steps, setSteps] =
     useState<Record<InitStepId, InitStepUpdate>>(initialInitSteps)
@@ -136,10 +134,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
           size="sm"
           loading={mutation.isPending}
           loadingLabel={t("orgSettings.rerun.running")}
-          disabled={!isOwner || mutation.isPending}
-          title={
-            isOwner ? undefined : t("orgSettings.rerun.requiresOwnerTitle")
-          }
+          disabled={mutation.isPending}
           onClick={() => {
             if (!mutation.isPending) void runRerun(() => mutation.mutateAsync())
           }}
@@ -150,14 +145,8 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
         </Button>
       }
     >
-      {!isOwner && (
-        <SummaryBanner tone="error">
-          {t("orgSettings.rerun.requiresOwnerNote")}
-        </SummaryBanner>
-      )}
-
       {started && (
-        <div className={!isOwner ? "mt-4" : undefined}>
+        <div>
           <InitStepBoard steps={steps} org={org} />
           {failed && (
             <SummaryBanner tone="error" className="mt-3">

@@ -553,8 +553,12 @@ export const TeacherSidebarMenu = ({
   } = useClassroomRoleContext()
   // Finer, preview-aware classroom role. Roster is staff-only, Settings
   // instructor-only; gating on this makes "View as student/TA" faithfully hide
-  // what a real student/TA wouldn't see. `unresolved` is permissive (no flash).
-  const showStaffItems = showTeacherUi && isStaffRole(classroomRole)
+  // what a real student/TA wouldn't see. showTeacherUi already implies a
+  // resolved instructor|ta role (see ClassroomRoleProvider: it's isStaffRole &&
+  // roleResolved), so the can() conjunct routes the staff-content decision
+  // through the central policy without changing the truth table.
+  const showStaffItems =
+    showTeacherUi && can("viewClassroomStaffContent", { classroomRole })
   const canEditSettings = can("editClassroomSettings", {
     classroomRole,
   })
