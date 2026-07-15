@@ -26,8 +26,9 @@ export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
 }
 
 // Enrollment-state badge tone + i18n label, single-sourced so the roster row
-// list and the member modal render the same status chip (AGENTS.md: one recipe,
-// one source — this pair drifted once when hand-synced).
+// list (EnrolledStudents) and the member modal (RosterMemberModal) render the
+// same status chip (AGENTS.md: one recipe, one source — they were hand-synced
+// before and drifted once on a renamed key).
 export const STATE_BADGE_TONE: Record<TeamRosterRowState, BadgeTone> = {
   enrolled: "success",
   pending: "warning",
