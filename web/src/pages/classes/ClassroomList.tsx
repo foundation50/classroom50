@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { NoSearchResults, ViewToggle } from "@/components/list"
-import { Button, LabeledControl } from "@/components/ui"
+import { Button, Input, LabeledControl, Select } from "@/components/ui"
 import useClassroomSummaries, {
   classroomDisplayName,
   type ClassroomSummary,
@@ -154,17 +154,21 @@ const ClassroomList = ({
         />
       )}
       <div className="flex flex-wrap items-center gap-2 rounded-xl border border-base-300 bg-base-100 p-2">
-        <label className="input input-sm input-bordered flex min-w-48 flex-1 items-center gap-2">
-          <Search aria-hidden="true" className="size-4 text-base-content/50" />
-          <input
-            type="search"
-            className="grow"
-            placeholder={t("classes.toolbar.searchPlaceholder")}
-            aria-label={t("classes.toolbar.searchLabel")}
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </label>
+        <Input
+          inputSize="sm"
+          leadingIcon={
+            <Search
+              aria-hidden="true"
+              className="size-4 text-base-content/50"
+            />
+          }
+          className="min-w-48 flex-1"
+          type="search"
+          placeholder={t("classes.toolbar.searchPlaceholder")}
+          aria-label={t("classes.toolbar.searchLabel")}
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
 
         <div
           role="group"
@@ -187,8 +191,9 @@ const ClassroomList = ({
 
         {showTermFilter && (
           <LabeledControl label={t("classes.toolbar.termPrefix")}>
-            <select
-              className="select select-bordered select-sm join-item"
+            <Select
+              selectSize="sm"
+              className="join-item w-auto"
               aria-label={t("classes.toolbar.termLabel")}
               value={activeTerm}
               onChange={(e) => setTermFilter(e.target.value)}
@@ -199,13 +204,14 @@ const ClassroomList = ({
                   {term}
                 </option>
               ))}
-            </select>
+            </Select>
           </LabeledControl>
         )}
 
         <LabeledControl label={t("classes.toolbar.sortPrefix")}>
-          <select
-            className="select select-bordered select-sm join-item"
+          <Select
+            selectSize="sm"
+            className="join-item w-auto"
             aria-label={t("classes.toolbar.sort.label")}
             value={sortKey}
             onChange={(e) => changeSort(e.target.value as ClassroomSortKey)}
@@ -215,7 +221,7 @@ const ClassroomList = ({
                 {t(opt.labelKey)}
               </option>
             ))}
-          </select>
+          </Select>
         </LabeledControl>
 
         <ViewToggle

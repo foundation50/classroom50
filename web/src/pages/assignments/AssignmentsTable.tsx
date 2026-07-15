@@ -20,7 +20,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Button } from "@/components/ui"
+import { Badge, Button } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -266,11 +266,15 @@ const AssignmentsTable = ({
                     })
                   }
                 >
-                  <span className="badge badge-soft max-xl:text-xs xl:text-sm whitespace-nowrap w-full">
+                  <Badge
+                    tone="neutral"
+                    size="md"
+                    className="max-xl:text-xs xl:text-sm whitespace-nowrap w-full"
+                  >
                     {assignment.due
                       ? formatDueDate(assignment.due)
                       : t("assignments.table.noDueDate")}
-                  </span>
+                  </Badge>
                 </td>
                 <td
                   onClick={() =>

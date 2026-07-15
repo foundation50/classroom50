@@ -25,7 +25,7 @@ import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Card } from "@/components/ui"
+import { Alert, Badge, Button, Card } from "@/components/ui"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -50,15 +50,18 @@ const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
         </p>
       </div>
       {href ? (
-        <a
+        <Button
+          as="a"
+          variant="outline"
+          size="sm"
           href={href}
           target="_blank"
           rel="noreferrer"
-          className="btn btn-sm btn-outline shrink-0"
+          className="shrink-0"
         >
           <FileText aria-hidden="true" className="size-4" />
           {t("submissions.student.viewGrade")}
-        </a>
+        </Button>
       ) : (
         <span className="text-sm text-base-content/70">
           {t("submissions.student.unavailable")}
@@ -77,24 +80,26 @@ const AssignmentMeta = ({ assignment }: { assignment?: Assignment }) => {
   return (
     <div className="mt-2 flex flex-wrap items-center gap-2">
       {assignment.mode === "group" ? (
-        <span className="badge badge-ghost badge-sm gap-1">
+        <Badge ghost className="gap-1">
           <UsersRound aria-hidden="true" className="size-3.5" />{" "}
           {t("submissions.student.modeGroup")}
-        </span>
+        </Badge>
       ) : assignment.mode === "individual" ? (
-        <span className="badge badge-ghost badge-sm gap-1">
+        <Badge ghost className="gap-1">
           <UserRound aria-hidden="true" className="size-3.5" />{" "}
           {t("submissions.student.modeIndividual")}
-        </span>
+        </Badge>
       ) : null}
-      <span
-        className={`badge badge-sm gap-1 ${overdue ? "badge-error badge-soft" : "badge-ghost"}`}
+      <Badge
+        tone={overdue ? "error" : "neutral"}
+        ghost={!overdue}
+        className="gap-1"
       >
         <CalendarClock aria-hidden="true" className="size-3.5" />
         {due
           ? t("submissions.dueDate", { date: formatDueDateTime(due) })
           : t("submissions.noDueDate")}
-      </span>
+      </Badge>
     </div>
   )
 }
@@ -181,15 +186,17 @@ const SubmissionBody = ({
         <Alert tone="info">
           <div>{t("submissions.student.noGradedYet")}</div>
         </Alert>
-        <a
+        <Button
+          as="a"
+          variant="outline"
+          size="sm"
           href={studentRepo.html_url}
           target="_blank"
           rel="noreferrer"
-          className="btn btn-sm btn-outline"
         >
           <ExternalLink aria-hidden="true" className="size-4" />
           {t("submissions.student.openMyRepo")}
-        </a>
+        </Button>
       </EnterDiv>
     )
   }
@@ -200,15 +207,17 @@ const SubmissionBody = ({
         <p className="text-sm text-base-content/70">
           {t("submissions.student.releasesIntro")}
         </p>
-        <a
+        <Button
+          as="a"
+          variant="outline"
+          size="sm"
           href={studentRepo.html_url}
           target="_blank"
           rel="noreferrer"
-          className="btn btn-sm btn-outline"
         >
           <ExternalLink aria-hidden="true" className="size-4" />
           {t("submissions.student.openMyRepo")}
-        </a>
+        </Button>
       </div>
 
       <Card as={EnterDiv} bordered={false} className="border border-base-200">

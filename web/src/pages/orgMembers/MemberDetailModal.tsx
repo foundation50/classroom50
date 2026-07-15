@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Button, Modal } from "@/components/ui"
+import { Badge, Button, Modal } from "@/components/ui"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -181,13 +181,15 @@ const MemberDetailModal = ({
                   <span className="font-medium">
                     {access.classroom}
                     {access.archived ? (
-                      <span className="badge badge-xs badge-ghost ml-2">
+                      <Badge size="xs" ghost className="ml-2">
                         {t("orgMembers.archived")}
-                      </span>
+                      </Badge>
                     ) : null}
                     {access.state === "unprovisioned" && !access.archived ? (
-                      <span
-                        className="badge badge-xs badge-warning badge-soft ml-2 gap-1"
+                      <Badge
+                        size="xs"
+                        tone="warning"
+                        className="ml-2 gap-1"
                         title={t("orgMembers.unprovisionedAccessTitle")}
                       >
                         <AlertTriangle
@@ -195,14 +197,14 @@ const MemberDetailModal = ({
                           className="size-2.5"
                         />
                         {t("orgMembers.unprovisionedAccessBadge")}
-                      </span>
+                      </Badge>
                     ) : null}
                   </span>
                   <span className="flex items-center gap-2 text-base-content/70">
                     {access.section ? (
-                      <span className="badge badge-xs badge-ghost">
+                      <Badge size="xs" ghost>
                         {access.section}
-                      </span>
+                      </Badge>
                     ) : null}
                     <ChevronRight
                       aria-hidden="true"

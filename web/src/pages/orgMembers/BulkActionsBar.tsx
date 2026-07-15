@@ -2,7 +2,7 @@ import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, UserMinus, X } from "lucide-react"
 
-import { Alert, Button, Modal, Toolbar } from "@/components/ui"
+import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubUser } from "@/github-core/types"
 import type { StudentCsvRow } from "@/domain/students"
@@ -300,9 +300,10 @@ const BulkActionsBar = ({
               >
                 {t("orgMembers.bulk.classroomLabel")}
               </label>
-              <select
+              <Select
                 id={`${titleId}-picker`}
-                className="select select-bordered select-sm max-w-[12rem]"
+                selectSize="sm"
+                className="max-w-[12rem] w-auto"
                 value={effectiveClassroom}
                 onChange={(e) => setClassroom(e.target.value)}
                 disabled={classrooms.length === 0}
@@ -316,7 +317,7 @@ const BulkActionsBar = ({
                     </option>
                   ))
                 )}
-              </select>
+              </Select>
 
               <div className="join">
                 <Button

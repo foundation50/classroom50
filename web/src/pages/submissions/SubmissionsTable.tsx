@@ -333,12 +333,9 @@ const SubmissionHistory = ({
             size="sm"
           />
           {s.late ? (
-            <span
-              className="badge badge-sm badge-error badge-soft"
-              title={t("submissions.table.lateHistoryTitle")}
-            >
+            <Badge tone="error" title={t("submissions.table.lateHistoryTitle")}>
               {t("submissions.table.late")}
-            </span>
+            </Badge>
           ) : null}
           {isGroup && s.submittedBy ? (
             <span className="text-base-content/70">
@@ -601,12 +598,12 @@ const SubmissionsTable = ({
                               {formatDateTime(datetime)}
                             </span>
                             {late ? (
-                              <span
-                                className="badge badge-sm badge-error badge-soft"
+                              <Badge
+                                tone="error"
                                 title={t("submissions.table.lateRowTitle")}
                               >
                                 {t("submissions.table.late")}
-                              </span>
+                              </Badge>
                             ) : null}
                           </div>
                           {rest.gradedAt && rest.gradedAt !== datetime ? (

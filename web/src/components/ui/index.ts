@@ -10,6 +10,8 @@ export type {
   ButtonShape,
 } from "./Button"
 
+export { RouterButton } from "./RouterButton"
+
 export { Card, CardBody, CardTitle, CardActions } from "./Card"
 export type { CardProps } from "./Card"
 

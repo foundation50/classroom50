@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ExternalLink } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
-import { Modal } from "@/components/ui"
+import { Badge, Button, Modal } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { getName, getInitials } from "@/util/students"
 
@@ -88,9 +88,7 @@ export const StudentProfileModal = ({
             {name}
           </h3>
           {student.section?.trim() ? (
-            <span className="badge badge-sm badge-ghost">
-              {student.section.trim()}
-            </span>
+            <Badge ghost>{student.section.trim()}</Badge>
           ) : null}
         </div>
       </div>
@@ -110,8 +108,11 @@ export const StudentProfileModal = ({
       </dl>
 
       {repoUrl ? (
-        <a
-          className="btn btn-outline btn-sm mt-4 w-full"
+        <Button
+          as="a"
+          variant="outline"
+          size="sm"
+          className="mt-4 w-full"
           href={repoUrl}
           target="_blank"
           rel="noreferrer"
@@ -120,7 +121,7 @@ export const StudentProfileModal = ({
           <GitHub aria-hidden="true" className="size-4" />{" "}
           {t("components.modals.studentProfile.openRepo")}
           <ExternalLink aria-hidden="true" className="size-3.5" />
-        </a>
+        </Button>
       ) : null}
     </Modal>
   )

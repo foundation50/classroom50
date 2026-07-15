@@ -1,4 +1,4 @@
-import { Link, useParams } from "@tanstack/react-router"
+import { useParams } from "@tanstack/react-router"
 import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card } from "@/components/ui"
+import { Alert, Button, Card, RouterButton } from "@/components/ui"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
@@ -120,14 +120,14 @@ const OrgSteps = ({
                 {t("setup.allSetBody")}
               </p>
             </div>
-            <Link className="btn btn-primary" to="/$org" params={{ org }}>
+            <RouterButton variant="primary" to="/$org" params={{ org }}>
               <span className="truncate">
                 {t("setup.goToOrg", {
                   org: org || t("setup.yourOrganization"),
                 })}
               </span>
               <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
-            </Link>
+            </RouterButton>
           </EnterDiv>
         )}
       </Card.Body>

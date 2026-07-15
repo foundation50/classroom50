@@ -5,7 +5,7 @@ import type { TFunction } from "i18next"
 import { slugify } from "@/util/slug"
 import { AlertTriangle } from "lucide-react"
 import AutogradingTestsPane from "./AutogradingTestsPane"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, FormField, Input, Textarea } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   testToDraft,
@@ -432,119 +432,114 @@ const CreateAssignmentForm = ({
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <form.Field name="name">
                 {(field) => (
-                  <div>
-                    <label htmlFor={field.name} className="label font-bold">
-                      {t("assignments.form.name")}
-                      <span className="text-error">*</span>
-                    </label>
-                    <input
-                      id={field.name}
-                      name={field.name}
-                      type="text"
-                      required
-                      aria-required="true"
-                      className="input w-full"
-                      placeholder={t("assignments.form.namePlaceholder")}
-                      value={field.state.value}
-                      onBlur={field.handleBlur}
-                      onChange={(e) => {
-                        field.handleChange(e.target.value)
-                        if (!edit && !slugTouched) {
-                          form.setFieldValue("slug", slugify(e.target.value))
-                        }
-                      }}
-                    />
-                  </div>
+                  <FormField
+                    htmlFor={field.name}
+                    required
+                    label={t("assignments.form.name")}
+                  >
+                    {({ id }) => (
+                      <Input
+                        id={id}
+                        name={field.name}
+                        required
+                        aria-required="true"
+                        placeholder={t("assignments.form.namePlaceholder")}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(e) => {
+                          field.handleChange(e.target.value)
+                          if (!edit && !slugTouched) {
+                            form.setFieldValue("slug", slugify(e.target.value))
+                          }
+                        }}
+                      />
+                    )}
+                  </FormField>
                 )}
               </form.Field>
 
               <form.Field name="slug">
-                {(field) => (
-                  <div>
-                    <label
+                {(field) => {
+                  const slugError =
+                    !edit && field.state.meta.errors.length > 0
+                      ? String(field.state.meta.errors[0])
+                      : undefined
+                  return (
+                    <FormField
                       htmlFor={field.name}
-                      className="label font-bold flex items-center gap-1.5"
-                    >
-                      {t("assignments.form.slug")}
-                      {!edit && <span className="text-error">*</span>}
-                      <HelpTooltip
-                        help={t(
-                          edit
-                            ? "assignments.form.slugEditHelp"
-                            : "assignments.form.slugHelp",
-                        )}
-                      />
-                    </label>
-                    <input
-                      id={field.name}
-                      name={field.name}
-                      type="text"
                       required={!edit}
-                      aria-required={!edit}
-                      // The slug is the assignment's repo-path identity; renaming
-                      // isn't supported, so it's shown read-only in edit mode.
-                      disabled={edit}
-                      aria-invalid={!edit && field.state.meta.errors.length > 0}
-                      aria-describedby={
-                        !edit && field.state.meta.errors.length > 0
-                          ? `${field.name}-error`
-                          : undefined
-                      }
-                      className="input w-full"
-                      placeholder={t("assignments.form.slugPlaceholder")}
-                      value={field.state.value}
-                      onBlur={(e) => {
-                        // Normalize on blur so what the teacher sees is what's
-                        // saved (the repo path segment). An emptied slug falls
-                        // back to the name-derived default, so leaving the field
-                        // blank restores the auto-generated slug.
-                        const normalized = slugify(e.target.value)
-                        field.handleChange(
-                          normalized || slugify(form.state.values.name),
-                        )
-                        field.handleBlur()
-                      }}
-                      onChange={(e) => {
-                        // Clearing the slug re-arms auto-fill from the name;
-                        // any non-empty edit latches it off so a deliberate
-                        // slug isn't clobbered by later name edits.
-                        setSlugTouched(e.target.value.trim() !== "")
-                        field.handleChange(e.target.value)
-                      }}
-                    />
-                    {!edit && field.state.meta.errors.length > 0 && (
-                      <p
-                        id={`${field.name}-error`}
-                        className="text-error text-sm mt-1.5"
-                        role="alert"
-                      >
-                        {String(field.state.meta.errors[0])}
-                      </p>
-                    )}
-                  </div>
-                )}
+                      help={t(
+                        edit
+                          ? "assignments.form.slugEditHelp"
+                          : "assignments.form.slugHelp",
+                      )}
+                      label={t("assignments.form.slug")}
+                      error={slugError}
+                    >
+                      {({ id, describedById, invalid }) => (
+                        <Input
+                          id={id}
+                          name={field.name}
+                          required={!edit}
+                          aria-required={!edit}
+                          // The slug is the assignment's repo-path identity;
+                          // renaming isn't supported, so it's read-only on edit.
+                          disabled={edit}
+                          invalid={invalid}
+                          aria-describedby={describedById}
+                          placeholder={t("assignments.form.slugPlaceholder")}
+                          value={field.state.value}
+                          onBlur={(e) => {
+                            // Normalize on blur so what the teacher sees is
+                            // what's saved (the repo path segment). An emptied
+                            // slug falls back to the name-derived default, so
+                            // leaving it blank restores the auto slug.
+                            const normalized = slugify(e.target.value)
+                            field.handleChange(
+                              normalized || slugify(form.state.values.name),
+                            )
+                            field.handleBlur()
+                          }}
+                          onChange={(e) => {
+                            // Clearing the slug re-arms auto-fill from the name;
+                            // any non-empty edit latches it off so a deliberate
+                            // slug isn't clobbered by later name edits.
+                            setSlugTouched(e.target.value.trim() !== "")
+                            field.handleChange(e.target.value)
+                          }}
+                        />
+                      )}
+                    </FormField>
+                  )
+                }}
               </form.Field>
             </div>
 
             <form.Field name="description">
               {(field) => (
-                <div className="mt-4">
-                  <label htmlFor={field.name} className="label font-bold mb-2">
-                    {t("assignments.form.description")}
-                    <span className="ml-1.5 font-normal text-base-content/60">
-                      ({t("assignments.form.optional")})
-                    </span>
-                  </label>
-                  <textarea
-                    id={field.name}
-                    name={field.name}
-                    className="textarea w-full"
-                    placeholder={t("assignments.form.descriptionPlaceholder")}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </div>
+                <FormField
+                  htmlFor={field.name}
+                  className="mt-4"
+                  label={
+                    <>
+                      {t("assignments.form.description")}
+                      <span className="ml-1.5 font-normal text-base-content/60">
+                        ({t("assignments.form.optional")})
+                      </span>
+                    </>
+                  }
+                >
+                  {({ id }) => (
+                    <Textarea
+                      id={id}
+                      name={field.name}
+                      placeholder={t("assignments.form.descriptionPlaceholder")}
+                      value={field.state.value}
+                      onBlur={field.handleBlur}
+                      onChange={(e) => field.handleChange(e.target.value)}
+                    />
+                  )}
+                </FormField>
               )}
             </form.Field>
 
@@ -612,11 +607,11 @@ const CreateAssignmentForm = ({
                               htmlFor={field.name}
                               label={t("assignments.form.maxGroupSize")}
                             />
-                            <input
+                            <Input
                               id={field.name}
                               name={field.name}
                               type="number"
-                              className="input validator w-full sm:max-w-[8rem]"
+                              className="validator w-full sm:max-w-[8rem]"
                               placeholder="#"
                               min={GROUP_SIZE_MIN}
                               max={GROUP_SIZE_MAX}
@@ -684,11 +679,11 @@ const CreateAssignmentForm = ({
                       />
                       {dueDateEnabled ? (
                         <div className="mt-2 ml-[3.75rem]">
-                          <input
+                          <Input
                             id={field.name}
                             name={field.name}
                             type="datetime-local"
-                            className="input w-full sm:max-w-xs"
+                            className="w-full sm:max-w-xs"
                             aria-label={t("assignments.form.dueDate", {
                               tz: tzShort,
                             })}
@@ -820,11 +815,9 @@ const CreateAssignmentForm = ({
                       label={t("assignments.form.setupCommand")}
                       help={t("assignments.form.setupCommandTip")}
                     />
-                    <input
+                    <Input
                       id={field.name}
                       name={field.name}
-                      type="text"
-                      className="input w-full"
                       placeholder={t(
                         "assignments.form.setupCommandPlaceholder",
                       )}
@@ -853,10 +846,10 @@ const CreateAssignmentForm = ({
                           result: "hello.py",
                         })}
                       />
-                      <textarea
+                      <Textarea
                         id={field.name}
                         name={field.name}
-                        className="textarea w-full font-mono"
+                        className="font-mono"
                         rows={4}
                         spellCheck={false}
                         placeholder={"*\n!hello.py"}
@@ -917,7 +910,7 @@ const CreateAssignmentForm = ({
                           return (
                             <div className="mt-3">
                               <div className="flex items-center gap-2">
-                                <input
+                                <Input
                                   id={field.name}
                                   name={field.name}
                                   type="number"
@@ -925,7 +918,7 @@ const CreateAssignmentForm = ({
                                   min={PASS_THRESHOLD_MIN}
                                   max={PASS_THRESHOLD_MAX}
                                   step={1}
-                                  className="input w-28"
+                                  className="w-28"
                                   value={field.state.value}
                                   onBlur={field.handleBlur}
                                   onChange={(e) =>

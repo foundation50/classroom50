@@ -2,7 +2,8 @@ import { AlertTriangle, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Card, CopyableDetails, Button } from "@/components/ui"
+import { Card, CopyableDetails, Button, Badge } from "@/components/ui"
+import type { BadgeTone } from "@/components/ui"
 
 // Distinct membership-failure causes the student flow (onboarding + accept) can
 // hit; each maps to a title/body and at least one recovery action.
@@ -135,20 +136,21 @@ export const MembershipError = ({
     generic: "membership.generic.title",
   }[cause]
 
-  const badgeTone = {
-    ssoWithUrl: "badge-warning",
-    ssoUrlless: "badge-warning",
-    notAMember: "badge-error",
-    generic: "badge-error",
-  }[cause]
+  const badgeToneByCause: Record<MembershipErrorCause, BadgeTone> = {
+    ssoWithUrl: "warning",
+    ssoUrlless: "warning",
+    notAMember: "error",
+    generic: "error",
+  }
+  const badgeTone = badgeToneByCause[cause]
 
   return (
     <Card.Body className="gap-6">
       <div>
-        <span className={`badge ${badgeTone} badge-soft gap-2`}>
+        <Badge tone={badgeTone} size="md" className="gap-2">
           <AlertTriangle aria-hidden="true" className="size-4" />
           {t("membership.badge")}
-        </span>
+        </Badge>
         <h1 className="mt-6 text-2xl font-bold">{t(titleKey)}</h1>
         <p className="mt-2 text-base text-base-content/70">
           {cause === "ssoWithUrl" || cause === "ssoUrlless" ? (
@@ -186,13 +188,15 @@ export const MembershipError = ({
             </p>
 
             {cause === "ssoWithUrl" && ssoUrl && (
-              <a
+              <Button
+                as="a"
                 href={ssoUrl}
-                className="btn btn-primary btn-sm"
+                variant="primary"
+                size="sm"
                 rel="noopener noreferrer"
               >
                 {t("membership.ssoRequired.authorizeButton")}
-              </a>
+              </Button>
             )}
 
             {cause === "generic" && onRetry && (

@@ -13,7 +13,7 @@ import {
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys } from "@/github-core/queries"
 import { renameConfigRepoToMain } from "@/github-core/mutations"
-import { Button, Spinner } from "@/components/ui"
+import { Badge, Button, Spinner, type BadgeTone } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import PlanBadge from "@/components/PlanBadge"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -73,10 +73,13 @@ const CONCERN_STATE_LABEL: Record<CheckState, string> = {
   unreadable: "orgSettings.audit.stateUnreadable",
 }
 
-const CONCERN_STATE_BADGE: Record<CheckState, string> = {
-  enforced: "badge-success",
-  unenforced: "badge-error",
-  unreadable: "badge-neutral badge-ghost",
+const CONCERN_STATE_BADGE: Record<
+  CheckState,
+  { tone: BadgeTone; ghost?: boolean }
+> = {
+  enforced: { tone: "success" },
+  unenforced: { tone: "error" },
+  unreadable: { tone: "neutral", ghost: true },
 }
 
 // What a Fix-it result means for the pane, derived purely from the RepairResult
@@ -171,15 +174,17 @@ export function ConcernRow({
             </Button>
           )}
           {unresolvedMessage !== undefined && (
-            <span className="badge badge-warning badge-soft">
+            <Badge tone="warning">
               {t("orgSettings.audit.needsManualSetup")}
-            </span>
+            </Badge>
           )}
-          <span
-            className={`badge ${CONCERN_STATE_BADGE[concern.verdict.state]}`}
+          <Badge
+            {...CONCERN_STATE_BADGE[concern.verdict.state]}
+            size="md"
+            soft={false}
           >
             {t(CONCERN_STATE_LABEL[concern.verdict.state])}
-          </span>
+          </Badge>
         </div>
       </div>
 
@@ -260,9 +265,7 @@ function RecommendationRow({
             {fixing ? null : t("orgSettings.audit.renameToMain")}
           </Button>
         )}
-        <span className="badge badge-warning badge-soft">
-          {t("orgSettings.audit.recommended")}
-        </span>
+        <Badge tone="warning">{t("orgSettings.audit.recommended")}</Badge>
       </div>
     </div>
   )
@@ -382,9 +385,9 @@ function AuditBody({
                     <ExternalLink aria-hidden="true" className="size-3" />
                   </a>
                 </div>
-                <span className="badge badge-warning badge-soft shrink-0">
+                <Badge tone="warning" className="shrink-0">
                   {t("orgSettings.audit.confirmManually")}
-                </span>
+                </Badge>
               </div>
             ))}
           </div>

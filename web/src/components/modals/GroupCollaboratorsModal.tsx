@@ -5,7 +5,14 @@ import { Plus, Trash2, UsersRound } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
-import { Alert, AnimatedAlert, Button, Modal } from "@/components/ui"
+import {
+  Alert,
+  AnimatedAlert,
+  Badge,
+  Button,
+  Input,
+  Modal,
+} from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
 import useGetRepoCollaborators from "@/hooks/useGetRepoCollaborators"
@@ -464,9 +471,9 @@ export function GroupCollaboratorsModal({
                       students={students}
                     />
                   </span>
-                  <span className="badge badge-primary badge-soft badge-sm">
+                  <Badge tone="primary">
                     {t("components.modals.groupCollaborators.ownerBadge")}
-                  </span>
+                  </Badge>
                 </li>
               )}
 
@@ -582,8 +589,8 @@ export function GroupCollaboratorsModal({
 
             {canManage && !isFull && (
               <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-                <input
-                  className="input input-bordered flex-1"
+                <Input
+                  className="flex-1"
                   placeholder={t(
                     "components.modals.groupCollaborators.addPlaceholder",
                   )}

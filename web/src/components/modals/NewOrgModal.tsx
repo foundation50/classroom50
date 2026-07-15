@@ -4,7 +4,7 @@ import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
 import PlanBadge from "@/components/PlanBadge"
-import { Modal } from "@/components/ui"
+import { Button, Modal } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import { classifyPlan } from "@/lib/orgPlan"
@@ -115,15 +115,17 @@ function NewOrgModal({
       )}
 
       <div className="modal-action">
-        <a
+        <Button
+          as="a"
           href="https://github.com/organizations/new"
           target="_blank"
           rel="noreferrer"
-          className="btn btn-ghost btn-sm"
+          variant="ghost"
+          size="sm"
         >
           {t("orgs.newOrg.createOnGitHub")}
           <ExternalLink aria-hidden="true" className="size-4" />
-        </a>
+        </Button>
       </div>
     </Modal>
   )

@@ -23,7 +23,7 @@ import {
   type StringField,
 } from "./formFieldHelpers"
 import { InlineNote, InlineCode as Code } from "@/components/InlineNote"
-import { HelpTooltip } from "@/components/ui"
+import { FormField, Input } from "@/components/ui"
 import {
   templateForkNoteView,
   templateRestrictedNoteView,
@@ -112,32 +112,35 @@ export const TemplateField = ({
 
   return (
     <>
-      <label
+      <FormField
         htmlFor={field.name}
-        className="label font-bold mb-2 flex items-center gap-1.5"
+        help={t("assignments.template.help")}
+        label={
+          <>
+            <GitHub
+              aria-hidden="true"
+              className="size-4 text-base-content/30 opacity-70"
+            />
+            {t("assignments.template.label")}
+            <span className="font-normal text-base-content/60">
+              ({t("assignments.form.optional")})
+            </span>
+          </>
+        }
       >
-        <GitHub
-          aria-hidden="true"
-          className="size-4 text-base-content/30 opacity-70"
-        />
-        {t("assignments.template.label")}
-        <span className="font-normal text-base-content/60">
-          ({t("assignments.form.optional")})
-        </span>
-        <HelpTooltip help={t("assignments.template.help")} />
-      </label>
-      <input
-        id={field.name}
-        name={field.name}
-        type="text"
-        autoComplete="off"
-        spellCheck={false}
-        placeholder={t("assignments.template.placeholder")}
-        className="input w-full"
-        value={rawValue}
-        onBlur={normalizeOnBlur(field)}
-        onChange={(e) => field.handleChange(e.target.value)}
-      />
+        {({ id }) => (
+          <Input
+            id={id}
+            name={field.name}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder={t("assignments.template.placeholder")}
+            value={rawValue}
+            onBlur={normalizeOnBlur(field)}
+            onChange={(e) => field.handleChange(e.target.value)}
+          />
+        )}
+      </FormField>
 
       <TemplateVerificationNote
         verification={verification}

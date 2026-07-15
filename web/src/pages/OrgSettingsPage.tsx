@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Button } from "@/components/ui"
+import { Button, Input } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -419,12 +419,11 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                   ? t("orgSettings.serviceToken.enterNewLabel")
                   : t("orgSettings.serviceToken.enterLabel")}
               </label>
-              <input
+              <Input
                 id="service-token"
                 ref={tokenInputRef}
                 type="password"
                 placeholder={t("orgSettings.serviceToken.placeholder")}
-                className="input input-bordered w-full"
                 autoComplete="off"
                 value={serviceToken}
                 onChange={(e) => {

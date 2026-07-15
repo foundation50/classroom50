@@ -15,9 +15,13 @@ vi.mock("@/components/PageShell", () => ({
     <div>{children}</div>
   ),
 }))
-vi.mock("@tanstack/react-router", () => ({
-  useParams: () => ({ org: "acme" }),
-}))
+vi.mock("@tanstack/react-router", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-router")>()
+  return {
+    ...actual,
+    useParams: () => ({ org: "acme" }),
+  }
+})
 vi.mock("@/hooks/useDocumentTitle", () => ({ useDocumentTitle: () => {} }))
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()

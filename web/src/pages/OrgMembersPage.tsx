@@ -10,7 +10,15 @@ import {
   UserPlus,
 } from "lucide-react"
 
-import { AnimatedAlert, Button, Card, Spinner } from "@/components/ui"
+import {
+  AnimatedAlert,
+  Badge,
+  Button,
+  Card,
+  Input,
+  Select,
+  Spinner,
+} from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -411,19 +419,19 @@ const OrgMembersPage = () => {
           </AnimatedAlert>
 
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <label className="input input-bordered flex min-w-0 flex-1 items-center gap-2">
-              <Search aria-hidden="true" className="size-4 opacity-50" />
-              <input
-                type="search"
-                className="grow"
-                placeholder={t("orgMembers.searchPlaceholder")}
-                aria-label={t("orgMembers.searchLabel")}
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-            </label>
-            <select
-              className="select select-bordered w-full sm:w-auto sm:min-w-[14rem]"
+            <Input
+              leadingIcon={
+                <Search aria-hidden="true" className="size-4 opacity-50" />
+              }
+              className="min-w-0 flex-1"
+              type="search"
+              placeholder={t("orgMembers.searchPlaceholder")}
+              aria-label={t("orgMembers.searchLabel")}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+            <Select
+              className="w-full sm:w-auto sm:min-w-[14rem]"
               aria-label={t("orgMembers.filterByClassroomLabel")}
               value={classroomFilter}
               onChange={(e) => setClassroomFilter(e.target.value)}
@@ -437,7 +445,7 @@ const OrgMembersPage = () => {
                   {c.name}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
 
           <Card className="mt-4 w-full overflow-hidden">
@@ -561,8 +569,9 @@ const OrgMembersPage = () => {
                           })}
                         </span>
                         {row.unprovisionedClassrooms.length > 0 ? (
-                          <span
-                            className="badge badge-sm badge-warning badge-soft gap-1"
+                          <Badge
+                            tone="warning"
+                            className="gap-1"
                             title={t("orgMembers.unprovisionedTitle", {
                               classrooms:
                                 row.unprovisionedClassrooms.join(", "),
@@ -573,7 +582,7 @@ const OrgMembersPage = () => {
                               className="size-3"
                             />
                             {t("orgMembers.unprovisionedBadge")}
-                          </span>
+                          </Badge>
                         ) : null}
                         <ClassificationBadge row={row} isOwner={isOwner(row)} />
                         <ChevronRight

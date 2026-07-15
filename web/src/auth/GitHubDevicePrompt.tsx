@@ -107,8 +107,11 @@ export function GitHubDevicePrompt({
             {t("auth.deviceStep2Title")}
           </h2>
 
-          <a
-            className="btn btn-outline btn-primary btn-sm mt-3 w-full"
+          <Button
+            as="a"
+            variant="outline"
+            size="sm"
+            className="mt-3 w-full"
             href={device.verificationUri}
             target="_blank"
             rel="noopener noreferrer"
@@ -118,7 +121,7 @@ export function GitHubDevicePrompt({
           >
             <ExternalLink aria-hidden="true" className="size-4" />
             {t("auth.deviceOpenUri", { uri: device.verificationUri })}
-          </a>
+          </Button>
 
           <p className="mt-2 text-xs leading-relaxed text-base-content/70">
             {t("auth.deviceStep2Hint")}

@@ -231,7 +231,7 @@ const StaffRoleList = ({
     <div>
       <div className="flex items-center gap-2 mb-2">
         <h4 className="font-bold">{rolePlural}</h4>
-        <span className="badge badge-sm badge-ghost">{members.length}</span>
+        <Badge ghost>{members.length}</Badge>
       </div>
       {membersQuery.isLoading ? (
         <div className="flex items-center gap-2 text-sm text-base-content/70">
@@ -346,13 +346,13 @@ const StaffMemberRow = ({
           className="size-6 rounded-full shrink-0"
         />
         <span className="truncate text-sm">@{member.login}</span>
-        <span
-          className={`badge badge-xs shrink-0 ${
-            role === "instructor" ? "badge-primary" : "badge-secondary"
-          } badge-soft`}
+        <Badge
+          size="xs"
+          tone={role === "instructor" ? "primary" : "secondary"}
+          className="shrink-0"
         >
           {roleLabel}
-        </span>
+        </Badge>
       </a>
       <Button
         variant="ghost"

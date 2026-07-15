@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle, Info, ShieldCheck } from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
+import { Badge } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { NotifyInput } from "@/context/notifications/NotificationProvider"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
@@ -50,35 +51,31 @@ export const ClassificationBadge = ({
   const { t } = useTranslation()
   if (row.classification === "on-roster-not-member") {
     return (
-      <span className="badge badge-sm badge-error badge-soft gap-1">
+      <Badge tone="error" className="gap-1">
         <AlertTriangle aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeNotMember")}
-      </span>
+      </Badge>
     )
   }
   // An owner/admin is labeled "Owner", not "Member" — takes precedence over the
   // no-roster badge (an owner with no classroom is still an owner).
   if (isOwner) {
     return (
-      <span className="badge badge-sm badge-info badge-soft gap-1">
+      <Badge tone="info" className="gap-1">
         <ShieldCheck aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeOwner")}
-      </span>
+      </Badge>
     )
   }
   if (row.classification === "member-no-roster") {
     return (
-      <span className="badge badge-sm badge-ghost gap-1">
+      <Badge ghost className="gap-1">
         <Info aria-hidden="true" className="size-3" />{" "}
         {t("orgMembers.badgeNoClassroom")}
-      </span>
+      </Badge>
     )
   }
-  return (
-    <span className="badge badge-sm badge-success badge-soft">
-      {t("orgMembers.badgeMember")}
-    </span>
-  )
+  return <Badge tone="success">{t("orgMembers.badgeMember")}</Badge>
 }
 
 // Shared invite flow for the inline row button and the detail modal. Errors are

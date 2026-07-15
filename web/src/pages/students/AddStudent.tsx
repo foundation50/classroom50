@@ -8,7 +8,7 @@ import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStu
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { StudentAlreadyEnrolledError } from "@/domain/students"
 import { isValidEmail } from "@/util/orgMembership"
-import { AnimatedAlert, Button, Modal } from "@/components/ui"
+import { AnimatedAlert, Button, Input, Modal } from "@/components/ui"
 
 type AddStudentProps = {
   org: string
@@ -165,49 +165,47 @@ const AddStudent = ({
         <div className="mt-4 flex flex-col gap-3">
           <form.Field name="name">
             {(field) => (
-              <label className="input input-bordered flex w-full items-center gap-2">
-                <UserRound
-                  className="size-4 text-base-content/50"
-                  aria-hidden="true"
-                />
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  className="grow"
-                  placeholder={t("students.namePlaceholder")}
-                  aria-label={t("students.namePlaceholder")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </label>
+              <Input
+                leadingIcon={
+                  <UserRound
+                    className="size-4 text-base-content/50"
+                    aria-hidden="true"
+                  />
+                }
+                id={field.name}
+                name={field.name}
+                type="text"
+                placeholder={t("students.namePlaceholder")}
+                aria-label={t("students.namePlaceholder")}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
             )}
           </form.Field>
 
           <form.Field name="username">
             {(field) => (
               <div>
-                <label className="input input-bordered flex w-full items-center gap-2">
-                  <GitHub className="size-4 opacity-40" aria-hidden="true" />
-                  <input
-                    id={field.name}
-                    name={field.name}
-                    type="text"
-                    className="grow"
-                    placeholder={t("students.usernamePlaceholder")}
-                    aria-label={t("students.usernameAria")}
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </label>
+                <Input
+                  leadingIcon={
+                    <GitHub className="size-4 opacity-40" aria-hidden="true" />
+                  }
+                  id={field.name}
+                  name={field.name}
+                  type="text"
+                  placeholder={t("students.usernamePlaceholder")}
+                  aria-label={t("students.usernameAria")}
+                  aria-invalid={field.state.meta.errors.length > 0}
+                  aria-describedby={
+                    field.state.meta.errors.length > 0
+                      ? `${field.name}-error`
+                      : undefined
+                  }
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
                 {field.state.meta.errors.length > 0 && (
                   <p
                     id={`${field.name}-error`}
@@ -224,29 +222,28 @@ const AddStudent = ({
           <form.Field name="email">
             {(field) => (
               <div>
-                <label className="input input-bordered flex w-full items-center gap-2">
-                  <Mail
-                    className="size-4 text-base-content/50"
-                    aria-hidden="true"
-                  />
-                  <input
-                    id={field.name}
-                    name={field.name}
-                    type="email"
-                    className="grow"
-                    placeholder={t("students.emailPlaceholder")}
-                    aria-label={t("students.emailAria")}
-                    aria-invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) => field.handleChange(e.target.value)}
-                  />
-                </label>
+                <Input
+                  leadingIcon={
+                    <Mail
+                      className="size-4 text-base-content/50"
+                      aria-hidden="true"
+                    />
+                  }
+                  id={field.name}
+                  name={field.name}
+                  type="email"
+                  placeholder={t("students.emailPlaceholder")}
+                  aria-label={t("students.emailAria")}
+                  aria-invalid={field.state.meta.errors.length > 0}
+                  aria-describedby={
+                    field.state.meta.errors.length > 0
+                      ? `${field.name}-error`
+                      : undefined
+                  }
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
                 {field.state.meta.errors.length > 0 && (
                   <p
                     id={`${field.name}-error`}
@@ -262,23 +259,22 @@ const AddStudent = ({
 
           <form.Field name="section">
             {(field) => (
-              <label className="input input-bordered flex w-full items-center gap-2">
-                <Users
-                  className="size-4 text-base-content/50"
-                  aria-hidden="true"
-                />
-                <input
-                  id={field.name}
-                  name={field.name}
-                  type="text"
-                  className="grow"
-                  placeholder={t("students.sectionPlaceholder")}
-                  aria-label={t("students.sectionAria")}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                />
-              </label>
+              <Input
+                leadingIcon={
+                  <Users
+                    className="size-4 text-base-content/50"
+                    aria-hidden="true"
+                  />
+                }
+                id={field.name}
+                name={field.name}
+                type="text"
+                placeholder={t("students.sectionPlaceholder")}
+                aria-label={t("students.sectionAria")}
+                value={field.state.value}
+                onBlur={field.handleBlur}
+                onChange={(e) => field.handleChange(e.target.value)}
+              />
             )}
           </form.Field>
         </div>

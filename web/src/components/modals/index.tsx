@@ -2,7 +2,12 @@ import { AlertTriangle } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button, AnimatedAlert, type ButtonVariant } from "@/components/ui"
+import {
+  Button,
+  AnimatedAlert,
+  Input,
+  type ButtonVariant,
+} from "@/components/ui"
 
 type ConfirmModalProps = {
   open: boolean
@@ -217,10 +222,10 @@ export function ConfirmModal({
                 {t("components.confirmModal.typeToConfirm_suffix")}
               </p>
 
-              <input
+              <Input
                 ref={confirmInputRef}
                 type="text"
-                className="input input-bordered w-full font-mono"
+                className="font-mono"
                 value={typedText}
                 disabled={isSubmitting}
                 autoFocus

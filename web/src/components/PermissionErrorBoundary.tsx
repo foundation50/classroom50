@@ -1,9 +1,8 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
-import { Link } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { ShieldAlert } from "lucide-react"
 import { GitHubAPIError } from "@/github-core/errors"
-import { Alert } from "@/components/ui"
+import { Alert, RouterButton } from "@/components/ui"
 import { logger } from "@/lib/logger"
 
 const log = logger.scope("permission-error-boundary")
@@ -19,8 +18,8 @@ function isPermissionError(error: unknown): boolean {
   )
 }
 
-// The translated fallback UI. A function component so it can use hooks (t, Link)
-// that the class boundary can't.
+// The translated fallback UI. A function component so it can use hooks (t,
+// RouterButton) that the class boundary can't.
 function PermissionDeniedMessage() {
   const { t } = useTranslation()
   return (
@@ -32,9 +31,9 @@ function PermissionDeniedMessage() {
         <h1 className="text-lg font-bold">{t("permissionDenied.title")}</h1>
         <p className="text-sm">{t("permissionDenied.message")}</p>
       </Alert>
-      <Link to="/" className="btn btn-primary btn-sm">
+      <RouterButton to="/" variant="primary" size="sm">
         {t("permissionDenied.back")}
-      </Link>
+      </RouterButton>
     </div>
   )
 }

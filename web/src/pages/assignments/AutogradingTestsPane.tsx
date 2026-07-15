@@ -4,7 +4,7 @@ import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./CreateAssignmentForm"
 
-import { Button, Card, Input, Select } from "@/components/ui"
+import { Badge, Button, Card, Input, Select, Textarea } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import { emptyTestDraft, validateTestDraft } from "@/util/assignmentTests"
 import type { AssignmentTestComparison } from "@/types/classroom"
@@ -248,9 +248,9 @@ const AutogradingTestModal = ({
                           >
                             {t("assignments.autograder.input")}
                           </label>
-                          <textarea
+                          <Textarea
                             id={field.name}
-                            className="textarea w-full font-mono"
+                            className="font-mono"
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
@@ -272,9 +272,9 @@ const AutogradingTestModal = ({
                           >
                             {t("assignments.autograder.expectedOutput")}
                           </label>
-                          <textarea
+                          <Textarea
                             id={field.name}
-                            className="textarea w-full font-mono"
+                            className="font-mono"
                             value={field.state.value}
                             onBlur={field.handleBlur}
                             onChange={(e) => field.handleChange(e.target.value)}
@@ -282,7 +282,7 @@ const AutogradingTestModal = ({
                               "assignments.autograder.expectedOutputPlaceholder",
                             )}
                             rows={5}
-                            aria-invalid={field.state.meta.errors.length > 0}
+                            invalid={field.state.meta.errors.length > 0}
                             aria-describedby={
                               field.state.meta.errors.length > 0
                                 ? `${field.name}-error`
@@ -586,9 +586,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                         </td>
 
                         <td>
-                          <span className="badge badge-ghost badge-soft">
-                            {typeBadge(test.type, t)}
-                          </span>
+                          <Badge ghost>{typeBadge(test.type, t)}</Badge>
                         </td>
 
                         <td>
@@ -600,9 +598,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                         </td>
 
                         <td>
-                          <span className="badge badge-primary badge-soft">
-                            {test.points}
-                          </span>
+                          <Badge tone="primary">{test.points}</Badge>
                         </td>
 
                         <td>

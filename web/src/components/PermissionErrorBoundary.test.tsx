@@ -7,10 +7,18 @@ vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
   return { ...actual, useTranslation: () => ({ t: (key: string) => key }) }
 })
-// The friendly message renders a router <Link>; stub it to avoid a router.
-vi.mock("@tanstack/react-router", () => ({
-  Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
-}))
+// The friendly message renders a RouterButton (createLink) that needs a router
+// context; stub just that primitive to a plain anchor so the boundary renders
+// without a RouterProvider. Spread the barrel so Alert et al. stay real.
+vi.mock("@/components/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/components/ui")>()
+  return {
+    ...actual,
+    RouterButton: ({ children }: { children: React.ReactNode }) => (
+      <a>{children}</a>
+    ),
+  }
+})
 
 import { PermissionErrorBoundary } from "./PermissionErrorBoundary"
 

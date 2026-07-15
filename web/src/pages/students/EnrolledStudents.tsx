@@ -599,9 +599,9 @@ const EnrolledStudents = ({
             return <RoleBadges roles={row.roles} />
           })()}
           {row.section.trim() ? (
-            <span className="badge badge-sm badge-info badge-soft shrink-0">
+            <Badge tone="info" className="shrink-0">
               {row.section.trim()}
-            </span>
+            </Badge>
           ) : null}
           {row.state !== "enrolled" ? (
             <Badge
@@ -987,9 +987,7 @@ const EnrolledStudents = ({
                           ? t("students.noSection")
                           : section}
                       </h3>
-                      <span className="badge badge-ghost badge-sm">
-                        {group.length}
-                      </span>
+                      <Badge ghost>{group.length}</Badge>
                     </div>
                     <motion.ul
                       className="divide-y divide-base-300"

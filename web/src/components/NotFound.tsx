@@ -1,8 +1,8 @@
-import { Link } from "@tanstack/react-router"
 import { FileQuestion } from "lucide-react"
 import { useEffect, useRef } from "react"
 import { useTranslation } from "react-i18next"
 
+import { RouterButton } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 
 // Rendered by role/visibility-gated pages when the user can't access a resource.
@@ -34,9 +34,9 @@ const NotFound = ({ title, message }: { title?: string; message?: string }) => {
         </h1>
         <p className="mt-1 max-w-md text-base-content/70">{resolvedMessage}</p>
       </div>
-      <Link to="/" className="btn btn-primary btn-sm">
+      <RouterButton to="/" variant="primary" size="sm">
         {t("common.goToDashboard")}
-      </Link>
+      </RouterButton>
     </div>
   )
 }

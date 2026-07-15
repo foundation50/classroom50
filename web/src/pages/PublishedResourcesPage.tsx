@@ -17,7 +17,7 @@ import { enterExit, staggerTransition } from "@/lib/motion"
 
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
-import { Button } from "@/components/ui"
+import { Badge, Button, type BadgeTone } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireTeacher from "@/components/RequireTeacher"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -52,15 +52,16 @@ type Resource = {
 
 const KIND_BADGE: Record<
   ResourceKind,
-  { labelKey: string; className: string }
+  { labelKey: string; tone: BadgeTone; ghost?: boolean }
 > = {
   engine: {
     labelKey: "published.kind.engine",
-    className: "badge-ghost",
+    tone: "neutral",
+    ghost: true,
   },
   data: {
     labelKey: "published.kind.data",
-    className: "badge-primary badge-soft",
+    tone: "primary",
   },
 }
 
@@ -159,33 +160,25 @@ function StatusBadge({ url }: { url: string }) {
 
   if (status === "public") {
     return (
-      <span ref={ref} className="badge badge-success badge-soft badge-sm gap-1">
+      <Badge tone="success" className="gap-1">
         <Globe aria-hidden="true" className="size-3" />
         {t("published.status.public")}
-      </span>
+      </Badge>
     )
   }
 
   if (status === "missing") {
     return (
-      <span
-        ref={ref}
-        className="badge badge-ghost badge-sm"
-        title={t("published.status.notPublishedTitle")}
-      >
+      <Badge ghost title={t("published.status.notPublishedTitle")}>
         {t("published.status.notPublished")}
-      </span>
+      </Badge>
     )
   }
 
   return (
-    <span
-      ref={ref}
-      className="badge badge-warning badge-soft badge-sm"
-      title={t("published.status.unreachableTitle")}
-    >
+    <Badge tone="warning" title={t("published.status.unreachableTitle")}>
       {t("published.status.unreachable")}
-    </span>
+    </Badge>
   )
 }
 
@@ -199,14 +192,10 @@ function ResourceRow({ resource }: { resource: Resource }) {
           <span className="font-semibold text-base-content">
             {resource.label}
           </span>
-          <span className={`badge badge-sm ${badge.className}`}>
+          <Badge tone={badge.tone} ghost={badge.ghost}>
             {t(badge.labelKey)}
-          </span>
-          {resource.optional && (
-            <span className="badge badge-ghost badge-sm">
-              {t("published.optional")}
-            </span>
-          )}
+          </Badge>
+          {resource.optional && <Badge ghost>{t("published.optional")}</Badge>}
         </div>
         <p className="mt-1 text-sm text-base-content/70">
           {resource.description}
@@ -219,16 +208,18 @@ function ResourceRow({ resource }: { resource: Resource }) {
         <StatusBadge url={resource.url} />
         <div className="flex items-center gap-1">
           <CopyButton value={resource.url} />
-          <a
+          <Button
+            as="a"
+            variant="ghost"
+            size="xs"
             href={resource.url}
             target="_blank"
             rel="noreferrer"
-            className="btn btn-ghost btn-xs"
             aria-label={t("published.openUrl")}
             title={t("published.openUrl")}
           >
             <ExternalLink aria-hidden="true" className="size-3.5" />
-          </a>
+          </Button>
         </div>
       </div>
     </div>
@@ -321,14 +312,12 @@ function ClassroomResources({
           <div className="flex items-center gap-2">
             <h3 className="truncate font-semibold">{classroom}</h3>
             {secret ? (
-              <span className="badge badge-warning badge-soft badge-sm gap-1">
+              <Badge tone="warning" className="gap-1">
                 <ShieldAlert aria-hidden="true" className="size-3" />
                 {t("published.unlisted")}
-              </span>
+              </Badge>
             ) : (
-              <span className="badge badge-ghost badge-sm">
-                {t("published.publicPath")}
-              </span>
+              <Badge ghost>{t("published.publicPath")}</Badge>
             )}
           </div>
           <p className="text-xs text-base-content/70">

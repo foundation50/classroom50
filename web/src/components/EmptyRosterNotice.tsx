@@ -1,6 +1,7 @@
-import { Link } from "@tanstack/react-router"
 import { Info, UserPlus } from "lucide-react"
 import { useTranslation } from "react-i18next"
+
+import { RouterButton } from "@/components/ui"
 
 // Empty/unenrolled-roster notice. Owns the daisyUI alert shell + ARIA so the
 // assignments list and create pages can't drift in markup; copy adapts to
@@ -42,16 +43,18 @@ export const EmptyRosterNotice = ({
           )}
         </span>
       </div>
-      <Link
+      <RouterButton
         to="/$org/$classroom/roster"
         params={{ org, classroom }}
-        className="btn btn-sm btn-info whitespace-nowrap sm:shrink-0"
+        variant="info"
+        size="sm"
+        className="whitespace-nowrap sm:shrink-0"
       >
         <UserPlus className="size-4" aria-hidden="true" />
         {hasRosterRows
           ? t("components.notices.emptyRoster.manageRoster")
           : t("components.notices.emptyRoster.addStudents")}
-      </Link>
+      </RouterButton>
     </div>
   )
 }

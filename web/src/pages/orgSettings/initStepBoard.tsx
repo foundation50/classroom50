@@ -19,7 +19,7 @@ import {
   isOrgDefaultsStepData,
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
-import { Spinner } from "@/components/ui"
+import { Badge, Spinner, type BadgeTone } from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
@@ -188,13 +188,16 @@ export function applyStepUpdate(
   }
 }
 
-const STATUS_BADGE_CLASS: Record<InitStepStatus, string> = {
-  complete: "badge-success",
-  warning: "badge-warning",
-  error: "badge-error",
-  pending: "badge-neutral badge-ghost",
-  running: "badge-neutral badge-ghost",
-  skipped: "badge-neutral badge-ghost",
+const STATUS_BADGE_PROPS: Record<
+  InitStepStatus,
+  { tone: BadgeTone; ghost?: boolean }
+> = {
+  complete: { tone: "success" },
+  warning: { tone: "warning" },
+  error: { tone: "error" },
+  pending: { tone: "neutral", ghost: true },
+  running: { tone: "neutral", ghost: true },
+  skipped: { tone: "neutral", ghost: true },
 }
 
 const STATUS_ICON: Record<InitStepStatus, ReactNode> = {
@@ -268,9 +271,14 @@ export const InitStep = ({
             </p>
           </div>
         </div>
-        <span className={`badge shrink-0 ${STATUS_BADGE_CLASS[status]}`}>
+        <Badge
+          {...STATUS_BADGE_PROPS[status]}
+          size="md"
+          soft={false}
+          className="shrink-0"
+        >
           {STATUS_ICON[status]}
-        </span>
+        </Badge>
       </button>
 
       {open && (

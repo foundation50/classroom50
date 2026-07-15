@@ -7,7 +7,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import { Spinner } from "@/components/Spinner"
-import { Button, Card } from "@/components/ui"
+import { Badge, Button, Card, RouterButton } from "@/components/ui"
 import {
   MembershipError,
   classifyMembershipError,
@@ -71,10 +71,10 @@ const NotInvited = ({
     <OnboardShell>
       <EnterDiv className="card-body gap-6">
         <div>
-          <span className="badge badge-ghost badge-soft gap-2">
+          <Badge ghost size="md" className="gap-2">
             <Mail aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
-          </span>
+          </Badge>
           <h1 className="mt-6 text-2xl font-bold">
             {t("getStarted.notInvited.title")}
           </h1>
@@ -127,10 +127,10 @@ const AllSet = ({
     <OnboardShell>
       <EnterDiv className="card-body gap-6">
         <div>
-          <span className="badge badge-primary badge-soft gap-2">
+          <Badge tone="primary" size="md" className="gap-2">
             <Mail aria-hidden="true" className="size-4" />
             {t("getStarted.badge")}
-          </span>
+          </Badge>
           <h1 className="mt-6 text-2xl font-bold">
             {t("getStarted.active.title")}
           </h1>
@@ -152,24 +152,21 @@ const AllSet = ({
           </div>
         </div>
         {returning && returnTo ? (
-          <button
-            type="button"
-            className="btn btn-primary w-full"
-            onClick={onContinue}
-          >
+          <Button variant="primary" className="w-full" onClick={onContinue}>
             {t("getStarted.continueToAssignment")}
-          </button>
+          </Button>
         ) : (
           org &&
           classroom && (
-            <Link
+            <RouterButton
               to="/$org/$classroom"
               params={{ org, classroom }}
-              className="btn btn-primary w-full"
+              variant="primary"
+              className="w-full"
             >
               {t("getStarted.active.goToClassroom")}
               <ArrowRight aria-hidden="true" className="size-4" />
-            </Link>
+            </RouterButton>
           )
         )}
       </EnterDiv>

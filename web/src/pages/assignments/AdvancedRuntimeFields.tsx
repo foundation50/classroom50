@@ -11,7 +11,7 @@ import {
 } from "lucide-react"
 import { orgRunnersQuery } from "@/github-core/queries"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
-import { Button, HelpTooltip } from "@/components/ui"
+import { Button, HelpTooltip, Input } from "@/components/ui"
 import {
   isKnownHostedRunnerLabel,
   isRunnerLabelShapeValid,
@@ -128,13 +128,12 @@ export const LanguageVersionField = ({
             />
             <div className="dropdown w-full max-w-xs">
               <div className="join w-full">
-                <input
+                <Input
                   id={field.name}
                   name={field.name}
-                  type="text"
                   autoComplete="off"
                   spellCheck={false}
-                  className="input join-item w-full"
+                  className="join-item w-full"
                   placeholder={t(
                     "assignments.form.runtime.versionPlaceholder",
                     { version: meta.placeholder },
@@ -251,13 +250,12 @@ export const RunnerField = ({
         label={t("assignments.form.runner.label")}
         help={t("assignments.form.runner.tip")}
       />
-      <input
+      <Input
         id={field.name}
         name={field.name}
-        type="text"
         autoComplete="off"
         spellCheck={false}
-        className="input w-full max-w-xs"
+        className="w-full max-w-xs"
         placeholder="ubuntu-latest"
         value={rawValue}
         onBlur={normalizeOnBlur(field, (value) =>
@@ -298,11 +296,10 @@ export const ContainerFields = ({ form }: { form: AssignmentForm }) => {
               label={t("assignments.form.dockerImage")}
               help={t("assignments.form.dockerImageTip")}
             />
-            <input
+            <Input
               id={field.name}
               name={field.name}
-              type="text"
-              className="input w-full max-w-xs"
+              className="w-full max-w-xs"
               placeholder={t("assignments.form.dockerImagePlaceholder")}
               value={field.state.value}
               onBlur={normalizeOnBlur(field)}
@@ -320,11 +317,10 @@ export const ContainerFields = ({ form }: { form: AssignmentForm }) => {
               label={t("assignments.form.containerUser")}
               help={t("assignments.form.containerUserTip")}
             />
-            <input
+            <Input
               id={field.name}
               name={field.name}
-              type="text"
-              className="input w-full max-w-xs"
+              className="w-full max-w-xs"
               placeholder={t("assignments.form.containerUserPlaceholder")}
               value={field.state.value}
               onBlur={normalizeOnBlur(field)}
@@ -353,13 +349,11 @@ export const AptField = ({ form }: { form: AssignmentForm }) => {
               label={t("assignments.form.runtime.aptLabel")}
               help={t("assignments.form.runtime.aptTip")}
             />
-            <input
+            <Input
               id={field.name}
               name={field.name}
-              type="text"
               autoComplete="off"
               spellCheck={false}
-              className="input w-full"
               placeholder={t("assignments.form.runtime.aptPlaceholder")}
               value={field.state.value}
               onBlur={normalizeOnBlur(field, (value) =>

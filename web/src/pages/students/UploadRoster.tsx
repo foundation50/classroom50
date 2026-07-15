@@ -5,7 +5,7 @@ import { Upload } from "lucide-react"
 import Papa from "papaparse"
 import { bulkEnrollStudentsInClassroom } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
-import { Alert, Button, Modal, Select, Spinner } from "@/components/ui"
+import { Alert, Badge, Button, Modal, Select, Spinner } from "@/components/ui"
 import {
   applyRosterRoleChange,
   bulkInviteByEmail,
@@ -208,7 +208,7 @@ const PreflightBucket = ({
       className={`flex items-center justify-between gap-2 rounded-box border px-4 py-2.5 ${toneClass}`}
     >
       <span className="text-sm">{title}</span>
-      <span className="badge badge-sm">{count}</span>
+      <Badge>{count}</Badge>
     </div>
   )
 }

@@ -12,7 +12,7 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Button } from "@/components/ui"
+import { Badge, Button } from "@/components/ui"
 import { NoSearchResults } from "@/components/list"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -151,9 +151,9 @@ export const TeacherAssignmentsView = ({
           <span className="flex items-center gap-2">
             {classroomData?.name || classroomData?.short_name || classroom}
             {myRoleLabel ? (
-              <span className="badge badge-soft badge-primary badge-sm align-middle">
+              <Badge tone="primary" className="align-middle">
                 {myRoleLabel}
-              </span>
+              </Badge>
             ) : null}
           </span>
         }
@@ -167,9 +167,9 @@ export const TeacherAssignmentsView = ({
         }
         action={
           archived ? (
-            <span className="badge badge-soft badge-neutral">
+            <Badge tone="neutral" size="md">
               {t("assignments.archived")}
-            </span>
+            </Badge>
           ) : (
             <NewAssignmentButton org={org} classroom={classroom} />
           )

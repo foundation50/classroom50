@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next"
 import { Check, Copy } from "lucide-react"
 
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Button, Modal } from "@/components/ui"
+import { Button, Input, Modal } from "@/components/ui"
 
 // A single copyable link row (read-only input + copy button).
 const CopyLinkField = ({
@@ -27,13 +27,14 @@ const CopyLinkField = ({
       <span className="text-sm font-medium">{label}</span>
       <span className="text-xs text-base-content/70">{hint}</span>
       <div className="join mt-1 w-full">
-        <input
+        <Input
+          inputSize="sm"
           type="text"
           readOnly
           value={url}
           aria-label={ariaLabel}
           onFocus={(event) => event.currentTarget.select()}
-          className="input input-sm input-bordered join-item w-full font-mono text-xs"
+          className="join-item w-full font-mono text-xs"
         />
         <Button
           size="sm"
