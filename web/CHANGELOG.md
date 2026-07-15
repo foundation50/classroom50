@@ -17,6 +17,20 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.7.0](https://github.com/foundation50/classroom50/compare/web-v1.6.0...web-v1.7.0) (2026-07-15)
+
+
+### Features
+
+* **web:** enforce the i18n dead-key + hardcoded-string gate in CI ([#281](https://github.com/foundation50/classroom50/issues/281)) ([79d5e57](https://github.com/foundation50/classroom50/commit/79d5e57bf1e9143a85b00fe1df57e7a27410e589))
+
+
+### Bug Fixes
+
+* **web:** let org owners accept assignments despite residual admin ([#286](https://github.com/foundation50/classroom50/issues/286)) ([23c8515](https://github.com/foundation50/classroom50/commit/23c8515f3515fdb13bc7a2f087d565a609953aea))
+* **web:** set safe QueryClient defaultOptions for queries ([#278](https://github.com/foundation50/classroom50/issues/278)) ([bbd1cb8](https://github.com/foundation50/classroom50/commit/bbd1cb8f97210eaba8338c9fb62f0e8bc1471e3a))
+* **web:** treat an org owner as org-staff so a fresh org isn't stranded ([#285](https://github.com/foundation50/classroom50/issues/285)) ([3a826e1](https://github.com/foundation50/classroom50/commit/3a826e126cc163bc172b6cb097626c5011d69d19)), closes [#280](https://github.com/foundation50/classroom50/issues/280)
+
 ## [1.6.0](https://github.com/foundation50/classroom50/compare/web-v1.5.0...web-v1.6.0) (2026-07-15)
 
 
