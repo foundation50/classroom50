@@ -4,6 +4,7 @@ import reactHooks from "eslint-plugin-react-hooks"
 import reactRefresh from "eslint-plugin-react-refresh"
 import jsxA11y from "eslint-plugin-jsx-a11y"
 import { importX } from "eslint-plugin-import-x"
+import boundaries from "eslint-plugin-boundaries"
 import { createTypeScriptImportResolver } from "eslint-import-resolver-typescript"
 import tseslint from "typescript-eslint"
 import prettier from "eslint-config-prettier/flat"
@@ -198,6 +199,135 @@ export default defineConfig([
     files: ["src/lib/logger.ts", "src/main.tsx"],
     rules: {
       "no-console": "off",
+    },
+  },
+  // Enforce the layered architecture direction (features -> components ->
+  // domain -> github-core -> util/types, strictly downward). eslint-plugin-
+  // boundaries classifies each src/<layer>/ file as an architectural element and
+  // this rule forbids the upward/inward inversions that break the layering.
+  //
+  // Policy shape: `default: allow` with explicit `disallow` edges, rather than
+  // `default: disallow` + an exhaustive allow-list. The app has ~18 top-level
+  // dirs (many cross-cutting: hooks, context, lib, auth, i18n, routes); a
+  // deny-by-default policy would demand enumerating every legal edge and would
+  // flag benign lateral imports. Denying the specific inversions that the
+  // layering actually forbids enforces the real invariant with near-zero false
+  // positives, and can be tightened later. The authz barrel guard
+  // (no-restricted-imports, above) and the data-layer no-cycle guard remain the
+  // complementary enforcement; dependency-cruiser adds the CI-side holistic pass.
+  //
+  // Scope note: this enforces the THREE load-bearing inversions
+  // (components -> pages, domain -> view, github-core -> up). It intentionally
+  // does NOT enforce util/types leaf-purity — a few util files legitimately
+  // depend on authz / a github-core error type / a component type today
+  // (classroomRoleUI, membershipReadError, teamRoster), and untangling that is a
+  // separate decision, not a Tier-2E boundary. Add a util/types leaf rule later
+  // if those are relocated.
+  //
+  // `dependency.kind: "value"` scopes every disallow to runtime imports, so the
+  // two benign type-only `github-core -> domain` input-type edges
+  // (CreateClassroomInput, GetAssignmentsFileInput) are left alone — matching how
+  // import-x/no-cycle already ignores `import type`. Tests are excluded so a test
+  // may reach across layers to exercise a unit.
+  {
+    files: ["src/**/*.{ts,tsx}"],
+    ignores: ["src/**/*.test.{ts,tsx}", "src/**/*.d.ts"],
+    plugins: { boundaries },
+    settings: {
+      "boundaries/dependency-nodes": ["import"],
+      // boundaries resolves each import to a file to classify its target
+      // element; without the `@/*` alias resolver it can't resolve the alias
+      // imports every layer uses and would treat targets as unknown (skipped).
+      "import/resolver": {
+        typescript: {
+          project: ["tsconfig.app.json", "tsconfig.node.json"],
+          alwaysTryTypes: true,
+        },
+      },
+      "boundaries/elements": [
+        { type: "pages", pattern: "src/pages/**", partialMatch: false },
+        { type: "routes", pattern: "src/routes/**", partialMatch: false },
+        {
+          type: "components",
+          pattern: "src/components/**",
+          partialMatch: false,
+        },
+        { type: "context", pattern: "src/context/**", partialMatch: false },
+        { type: "hooks", pattern: "src/hooks/**", partialMatch: false },
+        { type: "auth", pattern: "src/auth/**", partialMatch: false },
+        { type: "domain", pattern: "src/domain/**", partialMatch: false },
+        { type: "authz", pattern: "src/authz/**", partialMatch: false },
+        { type: "orgPolicy", pattern: "src/orgPolicy/**", partialMatch: false },
+        {
+          type: "githubCore",
+          pattern: "src/github-core/**",
+          partialMatch: false,
+        },
+        { type: "skeleton", pattern: "src/skeleton/**", partialMatch: false },
+        { type: "lib", pattern: "src/lib/**", partialMatch: false },
+        { type: "util", pattern: "src/util/**", partialMatch: false },
+        { type: "types", pattern: "src/types/**", partialMatch: false },
+        { type: "i18n", pattern: "src/i18n/**", partialMatch: false },
+        { type: "locales", pattern: "src/locales/**", partialMatch: false },
+      ],
+    },
+    rules: {
+      "boundaries/dependencies": [
+        "error",
+        {
+          default: "allow",
+          policies: [
+            {
+              // components are feature-agnostic and must never import a feature
+              // page (the reach-up P7/Tier-2E fixed).
+              from: { element: { type: "components" } },
+              disallow: {
+                to: { element: { type: "pages" } },
+                dependency: { kind: "value" },
+              },
+              message:
+                "components/ is a lower layer than pages/: a shared component must not import a feature page. Lift the shared piece into components/ (see Tier-2E).",
+            },
+            {
+              // domain is framework-free orchestration below the view layers.
+              from: { element: { type: "domain" } },
+              disallow: {
+                to: {
+                  element: {
+                    type: ["pages", "components", "hooks", "context", "routes"],
+                  },
+                },
+                dependency: { kind: "value" },
+              },
+              message:
+                "domain/ must not import view-layer code (pages/components/hooks/context/routes). Domain depends downward on github-core/util/types only.",
+            },
+            {
+              // github-core is the lowest data layer; it must not reach up into
+              // domain or any view layer at runtime (type-only input edges are
+              // left alone via dependency.kind: value).
+              from: { element: { type: "githubCore" } },
+              disallow: {
+                to: {
+                  element: {
+                    type: [
+                      "domain",
+                      "pages",
+                      "components",
+                      "hooks",
+                      "context",
+                      "routes",
+                    ],
+                  },
+                },
+                dependency: { kind: "value" },
+              },
+              message:
+                "github-core/ is the lowest data layer: it must not import domain or view code at runtime. Keep dependencies downward (util/types).",
+            },
+          ],
+        },
+      ],
     },
   },
   // Last: turn off ESLint rules that conflict with Prettier (formatting is
