@@ -56,8 +56,9 @@ func ResolveConfigRepoBranch(client githubapi.Client, org string) (string, error
 // classroom bootstrapped before the rename still reads. Missing both → points
 // the teacher at `gh teacher classroom add`.
 //
-// Read-only callers use this; write callers use LoadRosterWithSource so they
-// can converge the legacy file onto roster.csv in the same commit.
+// Read-only callers use this; write callers use LoadRosterWithSourceLenient so
+// they can converge the legacy file onto roster.csv in the same commit and
+// tolerate a pre-existing malformed row instead of aborting.
 func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]RosterRow, error) {
 	rows, _, err := LoadRosterWithSource(client, org, classroom, parentSHA)
 	return rows, err
@@ -68,8 +69,21 @@ func LoadRoster(client githubapi.Client, org, classroom, parentSHA string) ([]Ro
 // when only the legacy file exists. Write paths use the source to decide
 // whether the same commit must also delete the legacy file (see
 // RosterWriteChange), so a first edit of an un-migrated classroom converges it
-// onto roster.csv rather than leaving a stale legacy copy behind.
+// onto roster.csv rather than leaving a stale legacy copy behind. Parses
+// strictly; write commands use LoadRosterWithSourceLenient.
 func LoadRosterWithSource(client githubapi.Client, org, classroom, parentSHA string) (rows []RosterRow, sourcePath string, err error) {
+	return loadRosterWithSource(client, org, classroom, parentSHA, false)
+}
+
+// LoadRosterWithSourceLenient is LoadRosterWithSource for the read-modify-write
+// path: it parses leniently (ParseRosterLenient) so a pre-existing malformed row
+// can't block a legitimate edit of another and round-trips untouched. Write
+// commands (add/update/remove/import) use it; read-only callers stay strict.
+func LoadRosterWithSourceLenient(client githubapi.Client, org, classroom, parentSHA string) (rows []RosterRow, sourcePath string, err error) {
+	return loadRosterWithSource(client, org, classroom, parentSHA, true)
+}
+
+func loadRosterWithSource(client githubapi.Client, org, classroom, parentSHA string, lenient bool) (rows []RosterRow, sourcePath string, err error) {
 	path := RosterFilePath(classroom)
 	data, ok, err := ReadFileContents(client, org, ConfigRepoName, path, parentSHA)
 	if err != nil {
@@ -88,7 +102,11 @@ func LoadRosterWithSource(client githubapi.Client, org, classroom, parentSHA str
 		}
 		path, data = legacyPath, legacyData
 	}
-	parsed, err := ParseRoster(data)
+	parse := ParseRoster
+	if lenient {
+		parse = ParseRosterLenient
+	}
+	parsed, err := parse(data)
 	if err != nil {
 		return nil, "", fmt.Errorf("%s/%s/%s: %w", org, ConfigRepoName, path, err)
 	}
@@ -119,16 +137,22 @@ func RosterWriteChange(classroom, sourcePath string, rows []RosterRow) (gittree.
 func DedupeByUsername(rows []RosterRow) []RosterRow {
 	latest := make(map[string]RosterRow, len(rows))
 	order := make([]string, 0, len(rows))
+	var rawRows []RosterRow
 	for _, row := range rows {
+		if row.isRaw() {
+			// Preserved rows have no username to key on; keep each distinct.
+			rawRows = append(rawRows, row)
+			continue
+		}
 		key := strings.ToLower(row.Username)
 		if _, seen := latest[key]; !seen {
 			order = append(order, key)
 		}
 		latest[key] = row
 	}
-	out := make([]RosterRow, 0, len(order))
+	out := make([]RosterRow, 0, len(order)+len(rawRows))
 	for _, key := range order {
 		out = append(out, latest[key])
 	}
-	return out
+	return append(out, rawRows...)
 }

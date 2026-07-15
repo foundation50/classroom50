@@ -71,14 +71,37 @@ type RosterRow struct {
 	// ExtraOrder is the on-disk order of Extra columns for deterministic
 	// encoding. INVARIANT: it lists exactly the keys of Extra.
 	ExtraOrder []string
+	// raw is the original CSV record of a row that failed strict validation but
+	// was preserved by ParseRosterLenient, so a write can round-trip it instead
+	// of dropping a student. When set, the parsed fields are unpopulated:
+	// EncodeRoster writes raw verbatim; mutation helpers skip it (no username).
+	raw []string
 }
+
+// isRaw reports whether the row is a preserved-but-unparsed record.
+func (r RosterRow) isRaw() bool { return r.raw != nil }
 
 // ParseRoster decodes the roster CSV. The header MUST begin with the canonical
 // RosterColumns in order; a file written before the trailing `role` column was
 // added (ending at github_id) is still accepted (role reads as ""). Additional
 // trailing columns beyond the canonical set are preserved verbatim in
-// RosterRow.Extra. Empty input is rejected.
+// RosterRow.Extra. Empty input is rejected. Any malformed data row is an error.
 func ParseRoster(data []byte) ([]RosterRow, error) {
+	return parseRoster(data, false)
+}
+
+// ParseRosterLenient is ParseRoster for the read-modify-write path: a malformed
+// data row (empty username, wrong field count) is preserved verbatim as a raw
+// RosterRow instead of aborting, so a write command can round-trip pre-existing
+// bad data. Header and empty-input errors still hard-fail — a broken header
+// can't be safely round-tripped.
+func ParseRosterLenient(data []byte) ([]RosterRow, error) {
+	return parseRoster(data, true)
+}
+
+// parseRoster is the shared core; lenient preserves a bad row as raw rather
+// than erroring (see ParseRoster / ParseRosterLenient).
+func parseRoster(data []byte, lenient bool) ([]RosterRow, error) {
 	data = bytes.TrimPrefix(data, utf8BOM)
 	r := csv.NewReader(bytes.NewReader(data))
 	// Read header without field-count enforcement so a renamed/short header
@@ -133,8 +156,12 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 		}
 		seenExtra[name] = true
 	}
-	// Fix the field count to the full header width so a short/long row errors.
-	r.FieldsPerRecord = len(header)
+	// Strict mode fixes the field count so a short/long row errors; lenient
+	// leaves it unenforced so a mis-widthed row still reads into a preservable
+	// record.
+	if !lenient {
+		r.FieldsPerRecord = len(header)
+	}
 
 	var rows []RosterRow
 	for line := 2; ; line++ {
@@ -143,10 +170,18 @@ func ParseRoster(data []byte) ([]RosterRow, error) {
 			break
 		}
 		if err != nil {
+			if lenient {
+				// A quoting-level error yields no usable record to preserve.
+				continue
+			}
 			return nil, fmt.Errorf("line %d: %w", line, err)
 		}
 		row, err := recordToRow(record, canonicalLen, extraColumns, line)
 		if err != nil {
+			if lenient {
+				rows = append(rows, RosterRow{raw: record})
+				continue
+			}
 			return nil, err
 		}
 		rows = append(rows, row)
@@ -227,6 +262,12 @@ func ParseImportCSV(data []byte) ([]RosterRow, error) {
 // canonical prefix width (7 with role, 6 for a pre-role file); extraColumns (in
 // header order) name the values beyond it, carried through Extra.
 func recordToRow(record []string, canonicalLen int, extraColumns []string, line int) (RosterRow, error) {
+	// Guard the width before indexing: lenient parsing leaves FieldsPerRecord
+	// unenforced, so a mis-widthed row reaches here — error (the caller
+	// preserves it raw) rather than panicking on an out-of-range index.
+	if want := canonicalLen + len(extraColumns); len(record) != want {
+		return RosterRow{}, fmt.Errorf("line %d: wrong number of fields (got %d, want %d)", line, len(record), want)
+	}
 	if err := checkFieldLengths(line, record); err != nil {
 		return RosterRow{}, err
 	}
@@ -278,6 +319,19 @@ func EncodeRoster(rows []RosterRow) ([]byte, error) {
 		return nil, fmt.Errorf("write header: %w", err)
 	}
 	for _, row := range rows {
+		if row.isRaw() {
+			// Preserve a lenient-parsed malformed row verbatim (defanged). Its
+			// width may differ from the header; the write path re-reads
+			// leniently, so a mismatch round-trips.
+			record := make([]string, len(row.raw))
+			for i, cell := range row.raw {
+				record[i] = defangCSVCell(cell)
+			}
+			if err := w.Write(record); err != nil {
+				return nil, fmt.Errorf("write preserved row: %w", err)
+			}
+			continue
+		}
 		githubID := ""
 		if row.GitHubID != 0 {
 			githubID = strconv.FormatInt(row.GitHubID, 10)
@@ -333,6 +387,9 @@ func collectExtraColumns(rows []RosterRow) []string {
 // existing recorded role rather than blanking it.
 func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 	for i := range rows {
+		if rows[i].isRaw() {
+			continue // preserved malformed row: no usable username to match
+		}
 		if strings.EqualFold(rows[i].Username, row.Username) {
 			if row.Extra == nil && rows[i].Extra != nil {
 				row.Extra = rows[i].Extra
@@ -352,6 +409,9 @@ func UpsertRosterRow(rows []RosterRow, row RosterRow) ([]RosterRow, bool) {
 // whether a row was removed.
 func RemoveRosterRow(rows []RosterRow, username string) ([]RosterRow, bool) {
 	for i := range rows {
+		if rows[i].isRaw() {
+			continue // preserved malformed row: no usable username to match
+		}
 		if strings.EqualFold(rows[i].Username, username) {
 			return append(rows[:i], rows[i+1:]...), true
 		}
@@ -373,6 +433,9 @@ type RosterPatch struct {
 // matched, and whether any value changed (so the caller can no-op).
 func UpdateRosterRow(rows []RosterRow, username string, p RosterPatch) (out []RosterRow, found, changed bool) {
 	for i := range rows {
+		if rows[i].isRaw() {
+			continue // preserved malformed row: no usable username to match
+		}
 		if !strings.EqualFold(rows[i].Username, username) {
 			continue
 		}

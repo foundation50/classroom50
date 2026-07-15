@@ -1,6 +1,7 @@
 package configrepo
 
 import (
+	"bytes"
 	"reflect"
 	"strings"
 	"testing"
@@ -713,5 +714,85 @@ func TestFullRosterHeader(t *testing.T) {
 	gotHeader, _, _ := strings.Cut(string(encoded), "\n")
 	if gotHeader != want {
 		t.Fatalf("EncodeRoster header = %q, want %q", gotHeader, want)
+	}
+}
+
+// TestParseRosterLenient_PreservesMalformedRow is the parser-level guard for
+// issue #207: the read-modify-write path must not abort on a pre-existing
+// malformed row (here an empty username on line 2). ParseRosterLenient keeps the
+// bad row verbatim while parsing the good rows normally, so a write command can
+// round-trip it.
+func TestParseRosterLenient_PreservesMalformedRow(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		",Ghost,G,,,,\n" + // empty username: strict ParseRoster rejects this
+		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
+
+	// Strict parse still rejects, proving lenient is the behavior change.
+	if _, err := ParseRoster(in); err == nil {
+		t.Fatal("strict ParseRoster must still reject an empty-username row")
+	}
+
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("want 2 rows (1 preserved raw + alice), got %d: %#v", len(rows), rows)
+	}
+	if !rows[0].isRaw() {
+		t.Errorf("row 0 should be preserved raw, got %#v", rows[0])
+	}
+	if rows[1].isRaw() || rows[1].Username != "alice" || rows[1].GitHubID != 12345 {
+		t.Errorf("row 1 should be the parsed alice, got %#v", rows[1])
+	}
+}
+
+// TestParseRosterLenient_RoundTripsMalformedRow proves the preserved row
+// survives a lenient parse -> EncodeRoster -> lenient parse cycle unchanged, so
+// a write command never drops or corrupts a student it didn't touch.
+func TestParseRosterLenient_RoundTripsMalformedRow(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		",Ghost,G,,,,\n" +
+		"alice,Alice,A,alice@example.edu,s1,12345,student\n")
+
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	encoded, err := EncodeRoster(rows)
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	if !bytes.Equal(encoded, in) {
+		t.Fatalf("round-trip changed the file.\ngot:\n%s\nwant:\n%s", encoded, in)
+	}
+
+	// A subsequent lenient parse yields the same shape (raw row still raw).
+	rows2, err := ParseRosterLenient(encoded)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient (re-read): %v", err)
+	}
+	if len(rows2) != 2 || !rows2[0].isRaw() || rows2[1].Username != "alice" {
+		t.Fatalf("re-read shape changed: %#v", rows2)
+	}
+}
+
+// TestParseRosterLenient_PreservesWrongFieldCount: a short/long row is also
+// preserved verbatim (strict mode rejects it as a field-count error).
+func TestParseRosterLenient_PreservesWrongFieldCount(t *testing.T) {
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A\n" + // too few fields
+		"bob,Bob,B,bob@example.edu,s1,2,student\n")
+
+	if _, err := ParseRoster(in); err == nil {
+		t.Fatal("strict ParseRoster must still reject a wrong-field-count row")
+	}
+
+	rows, err := ParseRosterLenient(in)
+	if err != nil {
+		t.Fatalf("ParseRosterLenient: %v", err)
+	}
+	if len(rows) != 2 || !rows[0].isRaw() || rows[1].Username != "bob" {
+		t.Fatalf("want a preserved raw row + bob, got %#v", rows)
 	}
 }

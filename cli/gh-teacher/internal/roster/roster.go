@@ -314,7 +314,7 @@ func runRosterAdd(client githubapi.Client, out, errOut io.Writer, org, classroom
 
 	var action string
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
+		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -380,7 +380,7 @@ func runRosterUpdate(client githubapi.Client, out io.Writer, org, classroom, use
 	var noChange bool
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
 		noChange = false
-		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
+		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -419,7 +419,7 @@ func runRosterRemove(client githubapi.Client, out io.Writer, org, classroom, use
 
 	var removed bool
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
+		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}
@@ -511,7 +511,7 @@ func runRosterImport(client githubapi.Client, out, errOut io.Writer, org, classr
 		updated int
 	)
 	build := func(parentSHA string) (configwrite.CommitChange, error) {
-		rows, sourcePath, err := configrepo.LoadRosterWithSource(client, org, classroom, parentSHA)
+		rows, sourcePath, err := configrepo.LoadRosterWithSourceLenient(client, org, classroom, parentSHA)
 		if err != nil {
 			return configwrite.CommitChange{}, err
 		}

@@ -521,3 +521,105 @@ func TestRosterUpdateCmdPatchBuilder(t *testing.T) {
 		}
 	})
 }
+
+// TestRunRosterRemove_PreservesMalformedRow is the command-level guard for issue
+// #207 on the simplest write path (remove needs no user-lookup/invite mocks): a
+// pre-existing malformed row (empty username on line 2) must not block the
+// command, and must round-trip untouched into the written file.
+func TestRunRosterRemove_PreservesMalformedRow(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role\n" +
+		",Ghost,G,,,,\n" + // malformed: empty username, strict parse would abort
+		"alice,Alice,A,a@x.edu,s1,1,student\n" +
+		"bob,Bob,B,b@x.edu,s1,2,student\n"
+
+	mock := &rosterWriteMock{files: map[string]string{"cs-principles/roster.csv": roster}}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	if err := runRosterRemove(client, &out, "o", "cs-principles", "alice"); err != nil {
+		t.Fatalf("runRosterRemove must tolerate a malformed pre-existing row: %v", err)
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("got %d blobs POSTed, want 1", len(mock.blobs))
+	}
+	// The written file must still carry the untouched malformed row and bob.
+	if !strings.Contains(mock.blobs[0], ",Ghost,G,,,,") {
+		t.Errorf("malformed row was dropped or rewritten:\n%s", mock.blobs[0])
+	}
+	rows, err := configrepo.ParseRosterLenient([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("re-parse written roster: %v\n%s", err, mock.blobs[0])
+	}
+	var haveBob, haveAlice bool
+	for _, r := range rows {
+		switch r.Username {
+		case "bob":
+			haveBob = true
+		case "alice":
+			haveAlice = true
+		}
+	}
+	if !haveBob || haveAlice {
+		t.Errorf("want bob kept and alice removed, got %#v", rows)
+	}
+}
+
+// rosterAddMock extends the write mock with the user-lookup and org-invite
+// endpoints runRosterAdd calls. No classroom.json is served, so the team step
+// warns-and-skips (returns nil) — keeping the test focused on the commit path.
+type rosterAddMock struct{ *rosterWriteMock }
+
+func (m *rosterAddMock) handler(t *testing.T) http.Handler {
+	t.Helper()
+	base := m.rosterWriteMock.handler(t).(*http.ServeMux)
+	base.HandleFunc("/users/", func(w http.ResponseWriter, r *http.Request) {
+		login := strings.TrimPrefix(r.URL.Path, "/users/")
+		_ = json.NewEncoder(w).Encode(map[string]any{"login": login, "id": 999})
+	})
+	base.HandleFunc("/orgs/o/invitations", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": 1})
+	})
+	return base
+}
+
+// TestRunRosterAdd_PreservesMalformedRow is the direct reproduction of issue
+// #207: `roster add` over a roster whose line 2 has an empty username must
+// succeed (previously it failed with "line 2: username column is empty") and
+// preserve the malformed row.
+func TestRunRosterAdd_PreservesMalformedRow(t *testing.T) {
+	roster := "username,first_name,last_name,email,section,github_id,role\n" +
+		",Ghost,G,,,,\n" + // the malformed row from the issue
+		"alice,Alice,A,a@x.edu,s1,1,student\n"
+
+	mock := &rosterAddMock{&rosterWriteMock{files: map[string]string{"ai26/roster.csv": roster}}}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runRosterAdd(client, &out, &errOut, "o", "ai26", "aristotea", "", "", "", ""); err != nil {
+		t.Fatalf("runRosterAdd must tolerate a malformed pre-existing row: %v", err)
+	}
+	if len(mock.blobs) != 1 {
+		t.Fatalf("got %d blobs POSTed, want 1", len(mock.blobs))
+	}
+	if !strings.Contains(mock.blobs[0], ",Ghost,G,,,,") {
+		t.Errorf("malformed row was dropped or rewritten:\n%s", mock.blobs[0])
+	}
+	rows, err := configrepo.ParseRosterLenient([]byte(mock.blobs[0]))
+	if err != nil {
+		t.Fatalf("re-parse written roster: %v\n%s", err, mock.blobs[0])
+	}
+	var haveNew bool
+	for _, r := range rows {
+		if r.Username == "aristotea" {
+			haveNew = true
+		}
+	}
+	if !haveNew {
+		t.Errorf("added student aristotea missing from written roster: %#v", rows)
+	}
+}
