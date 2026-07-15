@@ -15,7 +15,7 @@ import { resolveOrgRole, type GitHubOrgRole } from "@/util/resolveRole"
 // transient read (fail-closed — never demote a real owner on a blip). The finer
 // classroom role layers on top of this at the classroom boundary (see
 // ClassroomRoleProvider).
-type OrgRoleContextValue = {
+type GitHubOrgRoleContextValue = {
   githubOrgRole: GitHubOrgRole
   // The membership read settled in a transient error (retries exhausted) with
   // the role still `unresolved` — the owner gate shows a retryable error surface
@@ -27,7 +27,9 @@ type OrgRoleContextValue = {
   retry: () => void
 }
 
-const OrgRoleContext = createContext<OrgRoleContextValue | null>(null)
+const GitHubOrgRoleContext = createContext<GitHubOrgRoleContextValue | null>(
+  null,
+)
 
 // Provider mounted at $org/route.tsx. Reuses the org-membership read the layout
 // already performs (React Query dedupes the shared key), so no extra fetch is
@@ -60,7 +62,9 @@ export function GitHubOrgRoleProvider({
   )
 
   return (
-    <OrgRoleContext.Provider value={value}>{children}</OrgRoleContext.Provider>
+    <GitHubOrgRoleContext.Provider value={value}>
+      {children}
+    </GitHubOrgRoleContext.Provider>
   )
 }
 
@@ -68,9 +72,9 @@ export function GitHubOrgRoleProvider({
 // mounted), so org-level guards never null-check — and a missing provider fails
 // closed (holds rather than grants) rather than throwing. Mirrors useRoleView's
 // safe default.
-export function useGitHubOrgRole(): OrgRoleContextValue {
+export function useGitHubOrgRole(): GitHubOrgRoleContextValue {
   return (
-    useContext(OrgRoleContext) ?? {
+    useContext(GitHubOrgRoleContext) ?? {
       githubOrgRole: "unresolved",
       isError: false,
       retry: () => {},

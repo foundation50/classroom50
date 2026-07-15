@@ -4,8 +4,8 @@
 // roleLabelKey/i18n; this helper has no "owner" concept to reuse there).
 //
 // Non-obvious gotcha: owner-pending only counts as a spinner when an org is in
-// scope. Off the $org boundary useGitHubOrgRole stays `unresolved` forever, so gating
-// on `hasOrg` prevents a permanent spinner on the org-less /orgs list.
+// scope. Off the $org boundary useGitHubOrgRole stays `unresolved` forever, so
+// gating on `hasOrg` prevents a permanent spinner on the org-less /orgs list.
 
 export type OrgFooterLabelInput = {
   hasOrg: boolean

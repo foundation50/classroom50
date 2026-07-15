@@ -33,8 +33,9 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 // dead-end their CTA on a NotFound.
 export function useSkeletonDrift(org: string | undefined) {
   const client = useGitHubClient()
-  // Resolve the role from the membership read, not useGitHubOrgRole(): this banner
-  // mounts above the GitHubOrgRoleProvider, so the context would always be unresolved.
+  // Resolve the role from the membership read, not useGitHubOrgRole(): this
+  // banner mounts above the GitHubOrgRoleProvider, so the context would always
+  // be unresolved.
   const membership = useGetOwnOrgMembership(org)
   const githubOrgRole = resolveOrgRole({
     isSuccess: membership.isSuccess,
