@@ -178,8 +178,9 @@ const useGetScores = (
       `${classroom ?? ""}/scores.json`,
     ),
     select: normalizeScores,
-    // Submissions land continuously; keep scores fresh so a tab refocus
-    // refetches rather than serving a 10-min-stale count.
+    // Submissions land continuously, so refetch on tab refocus (overriding the
+    // global refetchOnWindowFocus:false) rather than serving a stale count.
+    refetchOnWindowFocus: true,
     staleTime: 20 * 1000,
   })
 }

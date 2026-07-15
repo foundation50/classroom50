@@ -789,17 +789,18 @@ export function listAllOrgMembers(client: GitHubClient, org: string) {
 // The active org-member list (all pages) as a shared query. Single source for
 // the `orgMembersAll` cache both the classroom roster (needs-attention
 // in-org/not-in-org split) and the org Members page read, so the two can't
-// drift on cache key, fetcher, or freshness. Kept short (30s): membership
-// classification must react quickly to an invite accepted or a member removed
-// in another tab/session, and the list is cheap to refetch. Since the two
-// needs-attention states only affect a CSV-only row's sub-label (never
-// enrollment, which is team-driven), a brief staleness is display-only.
+// drift on cache key, fetcher, or freshness. Kept short (30s) and refetched on
+// focus so classification reacts quickly to an invite accepted or a member
+// removed in another tab/session; the affected sub-label is display-only
+// (never enrollment, which is team-driven), so brief staleness is harmless.
 export const ORG_MEMBERS_STALE_MS = 30 * 1000
 export function orgMembersAllQuery(client: GitHubClient, org: string) {
   return queryOptions({
     queryKey: githubKeys.orgMembersAll(org),
     queryFn: () => listAllOrgMembers(client, org),
     enabled: Boolean(org),
+    // Override the global refetchOnWindowFocus:false — see freshness note above.
+    refetchOnWindowFocus: true,
     staleTime: ORG_MEMBERS_STALE_MS,
   })
 }
