@@ -55,10 +55,7 @@ const ctx = (over: Record<string, unknown> = {}) => ({
   isLoading: false,
   isError: false,
   retry: () => {},
-  isTeacher: true,
-  isStudent: false,
   roleResolved: true,
-  showTeacherUi: true,
   ...over,
 })
 
@@ -81,7 +78,7 @@ describe("RequireTeacher — staff gate on a classroom", () => {
   it("a student is 404'd from staff content", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "student", actualRole: "student", showTeacherUi: false }),
+      ctx({ role: "student", actualRole: "student" }),
     )
     render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
     expect(shown()).toBe("notfound")
@@ -90,7 +87,7 @@ describe("RequireTeacher — staff gate on a classroom", () => {
   it("holds the spinner while unresolved, never flashes NotFound (R5)", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(
-      ctx({ roleResolved: false, showTeacherUi: false }),
+      ctx({ role: "unresolved", roleResolved: false }),
     )
     render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
     expect(shown()).toBe("spinner")
@@ -102,7 +99,6 @@ describe("RequireTeacher — staff gate on a classroom", () => {
       ctx({
         role: "unresolved",
         roleResolved: false,
-        showTeacherUi: false,
         isError: true,
       }),
     )

@@ -28,6 +28,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { roleLabelKey } from "@/util/resolveRole"
+import { can } from "@/util/capabilities"
 import { isClassroomArchived } from "@/types/classroom"
 import { OrgRepos } from "./ClassesPage"
 
@@ -257,7 +258,9 @@ const AssignmentsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.assignments"))
   const { org, classroom } = useParams({ strict: false })
-  const { isTeacher, isStudent, roleResolved } = useClassroomRoleContext()
+  const { role, roleResolved } = useClassroomRoleContext()
+  const isStaff = can("viewClassroomStaffContent", { classroomRole: role })
+  const isStudent = role === "student"
 
   return (
     <PageShell selected="assignments">
@@ -272,7 +275,7 @@ const AssignmentsPage = () => {
           <div className="skeleton skeleton-shimmer h-64 w-full rounded-box" />
         </div>
       )}
-      {roleResolved && isTeacher && org && classroom && (
+      {roleResolved && isStaff && org && classroom && (
         <TeacherAssignmentsView org={org} classroom={classroom} />
       )}
       {roleResolved && isStudent && org && classroom && (

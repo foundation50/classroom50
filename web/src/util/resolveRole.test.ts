@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   resolveClassroomRole,
   resolveOrgRole,
-  isStaffRole,
   applyViewAs,
   roleLabelKey,
   membershipFromQuery,
@@ -200,13 +199,6 @@ describe("membershipFromQuery", () => {
 })
 
 describe("role predicates", () => {
-  it("isStaffRole: instructor/ta/unresolved true; student false", () => {
-    expect(isStaffRole("instructor")).toBe(true)
-    expect(isStaffRole("ta")).toBe(true)
-    expect(isStaffRole("unresolved")).toBe(true) // permissive: let page load
-    expect(isStaffRole("student")).toBe(false)
-  })
-
   it("roleLabelKey: instructor => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
     expect(roleLabelKey("instructor")).toBe("nav.roleInstructor")
     expect(roleLabelKey("ta")).toBe("nav.roleTa")

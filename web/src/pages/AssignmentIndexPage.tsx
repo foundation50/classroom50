@@ -1,5 +1,6 @@
 import { Navigate, useParams } from "@tanstack/react-router"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { can } from "@/util/capabilities"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 
 // The bare assignment route has no view of its own: it forwards to the
@@ -8,7 +9,7 @@ import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 // through the student page (or vice versa).
 const AssignmentIndexPage = () => {
   const { org, classroom, assignment } = useParams({ strict: false })
-  const { showTeacherUi, roleResolved } = useClassroomRoleContext()
+  const { role, roleResolved } = useClassroomRoleContext()
 
   if (!org || !classroom || !assignment) {
     return <Navigate to="/" />
@@ -21,7 +22,7 @@ const AssignmentIndexPage = () => {
   return (
     <Navigate
       to={
-        showTeacherUi
+        can("viewClassroomStaffContent", { classroomRole: role })
           ? "/$org/$classroom/assignments/$assignment/submissions"
           : "/$org/$classroom/assignments/$assignment/submission"
       }

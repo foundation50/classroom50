@@ -40,7 +40,7 @@ import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/util/capabilities"
 import { orgFooterRoleLabel } from "./footerRoleLabel"
-import { roleLabelKey, isStaffRole, type ViewAsRole } from "@/util/resolveRole"
+import { roleLabelKey, type ViewAsRole } from "@/util/resolveRole"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -348,7 +348,10 @@ const AssignmentSidebarMenu = ({
 }) => {
   const { collapsed } = useSidebarCollapse()
   const { t } = useTranslation()
-  const { showTeacherUi, roleResolved, actualRole } = useClassroomRoleContext()
+  const { role, roleResolved, actualRole } = useClassroomRoleContext()
+  const showTeacherUi = can("viewClassroomStaffContent", {
+    classroomRole: role,
+  })
   const matchRoute = useMatchRoute()
   const { user } = useGithubAuth()
 
@@ -374,7 +377,9 @@ const AssignmentSidebarMenu = ({
     org,
     studentRepoNameForSecret,
   )
-  const isActuallyStaff = isStaffRole(actualRole) && actualRole !== "unresolved"
+  const isActuallyStaff = can("viewClassroomStaffContent", {
+    classroomRole: actualRole,
+  })
   const { data: classroomMeta } = useGetClassroom(org, classroom, {
     enabled: isActuallyStaff,
   })
@@ -546,19 +551,12 @@ export const TeacherSidebarMenu = ({
   selected: string
 }) => {
   // Placeholder while pending so items never flash in then out.
-  const {
-    showTeacherUi,
-    roleResolved,
-    role: classroomRole,
-  } = useClassroomRoleContext()
-  // Finer, preview-aware classroom role. Roster is staff-only, Settings
-  // instructor-only; gating on this makes "View as student/TA" faithfully hide
-  // what a real student/TA wouldn't see. showTeacherUi already implies a
-  // resolved instructor|ta role (see ClassroomRoleProvider: it's isStaffRole &&
-  // roleResolved), so the can() conjunct routes the staff-content decision
-  // through the central policy without changing the truth table.
-  const showStaffItems =
-    showTeacherUi && can("viewClassroomStaffContent", { classroomRole })
+  const { roleResolved, role: classroomRole } = useClassroomRoleContext()
+  // Staff nav (Roster staff-only, Settings instructor-only) gates on the
+  // preview-aware classroom role through the central can() policy, so "View as
+  // student/TA" faithfully hides what a real student/TA wouldn't see. can()
+  // already denies `unresolved`, so no separate resolved conjunct is needed.
+  const showStaffItems = can("viewClassroomStaffContent", { classroomRole })
   const canEditSettings = can("editClassroomSettings", {
     classroomRole,
   })

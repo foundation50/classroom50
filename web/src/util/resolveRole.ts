@@ -74,13 +74,6 @@ export function resolveOrgRole(input: {
   return "unresolved"
 }
 
-// Whether a classroom role may see/do instructor-or-TA classroom content.
-// `unresolved` is permissive on purpose: the guard treats it as "let the page
-// load".
-export function isStaffRole(role: ResolvedRole): boolean {
-  return role === "instructor" || role === "ta" || role === "unresolved"
-}
-
 // Apply a "view as" preview to an actual role. DOWNGRADE-ONLY: the preview can
 // only lower the effective role, never raise it, so it can't be abused to gain
 // access. `unresolved`/no-preview pass through unchanged.

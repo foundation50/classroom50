@@ -6,14 +6,14 @@ import {
 } from "react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
-import { isStaffRole, type ResolvedRole } from "@/util/resolveRole"
+import { type ResolvedRole } from "@/util/resolveRole"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child
-// page + guard. Carries both the fine classroom role (instructor/ta/student)
-// and the coarse staff verdict (showTeacherUi/isStudent/...) DERIVED from that
-// fine role, so the two can't diverge. Preview-aware fields respect the
-// downgrade-only "view as" lens; `actualRole` is the real one.
+// page + guard. Carries the fine classroom role (instructor/ta/student) plus
+// the `roleResolved` load signal; permission verdicts are derived at call sites
+// through the central `can()` policy off `role` (preview-aware; `actualRole` is
+// the real one).
 export type ClassroomRoleContextValue = {
   role: ResolvedRole
   actualRole: ResolvedRole
@@ -24,20 +24,19 @@ export type ClassroomRoleContextValue = {
   isError: boolean
   // Re-run the classroom team reads (the error surface's retry).
   retry: () => void
-  // Coarse staff verdict, DERIVED from the fine role (not a separate config-repo
-  // read) so it can't diverge from `role`. Preview-aware via `role`.
-  isTeacher: boolean
-  isStudent: boolean
+  // Whether the fine role has settled (not `unresolved`) — the spinner-vs-render
+  // signal. NOT a permission verdict: gate access via can(), gate loading state
+  // via this.
   roleResolved: boolean
-  showTeacherUi: boolean
 }
 
 const ClassroomRoleContext = createContext<ClassroomRoleContextValue | null>(
   null,
 )
 
-// Resolve the classroom role from the three per-classroom team reads and derive
-// the coarse staff verdict from it. One resolution per classroom mount.
+// Resolve the classroom role from the three per-classroom team reads. One
+// resolution per classroom mount; permission verdicts come from can() at the
+// call site off `role`.
 function useClassroomRoleResolution(
   org: string | undefined,
   classroom: string | undefined,
@@ -50,13 +49,7 @@ function useClassroomRoleResolution(
     user?.login,
   )
 
-  // DERIVE the coarse staff verdict from the resolved fine role (which already
-  // folds in team membership AND the "view as" clamp) so the two can't diverge.
-  // `unresolved` is the fail-closed sentinel (not resolved, no teacher UI, not
-  // yet a definitive student).
   const roleResolved = role !== "unresolved"
-  const isTeacher = isStaffRole(role) && roleResolved
-  const isStudent = role === "student"
 
   return {
     role,
@@ -64,10 +57,7 @@ function useClassroomRoleResolution(
     isLoading,
     isError,
     retry: refetch,
-    isTeacher,
-    isStudent,
     roleResolved,
-    showTeacherUi: isTeacher,
   }
 }
 
@@ -92,10 +82,7 @@ export function ClassroomRoleProvider({
       resolved.isLoading,
       resolved.isError,
       resolved.retry,
-      resolved.isTeacher,
-      resolved.isStudent,
       resolved.roleResolved,
-      resolved.showTeacherUi,
     ],
   )
   return (

@@ -59,6 +59,7 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { can } from "@/util/capabilities"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
   COLLECT_SCORES_WORKFLOW,
@@ -837,13 +838,18 @@ const SubmissionsPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.submissions"))
   const { org, classroom, assignment } = useParams({ strict: false })
-  const { showTeacherUi, roleResolved } = useClassroomRoleContext()
+  const { role, roleResolved } = useClassroomRoleContext()
 
   if (!roleResolved) {
     return <RoleResolvingFallback className="min-h-screen" />
   }
 
-  if (!showTeacherUi && org && classroom && assignment) {
+  if (
+    !can("viewClassroomStaffContent", { classroomRole: role }) &&
+    org &&
+    classroom &&
+    assignment
+  ) {
     return (
       <Navigate
         to="/$org/$classroom/assignments/$assignment/submission"

@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
   resolveClassroomRole,
-  isStaffRole,
   applyViewAs,
   roleLabelKey,
   type ClassroomRoleInput,
@@ -38,11 +37,6 @@ describe("resolveClassroomRole (KTD-4: owner is not a classroom role)", () => {
 })
 
 describe("role predicates stay wired", () => {
-  it("isStaffRole", () => {
-    expect(isStaffRole("ta")).toBe(true)
-    expect(isStaffRole("instructor")).toBe(true)
-    expect(isStaffRole("student")).toBe(false)
-  })
   it("roleLabelKey", () => {
     expect(roleLabelKey("instructor")).toBe("nav.roleInstructor")
     expect(roleLabelKey("unresolved")).toBeNull()

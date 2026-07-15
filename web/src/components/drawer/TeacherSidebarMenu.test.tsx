@@ -5,9 +5,8 @@ import type { ReactNode } from "react"
 
 // The drawer's classroom nav affordances (Roster, Settings) are gated via the
 // real can() policy off the resolved classroom role. Mock only the role signal
-// + the router/i18n/asset boundaries the module needs to load — can() and
-// isStaffRole stay REAL so this pins the role -> can() wiring the pure policy
-// tests can't reach.
+// + the router/i18n/asset boundaries the module needs to load — can() stays
+// REAL so this pins the role -> can() wiring the pure policy tests can't reach.
 const classroomCtxMock = vi.fn()
 
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
@@ -53,10 +52,7 @@ const ctx = (over: Record<string, unknown> = {}) => ({
   isLoading: false,
   isError: false,
   retry: () => {},
-  isTeacher: true,
-  isStudent: false,
   roleResolved: true,
-  showTeacherUi: true,
   ...over,
 })
 
@@ -99,7 +95,7 @@ describe("TeacherSidebarMenu — RBAC nav affordances via can()", () => {
     // role is the preview-clamped one; showStaffItems/canEditSettings key off it,
     // so a real instructor previewing as a student sees the student surface.
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "student", actualRole: "instructor", showTeacherUi: false }),
+      ctx({ role: "student", actualRole: "instructor" }),
     )
     renderMenu()
     expect(hasRoster()).toBe(false)
@@ -108,7 +104,7 @@ describe("TeacherSidebarMenu — RBAC nav affordances via can()", () => {
 
   it("a student sees neither Roster nor Settings", () => {
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "student", actualRole: "student", showTeacherUi: false }),
+      ctx({ role: "student", actualRole: "student" }),
     )
     renderMenu()
     expect(hasRoster()).toBe(false)
@@ -117,7 +113,7 @@ describe("TeacherSidebarMenu — RBAC nav affordances via can()", () => {
 
   it("shows skeleton placeholders (never staff items) while the role is unresolved", () => {
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "unresolved", roleResolved: false, showTeacherUi: false }),
+      ctx({ role: "unresolved", roleResolved: false }),
     )
     renderMenu()
     expect(hasSkeleton()).toBe(true)
