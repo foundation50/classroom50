@@ -54,6 +54,31 @@ func TestContractLiterals(t *testing.T) {
 	}
 }
 
+// TestAssignmentRepoName pins the assignment-repo naming formula — the
+// cross-binary contract that gh-student (via internal/reponame) and gh-teacher
+// (download) both build/parse and runner.py::username_from_repo mirrors by
+// value. A shape change here silently makes `gh teacher download` return zero
+// repos and misidentifies every submission, so this is the oracle. Covers the
+// lowercasing of all three segments and the prefix/name relationship.
+func TestAssignmentRepoName(t *testing.T) {
+	if got := AssignmentRepoPrefix("CS101", "HW1"); got != "cs101-hw1-" {
+		t.Errorf("AssignmentRepoPrefix = %q, want %q", got, "cs101-hw1-")
+	}
+	if got := AssignmentRepoName("CS101", "HW1", "Alice"); got != "cs101-hw1-alice" {
+		t.Errorf("AssignmentRepoName = %q, want %q", got, "cs101-hw1-alice")
+	}
+	// Name must be exactly Prefix + lowercased username, so a consumer that
+	// strips the prefix recovers the owner.
+	prefix := AssignmentRepoPrefix("cs101", "hw1")
+	name := AssignmentRepoName("cs101", "hw1", "bob")
+	if !strings.HasPrefix(name, prefix) {
+		t.Errorf("AssignmentRepoName %q does not start with AssignmentRepoPrefix %q", name, prefix)
+	}
+	if owner := strings.TrimPrefix(name, prefix); owner != "bob" {
+		t.Errorf("owner recovered from %q = %q, want %q", name, owner, "bob")
+	}
+}
+
 // TestRequiredOAuthScopes pins the unified CLI scope set (issue #246): both
 // binaries request exactly these, and delete_repo stays out (opt-in for
 // teardown). This list is the behavior oracle for the login command and the

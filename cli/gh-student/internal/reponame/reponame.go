@@ -1,31 +1,24 @@
-// Package reponame owns the canonical assignment-repo naming formula, a
-// cross-binary contract shared with cli/gh-teacher (which rebuilds the prefix
-// by hand in download.go — separate go.mod, no shared symbol) and
-// runner.py::username_from_repo. Changing the shape here silently makes
-// `gh teacher download` return zero repos and misidentifies every submission
-// in scores.json, so it lives in one named seam consumed by every gh-student
-// command that builds or parses a repo name.
+// Package reponame owns the gh-student-facing assignment-repo naming API,
+// delegating to the single cross-binary source in cli/shared/contract
+// (AssignmentRepoName / AssignmentRepoPrefix). Kept as a thin named seam so the
+// gh-student commands that build or parse a repo name read from one place; the
+// formula itself is shared with gh-teacher's download command and mirrored by
+// runner.py::username_from_repo. Changing the shape (in contract) silently makes
+// `gh teacher download` return zero repos and misidentifies every submission in
+// scores.json.
 package reponame
 
-import (
-	"fmt"
-	"strings"
-)
+import "github.com/foundation50/classroom50-cli-shared/contract"
 
 // Name is the canonical lowercased <classroom>-<assignment>-<username>
 // assignment-repo name.
 func Name(classroom, assignment, username string) string {
-	return Prefix(classroom, assignment) + strings.ToLower(username)
+	return contract.AssignmentRepoName(classroom, assignment, username)
 }
 
-// Prefix is the single source of the group/individual repo-name prefix
-// `<classroom>-<assignment>-` (all lowercased). Both the producer (Name) and
-// the consumer (group-membership's owner recovery, which strips this prefix)
-// derive from it, so the `<classroom>-<assignment>-<owner>` shape can only
-// change in one place.
+// Prefix is the group/individual repo-name prefix `<classroom>-<assignment>-`
+// (all lowercased). Both the producer (Name) and the consumer
+// (group-membership's owner recovery, which strips this prefix) derive from it.
 func Prefix(classroom, assignment string) string {
-	return fmt.Sprintf("%s-%s-",
-		strings.ToLower(classroom),
-		strings.ToLower(assignment),
-	)
+	return contract.AssignmentRepoPrefix(classroom, assignment)
 }

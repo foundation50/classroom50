@@ -24,6 +24,7 @@ import (
 	"github.com/cli/go-gh/v2/pkg/auth"
 	"github.com/spf13/cobra"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/classroom50-cli-shared/ghui"
 	"github.com/foundation50/gh-teacher/internal/assignment"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
@@ -368,9 +369,9 @@ func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, 
 // name starts with <classroom>-<assignment>-. Skips the team lookup,
 // result.json refresh, and scores.csv summary (all depend on the config repo).
 func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
-	// Deterministic head of assignmentRepoName — cross-binary contract with
-	// cli/gh-student/accept.go.
-	prefix := strings.ToLower(classroom) + "-" + strings.ToLower(assignment) + "-"
+	// Deterministic head of the assignment repo name — single-sourced with
+	// gh-student via cli/shared/contract.
+	prefix := contract.AssignmentRepoPrefix(classroom, assignment)
 
 	repos, err := orgrepos.ListNames(client, org)
 	if err != nil {
@@ -459,15 +460,11 @@ func assignmentIsGroup(assignments assignment.AssignmentsJSON, slug string) bool
 }
 
 // assignmentRepoName: canonical lowercased <classroom>-<assignment>-<username>
-// repo name. Cross-binary contract — mirrors reponame.Name in
-// cli/gh-student/internal/reponame. The two modules share no symbols; the
-// formula's shape IS the contract.
+// repo name. Delegates to the single cross-binary source in cli/shared/contract
+// (also used by gh-student via internal/reponame, and mirrored by
+// runner.py::username_from_repo).
 func assignmentRepoName(classroom, assignment, username string) string {
-	return fmt.Sprintf("%s-%s-%s",
-		strings.ToLower(classroom),
-		strings.ToLower(assignment),
-		strings.ToLower(username),
-	)
+	return contract.AssignmentRepoName(classroom, assignment, username)
 }
 
 // targetExists distinguishes "missing" from "other error" so a
