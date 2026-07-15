@@ -1,15 +1,9 @@
 /**
- * dependency-cruiser: CI-side holistic architecture validation.
- *
- * Complements the dev-time eslint-plugin-boundaries layer rule (real-time IDE
- * feedback) and the import-x/no-cycle guard: this runs over the whole graph in
- * CI to (1) fail on ANY circular dependency and (2) re-assert the same downward
- * layer invariants boundaries enforces, as a second independent check. Keep the
- * layer rules here in lockstep with the boundaries policy in eslint.config.js.
- *
- * Layer chain (strictly downward): pages -> components -> domain -> github-core
- * -> util/types. Type-only edges are allowed to reach up (matching no-cycle +
- * the boundaries dependency.kind:"value" scope) via `dependencyTypesNot`.
+ * dependency-cruiser: CI-side holistic architecture validation. Re-asserts the
+ * three downward layer invariants that eslint-plugin-boundaries enforces at
+ * dev time, plus a data-layer no-circular check, over the whole graph in CI.
+ * Keep the layer rules here in lockstep with eslint.config.js. tsPreCompilationDeps
+ * is off, so (matching import-x/no-cycle) type-only edges are not tracked.
  */
 module.exports = {
   forbidden: [

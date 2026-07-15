@@ -201,40 +201,33 @@ export default defineConfig([
       "no-console": "off",
     },
   },
-  // Enforce the layered architecture direction (features -> components ->
-  // domain -> github-core -> util/types, strictly downward). eslint-plugin-
-  // boundaries classifies each src/<layer>/ file as an architectural element and
-  // this rule forbids the upward/inward inversions that break the layering.
+  // Enforce the layered architecture (features -> components -> domain ->
+  // github-core -> util/types, strictly downward) by disallowing the three
+  // load-bearing inversions. `default: allow` + explicit disallows (not
+  // deny-by-default) keeps benign lateral edges quiet; dependency-cruiser adds
+  // the CI-side holistic pass. Rationale for the policy shape and the deferred
+  // util/types leaf rule lives in the Tier-2E PR (#290).
   //
-  // Policy shape: `default: allow` with explicit `disallow` edges, rather than
-  // `default: disallow` + an exhaustive allow-list. The app has ~18 top-level
-  // dirs (many cross-cutting: hooks, context, lib, auth, i18n, routes); a
-  // deny-by-default policy would demand enumerating every legal edge and would
-  // flag benign lateral imports. Denying the specific inversions that the
-  // layering actually forbids enforces the real invariant with near-zero false
-  // positives, and can be tightened later. The authz barrel guard
-  // (no-restricted-imports, above) and the data-layer no-cycle guard remain the
-  // complementary enforcement; dependency-cruiser adds the CI-side holistic pass.
-  //
-  // Scope note: this enforces the THREE load-bearing inversions
-  // (components -> pages, domain -> view, github-core -> up). It intentionally
-  // does NOT enforce util/types leaf-purity — a few util files legitimately
-  // depend on authz / a github-core error type / a component type today
-  // (classroomRoleUI, membershipReadError, teamRoster), and untangling that is a
-  // separate decision, not a Tier-2E boundary. Add a util/types leaf rule later
-  // if those are relocated.
-  //
-  // `dependency.kind: "value"` scopes every disallow to runtime imports, so the
-  // two benign type-only `github-core -> domain` input-type edges
-  // (CreateClassroomInput, GetAssignmentsFileInput) are left alone — matching how
-  // import-x/no-cycle already ignores `import type`. Tests are excluded so a test
-  // may reach across layers to exercise a unit.
+  // Adding a new src/<layer>/ dir needs THREE coordinated edits or it is
+  // silently unenforced: (1) a boundaries/elements entry below, (2) a disallow
+  // policy for its illegal edges, and (3) a matching .dependency-cruiser.cjs
+  // path rule. dependency-cruiser's path-regex rules are the CI backstop.
   {
     files: ["src/**/*.{ts,tsx}"],
     ignores: ["src/**/*.test.{ts,tsx}", "src/**/*.d.ts"],
     plugins: { boundaries },
     settings: {
-      "boundaries/dependency-nodes": ["import"],
+      // Classify all upward-reachable value edges, not just static `import`:
+      // a re-export (`export { X } from "@/pages/.."`), `require`, or dynamic
+      // `import()` is just as much a reach-up. `dependency.kind: "value"` on
+      // each disallow still scopes them to runtime edges, so type-only imports
+      // stay allowed (matching import-x/no-cycle).
+      "boundaries/dependency-nodes": [
+        "import",
+        "export",
+        "dynamic-import",
+        "require",
+      ],
       // boundaries resolves each import to a file to classify its target
       // element; without the `@/*` alias resolver it can't resolve the alias
       // imports every layer uses and would treat targets as unknown (skipped).

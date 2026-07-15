@@ -12,7 +12,7 @@
     "arch:graph": "depcruise src --config .dependency-cruiser.cjs --output-type dot | dot -T svg > dependency-graph.svg",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "tsc -b && eslint . && prettier --check . && vitest run",
+    "check": "tsc -b && eslint . && prettier --check . && npm run arch:validate && vitest run",
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",

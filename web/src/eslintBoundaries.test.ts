@@ -11,14 +11,18 @@ import { fileURLToPath } from "node:url"
 //
 // The plugin classifies a file by its src/<layer>/ path, so probes must live in
 // real layer dirs (a temp dir at src/ root would be an unknown element the rule
-// skips). We write a fresh temp subdir inside src/components and src/github-core,
-// drop an upward import (must fire) and a downward import (must NOT fire), run
-// eslint once, and assert boundaries/dependencies fires on exactly the inversions
-// — a non-zero exit alone isn't enough, since a globally-broken eslint erroring
-// on everything must not read as a real catch.
+// skips). We write fresh temp subdirs inside src/components, src/github-core, and
+// src/domain, then assert boundaries/dependencies fires on each of the three
+// disallowed inversions (components->pages, github-core->domain, domain->pages)
+// and stays silent on a legal downward import — a non-zero exit alone isn't
+// enough, since a globally-broken eslint erroring on everything must not read as
+// a real catch. We also probe a re-export and a dynamic import() reach-up so a
+// narrowed boundaries/dependency-nodes set (which would make those edge kinds
+// invisible) can't silently pass.
 
 const COMPONENTS_DIR = fileURLToPath(new URL("./components", import.meta.url))
 const GITHUB_CORE_DIR = fileURLToPath(new URL("./github-core", import.meta.url))
+const DOMAIN_DIR = fileURLToPath(new URL("./domain", import.meta.url))
 const WEB_ROOT = fileURLToPath(new URL("../", import.meta.url))
 const ESLINT_BIN = fileURLToPath(
   new URL("../node_modules/.bin/eslint", import.meta.url),
@@ -60,6 +64,7 @@ describe("layered-architecture boundary guard is live", () => {
       // Probe dirs inside real layers so the plugin classifies the files.
       const compDir = mkdtempSync(`${COMPONENTS_DIR}/__boundaries_probe_`)
       const coreDir = mkdtempSync(`${GITHUB_CORE_DIR}/__boundaries_probe_`)
+      const domainDir = mkdtempSync(`${DOMAIN_DIR}/__boundaries_probe_`)
       try {
         // components -> pages: an upward reach-up. Must be flagged.
         writeFileSync(
@@ -76,28 +81,69 @@ describe("layered-architecture boundary guard is live", () => {
           `${coreDir}/coreUpward.ts`,
           `import { syncRosterFromTeam } from "@/domain/students"\nexport const c = syncRosterFromTeam\n`,
         )
+        // domain -> pages (value): the third policy. Must fire — probing it here
+        // is what keeps the domain->view policy from silently going inert.
+        writeFileSync(
+          `${domainDir}/domainUpward.ts`,
+          `import ClassesPage from "@/pages/ClassesPage"\nexport const d = ClassesPage\n`,
+        )
+        // A re-export reach-up (`export … from`). The plugin only sees this as a
+        // dependency when `export` is in boundaries/dependency-nodes; probing it
+        // guards against the narrowed-node-set blind spot.
+        writeFileSync(
+          `${compDir}/compReexport.ts`,
+          `export { default as ClassesPage } from "@/pages/ClassesPage"\n`,
+        )
+        // A dynamic-import() reach-up (lazy loading a page). Likewise only seen
+        // when `dynamic-import` is in the node set.
+        writeFileSync(
+          `${compDir}/compDynamic.ts`,
+          `export const load = () => import("@/pages/ClassesPage")\n`,
+        )
 
         const byFile = ruleIdsByFile([
           `${compDir}/compUpward.ts`,
           `${compDir}/compDownward.ts`,
           `${coreDir}/coreUpward.ts`,
+          `${domainDir}/domainUpward.ts`,
+          `${compDir}/compReexport.ts`,
+          `${compDir}/compDynamic.ts`,
         ])
 
         expect(
           byFile["compUpward.ts"],
           "boundaries/dependencies did not fire on a components->pages import — the layer guard has gone inert (check boundaries/elements + the policies in eslint.config.js).",
         ).toContain("boundaries/dependencies")
+        // Assert the file was actually linted before asserting it is clean, so a
+        // skipped/absent file can't satisfy .not.toContain via a missing entry.
         expect(
-          byFile["compDownward.ts"] ?? [],
+          byFile["compDownward.ts"],
+          "compDownward.ts was not linted at all — the negative control is meaningless (eslint may have skipped the probe file).",
+        ).toBeDefined()
+        expect(
+          byFile["compDownward.ts"],
           "boundaries/dependencies fired on a legal components->util downward import — the policy is too strict.",
         ).not.toContain("boundaries/dependencies")
         expect(
           byFile["coreUpward.ts"],
           "boundaries/dependencies did not fire on a github-core->domain value import — the layer guard has gone inert.",
         ).toContain("boundaries/dependencies")
+        expect(
+          byFile["domainUpward.ts"],
+          "boundaries/dependencies did not fire on a domain->pages value import — the domain->view policy has gone inert.",
+        ).toContain("boundaries/dependencies")
+        expect(
+          byFile["compReexport.ts"],
+          "boundaries/dependencies did not fire on a components->pages re-export — `export` is missing from boundaries/dependency-nodes, so re-export reach-ups are invisible.",
+        ).toContain("boundaries/dependencies")
+        expect(
+          byFile["compDynamic.ts"],
+          "boundaries/dependencies did not fire on a components->pages dynamic import() — `dynamic-import` is missing from boundaries/dependency-nodes, so lazy-loaded reach-ups are invisible.",
+        ).toContain("boundaries/dependencies")
       } finally {
         rmSync(compDir, { recursive: true, force: true })
         rmSync(coreDir, { recursive: true, force: true })
+        rmSync(domainDir, { recursive: true, force: true })
       }
     },
   )
