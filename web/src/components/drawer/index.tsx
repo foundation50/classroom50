@@ -1027,11 +1027,11 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const { t } = useTranslation()
   const { isStaff, roleResolved } = useOrgStaff(org)
   // Members/Activity/Settings are owner-only surfaces, so their route access
-  // stays gated on can("manageOrg") (RequireOwner). Their sidebar SHORTCUTS,
-  // though, are shown only to a staff owner (`isStaff && isOwner`): an org
-  // owner on no staff team deliberately loses the shortcut clutter but keeps the
-  // routes reachable (and regains the nav by claiming instructor / joining a
-  // staff team). Team membership is the source of truth for org-staff chrome.
+  // stays gated on can("manageOrg") (RequireOwner). Their sidebar SHORTCUTS are
+  // shown to a staff owner (`isStaff && isOwner`); since useOrgStaff now treats
+  // an org owner as staff, a fresh owner on no staff team keeps the shortcuts
+  // (and the routes). Team membership is the source of truth for non-owner
+  // org-staff chrome.
   const { githubOrgRole } = useGitHubOrgRole()
   const isOwner = can("manageOrg", { githubOrgRole })
   const onSettings = settings || selected === "settings"

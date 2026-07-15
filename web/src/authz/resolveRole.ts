@@ -121,9 +121,10 @@ export function membershipFromQuery(
 // (Published page, "My Classes" nav, ClassesPage): staff = confirmed member of
 // >=1 classroom staff team in the org, derived from the viewer's own team
 // memberships (see useOrgStaff). Fail-closed tri-state: a transient/in-flight
-// read holds `unresolved` rather than demoting a real staffer. Deliberately
-// ignores org-owner status: an owner on no staff team is non-staff here and
-// recovers via ClaimInstructor (owner-scoped UI stays gated on can("manageOrg")).
+// read holds `unresolved` rather than demoting a real staffer. This pure verdict
+// is team-only; useOrgStaff additionally grants staff to an org owner (so a
+// freshly-configured org with no teams isn't stranded) — owner precedence lives
+// in the hook, not this type.
 export type OrgStaffVerdict = {
   isStaff: boolean
   // Definitively-resolved AND not staff — the org-less "treat as a plain member/
