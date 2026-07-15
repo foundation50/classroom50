@@ -12,10 +12,11 @@ import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
+import { githubKeys } from "@/github-core/queries"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useMutation } from "@tanstack/react-query"
+import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
@@ -525,6 +526,7 @@ const AcceptAssignmentPage = () => {
   const search = useSearch({ strict: false }) as { k?: string }
   const secret = typeof search.k === "string" ? search.k : undefined
   const client = useGitHubClient()
+  const queryClient = useQueryClient()
 
   const { user } = useGithubAuth()
   const username = user?.login
@@ -595,6 +597,14 @@ const AcceptAssignmentPage = () => {
       // milestone, so skip the confetti.
       if (result.status === "created") {
         fireConfetti()
+      }
+
+      if (org) {
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.orgRepos(org),
+          exact: true,
+          refetchType: "all",
+        })
       }
     },
   })

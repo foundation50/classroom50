@@ -1457,7 +1457,7 @@
       "group": "Group",
       "openRepo": "Open repo",
       "emptyTitle": "No assignment repos yet",
-      "emptyBody": "Repositories you can maintain will appear here once assignments have been created for this organization."
+      "emptyBody": "Repositories you can write to will appear here once assignments have been created for this organization."
     },
     "form": {
       "basicInfo": "Basic Information",

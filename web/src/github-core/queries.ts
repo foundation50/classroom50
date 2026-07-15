@@ -50,6 +50,8 @@ export const githubKeys = {
   orgMembership: (org: string) =>
     [...githubKeys.all, "org-membership", org] as const,
 
+  orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
+
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,
 
   // Distinct from `orgMembers` (page-1 via listOrgMembers): this keys the

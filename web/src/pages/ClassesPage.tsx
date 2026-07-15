@@ -261,17 +261,17 @@ export const OrgRepos = ({
 
   if (!repos) return <></>
 
-  let maintainRepos = repos.filter((repo) => repo.permissions?.maintain)
+  let writableRepos = repos.filter((repo) => repo.permissions?.push)
   if (classroom) {
     // Classroom repos are `<classroom>-<assignment>-<user>`, so require the
     // trailing "-" to avoid matching a sibling classroom whose name extends
     // this one (e.g. "cs" wrongly matching "cs101-a1-bob").
-    maintainRepos = maintainRepos.filter((repo) =>
+    writableRepos = writableRepos.filter((repo) =>
       repo.name.startsWith(`${classroom}-`),
     )
   }
 
-  if (maintainRepos.length === 0) {
+  if (writableRepos.length === 0) {
     return (
       <div className="rounded-2xl border border-dashed border-base-300 bg-base-100 p-8 text-center">
         <div className="mx-auto mb-3 flex size-12 items-center justify-center rounded-full bg-base-200">
@@ -294,7 +294,7 @@ export const OrgRepos = ({
 
   return (
     <div className="grid grid-cols-12 gap-4">
-      {maintainRepos.map((repo) => (
+      {writableRepos.map((repo) => (
         <RepoCard key={repo.id ?? repo.full_name} org={org} repo={repo} />
       ))}
     </div>
