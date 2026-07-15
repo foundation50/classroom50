@@ -38,7 +38,7 @@ const RequireRole = ({
 }
 
 // Shared gate shape: while the role read is in flight show a spinner (never
-// flash a 404 at a real teacher); if the read SETTLED IN ERROR (retries
+// flash a 404 at a real staffer); if the read SETTLED IN ERROR (retries
 // exhausted, role still unresolved) show a retryable error instead of an
 // indefinite spinner; then render children or NotFound. Each Require* wrapper
 // computes its own `resolved`/`permitted` from the role signal it reads, and
