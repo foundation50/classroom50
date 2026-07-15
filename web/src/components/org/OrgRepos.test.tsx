@@ -23,7 +23,7 @@ vi.mock("@/hooks/useGetPublicAssignment", () => ({
   default: () => ({ assignment: undefined }),
 }))
 
-import { OrgRepos } from "./ClassesPage"
+import { OrgRepos } from "./OrgRepos"
 
 type Permissions = NonNullable<GitHubRepo["permissions"]>
 
