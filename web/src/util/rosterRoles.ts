@@ -1,6 +1,10 @@
 import type { BadgeTone } from "@/components/ui"
-import { ROLE_RANK, sortRolesByRank, type RosterRole } from "@/util/roles"
-import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
+import { ROLE_RANK, sortRolesByRank } from "@/util/roles"
+import type {
+  TeamRosterRow,
+  TeamRosterRowState,
+  RosterRole,
+} from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two

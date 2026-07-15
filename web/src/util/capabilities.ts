@@ -1,4 +1,4 @@
-import type { EffectiveRole, OrgRole } from "@/util/resolveRole"
+import type { ResolvedRole, GitHubOrgRole } from "@/util/resolveRole"
 
 // The capability vocabulary — WHAT a viewer can do, decoupled from WHICH role
 // they hold. Consumers ask `can("editClassroomSettings")` instead of comparing
@@ -21,8 +21,8 @@ export type Capability =
 // need `classroomRole`. `classroomRole` is undefined off a classroom route;
 // `orgStaff` is the org-scoped team-based staff signal for org-less surfaces.
 export type CapabilityInput = {
-  orgRole?: OrgRole
-  classroomRole?: EffectiveRole
+  orgRole?: GitHubOrgRole
+  classroomRole?: ResolvedRole
   orgStaff?: boolean
 }
 

@@ -1,13 +1,13 @@
 import { describe, expect, it } from "vitest"
 import { can, type Capability, type CapabilityInput } from "./capabilities"
-import type { EffectiveRole, OrgRole } from "./resolveRole"
+import type { ResolvedRole, GitHubOrgRole } from "./resolveRole"
 
 // Table-driven parity: the policy must exactly mirror the role semantics the
 // scattered role-literal checks used to encode. Includes the KTD-4 rule (org
 // owner is NOT a classroom instructor) and the deny-by-default posture.
 
-const orgRoles: OrgRole[] = ["owner", "member", "non-member", "unresolved"]
-const classroomRoles: EffectiveRole[] = [
+const orgRoles: GitHubOrgRole[] = ["owner", "member", "non-member", "unresolved"]
+const classroomRoles: ResolvedRole[] = [
   "instructor",
   "ta",
   "student",

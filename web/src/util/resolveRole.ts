@@ -4,26 +4,13 @@ import type {
   GitHubOrgRole,
   GitHubTeamMembership,
   ViewAsRole,
-  // Deprecated aliases re-exported below for existing importers.
-  EffectiveRole,
-  OrgRole,
-  Membership,
 } from "@/util/roles"
 import { ROLE_RANK } from "@/util/roles"
 
 // Role types are single-sourced in util/roles; re-exported here because the
 // resolution logic below is their primary consumer and guards/UI reach for the
-// type alongside these resolvers. The deprecated aliases stay exported so
-// existing importers of this module don't churn in the overhaul PR.
-export type {
-  ResolvedRole,
-  GitHubOrgRole,
-  GitHubTeamMembership,
-  ViewAsRole,
-  EffectiveRole,
-  OrgRole,
-  Membership,
-}
+// type alongside these resolvers.
+export type { ResolvedRole, GitHubOrgRole, GitHubTeamMembership, ViewAsRole }
 
 // Structural inputs so the verdict is a pure, unit-testable function (no React
 // Query). Each signal is pre-reduced to its tri-state.

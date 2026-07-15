@@ -3,7 +3,7 @@ import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { rosterClaimSet } from "@/util/identity"
 import {
-  type RosterRole,
+  type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
   orgRoleForRole,
@@ -13,13 +13,12 @@ import {
 // Role vocabulary is single-sourced in util/roles. Re-exported here because the
 // roster row logic below is its primary consumer and callers naturally reach for
 // these alongside TeamRosterRow; roles.ts stays the definition home.
-export {
-  type RosterRole,
-  ROLE_RANK,
-  sortRolesByRank,
-  orgRoleForRole,
-  roleForOrgRole,
-}
+//
+// `RosterRole` is the roster-domain spelling of `ClassroomRole` (a role a roster
+// row can hold). It lives here (not as a deprecated alias in roles.ts) because
+// the roster surface is where the name reads naturally and is its only consumer.
+export type RosterRole = ClassroomRole
+export { ROLE_RANK, sortRolesByRank, orgRoleForRole, roleForOrgRole }
 
 // Team-driven roster: the classroom GitHub team is the source of truth for
 // enrollment and role, not roster.csv. Enrolled/pending rows come from team

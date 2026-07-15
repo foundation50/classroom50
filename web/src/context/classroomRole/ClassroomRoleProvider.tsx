@@ -6,7 +6,7 @@ import {
 } from "react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
-import { isStaffRole, type EffectiveRole } from "@/util/resolveRole"
+import { isStaffRole, type ResolvedRole } from "@/util/resolveRole"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child
@@ -15,8 +15,8 @@ import { isStaffRole, type EffectiveRole } from "@/util/resolveRole"
 // fine role, so the two can't diverge. Preview-aware fields respect the
 // downgrade-only "view as" lens; `actualRole` is the real one.
 export type ClassroomRoleContextValue = {
-  role: EffectiveRole
-  actualRole: EffectiveRole
+  role: ResolvedRole
+  actualRole: ResolvedRole
   isLoading: boolean
   // An elevation (instructor/ta) read settled in a non-definitive error with
   // the role still `unresolved` and nothing in flight — the guard shows an

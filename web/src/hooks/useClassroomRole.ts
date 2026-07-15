@@ -8,7 +8,7 @@ import {
   resolveClassroomRole,
   applyViewAs,
   membershipFromQuery,
-  type EffectiveRole,
+  type ResolvedRole,
 } from "@/util/resolveRole"
 import type { GitHubClient } from "@/github-core/client"
 import type { StaffRole } from "@/types/classroom"
@@ -60,7 +60,7 @@ export function teamMembershipQuery(
 
 // Resolve the viewer's effective CLASSROOM role from live team-membership
 // reads: the instructor, ta, and students teams (instructor > ta > student).
-// Org-admin status is NOT consulted here (KTD-4) — that capability is OrgRole,
+// Org-admin status is NOT consulted here (KTD-4) — that is GitHubOrgRole,
 // resolved at the org boundary. Applies "view as" as a downgrade-only lens:
 // `role` reflects the preview, `actualRole` is the real one.
 export function useClassroomRole(
@@ -68,8 +68,8 @@ export function useClassroomRole(
   classroom: string | undefined,
   username: string | undefined,
 ): {
-  role: EffectiveRole
-  actualRole: EffectiveRole
+  role: ResolvedRole
+  actualRole: ResolvedRole
   isLoading: boolean
   isError: boolean
   refetch: () => void

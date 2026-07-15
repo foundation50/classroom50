@@ -80,17 +80,3 @@ export function orgRoleForRole(role: ClassroomRole): "admin" | "direct_member" {
 export function roleForOrgRole(orgRole: string): ClassroomRole {
   return orgRole === "admin" ? "instructor" : "student"
 }
-
-// --- Backward-compatible aliases (deprecated) -------------------------------
-// The names below were the pre-overhaul vocabulary. Kept so existing importers
-// (and the resolveRole/teamRoster re-export surfaces) don't churn in this PR;
-// remove in a follow-up repoint pass.
-
-/** @deprecated Use GitHubOrgRole. */
-export type OrgRole = GitHubOrgRole
-/** @deprecated Use GitHubTeamMembership. */
-export type Membership = GitHubTeamMembership
-/** @deprecated Use ClassroomRole. */
-export type RosterRole = ClassroomRole
-/** @deprecated Use ResolvedRole. */
-export type EffectiveRole = ResolvedRole
