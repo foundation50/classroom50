@@ -1033,8 +1033,12 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
   const { t } = useTranslation()
   const { isStaff: showTeacherUi, roleResolved } = useOrgStaff(org)
-  // Org-level Members/Settings are owner-only, so gate those two links on the
-  // org-role capability rather than the broad staff signal.
+  // Members/Activity/Settings are owner-only surfaces, so their route access
+  // stays gated on can("manageOrg") (RequireOwner). Their sidebar SHORTCUTS,
+  // though, are shown only to a staff owner (`showTeacherUi && isOwner`): an org
+  // owner on no staff team deliberately loses the shortcut clutter but keeps the
+  // routes reachable (and regains the nav by claiming instructor / joining a
+  // staff team). Team membership is the source of truth for org-staff chrome.
   const { orgRole } = useOrgRole()
   const isOwner = can("manageOrg", { orgRole })
   const onSettings = settings || selected === "settings"

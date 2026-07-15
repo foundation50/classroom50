@@ -138,18 +138,11 @@ export function membershipFromQuery(
 // --- Org-level staff verdict (team-based) -----------------------------------
 
 // The viewer's org-level staff standing for surfaces with NO classroom in scope
-// (Published page, "My Classes" nav, ClassesPage). Team membership is the source
-// of truth: staff = a confirmed member of at least one classroom's staff team.
-// Fail-closed tri-state, mirroring resolveClassroomRole:
-//   - staff:      >=1 staff-team probe confirmed `member`.
-//   - non-staff:  no confirmed membership AND every probe definitively settled
-//                 (`member`/`non-member`) — so "not on any staff team" is a
-//                 DEFINITIVE verdict, not a blip.
-//   - unresolved: no confirmed membership and >=1 probe still in flight / errored
-//                 transiently — hold; never grant, never demote a real staffer.
-// Deliberately does NOT consult org-owner status or config-repo read access: an
-// org owner on no staff team is non-staff here and recovers via ClaimInstructor
-// (owner-scoped UI stays gated on can("manageOrg"), separately).
+// (Published page, "My Classes" nav, ClassesPage): staff = confirmed member of
+// >=1 classroom staff team. Fail-closed tri-state (mirrors resolveClassroomRole)
+// so a transient blip never demotes a real staffer. Deliberately ignores
+// org-owner status: an owner on no staff team is non-staff and recovers via
+// ClaimInstructor (owner-scoped UI stays gated on can("manageOrg") separately).
 export type OrgStaffVerdict = {
   isStaff: boolean
   // Definitively-resolved AND not staff — the org-less "treat as a plain member/
@@ -158,12 +151,10 @@ export type OrgStaffVerdict = {
   roleResolved: boolean
 }
 
-// Reduce the per-classroom staff-team membership signals (one GitHubTeamMembership
-// per classroom — each already the OR of that classroom's instructor/ta probes)
-// to the org-level verdict. `signals` is empty when the org has no classrooms (or
-// the classroom list hasn't loaded): that is NOT staff, but it is only *resolved*
-// once the caller confirms the classroom list itself settled (classesResolved) —
-// so an in-flight class list holds `unresolved` rather than flashing non-staff.
+// Reduce the flat staff-team membership signals (all classrooms x instructor/ta)
+// to the org-level verdict. Empty when the org has no classrooms or the list has
+// not loaded — resolved as non-staff only once the caller confirms the list
+// settled (classesResolved), so an in-flight list holds rather than flashing.
 export function resolveOrgStaff(
   signals: GitHubTeamMembership[],
   classesResolved: boolean,

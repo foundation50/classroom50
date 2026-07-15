@@ -19,6 +19,18 @@ describe("orgFooterRoleLabel", () => {
     })
   })
 
+  it("owner on no staff team (isStudent from the team signal) still => Instructor", () => {
+    // The isNonStaff->isStudent rename: an org owner on no staff team now reads
+    // isStudent:true, but owner precedence must still label them Instructor, not
+    // Student. This is what keeps the renamed sentinel safe in the footer.
+    expect(
+      orgFooterRoleLabel({ ...base, isOwner: true, isStudent: true }),
+    ).toEqual({
+      labelKey: "nav.roleInstructor",
+      pending: false,
+    })
+  })
+
   it("org setup route => Instructor even without an owner verdict yet", () => {
     expect(orgFooterRoleLabel({ ...base, isOrgSetup: true })).toEqual({
       labelKey: "nav.roleInstructor",

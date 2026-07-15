@@ -2,14 +2,17 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { renderHook } from "@testing-library/react"
 
-const useQueriesMock = vi.fn()
+const useQueryMock = vi.fn()
 const getClassesMock = vi.fn()
 
 vi.mock("@tanstack/react-query", () => ({
-  useQueries: (arg: unknown) => useQueriesMock(arg),
+  useQuery: (arg: unknown) => useQueryMock(arg),
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
-  useGitHubClient: () => ({}),
+  useGitHubClient: () => ({
+    // Every probe reads a body with no active state => non-member.
+    request: async () => ({}),
+  }),
 }))
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "teacher1" } }),
@@ -17,51 +20,20 @@ vi.mock("@/auth/useGithubAuth", () => ({
 vi.mock("@/hooks/useGetClasses", () => ({
   default: (org: string | undefined) => getClassesMock(org),
 }))
-vi.mock("@/hooks/useClassroomRole", () => ({
-  teamMembershipQuery: () => ({}),
-}))
 
 import { useOrgStaff } from "./useOrgStaff"
-import { GitHubAPIError } from "@/github-core/errors"
+import type { GitHubTeamMembership } from "@/util/roles"
 
-const apiError = (status: number) =>
-  new GitHubAPIError({
-    status,
-    url: "https://api.github.com/orgs/acme/teams/x/memberships/teacher1",
-    message: `boom ${status}`,
-    body: null,
-    rateLimit: {
-      limit: null,
-      remaining: null,
-      used: null,
-      reset: null,
-      resource: null,
-      retryAfter: null,
-    },
-  })
-
-// react-query result stubs for the per-team probes.
-const member = {
-  isSuccess: true,
-  error: null,
-  fetchStatus: "idle",
-  isError: false,
-  refetch: () => {},
-}
-const nonMember = {
+// Aggregate probe-query result stub (the single useQuery the hook runs). `data`
+// is the flat signals array resolveOrgStaff consumes.
+const probe = (over: Record<string, unknown> = {}) => ({
+  data: undefined as GitHubTeamMembership[] | undefined,
   isSuccess: false,
-  error: apiError(404),
-  fetchStatus: "idle",
   isError: false,
-  refetch: () => {},
-}
-const erroredProbe = {
-  isSuccess: false,
-  error: apiError(500),
   fetchStatus: "idle",
-  isError: true,
   refetch: () => {},
-}
+  ...over,
+})
 
 const classes = (over: Record<string, unknown>) => ({
   classes: [],
@@ -73,7 +45,7 @@ const classes = (over: Record<string, unknown>) => ({
 })
 
 beforeEach(() => {
-  useQueriesMock.mockReset()
+  useQueryMock.mockReset()
   getClassesMock.mockReset()
 })
 
@@ -84,7 +56,7 @@ describe("useOrgStaff — class-list state gates the verdict", () => {
     getClassesMock.mockReturnValue(
       classes({ classes: [], isLoading: true, isSuccess: false }),
     )
-    useQueriesMock.mockReturnValue([])
+    useQueryMock.mockReturnValue(probe({ fetchStatus: "idle" }))
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current.roleResolved).toBe(false)
     expect(result.current.isNonStaff).toBe(false)
@@ -101,7 +73,7 @@ describe("useOrgStaff — class-list state gates the verdict", () => {
         isError: true,
       }),
     )
-    useQueriesMock.mockReturnValue([])
+    useQueryMock.mockReturnValue(probe())
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current.roleResolved).toBe(false)
     expect(result.current.isNonStaff).toBe(false)
@@ -110,7 +82,7 @@ describe("useOrgStaff — class-list state gates the verdict", () => {
 
   it("resolves non-staff for an org with a successfully-loaded empty class list", () => {
     getClassesMock.mockReturnValue(classes({ classes: [], isSuccess: true }))
-    useQueriesMock.mockReturnValue([])
+    useQueryMock.mockReturnValue(probe({ data: [], isSuccess: true }))
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current).toMatchObject({
       isStaff: false,
@@ -125,27 +97,99 @@ describe("useOrgStaff — class-list state gates the verdict", () => {
       classes({ classes: [{ name: "cs101" }], isSuccess: true }),
     )
     // instructor probe = member, ta probe = non-member.
-    useQueriesMock.mockReturnValue([member, nonMember])
+    useQueryMock.mockReturnValue(
+      probe({ data: ["member", "non-member"], isSuccess: true }),
+    )
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current.isStaff).toBe(true)
     expect(result.current.roleResolved).toBe(true)
   })
 
-  it("holds unresolved on a transient probe error even after the class list loaded", () => {
+  it("holds unresolved (surfaces isError) when the probe query settles in error", () => {
+    // A transient probe failure exhausts retries -> the aggregate query errors;
+    // the verdict must hold unresolved and offer retry, never demote to non-staff.
     getClassesMock.mockReturnValue(
       classes({ classes: [{ name: "cs101" }], isSuccess: true }),
     )
-    useQueriesMock.mockReturnValue([nonMember, erroredProbe])
+    useQueryMock.mockReturnValue(
+      probe({ data: undefined, isSuccess: false, isError: true }),
+    )
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current.roleResolved).toBe(false)
+    expect(result.current.isNonStaff).toBe(false)
     expect(result.current.isError).toBe(true)
   })
 
-  it("holds (unresolved, loading) with no org/user known", () => {
+  it("is loading (holds unresolved) while the probe query is fetching", () => {
+    getClassesMock.mockReturnValue(
+      classes({ classes: [{ name: "cs101" }], isSuccess: true }),
+    )
+    useQueryMock.mockReturnValue(probe({ fetchStatus: "fetching" }))
+    const { result } = renderHook(() => useOrgStaff("acme"))
+    expect(result.current.isLoading).toBe(true)
+    expect(result.current.roleResolved).toBe(false)
+    expect(result.current.isNonStaff).toBe(false)
+  })
+
+  it("refetch re-runs both the class list and the probe query", () => {
+    const refetchClasses = vi.fn()
+    const refetchProbes = vi.fn()
+    getClassesMock.mockReturnValue(
+      classes({
+        classes: [{ name: "cs101" }],
+        isSuccess: true,
+        refetch: refetchClasses,
+      }),
+    )
+    useQueryMock.mockReturnValue(
+      probe({
+        data: ["non-member", "non-member"],
+        isSuccess: true,
+        refetch: refetchProbes,
+      }),
+    )
+    const { result } = renderHook(() => useOrgStaff("acme"))
+    result.current.refetch()
+    expect(refetchClasses).toHaveBeenCalledTimes(1)
+    expect(refetchProbes).toHaveBeenCalledTimes(1)
+  })
+
+  it("settles (not loading) with no org/user known, without resolving a verdict", () => {
+    // An org-less route (no $org) or a not-yet-known viewer is disabled, not
+    // loading — otherwise the footer role label would shimmer forever on the
+    // org list. It just never resolves a verdict (roleResolved stays false).
     getClassesMock.mockReturnValue(classes({ classes: [], isSuccess: true }))
-    useQueriesMock.mockReturnValue([])
+    useQueryMock.mockReturnValue(probe())
     const { result } = renderHook(() => useOrgStaff(undefined))
     expect(result.current.roleResolved).toBe(false)
-    expect(result.current.isLoading).toBe(true)
+    expect(result.current.isLoading).toBe(false)
+    expect(result.current.isNonStaff).toBe(false)
+    expect(result.current.isStaff).toBe(false)
+  })
+
+  it("bounds the probe fan-out through mapWithConcurrency (queryFn)", async () => {
+    // Guard the fix: the probe queryFn must run through the concurrency limiter
+    // (not fire all 2N GETs at once). We capture the queryFn passed to useQuery
+    // and assert it resolves a signal per (classroom x staff role) slug.
+    let captured: (() => Promise<GitHubTeamMembership[]>) | undefined
+    getClassesMock.mockReturnValue(
+      classes({
+        classes: [{ name: "cs101" }, { name: "cs102" }],
+        isSuccess: true,
+      }),
+    )
+    useQueryMock.mockImplementation(
+      (opts: { queryFn: () => Promise<GitHubTeamMembership[]> }) => {
+        captured = opts.queryFn
+        return probe()
+      },
+    )
+    renderHook(() => useOrgStaff("acme"))
+    expect(captured).toBeTypeOf("function")
+    // 2 classrooms x 2 staff roles = 4 probes; the client mock returns {} so each
+    // probe reads state !== "active" => non-member.
+    const signals = await captured!()
+    expect(signals).toHaveLength(4)
+    expect(signals.every((s) => s === "non-member")).toBe(true)
   })
 })
