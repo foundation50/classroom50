@@ -155,9 +155,18 @@ export default defineConfig([
   // file (`@/authz/roles`, `@/authz/resolveRole`, `@/authz/capabilities`) is
   // forbidden, so the module's internals can be refactored without breaking
   // callers and can() stays the single decision surface. The authz files
-  // themselves import each other by relative path (`./roles`), which this
-  // pattern doesn't match, so the module is free internally. Turns the
+  // themselves import each other by relative path (`./roles`), which the
+  // `ignores` below excludes, so the module is free internally. Turns the
   // single-source-of-truth from a convention into an enforced invariant.
+  //
+  // The patterns block BOTH spellings of a deep import — the `@/` alias
+  // (`@/authz/roles`) and a relative path (`../authz/roles`) — because they
+  // resolve to the same internal module, and a rule that only caught the alias
+  // would go green while a relative deep import breached the barrel. The public
+  // barrel itself (`@/authz` and its explicit `/index` spelling) is excluded via
+  // a negated glob so importing the API is never flagged; the relative-path
+  // `regex` matches any `.../authz/<internal>` tail regardless of the `../`
+  // prefix (glob `**` can't cross a leading-dot segment).
   {
     files: ["**/*.{ts,tsx}"],
     ignores: ["src/authz/**"],
@@ -167,9 +176,14 @@ export default defineConfig([
         {
           patterns: [
             {
-              group: ["@/authz/*"],
+              group: ["@/authz/*", "!@/authz/index"],
               message:
                 "Import authz through the public barrel `@/authz`, not its internal files. The barrel is the module's only public API (see src/authz/index.ts).",
+            },
+            {
+              regex: "(^|/)authz/(roles|resolveRole|capabilities)$",
+              message:
+                "Import authz through the public barrel `@/authz`, not its internal files by relative path. The barrel is the module's only public API (see src/authz/index.ts).",
             },
           ],
         },

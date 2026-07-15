@@ -10,9 +10,10 @@ import {
   roleForGitHubOrgRole,
 } from "@/authz"
 
-// Role vocabulary is single-sourced in util/roles. Re-exported here because the
-// roster row logic below is its primary consumer and callers naturally reach for
-// these alongside TeamRosterRow; roles.ts stays the definition home.
+// Role vocabulary is single-sourced in the authz module (authz/roles). Re-exported
+// here because the roster row logic below is its primary consumer and callers
+// naturally reach for these alongside TeamRosterRow; authz/roles stays the
+// definition home, consumed via the @/authz barrel.
 export {
   type ClassroomRole,
   ROLE_RANK,
