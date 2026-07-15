@@ -1114,6 +1114,13 @@ export async function getClassroom50OrgSummary(
 ): Promise<Classroom50OrgSummary> {
   const org = membership.organization
 
+  // The one owner test for this summary: an active org admin. Single-sourced
+  // here so the needs_setup branch and the canInitialize flag can't drift.
+  // (Can't route through resolveOrgRole/can — those live in util/resolveRole,
+  // which imports github-core/errors, so importing it here would cycle.)
+  const isActiveAdmin =
+    membership.state === "active" && membership.role === "admin"
+
   let canAccessRepo = false
   let status: Classroom50Status
 
@@ -1133,7 +1140,7 @@ export async function getClassroom50OrgSummary(
     if (error instanceof GitHubAPIError && error.status === 404) {
       canAccessRepo = false
 
-      if (membership.state === "active" && membership.role === "admin") {
+      if (isActiveAdmin) {
         // An admin who can't see classroom50 hasn't initialized it yet.
         status = "needs_setup"
       } else {
@@ -1159,8 +1166,7 @@ export async function getClassroom50OrgSummary(
     classroom50: {
       status,
       canAccessRepo,
-      canInitialize:
-        membership.state === "active" && membership.role === "admin",
+      canInitialize: isActiveAdmin,
       pagesUrl: `https://${org.login}.github.io/${CONFIG_REPO}/`,
     },
   }

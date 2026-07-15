@@ -82,3 +82,14 @@ export function githubOrgRoleForRole(
 export function roleForGitHubOrgRole(githubOrgRole: string): ClassroomRole {
   return githubOrgRole === "admin" ? "instructor" : "student"
 }
+
+// Whether a GitHub org membership wire-role denotes an org OWNER. GitHub's org
+// membership role is `admin` (owner) or `member`; `owner` is our product name
+// for `admin`. The single home for the wire-level owner test, so pages reading
+// a raw membership/invite payload don't hand-copy `role === "admin"`. (For a
+// resolved viewer role use resolveOrgRole/can("manageOrg"); this is for raw
+// wire objects — a pending invite's role, a per-org summary — that don't go
+// through the provider.)
+export function isOwnerGitHubOrgRole(githubOrgRole: string): boolean {
+  return githubOrgRole === "admin"
+}

@@ -8,6 +8,7 @@ import {
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
 } from "./teamRoster"
+import { isOwnerGitHubOrgRole } from "@/util/roles"
 import { enrolledCountsByRole } from "./rosterRoles"
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"
@@ -662,5 +663,14 @@ describe("githubOrgRoleForRole / roleForGitHubOrgRole — classroom<->org role m
     expect(roleForGitHubOrgRole(githubOrgRoleForRole("instructor"))).toBe(
       "instructor",
     )
+  })
+})
+
+describe("isOwnerGitHubOrgRole — wire org-role owner test", () => {
+  it("only `admin` is an owner; member/absent/unknown are not", () => {
+    expect(isOwnerGitHubOrgRole("admin")).toBe(true)
+    expect(isOwnerGitHubOrgRole("member")).toBe(false)
+    expect(isOwnerGitHubOrgRole("")).toBe(false)
+    expect(isOwnerGitHubOrgRole("direct_member")).toBe(false)
   })
 })

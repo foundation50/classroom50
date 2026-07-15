@@ -2,6 +2,7 @@ import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { acceptAndVerifyOrgMembership } from "@/domain/users"
+import { isOwnerGitHubOrgRole } from "@/util/roles"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
@@ -107,7 +108,7 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
   const navigate = useNavigate()
   const { notify } = useToast()
   const org = invite.organization
-  const isOwner = invite.role === "admin"
+  const isOwner = isOwnerGitHubOrgRole(invite.role)
 
   const accept = useMutation({
     mutationFn: () => acceptAndVerifyOrgMembership(client, org.login),
@@ -231,7 +232,7 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
   const { org, membership, classroom50 } = summary
   const isReady = classroom50.status === "ready"
   const noAccess = classroom50.status === "no_access"
-  const isAdmin = membership.role === "admin"
+  const isAdmin = isOwnerGitHubOrgRole(membership.role)
   // useGetOrgs only surfaces active memberships, so every summary here is an
   // active member.
   const isActiveMember = membership.state === "active"
