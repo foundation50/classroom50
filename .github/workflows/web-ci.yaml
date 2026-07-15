@@ -63,6 +63,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      # dependency-cruiser: CI-side holistic architecture validation. Complements
+      # the dev-time eslint-plugin-boundaries layer rule + import-x/no-cycle guard
+      # by re-asserting the downward layer invariants and data-layer acyclicity
+      # across the whole graph. Config: web/.dependency-cruiser.cjs.
+      - name: Architecture validate
+        run: npm run arch:validate
+
       - name: Format check
         run: npm run format:check
 
