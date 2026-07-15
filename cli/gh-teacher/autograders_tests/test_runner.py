@@ -80,6 +80,22 @@ class TestUsernameFromRepo:
             "fallback",
         ) == "alice-the-second"
 
+    def test_shared_fixture_parity(self):
+        # Same golden cases the Go contract test asserts, so the naming formula
+        # and this mirror can't drift: recover each fixture owner by stripping
+        # the <classroom>-<assignment>- prefix from the fixture repo name.
+        fixture = (_REPO_ROOT / "cli" / "shared" / "testdata"
+                   / "assignment_repo_name_cases.json")
+        cases = json.loads(fixture.read_text())["cases"]
+        assert cases, "shared fixture has no cases"
+        for case in cases:
+            assert ag.username_from_repo(
+                f"owner/{case['name']}",
+                case["classroom"],
+                case["assignment"],
+                "fallback",
+            ) == case["owner"], case["name"]
+
 
 # ---------------------------------------------------------------------------
 # URL construction

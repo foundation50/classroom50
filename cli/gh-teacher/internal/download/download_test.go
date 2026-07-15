@@ -39,6 +39,32 @@ func TestAssignmentRepoName(t *testing.T) {
 	}
 }
 
+// TestMatchesAssignmentPrefix pins the repo-selection downloadByPattern uses:
+// canonical and mixed-case assignment repos match; the config repo, a different
+// assignment, and a near-miss prefix do not.
+func TestMatchesAssignmentPrefix(t *testing.T) {
+	cases := []struct {
+		name, classroom, assignment string
+		want                        bool
+	}{
+		{"cs-principles-hello-alice", "cs-principles", "hello", true},
+		{"CS-Principles-Hello-Alice", "cs-principles", "hello", true}, // repo name cased differently
+		{"cs-principles-hello-ada-l", "cs-principles", "hello", true}, // hyphenated username
+		{"cs-principles-goodbye-alice", "cs-principles", "hello", false},
+		{"classroom50", "cs-principles", "hello", false},                // config repo
+		{"cs-principles-hello", "cs-principles", "hello", false},        // prefix without trailing "-<owner>"
+		{"cs-principles-hello2-alice", "cs-principles", "hello", false}, // near-miss: no "-" boundary
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := matchesAssignmentPrefix(tc.name, tc.classroom, tc.assignment); got != tc.want {
+				t.Fatalf("matchesAssignmentPrefix(%q,%q,%q) = %v, want %v",
+					tc.name, tc.classroom, tc.assignment, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestAssignmentRegistered(t *testing.T) {
 	file := assignment.AssignmentsJSON{
 		Schema: contract.AssignmentsSchemaV1,

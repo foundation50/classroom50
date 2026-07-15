@@ -29,6 +29,20 @@ def test_assignment_repo_name_lowercases():
     )
 
 
+def test_assignment_repo_name_shared_fixture_parity():
+    # Same golden cases the Go contract test asserts, so this mirror can't
+    # drift from the single source in cli/shared/contract.
+    repo_root = pathlib.Path(__file__).resolve().parents[3]
+    fixture = (repo_root / "cli" / "shared" / "testdata"
+               / "assignment_repo_name_cases.json")
+    cases = json.loads(fixture.read_text())["cases"]
+    assert cases, "shared fixture has no cases"
+    for case in cases:
+        assert rr.assignment_repo_name(
+            case["classroom"], case["assignment"], case["username"]
+        ) == case["name"], case["name"]
+
+
 def test_build_submit_tag_shape():
     tag = rr.build_submit_tag("abcdef1234567890")
     assert tag.startswith("submit/")

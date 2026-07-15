@@ -738,10 +738,9 @@ def _assert_same_host(next_url: str, api_url: str) -> str:
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
-    """Canonical student-repo name. Cross-binary contract — mirrors
-    `assignment_repo_name` in collect_scores.py and `assignmentRepoName` in
-    cli/gh-student/accept.go; changing the shape here without updating the
-    others silently breaks the regrade fan-out."""
+    """Canonical student-repo name. Mirrors the formula single-sourced in
+    cli/shared/contract (AssignmentRepoName); keep byte-identical or the
+    regrade fan-out misidentifies submissions."""
     return f"{classroom.lower()}-{assignment.lower()}-{username.lower()}"
 
 

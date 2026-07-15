@@ -113,10 +113,9 @@ func PrefixCommit(message string) string {
 // `<classroom>-<assignment>-` (all lowercased). Both the producer
 // (AssignmentRepoName) and consumers that strip it to recover the owner derive
 // from this, so the `<classroom>-<assignment>-<owner>` shape can only change in
-// one place. Cross-binary: gh-student (via internal/reponame) builds and parses
-// repo names with it, gh-teacher's download command matches repos by this
-// prefix, and runner.py::username_from_repo mirrors the shape by value (NO
-// compile-time link — keep byte-identical). A drift here silently makes
+// one place. Cross-binary with NO compile-time link — keep byte-identical with
+// the Python mirrors: runner.py::username_from_repo, and assignment_repo_name in
+// collect_scores.py and regrade_repos.py. A drift here silently makes
 // `gh teacher download` return zero repos and misidentifies every submission.
 func AssignmentRepoPrefix(classroom, assignment string) string {
 	return fmt.Sprintf("%s-%s-",

@@ -1,11 +1,8 @@
-// Package reponame owns the gh-student-facing assignment-repo naming API,
-// delegating to the single cross-binary source in cli/shared/contract
-// (AssignmentRepoName / AssignmentRepoPrefix). Kept as a thin named seam so the
-// gh-student commands that build or parse a repo name read from one place; the
-// formula itself is shared with gh-teacher's download command and mirrored by
-// runner.py::username_from_repo. Changing the shape (in contract) silently makes
-// `gh teacher download` return zero repos and misidentifies every submission in
-// scores.json.
+// Package reponame is the gh-student-facing assignment-repo naming API — a thin
+// named seam so gh-student commands read the repo-name formula from one place.
+// It delegates to the single cross-binary source in cli/shared/contract
+// (AssignmentRepoName / AssignmentRepoPrefix), where the shape and its
+// keep-byte-identical contract are documented.
 package reponame
 
 import "github.com/foundation50/classroom50-cli-shared/contract"

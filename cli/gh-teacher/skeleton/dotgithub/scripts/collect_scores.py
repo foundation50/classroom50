@@ -646,9 +646,9 @@ def collect_classroom(
 
 
 def assignment_repo_name(classroom: str, assignment: str, username: str) -> str:
-    """Canonical student-repo name. Cross-binary contract — mirrors
-    `assignmentRepoName` in cli/gh-student/accept.go; changing the shape here
-    without updating Go silently breaks the collect loop."""
+    """Canonical student-repo name. Mirrors the formula single-sourced in
+    cli/shared/contract (AssignmentRepoName); keep byte-identical or the
+    collect loop misidentifies submissions."""
     return f"{classroom.lower()}-{assignment.lower()}-{username.lower()}"
 
 

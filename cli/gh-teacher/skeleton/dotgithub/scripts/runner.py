@@ -172,9 +172,9 @@ def runtime_root() -> pathlib.Path:
 def username_from_repo(repository: str, classroom: str, assignment: str, actor: str) -> str:
     """Derive the student username from `<owner>/<classroom>-<assignment>-<username>`.
 
-    Mirrors `assignmentRepoName` in cli/gh-student/accept.go (lowercased
-    throughout). Falls back to GITHUB_ACTOR when the repo name doesn't follow
-    the convention (e.g. hand-created test repos).
+    Mirrors the naming formula single-sourced in cli/shared/contract
+    (AssignmentRepoName); keep byte-identical. Falls back to GITHUB_ACTOR when
+    the repo name doesn't follow the convention (e.g. hand-created test repos).
     """
     if "/" in repository:
         _, repo = repository.split("/", 1)

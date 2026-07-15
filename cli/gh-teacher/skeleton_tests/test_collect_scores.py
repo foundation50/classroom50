@@ -1011,9 +1011,8 @@ class TestGroupCollectClassroom:
 
 class TestAssignmentRepoName:
     def test_lowercases_all_three_components(self):
-        # Cross-binary contract with assignmentRepoName in
-        # cli/gh-student/accept.go — drift makes the collect
-        # releases/latest call 404 for every student.
+        # Cross-binary contract single-sourced in cli/shared/contract — drift
+        # makes the collect releases/latest call 404 for every student.
         assert (
             cs.assignment_repo_name("CS-Principles", "Hello", "Alice")
             == "cs-principles-hello-alice"
@@ -1026,6 +1025,19 @@ class TestAssignmentRepoName:
             cs.assignment_repo_name("cs-principles", "hello-world", "ada-l")
             == "cs-principles-hello-world-ada-l"
         )
+
+    def test_shared_fixture_parity(self):
+        # Same golden cases the Go contract test asserts, so this mirror can't
+        # drift from the single source in cli/shared/contract.
+        repo_root = pathlib.Path(__file__).resolve().parents[3]
+        fixture = (repo_root / "cli" / "shared" / "testdata"
+                   / "assignment_repo_name_cases.json")
+        cases = json.loads(fixture.read_text())["cases"]
+        assert cases, "shared fixture has no cases"
+        for case in cases:
+            assert cs.assignment_repo_name(
+                case["classroom"], case["assignment"], case["username"]
+            ) == case["name"], case["name"]
 
 
 # Due-date / lateness ---------------------------------------------------------

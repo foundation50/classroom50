@@ -1,0 +1,9 @@
+{
+  "_comment": "Shared golden fixture pinning the assignment-repo naming formula <classroom>-<assignment>-<username> (all three segments lowercased) to identical output across every implementation: Go contract.AssignmentRepoName/AssignmentRepoPrefix (cli/shared/contract) and the by-value Python mirrors username_from_repo (runner.py), assignment_repo_name (collect_scores.py, regrade_repos.py). There is NO compile-time link across languages, so each side asserts these same cases and a one-sided edit fails on the other side. Each case gives the components and the expected repo name; owner is the expected tail recovered by stripping the <classroom>-<assignment>- prefix (runner.py::username_from_repo). A drift here silently makes `gh teacher download` return zero repos and misidentifies every submission.",
+  "cases": [
+    { "classroom": "CS101", "assignment": "HW1", "username": "Alice", "name": "cs101-hw1-alice", "owner": "alice" },
+    { "classroom": "cs-principles", "assignment": "hello", "username": "alice", "name": "cs-principles-hello-alice", "owner": "alice" },
+    { "classroom": "cs-principles", "assignment": "hello-world", "username": "ada-l", "name": "cs-principles-hello-world-ada-l", "owner": "ada-l" },
+    { "classroom": "CS-Principles", "assignment": "Hello", "username": "alice-the-second", "name": "cs-principles-hello-alice-the-second", "owner": "alice-the-second" }
+  ]
+}

@@ -365,12 +365,18 @@ func loadRosterMetadata(client githubapi.Client, org, classroom, branch string, 
 	return byLogin
 }
 
+// matchesAssignmentPrefix reports whether repo is an assignment repo for
+// <classroom>/<assignment> — its lowercased name starts with the repo-name
+// prefix. This is how downloadByPattern selects repos to clone, kept as a pure
+// helper so the selection can be tested in isolation.
+func matchesAssignmentPrefix(name, classroom, assignment string) bool {
+	return strings.HasPrefix(strings.ToLower(name), contract.AssignmentRepoPrefix(classroom, assignment))
+}
+
 // downloadByPattern: page through <org>'s repos and clone every one whose
 // name starts with <classroom>-<assignment>-. Skips the team lookup,
 // result.json refresh, and scores.csv summary (all depend on the config repo).
 func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, classroom, assignment, dir string, quiet, verbose bool) error {
-	// Deterministic head of the assignment repo name — single-sourced with
-	// gh-student via cli/shared/contract.
 	prefix := contract.AssignmentRepoPrefix(classroom, assignment)
 
 	repos, err := orgrepos.ListNames(client, org)
@@ -380,7 +386,7 @@ func downloadByPattern(client githubapi.Client, out, errOut io.Writer, org, clas
 
 	var matched []string
 	for _, name := range repos {
-		if strings.HasPrefix(strings.ToLower(name), prefix) {
+		if matchesAssignmentPrefix(name, classroom, assignment) {
 			matched = append(matched, name)
 		}
 	}
