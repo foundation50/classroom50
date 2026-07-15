@@ -1,17 +1,12 @@
 import type { BadgeTone } from "@/components/ui"
-import {
-  ROLE_RANK,
-  sortRolesByRank,
-  type RosterRole,
-  type TeamRosterRow,
-  type TeamRosterRowState,
-} from "@/util/teamRoster"
+import { ROLE_RANK, sortRolesByRank, type RosterRole } from "@/util/roles"
+import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
 // surfaces can't drift on tone or precedence (AGENTS.md: one recipe, one source).
 // ROLE_RANK and sortRolesByRank are single-sourced in util/roles and re-exported
-// here (via teamRoster) so UI callers have one import for all role presentation.
+// here so UI callers have one import for all role presentation.
 export { ROLE_RANK, sortRolesByRank }
 
 // i18n key per role for row badges and filter labels.

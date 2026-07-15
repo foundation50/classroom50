@@ -6,7 +6,7 @@ import type { EffectiveRole, OrgRole } from "./resolveRole"
 // scattered role-literal checks used to encode. Includes the KTD-4 rule (org
 // owner is NOT a classroom instructor) and the deny-by-default posture.
 
-const orgRoles: OrgRole[] = ["owner", "member", "unresolved"]
+const orgRoles: OrgRole[] = ["owner", "member", "non-member", "unresolved"]
 const classroomRoles: EffectiveRole[] = [
   "instructor",
   "ta",
@@ -92,6 +92,12 @@ describe("can — claimInstructor (KTD-4 self-repair)", () => {
   it("never offered to a non-owner or mid-resolution", () => {
     expect(
       can("claimInstructor", { orgRole: "member", classroomRole: "student" }),
+    ).toBe(false)
+    expect(
+      can("claimInstructor", {
+        orgRole: "non-member",
+        classroomRole: "student",
+      }),
     ).toBe(false)
     expect(
       can("claimInstructor", { orgRole: "owner", classroomRole: "unresolved" }),

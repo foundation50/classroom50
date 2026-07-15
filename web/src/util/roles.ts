@@ -1,30 +1,13 @@
 import type { StaffRole } from "@/types/classroom"
 
 // Single home for Classroom-50's role vocabulary and the app<->GitHub role
-// mappings. There are exactly three concepts here — keep them distinct:
-//
-//   1. GitHubOrgRole      — the viewer's standing in the GitHub org
-//                           (owner | member | non-member). Owner is the product
-//                           name for GitHub's org `admin`.
-//   2. ClassroomRole      — the viewer's in-app role within a classroom
-//                           (instructor | ta | student), backed by GitHub teams.
-//   3. GitHubTeamMembership — a low-level "is the viewer on THIS team?" probe
-//                           result. It FEEDS classroom-role resolution but is not
-//                           itself a role; "member" here means "on this team",
-//                           NOT "in the org" (so it is not GitHubOrgRole).
-//
-// Each carries an `unresolved` fail-closed sentinel: a needed signal hit a
-// transient error, so callers hold ("don't redirect / don't demote") rather than
-// act on a blip. The one contract-frozen literal, StaffRole ("instructor"|"ta"),
-// lives in types/classroom.ts (it mirrors the persisted `teams` schema shape);
-// everything here derives from it, so adding a role (e.g. "head-ta") is: add the
-// literal to StaffRole (the contract — also its schema + CLI mirror), then extend
-// the maps below. The unions, rank, and slug role pick it up automatically.
-//
-// Product terms (instructor/ta/student, owner) are distinct from GitHub WIRE
-// terms (team member/maintainer; org admin/direct_member); the two directions of
-// the admin<->owner correspondence live only in this file (orgRoleForRole /
-// roleForOrgRole).
+// mappings. Three distinct concepts live below, each in its own section:
+// GitHubOrgRole (org standing), ClassroomRole (in-app role), and
+// GitHubTeamMembership (a per-team probe result that feeds ClassroomRole).
+// Every union derives from the one contract-frozen literal StaffRole (in
+// types/classroom.ts, mirroring the persisted `teams` schema), so adding a role
+// starts there. The admin<->owner correspondence lives only here
+// (orgRoleForRole / roleForOrgRole).
 
 // --- 1. GitHub org standing -------------------------------------------------
 
