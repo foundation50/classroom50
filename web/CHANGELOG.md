@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.6.0](https://github.com/foundation50/classroom50/compare/web-v1.5.0...web-v1.6.0) (2026-07-15)
+
+
+### Features
+
+* grant TA (staff) teams repo access during score collection ([#244](https://github.com/foundation50/classroom50/issues/244)) ([3c5b369](https://github.com/foundation50/classroom50/commit/3c5b369d790da97dc25b890767a1127234426e7f))
+* **web:** list created repos on the submissions dashboard ([#249](https://github.com/foundation50/classroom50/issues/249)) ([3d26e31](https://github.com/foundation50/classroom50/commit/3d26e316d1d1855cfaf06c999f0217e68c6741bb))
+* **web:** team-based org-staff signal, replacing the config-repo heuristic (P5d) ([#265](https://github.com/foundation50/classroom50/issues/265)) ([539907f](https://github.com/foundation50/classroom50/commit/539907fa09096c5399d400159ef4aa751f38ce1b))
+
+
+### Bug Fixes
+
+* **web:** show write-access assignment repositories ([#263](https://github.com/foundation50/classroom50/issues/263)) ([3d4fc52](https://github.com/foundation50/classroom50/commit/3d4fc5222d132de7e986f8be7b34d3679c7fd993))
+* **web:** stop no-cycle guard test timing out in CI ([#256](https://github.com/foundation50/classroom50/issues/256)) ([3a8b678](https://github.com/foundation50/classroom50/commit/3a8b678684a48d9a89aaf7c21981ece45c3adb1e))
+
 ## [1.5.0](https://github.com/foundation50/classroom50/compare/web-v1.4.0...web-v1.5.0) (2026-07-14)
 
 
