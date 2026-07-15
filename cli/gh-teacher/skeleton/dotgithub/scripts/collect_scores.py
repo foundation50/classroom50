@@ -71,10 +71,12 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (created by autograde-runner.yaml on push to the repo's default branch).
 SUBMIT_TAG_PREFIX = "submit/"
 
-# Repo permission the collect-time grant gives each staff role's team. Hand-
-# mirrored from Go StaffTeamRepoPermissions (source of truth; parity-tested) —
-# keep in lockstep. A role absent here gets nothing (the instructor team is
-# granted at classroom setup, so only TA needs a collect-time grant today).
+# Repo permission the grant gives each staff role's team. Hand-mirrored from Go
+# StaffTeamRepoPermissions (source of truth; parity-tested) — keep in lockstep.
+# The TA-team template read is granted eagerly at assignment add/reuse and
+# classroom migrate (Go side); this collect-time grant is the idempotent
+# re-affirm. A role absent here gets nothing (the instructor team is granted at
+# classroom setup, so only TA needs a grant today).
 STAFF_TEAM_PERMISSIONS = {"ta": "pull"}
 
 RFC3339_RE = re.compile(
