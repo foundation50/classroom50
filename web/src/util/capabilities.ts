@@ -7,7 +7,8 @@ export type Capability =
   // Org-wide (org admin only).
   | "manageOrg" // org settings / members / activity
   // Org-scoped staff signal for surfaces with no classroom in scope (e.g. the
-  // org "Published" page), backed by the config-repo verdict.
+  // org "Published" page), backed by the team-based "staff of any classroom"
+  // signal (member of >=1 classroom staff team).
   | "viewOrgStaffContent"
   // Classroom-scoped.
   | "viewClassroomStaffContent" // roster / authoring / submissions (instructor|ta)
@@ -18,7 +19,7 @@ export type Capability =
 // The resolved signals a capability decision draws on. All optional: a
 // classroom-scoped capability doesn't need `orgRole`, an org-scoped one doesn't
 // need `classroomRole`. `classroomRole` is undefined off a classroom route;
-// `orgStaff` is the org-scoped config-repo verdict for org-less surfaces.
+// `orgStaff` is the org-scoped team-based staff signal for org-less surfaces.
 export type CapabilityInput = {
   orgRole?: OrgRole
   classroomRole?: EffectiveRole

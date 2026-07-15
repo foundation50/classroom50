@@ -135,53 +135,49 @@ export function membershipFromQuery(
   return "unresolved"
 }
 
-// The repo-query state the coarse staff verdict depends on. Structural so the
-// verdict stays a pure, testable function (no React Query).
-export type TeacherVerdictInput = {
-  org: string | undefined
-  isSuccess: boolean
-  permissions?: {
-    admin?: boolean
-    maintain?: boolean
-    push?: boolean
-    pull?: boolean
-  }
-  error: unknown
-}
+// --- Org-level staff verdict (team-based) -----------------------------------
 
-export type TeacherVerdict = {
-  isTeacher: boolean
-  isStudent: boolean
-  isBlocked: boolean
+// The viewer's org-level staff standing for surfaces with NO classroom in scope
+// (Published page, "My Classes" nav, ClassesPage). Team membership is the source
+// of truth: staff = a confirmed member of at least one classroom's staff team.
+// Fail-closed tri-state, mirroring resolveClassroomRole:
+//   - staff:      >=1 staff-team probe confirmed `member`.
+//   - non-staff:  no confirmed membership AND every probe definitively settled
+//                 (`member`/`non-member`) — so "not on any staff team" is a
+//                 DEFINITIVE verdict, not a blip.
+//   - unresolved: no confirmed membership and >=1 probe still in flight / errored
+//                 transiently — hold; never grant, never demote a real staffer.
+// Deliberately does NOT consult org-owner status or config-repo read access: an
+// org owner on no staff team is non-staff here and recovers via ClaimInstructor
+// (owner-scoped UI stays gated on can("manageOrg"), separately).
+export type OrgStaffVerdict = {
+  isStaff: boolean
+  // Definitively-resolved AND not staff — the org-less "treat as a plain member/
+  // student" signal the footer + ClassesPage read. Never true while unresolved.
+  isNonStaff: boolean
   roleResolved: boolean
-  showTeacherUi: boolean
 }
 
-// Pure, fail-closed coarse role resolution against the org's `classroom50`
-// config repo: teacher = repo GET succeeded with a non-trivial permission,
-// student = 404, blocked = 403. Resolved only on a definitive verdict
-// (success/404/403) — a transient 5xx/429/network error must NOT resolve, or a
-// student during a blip would be promoted into teacher UI. Org-less routes have
-// no role.
-export function resolveTeacherVerdict(
-  input: TeacherVerdictInput,
-): TeacherVerdict {
-  const { org, isSuccess, permissions, error } = input
-
-  const isTeacher =
-    isSuccess &&
-    Boolean(
-      permissions?.admin ||
-      permissions?.maintain ||
-      permissions?.push ||
-      permissions?.pull,
-    )
-
-  const isStudent = error instanceof GitHubAPIError && error.isNotFound
-  const isBlocked = error instanceof GitHubAPIError && error.isForbidden
-
-  const roleResolved = !org || isSuccess || isStudent || isBlocked
-  const showTeacherUi = Boolean(org) && isTeacher
-
-  return { isTeacher, isStudent, isBlocked, roleResolved, showTeacherUi }
+// Reduce the per-classroom staff-team membership signals (one GitHubTeamMembership
+// per classroom — each already the OR of that classroom's instructor/ta probes)
+// to the org-level verdict. `signals` is empty when the org has no classrooms (or
+// the classroom list hasn't loaded): that is NOT staff, but it is only *resolved*
+// once the caller confirms the classroom list itself settled (classesResolved) —
+// so an in-flight class list holds `unresolved` rather than flashing non-staff.
+export function resolveOrgStaff(
+  signals: GitHubTeamMembership[],
+  classesResolved: boolean,
+): OrgStaffVerdict {
+  // A confirmed membership is definitive and wins immediately, even if other
+  // probes are still in flight — a real staffer is never held on a slow sibling.
+  if (signals.some((s) => s === "member")) {
+    return { isStaff: true, isNonStaff: false, roleResolved: true }
+  }
+  // No confirmed staff membership. Hold if the class list is still resolving or
+  // any probe is non-definitive (transient/in-flight) — fail-closed, don't demote.
+  if (!classesResolved || signals.some((s) => s === "unresolved")) {
+    return { isStaff: false, isNonStaff: false, roleResolved: false }
+  }
+  // Class list settled and every probe is a definitive non-member: not staff.
+  return { isStaff: false, isNonStaff: true, roleResolved: true }
 }

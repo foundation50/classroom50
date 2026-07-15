@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest"
 import {
   resolveClassroomRole,
   resolveOrgRole,
+  resolveOrgStaff,
   isStaffRole,
   applyViewAs,
   roleLabelKey,
   membershipFromQuery,
-  resolveTeacherVerdict,
   type ClassroomRoleInput,
 } from "./resolveRole"
 import { GitHubAPIError } from "@/github-core/errors"
@@ -242,64 +242,49 @@ describe("applyViewAs (downgrade-only preview)", () => {
   })
 })
 
-describe("resolveTeacherVerdict", () => {
-  const success = (
-    permissions: Record<string, boolean>,
-    org: string | undefined = "acme",
-  ) => resolveTeacherVerdict({ org, isSuccess: true, permissions, error: null })
+describe("resolveOrgStaff", () => {
+  it("staff when at least one classroom staff-team probe confirms membership", () => {
+    const v = resolveOrgStaff(["non-member", "member", "non-member"], true)
+    expect(v).toEqual({ isStaff: true, isNonStaff: false, roleResolved: true })
+  })
 
-  const failure = (error: unknown, org: string | undefined = "acme") =>
-    resolveTeacherVerdict({
-      org,
-      isSuccess: false,
-      permissions: undefined,
-      error,
-    })
-
-  for (const perm of ["admin", "maintain", "push", "pull"]) {
-    it(`treats ${perm} access as teacher`, () => {
-      const v = success({ [perm]: true })
-      expect(v.isTeacher).toBe(true)
-      expect(v.showTeacherUi).toBe(true)
-      expect(v.roleResolved).toBe(true)
-      expect(v.isStudent).toBe(false)
-      expect(v.isBlocked).toBe(false)
-    })
-  }
-
-  it("classifies a 404 as a resolved student, never teacher", () => {
-    const v = failure(apiError(404))
-    expect(v.isStudent).toBe(true)
-    expect(v.isTeacher).toBe(false)
-    expect(v.showTeacherUi).toBe(false)
+  it("a confirmed membership wins even while a sibling probe is still in flight", () => {
+    // A real staffer must never be held on a slow sibling read.
+    const v = resolveOrgStaff(["member", "unresolved"], false)
+    expect(v.isStaff).toBe(true)
     expect(v.roleResolved).toBe(true)
   })
 
-  it("classifies a 403 as a resolved blocked user, never teacher", () => {
-    const v = failure(apiError(403))
-    expect(v.isBlocked).toBe(true)
-    expect(v.isTeacher).toBe(false)
-    expect(v.roleResolved).toBe(true)
+  it("non-staff only when the class list settled AND every probe is definitively non-member", () => {
+    const v = resolveOrgStaff(["non-member", "non-member"], true)
+    expect(v).toEqual({ isStaff: false, isNonStaff: true, roleResolved: true })
   })
 
-  for (const status of [500, 502, 503, 429]) {
-    it(`leaves the role UNRESOLVED on a ${status} (fail-closed)`, () => {
-      const v = failure(apiError(status))
-      expect(v.roleResolved).toBe(false)
-      expect(v.showTeacherUi).toBe(false)
-      expect(v.isStudent).toBe(false)
-      expect(v.isBlocked).toBe(false)
-    })
-  }
+  it("empty org (no classrooms) with a settled class list is definitively non-staff", () => {
+    // An org owner on no staff team (and no classrooms) is NOT org-staff — the
+    // deliberate behavior change. They recover via ClaimInstructor / owner UI.
+    const v = resolveOrgStaff([], true)
+    expect(v).toEqual({ isStaff: false, isNonStaff: true, roleResolved: true })
+  })
 
-  it("org-less route resolves immediately with no role and no teacher UI", () => {
-    const v = resolveTeacherVerdict({
-      org: undefined,
-      isSuccess: false,
-      permissions: undefined,
-      error: null,
+  it("holds unresolved while the classroom list is still loading (no flash of non-staff)", () => {
+    expect(resolveOrgStaff([], false)).toEqual({
+      isStaff: false,
+      isNonStaff: false,
+      roleResolved: false,
     })
-    expect(v.roleResolved).toBe(true)
-    expect(v.showTeacherUi).toBe(false)
+    // Even with all-definitive probes, an unsettled class list holds.
+    expect(resolveOrgStaff(["non-member"], false).roleResolved).toBe(false)
+  })
+
+  it("holds unresolved on a transient probe error (fail-closed — never demote)", () => {
+    // A 5xx/429/network blip on a staff-team probe reduces to `unresolved`; the
+    // viewer might be a real staffer, so hold rather than render non-staff.
+    const v = resolveOrgStaff(["non-member", "unresolved"], true)
+    expect(v).toEqual({
+      isStaff: false,
+      isNonStaff: false,
+      roleResolved: false,
+    })
   })
 })

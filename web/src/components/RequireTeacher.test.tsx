@@ -6,7 +6,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 // fallback/notfound leaves (which otherwise need a router).
 const classroomCtxMock = vi.fn()
 const orgRoleMock = vi.fn()
-const configRepoMock = vi.fn()
+const orgStaffMock = vi.fn()
 const paramsMock = vi.fn()
 
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
@@ -15,8 +15,8 @@ vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
 vi.mock("@/context/orgRole/OrgRoleProvider", () => ({
   useOrgRole: () => orgRoleMock(),
 }))
-vi.mock("@/hooks/useConfigRepoAccess", () => ({
-  useConfigRepoAccess: () => configRepoMock(),
+vi.mock("@/hooks/useOrgStaff", () => ({
+  useOrgStaff: () => orgStaffMock(),
 }))
 vi.mock("@tanstack/react-router", () => ({
   useParams: () => paramsMock(),
@@ -66,7 +66,7 @@ afterEach(() => {
   cleanup()
   classroomCtxMock.mockReset()
   orgRoleMock.mockReset()
-  configRepoMock.mockReset()
+  orgStaffMock.mockReset()
   paramsMock.mockReset()
 })
 
@@ -207,24 +207,24 @@ describe("RequireTeacher — owner gate on org-level routes", () => {
 })
 
 describe("RequireTeacher — staff gate on an org-level route (no classroom)", () => {
-  it("uses the org config-repo verdict (Published page)", () => {
+  it("uses the org team-based staff signal (Published page)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    configRepoMock.mockReturnValue({ showTeacherUi: true, roleResolved: true })
+    orgStaffMock.mockReturnValue({ isStaff: true, roleResolved: true })
     render(<RequireTeacher>{child}</RequireTeacher>)
     expect(shown()).toBe("child")
   })
 
-  it("404s a non-staff org member", () => {
+  it("404s a non-staff org member (incl. an owner on no staff team)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    configRepoMock.mockReturnValue({ showTeacherUi: false, roleResolved: true })
+    orgStaffMock.mockReturnValue({ isStaff: false, roleResolved: true })
     render(<RequireTeacher>{child}</RequireTeacher>)
     expect(shown()).toBe("notfound")
   })
 
-  it("shows a retryable error when the config-repo read settles in error", () => {
+  it("shows a retryable error when the staff-team probes settle in error", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    configRepoMock.mockReturnValue({
-      showTeacherUi: false,
+    orgStaffMock.mockReturnValue({
+      isStaff: false,
       roleResolved: false,
       isError: true,
       refetch: () => {},

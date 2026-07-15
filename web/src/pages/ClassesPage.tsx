@@ -19,7 +19,7 @@ import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubRepo } from "@/github-core/types"
 import MissingParams from "@/components/MissingParams"
-import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
+import { useOrgStaff } from "@/hooks/useOrgStaff"
 import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
 import { can } from "@/util/capabilities"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
@@ -307,10 +307,10 @@ const ClassesPage = () => {
   const { org } = useParams({ strict: false })
   const { classes } = useGetClasses(org)
   const {
-    isTeacher,
-    isStudent,
+    isStaff: isTeacher,
+    isNonStaff: isStudent,
     isLoading: roleLoading,
-  } = useConfigRepoAccess(org)
+  } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
   const { orgRole } = useOrgRole()

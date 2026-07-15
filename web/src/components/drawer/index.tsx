@@ -31,7 +31,7 @@ import { useTranslation } from "react-i18next"
 import { useGithubAuth } from "../../auth/useGithubAuth"
 import GitHub from "@/assets/github.svg?react"
 import duck from "@/assets/duck.png"
-import { useConfigRepoAccess } from "../../hooks/useConfigRepoAccess"
+import { useOrgStaff } from "../../hooks/useOrgStaff"
 import {
   useClassroomRoleContext,
   useClassroomRoleContextOptional,
@@ -627,7 +627,7 @@ export const SidebarFooter = () => {
     from: "/_authed/$org/setup/",
     shouldThrow: false,
   })
-  const { isStudent, isLoading: roleLoading } = useConfigRepoAccess(org)
+  const { isNonStaff: isStudent, isLoading: roleLoading } = useOrgStaff(org)
   // Org plan for the About-dialog diagnostics snapshot. Cached and shared with
   // the setup/audit panes; `plan` is only visible to org owners, so this is
   // often undefined (the snapshot then reports "unknown" with a reason).
@@ -1032,7 +1032,7 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
 export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
   const { t } = useTranslation()
-  const { showTeacherUi, roleResolved } = useConfigRepoAccess(org)
+  const { isStaff: showTeacherUi, roleResolved } = useOrgStaff(org)
   // Org-level Members/Settings are owner-only, so gate those two links on the
   // org-role capability rather than the broad staff signal.
   const { orgRole } = useOrgRole()

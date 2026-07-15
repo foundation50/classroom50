@@ -26,7 +26,7 @@ describe("can — org capabilities", () => {
     }
   })
 
-  it("viewOrgStaffContent: keyed on the org-scoped config-repo staff verdict", () => {
+  it("viewOrgStaffContent: keyed on the org-scoped team-based staff signal", () => {
     expect(can("viewOrgStaffContent", { orgStaff: true })).toBe(true)
     expect(can("viewOrgStaffContent", { orgStaff: false })).toBe(false)
     expect(can("viewOrgStaffContent", {})).toBe(false)

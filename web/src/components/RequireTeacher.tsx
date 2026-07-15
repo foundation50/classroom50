@@ -1,7 +1,7 @@
 import { type ReactNode } from "react"
 import { useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { useConfigRepoAccess } from "@/hooks/useConfigRepoAccess"
+import { useOrgStaff } from "@/hooks/useOrgStaff"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
 import { can } from "@/util/capabilities"
@@ -11,9 +11,9 @@ import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 
 // What a guarded surface requires:
 // - "staff": any classroom staff (instructor/ta) — for classroom CONTENT
-//   (roster, authoring, submissions). Backed by config-repo access. On an
-//   org-level surface (no $classroom, e.g. Published) this is the org-scoped
-//   config-repo verdict; on a classroom surface it reads the shared context.
+//   (roster, authoring, submissions). On an org-level surface (no $classroom,
+//   e.g. Published) this is the org-scoped team-based "staff of any classroom"
+//   signal (useOrgStaff); on a classroom surface it reads the shared context.
 // - "instructor": instructor of THIS classroom (excludes TAs) — for classroom
 //   SETTINGS. Reads the classroom context. Needs a $classroom route.
 // - "owner": org admin only — for ORG-wide settings/setup. Reads the org-role
@@ -72,8 +72,8 @@ const RoleGate = ({
 }
 
 // Staff gate. On a classroom surface, read the shared classroom context; on an
-// org-level surface (no classroom), fall back to the org-scoped config-repo
-// verdict, which needs no classroom.
+// org-level surface (no classroom), fall back to the org-scoped team-based
+// "staff of any classroom" signal, which needs no classroom in scope.
 const RequireStaff = ({ children }: { children: ReactNode }) => {
   const { classroom } = useParams({ strict: false })
   if (classroom)
@@ -99,13 +99,12 @@ const RequireClassroomStaff = ({ children }: { children: ReactNode }) => {
 
 const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
   const { org } = useParams({ strict: false })
-  const { showTeacherUi, roleResolved, isError, refetch } =
-    useConfigRepoAccess(org)
+  const { isStaff, roleResolved, isError, refetch } = useOrgStaff(org)
   return (
     <RoleGate
       resolved={roleResolved}
       permitted={can("viewOrgStaffContent", {
-        orgStaff: showTeacherUi,
+        orgStaff: isStaff,
       })}
       errored={isError}
       onRetry={refetch}
