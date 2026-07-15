@@ -2,44 +2,22 @@ import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import { AlertTriangle, Info, ShieldCheck } from "lucide-react"
 
-import GitHub from "@/assets/github.svg?react"
 import { Badge } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
 import type { NotifyInput } from "@/context/notifications/NotificationProvider"
 import { inviteMemberToOrg } from "@/domain/orgMembers/inviteMemberToOrg"
-import type { MemberListRow } from "@/util/memberRow"
 import type { OrgMemberRow } from "@/util/orgMembers"
 
-// Presentation helpers shared by member lists and detail modals. initialsFor /
-// GitHubIdentity target the view-agnostic MemberListRow so both the Org Members
-// list and the classroom roster feed adapted rows. ClassificationBadge and
-// runInviteMember stay org-specific (they read `classification` / invite to the
-// org).
-
-// First initial of a row's best display string, for the avatar fallback.
-export const initialsFor = (row: MemberListRow) =>
-  (row.name || row.username || row.email || "?")[0]?.toUpperCase() ?? "?"
-
-// GitHub identity line: shows @username and the immutable numeric GitHub id to
-// make clear these are GitHub members.
-export const GitHubIdentity = ({ row }: { row: MemberListRow }) => {
-  const { t } = useTranslation()
-  return (
-    <span className="inline-flex items-center gap-1.5 text-xs text-base-content/70">
-      <GitHub aria-hidden="true" className="size-3.5 opacity-50" />
-      {row.username ? (
-        <span className="font-mono">@{row.username}</span>
-      ) : (
-        <span className="italic">{t("orgMembers.noGitHubUsername")}</span>
-      )}
-      {row.github_id ? (
-        <span className="text-base-content/70">
-          {t("orgMembers.idSuffix", { id: row.github_id })}
-        </span>
-      ) : null}
-    </span>
-  )
-}
+// Org-specific member presentation. The view-agnostic primitives (initialsFor,
+// GitHubIdentity) moved down to components/memberList/memberPresentation so a
+// shared component can use them without a components->pages reach-up; they are
+// re-exported here so existing importers keep working unchanged.
+// ClassificationBadge and runInviteMember stay here — they read `classification`
+// and invite to the org, so they are genuinely org-feature code.
+export {
+  GitHubIdentity,
+  initialsFor,
+} from "@/components/memberList/memberPresentation"
 
 export const ClassificationBadge = ({
   row,

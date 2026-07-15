@@ -24,7 +24,7 @@ import { EnterDiv } from "@/lib/motionComponents"
 import {
   SkeletonOverwriteModal,
   useSkeletonOverwriteConfirm,
-} from "./orgSettings/skeletonOverwriteUi"
+} from "@/components/skeletonOverwrite/skeletonOverwriteUi"
 import {
   InitStepBoard,
   applyStepUpdate,

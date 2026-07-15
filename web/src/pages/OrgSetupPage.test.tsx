@@ -43,7 +43,7 @@ vi.mock("@/hooks/useGetOrgPlanDetails", () => ({
 vi.mock("@/github-core/mutations", () => ({
   initClassroom50: async () => ({ status: "ok" }),
 }))
-vi.mock("./orgSettings/skeletonOverwriteUi", () => ({
+vi.mock("@/components/skeletonOverwrite/skeletonOverwriteUi", () => ({
   SkeletonOverwriteModal: () => null,
   useSkeletonOverwriteConfirm: () => ({
     overwritePaths: null,

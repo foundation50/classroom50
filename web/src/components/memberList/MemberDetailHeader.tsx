@@ -5,7 +5,7 @@ import Avatar from "@/components/avatar"
 import {
   GitHubIdentity,
   initialsFor,
-} from "@/pages/orgMembers/memberPresentation"
+} from "@/components/memberList/memberPresentation"
 import type { MemberListRow } from "@/util/memberRow"
 
 // The identity header shared by the Org Members detail modal and the classroom

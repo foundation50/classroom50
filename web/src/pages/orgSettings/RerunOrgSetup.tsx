@@ -23,7 +23,7 @@ import { CalloutDiv } from "@/lib/motionComponents"
 import {
   SkeletonOverwriteModal,
   useSkeletonOverwriteConfirm,
-} from "./skeletonOverwriteUi"
+} from "@/components/skeletonOverwrite/skeletonOverwriteUi"
 
 const BANNER_TONE = {
   error: "border-error/30 bg-error/10 text-error",

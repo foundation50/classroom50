@@ -15,7 +15,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import {
   SkeletonOverwriteModal,
   useSkeletonOverwriteConfirm,
-} from "@/pages/orgSettings/skeletonOverwriteUi"
+} from "@/components/skeletonOverwrite/skeletonOverwriteUi"
 import { Button } from "@/components/ui"
 
 export type DriftBannerView = "warning" | "success" | "hidden"
