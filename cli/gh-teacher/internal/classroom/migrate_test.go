@@ -671,6 +671,8 @@ func (s *migrateE2EState) dispatch(t *testing.T, w http.ResponseWriter, r *http.
 		case http.MethodPut:
 			rest := strings.TrimPrefix(path, "/orgs/"+s.targetOrg()+"/teams/")
 			if slug, repoPath, ok := strings.Cut(rest, "/repos/"); ok && strings.HasSuffix(repoPath, "/readability") {
+				// The `-ta` suffix is how the mock tells the TA staff team's
+				// template grant from the student team's.
 				if s.failTAGrant && strings.HasSuffix(slug, "-ta") {
 					w.WriteHeader(http.StatusInternalServerError)
 					return

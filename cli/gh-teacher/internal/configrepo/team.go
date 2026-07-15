@@ -55,15 +55,15 @@ var StaffRoles = []StaffRole{RoleInstructor, RoleTA}
 // The TA-team template read is applied at TWO points: eagerly at assignment
 // add/reuse and classroom migrate (see grantStaffTeamTemplateRead / migrate.go),
 // and again as an idempotent re-affirm at collect-scores. The eager sites use
-// this map as a presence gate (grant only roles listed here); collect-scores
-// additionally reads the value. Source of truth for the collector's
+// this map only as a presence gate and hardcode read (GrantTeamRepoRead);
+// collect-scores reads the value. Source of truth for the collector's
 // hand-mirrored STAFF_TEAM_PERMISSIONS (collect_scores.py) — keep in lockstep.
 //
 // A role absent from this map is granted nothing (the instructor team already
 // gets its access at classroom setup, so only the TA team needs a grant today).
-// Adding a future head-TA write team is a one-line addition here and in the
-// mirror — but note the eager sites currently hardcode read (GrantTeamRepoRead);
-// a non-read staff permission would also need those sites to consume the value.
+// Adding a future non-read staff permission is a one-line addition here and in
+// the mirror, but would also need the eager sites to consume the value instead
+// of hardcoding read.
 var StaffTeamRepoPermissions = map[StaffRole]string{
 	RoleTA: "pull",
 }
