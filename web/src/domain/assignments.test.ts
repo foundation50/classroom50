@@ -707,6 +707,159 @@ describe("editAssignment (preserved-entry integration)", () => {
   })
 })
 
+describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
+  const ORG = "cs50"
+  const CLASSROOM = "cs50"
+  const SLUG = "hw1"
+  const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
+
+  // Drives editAssignment down the in-org-private-template grant path and
+  // records every team-repo PUT so a test can assert which teams got read on
+  // the template. classroomJson controls the recorded team/teams block.
+  function makeGrantClient(opts: {
+    classroomJson: Record<string, unknown>
+    taGrantThrows?: boolean
+  }): { client: GitHubClient; grants: () => string[] } {
+    const grants: string[] = []
+    const tmplRepo = {
+      name: "tmpl-v2",
+      full_name: `${ORG}/tmpl-v2`,
+      private: true,
+      is_template: true,
+      default_branch: "main",
+    }
+    const assignmentsFile = {
+      schema: "classroom50/assignments/v1",
+      assignments: [
+        {
+          slug: SLUG,
+          name: "Homework 1",
+          mode: "individual",
+          autograder: "default",
+          feedback_pr: true,
+          template: { owner: ORG, repo: "tmpl", branch: "main" },
+        },
+      ],
+    }
+
+    const request = vi.fn(async (url: string, init?: { method?: string }) => {
+      const method = init?.method ?? "GET"
+      // Team-repo grant PUT: /orgs/{org}/teams/{slug}/repos/{owner}/{repo}
+      const grantMatch = url.match(/\/orgs\/[^/]+\/teams\/([^/]+)\/repos\//)
+      if (method === "PUT" && grantMatch) {
+        if (grantMatch[1].endsWith("-ta") && opts.taGrantThrows) {
+          throw new GitHubAPIError({
+            status: 500,
+            url,
+            message: "boom",
+            body: null,
+            rateLimit: {
+              limit: null,
+              remaining: null,
+              used: null,
+              reset: null,
+              resource: null,
+              retryAfter: null,
+            },
+          })
+        }
+        grants.push(grantMatch[1])
+        return {}
+      }
+      if (/\/repos\/[^/]+\/classroom50$/.test(url))
+        return { default_branch: "main" }
+      if (url.includes("/git/ref/heads/main")) return { object: { sha: "s" } }
+      if (url.includes("/git/commits/s")) return { tree: { sha: "t" } }
+      if (url.includes("/contents/cs50/assignments.json")) {
+        return {
+          type: "file",
+          encoding: "base64",
+          content: b64(JSON.stringify(assignmentsFile)),
+        }
+      }
+      if (url.includes(`/repos/${ORG}/tmpl-v2`)) return tmplRepo
+      if (url.endsWith("/git/trees")) return { sha: "newtree" }
+      if (url.endsWith("/git/commits")) return { sha: "newcommit" }
+      if (method === "PATCH" && url.includes("/git/refs/heads/main"))
+        return { object: { sha: "newcommit" } }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+
+    // getClassroomJson (requestRaw) returns the recorded team block; the
+    // archive guard reads the same body (active by default).
+    const requestRaw = vi.fn(async () => JSON.stringify(opts.classroomJson))
+
+    return {
+      client: { request, requestRaw } as unknown as GitHubClient,
+      grants: () => grants,
+    }
+  }
+
+  function editInput() {
+    return {
+      org: ORG,
+      classroom: CLASSROOM,
+      slug: SLUG,
+      name: "Homework 1",
+      description: "",
+      template_repo: "tmpl-v2",
+      due_date: "",
+      mode: "individual",
+      max_group_size: 0,
+      tests: [],
+    } as unknown as Parameters<typeof editAssignment>[1]
+  }
+
+  it("grants both the student team and the TA staff team on a private in-org template", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+    })
+
+    const result = await editAssignment(client, editInput())
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+  })
+
+  it("grants only the student team when no TA team is recorded", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+      },
+    })
+
+    const result = await editAssignment(client, editInput())
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual(["classroom50-cs50"])
+  })
+
+  it("keeps the edit successful when the TA grant fails (non-blocking)", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+      taGrantThrows: true,
+    })
+
+    const result = await editAssignment(client, editInput())
+
+    // Student grant landed; TA failure did not surface as a save warning.
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual(["classroom50-cs50"])
+  })
+})
+
 describe("copyAssignmentToClassroom (reuse fork guard)", () => {
   const ORG = "acme"
   const emptyRateLimit = {

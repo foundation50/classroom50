@@ -927,9 +927,11 @@ async function grantTeamTemplateRead(
   template: NonNullable<Assignment["template"]>,
 ) {
   let teamSlug: string | undefined
+  let taTeamSlug: string | undefined
   try {
     const classroomJson = await getClassroomJson(client, { org, classroom })
     teamSlug = classroomJson.team?.slug
+    taTeamSlug = classroomJson.teams?.ta?.slug
   } catch (err) {
     // 404 = no classroom.json (pre-feature) is a genuine "no team"; fall
     // through. Anything else is transient and must not be misread as "no team".
@@ -955,6 +957,31 @@ async function grantTeamTemplateRead(
     repo: template.repo,
     permission: "pull",
   })
+
+  // Best-effort: grant the TA staff team the same read so a base-permission-
+  // `none` TA can read the private template without waiting for collect-scores
+  // (mirrors the CLI). Non-blocking — the student grant above is what gates
+  // `student accept`; a TA-grant failure only warns and collect-scores
+  // re-affirms it. A classroom with no recorded TA team is a clean skip.
+  if (taTeamSlug) {
+    try {
+      await addRepositoryToTeam(client, {
+        org,
+        teamSlug: taTeamSlug,
+        owner: template.owner,
+        repo: template.repo,
+        permission: "pull",
+      })
+    } catch (err) {
+      log.warn("granting TA staff team template read failed (non-fatal)", {
+        org,
+        classroom,
+        taTeamSlug,
+        template: `${template.owner}/${template.repo}`,
+        err,
+      })
+    }
+  }
 }
 
 // Grant the template read but never throw: the commit already landed, so a
