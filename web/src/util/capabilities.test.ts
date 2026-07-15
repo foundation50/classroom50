@@ -6,7 +6,12 @@ import type { ResolvedRole, GitHubOrgRole } from "./resolveRole"
 // scattered role-literal checks used to encode. Includes the KTD-4 rule (org
 // owner is NOT a classroom instructor) and the deny-by-default posture.
 
-const orgRoles: GitHubOrgRole[] = ["owner", "member", "non-member", "unresolved"]
+const orgRoles: GitHubOrgRole[] = [
+  "owner",
+  "member",
+  "non-member",
+  "unresolved",
+]
 const classroomRoles: ResolvedRole[] = [
   "instructor",
   "ta",
