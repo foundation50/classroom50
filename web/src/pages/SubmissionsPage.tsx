@@ -121,9 +121,9 @@ const SubmissionsPageContent = () => {
   // last fetch (1s < 1min < 1hr). UI-only; the fetch cadence is unchanged.
   const now = useLiveNow(scoresUpdatedAt || null)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
-  // Team-driven usernames (Section 7): the classroom GitHub team is
-  // authoritative for enrollment; roster.csv enriches display only. The
-  // dashboard consumes Student[], so map enrolled team rows into that shape.
+  // Team-driven usernames: the classroom GitHub team is authoritative for
+  // enrollment; roster.csv enriches display only. The dashboard consumes
+  // Student[], so map enrolled team rows into that shape.
   // Restrict to rows carrying a STUDENT enrollment — a pure instructor/TA is an
   // enrolled team member but not a gradee, and "Collect scores" already runs
   // only against the student team, so excluding them keeps this roster in step
