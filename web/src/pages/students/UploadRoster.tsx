@@ -7,7 +7,7 @@ import { bulkEnrollStudentsInClassroom } from "@/domain/students"
 import type { GitHubClient } from "@/github-core/client"
 import { Alert, Badge, Button, Modal, Select, Spinner } from "@/components/ui"
 import {
-  applyRosterRoleChange,
+  applyClassroomRoleChange,
   bulkInviteByEmail,
   inviteRosterStudents,
   isLikelyGithubUsername,
@@ -16,7 +16,7 @@ import {
   resolveRosterUploadPreflight,
   RosterCsvMalformedError,
   splitName,
-  writeRosterRoles,
+  writeClassroomRoles,
   type BulkImportResult,
   type BulkInviteByEmailResult,
   type ImportRosterRow,
@@ -27,7 +27,7 @@ import {
 } from "@/util/rosterUploadPreflight"
 import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
 import { logger } from "@/lib/logger"
-import type { RosterRole } from "@/util/teamRoster"
+import type { ClassroomRole } from "@/util/teamRoster"
 import {
   classifyUploadFile,
   type UploadKind,
@@ -167,14 +167,14 @@ export const detectImportHeaderIssue = (
   }
 }
 
-// Coerce a raw string to a RosterRole, or undefined when absent/unknown.
+// Coerce a raw string to a ClassroomRole, or undefined when absent/unknown.
 // Case-insensitive; the upload defaults undefined to "student" and lets the
 // instructor override, so an unrecognized value degrades to student rather than
 // failing the whole import. Exported so both the CSV parse and the preview
 // Select coerce through one guard (no unchecked cast on raw input).
 export const coerceImportRole = (
   raw: string | undefined,
-): RosterRole | undefined => {
+): ClassroomRole | undefined => {
   const value = raw?.trim().toLowerCase()
   if (value === "student" || value === "instructor" || value === "ta") {
     return value
@@ -291,7 +291,9 @@ const UploadRoster = ({
   // per-address role, the org-owner confirmation, and the send result. Kept
   // separate from the roster rows so the two flows don't entangle.
   const [emails, setEmails] = useState<string[]>([])
-  const [emailRoles, setEmailRoles] = useState<Record<string, RosterRole>>({})
+  const [emailRoles, setEmailRoles] = useState<Record<string, ClassroomRole>>(
+    {},
+  )
   const [emailOwnerConfirmed, setEmailOwnerConfirmed] = useState(false)
   const [emailResult, setEmailResult] =
     useState<BulkInviteByEmailResult | null>(null)
@@ -303,7 +305,9 @@ const UploadRoster = ({
   // Per-row role the instructor is about to invite as, keyed by lowercased
   // username. Seeded from the CSV `role` column (else "student") and editable in
   // the preview. Instructor -> org owner invite (called out in the confirm).
-  const [rolesByUser, setRolesByUser] = useState<Record<string, RosterRole>>({})
+  const [rolesByUser, setRolesByUser] = useState<Record<string, ClassroomRole>>(
+    {},
+  )
   // Preflight against current GitHub membership (read-only). Null until the
   // preview's classification resolves; drives the no-action / invite / enroll /
   // role-change buckets and gates the confirm checkbox.
@@ -323,7 +327,7 @@ const UploadRoster = ({
   // dialog so an un-invited upload isn't silently lost (it won't appear on the
   // team-driven roster until re-invited or accepted).
   const [inviteOutcome, setInviteOutcome] = useState<{
-    invited: { username: string; role: RosterRole }[]
+    invited: { username: string; role: ClassroomRole }[]
     deferred: string[]
     failed: { username: string; message: string }[]
   } | null>(null)
@@ -335,7 +339,7 @@ const UploadRoster = ({
   // Outcome of the confirmed role-change (team-move) pass, surfaced in the
   // result dialog alongside the invite outcomes.
   const [roleChangeOutcome, setRoleChangeOutcome] = useState<{
-    changed: { username: string; to: RosterRole }[]
+    changed: { username: string; to: ClassroomRole }[]
     failed: { username: string; message: string }[]
   } | null>(null)
 
@@ -425,7 +429,8 @@ const UploadRoster = ({
     /* eslint-enable react-hooks/set-state-in-effect */
     const preflightRows = rows.map((r) => ({
       username: r.username,
-      role: rolesByUser[r.username.toLowerCase()] ?? ("student" as RosterRole),
+      role:
+        rolesByUser[r.username.toLowerCase()] ?? ("student" as ClassroomRole),
     }))
     void resolveRosterUploadPreflight(client, {
       org,
@@ -757,7 +762,7 @@ const UploadRoster = ({
     //    not just the freshly-invited ones. A row that was deferred (rate
     //    limit), skipped (already a member/pending), or failed still has a
     //    teacher-assigned role and a roster row from step 1 — omitting them
-    //    would leave their role blank until a later sync. writeRosterRoles
+    //    would leave their role blank until a later sync. writeClassroomRoles
     //    only touches existing rows whose role actually changed, so covering
     //    the full set is safe and idempotent. Best-effort: a writeback failure
     //    doesn't undo the invites (role converges on the next sync). A
@@ -770,7 +775,7 @@ const UploadRoster = ({
       .filter((r) => r.username.trim())
     if (roleWriteback.length > 0) {
       try {
-        await writeRosterRoles(client, {
+        await writeClassroomRoles(client, {
           org,
           classroom,
           roles: roleWriteback,
@@ -796,14 +801,14 @@ const UploadRoster = ({
     //      checkbox in the preview.
     //    - enroll: an active member on NO classroom team -> an additive team-add
     //      onto the CSV role's team (empty fromRoles, so nothing is dropped).
-    //    Both route through applyRosterRoleChange (re-verifies active membership,
+    //    Both route through applyClassroomRoleChange (re-verifies active membership,
     //    never team-adds a non-member). Best-effort per row: a failure is
     //    surfaced in the result dialog, not fatal (the roster write already
     //    landed).
     const moves: {
       username: string
-      fromRoles: RosterRole[]
-      toRole: RosterRole
+      fromRoles: ClassroomRole[]
+      toRole: ClassroomRole
     }[] = [
       ...(plan?.roleChanges ?? []).map((c) => ({
         username: c.username,
@@ -812,7 +817,7 @@ const UploadRoster = ({
       })),
       ...(plan?.enroll ?? []).map((e) => ({
         username: e.username,
-        fromRoles: [] as RosterRole[],
+        fromRoles: [] as ClassroomRole[],
         toRole: e.role,
       })),
     ]
@@ -824,13 +829,13 @@ const UploadRoster = ({
       })
       const changed: {
         username: string
-        to: RosterRole
+        to: ClassroomRole
       }[] = []
       const failed: { username: string; message: string }[] = []
       let done = 0
       for (const move of moves) {
         try {
-          const res = await applyRosterRoleChange(client, {
+          const res = await applyClassroomRoleChange(client, {
             org,
             classroom,
             username: move.username,

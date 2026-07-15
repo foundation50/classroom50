@@ -20,7 +20,7 @@ import {
   rowsNeedingBackfill,
   type TeamRosterRow,
   type TeamRosterRowState,
-  type RosterRole,
+  type ClassroomRole,
 } from "@/util/teamRoster"
 import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
 import { memberIdentitySets } from "@/util/identity"
@@ -68,7 +68,7 @@ export type UseTeamRosterResult = {
   // Resolved team slug per role, so the detail view can link each role a member
   // actually holds to its real team (student -> classroom team, instructor/ta ->
   // the staff team) rather than assuming everyone is on the student team.
-  teamSlugByRole: Record<RosterRole, string>
+  teamSlugByRole: Record<ClassroomRole, string>
   // Count of team members with no roster.csv row — the exact set "Sync roster"
   // appends. 0 = in sync (button disabled, "In sync"); >0 = drift the teacher
   // can sync (auto-synced on open).

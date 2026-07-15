@@ -6,7 +6,7 @@ import {
   ROLE_LABEL_KEY,
   sortRolesByRank,
 } from "@/util/rosterRoles"
-import type { RosterRole } from "@/util/teamRoster"
+import type { ClassroomRole } from "@/util/teamRoster"
 
 // One badge per classroom role a member holds, highest-precedence first
 // (instructor > ta > student; student renders as the neutral ghost chip). A
@@ -14,7 +14,7 @@ import type { RosterRole } from "@/util/teamRoster"
 // a chip for each, making a "mixed team" membership visible at a glance rather
 // than collapsing to a single primary role. Uses the shared role presentation
 // maps so the roster row and any other role-badge surface can't drift.
-export function RoleBadges({ roles }: { roles: RosterRole[] }) {
+export function RoleBadges({ roles }: { roles: ClassroomRole[] }) {
   const { t } = useTranslation()
 
   return (

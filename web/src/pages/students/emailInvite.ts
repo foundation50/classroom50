@@ -1,11 +1,11 @@
 import { normalizeEmail, isValidEmail } from "@/util/orgMembership"
-import type { RosterRole } from "@/util/teamRoster"
+import type { ClassroomRole } from "@/util/teamRoster"
 
 // A single parsed email-invite target. `role` is chosen in the preview UI (not
 // the file), so the parser leaves it undefined and the modal defaults it.
 export type EmailInviteRow = {
   email: string
-  role?: RosterRole
+  role?: ClassroomRole
 }
 
 // Parse a one-email-per-line file (.txt or .csv) into invite targets. Deliberately

@@ -6,13 +6,13 @@ import {
   sortRolesByRank,
 } from "./rosterRoles"
 import type {
-  RosterRole,
+  ClassroomRole,
   TeamRosterRow,
   TeamRosterRowState,
 } from "./teamRoster"
 
 const row = (
-  roles: RosterRole[],
+  roles: ClassroomRole[],
   state: TeamRosterRowState = "enrolled",
 ): TeamRosterRow =>
   ({
@@ -43,7 +43,7 @@ describe("hasStudentEnrollment", () => {
 
 describe("sortRolesByRank", () => {
   it("orders instructor > ta > student and does not mutate input", () => {
-    const input: RosterRole[] = ["student", "ta", "instructor"]
+    const input: ClassroomRole[] = ["student", "ta", "instructor"]
     expect(sortRolesByRank(input)).toEqual(["instructor", "ta", "student"])
     expect(input).toEqual(["student", "ta", "instructor"])
   })

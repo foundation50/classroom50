@@ -1,10 +1,6 @@
 import type { BadgeTone } from "@/components/ui"
-import { ROLE_RANK, sortRolesByRank } from "@/util/roles"
-import type {
-  TeamRosterRow,
-  TeamRosterRowState,
-  RosterRole,
-} from "@/util/teamRoster"
+import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/util/roles"
+import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
@@ -14,7 +10,7 @@ import type {
 export { ROLE_RANK, sortRolesByRank }
 
 // i18n key per role for row badges and filter labels.
-export const ROLE_LABEL_KEY: Record<RosterRole, string> = {
+export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
   instructor: "students.roleInstructor",
   ta: "students.roleTa",
   student: "students.roleStudent",
@@ -23,7 +19,7 @@ export const ROLE_LABEL_KEY: Record<RosterRole, string> = {
 // Badge tone per role, distinct from the warning/error status tones so role and
 // enrollment state read as separate facets. `student` uses the neutral ghost
 // chip (rendered with the Badge `ghost` prop), so it maps to "neutral" here.
-export const ROLE_BADGE_TONE: Record<RosterRole, BadgeTone> = {
+export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
   instructor: "primary",
   ta: "secondary",
   student: "neutral",
@@ -65,7 +61,7 @@ export function hasStudentEnrollment(
 // `instructor`/`ta` count every row holding that staff role. A person on two
 // teams contributes to each of their roles — these are role tallies, not a
 // partition, so they can sum to more than the row count.
-export type RoleCounts = Record<RosterRole, number>
+export type RoleCounts = Record<ClassroomRole, number>
 
 export function countByRole(rows: TeamRosterRow[]): RoleCounts {
   const counts: RoleCounts = { instructor: 0, ta: 0, student: 0 }

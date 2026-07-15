@@ -13,12 +13,13 @@ import {
 // Role vocabulary is single-sourced in util/roles. Re-exported here because the
 // roster row logic below is its primary consumer and callers naturally reach for
 // these alongside TeamRosterRow; roles.ts stays the definition home.
-//
-// `RosterRole` is the roster-domain spelling of `ClassroomRole` (a role a roster
-// row can hold). It lives here (not as a deprecated alias in roles.ts) because
-// the roster surface is where the name reads naturally and is its only consumer.
-export type RosterRole = ClassroomRole
-export { ROLE_RANK, sortRolesByRank, orgRoleForRole, roleForOrgRole }
+export {
+  type ClassroomRole,
+  ROLE_RANK,
+  sortRolesByRank,
+  orgRoleForRole,
+  roleForOrgRole,
+}
 
 // Team-driven roster: the classroom GitHub team is the source of truth for
 // enrollment and role, not roster.csv. Enrolled/pending rows come from team
@@ -57,7 +58,7 @@ export type TeamRosterRow = {
   // For a needs-attention row the team hasn't assigned a role yet, so this holds
   // the placeholder ["student"] purely for the non-empty invariant — the view
   // renders NO role badge for those states.
-  roles: RosterRole[]
+  roles: ClassroomRole[]
   // GitHub identity when known. Empty only for an email-only pending invite.
   username: string
   github_id: string
@@ -211,7 +212,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // Members tagged with the role of the team they came from. The student team
   // is "student"; each staff team its role. Student first so a student+staff
   // person keeps their student metadata join, with staff roles unioned on.
-  const roleMembers: Array<{ role: RosterRole; member: GitHubUser }> = [
+  const roleMembers: Array<{ role: ClassroomRole; member: GitHubUser }> = [
     ...members.map((member) => ({ role: "student" as const, member })),
     ...STAFF_ROLES.flatMap((role) =>
       (staffMembers[role] ?? []).map((member) => ({ role, member })),
@@ -249,7 +250,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // staff first lets the org-level "student" invite recognize the person as an
   // already-tagged pending staffer and NOT add a spurious "student" role.
   const roleInvites: Array<{
-    role: RosterRole
+    role: ClassroomRole
     invite: GitHubOrgInvitation
   }> = [
     ...STAFF_ROLES.flatMap((role) =>
@@ -358,7 +359,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 }
 
 // Add a role to a row's set (idempotent), keeping ROLE_RANK order.
-function addRole(row: TeamRosterRow, role: RosterRole): void {
+function addRole(row: TeamRosterRow, role: ClassroomRole): void {
   if (row.roles.includes(role)) return
   row.roles = sortRolesByRank([...row.roles, role])
 }
@@ -458,9 +459,9 @@ export function rowsNeedingBackfill(
   students: Student[],
 ): Student[] {
   // Primary team role per id and per login (highest precedence wins).
-  const roleById = new Map<string, RosterRole>()
-  const roleByLogin = new Map<string, RosterRole>()
-  const consider = (m: GitHubUser, role: RosterRole) => {
+  const roleById = new Map<string, ClassroomRole>()
+  const roleByLogin = new Map<string, ClassroomRole>()
+  const consider = (m: GitHubUser, role: ClassroomRole) => {
     const id = String(m.id)
     const login = m.login.toLowerCase()
     if (!roleById.has(id) || ROLE_RANK[role] > ROLE_RANK[roleById.get(id)!]) {

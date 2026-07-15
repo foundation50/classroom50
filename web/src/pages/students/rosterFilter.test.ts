@@ -5,13 +5,13 @@ import {
   type RosterFilterInput,
 } from "./rosterFilter"
 import type {
-  RosterRole,
+  ClassroomRole,
   TeamRosterRow,
   TeamRosterRowState,
 } from "@/util/teamRoster"
 
 const row = (
-  over: Partial<TeamRosterRow> & { roles: RosterRole[] },
+  over: Partial<TeamRosterRow> & { roles: ClassroomRole[] },
 ): TeamRosterRow =>
   ({
     key: over.username ?? "k",

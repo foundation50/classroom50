@@ -59,7 +59,11 @@ import {
   type StudentCsvRow,
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
-import { ROLE_RANK, orgRoleForRole, type RosterRole } from "@/util/teamRoster"
+import {
+  ROLE_RANK,
+  orgRoleForRole,
+  type ClassroomRole,
+} from "@/util/teamRoster"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { memberIdentitySets } from "@/util/identity"
 import {
@@ -249,7 +253,7 @@ export async function resolveTeamIdForRoleRead(
   client: GitHubClient,
   org: string,
   classroom: string,
-  role: RosterRole,
+  role: ClassroomRole,
 ): Promise<number | undefined> {
   if (role === "student") {
     return (await resolveClassroomTeam(client, org, classroom)).id
@@ -637,10 +641,10 @@ export type ImportRosterRow = {
   last_name?: string
   email?: string
   section?: string
-  // Classroom role from an optional `role` column, validated to a RosterRole.
+  // Classroom role from an optional `role` column, validated to a ClassroomRole.
   // Undefined when absent or unrecognized; the upload defaults it to "student"
   // and lets the instructor override per row before inviting.
-  role?: RosterRole
+  role?: ClassroomRole
 }
 
 export type AddStudentsToClassroomInput = {
@@ -916,7 +920,7 @@ type MemberWithRole = {
   id: number
   login: string
   email?: string | null
-  role: RosterRole
+  role: ClassroomRole
 }
 
 // Resolve the student-team slug plus the two staff-team slugs from one
@@ -1017,7 +1021,7 @@ async function listClassroomMembersWithRoles(
   const byId = new Map<number, MemberWithRole>()
   const consider = (
     member: { id: number; login: string; email?: string | null },
-    role: RosterRole,
+    role: ClassroomRole,
   ) => {
     const existing = byId.get(member.id)
     // Keep the highest-precedence role when a person is on several teams
@@ -1231,13 +1235,13 @@ export async function syncRosterFromTeam(
   })
 }
 
-export type WriteRosterRolesInput = {
+export type WriteClassroomRolesInput = {
   org: string
   classroom: string
   // Usernames -> the role to persist on their roster.csv row. Used by the upload
   // to write an assigned role for a freshly-invited (still-pending) member,
   // whose role auto-sync can't yet derive from team membership.
-  roles: { username: string; role: RosterRole }[]
+  roles: { username: string; role: ClassroomRole }[]
 }
 
 // A role writeback couldn't run because roster.csv is malformed. Typed so the
@@ -1259,9 +1263,9 @@ export class RosterCsvMalformedError extends Error {
 // touches rows that exist and whose role actually changes; never appends,
 // removes, or edits other fields. Best-effort caller (upload) — a conflict-safe
 // single commit.
-export async function writeRosterRoles(
+export async function writeClassroomRoles(
   client: GitHubClient,
-  input: WriteRosterRolesInput,
+  input: WriteClassroomRolesInput,
 ): Promise<{ changed: number }> {
   const { org, classroom } = input
   await assertClassroomNotArchived(client, org, classroom)
@@ -1411,7 +1415,7 @@ export type InviteRosterStudentsInput = {
   // `role` (default "student") selects the target team and org role: student ->
   // classroom team, ta -> TA team, instructor -> org OWNER (admin) + instructor
   // team. `pending` rows are handled by resendOrgInvitation, not here.
-  students: { username: string; github_id?: string; role?: RosterRole }[]
+  students: { username: string; github_id?: string; role?: ClassroomRole }[]
   onProgress?: (progress: {
     processed: number
     total: number
@@ -1479,7 +1483,7 @@ async function retryDeferred<T>(opts: {
 export type InviteRosterStudentsResult = {
   // A fresh org invite was created (carrying the role's team). Each carries the
   // role it was invited as, so a caller can write it back to roster.csv.
-  invited: { username: string; role: RosterRole }[]
+  invited: { username: string; role: ClassroomRole }[]
   // Already an active member or already had a pending invite — no new invite.
   skipped: { username: string; reason: "already-member" | "already-pending" }[]
   // Couldn't invite (username didn't resolve to a GitHub account, or the invite
@@ -1636,9 +1640,9 @@ async function resolveTeamIdByRole(
   client: GitHubClient,
   org: string,
   classroom: string,
-  rolesPresent: ReadonlySet<RosterRole>,
-): Promise<Record<RosterRole, number | undefined>> {
-  const result: Record<RosterRole, number | undefined> = {
+  rolesPresent: ReadonlySet<ClassroomRole>,
+): Promise<Record<ClassroomRole, number | undefined>> {
+  const result: Record<ClassroomRole, number | undefined> = {
     student: undefined,
     instructor: undefined,
     ta: undefined,
@@ -1677,7 +1681,7 @@ export type BulkInviteByEmailInput = {
   org: string
   classroom: string
   // Emails to invite, each with the role the teacher assigned in the preview.
-  invites: { email: string; role?: RosterRole }[]
+  invites: { email: string; role?: ClassroomRole }[]
   onProgress?: (progress: {
     processed: number
     total: number
@@ -1691,7 +1695,7 @@ export type BulkInviteByEmailInput = {
 
 export type BulkInviteByEmailResult = {
   // A fresh org email invite was created (carrying the role's team).
-  invited: { email: string; role: RosterRole }[]
+  invited: { email: string; role: ClassroomRole }[]
   // GitHub returned 422 — the email already belongs to a member or already has
   // a pending invite, so no new invite was sent. Unlike inviteRosterStudents'
   // skipped bucket ({ username; reason: "already-member" | "already-pending" }),
@@ -1891,7 +1895,7 @@ export async function resolveRosterUploadPreflight(
   return classifyRosterUpload(rows, membershipLookup(resolved))
 }
 
-export type ApplyRosterRoleChangeInput = {
+export type ApplyClassroomRoleChangeInput = {
   org: string
   classroom: string
   username: string
@@ -1899,14 +1903,14 @@ export type ApplyRosterRoleChangeInput = {
   // ALL classroom roles the account currently holds (the teams to move OFF of).
   // Empty for an additive enroll (an active member on no team) — then no team
   // is dropped. The target team is never dropped even if present here.
-  fromRoles: RosterRole[]
+  fromRoles: ClassroomRole[]
   // The CSV's intended role (the team to move ONTO).
-  toRole: RosterRole
+  toRole: ClassroomRole
 }
 
-export type ApplyRosterRoleChangeResult = {
+export type ApplyClassroomRoleChangeResult = {
   username: string
-  toRole: RosterRole
+  toRole: ClassroomRole
   // Non-fatal warnings (a best-effort old-team removal that failed, etc.).
   warnings: string[]
 }
@@ -1939,10 +1943,10 @@ export type ApplyRosterRoleChangeResult = {
 // NEVER team-adds a non-member (that would create a stray team invitation); the
 // preflight only produces role_change/enroll for active members, and this
 // re-verifies.
-export async function applyRosterRoleChange(
+export async function applyClassroomRoleChange(
   client: GitHubClient,
-  input: ApplyRosterRoleChangeInput,
-): Promise<ApplyRosterRoleChangeResult> {
+  input: ApplyClassroomRoleChangeInput,
+): Promise<ApplyClassroomRoleChangeResult> {
   const { org, classroom, fromRoles, toRole } = input
   const username = input.username.trim()
   await assertClassroomNotArchived(client, org, classroom)
@@ -1962,7 +1966,7 @@ export async function applyRosterRoleChange(
   }
 
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
-  const slugForRole = (role: RosterRole): string =>
+  const slugForRole = (role: ClassroomRole): string =>
     role === "student" ? slugs.student : slugs.staff[role]
 
   const wasInstructor = fromRoles.includes("instructor")
@@ -2069,12 +2073,12 @@ export type AssignRosterMemberRoleInput = {
   org: string
   classroom: string
   username: string
-  role: RosterRole
+  role: ClassroomRole
 }
 
 export type AssignRosterMemberRoleResult =
   // Added to the target team.
-  | { state: "assigned"; role: RosterRole }
+  | { state: "assigned"; role: ClassroomRole }
   // Not an active org member (must be invited first, not team-added).
   | { state: "not-member" }
 

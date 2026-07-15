@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next"
 
 import { Alert, Button, Select } from "@/components/ui"
 import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
-import type { RosterRole } from "@/util/teamRoster"
+import type { ClassroomRole } from "@/util/teamRoster"
 import type { BulkInviteByEmailResult } from "@/domain/students"
 import type { UploadKind } from "@/pages/students/uploadClassify"
 
@@ -56,7 +56,7 @@ export const EmailInvitePreview = ({
   onSend,
 }: {
   emails: string[]
-  emailRoles: Record<string, RosterRole>
+  emailRoles: Record<string, ClassroomRole>
   emailOwnerConfirmed: boolean
   emailHasInstructor: boolean
   canProcess: boolean

@@ -18,7 +18,7 @@ import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   assignRosterMemberRole,
-  applyRosterRoleChange,
+  applyClassroomRoleChange,
   inviteRosterStudents,
   resolveTeamIdForRoleRead,
   unenrollStudent,
@@ -35,7 +35,7 @@ import {
   orgRoleForRole,
   rowToStudent,
   sortRolesByRank,
-  type RosterRole,
+  type ClassroomRole,
   type TeamRosterRow,
 } from "@/util/teamRoster"
 import {
@@ -78,7 +78,7 @@ const RosterMemberModal = ({
   // Resolved team slug per role, so each role a member actually holds links to
   // its real team (student -> classroom team, instructor/ta -> the staff team)
   // instead of assuming everyone is on the student team.
-  teamSlugByRole: Record<RosterRole, string>
+  teamSlugByRole: Record<ClassroomRole, string>
   // Nullable so the <dialog> can stay mounted across open/close.
   row: TeamRosterRow | null
   // Whether the viewer can perform owner-scoped membership writes (invite,
@@ -119,7 +119,7 @@ const RosterMemberModal = ({
   const [changingRole, setChangingRole] = useState(false)
   // The role selected in the enrolled-row role dropdown (null = matches current,
   // no pending change). Instructor target requires the owner-grant confirmation.
-  const [pendingRole, setPendingRole] = useState<RosterRole | null>(null)
+  const [pendingRole, setPendingRole] = useState<ClassroomRole | null>(null)
   const [roleOwnerConfirmed, setRoleOwnerConfirmed] = useState(false)
 
   const unenrollMutation = useMutation({
@@ -227,9 +227,9 @@ const RosterMemberModal = ({
   // off instructor revokes your own org-owner access mid-change (the mutation
   // refuses it), so the control is suppressed with a note rather than shown as a
   // dead action. The dropdown seeds from their primary current role; switching +
-  // confirming calls applyRosterRoleChange (which grants/revokes org owner for
+  // confirming calls applyClassroomRoleChange (which grants/revokes org owner for
   // an instructor target/demotion).
-  const currentRole: RosterRole = sortRolesByRank(row.roles)[0] ?? "student"
+  const currentRole: ClassroomRole = sortRolesByRank(row.roles)[0] ?? "student"
   const canChangeRole =
     canManage && !isSelf && row.state === "enrolled" && Boolean(row.username)
   // Show the "can't change your own role" note only when a role change would
@@ -408,7 +408,7 @@ const RosterMemberModal = ({
     }
     setChangingRole(true)
     try {
-      await applyRosterRoleChange(client, {
+      await applyClassroomRoleChange(client, {
         org,
         classroom,
         username,
@@ -762,7 +762,7 @@ const RosterMemberModal = ({
                     disabled={busy}
                     value={selectedRole}
                     onChange={(e) => {
-                      const next = e.target.value as RosterRole
+                      const next = e.target.value as ClassroomRole
                       setPendingRole(next)
                       setRoleOwnerConfirmed(false)
                     }}

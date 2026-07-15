@@ -1,5 +1,5 @@
 import { STAFF_ROLES } from "@/types/classroom"
-import { sortRolesByRank, type RosterRole } from "@/util/teamRoster"
+import { sortRolesByRank, type ClassroomRole } from "@/util/teamRoster"
 
 // Preflight classification for a CSV roster upload. Pure: given the uploaded
 // rows (each resolved to a username + intended role) and the classroom's CURRENT
@@ -20,7 +20,7 @@ import { sortRolesByRank, type RosterRole } from "@/util/teamRoster"
 // GitHub teams remain the source of truth: this never fabricates a role, only
 // compares the CSV's intended role to the live team membership.
 
-export type PreflightRole = RosterRole
+export type PreflightRole = ClassroomRole
 
 // A member's live classroom standing, resolved from the org-member list + the
 // three per-classroom team memberships.
@@ -30,7 +30,7 @@ export type CurrentMembership = {
   isOrgMember: boolean
   // Classroom roles the account currently holds across the student + staff
   // teams (empty when on none). Unioned, so a student+ta holds both.
-  roles: RosterRole[]
+  roles: ClassroomRole[]
 }
 
 // The uploaded row reduced to what the classifier needs: an identity + intended
@@ -52,11 +52,11 @@ export type PreflightOutcome =
       // The CSV's intended role (the target team to move onto).
       role: PreflightRole
       // The account's current highest-precedence classroom role (for display).
-      currentRole: RosterRole
-      // ALL classroom roles the account currently holds. applyRosterRoleChange
+      currentRole: ClassroomRole
+      // ALL classroom roles the account currently holds. applyClassroomRoleChange
       // drops every non-target team, so a member on both the instructor and TA
       // teams moved to student leaves neither staff team behind.
-      currentRoles: RosterRole[]
+      currentRoles: ClassroomRole[]
     }
 
 export type PreflightResult = {
@@ -73,7 +73,7 @@ export type PreflightResult = {
 // The highest-precedence role in a set (instructor > ta > student), or undefined
 // for an account on no classroom team. Uses the canonical sortRolesByRank so the
 // precedence order has a single source (teamRoster.ROLE_RANK).
-function primaryOf(roles: RosterRole[]): RosterRole | undefined {
+function primaryOf(roles: ClassroomRole[]): ClassroomRole | undefined {
   return roles.length === 0 ? undefined : sortRolesByRank(roles)[0]
 }
 
@@ -162,14 +162,14 @@ export type ResolvedMembership = {
   orgMemberIds: ReadonlySet<string>
   orgMemberLogins: ReadonlySet<string>
   // Per classroom role -> the id + login sets of that team's live members.
-  teamIdsByRole: Record<RosterRole, ReadonlySet<string>>
-  teamLoginsByRole: Record<RosterRole, ReadonlySet<string>>
+  teamIdsByRole: Record<ClassroomRole, ReadonlySet<string>>
+  teamLoginsByRole: Record<ClassroomRole, ReadonlySet<string>>
 }
 
 export function membershipLookup(
   resolved: ResolvedMembership,
 ): (row: PreflightRow) => CurrentMembership {
-  const roleList: RosterRole[] = ["student", ...STAFF_ROLES]
+  const roleList: ClassroomRole[] = ["student", ...STAFF_ROLES]
   return (row: PreflightRow) => {
     const id = row.github_id?.trim() ?? ""
     const login = row.username.trim().toLowerCase()

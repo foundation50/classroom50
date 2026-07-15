@@ -10,10 +10,10 @@ import {
   resolveClassroomPendingInvite,
   bulkEnrollStudentsInClassroom,
   assignRosterMemberRole,
-  applyRosterRoleChange,
+  applyClassroomRoleChange,
   inviteRosterStudents,
   syncRosterFromTeam,
-  writeRosterRoles,
+  writeClassroomRoles,
   migrateRosterFile,
   resolveTeamIdForRoleRead,
   updateStudent,
@@ -2742,7 +2742,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 })
 
-describe("writeRosterRoles — set role on existing rows", () => {
+describe("writeClassroomRoles — set role on existing rows", () => {
   it("writes the assigned role onto a matching row and commits", async () => {
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + "prof,,,,,9,\n",
@@ -2750,7 +2750,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
       teamHas: [],
     })
 
-    const res = await writeRosterRoles(client, {
+    const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
       roles: [{ username: "prof", role: "instructor" }],
@@ -2770,7 +2770,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
       teamHas: [],
     })
 
-    const res = await writeRosterRoles(client, {
+    const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
       roles: [{ username: "prof", role: "instructor" }],
@@ -2791,7 +2791,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
     })
 
     await expect(
-      writeRosterRoles(client, {
+      writeClassroomRoles(client, {
         org: "acme",
         classroom: "cs101",
         roles: [{ username: "prof", role: "instructor" }],
@@ -2807,7 +2807,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
       teamHas: [],
     })
 
-    const res = await writeRosterRoles(client, {
+    const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
       roles: [{ username: "ghost", role: "ta" }],
@@ -2824,7 +2824,7 @@ describe("writeRosterRoles — set role on existing rows", () => {
       teamHas: [],
     })
 
-    const res = await writeRosterRoles(client, {
+    const res = await writeClassroomRoles(client, {
       org: "acme",
       classroom: "cs101",
       roles: [],
@@ -3568,7 +3568,7 @@ describe("assignRosterMemberRole — enroll a rostered active member", () => {
   })
 })
 
-// A focused client mock for applyRosterRoleChange: records team adds, team
+// A focused client mock for applyClassroomRoleChange: records team adds, team
 // removes, org-membership role PUTs, and an ordered `ops` log (to assert the
 // owner-demote-first ordering). `members` are active org members; anyone else
 // 404s. `failRemoveSlug` makes a team-removal of that slug throw (best-effort
@@ -3722,13 +3722,13 @@ const makeRoleChangeClient = (opts: {
   }
 }
 
-describe("applyRosterRoleChange — confirmed team move / enroll", () => {
+describe("applyClassroomRoleChange — confirmed team move / enroll", () => {
   it("moves a student to TA: adds to the ta team, removes from the student team", async () => {
     const { client, teamAdds, teamRemoves, orgRolePuts } = makeRoleChangeClient(
       { members: ["userb"] },
     )
 
-    const result = await applyRosterRoleChange(client, {
+    const result = await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "userb",
@@ -3754,7 +3754,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
       members: ["userb"],
     })
 
-    await applyRosterRoleChange(client, {
+    await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "userb",
@@ -3773,7 +3773,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     const { client, teamAdds, teamRemoves, orgRolePuts, ops } =
       makeRoleChangeClient({ members: ["boss"] })
 
-    await applyRosterRoleChange(client, {
+    await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "boss",
@@ -3799,7 +3799,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     const { client, teamRemoves } = makeRoleChangeClient({ members: ["boss"] })
 
     // On both instructor + ta; move to student -> both staff teams dropped.
-    await applyRosterRoleChange(client, {
+    await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "boss",
@@ -3822,7 +3822,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
       { members: ["newta"] },
     )
 
-    await applyRosterRoleChange(client, {
+    await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "newta",
@@ -3844,7 +3844,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
       failRemoveSlug: "classroom50-cs101",
     })
 
-    const result = await applyRosterRoleChange(client, {
+    const result = await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "userb",
@@ -3865,7 +3865,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     const { client, teamAdds } = makeRoleChangeClient({ members: [] })
 
     await expect(
-      applyRosterRoleChange(client, {
+      applyClassroomRoleChange(client, {
         org: "acme",
         classroom: "cs101",
         username: "stranger",
@@ -3883,7 +3883,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     })
 
     await expect(
-      applyRosterRoleChange(client, {
+      applyClassroomRoleChange(client, {
         org: "acme",
         classroom: "cs101",
         username: "boss",
@@ -3904,7 +3904,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     })
 
     await expect(
-      applyRosterRoleChange(client, {
+      applyClassroomRoleChange(client, {
         org: "acme",
         classroom: "cs101",
         username: "boss",
@@ -3923,7 +3923,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
       admins: [],
     })
 
-    await applyRosterRoleChange(client, {
+    await applyClassroomRoleChange(client, {
       org: "acme",
       classroom: "cs101",
       username: "boss",
@@ -3943,7 +3943,7 @@ describe("applyRosterRoleChange — confirmed team move / enroll", () => {
     })
 
     await expect(
-      applyRosterRoleChange(client, {
+      applyClassroomRoleChange(client, {
         org: "acme",
         classroom: "cs101",
         username: "boss",

@@ -39,7 +39,7 @@ import {
   dropSuppressed,
   type SuppressedLogins,
 } from "@/hooks/useSuppressedLogins"
-import type { TeamRosterRow, RosterRole } from "@/util/teamRoster"
+import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
 import {
   ROLE_LABEL_KEY,
@@ -272,9 +272,9 @@ const EnrolledStudents = ({
   // when at least one row holds it (so a class with no TAs has no dead "TA"
   // filter). Ordered student-first, then staff roles per the STAFF_ROLES source.
   const roleFilterOptions = useMemo(() => {
-    const present = new Set<RosterRole>()
+    const present = new Set<ClassroomRole>()
     for (const row of rows) for (const role of row.roles) present.add(role)
-    return (["student", ...STAFF_ROLES] as RosterRole[]).filter((role) =>
+    return (["student", ...STAFF_ROLES] as ClassroomRole[]).filter((role) =>
       present.has(role),
     )
   }, [rows])

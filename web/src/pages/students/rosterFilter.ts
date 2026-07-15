@@ -1,6 +1,6 @@
 import { nameFromParts } from "@/util/students"
 import type {
-  RosterRole,
+  ClassroomRole,
   TeamRosterRow,
   TeamRosterRowState,
 } from "@/util/teamRoster"
@@ -10,7 +10,7 @@ import type {
 export const NO_SECTION = "No section"
 
 export type StatusFilter = "all" | TeamRosterRowState
-export type RoleFilter = "all" | RosterRole
+export type RoleFilter = "all" | ClassroomRole
 
 export type RosterFilterInput = {
   query: string
