@@ -74,9 +74,10 @@ SUBMIT_TAG_PREFIX = "submit/"
 # Repo permission the grant gives each staff role's team. Hand-mirrored from Go
 # StaffTeamRepoPermissions (source of truth; parity-tested) — keep in lockstep.
 # The TA-team template read is granted eagerly at assignment add/reuse and
-# classroom migrate (Go side); this collect-time grant is the idempotent
-# re-affirm. A role absent here gets nothing (the instructor team is granted at
-# classroom setup, so only TA needs a grant today).
+# classroom migrate (Go side, which hardcodes read there); this collect-time
+# grant reads the value below and is the idempotent re-affirm. A role absent
+# here gets nothing (the instructor team is granted at classroom setup, so only
+# TA needs a grant today).
 STAFF_TEAM_PERMISSIONS = {"ta": "pull"}
 
 RFC3339_RE = re.compile(

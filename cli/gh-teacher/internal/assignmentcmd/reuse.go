@@ -341,8 +341,8 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 // grantStaffTeamTemplateRead best-effort grants the classroom's TA staff team
 // read on a private, org-owned template. Non-blocking by design (see
 // grantClassroomTeamTemplateRead): a missing TA team is a clean skip and a
-// grant failure only warns. The permission is gated on StaffTeamRepoPermissions
-// so setup-time and collect-scores grants can't diverge.
+// grant failure only warns. StaffTeamRepoPermissions is a presence gate here —
+// the TA team is granted read (GrantTeamRepoRead) only when the role is mapped.
 func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, tmplOwner, tmplRepo string) {
 	if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; !ok {
 		return

@@ -277,9 +277,11 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// The TA staff team gets the same read (best-effort) so a base-permission-
 	// `none` TA can read the template without waiting for collect-scores. The
 	// TA slug comes from the just-created staffTeams (classroom.json isn't
-	// committed until CommitTree above, so it can't be re-resolved here). A TA-
-	// grant failure only warns — it's not a student blocker, so it never adds to
-	// grantFailures or changes the exit code.
+	// committed until CommitTree above, so it can't be re-resolved here).
+	// StaffTeamRepoPermissions is a presence gate: grant the TA team read only
+	// when the role is mapped. A TA-grant failure only warns — it's not a
+	// student blocker, so it never adds to grantFailures or changes the exit
+	// code.
 	taSlug := ""
 	if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; ok && staffTeams != nil && staffTeams.TA != nil {
 		taSlug = staffTeams.TA.Slug
