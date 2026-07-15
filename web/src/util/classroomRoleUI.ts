@@ -4,7 +4,7 @@ import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.
 // Shared by the Roster view and the classroom Settings staff section so the two
-// surfaces can't drift on tone or precedence (AGENTS.md: one recipe, one source).
+// surfaces can't drift on tone or precedence.
 // ROLE_RANK and sortRolesByRank are single-sourced in the authz module and
 // re-exported here so UI callers have one import for all role presentation.
 export { ROLE_RANK, sortRolesByRank }
@@ -27,8 +27,8 @@ export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
 
 // Enrollment-state badge tone + i18n label, single-sourced so the roster row
 // list (EnrolledStudents) and the member modal (RosterMemberModal) render the
-// same status chip (AGENTS.md: one recipe, one source — they were hand-synced
-// before and drifted once on a renamed key).
+// same status chip (they were hand-synced before and drifted once on a renamed
+// key).
 export const STATE_BADGE_TONE: Record<TeamRosterRowState, BadgeTone> = {
   enrolled: "success",
   pending: "warning",

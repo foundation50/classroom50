@@ -27,9 +27,8 @@ function formatDetail(item: TimelineItem, t: TFunction): string | undefined {
 }
 
 // One source/status -> tone decision, shared by the icon chip and the Badge, so
-// the two never drift (AGENTS.md one-recipe-one-source). Maps to a DaisyUI
-// semantic color used both as the Badge tone and, via `${tone}`, the chip's
-// bg-<tone>/10 text-<tone> classes.
+// the two never drift. Maps to a DaisyUI semantic color used both as the Badge
+// tone and, via `${tone}`, the chip's bg-<tone>/10 text-<tone> classes.
 function itemTone(item: TimelineItem): BadgeTone {
   if (item.status === "error") return "error"
   if (item.status === "running") return "warning"
