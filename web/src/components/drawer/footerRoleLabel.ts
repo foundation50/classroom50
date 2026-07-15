@@ -16,7 +16,7 @@ export type OrgFooterLabelInput = {
   // not trustworthy, so it neither grants "Instructor" nor falls back to
   // "Student".
   ownerError: boolean
-  isStudent: boolean
+  isNonStaff: boolean
   roleLoading: boolean
 }
 
@@ -33,7 +33,7 @@ export function orgFooterRoleLabel(input: OrgFooterLabelInput): OrgFooterLabel {
     isOwner,
     ownerPending,
     ownerError,
-    isStudent,
+    isNonStaff,
     roleLoading,
   } = input
 
@@ -42,7 +42,7 @@ export function orgFooterRoleLabel(input: OrgFooterLabelInput): OrgFooterLabel {
   let labelKey: OrgFooterLabel["labelKey"] = null
   if (isOrgSetup || isOwner) {
     labelKey = "nav.roleInstructor"
-  } else if (!ownerUnsettled && !roleLoading && isStudent) {
+  } else if (!ownerUnsettled && !roleLoading && isNonStaff) {
     labelKey = "nav.roleStudent"
   }
 

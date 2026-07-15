@@ -306,11 +306,7 @@ const ClassesPage = () => {
   useDocumentTitle(t("documentTitle.classes"))
   const { org } = useParams({ strict: false })
   const { classes } = useGetClasses(org)
-  const {
-    isStaff: isTeacher,
-    isNonStaff: isStudent,
-    isLoading: roleLoading,
-  } = useOrgStaff(org)
+  const { isStaff, isNonStaff, isLoading: roleLoading } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
   const { githubOrgRole } = useGitHubOrgRole()
@@ -330,11 +326,11 @@ const ClassesPage = () => {
     <PageShell page="classes" selected="assignments">
       <PageHeader
         loading={roleLoading}
-        title={isTeacher ? t("classes.myClasses") : t("classes.myAssignments")}
+        title={isStaff ? t("classes.myClasses") : t("classes.myAssignments")}
         subtitle={<p className="max-w-2xl">{t("classes.manageSubtitle")}</p>}
       />
 
-      {isStudent && !isMember && !loadingMembership && (
+      {isNonStaff && !isMember && !loadingMembership && (
         <JoinOrgCard org={org} />
       )}
       {isOwner && <OrgPreflightNotice org={org} />}
@@ -349,13 +345,11 @@ const ClassesPage = () => {
         </div>
       ) : (
         <>
-          {classes.length === 0 && isTeacher && (
-            <CreateClassroomPane org={org} />
-          )}
-          {isTeacher && classes.length > 0 && (
+          {classes.length === 0 && isStaff && <CreateClassroomPane org={org} />}
+          {isStaff && classes.length > 0 && (
             <ClassroomList org={org} dirs={classes} />
           )}
-          {isStudent && isMember && <OrgRepos org={org} />}
+          {isNonStaff && isMember && <OrgRepos org={org} />}
         </>
       )}
     </PageShell>

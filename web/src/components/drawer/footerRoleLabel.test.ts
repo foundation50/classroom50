@@ -7,7 +7,7 @@ const base = {
   isOwner: false,
   ownerPending: false,
   ownerError: false,
-  isStudent: false,
+  isNonStaff: false,
   roleLoading: false,
 }
 
@@ -19,12 +19,11 @@ describe("orgFooterRoleLabel", () => {
     })
   })
 
-  it("owner on no staff team (isStudent from the team signal) still => Instructor", () => {
-    // The isNonStaff->isStudent rename: an org owner on no staff team now reads
-    // isStudent:true, but owner precedence must still label them Instructor, not
-    // Student. This is what keeps the renamed sentinel safe in the footer.
+  it("owner on no staff team (isNonStaff from the team signal) still => Instructor", () => {
+    // An org owner on no classroom staff team reads isNonStaff:true, but owner
+    // precedence must still label them Instructor, not Student.
     expect(
-      orgFooterRoleLabel({ ...base, isOwner: true, isStudent: true }),
+      orgFooterRoleLabel({ ...base, isOwner: true, isNonStaff: true }),
     ).toEqual({
       labelKey: "nav.roleInstructor",
       pending: false,
@@ -38,8 +37,8 @@ describe("orgFooterRoleLabel", () => {
     })
   })
 
-  it("definitive non-owner student => Student", () => {
-    expect(orgFooterRoleLabel({ ...base, isStudent: true })).toEqual({
+  it("definitive non-owner non-staff => Student", () => {
+    expect(orgFooterRoleLabel({ ...base, isNonStaff: true })).toEqual({
       labelKey: "nav.roleStudent",
       pending: false,
     })
@@ -54,9 +53,9 @@ describe("orgFooterRoleLabel", () => {
 
   it("owner-pending with an org in scope => pending spinner, no premature label", () => {
     expect(
-      orgFooterRoleLabel({ ...base, ownerPending: true, isStudent: true }),
+      orgFooterRoleLabel({ ...base, ownerPending: true, isNonStaff: true }),
     ).toEqual({
-      // isStudent must NOT win while owner is still pending (would flash Student
+      // isNonStaff must NOT win while owner is still pending (would flash Student
       // at a real owner mid-load).
       labelKey: null,
       pending: true,
@@ -74,7 +73,7 @@ describe("orgFooterRoleLabel", () => {
 
   it("settled owner-error + config 404 => blank, not Student (don't mislabel a real owner)", () => {
     expect(
-      orgFooterRoleLabel({ ...base, ownerError: true, isStudent: true }),
+      orgFooterRoleLabel({ ...base, ownerError: true, isNonStaff: true }),
     ).toEqual({
       // A settled owner-error means the verdict is untrustworthy; suppress the
       // Student fallback. Not pending (error is settled), so no spinner.
@@ -85,7 +84,7 @@ describe("orgFooterRoleLabel", () => {
 
   it("config-repo role loading => pending, Student suppressed until it resolves", () => {
     expect(
-      orgFooterRoleLabel({ ...base, roleLoading: true, isStudent: true }),
+      orgFooterRoleLabel({ ...base, roleLoading: true, isNonStaff: true }),
     ).toEqual({
       labelKey: null,
       pending: true,

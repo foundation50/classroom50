@@ -625,7 +625,7 @@ export const SidebarFooter = () => {
     from: "/_authed/$org/setup/",
     shouldThrow: false,
   })
-  const { isNonStaff: isStudent, isLoading: roleLoading } = useOrgStaff(org)
+  const { isNonStaff, isLoading: roleLoading } = useOrgStaff(org)
   // Org plan for the About-dialog diagnostics snapshot. Cached and shared with
   // the setup/audit panes; `plan` is only visible to org owners, so this is
   // often undefined (the snapshot then reports "unknown" with a reason).
@@ -702,7 +702,7 @@ export const SidebarFooter = () => {
       isOwner,
       ownerPending,
       ownerError,
-      isStudent,
+      isNonStaff,
       roleLoading,
     })
     roleLabelText = orgLabel.labelKey ? t(orgLabel.labelKey) : null
@@ -1030,10 +1030,10 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
 export const MyClasses = ({ settings = false, selected = "" }) => {
   const { org } = useParams({ strict: false })
   const { t } = useTranslation()
-  const { isStaff: showTeacherUi, roleResolved } = useOrgStaff(org)
+  const { isStaff, roleResolved } = useOrgStaff(org)
   // Members/Activity/Settings are owner-only surfaces, so their route access
   // stays gated on can("manageOrg") (RequireOwner). Their sidebar SHORTCUTS,
-  // though, are shown only to a staff owner (`showTeacherUi && isOwner`): an org
+  // though, are shown only to a staff owner (`isStaff && isOwner`): an org
   // owner on no staff team deliberately loses the shortcut clutter but keeps the
   // routes reachable (and regains the nav by claiming instructor / joining a
   // staff team). Team membership is the source of truth for org-staff chrome.
@@ -1045,9 +1045,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   const onActivity = selected === "activity"
   if (!org) return null
 
-  const classesLabel = showTeacherUi
-    ? t("nav.myClasses")
-    : t("nav.myAssignments")
+  const classesLabel = isStaff ? t("nav.myClasses") : t("nav.myAssignments")
 
   return (
     <div className="py-4">
@@ -1069,7 +1067,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             </Link>
           </Tip>
         )}
-        {showTeacherUi && (
+        {isStaff && (
           <Tip label={t("nav.published")}>
             <Link to="/$org/published" params={{ org }}>
               <SidebarItemBody
@@ -1080,7 +1078,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             </Link>
           </Tip>
         )}
-        {showTeacherUi && isOwner && (
+        {isStaff && isOwner && (
           <Tip label={t("nav.members")}>
             <Link to="/$org/members" params={{ org }}>
               <SidebarItemBody
@@ -1091,7 +1089,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             </Link>
           </Tip>
         )}
-        {showTeacherUi && isOwner && (
+        {isStaff && isOwner && (
           <Tip label={t("nav.activity")}>
             <Link to="/$org/activity" params={{ org }}>
               <SidebarItemBody
@@ -1102,7 +1100,7 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
             </Link>
           </Tip>
         )}
-        {showTeacherUi && isOwner && (
+        {isStaff && isOwner && (
           <Tip label={t("nav.settings")}>
             <Link to="/$org/settings" params={{ org }}>
               <SidebarItemBody
