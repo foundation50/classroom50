@@ -26,12 +26,22 @@ It reports three independent things:
      string constants (labelKey/titleKey/what/why/...) and passed to t() later,
      so we count a key as used if its exact dotted string appears anywhere in the
      source, and also honour dynamic t(`prefix.${x}`) prefixes. Reported as a
-     warning; only fails under --strict.
+     warning; only fails under --strict. Caveat: a dynamic t(`prefix.${x}`) marks
+     the whole en.json subtree under `prefix` used, so neither DEAD nor MISSING
+     holds inside a dynamically-addressed subtree (orgActivity.type.*,
+     classes.filter.*, ...) -- an orphan there can't be flagged and a
+     runtime-missing key falls back to English silently. DEAD is a lower bound.
 
   3. HARDCODED strings -- user-facing string literals that bypass i18n entirely
-     (so no language pack can ever translate them): prose in translatable JSX
-     attributes (aria-label/alt/title/placeholder) and plain-string error/toast
-     calls. Heuristic; reported as a warning, only fails under --strict.
+     (so no language pack can ever translate them). Heuristic; reported as a
+     warning, only fails under --strict. Coverage is deliberately narrow -- green
+     means "the covered shapes hardcode no prose", not "no hardcoded prose
+     anywhere". Covered: double-quoted aria-label/alt/title/placeholder, and raw
+     first-arg strings to toast()/setError()/failDeviceFlow(). NOT covered: JSX
+     children text (<span>Hello</span>), brace/template-literal attributes
+     (title={`...`}), single-quoted attributes, or prose through any other
+     helper. Dev-only UI (HARDCODED_IGNORE_PREFIXES) and scoped format-hint
+     values (HARDCODED_ALLOWED_VALUES) are exempt.
 
 Exit code: 0 when clean (no MISSING, and under --strict no DEAD/HARDCODED), else 1.
 """
@@ -89,12 +99,21 @@ HARDCODED_IGNORE_PREFIXES = ("web/src/components/dev/",)
 
 # Specific literal values that are NOT translatable prose despite matching a
 # user-facing-attribute pattern — a format example / code sample identical in
-# every language. Keep this list tiny and justified; prefer i18n for real prose.
-HARDCODED_ALLOWED_VALUES = frozenset(
-    {
-        "ghp_…",  # GitHub PAT prefix shown as an input placeholder (a format hint)
-    }
-)
+# every language. Each value is scoped to the one path prefix it's allowed in
+# (byte-exact value match, str.startswith path match) so the exemption can't
+# silently spread to other files. Keep this map tiny and justified; prefer i18n
+# for real prose.
+HARDCODED_ALLOWED_VALUES = {
+    # GitHub PAT prefix shown as an input placeholder (a format hint), only in
+    # the PAT sign-in prompt.
+    "ghp_…": "web/src/auth/",
+}
+
+
+def is_allowed_hardcoded(val: str, relpath: str) -> bool:
+    """True when `val` is an allowlisted non-prose literal in its scoped path."""
+    prefix = HARDCODED_ALLOWED_VALUES.get(val)
+    return prefix is not None and relpath.startswith(prefix)
 
 
 def flatten(obj: dict, prefix: str = "") -> dict[str, object]:
@@ -200,19 +219,19 @@ def main() -> int:
         # Hardcoded JSX-attribute prose can appear in any component-bearing file
         # (a .ts helper returning JSX via createElement, not just .tsx), so scan
         # every source file; ATTR_RE is specific enough that non-JSX files match
-        # nothing. Dev-only UI is exempt (never user-facing).
+        # nothing.
         if relpath.startswith(HARDCODED_IGNORE_PREFIXES):
             continue
         for i, line in enumerate(text.splitlines(), 1):
             for m in ATTR_RE.finditer(line):
                 val = m.group(1).strip()
-                if CODEISH_RE.match(val) or val in HARDCODED_ALLOWED_VALUES:
+                if CODEISH_RE.match(val) or is_allowed_hardcoded(val, relpath):
                     continue
                 hardcoded.append((relpath, i, val))
             for m in USERFACING_CALL_RE.finditer(line):
                 val = m.group(2)
                 # skip developer-only "must be used within" invariants
-                if "must be used" in val or val in HARDCODED_ALLOWED_VALUES:
+                if "must be used" in val or is_allowed_hardcoded(val, relpath):
                     continue
                 hardcoded.append((relpath, i, val))
 

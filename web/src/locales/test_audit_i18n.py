@@ -277,6 +277,46 @@ class TestHardcodedExemptions:
         )
         assert code == 0
 
+    def test_allowlisted_value_exempt_in_userfacing_call(self, monkeypatch, tmp_path):
+        # The allowlist must apply to the toast/setError/failDeviceFlow branch
+        # too, not only JSX attributes.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={"auth/Prompt.tsx": 't("nav.home"); setError("ghp_…")'},
+            strict=True,
+        )
+        assert code == 0
+
+    def test_allowlisted_value_outside_scope_still_fails(self, monkeypatch, tmp_path):
+        # ghp_… is only exempt under web/src/auth/; the same value elsewhere is
+        # a genuine hardcoded string and must fail --strict.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={
+                "pages/Dashboard.tsx": 't("nav.home"); const x = <input placeholder="ghp_…" />'
+            },
+            strict=True,
+        )
+        assert code == 1
+
+    def test_allowlist_is_byte_exact(self, monkeypatch, tmp_path):
+        # A near-miss (ASCII "..." instead of the U+2026 ellipsis) is NOT the
+        # allowlisted value, so it must still fail even in the scoped path.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={
+                "auth/Prompt.tsx": 't("nav.home"); const x = <input placeholder="ghp_..." />'
+            },
+            strict=True,
+        )
+        assert code == 1
+
 
 # --------------------------------------------------------------------------
 # flatten() / PLURAL_SUFFIXES parity with the sibling verify_locale.py.

@@ -92,7 +92,14 @@ It reports three things:
 
 The dead/hardcoded checks are heuristic (indirect references and prose
 detection aren't exact), so they're warnings by default — skim them rather than
-treating every line as a defect.
+treating every line as a defect. **A green `--strict` run is not a proof of
+zero hardcoded prose:** the HARDCODED check only sees double-quoted
+`aria-label`/`alt`/`title`/`placeholder` and raw `toast`/`setError`/`failDeviceFlow`
+arguments — it misses JSX children text (`<span>Hello</span>`), brace/template-literal
+attributes (``title={`…`}``), and single-quoted attributes. Likewise, keys
+addressed through a dynamic ``t(`prefix.${x}`)`` are exempt from both the DEAD
+and MISSING guarantees (the whole subtree is treated as used, and a
+runtime-missing one falls back to English silently).
 
 ### Automated packs (CI)
 

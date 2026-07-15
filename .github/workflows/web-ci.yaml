@@ -95,9 +95,15 @@ jobs:
       #      (translation dead weight; drifts packs), and
       #   3. HARDCODED prose — user-facing string literals bypassing i18n.
       # Dev-only UI (components/dev/) and a tiny allowlist of format examples are
-      # exempt from (3); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES. Uses the
-      # runner's preinstalled python3 (no third-party deps); run from the repo
-      # root since the script resolves web/src relative to itself.
+      # exempt from (3); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES.
+      # Coverage limits (green here is NOT "no hardcoded prose anywhere"): (3) is
+      # a heuristic over double-quoted aria-label/alt/title/placeholder + raw
+      # toast/setError/failDeviceFlow args only — it misses JSX children text,
+      # brace/template-literal attributes, and single-quoted attributes; (1)/(2)
+      # don't hold inside dynamic t(`prefix.${x}`) subtrees. See audit_i18n.py's
+      # module docstring. Uses the runner's preinstalled python3 (no third-party
+      # deps); run from the repo root since the script resolves web/src relative
+      # to itself.
       - name: i18n key audit
         working-directory: ${{ github.workspace }}
         run: python3 web/src/locales/audit_i18n.py --strict
