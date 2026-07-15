@@ -541,7 +541,7 @@ const AssignmentSidebarMenu = ({
   )
 }
 
-export const TeacherSidebarMenu = ({
+export const StaffSidebarMenu = ({
   org,
   classroom,
   selected,
@@ -1016,11 +1016,7 @@ export const SidebarContent = ({ selected }: { selected: string }) => {
       {org && <AllClasses org={org} />}
       <SidebarClassInfo classInfo={classData} />
       {org && classroom && (
-        <TeacherSidebarMenu
-          selected={selected}
-          org={org}
-          classroom={classroom}
-        />
+        <StaffSidebarMenu selected={selected} org={org} classroom={classroom} />
       )}
       <SidebarFooter />
     </>

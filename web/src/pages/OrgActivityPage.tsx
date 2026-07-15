@@ -9,7 +9,7 @@ import { AnimatedAlert, Card, Spinner, Button } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { EmptyState } from "@/components/list"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import { DiagnosticsDialog } from "@/components/DiagnosticsDialog"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -131,7 +131,7 @@ const OrgActivityPage = () => {
 
   return (
     <PageShell page="classes" selected="activity">
-      <RequireTeacher allow="owner">
+      <RequireRole allow="owner">
         <PageHeader
           title={t("orgActivity.heading")}
           subtitle={t("orgActivity.subtitle")}
@@ -216,7 +216,7 @@ const OrgActivityPage = () => {
             )}
           </>
         )}
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

@@ -22,7 +22,7 @@ import {
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import Avatar from "@/components/avatar"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -370,7 +370,7 @@ const OrgMembersPage = () => {
   return (
     <>
       <PageShell page="classes" selected="members">
-        <RequireTeacher allow="owner">
+        <RequireRole allow="owner">
           <PageHeader
             title={t("orgMembers.heading")}
             subtitle={
@@ -596,7 +596,7 @@ const OrgMembersPage = () => {
               </>
             )}
           </Card>
-        </RequireTeacher>
+        </RequireRole>
       </PageShell>
 
       {org ? (

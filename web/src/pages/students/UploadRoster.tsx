@@ -25,7 +25,7 @@ import {
   hasInstructorPromotion,
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
-import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
+import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import { logger } from "@/lib/logger"
 import type { ClassroomRole } from "@/util/teamRoster"
 import {

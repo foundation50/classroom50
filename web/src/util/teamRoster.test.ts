@@ -9,7 +9,7 @@ import {
   rowsNeedingBackfill,
 } from "./teamRoster"
 import { isOwnerGitHubOrgRole } from "@/util/roles"
-import { enrolledCountsByRole } from "./rosterRoles"
+import { enrolledCountsByRole } from "./classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import { STAFF_ROLES } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"

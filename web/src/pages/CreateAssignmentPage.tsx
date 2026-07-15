@@ -5,7 +5,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
@@ -112,7 +112,7 @@ const CreateAssignmentPage = () => {
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
-      <RequireTeacher>
+      <RequireRole>
         <PageHeader title={t("assignments.createHeading")} />
         {emptyRoster.show ? (
           <EmptyRosterNotice
@@ -179,7 +179,7 @@ const CreateAssignmentPage = () => {
             })
           }}
         />
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

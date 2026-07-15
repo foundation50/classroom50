@@ -7,7 +7,7 @@ import { clearActivity, recordError } from "@/lib/activity/activityStore"
 // Stub the surrounding chrome + data hooks so the test focuses on the page's
 // merge/render logic. The GitHub client is null (persistent queries disabled),
 // so only the session source contributes — exactly the unit under test here.
-vi.mock("@/components/RequireTeacher", () => ({
+vi.mock("@/components/RequireRole", () => ({
   default: ({ children }: { children: React.ReactNode }) => <>{children}</>,
 }))
 vi.mock("@/components/PageShell", () => ({

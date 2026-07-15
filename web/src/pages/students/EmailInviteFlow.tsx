@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
 
 import { Alert, Button, Select } from "@/components/ui"
-import { ROLE_LABEL_KEY } from "@/util/rosterRoles"
+import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
 import type { ClassroomRole } from "@/util/teamRoster"
 import type { BulkInviteByEmailResult } from "@/domain/students"
 import type { UploadKind } from "@/pages/students/uploadClassify"

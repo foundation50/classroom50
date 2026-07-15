@@ -1,6 +1,6 @@
 import { Spinner } from "@/components/Spinner"
 
-// Shared pending state for the role-gated surfaces (RequireTeacher, the
+// Shared pending state for the role-gated surfaces (RequireRole, the
 // assignment index redirect, the SubmissionsPage self-guard).
 const RoleResolvingFallback = ({
   className = "min-h-[60vh]",

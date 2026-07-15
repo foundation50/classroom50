@@ -4,7 +4,7 @@ import {
   enrolledCountsByRole,
   hasStudentEnrollment,
   sortRolesByRank,
-} from "./rosterRoles"
+} from "./classroomRoleUI"
 import type {
   ClassroomRole,
   TeamRosterRow,

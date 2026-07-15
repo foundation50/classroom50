@@ -2,7 +2,7 @@
 import { describe, expect, it, vi, beforeEach } from "vitest"
 import { renderHook } from "@testing-library/react"
 
-import type { RoleCounts } from "@/util/rosterRoles"
+import type { RoleCounts } from "@/util/classroomRoleUI"
 import type { UseTeamRosterResult } from "@/hooks/useTeamRoster"
 
 const getStudents = vi.fn()

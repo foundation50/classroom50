@@ -54,7 +54,7 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 
 // Re-run the org setup from Org Settings: re-invokes the idempotent
 // initClassroom50 to re-apply lockdown, rulesets, and repo settings. Owner-gated
-// by the page's <RequireTeacher allow="owner"> (see TeardownSection); shows the
+// by the page's <RequireRole allow="owner"> (see TeardownSection); shows the
 // wizard's badge board. The "repair everything" path complementing the
 // per-concern audit (U5/U6).
 const RerunOrgSetup = ({ org }: { org: string }) => {

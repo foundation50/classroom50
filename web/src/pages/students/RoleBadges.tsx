@@ -5,7 +5,7 @@ import {
   ROLE_BADGE_TONE,
   ROLE_LABEL_KEY,
   sortRolesByRank,
-} from "@/util/rosterRoles"
+} from "@/util/classroomRoleUI"
 import type { ClassroomRole } from "@/util/teamRoster"
 
 // One badge per classroom role a member holds, highest-precedence first

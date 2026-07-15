@@ -22,7 +22,7 @@ import {
   type TeamRosterRowState,
   type ClassroomRole,
 } from "@/util/teamRoster"
-import { enrolledCountsByRole, type RoleCounts } from "@/util/rosterRoles"
+import { enrolledCountsByRole, type RoleCounts } from "@/util/classroomRoleUI"
 import { memberIdentitySets } from "@/util/identity"
 import type { Student } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"

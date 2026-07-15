@@ -18,18 +18,18 @@ import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 //   SETTINGS. Reads the classroom context. Needs a $classroom route.
 // - "owner": org admin only — for ORG-wide settings/setup. Reads the org-role
 //   context. Independent of any classroom team (KTD-4).
-export type RequireRole = "staff" | "instructor" | "owner"
+export type RoleRequirement = "staff" | "instructor" | "owner"
 
 // Gate page content by role. While the role resolves we show a spinner (never
-// flash a 404 at a real teacher), then children or NotFound. Access is
+// flash a 404 at a real staffer), then children or NotFound. Access is
 // GitHub-enforced underneath; this UX guard 404s rather than 403s by design.
 // Default `allow: "staff"` preserves the original behavior.
-const RequireTeacher = ({
+const RequireRole = ({
   children,
   allow = "staff",
 }: {
   children: ReactNode
-  allow?: RequireRole
+  allow?: RoleRequirement
 }) => {
   if (allow === "owner") return <RequireOwner>{children}</RequireOwner>
   if (allow === "instructor")
@@ -153,4 +153,4 @@ const RequireOwner = ({ children }: { children: ReactNode }) => {
   )
 }
 
-export default RequireTeacher
+export default RequireRole

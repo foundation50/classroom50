@@ -5,7 +5,7 @@ import { render, screen, cleanup } from "@testing-library/react"
 // Drive the provider from a mocked useClassroomRole (the fine role) + auth user,
 // so the test controls exactly what the boundary resolves. The provider exposes
 // the fine role + roleResolved; permission verdicts are derived at call sites
-// via can() (covered in capabilities.test.ts + TeacherSidebarMenu.test.tsx).
+// via can() (covered in capabilities.test.ts + StaffSidebarMenu.test.tsx).
 const classroomRoleMock = vi.fn()
 
 vi.mock("@/hooks/useClassroomRole", async (importOriginal) => {

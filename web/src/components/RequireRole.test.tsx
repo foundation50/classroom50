@@ -36,7 +36,7 @@ vi.mock("react-i18next", () => ({
   useTranslation: () => ({ t: (key: string) => key }),
 }))
 
-import RequireTeacher from "./RequireTeacher"
+import RequireRole from "./RequireRole"
 
 const child = <div data-testid="child" />
 
@@ -67,11 +67,11 @@ afterEach(() => {
   paramsMock.mockReset()
 })
 
-describe("RequireTeacher — staff gate on a classroom", () => {
+describe("RequireRole — staff gate on a classroom", () => {
   it("a TA (staff) reaches classroom content", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "ta", actualRole: "ta" }))
-    render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
+    render(<RequireRole allow="staff">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
@@ -80,7 +80,7 @@ describe("RequireTeacher — staff gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "student", actualRole: "student" }),
     )
-    render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
+    render(<RequireRole allow="staff">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
@@ -89,7 +89,7 @@ describe("RequireTeacher — staff gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "unresolved", roleResolved: false }),
     )
-    render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
+    render(<RequireRole allow="staff">{child}</RequireRole>)
     expect(shown()).toBe("spinner")
   })
 
@@ -102,23 +102,23 @@ describe("RequireTeacher — staff gate on a classroom", () => {
         isError: true,
       }),
     )
-    render(<RequireTeacher allow="staff">{child}</RequireTeacher>)
+    render(<RequireRole allow="staff">{child}</RequireRole>)
     expect(shown()).toBe("error")
   })
 })
 
-describe("RequireTeacher — instructor gate on a classroom", () => {
+describe("RequireRole — instructor gate on a classroom", () => {
   it("an instructor reaches classroom settings", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "instructor" }))
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
   it("a TA is 404'd from instructor settings", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "ta" }))
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
@@ -127,7 +127,7 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
     // context resolves them to `student`, so the instructor gate 404s.
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "student" }))
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
@@ -136,7 +136,7 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "unresolved", roleResolved: false }),
     )
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("spinner")
   })
 
@@ -147,7 +147,7 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "instructor", roleResolved: true, isLoading: true }),
     )
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
@@ -156,37 +156,37 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "unresolved", roleResolved: false, isError: true }),
     )
-    render(<RequireTeacher allow="instructor">{child}</RequireTeacher>)
+    render(<RequireRole allow="instructor">{child}</RequireRole>)
     expect(shown()).toBe("error")
   })
 })
 
-describe("RequireTeacher — owner gate on org-level routes", () => {
+describe("RequireRole — owner gate on org-level routes", () => {
   it("an org owner reaches org-wide settings", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
-    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    render(<RequireRole allow="owner">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
   it("a non-instructor-team org owner is STILL an owner org-wide (KTD-4)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
-    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    render(<RequireRole allow="owner">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
   it("a member is 404'd from org-wide settings", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({ githubOrgRole: "member" })
-    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    render(<RequireRole allow="owner">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
   it("holds the spinner while org role is unresolved", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({ githubOrgRole: "unresolved" })
-    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    render(<RequireRole allow="owner">{child}</RequireRole>)
     expect(shown()).toBe("spinner")
   })
 
@@ -197,23 +197,23 @@ describe("RequireTeacher — owner gate on org-level routes", () => {
       isError: true,
       retry: () => {},
     })
-    render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
+    render(<RequireRole allow="owner">{child}</RequireRole>)
     expect(shown()).toBe("error")
   })
 })
 
-describe("RequireTeacher — staff gate on an org-level route (no classroom)", () => {
+describe("RequireRole — staff gate on an org-level route (no classroom)", () => {
   it("uses the org team-based staff signal (Published page)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgStaffMock.mockReturnValue({ isStaff: true, roleResolved: true })
-    render(<RequireTeacher>{child}</RequireTeacher>)
+    render(<RequireRole>{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
   it("404s a non-staff org member (incl. an owner on no staff team)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgStaffMock.mockReturnValue({ isStaff: false, roleResolved: true })
-    render(<RequireTeacher>{child}</RequireTeacher>)
+    render(<RequireRole>{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
@@ -225,7 +225,7 @@ describe("RequireTeacher — staff gate on an org-level route (no classroom)", (
       isError: true,
       refetch: () => {},
     })
-    render(<RequireTeacher>{child}</RequireTeacher>)
+    render(<RequireRole>{child}</RequireRole>)
     expect(shown()).toBe("error")
   })
 })

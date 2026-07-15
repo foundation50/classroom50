@@ -16,12 +16,12 @@ import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
 import { invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
 import { Badge } from "@/components/ui"
-import { ROLE_BADGE_TONE } from "@/util/rosterRoles"
+import { ROLE_BADGE_TONE } from "@/util/classroomRoleUI"
 import { useTranslation } from "react-i18next"
 
 const StudentListContent = ({
@@ -190,9 +190,9 @@ const StudentListPage = () => {
   return (
     <PageShell selected="roster">
       <Breadcrumb endpoint={t("nav.roster")} />
-      <RequireTeacher>
+      <RequireRole>
         <StudentListContent org={org} classroom={classroom} />
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

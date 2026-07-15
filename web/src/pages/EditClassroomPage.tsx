@@ -23,7 +23,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Alert } from "@/components/ui"
 
@@ -153,13 +153,13 @@ const EditClassroomPage = () => {
   return (
     <PageShell selected="settings">
       <Breadcrumb endpoint={t("nav.settings")} />
-      <RequireTeacher allow="instructor">
+      <RequireRole allow="instructor">
         {!org || !classroom ? (
           <MissingParams message={t("classes.missingOrgOrClassroom")} />
         ) : (
           <EditClassroomContent org={org} classroom={classroom} />
         )}
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

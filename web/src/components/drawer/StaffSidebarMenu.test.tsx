@@ -42,7 +42,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 vi.mock("@/assets/github.svg?react", () => ({ default: () => null }))
 vi.mock("@/assets/duck.png", () => ({ default: "" }))
 
-import { TeacherSidebarMenu } from "./index"
+import { StaffSidebarMenu } from "./index"
 
 // Roster is staff-only (instructor|ta); Settings is instructor-only. Both keyed
 // off the resolved fine role via can().
@@ -68,7 +68,7 @@ const hasSkeleton = () => document.querySelector(".skeleton") !== null
 
 const renderMenu = () =>
   render(
-    <TeacherSidebarMenu org="acme" classroom="cs101" selected="assignments" />,
+    <StaffSidebarMenu org="acme" classroom="cs101" selected="assignments" />,
   )
 
 afterEach(() => {
@@ -76,7 +76,7 @@ afterEach(() => {
   classroomCtxMock.mockReset()
 })
 
-describe("TeacherSidebarMenu — RBAC nav affordances via can()", () => {
+describe("StaffSidebarMenu — RBAC nav affordances via can()", () => {
   it("an instructor sees Roster and Settings", () => {
     classroomCtxMock.mockReturnValue(ctx())
     renderMenu()

@@ -19,7 +19,7 @@ import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { Badge, Button, type BadgeTone } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
@@ -449,7 +449,7 @@ const PublishedResourcesPage = () => {
 
   return (
     <PageShell page="classes" selected="published">
-      <RequireTeacher>
+      <RequireRole>
         <PageHeader
           title={t("published.pageHeading")}
           subtitle={
@@ -465,7 +465,7 @@ const PublishedResourcesPage = () => {
           }
         />
         {org && <PublishedResourcesPane org={org} />}
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

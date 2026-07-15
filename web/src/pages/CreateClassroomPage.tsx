@@ -14,7 +14,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import MissingParams from "@/components/MissingParams"
 import { logger } from "@/lib/logger"
-import RequireTeacher from "@/components/RequireTeacher"
+import RequireRole from "@/components/RequireRole"
 import CreateClassroomForm from "./classes/CreateClassroomForm"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -92,7 +92,7 @@ const CreateClassroomPage = () => {
   return (
     <PageShell page="classes" selected="classes">
       <Breadcrumb endpoint={t("documentTitle.newClassroom")} />
-      <RequireTeacher allow="owner">
+      <RequireRole allow="owner">
         <PageHeader title={t("classes.createTitle")} />
         <CreateClassroomForm
           onSubmit={(values) =>
@@ -106,7 +106,7 @@ const CreateClassroomPage = () => {
             })
           }
         />
-      </RequireTeacher>
+      </RequireRole>
     </PageShell>
   )
 }

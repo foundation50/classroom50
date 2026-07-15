@@ -21,8 +21,9 @@ export type GitHubOrgRole = "owner" | "member" | "non-member" | "unresolved"
 // --- 2. Classroom role ------------------------------------------------------
 
 // The sole non-staff classroom role. Named for symmetry with StaffRole so
-// ClassroomRole reads as "student or staff".
-export type StudentRole = "student"
+// ClassroomRole reads as "student or staff". Not exported — it's a building
+// block for ClassroomRole, which is the public type.
+type StudentRole = "student"
 
 // A person's role WITHIN a classroom: student (classroom team) or a StaffRole
 // (instructor/ta staff teams). The single base the other classroom-role shapes

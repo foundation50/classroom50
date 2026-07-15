@@ -22,7 +22,7 @@ const log = logger.scope("orgSettings:TeardownSection")
 
 // Teardown / org reset: deletes ALL repos in the org (mirroring the CLI's
 // `gh teacher teardown`), marker-gated and behind a typed-org-name confirmation.
-// Owner-gated by the page's <RequireTeacher allow="owner"> (RequireOwner renders
+// Owner-gated by the page's <RequireRole allow="owner"> (RequireOwner renders
 // children only for a resolved owner, with its own spinner/retry surface), so no
 // inline owner re-check is needed here.
 const TeardownSection = ({ org }: { org: string }) => {

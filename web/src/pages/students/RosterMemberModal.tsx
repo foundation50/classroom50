@@ -42,7 +42,7 @@ import {
   hasStudentEnrollment,
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
-} from "@/util/rosterRoles"
+} from "@/util/classroomRoleUI"
 import { Badge, Button, Modal, Select } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a

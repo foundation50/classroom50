@@ -46,7 +46,7 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
   hasStudentEnrollment,
-} from "@/util/rosterRoles"
+} from "@/util/classroomRoleUI"
 import {
   filterRosterRows,
   NO_SECTION,
