@@ -149,6 +149,14 @@ export type GitHubTeam = {
   description: string | null
 }
 
+// A team from GET /user/teams (the viewer's own memberships across orgs). Same
+// shape as GitHubTeam plus the required `organization` object, so a cross-org
+// listing can be filtered to a single org. Secret teams the viewer belongs to
+// are included (self-scoped read).
+export type MyTeam = GitHubTeam & {
+  organization: { login: string; id: number }
+}
+
 export type GitHubOrgDetails = {
   login: string
   id: number

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 import {
   resolveClassroomRole,
   resolveOrgRole,
-  resolveOrgStaff,
   isStaffRole,
   applyViewAs,
   roleLabelKey,
@@ -239,52 +238,5 @@ describe("applyViewAs (downgrade-only preview)", () => {
 
   it("a preview equal to or above the actual role is a no-op", () => {
     expect(applyViewAs("ta", "ta")).toBe("ta")
-  })
-})
-
-describe("resolveOrgStaff", () => {
-  it("staff when at least one classroom staff-team probe confirms membership", () => {
-    const v = resolveOrgStaff(["non-member", "member", "non-member"], true)
-    expect(v).toEqual({ isStaff: true, isNonStaff: false, roleResolved: true })
-  })
-
-  it("a confirmed membership wins even while a sibling probe is still in flight", () => {
-    // A real staffer must never be held on a slow sibling read.
-    const v = resolveOrgStaff(["member", "unresolved"], false)
-    expect(v.isStaff).toBe(true)
-    expect(v.roleResolved).toBe(true)
-  })
-
-  it("non-staff only when the class list settled AND every probe is definitively non-member", () => {
-    const v = resolveOrgStaff(["non-member", "non-member"], true)
-    expect(v).toEqual({ isStaff: false, isNonStaff: true, roleResolved: true })
-  })
-
-  it("empty org (no classrooms) with a settled class list is definitively non-staff", () => {
-    // An org owner on no staff team (and no classrooms) is NOT org-staff — the
-    // deliberate behavior change. They recover via ClaimInstructor / owner UI.
-    const v = resolveOrgStaff([], true)
-    expect(v).toEqual({ isStaff: false, isNonStaff: true, roleResolved: true })
-  })
-
-  it("holds unresolved while the classroom list is still loading (no flash of non-staff)", () => {
-    expect(resolveOrgStaff([], false)).toEqual({
-      isStaff: false,
-      isNonStaff: false,
-      roleResolved: false,
-    })
-    // Even with all-definitive probes, an unsettled class list holds.
-    expect(resolveOrgStaff(["non-member"], false).roleResolved).toBe(false)
-  })
-
-  it("holds unresolved on a transient probe error (fail-closed — never demote)", () => {
-    // A 5xx/429/network blip on a staff-team probe reduces to `unresolved`; the
-    // viewer might be a real staffer, so hold rather than render non-staff.
-    const v = resolveOrgStaff(["non-member", "unresolved"], true)
-    expect(v).toEqual({
-      isStaff: false,
-      isNonStaff: false,
-      roleResolved: false,
-    })
   })
 })

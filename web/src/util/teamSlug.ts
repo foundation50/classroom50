@@ -1,5 +1,5 @@
 import { CONFIG_REPO } from "@/util/configRepo"
-import type { StaffRole } from "@/types/classroom"
+import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 
 // Roles a per-classroom team can back. Broader than StaffRole: also the students
 // team, a real team but not a staff role (no `-<role>` suffix, absent from
@@ -25,4 +25,32 @@ export function classroomTeamSlug(
   return role === "student"
     ? `${CONFIG_REPO}-${classroom}`
     : `${CONFIG_REPO}-${classroom}-${role}`
+}
+
+// Inverse of classroomTeamSlug for a STAFF team: parse a team slug back to its
+// { classroom, role } when it is a `classroom50-<classroom>-<instructor|ta>`
+// team, else null. Used to derive an org-level staff signal from the viewer's
+// own team memberships (GET /user/teams) without reading the config repo.
+//
+// A classroom short-name may contain hyphens (e.g. `cs-principles`), so match a
+// known role SUFFIX first, then take the middle as the classroom — never split
+// naively on `-`. Only staff roles are recognized: a bare student slug
+// (`classroom50-<classroom>`, no role suffix) returns null, since the student
+// team is not a staff signal. A non-classroom slug returns null.
+export function parseClassroomTeamSlug(
+  slug: string,
+): { classroom: string; role: StaffRole } | null {
+  const prefix = `${CONFIG_REPO}-`
+  if (!slug.startsWith(prefix)) return null
+  for (const role of STAFF_ROLES) {
+    const suffix = `-${role}`
+    if (slug.endsWith(suffix)) {
+      // Everything between the prefix and the role suffix is the classroom.
+      const classroom = slug.slice(prefix.length, slug.length - suffix.length)
+      // A non-empty classroom is required (guards `classroom50-instructor`,
+      // which has no classroom segment and isn't a real per-classroom team).
+      if (classroom.length > 0) return { classroom, role }
+    }
+  }
+  return null
 }

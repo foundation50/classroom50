@@ -3,31 +3,38 @@ import { describe, expect, it, vi, beforeEach } from "vitest"
 import { renderHook } from "@testing-library/react"
 
 const useQueryMock = vi.fn()
-const getClassesMock = vi.fn()
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery: (arg: unknown) => useQueryMock(arg),
 }))
 vi.mock("@/context/github/GitHubProvider", () => ({
-  useGitHubClient: () => ({
-    // Every probe reads a body with no active state => non-member.
-    request: async () => ({}),
-  }),
+  useGitHubClient: () => ({}),
 }))
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "teacher1" } }),
 }))
-vi.mock("@/hooks/useGetClasses", () => ({
-  default: (org: string | undefined) => getClassesMock(org),
+// myTeamsQuery is a pure options factory; the mock returns a marker the mocked
+// useQuery ignores (it returns whatever useQueryMock is set to).
+vi.mock("@/github-core/queries", () => ({
+  myTeamsQuery: () => ({ queryKey: ["my-teams"] }),
 }))
 
 import { useOrgStaff } from "./useOrgStaff"
-import type { GitHubTeamMembership } from "@/util/roles"
+import type { MyTeam } from "@/github-core/types"
 
-// Aggregate probe-query result stub (the single useQuery the hook runs). `data`
-// is the flat signals array resolveOrgStaff consumes.
-const probe = (over: Record<string, unknown> = {}) => ({
-  data: undefined as GitHubTeamMembership[] | undefined,
+const team = (slug: string, orgLogin = "acme"): MyTeam =>
+  ({
+    id: 1,
+    name: slug,
+    slug,
+    privacy: "secret",
+    description: null,
+    organization: { login: orgLogin, id: 1 },
+  }) as MyTeam
+
+// The single teams query the hook runs.
+const teams = (over: Record<string, unknown> = {}) => ({
+  data: undefined as MyTeam[] | undefined,
   isSuccess: false,
   isError: false,
   fetchStatus: "idle",
@@ -35,84 +42,65 @@ const probe = (over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const classes = (over: Record<string, unknown>) => ({
-  classes: [],
-  isSuccess: false,
-  isLoading: false,
-  isError: false,
-  refetch: () => {},
-  ...over,
-})
-
 beforeEach(() => {
   useQueryMock.mockReset()
-  getClassesMock.mockReset()
 })
 
-describe("useOrgStaff — class-list state gates the verdict", () => {
-  it("holds unresolved while the class list is still loading (no premature non-staff)", () => {
-    // The bug this guards: useGetClasses returns classes=[] while loading, so a
-    // naive classesResolved=true would flash a definitive non-staff.
-    getClassesMock.mockReturnValue(
-      classes({ classes: [], isLoading: true, isSuccess: false }),
+describe("useOrgStaff — team-based org-staff signal", () => {
+  it("is staff when the viewer is on a classroom staff team in this org", () => {
+    useQueryMock.mockReturnValue(
+      teams({ data: [team("classroom50-cs101-instructor")], isSuccess: true }),
     )
-    useQueryMock.mockReturnValue(probe({ fetchStatus: "idle" }))
-    const { result } = renderHook(() => useOrgStaff("acme"))
-    expect(result.current.roleResolved).toBe(false)
-    expect(result.current.isNonStaff).toBe(false)
-    expect(result.current.isStaff).toBe(false)
-    expect(result.current.isLoading).toBe(true)
-  })
-
-  it("surfaces isError (not non-staff) when the class-list read fails", () => {
-    getClassesMock.mockReturnValue(
-      classes({
-        classes: [],
-        isLoading: false,
-        isSuccess: false,
-        isError: true,
-      }),
-    )
-    useQueryMock.mockReturnValue(probe())
-    const { result } = renderHook(() => useOrgStaff("acme"))
-    expect(result.current.roleResolved).toBe(false)
-    expect(result.current.isNonStaff).toBe(false)
-    expect(result.current.isError).toBe(true)
-  })
-
-  it("resolves non-staff for an org with a successfully-loaded empty class list", () => {
-    getClassesMock.mockReturnValue(classes({ classes: [], isSuccess: true }))
-    useQueryMock.mockReturnValue(probe({ data: [], isSuccess: true }))
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current).toMatchObject({
-      isStaff: false,
-      isNonStaff: true,
+      isStaff: true,
+      isNonStaff: false,
       roleResolved: true,
       isError: false,
     })
   })
 
-  it("is staff when a probe confirms membership on a loaded class list", () => {
-    getClassesMock.mockReturnValue(
-      classes({ classes: [{ name: "cs101" }], isSuccess: true }),
-    )
-    // instructor probe = member, ta probe = non-member.
+  it("is non-staff when the viewer is on no staff team (successful empty-ish listing)", () => {
+    // A student: on some non-classroom team + the students team, but no
+    // instructor/ta team. Cleanly non-staff, no 404 (self-scoped read).
     useQueryMock.mockReturnValue(
-      probe({ data: ["member", "non-member"], isSuccess: true }),
+      teams({
+        data: [team("classroom50-cs101"), team("some-other-team")],
+        isSuccess: true,
+      }),
     )
     const { result } = renderHook(() => useOrgStaff("acme"))
-    expect(result.current.isStaff).toBe(true)
-    expect(result.current.roleResolved).toBe(true)
+    expect(result.current).toMatchObject({
+      isStaff: false,
+      isNonStaff: true,
+      roleResolved: true,
+    })
   })
 
-  it("holds unresolved (surfaces isError) when the probe query settles in error", () => {
-    // A transient probe failure exhausts retries -> the aggregate query errors;
-    // the verdict must hold unresolved and offer retry, never demote to non-staff.
-    getClassesMock.mockReturnValue(
-      classes({ classes: [{ name: "cs101" }], isSuccess: true }),
-    )
+  it("ignores a staff team in a DIFFERENT org", () => {
     useQueryMock.mockReturnValue(
-      probe({ data: undefined, isSuccess: false, isError: true }),
+      teams({
+        data: [team("classroom50-cs101-instructor", "other-org")],
+        isSuccess: true,
+      }),
+    )
+    const { result } = renderHook(() => useOrgStaff("acme"))
+    expect(result.current.isStaff).toBe(false)
+    expect(result.current.isNonStaff).toBe(true)
+  })
+
+  it("holds unresolved (loading) while the teams read is fetching", () => {
+    useQueryMock.mockReturnValue(teams({ fetchStatus: "fetching" }))
+    const { result } = renderHook(() => useOrgStaff("acme"))
+    expect(result.current.isLoading).toBe(true)
+    expect(result.current.roleResolved).toBe(false)
+    expect(result.current.isNonStaff).toBe(false)
+  })
+
+  it("holds unresolved + surfaces isError when the teams read settles in error", () => {
+    // Fail-closed: a transient failure must not demote a real staffer.
+    useQueryMock.mockReturnValue(
+      teams({ data: undefined, isSuccess: false, isError: true }),
     )
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current.roleResolved).toBe(false)
@@ -120,76 +108,18 @@ describe("useOrgStaff — class-list state gates the verdict", () => {
     expect(result.current.isError).toBe(true)
   })
 
-  it("is loading (holds unresolved) while the probe query is fetching", () => {
-    getClassesMock.mockReturnValue(
-      classes({ classes: [{ name: "cs101" }], isSuccess: true }),
-    )
-    useQueryMock.mockReturnValue(probe({ fetchStatus: "fetching" }))
-    const { result } = renderHook(() => useOrgStaff("acme"))
-    expect(result.current.isLoading).toBe(true)
-    expect(result.current.roleResolved).toBe(false)
-    expect(result.current.isNonStaff).toBe(false)
-  })
-
-  it("refetch re-runs both the class list and the probe query", () => {
-    const refetchClasses = vi.fn()
-    const refetchProbes = vi.fn()
-    getClassesMock.mockReturnValue(
-      classes({
-        classes: [{ name: "cs101" }],
-        isSuccess: true,
-        refetch: refetchClasses,
-      }),
-    )
-    useQueryMock.mockReturnValue(
-      probe({
-        data: ["non-member", "non-member"],
-        isSuccess: true,
-        refetch: refetchProbes,
-      }),
-    )
-    const { result } = renderHook(() => useOrgStaff("acme"))
-    result.current.refetch()
-    expect(refetchClasses).toHaveBeenCalledTimes(1)
-    expect(refetchProbes).toHaveBeenCalledTimes(1)
-  })
-
-  it("settles (not loading) with no org/user known, without resolving a verdict", () => {
-    // An org-less route (no $org) or a not-yet-known viewer is disabled, not
-    // loading — otherwise the footer role label would shimmer forever on the
-    // org list. It just never resolves a verdict (roleResolved stays false).
-    getClassesMock.mockReturnValue(classes({ classes: [], isSuccess: true }))
-    useQueryMock.mockReturnValue(probe())
+  it("holds (unresolved, loading) with no org/user known", () => {
+    useQueryMock.mockReturnValue(teams({ fetchStatus: "fetching" }))
     const { result } = renderHook(() => useOrgStaff(undefined))
     expect(result.current.roleResolved).toBe(false)
-    expect(result.current.isLoading).toBe(false)
-    expect(result.current.isNonStaff).toBe(false)
-    expect(result.current.isStaff).toBe(false)
+    expect(result.current.isLoading).toBe(true)
   })
 
-  it("bounds the probe fan-out through mapWithConcurrency (queryFn)", async () => {
-    // Guard the fix: the probe queryFn must run through the concurrency limiter
-    // (not fire all 2N GETs at once). We capture the queryFn passed to useQuery
-    // and assert it resolves a signal per (classroom x staff role) slug.
-    let captured: (() => Promise<GitHubTeamMembership[]>) | undefined
-    getClassesMock.mockReturnValue(
-      classes({
-        classes: [{ name: "cs101" }, { name: "cs102" }],
-        isSuccess: true,
-      }),
-    )
-    useQueryMock.mockImplementation(
-      (opts: { queryFn: () => Promise<GitHubTeamMembership[]> }) => {
-        captured = opts.queryFn
-        return probe()
-      },
-    )
-    renderHook(() => useOrgStaff("acme"))
-    expect(captured).toBeTypeOf("function")
-    // 2 classrooms x 2 staff roles = 4 probes; the client mock returns {} so each
-    // probe reads state !== "active" => non-member.
-    const signals = await captured!()
-    expect(signals).toHaveLength(4)
-    expect(signals.every((s) => s === "non-member")).toBe(true)
+  it("refetch re-runs the teams query", () => {
+    const refetch = vi.fn()
+    useQueryMock.mockReturnValue(teams({ data: [], isSuccess: true, refetch }))
+    const { result } = renderHook(() => useOrgStaff("acme"))
+    result.current.refetch()
+    expect(refetch).toHaveBeenCalledTimes(1)
   })
 })

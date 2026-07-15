@@ -13,6 +13,7 @@ import type {
   GitHubRelease,
   GitHubRepo,
   GitHubTeam,
+  MyTeam,
   GitHubTreeResponse,
   GitHubUser,
   GitHubWorkflowRun,
@@ -73,6 +74,8 @@ export const githubKeys = {
     [...githubKeys.all, "team-failed-invitations", org, teamSlug] as const,
 
   orgTeams: (org: string) => [...githubKeys.all, "org-teams", org] as const,
+
+  myTeams: () => [...githubKeys.all, "my-teams"] as const,
 
   repo: (owner: string, repo: string) =>
     [...githubKeys.all, "repo", owner, repo] as const,
@@ -1285,6 +1288,30 @@ export function orgTeamsQuery(client: GitHubClient, org: string) {
     queryFn: () => listOrgTeams(client, org),
     enabled: Boolean(org),
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+// The teams the AUTHENTICATED viewer belongs to, across all orgs. Self-scoped
+// (needs only read:org), so any member — including a student on no staff team —
+// can call it, and it INCLUDES secret teams the viewer is a member of. Unlike
+// listOrgTeams (which 404s -> [] for a non-owner who can't list an org's teams),
+// this always returns the viewer's own memberships, so a caller can derive an
+// org-level role signal without reading the config repo. Not tolerated to [] on
+// error: the caller decides fail-closed vs. definitive-empty from the query
+// state (a transient failure must hold, not read as "no teams").
+export async function listMyTeams(client: GitHubClient): Promise<MyTeam[]> {
+  return paginateAll<MyTeam>(
+    client,
+    (page) => `/user/teams?per_page=100&page=${page}`,
+  )
+}
+
+export function myTeamsQuery(client: GitHubClient) {
+  return queryOptions({
+    queryKey: githubKeys.myTeams(),
+    queryFn: () => listMyTeams(client),
+    staleTime: 5 * 60 * 1000,
+    retry: retryTransientGitHubError,
   })
 }
 

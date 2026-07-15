@@ -139,36 +139,15 @@ export function membershipFromQuery(
 
 // The viewer's org-level staff standing for surfaces with NO classroom in scope
 // (Published page, "My Classes" nav, ClassesPage): staff = confirmed member of
-// >=1 classroom staff team. Fail-closed tri-state (mirrors resolveClassroomRole)
-// so a transient blip never demotes a real staffer. Deliberately ignores
-// org-owner status: an owner on no staff team is non-staff and recovers via
-// ClaimInstructor (owner-scoped UI stays gated on can("manageOrg") separately).
+// >=1 classroom staff team in the org, derived from the viewer's own team
+// memberships (see useOrgStaff). Fail-closed tri-state: a transient/in-flight
+// read holds `unresolved` rather than demoting a real staffer. Deliberately
+// ignores org-owner status: an owner on no staff team is non-staff here and
+// recovers via ClaimInstructor (owner-scoped UI stays gated on can("manageOrg")).
 export type OrgStaffVerdict = {
   isStaff: boolean
   // Definitively-resolved AND not staff — the org-less "treat as a plain member/
   // student" signal the footer + ClassesPage read. Never true while unresolved.
   isNonStaff: boolean
   roleResolved: boolean
-}
-
-// Reduce the flat staff-team membership signals (all classrooms x instructor/ta)
-// to the org-level verdict. Empty when the org has no classrooms or the list has
-// not loaded — resolved as non-staff only once the caller confirms the list
-// settled (classesResolved), so an in-flight list holds rather than flashing.
-export function resolveOrgStaff(
-  signals: GitHubTeamMembership[],
-  classesResolved: boolean,
-): OrgStaffVerdict {
-  // A confirmed membership is definitive and wins immediately, even if other
-  // probes are still in flight — a real staffer is never held on a slow sibling.
-  if (signals.some((s) => s === "member")) {
-    return { isStaff: true, isNonStaff: false, roleResolved: true }
-  }
-  // No confirmed staff membership. Hold if the class list is still resolving or
-  // any probe is non-definitive (transient/in-flight) — fail-closed, don't demote.
-  if (!classesResolved || signals.some((s) => s === "unresolved")) {
-    return { isStaff: false, isNonStaff: false, roleResolved: false }
-  }
-  // Class list settled and every probe is a definitive non-member: not staff.
-  return { isStaff: false, isNonStaff: true, roleResolved: true }
 }
