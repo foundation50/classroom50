@@ -2,7 +2,7 @@ import { useCallback, useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/util/capabilities"
 import {
   githubKeys,
@@ -103,12 +103,12 @@ export function useTeamRoster(
   students: Student[],
 ): UseTeamRosterResult {
   const client = useGitHubClient()
-  const { orgRole } = useOrgRole()
+  const { githubOrgRole } = useGitHubOrgRole()
   // Team invitations are owner-only (like org invitations). Gate the reads on
   // the manageOrg capability so a non-owner doesn't fire a guaranteed 403. This
   // gate stays IN the hook: a non-owner staffer (TA) legitimately uses the hook
   // for the ungated member reads, so it can't move to a caller/owner guard.
-  const isOwner = can("manageOrg", { orgRole })
+  const isOwner = can("manageOrg", { githubOrgRole })
 
   const { data: classroomJson } = useGetClassroom(org, classroom)
   const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)

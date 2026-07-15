@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { renderHook } from "@testing-library/react"
 
 const orgRoleMock = vi.fn()
-vi.mock("@/context/orgRole/OrgRoleProvider", () => ({
-  useOrgRole: () => orgRoleMock(),
+vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
+  useGitHubOrgRole: () => orgRoleMock(),
 }))
 
 import { useIsOrgOwner } from "./useIsOrgOwner"
@@ -12,10 +12,14 @@ import { useIsOrgOwner } from "./useIsOrgOwner"
 const retry = vi.fn()
 
 const withOrgRole = (
-  value: Partial<{ orgRole: string; isError: boolean; retry: () => void }>,
+  value: Partial<{
+    githubOrgRole: string
+    isError: boolean
+    retry: () => void
+  }>,
 ) => {
   orgRoleMock.mockReturnValue({
-    orgRole: "unresolved",
+    githubOrgRole: "unresolved",
     isError: false,
     retry,
     ...value,
@@ -30,7 +34,7 @@ afterEach(() => {
 
 describe("useIsOrgOwner", () => {
   it("owner => isOwner, not pending, not error", () => {
-    expect(withOrgRole({ orgRole: "owner" })).toEqual({
+    expect(withOrgRole({ githubOrgRole: "owner" })).toEqual({
       isOwner: true,
       isPending: false,
       isError: false,
@@ -39,13 +43,13 @@ describe("useIsOrgOwner", () => {
   })
 
   it("member => not owner, not pending", () => {
-    const r = withOrgRole({ orgRole: "member" })
+    const r = withOrgRole({ githubOrgRole: "member" })
     expect(r.isOwner).toBe(false)
     expect(r.isPending).toBe(false)
   })
 
   it("unresolved (in flight) => pending, not owner, not error", () => {
-    expect(withOrgRole({ orgRole: "unresolved" })).toEqual({
+    expect(withOrgRole({ githubOrgRole: "unresolved" })).toEqual({
       isOwner: false,
       isPending: true,
       isError: false,
@@ -54,7 +58,7 @@ describe("useIsOrgOwner", () => {
   })
 
   it("unresolved + isError (settled) => error surface, not pending, retry passthrough", () => {
-    const r = withOrgRole({ orgRole: "unresolved", isError: true })
+    const r = withOrgRole({ githubOrgRole: "unresolved", isError: true })
     expect(r.isOwner).toBe(false)
     expect(r.isPending).toBe(false)
     expect(r.isError).toBe(true)

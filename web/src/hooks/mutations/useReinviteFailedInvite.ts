@@ -3,7 +3,7 @@ import { inviteRosterStudents, bulkInviteByEmail } from "@/domain/students"
 import { cancelOrgInvitation } from "@/github-core/mutations"
 import { invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { roleForOrgRole } from "@/util/teamRoster"
+import { roleForGitHubOrgRole } from "@/util/teamRoster"
 import type { GitHubOrgInvitation } from "@/github-core/types"
 
 // The invite mutations bucket a rate-limited/failed target rather than throwing,
@@ -51,7 +51,7 @@ export function useReinviteFailedInvite(
     mutationFn: async (inv: GitHubOrgInvitation) => {
       const who = inv.login || inv.email || String(inv.id)
       await cancelOrgInvitation(client, { org, invitationId: inv.id })
-      const role = roleForOrgRole(inv.role)
+      const role = roleForGitHubOrgRole(inv.role)
       const sent = {
         rateLimited: messages.rateLimited(who),
         notSent: messages.notSent(who),

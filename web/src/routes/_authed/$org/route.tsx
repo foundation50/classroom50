@@ -9,7 +9,10 @@ import {
 import { Spinner } from "@/components/Spinner"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useOrgClassroom50Status } from "@/hooks/useOrgClassroom50Status"
-import { OrgRoleProvider, useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import {
+  GitHubOrgRoleProvider,
+  useGitHubOrgRole,
+} from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/util/capabilities"
 
 export const Route = createFileRoute("/_authed/$org")({
@@ -23,9 +26,9 @@ export const Route = createFileRoute("/_authed/$org")({
 function OrgLayout() {
   const { org } = useParams({ from: "/_authed/$org" })
   return (
-    <OrgRoleProvider org={org}>
+    <GitHubOrgRoleProvider org={org}>
       <OrgLayoutInner />
-    </OrgRoleProvider>
+    </GitHubOrgRoleProvider>
   )
 }
 
@@ -42,8 +45,8 @@ function OrgLayoutInner() {
   const { isLoading: loadingMembership } = useGetOwnOrgMembership(org)
   // Gate on the org-role capability (provider mounted by OrgLayout) rather than
   // re-deriving the admin literal from membership.
-  const { orgRole } = useOrgRole()
-  const isAdmin = can("manageOrg", { orgRole })
+  const { githubOrgRole } = useGitHubOrgRole()
+  const isAdmin = can("manageOrg", { githubOrgRole })
 
   const { data: repoStatus, isLoading: loadingRepo } =
     useOrgClassroom50Status(org)

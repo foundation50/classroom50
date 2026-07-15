@@ -36,8 +36,8 @@ import {
   useClassroomRoleContext,
   useClassroomRoleContextOptional,
 } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
-import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/util/capabilities"
 import { orgFooterRoleLabel } from "./footerRoleLabel"
 import { roleLabelKey, isStaffRole, type ViewAsRole } from "@/util/resolveRole"
@@ -1039,8 +1039,8 @@ export const MyClasses = ({ settings = false, selected = "" }) => {
   // owner on no staff team deliberately loses the shortcut clutter but keeps the
   // routes reachable (and regains the nav by claiming instructor / joining a
   // staff team). Team membership is the source of truth for org-staff chrome.
-  const { orgRole } = useOrgRole()
-  const isOwner = can("manageOrg", { orgRole })
+  const { githubOrgRole } = useGitHubOrgRole()
+  const isOwner = can("manageOrg", { githubOrgRole })
   const onSettings = settings || selected === "settings"
   const onPublished = selected === "published"
   const onMembers = selected === "members"

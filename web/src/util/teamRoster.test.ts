@@ -2,8 +2,8 @@ import { describe, expect, it } from "vitest"
 import {
   buildTeamRoster,
   countByState,
-  orgRoleForRole,
-  roleForOrgRole,
+  githubOrgRoleForRole,
+  roleForGitHubOrgRole,
   rowToStudent,
   teamMembersMissingFromCsv,
   rowsNeedingBackfill,
@@ -642,23 +642,25 @@ describe("buildTeamRoster — CSV-only rows do not render (team-driven)", () => 
   })
 })
 
-describe("orgRoleForRole / roleForOrgRole — classroom<->org role mapping", () => {
+describe("githubOrgRoleForRole / roleForGitHubOrgRole — classroom<->org role mapping", () => {
   it("maps instructor to org OWNER (admin), student/ta to direct_member", () => {
-    expect(orgRoleForRole("instructor")).toBe("admin")
-    expect(orgRoleForRole("ta")).toBe("direct_member")
-    expect(orgRoleForRole("student")).toBe("direct_member")
+    expect(githubOrgRoleForRole("instructor")).toBe("admin")
+    expect(githubOrgRoleForRole("ta")).toBe("direct_member")
+    expect(githubOrgRoleForRole("student")).toBe("direct_member")
   })
 
   it("maps admin back to instructor, everything else to student", () => {
-    expect(roleForOrgRole("admin")).toBe("instructor")
-    expect(roleForOrgRole("direct_member")).toBe("student")
+    expect(roleForGitHubOrgRole("admin")).toBe("instructor")
+    expect(roleForGitHubOrgRole("direct_member")).toBe("student")
     // An unrecognized/absent org role is treated as a plain student, never a
     // silent owner grant.
-    expect(roleForOrgRole("")).toBe("student")
-    expect(roleForOrgRole("member")).toBe("student")
+    expect(roleForGitHubOrgRole("")).toBe("student")
+    expect(roleForGitHubOrgRole("member")).toBe("student")
   })
 
   it("round-trips instructor (the security-sensitive owner grant)", () => {
-    expect(roleForOrgRole(orgRoleForRole("instructor"))).toBe("instructor")
+    expect(roleForGitHubOrgRole(githubOrgRoleForRole("instructor"))).toBe(
+      "instructor",
+    )
   })
 })

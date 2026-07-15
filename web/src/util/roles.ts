@@ -7,7 +7,7 @@ import type { StaffRole } from "@/types/classroom"
 // Every union derives from the one contract-frozen literal StaffRole (in
 // types/classroom.ts, mirroring the persisted `teams` schema), so adding a role
 // starts there. The admin<->owner correspondence lives only here
-// (orgRoleForRole / roleForOrgRole).
+// (githubOrgRoleForRole / roleForGitHubOrgRole).
 
 // --- 1. GitHub org standing -------------------------------------------------
 
@@ -69,7 +69,9 @@ export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 // WRITE: the GitHub org membership role an invite/role-change carries for a
 // classroom role. An instructor becomes an org OWNER (wire "admin"); student/ta
 // are plain members ("direct_member").
-export function orgRoleForRole(role: ClassroomRole): "admin" | "direct_member" {
+export function githubOrgRoleForRole(
+  role: ClassroomRole,
+): "admin" | "direct_member" {
   return role === "instructor" ? "admin" : "direct_member"
 }
 
@@ -77,6 +79,6 @@ export function orgRoleForRole(role: ClassroomRole): "admin" | "direct_member" {
 // org role. "admin" grants org OWNER, i.e. an instructor; anything else
 // re-invites as a plain student (org role alone can't distinguish TA from
 // student, and student is the safe default a re-invite lands on).
-export function roleForOrgRole(orgRole: string): ClassroomRole {
-  return orgRole === "admin" ? "instructor" : "student"
+export function roleForGitHubOrgRole(githubOrgRole: string): ClassroomRole {
+  return githubOrgRole === "admin" ? "instructor" : "student"
 }

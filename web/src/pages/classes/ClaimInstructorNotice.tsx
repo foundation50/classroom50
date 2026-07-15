@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next"
 import { Loader2, ShieldPlus } from "lucide-react"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/util/capabilities"
 import { useClaimInstructor } from "@/hooks/mutations/useClaimInstructor"
@@ -26,7 +26,7 @@ export function ClaimInstructorNotice({
 }) {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const { orgRole } = useOrgRole()
+  const { githubOrgRole } = useGitHubOrgRole()
   const { actualRole } = useClassroomRoleContext()
 
   const claimMutation = useClaimInstructor(org, classroom, {
@@ -58,7 +58,7 @@ export function ClaimInstructorNotice({
   // Only an org owner who currently resolves to `student` here needs repair. A
   // TA/instructor of this classroom, or a non-owner, never sees it. `unresolved`
   // holds the affordance back (fail-closed — don't offer it mid-resolution).
-  if (!can("claimInstructor", { orgRole, classroomRole: actualRole }))
+  if (!can("claimInstructor", { githubOrgRole, classroomRole: actualRole }))
     return null
 
   return (

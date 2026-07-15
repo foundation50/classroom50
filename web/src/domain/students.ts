@@ -61,7 +61,7 @@ import {
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import {
   ROLE_RANK,
-  orgRoleForRole,
+  githubOrgRoleForRole,
   type ClassroomRole,
 } from "@/util/teamRoster"
 import { classroomTeamSlug } from "@/util/teamSlug"
@@ -1567,7 +1567,7 @@ export async function inviteRosterStudents(
       username,
       inviteeId,
       teamIds: teamId ? [teamId] : undefined,
-      role: orgRoleForRole(role),
+      role: githubOrgRoleForRole(role),
     })
     if (result.state === "invited") return { username, role }
     return {
@@ -1782,7 +1782,7 @@ export async function bulkInviteByEmail(
       org,
       email: target.email,
       team_ids: teamId ? [teamId] : undefined,
-      role: orgRoleForRole(target.role),
+      role: githubOrgRoleForRole(target.role),
     })
   }
 

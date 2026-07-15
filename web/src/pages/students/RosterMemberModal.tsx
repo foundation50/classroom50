@@ -32,7 +32,7 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
-  orgRoleForRole,
+  githubOrgRoleForRole,
   rowToStudent,
   sortRolesByRank,
   type ClassroomRole,
@@ -240,7 +240,7 @@ const RosterMemberModal = ({
   const roleChanged = selectedRole !== currentRole
   // Single-sourced with the write mapping: a role grants org owner iff its
   // invite carries the "admin" org role (currently only instructor).
-  const roleGrantsOwner = orgRoleForRole(selectedRole) === "admin"
+  const roleGrantsOwner = githubOrgRoleForRole(selectedRole) === "admin"
   const canApplyRole = roleChanged && (!roleGrantsOwner || roleOwnerConfirmed)
 
   const handleAssignRole = async () => {
@@ -355,7 +355,7 @@ const RosterMemberModal = ({
         teamIds: teamId ? [teamId] : undefined,
         // Re-issue with the same org role as the original invite, so a resend
         // never downgrades a pending instructor from org OWNER.
-        role: orgRoleForRole(role),
+        role: githubOrgRoleForRole(role),
       })
       onResent(row.key)
       onClose()

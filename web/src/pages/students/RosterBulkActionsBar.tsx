@@ -17,7 +17,7 @@ import {
 } from "@/domain/roster/bulkUnenrollRoster"
 import { resolveTeamIdForRoleRead } from "@/domain/students"
 import { parseGitHubId } from "@/util/students"
-import { orgRoleForRole, sortRolesByRank } from "@/util/teamRoster"
+import { githubOrgRoleForRole, sortRolesByRank } from "@/util/teamRoster"
 import {
   BulkResultSection,
   type BulkPhase,
@@ -269,7 +269,7 @@ const RosterBulkActionsBar = ({
           invitationId: row.invitation_id,
           teamIds: teamId ? [teamId] : undefined,
           // Preserve the original invite's org role (instructor -> org OWNER).
-          role: orgRoleForRole(role),
+          role: githubOrgRoleForRole(role),
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })

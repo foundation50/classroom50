@@ -20,7 +20,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubRepo } from "@/github-core/types"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/util/capabilities"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
@@ -313,14 +313,14 @@ const ClassesPage = () => {
   } = useOrgStaff(org)
   const { data: membership, isLoading: loadingMembership } =
     useGetOwnOrgMembership(org)
-  const { orgRole } = useOrgRole()
+  const { githubOrgRole } = useGitHubOrgRole()
 
   const isMember = membership?.state === "active"
   // The org preflight (service token + policy audit) is an OWNER concern: a
   // non-owner can't read the service-token secret and would see a false
   // "failed" alert. Gate on the org-role capability, not the broad teacher
   // signal.
-  const isOwner = can("manageOrg", { orgRole })
+  const isOwner = can("manageOrg", { githubOrgRole })
 
   if (!org) {
     return <MissingParams message={t("classes.missingOrg")} />

@@ -9,7 +9,7 @@ import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card, RouterButton } from "@/components/ui"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { useIsOrgOwner } from "@/context/orgRole/useIsOrgOwner"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useState } from "react"
 import {

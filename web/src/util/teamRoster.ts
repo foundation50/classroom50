@@ -6,8 +6,8 @@ import {
   type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
-  orgRoleForRole,
-  roleForOrgRole,
+  githubOrgRoleForRole,
+  roleForGitHubOrgRole,
 } from "@/util/roles"
 
 // Role vocabulary is single-sourced in util/roles. Re-exported here because the
@@ -17,8 +17,8 @@ export {
   type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
-  orgRoleForRole,
-  roleForOrgRole,
+  githubOrgRoleForRole,
+  roleForGitHubOrgRole,
 }
 
 // Team-driven roster: the classroom GitHub team is the source of truth for

@@ -21,13 +21,15 @@ const classroomRoles: ResolvedRole[] = [
 
 describe("can — org capabilities", () => {
   it("manageOrg: only an org owner", () => {
-    expect(can("manageOrg", { orgRole: "owner" })).toBe(true)
-    expect(can("manageOrg", { orgRole: "member" })).toBe(false)
-    expect(can("manageOrg", { orgRole: "non-member" })).toBe(false)
-    expect(can("manageOrg", { orgRole: "unresolved" })).toBe(false)
+    expect(can("manageOrg", { githubOrgRole: "owner" })).toBe(true)
+    expect(can("manageOrg", { githubOrgRole: "member" })).toBe(false)
+    expect(can("manageOrg", { githubOrgRole: "non-member" })).toBe(false)
+    expect(can("manageOrg", { githubOrgRole: "unresolved" })).toBe(false)
     // Classroom role is irrelevant to org capabilities.
     for (const classroomRole of classroomRoles) {
-      expect(can("manageOrg", { orgRole: "member", classroomRole })).toBe(false)
+      expect(can("manageOrg", { githubOrgRole: "member", classroomRole })).toBe(
+        false,
+      )
     }
   })
 
@@ -81,35 +83,47 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
 describe("can — claimInstructor (KTD-4 self-repair)", () => {
   it("only an org owner who currently resolves to student in the classroom", () => {
     expect(
-      can("claimInstructor", { orgRole: "owner", classroomRole: "student" }),
+      can("claimInstructor", {
+        githubOrgRole: "owner",
+        classroomRole: "student",
+      }),
     ).toBe(true)
   })
 
   it("KTD-4: an org owner is NOT auto-instructor — but an owner already on the instructor team never sees the affordance", () => {
     expect(
-      can("claimInstructor", { orgRole: "owner", classroomRole: "instructor" }),
+      can("claimInstructor", {
+        githubOrgRole: "owner",
+        classroomRole: "instructor",
+      }),
     ).toBe(false)
     expect(
-      can("claimInstructor", { orgRole: "owner", classroomRole: "ta" }),
+      can("claimInstructor", { githubOrgRole: "owner", classroomRole: "ta" }),
     ).toBe(false)
   })
 
   it("never offered to a non-owner or mid-resolution", () => {
     expect(
-      can("claimInstructor", { orgRole: "member", classroomRole: "student" }),
-    ).toBe(false)
-    expect(
       can("claimInstructor", {
-        orgRole: "non-member",
+        githubOrgRole: "member",
         classroomRole: "student",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", { orgRole: "owner", classroomRole: "unresolved" }),
+      can("claimInstructor", {
+        githubOrgRole: "non-member",
+        classroomRole: "student",
+      }),
     ).toBe(false)
     expect(
       can("claimInstructor", {
-        orgRole: "unresolved",
+        githubOrgRole: "owner",
+        classroomRole: "unresolved",
+      }),
+    ).toBe(false)
+    expect(
+      can("claimInstructor", {
+        githubOrgRole: "unresolved",
         classroomRole: "student",
       }),
     ).toBe(false)
@@ -130,7 +144,10 @@ describe("deny-by-default coverage across the whole matrix", () => {
     for (const cap of caps) {
       for (const orgRole of orgRoles) {
         for (const classroomRole of classroomRoles) {
-          const input: CapabilityInput = { orgRole, classroomRole }
+          const input: CapabilityInput = {
+            githubOrgRole: orgRole,
+            classroomRole,
+          }
           expect(typeof can(cap, input)).toBe("boolean")
         }
       }

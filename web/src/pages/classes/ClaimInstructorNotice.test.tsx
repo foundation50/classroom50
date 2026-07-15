@@ -17,8 +17,8 @@ const ensureTeamMock = vi.fn()
 const grantWriteMock = vi.fn()
 const addUserMock = vi.fn()
 
-vi.mock("@/context/orgRole/OrgRoleProvider", () => ({
-  useOrgRole: () => orgRoleMock(),
+vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
+  useGitHubOrgRole: () => orgRoleMock(),
 }))
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
   useClassroomRoleContext: () => classroomCtxMock(),
@@ -61,28 +61,28 @@ const action = "classes.claimInstructor.action"
 
 describe("ClaimInstructorNotice visibility", () => {
   it("shows for an org owner resolving to student in the classroom", () => {
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     expect(screen.queryByText(action)).toBeTruthy()
   })
 
   it("hidden for an owner who is already an instructor", () => {
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "instructor" })
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     expect(screen.queryByText(action)).toBeNull()
   })
 
   it("hidden for a non-owner (plain student)", () => {
-    orgRoleMock.mockReturnValue({ orgRole: "member" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "member" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     expect(screen.queryByText(action)).toBeNull()
   })
 
   it("hidden while the role is unresolved (fail-closed)", () => {
-    orgRoleMock.mockReturnValue({ orgRole: "unresolved" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "unresolved" })
     classroomCtxMock.mockReturnValue({ actualRole: "unresolved" })
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     expect(screen.queryByText(action)).toBeNull()
@@ -91,7 +91,7 @@ describe("ClaimInstructorNotice visibility", () => {
 
 describe("ClaimInstructorNotice self-add", () => {
   it("ensures the team, grants write, and adds the viewer as maintainer", async () => {
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
     ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-instructor" })
     grantWriteMock.mockResolvedValue(undefined)
@@ -121,7 +121,7 @@ describe("ClaimInstructorNotice self-add", () => {
   })
 
   it("surfaces an error toast when the add fails", async () => {
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
     ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-instructor" })
     grantWriteMock.mockResolvedValue(undefined)

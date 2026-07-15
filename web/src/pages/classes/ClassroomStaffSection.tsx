@@ -19,7 +19,7 @@ import {
   cancelOrgInvitation,
 } from "@/github-core/mutations"
 import { resolveTeamIdForRoleRead } from "@/domain/students"
-import { orgRoleForRole } from "@/util/teamRoster"
+import { githubOrgRoleForRole } from "@/util/teamRoster"
 import {
   useAddStaffMember,
   syncRosterAfterStaffChange,
@@ -442,7 +442,7 @@ const PendingStaffRow = ({
         invitationId: invite.id,
         teamIds: teamId ? [teamId] : undefined,
         // Preserve the original org role: an instructor invite is org OWNER.
-        role: orgRoleForRole(role),
+        role: githubOrgRoleForRole(role),
       })
     },
     onSuccess: () => {

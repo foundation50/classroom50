@@ -67,9 +67,9 @@ vi.mock("@/hooks/useGetClassroom", () => ({
 // Ownership gates the (now team-scoped) invitation reads. Default owner so the
 // student pending/failed reads fire; a test flips to "member" for the
 // non-owner pendingHidden path.
-let orgRole = "owner"
-vi.mock("@/context/orgRole/OrgRoleProvider", () => ({
-  useOrgRole: () => ({ orgRole, isError: false, retry: () => {} }),
+let githubOrgRole = "owner"
+vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
+  useGitHubOrgRole: () => ({ githubOrgRole, isError: false, retry: () => {} }),
 }))
 
 // Imported AFTER the mocks so the hook picks up the mocked dependencies.
@@ -87,7 +87,7 @@ const wrapper = ({ children }: PropsWithChildren) => {
 
 describe("useTeamRoster — staff-team failure surfacing and recovery", () => {
   beforeEach(() => {
-    orgRole = "owner"
+    githubOrgRole = "owner"
     taMembersShouldFail = true
     studentInvitesShouldFail = false
     request.mockClear()
@@ -122,7 +122,7 @@ describe("useTeamRoster — staff-team failure surfacing and recovery", () => {
 // non-owner's definitive not-owner state is `pendingHidden`, not an error.
 describe("useTeamRoster — invitations transient failure surfacing", () => {
   beforeEach(() => {
-    orgRole = "owner"
+    githubOrgRole = "owner"
     taMembersShouldFail = false
     studentInvitesShouldFail = false
     studentFailedInvitesShouldFail = false
@@ -148,7 +148,7 @@ describe("useTeamRoster — invitations transient failure surfacing", () => {
   })
 
   it("does NOT treat a non-owner as an error (pendingHidden, no invite reads)", async () => {
-    orgRole = "member"
+    githubOrgRole = "member"
     const { result } = renderHook(() => useTeamRoster("acme", "cs101", []), {
       wrapper,
     })
@@ -173,7 +173,7 @@ describe("useTeamRoster — invitations transient failure surfacing", () => {
 // slug that returns it.
 describe("useTeamRoster — pending scoped to the classroom team (#236)", () => {
   beforeEach(() => {
-    orgRole = "owner"
+    githubOrgRole = "owner"
     taMembersShouldFail = false
     studentInvitesShouldFail = false
     studentFailedInvitesShouldFail = false

@@ -10,7 +10,10 @@ vi.mock("@/hooks/useGetOwnOrgMembership", () => ({
   default: (org: string | undefined) => membershipMock(org),
 }))
 
-import { OrgRoleProvider, useOrgRole } from "./OrgRoleProvider"
+import {
+  GitHubOrgRoleProvider,
+  useGitHubOrgRole,
+} from "./GitHubOrgRoleProvider"
 
 const apiError = (status: number) =>
   new GitHubAPIError({
@@ -29,10 +32,10 @@ const apiError = (status: number) =>
   })
 
 const Probe = () => {
-  const { orgRole, isError } = useOrgRole()
+  const { githubOrgRole, isError } = useGitHubOrgRole()
   return (
     <div>
-      <div data-testid="role">{orgRole}</div>
+      <div data-testid="role">{githubOrgRole}</div>
       <div data-testid="error">{String(isError)}</div>
     </div>
   )
@@ -56,9 +59,9 @@ const renderWithMembership = (
     ...membership,
   })
   render(
-    <OrgRoleProvider org="acme">
+    <GitHubOrgRoleProvider org="acme">
       <Probe />
-    </OrgRoleProvider>,
+    </GitHubOrgRoleProvider>,
   )
   return screen.getByTestId("role").textContent
 }
@@ -68,7 +71,7 @@ afterEach(() => {
   membershipMock.mockReset()
 })
 
-describe("OrgRoleProvider", () => {
+describe("GitHubOrgRoleProvider", () => {
   it("owner for an active admin", () => {
     expect(
       renderWithMembership({
@@ -114,7 +117,7 @@ describe("OrgRoleProvider", () => {
   })
 })
 
-describe("useOrgRole off-route default", () => {
+describe("useGitHubOrgRole off-route default", () => {
   it("returns unresolved when no provider is mounted (fail-closed)", () => {
     render(<Probe />)
     expect(screen.getByTestId("role").textContent).toBe("unresolved")

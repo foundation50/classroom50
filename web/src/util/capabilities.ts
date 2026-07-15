@@ -17,11 +17,12 @@ export type Capability =
   | "claimInstructor" // org owner who currently resolves to student here
 
 // The resolved signals a capability decision draws on. All optional: a
-// classroom-scoped capability doesn't need `orgRole`, an org-scoped one doesn't
-// need `classroomRole`. `classroomRole` is undefined off a classroom route;
-// `orgStaff` is the org-scoped team-based staff signal for org-less surfaces.
+// classroom-scoped capability doesn't need `githubOrgRole`, an org-scoped one
+// doesn't need `classroomRole`. `classroomRole` is undefined off a classroom
+// route; `orgStaff` is the org-scoped team-based staff signal for org-less
+// surfaces.
 export type CapabilityInput = {
-  orgRole?: GitHubOrgRole
+  githubOrgRole?: GitHubOrgRole
   classroomRole?: ResolvedRole
   orgStaff?: boolean
 }
@@ -34,10 +35,10 @@ export type CapabilityInput = {
 // `can(...)` alone (e.g. a nav affordance) can't be tricked into granting during
 // the in-flight window.
 export function can(cap: Capability, input: CapabilityInput): boolean {
-  const { orgRole, classroomRole, orgStaff } = input
+  const { githubOrgRole, classroomRole, orgStaff } = input
   switch (cap) {
     case "manageOrg":
-      return orgRole === "owner"
+      return githubOrgRole === "owner"
     case "viewOrgStaffContent":
       return orgStaff === true
     case "viewClassroomStaffContent":
@@ -47,6 +48,6 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
     case "previewAsRole":
       return classroomRole === "instructor"
     case "claimInstructor":
-      return orgRole === "owner" && classroomRole === "student"
+      return githubOrgRole === "owner" && classroomRole === "student"
   }
 }

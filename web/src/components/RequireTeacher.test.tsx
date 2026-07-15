@@ -12,8 +12,8 @@ const paramsMock = vi.fn()
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
   useClassroomRoleContext: () => classroomCtxMock(),
 }))
-vi.mock("@/context/orgRole/OrgRoleProvider", () => ({
-  useOrgRole: () => orgRoleMock(),
+vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
+  useGitHubOrgRole: () => orgRoleMock(),
 }))
 vi.mock("@/hooks/useOrgStaff", () => ({
   useOrgStaff: () => orgStaffMock(),
@@ -168,28 +168,28 @@ describe("RequireTeacher — instructor gate on a classroom", () => {
 describe("RequireTeacher — owner gate on org-level routes", () => {
   it("an org owner reaches org-wide settings", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
     expect(shown()).toBe("child")
   })
 
   it("a non-instructor-team org owner is STILL an owner org-wide (KTD-4)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    orgRoleMock.mockReturnValue({ orgRole: "owner" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
     expect(shown()).toBe("child")
   })
 
   it("a member is 404'd from org-wide settings", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    orgRoleMock.mockReturnValue({ orgRole: "member" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "member" })
     render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
     expect(shown()).toBe("notfound")
   })
 
   it("holds the spinner while org role is unresolved", () => {
     paramsMock.mockReturnValue({ org: "acme" })
-    orgRoleMock.mockReturnValue({ orgRole: "unresolved" })
+    orgRoleMock.mockReturnValue({ githubOrgRole: "unresolved" })
     render(<RequireTeacher allow="owner">{child}</RequireTeacher>)
     expect(shown()).toBe("spinner")
   })
@@ -197,7 +197,7 @@ describe("RequireTeacher — owner gate on org-level routes", () => {
   it("shows a retryable error (not an infinite spinner) when the membership read settles in error", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({
-      orgRole: "unresolved",
+      githubOrgRole: "unresolved",
       isError: true,
       retry: () => {},
     })

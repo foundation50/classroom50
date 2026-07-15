@@ -2,7 +2,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
 import { ensureTeam } from "@/github-core/queries"
 import { retryTransientGitHubError } from "@/github-core/errors"
-import { useOrgRole } from "@/context/orgRole/OrgRoleProvider"
+import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/util/capabilities"
 
 // ensureTeam is a WRITE (POST /orgs/{org}/teams) living in a useQuery: gate
@@ -14,14 +14,14 @@ import { can } from "@/util/capabilities"
 // RequireTeacher *staff* guard, so the owner narrowing lives here, not the guard.
 const useEnsureTeam = (org: string, classroom: string) => {
   const client = useGitHubClient()
-  const { orgRole } = useOrgRole()
+  const { githubOrgRole } = useGitHubOrgRole()
 
   const teamQuery = useQuery({
     queryKey: ["team", org, classroom],
     queryFn: () => ensureTeam(client, org, classroom),
     staleTime: 10 * 60 * 1000,
     enabled:
-      Boolean(org) && Boolean(classroom) && can("manageOrg", { orgRole }),
+      Boolean(org) && Boolean(classroom) && can("manageOrg", { githubOrgRole }),
     retry: retryTransientGitHubError,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,

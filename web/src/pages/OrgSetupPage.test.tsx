@@ -8,7 +8,7 @@ import type { ReactNode } from "react"
 // settled-error / definitive non-owner / owner) without standing up the whole
 // PageShell + GitHub client + mutation graph the page pulls at load.
 const ownerMock = vi.fn()
-vi.mock("@/context/orgRole/useIsOrgOwner", () => ({
+vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
   useIsOrgOwner: () => ownerMock(),
 }))
 
