@@ -1227,6 +1227,10 @@ describe("permissionSatisfies — verified founder demotion", () => {
   it("still rejects a maintain read-back for a push target even for an owner", () => {
     expect(permissionSatisfies("write", "maintain", "push", true)).toBe(false)
   })
+
+  it("does not let isOwner leak into an admin target", () => {
+    expect(permissionSatisfies("write", "maintain", "admin", true)).toBe(false)
+  })
 })
 
 // Drives addFounderCollaborator end-to-end (PUT grant -> read-back -> throw),

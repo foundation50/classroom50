@@ -71,6 +71,7 @@ import {
 } from "@/github-core/queries"
 import { getAuthenticatedUser } from "./queries/users"
 import { acceptAndVerifyOrgMembership } from "./users"
+import { isOwnerGitHubOrgRole } from "@/authz"
 import {
   TemplateAccessError,
   inOrgTemplateError,
@@ -2166,7 +2167,7 @@ export async function acceptAssignment(params: {
   // An org owner who creates the repo holds admin and can't self-downgrade to
   // the push we grant (org policy blocks it); tolerate that residual admin at
   // the founder read-back so an owner can still accept.
-  const isOwner = membership.role === "admin"
+  const isOwner = isOwnerGitHubOrgRole(membership.role)
 
   const assignment = await withAcceptStep(
     {

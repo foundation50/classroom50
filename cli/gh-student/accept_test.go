@@ -70,6 +70,52 @@ func TestAssertModeCoherentForCreate(t *testing.T) {
 	}
 }
 
+// TestCheckOrgStatus pins the wire -> OrgStatus decode that is the sole source
+// of isOwner: an "admin" role must surface so an org owner is tolerated at the
+// founder read-back, and a 404 must degrade to a StatusCode-only result.
+func TestCheckOrgStatus(t *testing.T) {
+	const org = "cs50"
+	cases := []struct {
+		name       string
+		status     int
+		body       string
+		wantState  string
+		wantRole   string
+		wantStatus int
+	}{
+		{"active owner", http.StatusOK, `{"state":"active","role":"admin"}`, "active", "admin", http.StatusOK},
+		{"active member", http.StatusOK, `{"state":"active","role":"member"}`, "active", "member", http.StatusOK},
+		{"pending owner keeps role", http.StatusOK, `{"state":"pending","role":"admin"}`, "pending", "admin", http.StatusOK},
+		{"not a member", http.StatusNotFound, `{}`, "", "", http.StatusNotFound},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mux := http.NewServeMux()
+			mux.HandleFunc("/user/memberships/orgs/"+org, func(w http.ResponseWriter, _ *http.Request) {
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			})
+			server := httptest.NewServer(mux)
+			t.Cleanup(server.Close)
+			client := newTestRESTClient(t, server)
+
+			got, err := checkOrgStatus(client, org)
+			if err != nil {
+				t.Fatalf("checkOrgStatus returned error: %v", err)
+			}
+			if got.State != tc.wantState {
+				t.Errorf("State = %q, want %q", got.State, tc.wantState)
+			}
+			if got.Role != tc.wantRole {
+				t.Errorf("Role = %q, want %q", got.Role, tc.wantRole)
+			}
+			if got.StatusCode != tc.wantStatus {
+				t.Errorf("StatusCode = %d, want %d", got.StatusCode, tc.wantStatus)
+			}
+		})
+	}
+}
+
 // TestPermissionSatisfies pins the read-back decision, incl. the guard's
 // boundary: a `maintain` founder (legacy collapses to "write") must FAIL a
 // `push` target, so an ignored self-downgrade isn't passed green. isOwner
@@ -96,6 +142,7 @@ func TestPermissionSatisfies(t *testing.T) {
 		{"owner admin satisfies a push target", "admin", "admin", "push", true, true},
 		{"owner admin (legacy only) satisfies a push target", "admin", "", "push", true, true},
 		{"owner still fails a maintain push target", "write", "maintain", "push", true, false},
+		{"owner does not leak into an admin target", "write", "maintain", "admin", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
