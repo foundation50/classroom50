@@ -18,6 +18,7 @@ describe("can — org capabilities", () => {
   it("manageOrg: only an org owner", () => {
     expect(can("manageOrg", { orgRole: "owner" })).toBe(true)
     expect(can("manageOrg", { orgRole: "member" })).toBe(false)
+    expect(can("manageOrg", { orgRole: "non-member" })).toBe(false)
     expect(can("manageOrg", { orgRole: "unresolved" })).toBe(false)
     // Classroom role is irrelevant to org capabilities.
     for (const classroomRole of classroomRoles) {

@@ -6,21 +6,22 @@ import {
   type PropsWithChildren,
 } from "react"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
-import { resolveOrgRole, type OrgRole } from "@/util/resolveRole"
+import { resolveOrgRole, type GitHubOrgRole } from "@/util/resolveRole"
 
 // Org-wide capability, resolved ONCE at the $org boundary and shared with org-
 // level routes (settings, members, activity, create-classroom) that have no
-// classroom in scope. `owner` = active org admin; `member` = definitive
-// non-admin; `unresolved` = a transient read (fail-closed — never demote a real
-// owner on a blip). The finer classroom role layers on top of this at the
-// classroom boundary (see ClassroomRoleProvider).
+// classroom in scope. `owner` = active org admin; `member` = confirmed non-admin
+// member; `non-member` = definitive outsider (403/404); `unresolved` = a
+// transient read (fail-closed — never demote a real owner on a blip). The finer
+// classroom role layers on top of this at the classroom boundary (see
+// ClassroomRoleProvider).
 type OrgRoleContextValue = {
-  orgRole: OrgRole
+  orgRole: GitHubOrgRole
   // The membership read settled in a transient error (retries exhausted) with
   // the role still `unresolved` — the owner gate shows a retryable error surface
   // instead of holding a spinner forever (mirrors the classroom gates). A
   // definitive 403/404 is NOT `isError` here (resolveOrgRole already reduced it
-  // to `member`, so the role resolved).
+  // to `non-member`, so the role resolved).
   isError: boolean
   // Re-run the membership read (the error surface's retry).
   retry: () => void
