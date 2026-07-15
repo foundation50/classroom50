@@ -87,10 +87,10 @@ describe("OrgRoleProvider", () => {
     ).toBe("member")
   })
 
-  it("member on a definitive 403/404", () => {
-    expect(renderWithMembership({ error: apiError(404) })).toBe("member")
+  it("non-member on a definitive 403/404", () => {
+    expect(renderWithMembership({ error: apiError(404) })).toBe("non-member")
     cleanup()
-    expect(renderWithMembership({ error: apiError(403) })).toBe("member")
+    expect(renderWithMembership({ error: apiError(403) })).toBe("non-member")
   })
 
   it("unresolved while loading / on a transient error (fail-closed)", () => {
@@ -106,10 +106,10 @@ describe("OrgRoleProvider", () => {
     expect(screen.getByTestId("role").textContent).toBe("unresolved")
     expect(screen.getByTestId("error").textContent).toBe("true")
     cleanup()
-    // A definitive 403 resolves to `member` (roleResolved), so it is NOT an
+    // A definitive 403 resolves to `non-member` (roleResolved), so it is NOT an
     // error strand even though the query technically errored.
     renderWithMembership({ isError: true, error: apiError(403) })
-    expect(screen.getByTestId("role").textContent).toBe("member")
+    expect(screen.getByTestId("role").textContent).toBe("non-member")
     expect(screen.getByTestId("error").textContent).toBe("false")
   })
 })

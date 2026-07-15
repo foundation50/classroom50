@@ -139,7 +139,7 @@ describe("resolveOrgRole", () => {
   })
 
   for (const status of [403, 404]) {
-    it(`member on a definitive ${status}`, () => {
+    it(`non-member on a definitive ${status}`, () => {
       expect(
         resolveOrgRole({
           isSuccess: false,
@@ -147,7 +147,7 @@ describe("resolveOrgRole", () => {
           state: undefined,
           error: apiError(status),
         }),
-      ).toBe("member")
+      ).toBe("non-member")
     })
   }
 
