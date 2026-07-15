@@ -1218,6 +1218,15 @@ describe("permissionSatisfies — verified founder demotion", () => {
   it("rejects an under-grant (read only) for a push target", () => {
     expect(permissionSatisfies("read", "read", "push")).toBe(false)
   })
+
+  it("tolerates an owner's unavoidable admin for a push target when isOwner", () => {
+    expect(permissionSatisfies("admin", "admin", "push", true)).toBe(true)
+    expect(permissionSatisfies("admin", undefined, "push", true)).toBe(true)
+  })
+
+  it("still rejects a maintain read-back for a push target even for an owner", () => {
+    expect(permissionSatisfies("write", "maintain", "push", true)).toBe(false)
+  })
 })
 
 // Drives addFounderCollaborator end-to-end (PUT grant -> read-back -> throw),
@@ -1309,6 +1318,27 @@ describe("addFounderCollaborator — grant + read-back verification", () => {
         permission: "push",
       }),
     ).rejects.toThrow(/"push"/)
+  })
+
+  it("resolves for an org owner whose read-back stays admin after a push grant", async () => {
+    const { client, request } = makeClient({
+      permission: "admin",
+      role_name: "admin",
+    })
+    await expect(
+      addFounderCollaborator({
+        client,
+        owner,
+        repo,
+        username,
+        permission: "push",
+        isOwner: true,
+      }),
+    ).resolves.toBeUndefined()
+    expect(request).toHaveBeenCalledWith(collabPath, {
+      method: "PUT",
+      body: { permission: "push" },
+    })
   })
 })
 

@@ -1737,15 +1737,18 @@ export async function deleteAssignment(
 
 // Grant the founder their repo role and verify it took: a repo creator holds
 // admin, so an individual self-downgrade GitHub silently ignores looks like
-// success. CLI-aligned with inviteFounder in gh-student's accept.go.
+// success. isOwner tolerates an unavoidable residual admin (an org owner can't
+// self-downgrade), since admin already covers push. CLI-aligned with
+// inviteFounder in gh-student's accept.go.
 export async function addFounderCollaborator(params: {
   client: GitHubClient
   owner: string
   repo: string
   username: string
   permission: "push" | "admin"
+  isOwner?: boolean
 }) {
-  const { client, owner, repo, username, permission } = params
+  const { client, owner, repo, username, permission, isOwner = false } = params
 
   await client.request(`/repos/${owner}/${repo}/collaborators/${username}`, {
     method: "PUT",
@@ -1762,7 +1765,12 @@ export async function addFounderCollaborator(params: {
   })
 
   if (
-    !permissionSatisfies(effective.permission, effective.role_name, permission)
+    !permissionSatisfies(
+      effective.permission,
+      effective.role_name,
+      permission,
+      isOwner,
+    )
   ) {
     throw new Error(
       `Expected ${username} to have "${permission}" access on ${owner}/${repo}, but GitHub reports "${effective.permission}" (role "${effective.role_name}") — a repo creator holds admin and a self-downgrade may be blocked by org policy. Ask your instructor to set your access to "${permission}".`,
@@ -1773,17 +1781,23 @@ export async function addFounderCollaborator(params: {
 // Whether the read-back matches the role we set. role_name is authoritative
 // when present: a push target accepts push/write but must reject the
 // more-privileged maintain/admin the legacy field would hide (GitHub collapses
-// maintain->write, admin->admin). Mirrors gh-student's permissionSatisfies.
+// maintain->write, admin->admin). isOwner relaxes a push want to also accept
+// admin: an org owner who created the repo can't self-downgrade (org policy
+// blocks it), and admin is a superset of push. Mirrors gh-student's
+// permissionSatisfies.
 export function permissionSatisfies(
   legacy: string | undefined,
   roleName: string | undefined,
   want: "push" | "admin",
+  isOwner = false,
 ): boolean {
   if (roleName) {
     if (want === "admin") return roleName === "admin"
+    if (isOwner && roleName === "admin") return true
     return roleName === "push" || roleName === "write"
   }
   if (want === "admin") return legacy === "admin"
+  if (isOwner && legacy === "admin") return true
   return legacy === "write"
 }
 
@@ -2040,6 +2054,7 @@ async function provisionAcceptedRepo(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  isOwner?: boolean
   rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
 }) {
@@ -2052,6 +2067,7 @@ async function provisionAcceptedRepo(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    isOwner = false,
     rerenderShimForBranch,
     onStepUpdate,
   } = params
@@ -2072,6 +2088,7 @@ async function provisionAcceptedRepo(params: {
         repo: repo.name,
         username,
         permission: founderPermission(mode),
+        isOwner,
       })
     },
   )
@@ -2134,7 +2151,7 @@ export async function acceptAssignment(params: {
   // can't create their repo). Verifying here means a SAML-SSO-gated 403 surfaces
   // as an actionable step failure right away (with the SSO/HTTP status) instead
   // of a confusing downstream repo/access failure.
-  await withAcceptStep(
+  const membership = await withAcceptStep(
     {
       id: "membership",
       label: "Confirming your classroom membership",
@@ -2145,6 +2162,11 @@ export async function acceptAssignment(params: {
     },
     () => acceptAndVerifyOrgMembership(client, org),
   )
+
+  // An org owner who creates the repo holds admin and can't self-downgrade to
+  // the push we grant (org policy blocks it); tolerate that residual admin at
+  // the founder read-back so an owner can still accept.
+  const isOwner = membership.role === "admin"
 
   const assignment = await withAcceptStep(
     {
@@ -2292,6 +2314,7 @@ export async function acceptAssignment(params: {
           repo: created.repo.name,
           username,
           permission: founderPermission(assignment.mode),
+          isOwner,
         })
       } catch (err) {
         log.debug("accept: best-effort role reconcile failed (non-fatal)", {
@@ -2337,6 +2360,7 @@ export async function acceptAssignment(params: {
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
+      isOwner,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
     })
@@ -2372,6 +2396,7 @@ export async function acceptAssignment(params: {
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
+    isOwner,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,
   })

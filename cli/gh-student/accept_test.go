@@ -72,30 +72,35 @@ func TestAssertModeCoherentForCreate(t *testing.T) {
 
 // TestPermissionSatisfies pins the read-back decision, incl. the guard's
 // boundary: a `maintain` founder (legacy collapses to "write") must FAIL a
-// `push` target, so an ignored self-downgrade isn't passed green.
+// `push` target, so an ignored self-downgrade isn't passed green. isOwner
+// relaxes a push target to accept the org owner's unavoidable residual admin.
 func TestPermissionSatisfies(t *testing.T) {
 	cases := []struct {
 		name     string
 		legacy   string
 		roleName string
 		want     string
+		isOwner  bool
 		ok       bool
 	}{
-		{"push grant reads role_name push", "write", "push", "push", true},
-		{"push grant reads role_name write", "write", "write", "push", true},
-		{"maintain must fail a push target", "write", "maintain", "push", false},
-		{"admin must fail a push target", "admin", "admin", "push", false},
-		{"read must fail a push target", "read", "read", "push", false},
-		{"admin grant reads role_name admin", "admin", "admin", "admin", true},
-		{"push must fail an admin target", "write", "push", "admin", false},
-		{"empty role_name falls back to legacy write for push", "write", "", "push", true},
-		{"empty role_name falls back to legacy admin for admin", "admin", "", "admin", true},
-		{"empty role_name legacy write must fail admin", "write", "", "admin", false},
+		{"push grant reads role_name push", "write", "push", "push", false, true},
+		{"push grant reads role_name write", "write", "write", "push", false, true},
+		{"maintain must fail a push target", "write", "maintain", "push", false, false},
+		{"admin must fail a push target", "admin", "admin", "push", false, false},
+		{"read must fail a push target", "read", "read", "push", false, false},
+		{"admin grant reads role_name admin", "admin", "admin", "admin", false, true},
+		{"push must fail an admin target", "write", "push", "admin", false, false},
+		{"empty role_name falls back to legacy write for push", "write", "", "push", false, true},
+		{"empty role_name falls back to legacy admin for admin", "admin", "", "admin", false, true},
+		{"empty role_name legacy write must fail admin", "write", "", "admin", false, false},
+		{"owner admin satisfies a push target", "admin", "admin", "push", true, true},
+		{"owner admin (legacy only) satisfies a push target", "admin", "", "push", true, true},
+		{"owner still fails a maintain push target", "write", "maintain", "push", true, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := permissionSatisfies(tc.legacy, tc.roleName, tc.want); got != tc.ok {
-				t.Errorf("permissionSatisfies(%q,%q,%q) = %v, want %v", tc.legacy, tc.roleName, tc.want, got, tc.ok)
+			if got := permissionSatisfies(tc.legacy, tc.roleName, tc.want, tc.isOwner); got != tc.ok {
+				t.Errorf("permissionSatisfies(%q,%q,%q,%v) = %v, want %v", tc.legacy, tc.roleName, tc.want, tc.isOwner, got, tc.ok)
 			}
 		})
 	}
@@ -164,7 +169,7 @@ func TestInviteFounder(t *testing.T) {
 			client := newTestRESTClient(t, server)
 
 			var out bytes.Buffer
-			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, tc.want); err != nil {
+			if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, tc.want, false); err != nil {
 				t.Fatalf("inviteFounder returned error: %v", err)
 			}
 
@@ -205,11 +210,40 @@ func TestInviteFounder_VerificationFails(t *testing.T) {
 	client := newTestRESTClient(t, server)
 
 	var out bytes.Buffer
-	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push")
+	err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push", false)
 	if err == nil {
 		t.Fatalf("expected an error when the effective permission stays admin after a push grant, got nil")
 	}
 	if !strings.Contains(err.Error(), "push") || !strings.Contains(err.Error(), "admin") {
 		t.Errorf("error should name the wanted (push) and actual (admin) roles, got: %v", err)
+	}
+}
+
+// TestInviteFounder_OwnerTolerated proves an org owner can accept: the
+// self-downgrade to push is silently ignored (owner keeps admin), but with
+// isOwner set the read-back tolerates that residual admin instead of failing.
+func TestInviteFounder_OwnerTolerated(t *testing.T) {
+	const (
+		org      = "cs50"
+		repoName = "cs50-fall-2026-hello-alice"
+		username = "alice"
+	)
+	collabPath := "/repos/" + org + "/" + repoName + "/collaborators/" + username
+
+	mux := http.NewServeMux()
+	mux.HandleFunc(collabPath+"/permission", func(w http.ResponseWriter, _ *http.Request) {
+		// Owner can't self-downgrade; GitHub still reports admin.
+		_ = json.NewEncoder(w).Encode(map[string]any{"permission": "admin", "role_name": "admin"})
+	})
+	mux.HandleFunc(collabPath, func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	})
+	server := httptest.NewServer(mux)
+	t.Cleanup(server.Close)
+	client := newTestRESTClient(t, server)
+
+	var out bytes.Buffer
+	if err := inviteFounder(client, ui.NewForced(&out, false), false, username, org, repoName, "push", true); err != nil {
+		t.Fatalf("owner push grant reading back as admin should be tolerated, got: %v", err)
 	}
 }

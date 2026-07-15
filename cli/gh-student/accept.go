@@ -152,6 +152,11 @@ func acceptCmd() *cobra.Command {
 				return err
 			}
 
+			// An org owner who creates the repo holds admin and can't
+			// self-downgrade to the push we grant; tolerate that residual admin
+			// at the founder read-back so an owner can still accept.
+			isOwner := status.Role == "admin"
+
 			switch status.StatusCode {
 			case http.StatusOK:
 				// Auto-accept a pending org invite first.
@@ -162,7 +167,7 @@ func acceptCmd() *cobra.Command {
 					}
 					switch acceptStatus.StatusCode {
 					case http.StatusOK:
-						return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret)
+						return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
 					case http.StatusNotFound:
 						return fmt.Errorf("%s: no membership found for accept", org)
 					case http.StatusForbidden:
@@ -181,7 +186,7 @@ func acceptCmd() *cobra.Command {
 				return fmt.Errorf("%s: unknown status received (%d)", org, status.StatusCode)
 			}
 
-			return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret)
+			return acceptAssignment(cmd, client, u, out, org, classroom, assignment, secret, isOwner)
 		},
 	}
 
@@ -191,6 +196,7 @@ func acceptCmd() *cobra.Command {
 
 type OrgStatus struct {
 	State      string
+	Role       string
 	StatusCode int
 }
 
@@ -199,6 +205,7 @@ func checkOrgStatus(client githubapi.Client, org string) (OrgStatus, error) {
 	path := fmt.Sprintf("user/memberships/orgs/%s", url.PathEscape(org))
 	var resp struct {
 		State string `json:"state"`
+		Role  string `json:"role"`
 	}
 	if err := client.Get(path, &resp); err != nil {
 		if httpErr, ok := errors.AsType[*githubapi.HTTPError](err); ok {
@@ -212,6 +219,7 @@ func checkOrgStatus(client githubapi.Client, org string) (OrgStatus, error) {
 
 	return OrgStatus{
 		State:      resp.State,
+		Role:       resp.Role,
 		StatusCode: http.StatusOK,
 	}, nil
 }
@@ -262,7 +270,7 @@ func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) erro
 	return nil
 }
 
-func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out io.Writer, org, classroom, assignment, secret string) error {
+func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out io.Writer, org, classroom, assignment, secret string, isOwner bool) error {
 	verbose, _ := cmd.Flags().GetBool("verbose")
 
 	// The acceptor owns the repo, so capture their immutable id and the
@@ -399,6 +407,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		fullName:       fullName,
 		htmlURL:        htmlURL,
 		alreadyExisted: alreadyExisted,
+		isOwner:        isOwner,
 		createSp:       createSp,
 		createMsg:      createMsg,
 	})
@@ -420,8 +429,11 @@ type acceptRepoParams struct {
 	shim, autograderName       string
 	fullName, htmlURL          string
 	alreadyExisted             bool
-	createSp                   *ghui.Spinner
-	createMsg                  string
+	// isOwner tolerates an org owner's unavoidable residual admin at the
+	// founder read-back (they can't self-downgrade to push).
+	isOwner   bool
+	createSp  *ghui.Spinner
+	createMsg string
 }
 
 // acceptIntoRepo decides whether a just-created-or-existing repo needs
@@ -444,7 +456,7 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 			// Already accepted: reconcile the role best-effort. The repo is
 			// already healthy, so a transient/SSO-403/left-org failure must not
 			// fail a re-run that previously always succeeded — warn and report.
-			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil && verbose {
+			if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil && verbose {
 				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
@@ -506,7 +518,7 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	// Individual founders get least-privilege `push` (enough to push and
 	// trigger autograding); group founders get `admin` (needed to manage
 	// collaborators for `gh student invite`). See founderPermission.
-	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode)); err != nil {
+	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil {
 		return err
 	}
 
@@ -843,13 +855,14 @@ func founderPermission(mode string) string {
 
 // inviteFounder sets username's collaborator role and verifies it took effect.
 // A repo creator holds admin, so an individual self-downgrade GitHub silently
-// ignores would otherwise look identical to success.
-func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string) error {
+// ignores would otherwise look identical to success. isOwner tolerates an
+// org owner's unavoidable residual admin (admin already covers push).
+func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, org, repoName, permission string, isOwner bool) error {
 	if _, err := githubapi.SetCollaborator(client, org, repoName, username, permission); err != nil {
 		return err
 	}
 
-	if err := verifyFounderPermission(client, org, repoName, username, permission); err != nil {
+	if err := verifyFounderPermission(client, org, repoName, username, permission, isOwner); err != nil {
 		return err
 	}
 
@@ -863,7 +876,7 @@ func inviteFounder(client githubapi.Client, u *ui.UI, verbose bool, username, or
 // verifyFounderPermission reads the effective permission back and errors if it
 // doesn't match the role we set (permissionSatisfies handles GitHub's legacy
 // role collapse), so a silently-ignored downgrade fails loud instead.
-func verifyFounderPermission(client githubapi.Client, org, repoName, username, want string) error {
+func verifyFounderPermission(client githubapi.Client, org, repoName, username, want string, isOwner bool) error {
 	path := fmt.Sprintf("repos/%s/%s/collaborators/%s/permission",
 		url.PathEscape(org), url.PathEscape(repoName), url.PathEscape(username))
 	var got struct {
@@ -873,7 +886,7 @@ func verifyFounderPermission(client githubapi.Client, org, repoName, username, w
 	if err := client.Get(path, &got); err != nil {
 		return fmt.Errorf("verifying %s's permission on %s/%s: %w", username, org, repoName, err)
 	}
-	if permissionSatisfies(got.Permission, got.RoleName, want) {
+	if permissionSatisfies(got.Permission, got.RoleName, want, isOwner) {
 		return nil
 	}
 	return fmt.Errorf("expected %s to have %q access on %s/%s after setup, but GitHub reports %q (role %q) — a repo creator holds admin and a self-downgrade may be blocked by org policy; ask your instructor to set your access to %q",
@@ -883,13 +896,18 @@ func verifyFounderPermission(client githubapi.Client, org, repoName, username, w
 // permissionSatisfies reports whether the read-back matches the role we set.
 // role_name is authoritative when present: a push target accepts push/write
 // but must reject the more-privileged maintain/admin, which the legacy field
-// would otherwise hide (GitHub collapses maintain→write, admin→admin).
-func permissionSatisfies(legacy, roleName, want string) bool {
+// would otherwise hide (GitHub collapses maintain→write, admin→admin). isOwner
+// relaxes a push want to also accept admin: an org owner who created the repo
+// can't self-downgrade, and admin is a superset of push.
+func permissionSatisfies(legacy, roleName, want string, isOwner bool) bool {
 	if roleName != "" {
 		switch want {
 		case "admin":
 			return roleName == "admin"
 		case "push":
+			if isOwner && roleName == "admin" {
+				return true
+			}
 			return roleName == "push" || roleName == "write"
 		default:
 			return roleName == want
@@ -899,6 +917,9 @@ func permissionSatisfies(legacy, roleName, want string) bool {
 	case "admin":
 		return legacy == "admin"
 	case "push":
+		if isOwner && legacy == "admin" {
+			return true
+		}
 		return legacy == "write"
 	default:
 		return legacy == want
