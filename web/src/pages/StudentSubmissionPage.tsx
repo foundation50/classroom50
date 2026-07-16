@@ -259,6 +259,8 @@ const StudentSubmissionPage = () => {
     secret,
   )
 
+  const description = assignmentDescription(assignmentData)
+
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("nav.mySubmission")} />
@@ -270,12 +272,12 @@ const StudentSubmissionPage = () => {
         }
       />
       <AssignmentMeta assignment={assignmentData} />
-      {assignmentDescription(assignmentData) ? (
+      {description ? (
         <div className="mt-3 flex flex-col gap-1">
           <span className="text-sm font-medium text-base-content/70">
             {t("submissions.student.descriptionLabel")}
           </span>
-          <Markdown content={assignmentDescription(assignmentData)} />
+          <Markdown content={description} />
         </div>
       ) : null}
       {org && classroom && assignment ? (

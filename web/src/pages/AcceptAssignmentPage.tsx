@@ -675,6 +675,8 @@ const AcceptAssignmentPage = () => {
     return <AssignmentNotFound user={user} assignment={assignment} />
   }
 
+  const description = assignmentDescription(assignmentData)
+
   return (
     <AcceptLayout>
       <AcceptCard>
@@ -705,13 +707,13 @@ const AcceptAssignmentPage = () => {
               : t("accept.acceptHeading")}
           </h2>
 
-          {assignmentDescription(assignmentData) ? (
+          {description ? (
             <details className="collapse collapse-arrow border border-base-300 bg-base-100">
               <summary className="collapse-title min-h-0 px-4 py-3 text-sm font-medium">
                 {t("accept.descriptionLabel")}
               </summary>
               <div className="collapse-content max-h-80 overflow-y-auto">
-                <Markdown content={assignmentDescription(assignmentData)} />
+                <Markdown content={description} />
               </div>
             </details>
           ) : null}
