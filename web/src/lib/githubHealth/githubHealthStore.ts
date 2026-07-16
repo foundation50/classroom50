@@ -22,14 +22,12 @@ const WINDOW_MS = 30_000
 const PROBE_CACHE_MS = 60_000
 
 export type GitHubHealth = {
-  // At least FAILURE_THRESHOLD outage-shaped failures landed within WINDOW_MS
-  // and no success has since cleared them.
+  // >= FAILURE_THRESHOLD outage-shaped failures within WINDOW_MS, uncleared.
   suspected: boolean
-  // The authoritative githubstatus.com indicator, once a probe has resolved for
-  // the current suspicion episode. null until then (or if the probe failed).
+  // Authoritative githubstatus.com indicator once probed; null until then.
   statusIndicator: GitHubStatusIndicator | null
-  // The human-readable status summary from githubstatus.com (e.g. "Partially
-  // Degraded Service"), or null when unprobed / probe failed.
+  // Human-readable githubstatus.com summary (e.g. "Partially Degraded
+  // Service"); null when unprobed / probe failed.
   statusDescription: string | null
 }
 
@@ -38,6 +36,8 @@ const HEALTHY: GitHubHealth = {
   statusIndicator: null,
   statusDescription: null,
 }
+
+export { HEALTHY as HEALTHY_GITHUB_HEALTH }
 
 let state: GitHubHealth = HEALTHY
 let failureTimestamps: number[] = []

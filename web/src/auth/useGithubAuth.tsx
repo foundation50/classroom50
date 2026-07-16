@@ -824,10 +824,7 @@ function useGithubAuthState() {
     ],
   )
 
-  // True when the "loading" hold has become a dead end: online, token present,
-  // no cached user, and /user validation settled into a transient error with no
-  // refetch in flight. The App shell reads this to swap the bare spinner for a
-  // retry / sign-in-again surface instead of stranding the user.
+  // Live isValidationStuck against the current /user query state (see its doc).
   const isValidatingStuck = useMemo(
     () =>
       isValidationStuck({

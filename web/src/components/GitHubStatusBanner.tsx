@@ -6,7 +6,33 @@ import { useTranslation } from "react-i18next"
 import { AppBanner } from "@/components/AppBanner"
 import { useGitHubHealth } from "@/lib/githubHealth"
 
-const GITHUB_STATUS_URL = "https://www.githubstatus.com"
+export const GITHUB_STATUS_URL = "https://www.githubstatus.com"
+
+// The outage body text (confirmed vs generic) plus the githubstatus.com link.
+// Shared by the authed banner and the unauthed stuck-bootstrap screen so the
+// copy and URL can't drift between them.
+export function GitHubStatusNote({
+  statusDescription,
+}: {
+  statusDescription: string | null
+}) {
+  const { t } = useTranslation()
+  return (
+    <>
+      {statusDescription
+        ? t("githubStatus.bodyConfirmed", { status: statusDescription })
+        : t("githubStatus.bodyGeneric")}{" "}
+      <a
+        href={GITHUB_STATUS_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="link link-hover font-semibold text-base-content"
+      >
+        {t("githubStatus.checkStatusLink")}
+      </a>
+    </>
+  )
+}
 
 // Global warning banner shown when the app suspects GitHub is having trouble
 // (repeated outage-shaped API failures), optionally enriched with the

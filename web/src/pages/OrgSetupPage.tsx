@@ -286,24 +286,17 @@ const OrgSetupPage = () => {
         />
       )}
       {!ownerPending && !isError && !isOwner && <NotAdminAlert />}
-      {!ownerPending && !isError && isOwner && statusLoading && (
-        <Spinner label={t("setup.loadingSetup")} />
-      )}
       {!ownerPending &&
         !isError &&
         isOwner &&
-        !statusLoading &&
-        statusIndeterminate && (
+        (statusLoading ? (
+          <Spinner label={t("setup.loadingSetup")} />
+        ) : statusIndeterminate ? (
           <QueryErrorAlert
             message={t("setup.statusIndeterminate")}
             onRetry={retryStatus}
           />
-        )}
-      {!ownerPending &&
-        !isError &&
-        isOwner &&
-        !statusLoading &&
-        !statusIndeterminate && (
+        ) : (
           <OrgSteps
             steps={steps}
             mutation={{
@@ -328,7 +321,7 @@ const OrgSetupPage = () => {
             }}
             onManageToken={() => setBackOverride(STAGE_SERVICE_TOKEN)}
           />
-        )}
+        ))}
 
       <SkeletonOverwriteModal
         paths={overwritePaths}

@@ -3,6 +3,7 @@ import { useSyncExternalStore } from "react"
 import {
   getGitHubHealthSnapshot,
   subscribeGitHubHealth,
+  HEALTHY_GITHUB_HEALTH,
   type GitHubHealth,
 } from "./githubHealthStore"
 
@@ -12,12 +13,6 @@ export function useGitHubHealth(): GitHubHealth {
   return useSyncExternalStore(
     subscribeGitHubHealth,
     getGitHubHealthSnapshot,
-    () => HEALTHY_SERVER_SNAPSHOT,
+    () => HEALTHY_GITHUB_HEALTH,
   )
-}
-
-const HEALTHY_SERVER_SNAPSHOT: GitHubHealth = {
-  suspected: false,
-  statusIndicator: null,
-  statusDescription: null,
 }

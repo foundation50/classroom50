@@ -7,6 +7,7 @@ import { Spinner } from "@/components/Spinner"
 import { Button } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useGitHubHealth } from "@/lib/githubHealth"
+import { GitHubStatusNote } from "@/components/GitHubStatusBanner"
 import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
 import { logger } from "@/lib/logger"
 
@@ -58,10 +59,9 @@ export function App() {
   }, [sessionEndedOnAuthedRoute])
 
   if (status === "loading" || sessionEndedOnAuthedRoute) {
-    // A settled, persistent validation failure (retries exhausted while online —
-    // a proxy/extension blocking api.github.com, or a wedged stored session)
-    // would otherwise spin forever. Offer an escape: retry the /user validation,
-    // or sign out to a clean re-login (the recovery path users hit today).
+    // A settled, persistent validation failure would otherwise spin forever
+    // (see isValidationStuck). Offer an escape: retry /user, or sign out to a
+    // clean re-login.
     if (isValidatingStuck) {
       return (
         <div className="min-h-screen grid place-items-center p-6">
@@ -72,19 +72,7 @@ export function App() {
             </p>
             {githubSuspected ? (
               <p className="text-sm text-base-content/70">
-                {githubStatusDescription
-                  ? t("githubStatus.bodyConfirmed", {
-                      status: githubStatusDescription,
-                    })
-                  : t("githubStatus.bodyGeneric")}{" "}
-                <a
-                  href="https://www.githubstatus.com"
-                  target="_blank"
-                  rel="noreferrer"
-                  className="link link-hover font-semibold text-base-content"
-                >
-                  {t("githubStatus.checkStatusLink")}
-                </a>
+                <GitHubStatusNote statusDescription={githubStatusDescription} />
               </p>
             ) : null}
             <div className="flex flex-wrap items-center justify-center gap-3">
