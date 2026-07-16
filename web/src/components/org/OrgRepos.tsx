@@ -13,8 +13,9 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import { Card, Markdown, Modal } from "@/components/ui"
+import { Button, Card, Markdown, Modal } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
+import { assignmentDescription } from "@/types/classroom"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
 import useGetPublicAssignment from "@/hooks/useGetPublicAssignment"
@@ -32,7 +33,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
     secret,
   )
 
-  const description = assignmentData?.description?.trim()
+  const description = assignmentDescription(assignmentData)
   // Prefer the human assignment name; the repo name is the fallback identity
   // (`<classroom>-<assignment>-<user>`) when assignment data hasn't resolved.
   const title = assignmentData?.name || assignment || repo.name
@@ -131,49 +132,52 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
 
           <div className="flex flex-wrap items-center justify-end gap-2">
             {description ? (
-              <button
-                type="button"
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => setDescriptionOpen(true)}
-                className="btn btn-sm btn-outline"
               >
                 <FileText aria-hidden="true" className="size-4" />
                 {t("classes.repo.details")}
-              </button>
+              </Button>
             ) : null}
-            <a
+            <Button
+              as="a"
+              variant="primary"
+              size="sm"
               href={repo.html_url}
               target="_blank"
               rel="noreferrer"
-              className="btn btn-sm btn-primary"
             >
               {t("classes.repo.openRepo")}
               <ExternalLink aria-hidden="true" className="size-4" />
-            </a>
+            </Button>
           </div>
         </Card.Actions>
       </Card.Body>
 
-      {description ? (
-        <Modal
-          open={descriptionOpen}
-          onClose={() => setDescriptionOpen(false)}
-          size="2xl"
-          aria-label={t("classes.repo.descriptionModalTitle")}
-        >
-          <div className="mb-4 pr-8">
-            <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-              {t("classes.repo.descriptionModalTitle")}
-            </p>
-            <h3 className="text-lg font-bold">
-              {assignmentData?.name || assignment}
-            </h3>
-          </div>
+      {/* Always mount the Modal so its open/close effect can run; gating the
+          whole element on `description` would tear the open dialog out on a
+          background refetch without firing onClose, stranding descriptionOpen. */}
+      <Modal
+        open={descriptionOpen && Boolean(description)}
+        onClose={() => setDescriptionOpen(false)}
+        size="2xl"
+        aria-label={t("classes.repo.descriptionModalTitle")}
+      >
+        <div className="mb-4 pr-8">
+          <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+            {t("classes.repo.descriptionModalTitle")}
+          </p>
+          <h3 className="text-lg font-bold">{title}</h3>
+        </div>
+        {description ? (
           <Markdown
             content={description}
             className="max-h-[70vh] overflow-y-auto pr-1"
           />
-        </Modal>
-      ) : null}
+        ) : null}
+      </Modal>
     </Card>
   )
 }

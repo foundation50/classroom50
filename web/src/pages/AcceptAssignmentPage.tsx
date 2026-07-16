@@ -10,6 +10,7 @@ import {
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card, Markdown } from "@/components/ui"
+import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
@@ -704,16 +705,13 @@ const AcceptAssignmentPage = () => {
               : t("accept.acceptHeading")}
           </h2>
 
-          {assignmentData?.description?.trim() ? (
+          {assignmentDescription(assignmentData) ? (
             <details className="collapse collapse-arrow border border-base-300 bg-base-100">
               <summary className="collapse-title min-h-0 px-4 py-3 text-sm font-medium">
                 {t("accept.descriptionLabel")}
               </summary>
-              <div className="collapse-content">
-                <Markdown
-                  content={assignmentData.description}
-                  className="max-h-80 overflow-y-auto"
-                />
+              <div className="collapse-content max-h-80 overflow-y-auto">
+                <Markdown content={assignmentDescription(assignmentData)} />
               </div>
             </details>
           ) : null}

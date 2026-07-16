@@ -16,14 +16,15 @@ export type MarkdownProps = {
 }
 
 const components: Components = {
-  a: ({ href, children, ...props }) =>
+  // Only forward href/children; react-markdown also passes a `node` (hast
+  // Element) that must not spread onto the <a> as an invalid DOM attribute.
+  a: ({ href, children }) =>
     isSafeHttpUrl(href) ? (
       <a
         href={href}
         target="_blank"
         rel="noreferrer"
         className="link link-primary"
-        {...props}
       >
         {children}
       </a>

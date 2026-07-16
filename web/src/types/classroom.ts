@@ -121,6 +121,15 @@ export type Assignment = {
   migrated_from?: MigratedFrom
 }
 
+// Trimmed assignment description, or "" when absent. assignments.json is read
+// with an unchecked `as` cast, so a teacher-authored non-string `description:`
+// (a YAML block/list/number) would otherwise reach `.trim()` and throw during
+// render; coercing at this boundary keeps every student surface safe.
+export function assignmentDescription(assignment?: Assignment): string {
+  const value = assignment?.description
+  return typeof value === "string" ? value.trim() : ""
+}
+
 // classroom50/assignments/v1 `migrated_from`.
 export type MigratedFrom = {
   source: string

@@ -24,6 +24,7 @@ import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
+import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
 
@@ -269,12 +270,12 @@ const StudentSubmissionPage = () => {
         }
       />
       <AssignmentMeta assignment={assignmentData} />
-      {assignmentData?.description?.trim() ? (
+      {assignmentDescription(assignmentData) ? (
         <div className="mt-3 flex flex-col gap-1">
           <span className="text-sm font-medium text-base-content/70">
             {t("submissions.student.descriptionLabel")}
           </span>
-          <Markdown content={assignmentData.description} />
+          <Markdown content={assignmentDescription(assignmentData)} />
         </div>
       ) : null}
       {org && classroom && assignment ? (
