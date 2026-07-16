@@ -311,6 +311,9 @@ type CreateAssignmentFormProps = {
   // Classroom slug; template pre-flight uses it to check whether the classroom
   // team already has read on an in-org private template.
   classroom?: string
+  // Assignment slug (edit mode only); enables TemplateField's inline "Fix
+  // template access" recovery button. Absent on create.
+  slug?: string
   // Existing assignment slugs, for the create-mode uniqueness check.
   takenSlugs?: string[]
 }
@@ -391,6 +394,7 @@ const CreateAssignmentForm = ({
   readOnly = false,
   org,
   classroom,
+  slug,
   takenSlugs,
 }: CreateAssignmentFormProps) => {
   const { t } = useTranslation()
@@ -550,6 +554,7 @@ const CreateAssignmentForm = ({
                     field={field}
                     org={org}
                     classroom={classroom}
+                    slug={slug}
                   />
                 )}
               </form.Field>
