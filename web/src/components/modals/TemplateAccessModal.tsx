@@ -6,6 +6,7 @@ import { ExternalLink, KeyRound, ShieldCheck } from "lucide-react"
 import { Badge, Button, Modal, Spinner } from "@/components/ui"
 import GitHub from "@/assets/github.svg?react"
 import type { Assignment } from "@/types/classroom"
+import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
@@ -130,6 +131,10 @@ export const TemplateAccessModal = ({
           loading={teamsQuery.isPending}
           errored={teamsQuery.isError}
           teams={teamsQuery.data ?? []}
+          // A non-owner sees only teams visible to their account, so an empty
+          // result may be a visibility gap rather than a genuinely unshared
+          // template — surface the caveat instead of "no teams".
+          partialVisibility={!isOwner}
           permissionLabel={(permission) =>
             t("assignments.template.accessModal.permissionLabel", {
               permission,
@@ -171,17 +176,18 @@ const TeamsList = ({
   loading,
   errored,
   teams,
+  partialVisibility,
   permissionLabel,
 }: {
   loading: boolean
   errored: boolean
-  teams: {
-    id: number
-    name: string
-    slug: string
-    html_url: string
-    permission: string
-  }[]
+  teams: Pick<
+    GitHubRepoTeam,
+    "id" | "name" | "slug" | "html_url" | "permission"
+  >[]
+  // The viewer only sees teams visible to their account (non-owner), so an
+  // empty list is inconclusive — show the visibility caveat, not "no teams".
+  partialVisibility: boolean
   permissionLabel: (permission: string) => string
 }) => {
   const { t } = useTranslation()
@@ -194,8 +200,9 @@ const TeamsList = ({
       </p>
     )
   }
-  // A repo-teams read that failed, or returned nothing the viewer can see.
-  if (errored) {
+  // A repo-teams read that failed, or (for a non-owner) returned nothing the
+  // viewer can see — either way, don't claim the template is unshared.
+  if (errored || (partialVisibility && teams.length === 0)) {
     return (
       <p className="mt-2 text-sm text-base-content/60">
         {t("assignments.template.accessModal.teamsUnavailable")}

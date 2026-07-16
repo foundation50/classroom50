@@ -123,6 +123,20 @@ describe("TemplateAccessModal", () => {
     ).toBeTruthy()
   })
 
+  it("shows the visibility caveat (not 'empty') for a non-owner with no visible teams", async () => {
+    orgRole = "member"
+    listRepoTeams.mockResolvedValue([])
+    renderModal()
+    expect(
+      await screen.findByText(
+        "assignments.template.accessModal.teamsUnavailable",
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText("assignments.template.accessModal.teamsEmpty"),
+    ).toBeNull()
+  })
+
   it("shows the fix action to an org owner", () => {
     orgRole = "owner"
     renderModal()
