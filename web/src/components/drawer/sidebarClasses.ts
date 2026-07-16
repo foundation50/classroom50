@@ -1,5 +1,4 @@
-// Sidebar class-name recipes (dark rail). One source per AGENTS.md "one recipe,
-// one source" so a token rename lands once.
+// Sidebar class-name recipes (dark rail). Single source so a token rename lands once.
 
 export const navItemClass = (active: boolean, collapsed: boolean) =>
   `flex items-center gap-2 rounded-box border-l-2 px-2 py-2 transition-colors ${
