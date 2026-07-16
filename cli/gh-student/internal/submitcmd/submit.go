@@ -12,6 +12,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net/url"
 	"os"
 	"os/exec"
@@ -89,6 +90,12 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
 	if err != nil {
+		// A bare (empty_repo) assignment repo never carries the marker, and
+		// submit can't identify the assignment without it — the best help is
+		// a hint, since students on those assignments push directly.
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%w — if this is an empty-repository assignment, autograding is disabled and `gh student submit` is not used; commit and `git push` directly", err)
+		}
 		return err
 	}
 

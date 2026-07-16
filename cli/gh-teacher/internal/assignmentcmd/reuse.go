@@ -248,6 +248,9 @@ func runAssignmentReuse(client githubapi.Client, out, errOut io.Writer, p reuseA
 		_, _ = out.Write(data)
 	} else {
 		templateDesc := "no template"
+		if copied.EmptyRepo {
+			templateDesc = "empty repo, autograding disabled"
+		}
 		if copied.Template != nil {
 			templateDesc = fmt.Sprintf("template %s/%s@%s", copied.Template.Owner, copied.Template.Repo, copied.Template.Branch)
 		}

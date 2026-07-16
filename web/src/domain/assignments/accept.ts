@@ -277,6 +277,16 @@ export async function acceptAssignment(params: {
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
   const isEmptyRepo = assignment.empty_repo === true
 
+  // empty_repo and template are mutually exclusive at write time, but the
+  // published manifest is not re-validated, so a hand-edited entry can carry
+  // both. Fail closed rather than half-apply (template content with no
+  // control files). Mirrors the CLI's guard.
+  if (isEmptyRepo && assignment.template) {
+    throw new Error(
+      `Assignment "${assignmentSlug}" sets both empty_repo and a template — the entry is invalid; ask your instructor to re-run assignment setup.`,
+    )
+  }
+
   // Best-effort: resolve the template owner's immutable id (org or user). Never
   // fail accept over this — a missing id is recorded as null.
   let sourceOwnerId: number | null = null

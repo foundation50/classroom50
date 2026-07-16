@@ -82,25 +82,28 @@ export function SubmissionsActionsMenu({
         tabIndex={0}
         className="dropdown-content menu z-10 mt-1 w-64 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
       >
+        {/* Collect stays for empty_repo assignments: it's org-wide and
+            collect_scores.py skips this assignment server-side (see the
+            SubmissionsPage comment). Only grading actions hide. */}
+        <li>
+          <button
+            type="button"
+            disabled={disabledActions}
+            title={collectTitle}
+            onClick={() => {
+              closeMenu()
+              if (disabledActions) return
+              onCollect()
+            }}
+          >
+            <DownloadCloud aria-hidden="true" className="size-4" />
+            {collecting
+              ? t("submissions.collect.active")
+              : t("submissions.collect.label")}
+          </button>
+        </li>
         {!emptyRepo && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={collectTitle}
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onCollect()
-                }}
-              >
-                <DownloadCloud aria-hidden="true" className="size-4" />
-                {collecting
-                  ? t("submissions.collect.active")
-                  : t("submissions.collect.label")}
-              </button>
-            </li>
             <li>
               <button
                 type="button"

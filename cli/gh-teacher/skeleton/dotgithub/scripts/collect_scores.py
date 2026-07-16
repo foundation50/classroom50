@@ -377,6 +377,18 @@ def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     return slugs
 
 
+def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
+    """Every valid slug including empty_repo assignments. Staff access grants
+    use this instead of valid_assignment_slugs: a bare repo never autogrades,
+    but TAs still need read on it to review the student-built work."""
+    slugs: list[str] = []
+    for entry in assignments.get("assignments") or []:
+        slug = entry.get("slug")
+        if isinstance(slug, str) and slug:
+            slugs.append(slug)
+    return slugs
+
+
 def collect_classroom(
     *,
     api_url: str,
@@ -756,7 +768,10 @@ def grant_classroom_team_access(
     if not grant_slugs:
         return
 
-    slugs = valid_assignment_slugs(assignments)
+    # ALL slugs, not just the collectable subset: empty_repo assignments are
+    # skipped by collection but their student repos still exist and staff
+    # still need access to review them.
+    slugs = all_assignment_slugs(assignments)
     if not slugs:
         return
 

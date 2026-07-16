@@ -265,6 +265,14 @@ jobs:
           if entry is None:
               fail(f"assignment {assignment!r} not registered in {manifest_url} — ask your instructor to run `gh teacher assignment add`")
 
+          # empty_repo assignments never autograde — same predicate as
+          # collect_scores.py / regrade_repos.py, enforced here too because
+          # student repos are student-writable: a hand-added workflow calling
+          # this runner must not re-enter the grading pipeline (releases,
+          # submit tags) that collection deliberately skips.
+          if entry.get("empty_repo"):
+              fail(f"assignment {assignment!r} is an empty-repository assignment — autograding is disabled for it")
+
           # === Re-validate the declarative tests block ===
           # Mirrors cli/gh-teacher/tests.go (write-time validator) so a
           # hand-edited assignments.json fails here with a clear

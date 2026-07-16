@@ -308,6 +308,14 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		return fmt.Errorf("assignment %q has an incomplete template ref (owner=%q repo=%q branch=%q) — ask your instructor to re-run `gh teacher assignment add`",
 			assignment, entry.Template.Owner, entry.Template.Repo, entry.Template.Branch)
 	}
+	// empty_repo and template are mutually exclusive at write time, but
+	// publish-pages publishes assignments.json verbatim, so a hand-edited
+	// entry can carry both. Fail closed rather than half-apply (the template
+	// fork would generate starter content, then the bare fork would skip every
+	// control file — a templated repo the grading pipeline ignores).
+	if entry.EmptyRepo && entry.Template != nil {
+		return fmt.Errorf("assignment %q sets both empty_repo and a template — the entry is invalid; ask your instructor to re-run `gh teacher assignment add`", assignment)
+	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
 	//    is teacher-authored and resolved up front so a fetch failure doesn't

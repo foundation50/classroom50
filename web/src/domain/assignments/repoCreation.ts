@@ -177,6 +177,13 @@ async function createEmptyAssignmentRepo(params: {
     throw err
   }
 
+  // Bare (empty_repo) create: the repo has no commits and no branches, so any
+  // default_branch GitHub reports is the org default setting, not a real ref —
+  // return the dedicated kind so no caller trusts it or attempts a commit.
+  if (!autoInit) {
+    return { kind: "bare", repo }
+  }
+
   // Commit onto the repo's real default branch (GitHub picks it for an
   // auto_init repo); fall back to the requested branch, then DEFAULT_BRANCH.
   const targetBranch = repo.default_branch || branch || DEFAULT_BRANCH
