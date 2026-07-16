@@ -839,7 +839,15 @@
       "noBranch_1": "{{owner}}/{{repo}} has no default branch. Push a commit, or add",
       "noBranch_2": ".",
       "rateLimited": "GitHub rate limit hit. Try again shortly.",
-      "policyLink": "Check {{owner}}'s OAuth app policy"
+      "policyLink": "Check {{owner}}'s OAuth app policy",
+      "reconcile": {
+        "action": "Fix template access",
+        "aria": "Fix template access for this assignment",
+        "title": "Fix template access for this assignment",
+        "pending": "Granting…",
+        "success": "Granted the classroom team read on the template.",
+        "failed": "Couldn't grant template access:"
+      }
     }
   },
   "published": {

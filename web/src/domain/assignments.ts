@@ -18,6 +18,7 @@ export {
   createAssignment,
   editAssignmentWithConflictRetry,
   preserveUnmanagedAssignmentKeys,
+  tryGrantTeamTemplateRead,
   type CreateAssignmentResult,
 } from "./assignments/createEdit"
 export {
