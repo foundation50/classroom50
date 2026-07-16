@@ -719,15 +719,25 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
   function makeGrantClient(opts: {
     classroomJson: Record<string, unknown>
     taGrantThrows?: boolean
+    // Visibility/kind of the template the edit resolves to. Defaults to a
+    // private in-org template repo (the grant path). Set private:false to model
+    // a public template (no grant), or isTemplate:false to model a non-template.
+    templatePrivate?: boolean
+    templateIsTemplate?: boolean
   }): { client: GitHubClient; grants: () => string[] } {
     const grants: string[] = []
-    const tmplRepo = {
-      name: "tmpl-v2",
-      full_name: `${ORG}/tmpl-v2`,
-      private: true,
-      is_template: true,
+    const templatePrivate = opts.templatePrivate ?? true
+    const templateIsTemplate = opts.templateIsTemplate ?? true
+    // Serve a repo read for BOTH the changed ref (tmpl-v2) and the stored ref
+    // (tmpl), so a test can drive either the changed-ref or the unchanged-ref
+    // branch of buildAssignmentEntry.
+    const makeRepo = (name: string) => ({
+      name,
+      full_name: `${ORG}/${name}`,
+      private: templatePrivate,
+      is_template: templateIsTemplate,
       default_branch: "main",
-    }
+    })
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
       assignments: [
@@ -777,7 +787,8 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
           content: b64(JSON.stringify(assignmentsFile)),
         }
       }
-      if (url.includes(`/repos/${ORG}/tmpl-v2`)) return tmplRepo
+      if (url.includes(`/repos/${ORG}/tmpl-v2`)) return makeRepo("tmpl-v2")
+      if (/\/repos\/[^/]+\/tmpl(\?|$)/.test(url)) return makeRepo("tmpl")
       if (url.endsWith("/git/trees")) return { sha: "newtree" }
       if (url.endsWith("/git/commits")) return { sha: "newcommit" }
       if (method === "PATCH" && url.includes("/git/refs/heads/main"))
@@ -795,14 +806,16 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     }
   }
 
-  function editInput() {
+  // `template_repo` defaults to a CHANGED ref (tmpl-v2 vs stored tmpl); pass
+  // "tmpl" to exercise the unchanged-ref re-affirm branch.
+  function editInput(templateRepo = "tmpl-v2") {
     return {
       org: ORG,
       classroom: CLASSROOM,
       slug: SLUG,
       name: "Homework 1",
       description: "",
-      template_repo: "tmpl-v2",
+      template_repo: templateRepo,
       due_date: "",
       mode: "individual",
       max_group_size: 0,
@@ -857,6 +870,41 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     // Student grant landed; TA failure did not surface as a save warning.
     expect(result.templateGrantWarning).toBeUndefined()
     expect(grants()).toEqual(["classroom50-cs50"])
+  })
+
+  it("re-affirms the grant on an UNCHANGED in-org private template ref", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+    })
+
+    // Same owner/repo/branch as the stored template (tmpl) — the unchanged-ref
+    // branch. It must still re-affirm both teams so a dropped grant is repaired.
+    const result = await editAssignment(client, editInput("tmpl"))
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+  })
+
+  it("does not grant on an unchanged PUBLIC template ref", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+      templatePrivate: false,
+    })
+
+    const result = await editAssignment(client, editInput("tmpl"))
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual([])
   })
 })
 

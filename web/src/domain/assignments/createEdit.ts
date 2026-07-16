@@ -309,13 +309,15 @@ async function buildAssignmentEntry(
   if (input.template_repo.trim()) {
     const parsedTemplate = parseTemplateRef(input.template_repo, input.org)
     if (templateRefUnchanged(parsedTemplate, existingTemplate)) {
-      // Ref unchanged, so the team was already granted at create (needsTeamGrant
-      // stays false). But the stored ref may now be unreliable (e.g. a fork whose
-      // upstream went private, or a repo predating the fork guard), so still
-      // re-validate live via resolveTemplate — which runs the cross-org
-      // private-fork guard — and fail closed before any commit.
-      await resolveTemplate(client, input.org, parsedTemplate)
+      // Ref unchanged, but still re-validate live via resolveTemplate — it runs
+      // the cross-org private-fork guard and fails closed before any commit if
+      // the stored ref went unreliable (a fork whose upstream went private, a
+      // repo predating the guard). Reuse its needsTeamGrant so an unchanged-ref
+      // save re-affirms the (idempotent) team read: a grant GitHub or a prior
+      // failure dropped is repaired on the next edit, not left stranded.
+      const resolved = await resolveTemplate(client, input.org, parsedTemplate)
       template = existingTemplate!
+      needsTeamGrant = resolved.needsTeamGrant
     } else {
       const resolved = await resolveTemplate(client, input.org, parsedTemplate)
       template = resolved.template
