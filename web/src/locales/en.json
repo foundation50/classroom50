@@ -845,7 +845,7 @@
         "aria": "Fix template access for this assignment",
         "title": "Fix template access for this assignment",
         "pending": "Granting…",
-        "success": "Granted the classroom team read on the template.",
+        "success": "Classroom team read on the template is confirmed.",
         "failed": "Couldn't grant template access:"
       }
     }

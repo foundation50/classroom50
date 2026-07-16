@@ -84,7 +84,11 @@ export const TemplateField = ({
     verification?.kind === "ok" &&
     verification.inOrg &&
     verification.visibility === "private"
-      ? { owner: verification.owner, repo: verification.repo }
+      ? {
+          owner: verification.owner,
+          repo: verification.repo,
+          branch: verification.branch,
+        }
       : null
   const teamAccessEnabled = Boolean(
     client && org && classroom && inOrgPrivateTemplate,
@@ -162,10 +166,7 @@ export const TemplateField = ({
               template={{
                 owner: inOrgPrivateTemplate.owner,
                 repo: inOrgPrivateTemplate.repo,
-                branch:
-                  verification?.kind === "ok"
-                    ? verification.branch
-                    : "main",
+                branch: inOrgPrivateTemplate.branch,
               }}
             />
           ) : undefined
