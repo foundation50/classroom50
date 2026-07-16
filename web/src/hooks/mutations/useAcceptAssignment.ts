@@ -9,6 +9,11 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 // the viewer's repo list; the confetti, per-step progress state, and error UI
 // stay at the call site (steps are driven via the onStepUpdate callback the
 // caller passes). Mirrors useEnrollOrInviteStudent's data-callback shape.
+//
+// Params are bound at hook-call time (not at mutate()) because onStepUpdate
+// closes over the page's step state and the one call site's params are stable;
+// onStepUpdate is required here (the domain fn takes it optional) since the page
+// always drives the progress UI.
 export function useAcceptAssignment(params: {
   org: string
   classroom: string
@@ -31,13 +36,11 @@ export function useAcceptAssignment(params: {
         onStepUpdate,
       }),
     onSuccess: () => {
-      if (org) {
-        void queryClient.invalidateQueries({
-          queryKey: githubKeys.orgRepos(org),
-          exact: true,
-          refetchType: "all",
-        })
-      }
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgRepos(org),
+        exact: true,
+        refetchType: "all",
+      })
     },
   })
 }

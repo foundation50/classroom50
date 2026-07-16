@@ -10,18 +10,22 @@ import { githubKeys } from "@/github-core/queries"
 // Domain/github-core writes are mocked so each hook test asserts only the
 // hook's own responsibility: that it delegates to the right fn and (where it
 // owns cache reconcile) invalidates the right keys.
-const cancelOrgInvitation = vi.fn((..._a: unknown[]) => Promise.resolve())
-const acceptAssignment = vi.fn((..._a: unknown[]) =>
+const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
+  Promise.resolve(),
+)
+const acceptAssignment = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ status: "created", repo: {}, cloneCommand: "" }),
 )
-const deleteAssignment = vi.fn((..._a: unknown[]) => Promise.resolve())
-const unenrollStudent = vi.fn((..._a: unknown[]) =>
+const deleteAssignment = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
+  Promise.resolve(),
+)
+const unenrollStudent = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
   Promise.resolve({ removed: true }),
 )
-const updateStudentWithConflictRetry = vi.fn((..._a: unknown[]) =>
-  Promise.resolve({ student: {} }),
-)
-const invalidateInviteQueries = vi.fn((..._a: unknown[]) => {})
+const updateStudentWithConflictRetry = vi.fn<
+  (...args: unknown[]) => Promise<unknown>
+>(() => Promise.resolve({ student: {} }))
+const invalidateInviteQueries = vi.fn<(...args: unknown[]) => void>(() => {})
 
 vi.mock("@/github-core/mutations", () => ({
   cancelOrgInvitation: (client: unknown, input: unknown) =>
