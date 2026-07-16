@@ -20,9 +20,9 @@ import {
 import Avatar from "@/components/avatar"
 import { RoleBadges } from "./RoleBadges"
 import type { Student } from "@/types/classroom"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
-import { cancelOrgInvitation } from "@/github-core/mutations"
+import { useDismissFailedInvite } from "@/hooks/mutations/useDismissFailedInvite"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -189,19 +189,9 @@ const EnrolledStudents = ({
     invalidateInviteQueriesForOrg(queryClient, org)
 
   // Dismiss a failed/expired invitation: cancel it on GitHub (removes it from
-  // the failed list) and refresh. 404 is treated as success by the mutation.
-  const dismissFailedInvite = useMutation({
-    mutationFn: (invitationId: number) =>
-      cancelOrgInvitation(client, { org, invitationId }),
-    onSuccess: () => invalidateInviteQueries(),
-    onError: (err) =>
-      notify({
-        tone: "error",
-        message: t("students.failedInviteDismissError", {
-          error: getErrorMessage(err),
-        }),
-      }),
-  })
+  // the failed list) and refresh. The hook owns the invite-query invalidation;
+  // the error toast stays here so it skips on unmount.
+  const dismissFailedInvite = useDismissFailedInvite(org)
 
   // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
   // an equivalent fresh invite — same classroom role (instructor -> org OWNER),
@@ -797,7 +787,17 @@ const EnrolledStudents = ({
                         reinviteFailedInvite.isPending ||
                         dismissFailedInvite.isPending
                       }
-                      onClick={() => dismissFailedInvite.mutate(inv.id)}
+                      onClick={() =>
+                        dismissFailedInvite.mutate(inv.id, {
+                          onError: (err) =>
+                            notify({
+                              tone: "error",
+                              message: t("students.failedInviteDismissError", {
+                                error: getErrorMessage(err),
+                              }),
+                            }),
+                        })
+                      }
                     >
                       {t("students.dismiss")}
                     </Button>

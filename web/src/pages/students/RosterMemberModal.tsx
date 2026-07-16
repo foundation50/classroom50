@@ -10,18 +10,16 @@ import {
   XCircle,
 } from "lucide-react"
 
-import { useMutation } from "@tanstack/react-query"
-
 import Avatar from "@/components/avatar"
 import GitHub from "@/assets/github.svg?react"
 import EditStudentForm from "@/pages/students/EditStudentForm"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useUnenrollStudent } from "@/hooks/mutations/useUnenrollStudent"
 import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
   inviteRosterStudents,
   resolveTeamIdForRoleRead,
-  unenrollStudent,
   type StudentCsvRow,
 } from "@/domain/students"
 import {
@@ -122,10 +120,7 @@ const RosterMemberModal = ({
   const [pendingRole, setPendingRole] = useState<ClassroomRole | null>(null)
   const [roleOwnerConfirmed, setRoleOwnerConfirmed] = useState(false)
 
-  const unenrollMutation = useMutation({
-    mutationFn: (student: ReturnType<typeof rowToStudent>) =>
-      unenrollStudent(client, { org, classroom, student }),
-  })
+  const unenrollMutation = useUnenrollStudent(org, classroom)
 
   // `resending` covers an in-flight invite/resend; folding it into `busy` keeps
   // the modal non-closeable (button, backdrop, Escape) while a write is pending,

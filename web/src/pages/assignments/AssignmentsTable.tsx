@@ -12,12 +12,8 @@ import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import {
-  deleteAssignment,
-  type DeleteAssignmentInput,
-} from "@/domain/assignments"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useQueryClient } from "@tanstack/react-query"
+import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Badge, Button } from "@/components/ui"
@@ -34,13 +30,8 @@ const DeleteAssignmentButton = ({
   onDeleteAssignment: () => void
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
   const [open, setOpen] = useState(false)
-  const deleteAssignmentMutation = useMutation({
-    mutationFn: (input: DeleteAssignmentInput) =>
-      deleteAssignment(client, input),
-    onSuccess: () => onDeleteAssignment(),
-  })
+  const deleteAssignmentMutation = useDeleteAssignment()
 
   return (
     <>

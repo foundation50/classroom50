@@ -1,12 +1,10 @@
 import { Mail, UserRound, Users } from "lucide-react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
-import { useMutation } from "@tanstack/react-query"
 import { useCallback, useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
 import GitHub from "@/assets/github.svg?react"
-import { updateStudentWithConflictRetry } from "@/domain/students"
+import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { isValidEmail } from "@/util/orgMembership"
 import { studentKey } from "@/util/roster"
@@ -51,7 +49,6 @@ const EditStudentForm = ({
   // the GitHub identity elsewhere (e.g. the roster detail modal's header).
   showGitHubPanel?: boolean
 }) => {
-  const client = useGitHubClient()
   const runSave = useSafeSubmit()
   const { t } = useTranslation()
   const [error, setError] = useState<string | null>(null)
@@ -66,27 +63,7 @@ const EditStudentForm = ({
     [student],
   )
 
-  const updateMutation = useMutation({
-    mutationFn: (value: EditStudentFormValues) =>
-      updateStudentWithConflictRetry(client, {
-        org,
-        classroom,
-        key: studentKey(student),
-        patch: {
-          first_name: value.first_name.trim(),
-          last_name: value.last_name.trim(),
-          email: value.email.trim(),
-          section: value.section.trim(),
-        },
-        // Seed a row if none exists yet (a team member — often staff — added on
-        // GitHub before the roster synced their blank row), so editing upserts.
-        identity: {
-          github_id: student.github_id,
-          username: student.username,
-          email: student.email,
-        },
-      }),
-  })
+  const updateMutation = useUpdateStudent()
 
   const form = useForm({
     defaultValues: defaults(),
@@ -108,7 +85,25 @@ const EditStudentForm = ({
       // rejection, so capture the error inside fn before it propagates.
       await runSave(async () => {
         try {
-          const result = await updateMutation.mutateAsync(value)
+          const result = await updateMutation.mutateAsync({
+            org,
+            classroom,
+            key: studentKey(student),
+            patch: {
+              first_name: value.first_name.trim(),
+              last_name: value.last_name.trim(),
+              email: value.email.trim(),
+              section: value.section.trim(),
+            },
+            // Seed a row if none exists yet (a team member — often staff — added
+            // on GitHub before the roster synced their blank row), so editing
+            // upserts.
+            identity: {
+              github_id: student.github_id,
+              username: student.username,
+              email: student.email,
+            },
+          })
           onSaved(result.student)
         } catch (err) {
           setError(getErrorMessage(err))

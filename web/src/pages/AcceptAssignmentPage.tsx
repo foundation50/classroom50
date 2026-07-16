@@ -12,19 +12,13 @@ import { Spinner } from "@/components/Spinner"
 import { Alert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
-import { githubKeys } from "@/github-core/queries"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
-import {
-  acceptAssignment,
-  type AcceptStepId,
-  type AcceptStepStatus,
-} from "@/domain/assignments"
+import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
 import {
   classifyMembershipError,
@@ -525,8 +519,6 @@ const AcceptAssignmentPage = () => {
   // loosely so the page works if mounted without the typed route in tests.
   const search = useSearch({ strict: false }) as { k?: string }
   const secret = typeof search.k === "string" ? search.k : undefined
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
 
   const { user } = useGithubAuth()
   const username = user?.login
@@ -572,42 +564,36 @@ const AcceptAssignmentPage = () => {
     enabled: Boolean(isPending && org),
   })
 
-  const acceptMutation = useMutation({
-    mutationFn: () => {
-      setSteps(initialStepState)
-      return acceptAssignment({
-        client,
-        org: org ?? "",
-        classroom: classroom ?? "",
-        assignmentSlug: assignment ?? "",
-        secret,
-        onStepUpdate: (update) =>
-          setSteps((prev) => ({
-            ...prev,
-            [update.id]: {
-              status: update.status,
-              message: update.message,
-              error: update.error,
-            },
-          })),
-      })
-    },
-    onSuccess: (result) => {
-      // Celebrate a freshly created repo; an already-accepted repo isn't a new
-      // milestone, so skip the confetti.
-      if (result.status === "created") {
-        fireConfetti()
-      }
-
-      if (org) {
-        void queryClient.invalidateQueries({
-          queryKey: githubKeys.orgRepos(org),
-          exact: true,
-          refetchType: "all",
-        })
-      }
-    },
+  const acceptMutation = useAcceptAssignment({
+    org: org ?? "",
+    classroom: classroom ?? "",
+    assignmentSlug: assignment ?? "",
+    secret,
+    onStepUpdate: (update) =>
+      setSteps((prev) => ({
+        ...prev,
+        [update.id]: {
+          status: update.status,
+          message: update.message,
+          error: update.error,
+        },
+      })),
   })
+
+  // Reset the per-step progress UI, run the accept, and celebrate a freshly
+  // created repo. Step-reset + confetti are UI effects, so they live at the
+  // call site; the hook owns the org-repos invalidation. Both accept buttons
+  // (initial + repair rerun) go through this.
+  const runAcceptFlow = () => {
+    setSteps(initialStepState)
+    return acceptMutation.mutateAsync(undefined, {
+      onSuccess: (result) => {
+        if (result.status === "created") {
+          fireConfetti()
+        }
+      },
+    })
+  }
 
   if (loadingAssignments || isLoadingRepo || loadingOrgMembership) {
     return (
@@ -814,9 +800,7 @@ const AcceptAssignmentPage = () => {
                   variant="primary"
                   className="w-full text-lg p-5"
                   disabled={!username || acceptMutation.isPending}
-                  onClick={() =>
-                    void runAccept(() => acceptMutation.mutateAsync())
-                  }
+                  onClick={() => void runAccept(() => runAcceptFlow())}
                 >
                   {t("accept.acceptButton")}
                 </Button>
@@ -829,7 +813,7 @@ const AcceptAssignmentPage = () => {
                   disabled={!username || acceptMutation.isPending}
                   onRerun={() => {
                     setRepairOpen(false)
-                    void runAccept(() => acceptMutation.mutateAsync())
+                    void runAccept(() => runAcceptFlow())
                   }}
                   open={repairOpen}
                   onToggle={setRepairOpen}

@@ -10,6 +10,7 @@ export {
   resolveTemplate,
   type AcceptStepId,
   type AcceptStepStatus,
+  type OnAcceptStepUpdate,
   type TemplateAccessVerification,
 } from "./assignments/accessPrimitives"
 export {
