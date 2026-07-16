@@ -249,6 +249,13 @@ function useGithubAuthState() {
     },
   })
 
+  // Auth-flow mutations — a deliberate exception to the hooks/mutations/
+  // boundary (see that README). These drive the login state machine (screen /
+  // device / error), not GitHub data writes against the app's query cache:
+  // there is nothing to invalidate or reconcile, each has a single call site
+  // inside this provider, and their .isPending feeds this hook's returned flags
+  // (isRequestingDeviceCode / isValidatingPat). Lifting them into standalone
+  // hooks would fragment the state machine for no data-consistency gain.
   const exchangeCodeMutation = useMutation({
     mutationFn: exchangeWebCode,
   })

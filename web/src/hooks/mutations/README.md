@@ -33,3 +33,16 @@ no → call site.
 Hooks stay `t()`-free: a caller passes pre-translated strings via a `messages`
 bag. The boundary is a convention, not yet lint-enforced (P7 earmarks
 `eslint-plugin-boundaries`).
+
+## Deliberate exceptions
+
+The boundary is **GitHub data writes** against the app's query cache. Two
+`useMutation` clusters stay inline by design because they aren't that:
+
+- **`auth/useGithubAuth.tsx`** (`exchangeWebCode` / `requestDeviceCode` /
+  `fetchGithubUserWithScopes`) — login state-machine transitions, not cache
+  writes. No invalidation/reconcile, one call site each inside the provider, and
+  their `.isPending` feeds the provider's returned flags; extracting them would
+  fragment the state machine.
+- **`hooks/useGitHubOperation` / `hooks/useActionActivity`** — generic
+  write-infra wrappers, not a specific operation.
