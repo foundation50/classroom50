@@ -12,13 +12,9 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useState } from "react"
-import {
-  initClassroom50,
-  type InitStepId,
-  type InitStepUpdate,
-} from "@/github-core/mutations"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
+import { useQueryClient } from "@tanstack/react-query"
+import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import { OrgSettingsPane } from "./OrgSettingsPage"
 import { EnterDiv } from "@/lib/motionComponents"
 import {
@@ -149,7 +145,6 @@ const OrgSetupPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.setup"))
   const queryClient = useQueryClient()
-  const githubClient = useGitHubClient()
 
   const { org } = useParams({ strict: false })
   const [steps, setSteps] =
@@ -168,39 +163,39 @@ const OrgSetupPage = () => {
   const { overwritePaths, resolveOverwrite, confirmSkeletonOverwrite } =
     useSkeletonOverwriteConfirm()
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      if (!org) {
-        return
-      }
-      // Reset the board before a (re-)run so a prior run's per-step results —
-      // including the orgDefaults unenforced-settings list — can't linger on an
-      // error path that emits no fresh data. Mirrors RerunOrgSetup.
-      setSteps(initialInitSteps)
-      return initClassroom50({
-        client: githubClient,
-        org,
-        plan: orgPlanDetails?.plan?.name,
-        onStepUpdate: (update) => {
-          setSteps((steps) => applyStepUpdate(steps, update))
-        },
-        confirmSkeletonOverwrite,
-      })
+  const mutation = useRunOrgSetup({
+    org,
+    plan: orgPlanDetails?.plan?.name,
+    onStepUpdate: (update) => {
+      setSteps((steps) => applyStepUpdate(steps, update))
     },
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({
-        queryKey: ["orgs"],
-      })
-      // Don't advance if a prerequisite step failed; initClassroom50 resolves
-      // with status "error" rather than throwing.
-      if (data && data.status === "error") {
-        return
-      }
-      // Stay on step 1 after setup so the teacher can review per-step results;
-      // they advance with the explicit "Next" button.
-      setNextStep(true)
-    },
+    confirmSkeletonOverwrite,
   })
+
+  // Reset the board before the init call (must run before mutateAsync), then
+  // run setup. Invalidation + the status-"error" advance branch stay here via
+  // the per-call onSuccess.
+  const runSetupFlow = () => {
+    // Reset the board before a (re-)run so a prior run's per-step results —
+    // including the orgDefaults unenforced-settings list — can't linger on an
+    // error path that emits no fresh data. Mirrors RerunOrgSetup.
+    setSteps(initialInitSteps)
+    return mutation.mutateAsync(undefined, {
+      onSuccess: (data) => {
+        queryClient.invalidateQueries({
+          queryKey: ["orgs"],
+        })
+        // Don't advance if a prerequisite step failed; initClassroom50 resolves
+        // with status "error" rather than throwing.
+        if (data && data.status === "error") {
+          return
+        }
+        // Stay on step 1 after setup so the teacher can review per-step
+        // results; they advance with the explicit "Next" button.
+        setNextStep(true)
+      },
+    })
+  }
 
   // Owner gate via the shared fail-closed verdict. /setup is NOT behind
   // RequireOwner, so this page owns the pending/error/deny branches: hold a
@@ -231,7 +226,10 @@ const OrgSetupPage = () => {
       {!ownerPending && !isError && isOwner && (
         <OrgSteps
           steps={steps}
-          mutation={mutation}
+          mutation={{
+            isPending: mutation.isPending,
+            mutateAsync: runSetupFlow,
+          }}
           nextStep={nextStep}
           org={org}
           setStage={setCurrentStage}

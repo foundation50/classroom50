@@ -1,16 +1,12 @@
 import { useState, type ReactNode } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { Button } from "@/components/ui"
-import {
-  initClassroom50,
-  type InitStepId,
-  type InitStepUpdate,
-} from "@/github-core/mutations"
+import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
+import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import {
   INIT_STEP_ORDER,
@@ -59,7 +55,6 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 // per-concern audit (U5/U6).
 const RerunOrgSetup = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
   const queryClient = useQueryClient()
   const runRerun = useSafeSubmit()
 
@@ -87,41 +82,44 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
     ? INIT_STEP_ORDER.filter((id) => steps[id].status === "warning").length
     : 0
 
-  const mutation = useMutation({
-    mutationFn: async () => {
-      setStarted(true)
-      setFailed(false)
-      setDone(false)
-      setSteps(initialInitSteps)
-      return initClassroom50({
-        client,
-        org,
-        plan: planDetails?.plan?.name,
-        onStepUpdate: (update) => {
-          // init fires onStepUpdate across ~10 sequential steps; the user can
-          // navigate away mid-run. The work isn't cancelable (no AbortSignal),
-          // so the mounted guard just stops setState churn.
-          if (!mountedRef.current) return
-          setSteps((prev) => applyStepUpdate(prev, update))
-        },
-        confirmSkeletonOverwrite,
-      })
-    },
-    onSuccess: (data) => {
+  const mutation = useRunOrgSetup({
+    org,
+    plan: planDetails?.plan?.name,
+    onStepUpdate: (update) => {
+      // init fires onStepUpdate across ~10 sequential steps; the user can
+      // navigate away mid-run. The work isn't cancelable (no AbortSignal), so
+      // the mounted guard just stops setState churn.
       if (!mountedRef.current) return
-      setDone(true)
-      // init resolves (not throws) with status "error" on a prerequisite
-      // failure; surface it instead of treating it as success.
-      if (data && data.status === "error") {
-        setFailed(true)
-        return
-      }
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.orgAuditPrefix(org),
-      })
-      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      setSteps((prev) => applyStepUpdate(prev, update))
     },
+    confirmSkeletonOverwrite,
   })
+
+  // Reset the board before the init call (must run before mutateAsync), then
+  // run setup. Invalidation + the status-"error" branch stay here via the
+  // per-call onSuccess.
+  const runRerunFlow = () => {
+    setStarted(true)
+    setFailed(false)
+    setDone(false)
+    setSteps(initialInitSteps)
+    return mutation.mutateAsync(undefined, {
+      onSuccess: (data) => {
+        if (!mountedRef.current) return
+        setDone(true)
+        // init resolves (not throws) with status "error" on a prerequisite
+        // failure; surface it instead of treating it as success.
+        if (data && data.status === "error") {
+          setFailed(true)
+          return
+        }
+        void queryClient.invalidateQueries({
+          queryKey: githubKeys.orgAuditPrefix(org),
+        })
+        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      },
+    })
+  }
 
   return (
     <SettingsSection
@@ -136,7 +134,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
           loadingLabel={t("orgSettings.rerun.running")}
           disabled={mutation.isPending}
           onClick={() => {
-            if (!mutation.isPending) void runRerun(() => mutation.mutateAsync())
+            if (!mutation.isPending) void runRerun(() => runRerunFlow())
           }}
         >
           {mutation.isPending

@@ -1,29 +1,17 @@
 import { useMemo, useState } from "react"
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import { Loader2, Send, ShieldCheck, UserPlus, X, XCircle } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { ConfirmModal } from "@/components/modals"
-import {
-  githubKeys,
-  teamMembersQuery,
-  teamInvitationsQuery,
-  getUser,
-} from "@/github-core/queries"
+import { teamMembersQuery, teamInvitationsQuery } from "@/github-core/queries"
 import { classroomTeamSlug } from "@/util/teamSlug"
-import {
-  removeUserFromTeam,
-  resendOrgInvitation,
-  cancelOrgInvitation,
-} from "@/github-core/mutations"
-import { resolveTeamIdForRoleRead } from "@/domain/students"
-import { githubOrgRoleForRole } from "@/util/teamRoster"
-import {
-  useAddStaffMember,
-  syncRosterAfterStaffChange,
-} from "@/hooks/mutations/useAddStaffMember"
+import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
+import useRemoveStaffMember from "@/hooks/mutations/useRemoveStaffMember"
+import useResendStaffInvite from "@/hooks/mutations/useResendStaffInvite"
+import useCancelStaffInvite from "@/hooks/mutations/useCancelStaffInvite"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
@@ -284,8 +272,6 @@ const StaffMemberRow = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { notify } = useToast()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const teamSlug = classroomTeamSlug(classroom, role)
@@ -296,41 +282,7 @@ const StaffMemberRow = ({
       ? t("classes.staff.roleInstructorPlural")
       : t("classes.staff.roleTaPlural")
 
-  const removeMutation = useMutation({
-    mutationFn: () =>
-      removeUserFromTeam(client, { org, teamSlug, username: member.login }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(org, teamSlug),
-      })
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamInvitations(org, teamSlug),
-      })
-      // Clear the removed staffer's stale role from roster.csv now
-      // (best-effort) so the roster stops showing them with a role.
-      void syncRosterAfterStaffChange(client, queryClient, org, classroom)
-      notify({
-        tone: "success",
-        durationMs: 4000,
-        message: t("classes.staff.removedToast", {
-          login: member.login,
-          role: rolePlural,
-        }),
-      })
-    },
-    onError: (err) => {
-      notify({
-        tone: "error",
-        message: t("classes.staff.removeFailed", {
-          login: member.login,
-          error:
-            err instanceof Error
-              ? err.message
-              : t("classes.somethingWentWrong"),
-        }),
-      })
-    },
-  })
+  const removeMutation = useRemoveStaffMember(org, classroom, teamSlug)
 
   return (
     <li className="flex items-center justify-between gap-2 rounded-md border border-base-200 px-2 py-1.5">
@@ -383,7 +335,30 @@ const StaffMemberRow = ({
         confirmLabel={t("classes.staff.removeRole", { role: roleLabel })}
         onConfirm={async () => {
           setConfirmingRemove(false)
-          await removeMutation.mutateAsync()
+          await removeMutation.mutateAsync(member.login, {
+            onSuccess: () => {
+              notify({
+                tone: "success",
+                durationMs: 4000,
+                message: t("classes.staff.removedToast", {
+                  login: member.login,
+                  role: rolePlural,
+                }),
+              })
+            },
+            onError: (err) => {
+              notify({
+                tone: "error",
+                message: t("classes.staff.removeFailed", {
+                  login: member.login,
+                  error:
+                    err instanceof Error
+                      ? err.message
+                      : t("classes.somethingWentWrong"),
+                }),
+              })
+            },
+          })
         }}
         onClose={() => setConfirmingRemove(false)}
       />
@@ -408,87 +383,12 @@ const PendingStaffRow = ({
   disabled: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { notify } = useToast()
   const teamSlug = classroomTeamSlug(classroom, role)
   const who = invite.login || invite.email || String(invite.id)
 
-  const invalidate = () => {
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.teamInvitations(org, teamSlug),
-    })
-    queryClient.invalidateQueries({
-      queryKey: githubKeys.teamMembers(org, teamSlug),
-    })
-  }
-
-  const resendMutation = useMutation({
-    mutationFn: async () => {
-      if (!invite.login) throw new Error(t("classes.staff.resendEmailOnly"))
-      // Resolve the invitee's immutable id (org invites don't carry it) and the
-      // role's team, so the re-sent invite lands them on the staff team.
-      const inviteeId = (await getUser(client, invite.login)).id
-      const teamId = await resolveTeamIdForRoleRead(
-        client,
-        org,
-        classroom,
-        role,
-      )
-      await resendOrgInvitation(client, {
-        org,
-        username: invite.login,
-        inviteeId,
-        invitationId: invite.id,
-        teamIds: teamId ? [teamId] : undefined,
-        // Preserve the original org role: an instructor invite is org OWNER.
-        role: githubOrgRoleForRole(role),
-      })
-    },
-    onSuccess: () => {
-      invalidate()
-      notify({
-        tone: "success",
-        durationMs: 4000,
-        message: t("classes.staff.resentToast", { who }),
-      })
-    },
-    onError: (err) =>
-      notify({
-        tone: "error",
-        message: t("classes.staff.resendFailed", {
-          who,
-          error:
-            err instanceof Error
-              ? err.message
-              : t("classes.somethingWentWrong"),
-        }),
-      }),
-  })
-
-  const cancelMutation = useMutation({
-    mutationFn: () =>
-      cancelOrgInvitation(client, { org, invitationId: invite.id }),
-    onSuccess: () => {
-      invalidate()
-      notify({
-        tone: "success",
-        durationMs: 4000,
-        message: t("classes.staff.cancelledToast", { who }),
-      })
-    },
-    onError: (err) =>
-      notify({
-        tone: "error",
-        message: t("classes.staff.cancelFailed", {
-          who,
-          error:
-            err instanceof Error
-              ? err.message
-              : t("classes.somethingWentWrong"),
-        }),
-      }),
-  })
+  const resendMutation = useResendStaffInvite(org, classroom, role, teamSlug)
+  const cancelMutation = useCancelStaffInvite(org, teamSlug)
 
   const busy = resendMutation.isPending || cancelMutation.isPending
 
@@ -509,7 +409,34 @@ const PendingStaffRow = ({
             size="xs"
             title={t("classes.staff.resend")}
             disabled={disabled || busy}
-            onClick={() => resendMutation.mutate()}
+            onClick={() =>
+              resendMutation.mutate(
+                {
+                  login: invite.login,
+                  invitationId: invite.id,
+                  emailOnlyMessage: t("classes.staff.resendEmailOnly"),
+                },
+                {
+                  onSuccess: () =>
+                    notify({
+                      tone: "success",
+                      durationMs: 4000,
+                      message: t("classes.staff.resentToast", { who }),
+                    }),
+                  onError: (err) =>
+                    notify({
+                      tone: "error",
+                      message: t("classes.staff.resendFailed", {
+                        who,
+                        error:
+                          err instanceof Error
+                            ? err.message
+                            : t("classes.somethingWentWrong"),
+                      }),
+                    }),
+                },
+              )
+            }
           >
             {resendMutation.isPending ? (
               <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
@@ -524,7 +451,27 @@ const PendingStaffRow = ({
           className="text-error"
           title={t("classes.staff.cancelInvite")}
           disabled={disabled || busy}
-          onClick={() => cancelMutation.mutate()}
+          onClick={() =>
+            cancelMutation.mutate(invite.id, {
+              onSuccess: () =>
+                notify({
+                  tone: "success",
+                  durationMs: 4000,
+                  message: t("classes.staff.cancelledToast", { who }),
+                }),
+              onError: (err) =>
+                notify({
+                  tone: "error",
+                  message: t("classes.staff.cancelFailed", {
+                    who,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : t("classes.somethingWentWrong"),
+                  }),
+                }),
+            })
+          }
         >
           {cancelMutation.isPending ? (
             <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
