@@ -35,8 +35,6 @@ describe("logWriteFailure", () => {
       status: 422,
       requestId: "req-9",
     })
-    // The MutationCache already records API failures, so this branch must NOT
-    // re-record (that would double-count).
     expect(error).toHaveBeenCalledWith(
       "create classroom failed",
       expect.not.objectContaining({ record: true }),

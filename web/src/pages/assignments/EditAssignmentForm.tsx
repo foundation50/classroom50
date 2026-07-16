@@ -35,8 +35,7 @@ const EditAssignmentForm = ({
   const trackPublishDeploy = useTrackPublishDeploy()
   const editAssignmentMutation = useEditAssignment({
     onWrite: (result, variables) => {
-      // Track the publish-pages deploy this edit's commit triggers, anchored on
-      // the commit SHA (head_sha on the runs API).
+      // newCommitSha is the runs API's head_sha.
       trackPublishDeploy(
         org,
         result.newCommitSha,

@@ -36,8 +36,6 @@ const EditClassroomContent = ({
   )
 
   const editClassroomMutation = useEditClassroom(org, classroom, (result) => {
-    // A classroom.json write triggers a publish-pages deploy — surface it in
-    // the global activity banner, anchored on the commit SHA.
     trackPublishDeploy(
       org,
       result?.newCommitSha,
