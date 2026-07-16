@@ -1364,10 +1364,11 @@
     "repo": {
       "manageGroupAria": "Manage group for {{assignment}}",
       "manageGroupTitle": "Manage group",
+      "classroomLabel": "Classroom:",
       "individual": "Individual",
       "group": "Group",
       "openRepo": "Open repo",
-      "viewDescription": "View assignment description",
+      "details": "Details",
       "descriptionModalTitle": "Assignment description",
       "emptyTitle": "No assignment repos yet",
       "emptyBody": "Repositories you can write to will appear here once assignments have been created for this organization."

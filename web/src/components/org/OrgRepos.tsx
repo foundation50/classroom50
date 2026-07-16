@@ -5,6 +5,8 @@ import {
   BookOpen,
   ExternalLink,
   FileText,
+  FolderGit2,
+  GraduationCap,
   Link2,
   Pencil,
   UserRound,
@@ -31,6 +33,9 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   )
 
   const description = assignmentData?.description?.trim()
+  // Prefer the human assignment name; the repo name is the fallback identity
+  // (`<classroom>-<assignment>-<user>`) when assignment data hasn't resolved.
+  const title = assignmentData?.name || assignment || repo.name
 
   // Only group assignments have something a student can manage (collaborators);
   // for individual assignments the edit page is a dead-end, so no pencil.
@@ -70,7 +75,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 className="group inline-flex max-w-full items-center gap-1.5 transition-colors hover:text-primary"
               >
                 <h3 className="truncate text-base font-semibold leading-tight underline decoration-base-content/30 underline-offset-2 group-hover:decoration-primary">
-                  {repo.name}
+                  {title}
                 </h3>
                 <Link2
                   aria-hidden="true"
@@ -79,12 +84,32 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
               </Link>
             ) : (
               <h3 className="truncate text-base font-semibold leading-tight">
-                {repo.name}
+                {title}
               </h3>
             )}
-            <p className="truncate text-xs text-base-content/70">
-              {repo.owner?.login}
-            </p>
+            <div className="mt-1 flex flex-col gap-0.5 text-xs text-base-content/70">
+              {classroom ? (
+                <span className="inline-flex max-w-full items-center gap-1.5">
+                  <GraduationCap
+                    aria-hidden="true"
+                    className="size-3.5 shrink-0 text-base-content/50"
+                  />
+                  <span className="truncate">
+                    {t("classes.repo.classroomLabel")}{" "}
+                    <span className="font-medium text-base-content/80">
+                      {classroom}
+                    </span>
+                  </span>
+                </span>
+              ) : null}
+              <span className="inline-flex max-w-full items-center gap-1.5">
+                <FolderGit2
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-base-content/50"
+                />
+                <span className="truncate font-mono">{repo.name}</span>
+              </span>
+            </div>
           </div>
         </div>
 
@@ -112,7 +137,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 className="btn btn-sm btn-outline"
               >
                 <FileText aria-hidden="true" className="size-4" />
-                {t("classes.repo.viewDescription")}
+                {t("classes.repo.details")}
               </button>
             ) : null}
             <a
