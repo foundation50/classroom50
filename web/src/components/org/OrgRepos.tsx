@@ -5,6 +5,7 @@ import {
   BookOpen,
   ExternalLink,
   FileText,
+  Link2,
   Pencil,
   UserRound,
   UsersRound,
@@ -80,10 +81,14 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             <BookOpen aria-hidden="true" className="size-4 shrink-0" />
             <span className="truncate">
               {t("classes.repo.assignmentLabel")}{" "}
-              <span className="font-medium text-base-content/80 group-hover:text-primary">
+              <span className="font-medium text-base-content/80 underline decoration-base-content/30 underline-offset-2 group-hover:text-primary group-hover:decoration-primary">
                 {assignment}
               </span>
             </span>
+            <Link2
+              aria-hidden="true"
+              className="size-3.5 shrink-0 text-base-content/40 group-hover:text-primary"
+            />
           </Link>
         ) : null}
 
