@@ -17,6 +17,14 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.8.0](https://github.com/foundation50/classroom50/compare/web-v1.7.0...web-v1.8.0) (2026-07-16)
+
+
+### Features
+
+* grant TA staff team read on templates at setup, not only at collect-scores ([#288](https://github.com/foundation50/classroom50/issues/288)) ([9e4e5a3](https://github.com/foundation50/classroom50/commit/9e4e5a3bb71c6c3ec2247851c9abe66d828e5e0f))
+* **web:** show assignment description to students ([#299](https://github.com/foundation50/classroom50/issues/299)) ([572953c](https://github.com/foundation50/classroom50/commit/572953c5cd305494a972ae758ff64157741006c3))
+
 ## [1.7.0](https://github.com/foundation50/classroom50/compare/web-v1.6.0...web-v1.7.0) (2026-07-15)
 
 
