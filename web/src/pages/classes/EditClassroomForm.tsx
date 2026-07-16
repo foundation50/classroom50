@@ -1,16 +1,12 @@
-import {
-  deleteClassroom,
-  editClassroomWithConflictRetry,
-  type DeleteClassroomInput,
-} from "@/domain/classrooms"
 import { ConfirmModal } from "@/components/modals"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
+import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useForm } from "@tanstack/react-form"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -41,12 +37,8 @@ const DeleteClassroomButton = ({
   onDeleteClassroom: () => void
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
   const [open, setOpen] = useState(false)
-  const deleteClassroomMutation = useMutation({
-    mutationFn: (input: DeleteClassroomInput) => deleteClassroom(client, input),
-    onSuccess: () => onDeleteClassroom(),
-  })
+  const deleteClassroomMutation = useDeleteClassroom(org, classroom)
 
   return (
     <>
@@ -108,44 +100,14 @@ const ArchiveClassroomButton = ({
   archived: boolean
 }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
   const { notify } = useToast()
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
 
   // A pure archive/unarchive write: editClassroom preserves name/term when
-  // omitted, so we send only `active` — no refetch, no stale name/term.
-  const archiveMutation = useMutation({
-    mutationFn: (active: boolean) =>
-      editClassroomWithConflictRetry(client, {
-        org,
-        slug: classroom,
-        active,
-      }),
-    onSuccess: (_result, active) => {
-      // Optimistically flip the cached classroom.json `active` so the button,
-      // read-only fieldset, and badges update immediately. GitHub's contents API
-      // is read-after-write eventual, so we do NOT invalidate this exact key: an
-      // immediate refetch can read the pre-write body and clobber the optimistic
-      // flip. The optimistic value stays authoritative; the staleTime refetch
-      // reconciles later.
-      const key = githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${classroom}/classroom.json`,
-      )
-      queryClient.setQueryData(
-        key,
-        (prev: Record<string, unknown> | undefined) =>
-          prev ? { ...prev, active } : prev,
-      )
-      // Repartition the classes list (Active/Archived/All) — a different query
-      // than the per-classroom classroom.json above.
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
-      })
-    },
-  })
+  // omitted, so we send only `active`. The hook owns the optimistic flip +
+  // rollback + list invalidation; the success/error toasts stay at the call
+  // site below.
+  const archiveMutation = useArchiveClassroom(org, classroom)
 
   return (
     <>

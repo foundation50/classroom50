@@ -1,18 +1,14 @@
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { acceptAndVerifyOrgMembership } from "@/domain/users"
 import { isOwnerGitHubOrgRole } from "@/authz"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useAcceptOrgInvite } from "@/hooks/mutations/useAcceptOrgInvite"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import type { GitHubOrgMembership } from "@/github-core/types"
-import useGetOrgs, {
-  orgMembershipsQueryKey,
-  usePendingOrgInvites,
-} from "@/hooks/useGetOrgs"
+import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronDown,
@@ -103,31 +99,12 @@ function MissingOrgNotice({
 // moves the org into the active list, where the classroom50 summary is built.
 function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { notify } = useToast()
   const org = invite.organization
   const isOwner = isOwnerGitHubOrgRole(invite.role)
 
-  const accept = useMutation({
-    mutationFn: () => acceptAndVerifyOrgMembership(client, org.login),
-    onSuccess: () => {
-      notify({
-        tone: "success",
-        message: t("orgs.invites.accepted", { org: org.login }),
-      })
-      queryClient.invalidateQueries({ queryKey: orgMembershipsQueryKey })
-      queryClient.invalidateQueries({ queryKey: ["orgs"] })
-      navigate({ to: "/$org", params: { org: org.login } })
-    },
-    onError: () => {
-      notify({
-        tone: "error",
-        message: t("orgs.invites.acceptError", { org: org.login }),
-      })
-    },
-  })
+  const accept = useAcceptOrgInvite(org.login)
 
   return (
     <Card
@@ -187,7 +164,23 @@ function PendingInviteCard({ invite }: { invite: GitHubOrgMembership }) {
             size="sm"
             loading={accept.isPending}
             loadingLabel={t("orgs.invites.accepting")}
-            onClick={() => accept.mutate()}
+            onClick={() =>
+              accept.mutate(undefined, {
+                onSuccess: () => {
+                  notify({
+                    tone: "success",
+                    message: t("orgs.invites.accepted", { org: org.login }),
+                  })
+                  navigate({ to: "/$org", params: { org: org.login } })
+                },
+                onError: () => {
+                  notify({
+                    tone: "error",
+                    message: t("orgs.invites.acceptError", { org: org.login }),
+                  })
+                },
+              })
+            }
           >
             {t("orgs.invites.acceptOpen")}
           </Button>

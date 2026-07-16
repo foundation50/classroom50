@@ -14,9 +14,7 @@ import { useOrgStaff } from "@/hooks/useOrgStaff"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { acceptPendingOrgInvite } from "@/domain/users"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useAcceptPendingOrgInvite } from "@/hooks/mutations/useAcceptPendingOrgInvite"
 import OrgPreflightNotice from "@/pages/orgSettings/OrgPreflightNotice"
 import ClassroomList from "@/pages/classes/ClassroomList"
 import { OrgRepos } from "@/components/org/OrgRepos"
@@ -54,19 +52,9 @@ const CreateClassroomPane = ({ org }: { org: string }) => {
 
 const JoinOrgCard = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const run = useSafeSubmit()
 
-  const mutation = useMutation({
-    mutationFn: () => acceptPendingOrgInvite(client, org),
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: ["github", "memberships", "orgs", org],
-      })
-      queryClient.invalidateQueries({ queryKey: ["orgs"] })
-    },
-  })
+  const mutation = useAcceptPendingOrgInvite(org)
 
   return (
     <Card dashed>

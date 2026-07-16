@@ -1,15 +1,9 @@
-import {
-  deleteClassroom,
-  editClassroomWithConflictRetry,
-} from "@/domain/classrooms"
 import { ConfirmModal } from "@/components/modals"
 import { Button, Card } from "@/components/ui"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError } from "@/github-core/errors"
-import type { GitHubFileListing } from "@/github-core/types"
+import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
+import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useStudentCount from "@/hooks/useStudentCount"
 import {
@@ -18,7 +12,6 @@ import {
 } from "@/hooks/useClassroomSummaries"
 import { EnterDiv } from "@/lib/motionComponents"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Link } from "@tanstack/react-router"
 import {
   Archive,
@@ -116,9 +109,7 @@ function ClassroomMenu({
   onMenuOpenChange?: (open: boolean) => void
 }) {
   const { t } = useTranslation()
-  const client = useGitHubClient()
   const { notify } = useToast()
-  const queryClient = useQueryClient()
   const [open, setOpen] = useState(false)
   const [archiveOpen, setArchiveOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
@@ -205,115 +196,8 @@ function ClassroomMenu({
     items[next]?.focus()
   }
 
-  const archiveMutation = useMutation({
-    mutationFn: (active: boolean) =>
-      editClassroomWithConflictRetry(client, { org, slug, active }),
-    onMutate: (active: boolean) => {
-      const key = githubKeys.jsonFile(
-        org,
-        CONFIG_REPO,
-        `${slug}/classroom.json`,
-      )
-      const prev = queryClient.getQueryData(key)
-      // Optimistically flip the cached active so the card repartitions at once.
-      queryClient.setQueryData(
-        key,
-        (current: Record<string, unknown> | undefined) =>
-          current ? { ...current, active } : current,
-      )
-      // Do NOT invalidate this exact key (GitHub contents is read-after-write
-      // eventual). Repartition the list via the list-level key instead.
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
-      })
-      return { key, prev }
-    },
-    onError: (err, _active, ctx) => {
-      // Roll back the optimistic flip so a failed write can't strand the card
-      // in the wrong tab.
-      if (ctx) queryClient.setQueryData(ctx.key, ctx.prev)
-      notify({
-        tone: "error",
-        message: t(
-          archived ? "classes.unarchiveFailed" : "classes.archiveFailed",
-          {
-            classroom: slug,
-            error:
-              err instanceof Error
-                ? err.message
-                : t("classes.somethingWentWrong"),
-          },
-        ),
-      })
-    },
-    onSuccess: (_r, active) => {
-      notify({
-        tone: "success",
-        durationMs: 5000,
-        message: active
-          ? t("classes.unarchivedToast", { classroom: slug })
-          : t("classes.archivedToast", { classroom: slug }),
-      })
-    },
-  })
-
-  const deleteMutation = useMutation({
-    mutationFn: () => deleteClassroom(client, { org, classroom: slug }),
-    onSuccess: (result) => {
-      // deleteClassroom returns { deleted: false } as a no-op (e.g. the dir was
-      // already gone). Don't claim success in that case.
-      if (!result.deleted) {
-        notify({
-          tone: "warning",
-          message: t("classes.deleteNoop", { classroom: slug }),
-        })
-        queryClient.invalidateQueries({
-          queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
-        })
-        return
-      }
-      // Optimistically drop the dir from the cached listing so the card leaves
-      // at once — the Contents API is read-after-write eventual, so an immediate
-      // refetch can still return the just-deleted dir. Then invalidate to
-      // reconcile.
-      const listKey = githubKeys.jsonFile(org, CONFIG_REPO, "")
-      queryClient.setQueryData(
-        listKey,
-        (prev: GitHubFileListing[] | undefined) =>
-          prev ? prev.filter((entry) => entry.path !== slug) : prev,
-      )
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
-      })
-      // The list flow stays put (no navigate), so it is the natural place to
-      // finally surface the non-fatal team-cleanup warning that the edit page
-      // silently dropped.
-      if (result.teamDeleteWarning) {
-        notify({
-          tone: "warning",
-          message: t("classes.deleteTeamWarning", { classroom: slug }),
-        })
-      } else {
-        notify({
-          tone: "success",
-          durationMs: 5000,
-          message: t("classes.deletedToast", { classroom: slug }),
-        })
-      }
-    },
-    onError: (err) => {
-      notify({
-        tone: "error",
-        message: t("classes.deleteFailed", {
-          classroom: slug,
-          error:
-            err instanceof Error
-              ? err.message
-              : t("classes.somethingWentWrong"),
-        }),
-      })
-    },
-  })
+  const archiveMutation = useArchiveClassroom(org, slug)
+  const deleteMutation = useDeleteClassroom(org, slug)
 
   const menuItem =
     "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-base-200"
@@ -443,7 +327,34 @@ function ClassroomMenu({
         needsConfirm={false}
         dangerous={false}
         onConfirm={async () => {
-          await archiveMutation.mutateAsync(archived)
+          await archiveMutation.mutateAsync(archived, {
+            onSuccess: (_r, active) => {
+              notify({
+                tone: "success",
+                durationMs: 5000,
+                message: active
+                  ? t("classes.unarchivedToast", { classroom: slug })
+                  : t("classes.archivedToast", { classroom: slug }),
+              })
+            },
+            onError: (err) => {
+              notify({
+                tone: "error",
+                message: t(
+                  archived
+                    ? "classes.unarchiveFailed"
+                    : "classes.archiveFailed",
+                  {
+                    classroom: slug,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : t("classes.somethingWentWrong"),
+                  },
+                ),
+              })
+            },
+          })
         }}
         onClose={() => setArchiveOpen(false)}
       />
@@ -465,7 +376,51 @@ function ClassroomMenu({
         cancelLabel={t("classes.deleteClassroomCancel")}
         dangerous
         onConfirm={async () => {
-          await deleteMutation.mutateAsync()
+          await deleteMutation.mutateAsync(
+            { org, classroom: slug },
+            {
+              onSuccess: (result) => {
+                // deleteClassroom returns { deleted: false } as a no-op (e.g.
+                // the dir was already gone). Don't claim success in that case.
+                if (!result.deleted) {
+                  notify({
+                    tone: "warning",
+                    message: t("classes.deleteNoop", { classroom: slug }),
+                  })
+                  return
+                }
+                // The list flow stays put (no navigate), so it is the natural
+                // place to surface the non-fatal team-cleanup warning that the
+                // edit page silently drops.
+                if (result.teamDeleteWarning) {
+                  notify({
+                    tone: "warning",
+                    message: t("classes.deleteTeamWarning", {
+                      classroom: slug,
+                    }),
+                  })
+                } else {
+                  notify({
+                    tone: "success",
+                    durationMs: 5000,
+                    message: t("classes.deletedToast", { classroom: slug }),
+                  })
+                }
+              },
+              onError: (err) => {
+                notify({
+                  tone: "error",
+                  message: t("classes.deleteFailed", {
+                    classroom: slug,
+                    error:
+                      err instanceof Error
+                        ? err.message
+                        : t("classes.somethingWentWrong"),
+                  }),
+                })
+              },
+            },
+          )
         }}
         onClose={() => setDeleteOpen(false)}
       />
