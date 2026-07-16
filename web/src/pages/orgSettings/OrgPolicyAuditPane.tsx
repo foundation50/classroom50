@@ -588,6 +588,16 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
         </div>
       )}
 
+      {renameMutation.isError && (
+        <div className="mt-4 flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
+          <TriangleAlert
+            aria-hidden="true"
+            className="mt-0.5 size-4 shrink-0"
+          />
+          <span>{t("orgSettings.audit.renameError")}</span>
+        </div>
+      )}
+
       {transientNotice && (
         <div className="mt-4 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning">
           <TriangleAlert
@@ -627,7 +637,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
         confirmLabel={t("orgSettings.audit.renameToMain")}
         dangerous
         needsConfirm={false}
-        onConfirm={() => renameMutation.mutateAsync().then(() => undefined)}
+        onConfirm={() => runFix(() => renameMutation.mutateAsync())}
         onClose={() => setConfirmRename(false)}
       />
     </SettingsSection>

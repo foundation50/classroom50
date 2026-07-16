@@ -1070,6 +1070,7 @@
       "auditing": "Auditing organization policy…",
       "auditError": "Couldn't run the policy audit. Try re-checking.",
       "fixError": "Couldn't apply the fix. You may lack owner permissions, or an enterprise policy blocks this change.",
+      "renameError": "Couldn't rename the config repo's default branch. You may lack owner permissions, or the rename didn't go through — try again.",
       "fixTransient": "That didn't go through — this can be a temporary rate limit, or the repository may still be initializing. Try again in a moment.",
       "needsManualSetup": "Needs manual setup",
       "couldntAutoConfigure": "We couldn't set this automatically. This can happen when an enterprise or organization policy manages the setting, or when the account lacks permission. Set it manually on the linked page.",

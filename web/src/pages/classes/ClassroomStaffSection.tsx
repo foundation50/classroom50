@@ -12,6 +12,7 @@ import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
 import useRemoveStaffMember from "@/hooks/mutations/useRemoveStaffMember"
 import useResendStaffInvite from "@/hooks/mutations/useResendStaffInvite"
 import useCancelStaffInvite from "@/hooks/mutations/useCancelStaffInvite"
+import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
@@ -390,6 +391,10 @@ const PendingStaffRow = ({
   const resendMutation = useResendStaffInvite(org, classroom, role, teamSlug)
   const cancelMutation = useCancelStaffInvite(org, teamSlug)
 
+  // One latch per row so a same-tick double-click, or resend racing cancel on
+  // the same invite, can't start two overlapping writes before isPending flips.
+  const submit = useSafeSubmit()
+
   const busy = resendMutation.isPending || cancelMutation.isPending
 
   return (
@@ -410,31 +415,33 @@ const PendingStaffRow = ({
             title={t("classes.staff.resend")}
             disabled={disabled || busy}
             onClick={() =>
-              resendMutation.mutate(
-                {
-                  login: invite.login,
-                  invitationId: invite.id,
-                  emailOnlyMessage: t("classes.staff.resendEmailOnly"),
-                },
-                {
-                  onSuccess: () =>
-                    notify({
-                      tone: "success",
-                      durationMs: 4000,
-                      message: t("classes.staff.resentToast", { who }),
-                    }),
-                  onError: (err) =>
-                    notify({
-                      tone: "error",
-                      message: t("classes.staff.resendFailed", {
-                        who,
-                        error:
-                          err instanceof Error
-                            ? err.message
-                            : t("classes.somethingWentWrong"),
+              void submit(() =>
+                resendMutation.mutateAsync(
+                  {
+                    login: invite.login,
+                    invitationId: invite.id,
+                    emailOnlyMessage: t("classes.staff.resendEmailOnly"),
+                  },
+                  {
+                    onSuccess: () =>
+                      notify({
+                        tone: "success",
+                        durationMs: 4000,
+                        message: t("classes.staff.resentToast", { who }),
                       }),
-                    }),
-                },
+                    onError: (err) =>
+                      notify({
+                        tone: "error",
+                        message: t("classes.staff.resendFailed", {
+                          who,
+                          error:
+                            err instanceof Error
+                              ? err.message
+                              : t("classes.somethingWentWrong"),
+                        }),
+                      }),
+                  },
+                ),
               )
             }
           >
@@ -452,25 +459,27 @@ const PendingStaffRow = ({
           title={t("classes.staff.cancelInvite")}
           disabled={disabled || busy}
           onClick={() =>
-            cancelMutation.mutate(invite.id, {
-              onSuccess: () =>
-                notify({
-                  tone: "success",
-                  durationMs: 4000,
-                  message: t("classes.staff.cancelledToast", { who }),
-                }),
-              onError: (err) =>
-                notify({
-                  tone: "error",
-                  message: t("classes.staff.cancelFailed", {
-                    who,
-                    error:
-                      err instanceof Error
-                        ? err.message
-                        : t("classes.somethingWentWrong"),
+            void submit(() =>
+              cancelMutation.mutateAsync(invite.id, {
+                onSuccess: () =>
+                  notify({
+                    tone: "success",
+                    durationMs: 4000,
+                    message: t("classes.staff.cancelledToast", { who }),
                   }),
-                }),
-            })
+                onError: (err) =>
+                  notify({
+                    tone: "error",
+                    message: t("classes.staff.cancelFailed", {
+                      who,
+                      error:
+                        err instanceof Error
+                          ? err.message
+                          : t("classes.somethingWentWrong"),
+                    }),
+                  }),
+              }),
+            )
           }
         >
           {cancelMutation.isPending ? (
