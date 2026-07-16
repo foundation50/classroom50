@@ -705,12 +705,14 @@ const AcceptAssignmentPage = () => {
           </h2>
 
           {assignmentData?.description?.trim() ? (
-            <div className="flex flex-col gap-1">
-              <label className="label text-sm">
+            <details className="collapse collapse-arrow border border-base-300 bg-base-100">
+              <summary className="collapse-title min-h-0 px-4 py-3 text-sm font-medium">
                 {t("accept.descriptionLabel")}
-              </label>
-              <Markdown content={assignmentData.description} />
-            </div>
+              </summary>
+              <div className="collapse-content">
+                <Markdown content={assignmentData.description} />
+              </div>
+            </details>
           ) : null}
 
           <div className="divider my-0" />

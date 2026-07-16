@@ -9,7 +9,7 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import { Card } from "@/components/ui"
+import { Card, Markdown } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
@@ -72,9 +72,16 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
         </div>
 
-        <p className="line-clamp-2 min-h-10 text-sm text-base-content/70">
-          {repo.description || t("classes.repo.noDescription")}
-        </p>
+        {assignmentData?.description?.trim() ? (
+          <Markdown
+            content={assignmentData.description}
+            className="line-clamp-3 min-h-10 text-sm"
+          />
+        ) : (
+          <p className="line-clamp-2 min-h-10 text-sm text-base-content/70">
+            {repo.description || t("classes.repo.noDescription")}
+          </p>
+        )}
 
         {(classroom || assignment) && (
           <div className="alert alert-outline flex flex-col items-start">
