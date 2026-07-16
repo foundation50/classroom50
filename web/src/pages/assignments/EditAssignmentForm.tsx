@@ -4,7 +4,7 @@ import CreateAssignmentForm, {
 } from "./CreateAssignmentForm"
 import { type CreateAssignmentResult } from "@/domain/assignments"
 import { GitHubAPIError } from "@/github-core/errors"
-import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
+import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useEditAssignment } from "@/hooks/mutations/useEditAssignment"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Spinner } from "@/components/Spinner"
@@ -32,18 +32,16 @@ const EditAssignmentForm = ({
   readOnly?: boolean
 }) => {
   const { t } = useTranslation()
-  const { register } = useActionActivityRegistry()
+  const trackPublishDeploy = useTrackPublishDeploy()
   const editAssignmentMutation = useEditAssignment({
     onWrite: (result, variables) => {
       // Track the publish-pages deploy this edit's commit triggers, anchored on
       // the commit SHA (head_sha on the runs API).
-      if (result.newCommitSha) {
-        register({
-          org,
-          label: t("toasts.publishingAssignment", { name: variables.name }),
-          anchor: { kind: "sha", sha: result.newCommitSha },
-        })
-      }
+      trackPublishDeploy(
+        org,
+        result.newCommitSha,
+        t("toasts.publishingAssignment", { name: variables.name }),
+      )
     },
     onMutate,
   })

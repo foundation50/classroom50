@@ -9,13 +9,13 @@ import { AnimatedAlert, Button } from "@/components/ui"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
 import CreateAssignmentForm from "@/pages/assignments/CreateAssignmentForm"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
-import { GitHubAPIError } from "@/github-core/errors"
 import { useCreateAssignment } from "@/hooks/mutations/useCreateAssignment"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
+import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { logger } from "@/lib/logger"
+import { logWriteFailure } from "@/lib/logWriteFailure"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -27,7 +27,7 @@ const CreateAssignmentPage = () => {
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const { notify } = useToast()
-  const { register } = useActionActivityRegistry()
+  const trackPublishDeploy = useTrackPublishDeploy()
   const [errorMessage, setErrorMessage] = useState("")
   const [warningMessage, setWarningMessage] = useState("")
 
@@ -40,14 +40,11 @@ const CreateAssignmentPage = () => {
     org ?? "",
     classroom ?? "",
     (result, variables) => {
-      // Track the publish-pages deploy this commit triggers, anchored on SHA.
-      if (org && result.newCommitSha) {
-        register({
-          org,
-          label: t("toasts.publishingAssignment", { name: variables.name }),
-          anchor: { kind: "sha", sha: result.newCommitSha },
-        })
-      }
+      trackPublishDeploy(
+        org ?? "",
+        result.newCommitSha,
+        t("toasts.publishingAssignment", { name: variables.name }),
+      )
     },
   )
 
@@ -125,15 +122,7 @@ const CreateAssignmentPage = () => {
               },
               {
                 onError: (err) => {
-                  if (err instanceof GitHubAPIError) {
-                    // Console-only trace (MutationCache already recorded this).
-                    log.error("create assignment failed", {
-                      status: err.status,
-                      requestId: err.requestId,
-                    })
-                  } else {
-                    log.error("non-GitHub API error", { err, record: true })
-                  }
+                  logWriteFailure(log, err, "create assignment failed")
                   setErrorMessage(err.message)
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 },

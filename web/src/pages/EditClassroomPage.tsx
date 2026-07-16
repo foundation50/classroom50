@@ -13,7 +13,7 @@ import { useTranslation } from "react-i18next"
 import { useEditClassroom } from "@/hooks/mutations/useEditClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { useActionActivityRegistry } from "@/context/actions/ActionActivityProvider"
+import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
@@ -28,7 +28,7 @@ const EditClassroomContent = ({
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const { register } = useActionActivityRegistry()
+  const trackPublishDeploy = useTrackPublishDeploy()
   const runSave = useSafeSubmit()
   const { data: cl, isLoading: loadingClassroom } = useGetClassroom(
     org,
@@ -38,15 +38,13 @@ const EditClassroomContent = ({
   const editClassroomMutation = useEditClassroom(org, classroom, (result) => {
     // A classroom.json write triggers a publish-pages deploy — surface it in
     // the global activity banner, anchored on the commit SHA.
-    if (result?.newCommitSha) {
-      register({
-        org,
-        label: t("actionsBanner.workflow.publishClassroom", {
-          name: cl?.name ?? classroom,
-        }),
-        anchor: { kind: "sha", sha: result.newCommitSha },
-      })
-    }
+    trackPublishDeploy(
+      org,
+      result?.newCommitSha,
+      t("actionsBanner.workflow.publishClassroom", {
+        name: cl?.name ?? classroom,
+      }),
+    )
   })
 
   return (

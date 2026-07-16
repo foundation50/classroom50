@@ -3,10 +3,7 @@ import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
 import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
-import { githubKeys } from "@/github-core/queries"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { useForm } from "@tanstack/react-form"
-import { useQueryClient } from "@tanstack/react-query"
 import { useNavigate, useParams } from "@tanstack/react-router"
 import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -214,7 +211,6 @@ const ArchiveClassroomButton = ({
 
 const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const { org, classroom } = useParams({ strict: false })
   const [submitted, setSubmitted] = useState(false)
@@ -284,9 +280,8 @@ const EditClassroomForm = ({ onSubmit, cl }: EditClassroomFormProps) => {
               org={org}
               classroom={classroom}
               onDeleteClassroom={() => {
-                queryClient.invalidateQueries({
-                  queryKey: githubKeys.jsonFile(org, CONFIG_REPO),
-                })
+                // Cache reconcile is owned by useDeleteClassroom; call site only
+                // navigates.
                 navigate({ to: "/$org", params: { org } })
               }}
             />
