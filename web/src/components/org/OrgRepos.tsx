@@ -71,19 +71,20 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
         </div>
 
-        {assignment ? (
-          <div className="flex items-center gap-1.5 text-sm text-base-content/70">
-            <BookOpen
-              aria-hidden="true"
-              className="size-4 shrink-0 text-base-content/50"
-            />
+        {classroom && assignment ? (
+          <Link
+            to="/$org/$classroom/assignments/$assignment"
+            params={{ org, classroom, assignment }}
+            className="group inline-flex w-fit max-w-full items-center gap-1.5 text-sm text-base-content/70 transition-colors hover:text-primary"
+          >
+            <BookOpen aria-hidden="true" className="size-4 shrink-0" />
             <span className="truncate">
               {t("classes.repo.assignmentLabel")}{" "}
-              <span className="font-medium text-base-content/80">
+              <span className="font-medium text-base-content/80 group-hover:text-primary">
                 {assignment}
               </span>
             </span>
-          </div>
+          </Link>
         ) : null}
 
         <Card.Actions className="items-center justify-between gap-2 pt-1">
