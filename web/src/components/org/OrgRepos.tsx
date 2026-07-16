@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import {
   BookOpen,
   ExternalLink,
+  FileText,
   GraduationCap,
   Pencil,
   UserRound,
@@ -135,15 +136,27 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             )}
           </div>
 
-          <a
-            href={repo.html_url}
-            target="_blank"
-            rel="noreferrer"
-            className="btn btn-sm btn-primary"
-          >
-            {t("classes.repo.openRepo")}
-            <ExternalLink aria-hidden="true" className="size-4" />
-          </a>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            {classroom && assignment && (
+              <Link
+                to="/$org/$classroom/assignments/$assignment"
+                params={{ org, classroom, assignment }}
+                className="btn btn-sm btn-outline"
+              >
+                <FileText aria-hidden="true" className="size-4" />
+                {t("classes.repo.viewDetails")}
+              </Link>
+            )}
+            <a
+              href={repo.html_url}
+              target="_blank"
+              rel="noreferrer"
+              className="btn btn-sm btn-primary"
+            >
+              {t("classes.repo.openRepo")}
+              <ExternalLink aria-hidden="true" className="size-4" />
+            </a>
+          </div>
         </Card.Actions>
       </Card.Body>
     </Card>

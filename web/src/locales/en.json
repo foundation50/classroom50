@@ -1370,6 +1370,7 @@
       "individual": "Individual",
       "group": "Group",
       "openRepo": "Open repo",
+      "viewDetails": "View details",
       "emptyTitle": "No assignment repos yet",
       "emptyBody": "Repositories you can write to will appear here once assignments have been created for this organization."
     },
