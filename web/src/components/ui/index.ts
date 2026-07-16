@@ -50,6 +50,9 @@ export type { StatCardProps } from "./StatCard"
 export { LabeledControl } from "./LabeledControl"
 export type { LabeledControlProps } from "./LabeledControl"
 
+export { Markdown } from "./Markdown"
+export type { MarkdownProps } from "./Markdown"
+
 export { Toolbar } from "./Toolbar"
 export type {
   ToolbarProps,

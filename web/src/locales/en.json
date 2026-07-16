@@ -1439,6 +1439,7 @@
     "noDueDate": "No due date",
     "alreadyAcceptedHeading": "You've already accepted this assignment.",
     "acceptHeading": "Accept this assignment to get your own copy of the starter code repository.",
+    "descriptionLabel": "Assignment details",
     "repoAlreadyExists": "Repository already exists as:",
     "repoWillBeCreated": "Repository will be created as:",
     "errorTitle": "Could not accept assignment",
@@ -1675,6 +1676,7 @@
     },
     "student": {
       "submittedAt": "Submitted {{date}}",
+      "descriptionLabel": "Assignment details",
       "viewGrade": "View grade",
       "unavailable": "Unavailable",
       "modeGroup": "Group",

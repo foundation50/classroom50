@@ -9,7 +9,7 @@ import {
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card } from "@/components/ui"
+import { Alert, Button, Card, Markdown } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
 import { Link, useParams, useSearch } from "@tanstack/react-router"
@@ -703,6 +703,15 @@ const AcceptAssignmentPage = () => {
               ? t("accept.alreadyAcceptedHeading")
               : t("accept.acceptHeading")}
           </h2>
+
+          {assignmentData?.description?.trim() ? (
+            <div className="flex flex-col gap-1">
+              <label className="label text-sm">
+                {t("accept.descriptionLabel")}
+              </label>
+              <Markdown content={assignmentData.description} />
+            </div>
+          ) : null}
 
           <div className="divider my-0" />
 

@@ -25,7 +25,7 @@ import { safeHttpUrl } from "@/util/url"
 import type { GitHubRelease } from "@/github-core/types"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Alert, Badge, Button, Card } from "@/components/ui"
+import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -269,6 +269,14 @@ const StudentSubmissionPage = () => {
         }
       />
       <AssignmentMeta assignment={assignmentData} />
+      {assignmentData?.description?.trim() ? (
+        <div className="mt-3 flex flex-col gap-1">
+          <span className="text-sm font-medium text-base-content/70">
+            {t("submissions.student.descriptionLabel")}
+          </span>
+          <Markdown content={assignmentData.description} />
+        </div>
+      ) : null}
       {org && classroom && assignment ? (
         <SubmissionBody
           org={org}
