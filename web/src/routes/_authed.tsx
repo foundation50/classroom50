@@ -3,6 +3,7 @@ import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
 import { OfflineBanner } from "@/components/OfflineBanner"
+import { GitHubStatusBanner } from "@/components/GitHubStatusBanner"
 import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
 import { Spinner } from "@/components/Spinner"
@@ -54,6 +55,7 @@ function AuthedLayout() {
   return (
     <>
       <OfflineBanner />
+      <GitHubStatusBanner />
       <ScopeWarningBanner />
       <SkeletonDriftBanner />
       <UpdateAvailableBanner />

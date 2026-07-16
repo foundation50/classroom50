@@ -6,6 +6,7 @@ import router from "./router"
 import { Spinner } from "@/components/Spinner"
 import { Button } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
+import { useGitHubHealth } from "@/lib/githubHealth"
 import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
 import { logger } from "@/lib/logger"
 
@@ -22,6 +23,10 @@ export function App() {
     signOut,
   } = useGithubAuth()
   const { t } = useTranslation()
+  const {
+    suspected: githubSuspected,
+    statusDescription: githubStatusDescription,
+  } = useGitHubHealth()
 
   useEffect(() => {
     if (status === "loading") return
@@ -65,6 +70,23 @@ export function App() {
             <p className="text-sm text-base-content/70">
               {t("auth.validationStuck")}
             </p>
+            {githubSuspected ? (
+              <p className="text-sm text-base-content/70">
+                {githubStatusDescription
+                  ? t("githubStatus.bodyConfirmed", {
+                      status: githubStatusDescription,
+                    })
+                  : t("githubStatus.bodyGeneric")}{" "}
+                <a
+                  href="https://www.githubstatus.com"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="link link-hover font-semibold text-base-content"
+                >
+                  {t("githubStatus.checkStatusLink")}
+                </a>
+              </p>
+            ) : null}
             <div className="flex flex-wrap items-center justify-center gap-3">
               <Button variant="primary" onClick={retryUserValidation}>
                 {t("submissions.errors.retry")}

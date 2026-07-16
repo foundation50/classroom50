@@ -1260,6 +1260,12 @@
     "title": "You're offline",
     "body": "Classroom 50 works with live data from GitHub, so it needs a connection. This banner clears automatically when you're back online."
   },
+  "githubStatus": {
+    "title": "GitHub may be having problems",
+    "bodyConfirmed": "GitHub is reporting: {{status}}. Some actions may fail or be slow until it recovers.",
+    "bodyGeneric": "Classroom 50 is having trouble reaching GitHub. This is usually a temporary GitHub outage, but a VPN, proxy, or browser extension blocking api.github.com can cause it too.",
+    "checkStatusLink": "Check GitHub status"
+  },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",
     "body": "The GitHub Actions workflows in this org's classroom50 config repo are out of date. Update them here to keep grading, score collection, and Pages publishing working.",
