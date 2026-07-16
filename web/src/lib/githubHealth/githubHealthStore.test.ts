@@ -164,12 +164,23 @@ describe("status probe enrichment", () => {
     expect(snap.statusDescription).toBeNull()
   })
 
-  it("stays suspected with no description when the probe fails", async () => {
-    fetchIndicatorMock.mockResolvedValue(null)
-    trip()
+  it("re-probes on a fresh episode after recovery (probe cache is re-armed on success)", async () => {
+    fetchIndicatorMock.mockResolvedValue({
+      indicator: "major",
+      description: "Major Service Outage",
+    })
+    trip(1000)
     await flush()
-    const snap = getGitHubHealthSnapshot()
-    expect(snap.suspected).toBe(true)
-    expect(snap.statusDescription).toBeNull()
+    expect(getGitHubHealthSnapshot().statusIndicator).toBe("major")
+    expect(fetchIndicatorMock).toHaveBeenCalledTimes(1)
+
+    recordGitHubSuccess()
+    expect(getGitHubHealthSnapshot().suspected).toBe(false)
+
+    // A distinct outage 5s later (well within PROBE_CACHE_MS) must still probe.
+    trip(6000)
+    await flush()
+    expect(getGitHubHealthSnapshot().statusIndicator).toBe("major")
+    expect(fetchIndicatorMock).toHaveBeenCalledTimes(2)
   })
 })

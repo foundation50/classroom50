@@ -13,7 +13,7 @@ import {
 // banner and the unauthed bootstrap screen read one source via useSyncExternalStore,
 // mirroring useOnlineStatus.
 
-// Cross more than this many outage-shaped failures within WINDOW_MS to suspect
+// Cross at least this many outage-shaped failures within WINDOW_MS to suspect
 // an outage. A single blip must never trip it.
 const FAILURE_THRESHOLD = 3
 const WINDOW_MS = 30_000
@@ -135,7 +135,14 @@ export function recordGitHubFailure(
 // reachable, so it clears the failure window and any suspicion.
 export function recordGitHubSuccess(): void {
   if (failureTimestamps.length > 0) failureTimestamps = []
-  if (state.suspected) setState(HEALTHY)
+  if (state.suspected) {
+    setState(HEALTHY)
+    // Re-arm the probe for the next episode: a distinct outage that trips
+    // within PROBE_CACHE_MS of this recovery must still get its guaranteed
+    // first probe (otherwise it shows the generic message while githubstatus
+    // may already report a real indicator). Mirrors the null-init gate.
+    lastProbeAt = null
+  }
 }
 
 export function subscribeGitHubHealth(listener: () => void): () => void {
