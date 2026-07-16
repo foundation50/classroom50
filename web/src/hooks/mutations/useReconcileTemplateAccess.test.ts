@@ -22,7 +22,13 @@ const ORG = "cs50"
 const CLASSROOM = "cs50"
 const SLUG = "hw1"
 const TEMPLATE = { owner: ORG, repo: "tmpl", branch: "main" }
-const KEY = ["template-team-access", ORG, CLASSROOM, TEMPLATE.owner, TEMPLATE.repo]
+const KEY = [
+  "template-team-access",
+  ORG,
+  CLASSROOM,
+  TEMPLATE.owner,
+  TEMPLATE.repo,
+]
 
 function wrapperWith(queryClient: QueryClient) {
   return ({ children }: PropsWithChildren) =>
