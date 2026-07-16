@@ -43,6 +43,10 @@ let state: GitHubHealth = HEALTHY
 let failureTimestamps: number[] = []
 let lastProbeAt: number | null = null
 let probeInFlight = false
+// Bumped whenever suspicion is freshly entered or cleared, so a probe from a
+// prior outage episode can't apply its stale result to a later one (or block
+// the later one's own probe) during rapid outage/recovery flapping.
+let episodeId = 0
 
 const listeners = new Set<() => void>()
 
@@ -90,11 +94,13 @@ async function probeStatus(now: number) {
   if (lastProbeAt !== null && now - lastProbeAt < PROBE_CACHE_MS) return
   probeInFlight = true
   lastProbeAt = now
+  const probedEpisode = episodeId
   try {
     const result = await fetchGitHubStatusIndicator()
-    // A probe that resolves after the suspicion already cleared must not
-    // resurrect the banner.
-    if (!state.suspected) return
+    // A probe that resolves after its episode ended (suspicion cleared, or a
+    // fresh episode began during recovery flapping) must not resurrect the
+    // banner or write a stale indicator onto the new episode.
+    if (!state.suspected || episodeId !== probedEpisode) return
     if (!result || result.indicator === "none") {
       // GitHub reports healthy (or the probe was inconclusive): keep the
       // locally-suspected state with the generic message — the user is still
@@ -108,7 +114,10 @@ async function probeStatus(now: number) {
       statusDescription: result.description,
     })
   } finally {
-    probeInFlight = false
+    // Only the probe that still owns the current episode clears the in-flight
+    // flag; a superseded probe leaves the new episode's flag (set when it
+    // re-armed) untouched, so the new episode can still run its own probe.
+    if (episodeId === probedEpisode) probeInFlight = false
   }
 }
 
@@ -124,6 +133,12 @@ export function recordGitHubFailure(
   failureTimestamps.push(now)
 
   if (failureTimestamps.length >= FAILURE_THRESHOLD && !state.suspected) {
+    // Fresh episode: bump the epoch and re-arm the probe so this episode gets
+    // its own guaranteed first probe, independent of any probe still in flight
+    // from a just-ended episode (whose stale result the epoch guard discards).
+    episodeId++
+    lastProbeAt = null
+    probeInFlight = false
     setState({ ...HEALTHY, suspected: true })
   }
   if (state.suspected) {
@@ -137,11 +152,13 @@ export function recordGitHubSuccess(): void {
   if (failureTimestamps.length > 0) failureTimestamps = []
   if (state.suspected) {
     setState(HEALTHY)
-    // Re-arm the probe for the next episode: a distinct outage that trips
-    // within PROBE_CACHE_MS of this recovery must still get its guaranteed
-    // first probe (otherwise it shows the generic message while githubstatus
-    // may already report a real indicator). Mirrors the null-init gate.
+    // End the episode: bump the epoch so an in-flight probe from this episode
+    // discards its result instead of writing it onto a later suspicion, and
+    // re-arm so a distinct outage that trips within PROBE_CACHE_MS of this
+    // recovery still gets its guaranteed first probe.
+    episodeId++
     lastProbeAt = null
+    probeInFlight = false
   }
 }
 
@@ -160,4 +177,5 @@ export function __resetGitHubHealthForTest(): void {
   failureTimestamps = []
   lastProbeAt = null
   probeInFlight = false
+  episodeId = 0
 }

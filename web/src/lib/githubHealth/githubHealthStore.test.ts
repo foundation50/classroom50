@@ -183,4 +183,63 @@ describe("status probe enrichment", () => {
     expect(getGitHubHealthSnapshot().statusIndicator).toBe("major")
     expect(fetchIndicatorMock).toHaveBeenCalledTimes(2)
   })
+
+  it("a fresh episode still probes when a prior episode's probe is still in flight", async () => {
+    // Episode A's probe never resolves (slow network) — its in-flight flag must
+    // not starve episode B of its own guaranteed first probe after recovery.
+    let resolveA: (v: unknown) => void = () => {}
+    fetchIndicatorMock.mockReturnValueOnce(
+      new Promise((res) => {
+        resolveA = res
+      }),
+    )
+    trip(1000)
+    await flush()
+    expect(fetchIndicatorMock).toHaveBeenCalledTimes(1)
+
+    recordGitHubSuccess()
+
+    fetchIndicatorMock.mockResolvedValueOnce({
+      indicator: "major",
+      description: "Major Service Outage",
+    })
+    trip(6000)
+    await flush()
+    // Episode B probed despite A still pending, and got its own result.
+    expect(fetchIndicatorMock).toHaveBeenCalledTimes(2)
+    expect(getGitHubHealthSnapshot().statusIndicator).toBe("major")
+
+    // A resolving late must not overwrite episode B.
+    resolveA({ indicator: "minor", description: "Stale Episode A" })
+    await flush()
+    expect(getGitHubHealthSnapshot().statusDescription).toBe(
+      "Major Service Outage",
+    )
+  })
+
+  it("a stale probe resolving into a new episode does not write its result onto it", async () => {
+    let resolveA: (v: unknown) => void = () => {}
+    fetchIndicatorMock.mockReturnValueOnce(
+      new Promise((res) => {
+        resolveA = res
+      }),
+    )
+    trip(1000)
+    await flush()
+
+    recordGitHubSuccess()
+    // Episode B trips and its own probe reports healthy-but-generic (null).
+    fetchIndicatorMock.mockResolvedValueOnce(null)
+    trip(6000)
+    await flush()
+    expect(getGitHubHealthSnapshot().suspected).toBe(true)
+    expect(getGitHubHealthSnapshot().statusDescription).toBeNull()
+
+    // Episode A's stale probe resolves with an indicator; the epoch guard must
+    // discard it rather than enrich episode B with episode A's description.
+    resolveA({ indicator: "critical", description: "Stale Episode A" })
+    await flush()
+    expect(getGitHubHealthSnapshot().statusDescription).toBeNull()
+    expect(getGitHubHealthSnapshot().statusIndicator).toBeNull()
+  })
 })

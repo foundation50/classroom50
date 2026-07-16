@@ -32,8 +32,11 @@ export function useSaveServiceToken(org: string | undefined) {
       // Seed the status to "present" before the refetch so a UI deriving its
       // state from token presence (the setup wizard) advances even if the
       // invalidation refetch fails (offline / transient GitHub error) — the
-      // save itself already succeeded. The invalidate below reconciles the
-      // real created/updated timestamps once the network read lands.
+      // save itself already succeeded. The seed survives such a failure because
+      // getServiceTokenStatus now rethrows transient errors, so react-query
+      // keeps this seeded data rather than overwriting it with a verdict. The
+      // invalidate below reconciles the real created/updated timestamps once a
+      // read lands.
       const now = new Date().toISOString()
       const seeded: ServiceTokenStatus = {
         status: "present",

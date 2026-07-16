@@ -197,13 +197,21 @@ const OrgSetupPage = () => {
   const effectiveStage = backOverride ?? Math.max(derivedStage, forwardIntent)
 
   // A settled indeterminate probe is a 403/permission or transient error, NOT a
-  // real "missing". Surfacing stage 1 "Run setup" here would invite a needless
-  // skeleton-overwriting re-run, so show a retry surface instead. The two probes
-  // signal it differently: the config probe rethrows non-404s, so react-query
-  // surfaces isError (data stays undefined); the token probe resolves an
-  // explicit status:"unknown". undefined data mid-flight is the loading case.
+  // real "missing" — surfacing stage 1 "Run setup" here would invite a needless
+  // skeleton-overwriting re-run, so show a retry surface instead. Both probes
+  // now rethrow non-definitive errors, so react-query surfaces isError; the
+  // token probe also resolves an explicit status:"unknown" for a 403. Gate the
+  // isError branches on data being absent: a *background* refetch that fails
+  // while prior data is still cached (a transient blip after a setup re-run, or
+  // an optimistically-seeded token) must keep the derived stage, not eject the
+  // user off a valid step. undefined data mid-flight is the loading case.
   const statusIndeterminate =
-    (!repoStatusQuery.isLoading && repoStatusQuery.isError) ||
+    (!repoStatusQuery.isLoading &&
+      repoStatusQuery.isError &&
+      repoStatusQuery.data === undefined) ||
+    (!tokenStatusQuery.isLoading &&
+      tokenStatusQuery.isError &&
+      tokenStatusQuery.data === undefined) ||
     (!tokenStatusQuery.isLoading && tokenStatusQuery.data?.status === "unknown")
   const statusLoading = repoStatusQuery.isLoading || tokenStatusQuery.isLoading
 

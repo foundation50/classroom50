@@ -8,28 +8,45 @@ import { useGitHubHealth } from "@/lib/githubHealth"
 
 export const GITHUB_STATUS_URL = "https://www.githubstatus.com"
 
-// The outage body text (confirmed vs generic) plus the githubstatus.com link.
-// Shared by the authed banner and the unauthed stuck-bootstrap screen so the
-// copy and URL can't drift between them.
+// The outage body text (confirmed vs generic) plus the githubstatus.com link —
+// the single source of both, so the copy and URL can't drift between the authed
+// banner and the unauthed stuck-bootstrap screen. `block` renders the banner's
+// muted-paragraph + own-line link; the default is the inline fragment the
+// unauthed screen wraps in its own <p>.
 export function GitHubStatusNote({
   statusDescription,
+  block = false,
 }: {
   statusDescription: string | null
+  block?: boolean
 }) {
   const { t } = useTranslation()
+  const body = statusDescription
+    ? t("githubStatus.bodyConfirmed", { status: statusDescription })
+    : t("githubStatus.bodyGeneric")
+  const link = (
+    <a
+      href={GITHUB_STATUS_URL}
+      target="_blank"
+      rel="noreferrer"
+      className={`link link-hover font-semibold text-base-content${
+        block ? " self-start" : ""
+      }`}
+    >
+      {t("githubStatus.checkStatusLink")}
+    </a>
+  )
+  if (block) {
+    return (
+      <>
+        <p className="text-base-content/70">{body}</p>
+        {link}
+      </>
+    )
+  }
   return (
     <>
-      {statusDescription
-        ? t("githubStatus.bodyConfirmed", { status: statusDescription })
-        : t("githubStatus.bodyGeneric")}{" "}
-      <a
-        href={GITHUB_STATUS_URL}
-        target="_blank"
-        rel="noreferrer"
-        className="link link-hover font-semibold text-base-content"
-      >
-        {t("githubStatus.checkStatusLink")}
-      </a>
+      {body} {link}
     </>
   )
 }
@@ -61,19 +78,7 @@ export function GitHubStatusBanner() {
           title={t("githubStatus.title")}
           onDismiss={() => setDismissed(true)}
         >
-          <p className="text-base-content/70">
-            {statusDescription
-              ? t("githubStatus.bodyConfirmed", { status: statusDescription })
-              : t("githubStatus.bodyGeneric")}
-          </p>
-          <a
-            href={GITHUB_STATUS_URL}
-            target="_blank"
-            rel="noreferrer"
-            className="link link-hover self-start font-semibold text-base-content"
-          >
-            {t("githubStatus.checkStatusLink")}
-          </a>
+          <GitHubStatusNote statusDescription={statusDescription} block />
         </AppBanner>
       ) : null}
     </AnimatePresence>
