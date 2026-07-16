@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 
 import router from "./router"
 import { Spinner } from "@/components/Spinner"
+import { Button } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
 import { logger } from "@/lib/logger"
@@ -11,7 +12,15 @@ import { logger } from "@/lib/logger"
 const log = logger.scope("app")
 
 export function App() {
-  const { status, token, user, isOnline } = useGithubAuth()
+  const {
+    status,
+    token,
+    user,
+    isOnline,
+    isValidatingStuck,
+    retryUserValidation,
+    signOut,
+  } = useGithubAuth()
   const { t } = useTranslation()
 
   useEffect(() => {
@@ -44,6 +53,31 @@ export function App() {
   }, [sessionEndedOnAuthedRoute])
 
   if (status === "loading" || sessionEndedOnAuthedRoute) {
+    // A settled, persistent validation failure (retries exhausted while online —
+    // a proxy/extension blocking api.github.com, or a wedged stored session)
+    // would otherwise spin forever. Offer an escape: retry the /user validation,
+    // or sign out to a clean re-login (the recovery path users hit today).
+    if (isValidatingStuck) {
+      return (
+        <div className="min-h-screen grid place-items-center p-6">
+          <div className="flex max-w-md flex-col items-center gap-4 text-center">
+            <Spinner size="lg" label={t("common.loadingApp")} />
+            <p className="text-sm text-base-content/70">
+              {t("auth.validationStuck")}
+            </p>
+            <div className="flex flex-wrap items-center justify-center gap-3">
+              <Button variant="primary" onClick={retryUserValidation}>
+                {t("submissions.errors.retry")}
+              </Button>
+              <Button variant="ghost" onClick={signOut}>
+                {t("auth.validationStuckSignIn")}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )
+    }
+
     // Offline with a stored token that can't be validated yet: explain the hold
     // rather than showing a bare, indefinite "loading" spinner (the session is
     // preserved and resumes when connectivity returns).

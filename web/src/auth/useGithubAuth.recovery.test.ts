@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   classifyPatResult,
   isTransientUserError,
+  isValidationStuck,
   recoverStrandedExchange,
   resolveAuthStatus,
   shouldExpireOnUserError,
@@ -265,5 +266,52 @@ describe("isTransientUserError", () => {
   it("is false when there is no error", () => {
     expect(isTransientUserError(undefined)).toBe(false)
     expect(isTransientUserError(null)).toBe(false)
+  })
+})
+
+// The escape-hatch gate for the "loading" hold: when a token holder is online
+// with no cached user and /user validation has SETTLED into a transient error
+// (retries exhausted, not still fetching), the hold is a dead end and the App
+// shell shows a retry / sign-in-again surface instead of an endless spinner.
+// resolveAuthStatus still returns "loading" here on purpose (#187); this flag
+// only enriches that screen, so every hold-vs-bounce invariant is preserved.
+describe("isValidationStuck", () => {
+  const stuck = {
+    hasToken: true,
+    isOnline: true,
+    hasUser: false,
+    userQueryErrored: true,
+    userErrorIsTransient: true,
+    userQueryFetching: false,
+  }
+
+  it("is true when online, token present, no user, and settled on a transient error", () => {
+    expect(isValidationStuck(stuck)).toBe(true)
+  })
+
+  it("is false while a refetch is still in flight (not yet a dead end)", () => {
+    expect(isValidationStuck({ ...stuck, userQueryFetching: true })).toBe(false)
+  })
+
+  it("is false offline (that's the offlineHold case, not a stuck retry)", () => {
+    expect(isValidationStuck({ ...stuck, isOnline: false })).toBe(false)
+  })
+
+  it("is false once a user is cached (session already validated)", () => {
+    expect(isValidationStuck({ ...stuck, hasUser: true })).toBe(false)
+  })
+
+  it("is false with no token (nothing to validate)", () => {
+    expect(isValidationStuck({ ...stuck, hasToken: false })).toBe(false)
+  })
+
+  it("is false when the query has not errored", () => {
+    expect(isValidationStuck({ ...stuck, userQueryErrored: false })).toBe(false)
+  })
+
+  it("is false for a definitive (non-transient) error — resolveAuthStatus mounts the app instead", () => {
+    expect(isValidationStuck({ ...stuck, userErrorIsTransient: false })).toBe(
+      false,
+    )
   })
 })
