@@ -60,6 +60,8 @@ export {
   teamMembersQuery,
   listOrgTeams,
   orgTeamsQuery,
+  listRepoTeams,
+  repoTeamsQuery,
   listMyTeams,
   myTeamsQuery,
 } from "./queries/teamReads"

@@ -24,17 +24,12 @@ vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))
 
-const reconcileMutate = vi.fn()
-vi.mock("@/hooks/mutations/useReconcileTemplateAccess", () => ({
-  useReconcileTemplateAccess: () => ({
-    mutate: reconcileMutate,
-    isPending: false,
-  }),
-}))
-
-const notify = vi.fn()
-vi.mock("@/context/notifications/NotificationProvider", () => ({
-  useToast: () => ({ notify, dismiss: vi.fn() }),
+// The modal is exercised in its own test; here we stub it to a marker so the
+// table test asserts only that the trigger renders and opens it.
+vi.mock("@/components/modals/TemplateAccessModal", () => ({
+  TemplateAccessModal: ({ assignment }: { assignment: { slug: string } }) => (
+    <div data-testid="template-access-modal">{assignment.slug}</div>
+  ),
 }))
 
 const scores = vi.fn()
@@ -55,7 +50,7 @@ const assignment = (over: Partial<Assignment> = {}): Assignment =>
   ({ slug: "hw1", name: "HW 1", mode: "individual", ...over }) as Assignment
 
 const inOrgTemplate = { owner: "acme", repo: "tmpl", branch: "main" }
-const RECONCILE_ARIA = "assignments.template.reconcile.aria"
+const ACCESS_ARIA = "assignments.template.accessModal.triggerAria"
 
 // The submission cell renders "<submitted> / <denominator>" as sibling text
 // nodes; read the row's textContent to assert the rendered ratio.
@@ -66,8 +61,6 @@ const ratioText = () =>
 beforeEach(() => {
   scores.mockReset()
   scores.mockReturnValue({ data: { submissions: {} } })
-  reconcileMutate.mockReset()
-  notify.mockReset()
 })
 
 afterEach(cleanup)
@@ -132,8 +125,8 @@ describe("AssignmentsTable submission denominator", () => {
   })
 })
 
-describe("AssignmentsTable — Fix template access button", () => {
-  it("renders the reconcile button for an in-org templated assignment", () => {
+describe("AssignmentsTable — Template access button", () => {
+  it("renders the trigger for an in-org templated assignment", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -142,7 +135,21 @@ describe("AssignmentsTable — Fix template access button", () => {
         studentCount={0}
       />,
     )
-    expect(screen.queryByLabelText(RECONCILE_ARIA)).toBeTruthy()
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
+  })
+
+  it("renders the trigger for an out-of-org template too (review + link)", () => {
+    wrap(
+      <AssignmentsTable
+        org="acme"
+        classroom="cs101"
+        assignments={[
+          assignment({ template: { ...inOrgTemplate, owner: "other" } }),
+        ]}
+        studentCount={0}
+      />,
+    )
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
   })
 
   it("does not render it for a template-less assignment", () => {
@@ -154,24 +161,10 @@ describe("AssignmentsTable — Fix template access button", () => {
         studentCount={0}
       />,
     )
-    expect(screen.queryByLabelText(RECONCILE_ARIA)).toBeNull()
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeNull()
   })
 
-  it("does not render it for an out-of-org template", () => {
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs101"
-        assignments={[
-          assignment({ template: { ...inOrgTemplate, owner: "other" } }),
-        ]}
-        studentCount={0}
-      />,
-    )
-    expect(screen.queryByLabelText(RECONCILE_ARIA)).toBeNull()
-  })
-
-  it("does not render it when the classroom is archived", () => {
+  it("still renders it when archived (viewing stays available)", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -181,10 +174,10 @@ describe("AssignmentsTable — Fix template access button", () => {
         archived
       />,
     )
-    expect(screen.queryByLabelText(RECONCILE_ARIA)).toBeNull()
+    expect(screen.queryByLabelText(ACCESS_ARIA)).toBeTruthy()
   })
 
-  it("invokes the reconcile hook with the row's target on click", () => {
+  it("opens the template-access modal on click", () => {
     wrap(
       <AssignmentsTable
         org="acme"
@@ -193,38 +186,8 @@ describe("AssignmentsTable — Fix template access button", () => {
         studentCount={0}
       />,
     )
-    fireEvent.click(screen.getByLabelText(RECONCILE_ARIA))
-    expect(reconcileMutate).toHaveBeenCalledWith(
-      {
-        org: "acme",
-        classroom: "cs101",
-        slug: "hw1",
-        template: inOrgTemplate,
-      },
-      expect.objectContaining({ onSuccess: expect.any(Function) }),
-    )
-  })
-
-  it("toasts success on a clean reconcile and error on a warning", () => {
-    wrap(
-      <AssignmentsTable
-        org="acme"
-        classroom="cs101"
-        assignments={[assignment({ template: inOrgTemplate })]}
-        studentCount={0}
-      />,
-    )
-    fireEvent.click(screen.getByLabelText(RECONCILE_ARIA))
-    const { onSuccess } = reconcileMutate.mock.calls[0][1]
-
-    onSuccess({ warning: undefined })
-    expect(notify).toHaveBeenLastCalledWith(
-      expect.objectContaining({ tone: "success" }),
-    )
-
-    onSuccess({ warning: "student grant failed" })
-    expect(notify).toHaveBeenLastCalledWith(
-      expect.objectContaining({ tone: "error" }),
-    )
+    expect(screen.queryByTestId("template-access-modal")).toBeNull()
+    fireEvent.click(screen.getByLabelText(ACCESS_ARIA))
+    expect(screen.getByTestId("template-access-modal").textContent).toBe("hw1")
   })
 })

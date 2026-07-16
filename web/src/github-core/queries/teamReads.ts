@@ -1,7 +1,7 @@
 import { queryOptions } from "@tanstack/react-query"
 
 import type { GitHubClient } from "../client"
-import type { GitHubTeam, GitHubUser, MyTeam } from "../types"
+import type { GitHubTeam, GitHubRepoTeam, GitHubUser, MyTeam } from "../types"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import {
   GitHubAPIError,
@@ -124,6 +124,41 @@ export function orgTeamsQuery(client: GitHubClient, org: string) {
     queryFn: () => listOrgTeams(client, org),
     enabled: Boolean(org),
     staleTime: 5 * 60 * 1000,
+  })
+}
+
+// Teams with access to a repo, across all pages (GET /repos/{owner}/{repo}/teams).
+// Needs only the token's repo scope (not repo-admin), but GitHub returns only
+// teams VISIBLE to the viewer — a non-owner may see a subset. 404 (repo gone /
+// invisible) -> [] so the caller degrades to "no teams listed".
+export async function listRepoTeams(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+): Promise<GitHubRepoTeam[]> {
+  return tolerateGitHubError(
+    () =>
+      paginateAll<GitHubRepoTeam>(
+        client,
+        (page) =>
+          `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+            repo,
+          )}/teams?per_page=100&page=${page}`,
+      ),
+    [],
+  )
+}
+
+export function repoTeamsQuery(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+) {
+  return queryOptions({
+    queryKey: githubKeys.repoTeams(owner, repo),
+    queryFn: () => listRepoTeams(client, owner, repo),
+    enabled: Boolean(owner && repo),
+    staleTime: 60 * 1000,
   })
 }
 

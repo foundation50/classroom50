@@ -149,6 +149,16 @@ export type GitHubTeam = {
   description: string | null
 }
 
+// A team as returned by GET /repos/{owner}/{repo}/teams — GitHubTeam plus the
+// team's effective permission on that repo and its html_url (for linking).
+export type RepoAccessPermission =
+  "pull" | "triage" | "push" | "maintain" | "admin"
+
+export type GitHubRepoTeam = GitHubTeam & {
+  html_url: string
+  permission: RepoAccessPermission
+}
+
 // A team from GET /user/teams (the viewer's own memberships across orgs). Same
 // shape as GitHubTeam plus the required `organization` object, so a cross-org
 // listing can be filtered to a single org. Secret teams the viewer belongs to

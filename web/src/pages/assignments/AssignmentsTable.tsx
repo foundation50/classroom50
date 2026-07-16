@@ -3,27 +3,24 @@ import { useTranslation } from "react-i18next"
 import {
   Copy,
   Eye,
-  KeyRound,
   Pencil,
+  ShieldCheck,
   Trash2,
   UserRound,
   UsersRound,
 } from "lucide-react"
 
-import GitHub from "@/assets/github.svg?react"
 import useGetScores from "@/hooks/useGetScores"
 import { formatDueDate } from "@/util/formatDate"
-import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { Link } from "@tanstack/react-router"
 import { useState } from "react"
 import { ConfirmModal } from "@/components/modals"
 import { ReuseAssignmentModal } from "@/components/modals/ReuseAssignmentModal"
+import { TemplateAccessModal } from "@/components/modals/TemplateAccessModal"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
-import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
-import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Badge, Button } from "@/components/ui"
@@ -135,13 +132,11 @@ const ReuseAssignmentButton = ({
   )
 }
 
-// Per-row recovery: re-grant the classroom team read on this assignment's in-org
-// private template (the acceptance-blocking fix from issue #305). One-click, no
-// confirmation — the grant is idempotent and additive-only, so there's nothing
-// destructive to confirm. Shown for any org-owned template (the row lacks
-// visibility info); on a public/already-granted template the grant harmlessly
-// no-ops. Feedback is a toast (the table has no per-row access verdict to flip).
-const ReconcileTemplateAccessButton = ({
+// Per-row "Template access": opens a modal to review which template repo the
+// assignment uses and which GitHub teams can read it, and (org owners only)
+// re-grant the classroom student/TA teams read — the acceptance-blocking fix
+// from issue #305. Merges the former source-repo link and fix-access button.
+const TemplateAccessButton = ({
   org,
   classroom,
   assignment,
@@ -151,45 +146,35 @@ const ReconcileTemplateAccessButton = ({
   assignment: Assignment
 }) => {
   const { t } = useTranslation()
-  const { notify } = useToast()
-  const reconcile = useReconcileTemplateAccess()
-  const template = assignment.template
-  if (!template) return null
+  const [open, setOpen] = useState(false)
+  if (!assignment.template) return null
 
   return (
-    <Button
-      variant="ghost"
-      size="sm"
-      shape="circle"
-      loading={reconcile.isPending}
-      loadingLabel={t("assignments.template.reconcile.pending")}
-      disabled={reconcile.isPending}
-      title={t("assignments.template.reconcile.title")}
-      aria-label={t("assignments.template.reconcile.aria")}
-      onClick={(e) => {
-        e.stopPropagation()
-        reconcile.mutate(
-          { org, classroom, slug: assignment.slug, template },
-          {
-            onSuccess: (result) => {
-              if (result.warning) {
-                notify({
-                  tone: "error",
-                  message: `${t("assignments.template.reconcile.failed")} ${result.warning}`,
-                })
-              } else {
-                notify({
-                  tone: "success",
-                  message: t("assignments.template.reconcile.success"),
-                })
-              }
-            },
-          },
-        )
-      }}
-    >
-      <KeyRound aria-hidden="true" className="size-4" />
-    </Button>
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="circle"
+        title={t("assignments.template.accessModal.triggerTitle")}
+        aria-label={t("assignments.template.accessModal.triggerAria", {
+          name: assignment.name || assignment.slug,
+        })}
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen(true)
+        }}
+      >
+        <ShieldCheck aria-hidden="true" className="size-4" />
+      </Button>
+      {open ? (
+        <TemplateAccessModal
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          onClose={() => setOpen(false)}
+        />
+      ) : null}
+    </>
   )
 }
 
@@ -384,25 +369,11 @@ const AssignmentsTable = ({
                 </td>
                 <td>
                   {assignment.template && (
-                    <a
-                      href={githubTemplateRepoUrl(
-                        assignment.template.owner,
-                        assignment.template.repo,
-                        assignment.template.branch,
-                      )}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="btn btn-circle btn-sm btn-ghost"
-                      title={t("assignments.table.sourceRepoTitle")}
-                      aria-label={t("assignments.table.sourceRepoAria", {
-                        name: assignment.name || assignment.slug,
-                      })}
-                      onClick={(event) => {
-                        event.stopPropagation()
-                      }}
-                    >
-                      <GitHub aria-hidden="true" className="size-4" />
-                    </a>
+                    <TemplateAccessButton
+                      org={org}
+                      classroom={classroom}
+                      assignment={assignment}
+                    />
                   )}
                   <Link
                     className="btn btn-circle btn-sm btn-ghost"
@@ -429,15 +400,6 @@ const AssignmentsTable = ({
                   </Link>
                   {archived ? null : (
                     <>
-                      {assignment.template &&
-                      assignment.template.owner.toLowerCase() ===
-                        org.toLowerCase() ? (
-                        <ReconcileTemplateAccessButton
-                          org={org}
-                          classroom={classroom}
-                          assignment={assignment}
-                        />
-                      ) : null}
                       <ReuseAssignmentButton
                         org={org}
                         classroom={classroom}

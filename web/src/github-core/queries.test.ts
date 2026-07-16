@@ -9,6 +9,7 @@ import {
   listAllOrgMembers,
   listOrgAdmins,
   listOrgTeams,
+  listRepoTeams,
   listTeamInvitations,
   releasesQuery,
   verifyClassroom50ConfigRepo,
@@ -179,6 +180,38 @@ describe("listOrgTeams (org teams fallback)", () => {
     } as unknown as GitHubClient
     const teams = await listOrgTeams(client, "acme")
     expect(teams.map((tm) => tm.slug)).toEqual(["classroom50-cs101"])
+  })
+})
+
+describe("listRepoTeams (repo teams, 404 -> [])", () => {
+  it("returns [] on 404 (repo gone/invisible — degrades to 'no teams listed')", async () => {
+    const client = {
+      request: vi.fn().mockRejectedValue(apiError(404)),
+    } as unknown as GitHubClient
+    await expect(listRepoTeams(client, "acme", "tmpl")).resolves.toEqual([])
+  })
+
+  it("rethrows a non-404 error rather than degrading silently", async () => {
+    const client = {
+      request: vi.fn().mockRejectedValue(apiError(500)),
+    } as unknown as GitHubClient
+    await expect(listRepoTeams(client, "acme", "tmpl")).rejects.toThrow(
+      GitHubAPIError,
+    )
+  })
+
+  it("returns the repo's teams with their permission on success", async () => {
+    const client = {
+      request: vi.fn().mockResolvedValue([
+        { id: 7, slug: "classroom50-cs101", permission: "pull" },
+        { id: 9, slug: "classroom50-cs101-ta", permission: "pull" },
+      ]),
+    } as unknown as GitHubClient
+    const teams = await listRepoTeams(client, "acme", "tmpl")
+    expect(teams.map((tm) => tm.slug)).toEqual([
+      "classroom50-cs101",
+      "classroom50-cs101-ta",
+    ])
   })
 })
 

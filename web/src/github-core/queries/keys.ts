@@ -45,6 +45,11 @@ export const githubKeys = {
 
   orgTeams: (org: string) => [...githubKeys.all, "org-teams", org] as const,
 
+  // Teams with access to a repo (GET /repos/{owner}/{repo}/teams) — repo-scoped,
+  // distinct from the org-scoped orgTeams.
+  repoTeams: (owner: string, repo: string) =>
+    [...githubKeys.all, "repo-teams", owner, repo] as const,
+
   myTeams: () => [...githubKeys.all, "my-teams"] as const,
 
   repo: (owner: string, repo: string) =>

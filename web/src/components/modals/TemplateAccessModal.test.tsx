@@ -1,0 +1,171 @@
+// @vitest-environment happy-dom
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { render, screen, cleanup, fireEvent } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import type { PropsWithChildren } from "react"
+import { createElement } from "react"
+
+import type { Assignment } from "@/types/classroom"
+
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>()
+  return { ...actual, useTranslation: () => ({ t: (key: string) => key }) }
+})
+
+vi.mock("@/context/github/GitHubProvider", () => ({
+  useGitHubClient: () => ({ request: vi.fn() }),
+}))
+
+let orgRole = "owner"
+vi.mock("@/context/githubOrgRole/GitHubOrgRoleProvider", () => ({
+  useGitHubOrgRole: () => ({ githubOrgRole: orgRole }),
+}))
+
+const notify = vi.fn()
+vi.mock("@/context/notifications/NotificationProvider", () => ({
+  useToast: () => ({ notify, dismiss: vi.fn() }),
+}))
+
+const listRepoTeams = vi.fn()
+vi.mock("@/github-core/queries", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/github-core/queries")>()
+  return {
+    ...actual,
+    repoTeamsQuery: (_client: unknown, owner: string, repo: string) => ({
+      queryKey: ["github", "repo-teams", owner, repo],
+      queryFn: () => listRepoTeams(owner, repo),
+      enabled: Boolean(owner && repo),
+    }),
+  }
+})
+
+const reconcileMutate = vi.fn()
+let reconcilePending = false
+vi.mock("@/hooks/mutations/useReconcileTemplateAccess", () => ({
+  useReconcileTemplateAccess: () => ({
+    mutate: reconcileMutate,
+    isPending: reconcilePending,
+  }),
+}))
+
+import { TemplateAccessModal } from "./TemplateAccessModal"
+
+const ORG = "acme"
+const template = { owner: ORG, repo: "tmpl", branch: "main" }
+const assignment = (over: Partial<Assignment> = {}): Assignment =>
+  ({
+    slug: "hw1",
+    name: "HW 1",
+    mode: "individual",
+    template,
+    ...over,
+  }) as Assignment
+
+function renderModal() {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false, gcTime: 0 } },
+  })
+  const wrapper = ({ children }: PropsWithChildren) =>
+    createElement(QueryClientProvider, { client }, children)
+  return render(
+    createElement(TemplateAccessModal, {
+      org: ORG,
+      classroom: "cs101",
+      assignment: assignment(),
+      onClose: vi.fn(),
+    }),
+    { wrapper },
+  )
+}
+
+const FIX_ACTION = "assignments.template.accessModal.fixAction"
+const OWNER_NOTE = "assignments.template.accessModal.ownerOnlyNote"
+
+beforeEach(() => {
+  orgRole = "owner"
+  reconcilePending = false
+  listRepoTeams.mockReset()
+  listRepoTeams.mockResolvedValue([])
+  reconcileMutate.mockReset()
+  notify.mockReset()
+})
+
+afterEach(cleanup)
+
+describe("TemplateAccessModal", () => {
+  it("shows the template owner/repo and a GitHub link", async () => {
+    renderModal()
+    expect(screen.getByText("acme/tmpl")).toBeTruthy()
+    expect(
+      screen.getByText("assignments.template.accessModal.openOnGitHub"),
+    ).toBeTruthy()
+  })
+
+  it("lists the teams that have access", async () => {
+    listRepoTeams.mockResolvedValue([
+      {
+        id: 1,
+        name: "cs101 students",
+        slug: "classroom50-cs101",
+        html_url: "https://x",
+        permission: "pull",
+      },
+    ])
+    renderModal()
+    expect(await screen.findByText("cs101 students")).toBeTruthy()
+  })
+
+  it("shows the empty state when no team has access", async () => {
+    listRepoTeams.mockResolvedValue([])
+    renderModal()
+    expect(
+      await screen.findByText("assignments.template.accessModal.teamsEmpty"),
+    ).toBeTruthy()
+  })
+
+  it("shows the fix action to an org owner", () => {
+    orgRole = "owner"
+    renderModal()
+    expect(screen.queryByText(FIX_ACTION)).toBeTruthy()
+    expect(screen.queryByText(OWNER_NOTE)).toBeNull()
+  })
+
+  it("hides the fix action from a non-owner and shows the owner-only note", () => {
+    orgRole = "member"
+    renderModal()
+    expect(screen.queryByText(FIX_ACTION)).toBeNull()
+    expect(screen.queryByText(OWNER_NOTE)).toBeTruthy()
+  })
+
+  it("invokes the reconcile hook when the owner clicks fix", () => {
+    orgRole = "owner"
+    renderModal()
+    fireEvent.click(screen.getByText(FIX_ACTION))
+    expect(reconcileMutate).toHaveBeenCalledWith(
+      { org: ORG, classroom: "cs101", slug: "hw1", template },
+      expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+  })
+
+  it("does not offer the fix action for an out-of-org template", () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, gcTime: 0 } },
+    })
+    render(
+      createElement(TemplateAccessModal, {
+        org: ORG,
+        classroom: "cs101",
+        assignment: assignment({
+          template: { owner: "other", repo: "tmpl", branch: "main" },
+        }),
+        onClose: vi.fn(),
+      }),
+      {
+        wrapper: ({ children }: PropsWithChildren) =>
+          createElement(QueryClientProvider, { client }, children),
+      },
+    )
+    expect(screen.queryByText(FIX_ACTION)).toBeNull()
+    expect(screen.queryByText(OWNER_NOTE)).toBeNull()
+  })
+})
