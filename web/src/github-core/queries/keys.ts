@@ -12,6 +12,13 @@ export const githubKeys = {
   orgMembership: (org: string) =>
     [...githubKeys.all, "org-membership", org] as const,
 
+  // The authenticated viewer's OWN membership in an org (GET
+  // /user/memberships/orgs/{org}) — distinct from `orgMembership` above (the
+  // org-scoped membership read). Single-sourced here because both the read
+  // (useGetOwnOrgMembership) and the accept-invite invalidation key it.
+  ownOrgMembership: (org: string | undefined) =>
+    [...githubKeys.all, "memberships", "orgs", org] as const,
+
   orgRepos: (org: string) => [...githubKeys.all, "org-repos", org] as const,
 
   orgMembers: (org: string) => ["orgs", "list", "members", org] as const,

@@ -1,5 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { acceptPendingOrgInvite } from "@/domain/users"
+import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
 // Accept a pending org invite from the classes page's "join org" card (a
@@ -14,7 +15,7 @@ export function useAcceptPendingOrgInvite(org: string) {
     mutationFn: () => acceptPendingOrgInvite(client, org),
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["github", "memberships", "orgs", org],
+        queryKey: githubKeys.ownOrgMembership(org),
       })
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
     },

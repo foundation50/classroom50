@@ -5,10 +5,9 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Archive / unarchive a classroom (toggles the `active` flag via the
-// conflict-retried edit). Hook owns the full optimistic cache chain so both the
-// list card and the detail form update instantly and consistently:
-// cancelQueries -> snapshot -> optimistic flip -> rollback on error -> settle
-// with a list invalidation. Toasts stay at the call site (see ./README.md).
+// conflict-retried edit). Shared by the list card and the detail form, so the
+// hook owns the full optimistic cache chain and both surfaces stay consistent.
+// Toasts stay at the call site (see ./README.md).
 //
 // We do NOT invalidate the exact `classroom.json` key we flipped: GitHub's
 // Contents API is read-after-write eventual, so an immediate refetch can read

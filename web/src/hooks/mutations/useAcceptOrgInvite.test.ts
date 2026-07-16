@@ -21,6 +21,7 @@ vi.mock("@/hooks/useGetOrgs", () => ({
 
 import { useAcceptOrgInvite } from "./useAcceptOrgInvite"
 import { useAcceptPendingOrgInvite } from "./useAcceptPendingOrgInvite"
+import { githubKeys } from "@/github-core/queries"
 
 const ORG = "acme"
 
@@ -70,7 +71,7 @@ describe("useAcceptPendingOrgInvite", () => {
 
     expect(acceptPendingOrgInvite).toHaveBeenCalled()
     expect(invalidate).toHaveBeenCalledWith({
-      queryKey: ["github", "memberships", "orgs", ORG],
+      queryKey: githubKeys.ownOrgMembership(ORG),
     })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ["orgs"] })
   })

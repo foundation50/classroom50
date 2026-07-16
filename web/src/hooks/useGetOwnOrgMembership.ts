@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query"
 import { getPendingOrgInvite } from "@/github-core/mutations"
+import { githubKeys } from "@/github-core/queries"
 import { retryTransientGitHubError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
@@ -14,7 +15,7 @@ const useGetOwnOrgMembership = (org: string | undefined) => {
   const client = useGitHubClient()
 
   return useQuery({
-    queryKey: ["github", "memberships", "orgs", org],
+    queryKey: githubKeys.ownOrgMembership(org),
     queryFn: () => getPendingOrgInvite(client, org ?? ""),
     staleTime: 10 * 60 * 1000,
     retry: retryTransientGitHubError,

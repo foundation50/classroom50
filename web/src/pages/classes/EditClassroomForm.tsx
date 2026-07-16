@@ -37,6 +37,7 @@ const DeleteClassroomButton = ({
   onDeleteClassroom: () => void
 }) => {
   const { t } = useTranslation()
+  const { notify } = useToast()
   const [open, setOpen] = useState(false)
   const deleteClassroomMutation = useDeleteClassroom(org, classroom)
 
@@ -73,10 +74,18 @@ const DeleteClassroomButton = ({
         cancelLabel={t("classes.deleteClassroomCancel")}
         dangerous
         onConfirm={async () => {
-          await deleteClassroomMutation.mutateAsync({
+          const result = await deleteClassroomMutation.mutateAsync({
             org,
             classroom,
           })
+          // Surface the non-fatal team-cleanup warning (the classroom dir was
+          // still deleted); the toast rides along to the destination page.
+          if (result.teamDeleteWarning) {
+            notify({
+              tone: "warning",
+              message: t("classes.deleteTeamWarning", { classroom }),
+            })
+          }
           onDeleteClassroom()
         }}
         onClose={() => setOpen(false)}
