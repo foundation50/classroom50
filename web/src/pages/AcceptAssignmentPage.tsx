@@ -710,7 +710,10 @@ const AcceptAssignmentPage = () => {
                 {t("accept.descriptionLabel")}
               </summary>
               <div className="collapse-content">
-                <Markdown content={assignmentData.description} />
+                <Markdown
+                  content={assignmentData.description}
+                  className="max-h-80 overflow-y-auto"
+                />
               </div>
             </details>
           ) : null}
