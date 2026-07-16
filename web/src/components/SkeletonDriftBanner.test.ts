@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest"
 
 import {
-  isFixResolvedClean,
   resolveDriftBannerView,
   type DriftBannerInput,
 } from "./SkeletonDriftBanner"
+import { isFixResolvedClean } from "@/hooks/mutations/useFixSkeletonDrift"
 
 const base: DriftBannerInput = {
   hasOrg: true,

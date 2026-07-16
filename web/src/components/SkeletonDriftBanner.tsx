@@ -5,7 +5,10 @@ import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
-import { useFixSkeletonDrift } from "@/hooks/mutations/useFixSkeletonDrift"
+import {
+  useFixSkeletonDrift,
+  isFixResolvedClean,
+} from "@/hooks/mutations/useFixSkeletonDrift"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import {
@@ -47,17 +50,6 @@ export function resolveDriftBannerView(
   if (fixResolvedClean && !isPending) return "success"
   if (hasDrift) return "warning"
   return "hidden"
-}
-
-// A fix leaves the org clean only when it completed and skipped nothing; a
-// declined overwrite leaves skippedOverwrite non-empty and must stay on the
-// warning view. Pure so the result-contract mapping is testable (mirrors
-// resolveSkeletonDrift), independent of the component's async wiring.
-export function isFixResolvedClean(result: {
-  status: string
-  skippedOverwrite: string[]
-}): boolean {
-  return result.status === "complete" && result.skippedOverwrite.length === 0
 }
 
 // Global warning banner for an org owner when the `classroom50` config repo's

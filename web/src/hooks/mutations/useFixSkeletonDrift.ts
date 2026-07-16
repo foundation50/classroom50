@@ -4,6 +4,17 @@ import type { StaleSkeletonFile } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
+// A fix resolved clean iff it completed with nothing skipped; a declined
+// overwrite (skippedOverwrite non-empty) leaves files drifted. Pure and shared:
+// the hook uses it to pick seed-vs-invalidate, the banner uses it to pick the
+// success-vs-warning view — one contract, one source.
+export function isFixResolvedClean(result: {
+  status: string
+  skippedOverwrite: string[]
+}): boolean {
+  return result.status === "complete" && result.skippedOverwrite.length === 0
+}
+
 // Refresh a config repo's drifted skeleton files (scaffolded workflows that fell
 // behind the bundled skeleton). `targetOrg` is the mutate variable — the banner
 // is a singleton across orgs, so the result must be attributed to the org the
@@ -27,9 +38,7 @@ export function useFixSkeletonDrift(
       ensureSkeletonFiles(client, targetOrg, confirmOverwrite),
     onSuccess: (result, targetOrg) => {
       const key = githubKeys.skeletonDrift(targetOrg)
-      const resolvedClean =
-        result.status === "complete" && result.skippedOverwrite.length === 0
-      if (resolvedClean) {
+      if (isFixResolvedClean(result)) {
         queryClient.setQueryData<StaleSkeletonFile[]>(key, [])
       } else {
         void queryClient.invalidateQueries({ queryKey: key })
