@@ -97,6 +97,7 @@ const repoStatus = (over: Record<string, unknown> = {}) =>
   repoStatusMock.mockReturnValue({
     data: undefined,
     isLoading: false,
+    isError: false,
     refetch: vi.fn(),
     ...over,
   })
@@ -105,6 +106,7 @@ const tokenStatus = (over: Record<string, unknown> = {}) =>
   tokenStatusMock.mockReturnValue({
     data: undefined,
     isLoading: false,
+    isError: false,
     refetch: vi.fn(),
     ...over,
   })
@@ -192,18 +194,38 @@ describe("OrgSetupPage derived wizard stage", () => {
     expect(screen.queryByText("setup.nextServiceToken")).toBeNull()
   })
 
-  it("settled 'unknown' status => retry surface, not a silent stage 1", () => {
+  it("token 'unknown' status => retry surface, not a silent stage 1", () => {
     owner({ isOwner: true })
-    repoStatus({ data: "unknown" })
+    repoStatus({ data: "ready" })
     tokenStatus({ data: { status: "unknown" } })
     renderPage()
     expect(screen.queryByText("setup.statusIndeterminate")).not.toBeNull()
     expect(screen.queryByText("setup.runSetup")).toBeNull()
   })
 
-  it("status loading => spinner, not a stage-1 flash", () => {
+  it("config-probe error => retry surface, not a silent stage 1 (repo probe rethrows, no 'unknown' data)", () => {
+    owner({ isOwner: true })
+    // The config probe rethrows non-404s, so react-query surfaces isError with
+    // data still undefined — it never resolves the string "unknown".
+    repoStatus({ isError: true })
+    tokenStatus({ data: { status: "missing" } })
+    renderPage()
+    expect(screen.queryByText("setup.statusIndeterminate")).not.toBeNull()
+    expect(screen.queryByText("setup.runSetup")).toBeNull()
+  })
+
+  it("repo-probe loading => spinner, not a stage-1 flash", () => {
     owner({ isOwner: true })
     repoStatus({ isLoading: true })
+    tokenStatus({ data: { status: "missing" } })
+    renderPage()
+    expect(screen.queryByText("setup.loadingSetup")).not.toBeNull()
+    expect(screen.queryByText("setup.runSetup")).toBeNull()
+  })
+
+  it("token-probe loading => spinner, not a stage-1 flash", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
     tokenStatus({ isLoading: true })
     renderPage()
     expect(screen.queryByText("setup.loadingSetup")).not.toBeNull()
