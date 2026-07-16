@@ -1,6 +1,6 @@
-import { useId } from "react"
+import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { useQuery } from "@tanstack/react-query"
 import { ExternalLink, ShieldCheck } from "lucide-react"
 
 import { Badge, Button, Modal, Spinner } from "@/components/ui"
@@ -10,7 +10,7 @@ import type { GitHubRepoTeam } from "@/github-core/types"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { can } from "@/authz"
-import { githubKeys, repoTeamsQuery } from "@/github-core/queries"
+import { repoTeamsQuery } from "@/github-core/queries"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { classroomTeamSlug } from "@/util/teamSlug"
@@ -42,11 +42,16 @@ export const TemplateAccessModal = ({
   const { t } = useTranslation()
   const titleId = useId()
   const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const { notify } = useToast()
   const { githubOrgRole } = useGitHubOrgRole()
   const isOwner = can("manageOrg", { githubOrgRole })
   const reconcile = useReconcileTemplateAccess()
+  // Latched once a grant from this modal succeeds. GitHub's repo-teams read is
+  // eventually consistent, so the post-grant refetch (owned by the reconcile
+  // hook) can briefly return the pre-grant list; without this the Fix button
+  // would re-enable and the list re-flash "no teams" right after the success
+  // toast. Cleared when the refetch settles with the granted team present.
+  const [granted, setGranted] = useState(false)
 
   const template = assignment.template
   const inOrg = !!template && template.owner.toLowerCase() === org.toLowerCase()
@@ -63,23 +68,29 @@ export const TemplateAccessModal = ({
   // Which classroom teams the template is missing. Every repo permission grants
   // read, so a team present in the list already satisfies the requirement; only
   // an absent required team needs the grant. We can only judge this when the
-  // team list is readable (owner + not errored) — otherwise treat it as unknown
-  // and leave the action enabled rather than falsely claiming "all set".
+  // team list is readable (owner + settled + not errored) — otherwise treat it
+  // as unknown and leave the action enabled rather than falsely claiming "all
+  // set". `isFetching` (not just `isPending`) so a background refetch after the
+  // grant doesn't expose a window where the button re-enables on stale data.
   const teams = teamsQuery.data ?? []
   const presentSlugs = new Set(teams.map((tm) => tm.slug.toLowerCase()))
   const requiredSlugs = REQUIRED_ROLES.map((role) =>
     classroomTeamSlug(classroom, role).toLowerCase(),
   )
-  const accessKnown = isOwner && !teamsQuery.isPending && !teamsQuery.isError
+  const accessKnown = isOwner && !teamsQuery.isFetching && !teamsQuery.isError
   const missingRequired = requiredSlugs.filter(
     (slug) => !presentSlugs.has(slug),
   )
-  // Enable only when we know access is missing; if unknown, stay enabled so the
-  // owner can still repair. Disable only when we can confirm all required teams
-  // are present.
+  // Confirmed present once the settled list contains every required team.
   const allRequiredPresent = accessKnown && missingRequired.length === 0
+  // Disable Fix when the team is confirmed present, OR when a grant already
+  // succeeded in this modal — the grant is idempotent and additive, so there's
+  // nothing left to fix, and this keeps the button from re-enabling while the
+  // eventually-consistent refetch settles.
+  const satisfied = allRequiredPresent || granted
 
   const handleFix = () => {
+    setGranted(false)
     reconcile.mutate(
       { org, classroom, slug: assignment.slug, template },
       {
@@ -90,13 +101,10 @@ export const TemplateAccessModal = ({
               message: `${t("assignments.template.reconcile.failed")} ${result.warning}`,
             })
           } else {
+            setGranted(true)
             notify({
               tone: "success",
               message: t("assignments.template.reconcile.success"),
-            })
-            // Refetch the team list so a newly granted team shows up.
-            void queryClient.invalidateQueries({
-              queryKey: githubKeys.repoTeams(template.owner, template.repo),
             })
           }
         },
@@ -161,8 +169,11 @@ export const TemplateAccessModal = ({
           teams={teamsQuery.data ?? []}
           // A non-owner sees only teams visible to their account, so an empty
           // result may be a visibility gap rather than a genuinely unshared
-          // template — surface the caveat instead of "no teams".
-          partialVisibility={!isOwner}
+          // template — surface the caveat instead of "no teams". After a
+          // successful grant here, the refetch is eventually consistent and may
+          // briefly still be empty — treat that like partial visibility rather
+          // than re-flashing "no teams".
+          partialVisibility={!isOwner || granted}
           permissionLabel={(permission) =>
             t("assignments.template.accessModal.permissionLabel", {
               permission,
@@ -187,9 +198,9 @@ export const TemplateAccessModal = ({
             variant="primary"
             loading={reconcile.isPending}
             loadingLabel={t("assignments.template.reconcile.pending")}
-            disabled={reconcile.isPending || allRequiredPresent}
+            disabled={reconcile.isPending || satisfied}
             title={
-              allRequiredPresent
+              satisfied
                 ? t("assignments.template.accessModal.fixSatisfied")
                 : t("assignments.template.accessModal.fixHint")
             }

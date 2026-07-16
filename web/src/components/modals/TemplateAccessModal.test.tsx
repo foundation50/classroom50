@@ -6,6 +6,7 @@ import {
   cleanup,
   fireEvent,
   waitFor,
+  act,
 } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
@@ -165,6 +166,58 @@ describe("TemplateAccessModal", () => {
       { org: ORG, classroom: "cs101", slug: "hw1", template },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     )
+  })
+
+  it("toasts success and disables fix after a clean grant (no re-flash)", async () => {
+    orgRole = "owner"
+    // Student team absent, so Fix starts enabled.
+    listRepoTeams.mockResolvedValue([])
+    renderModal()
+    await waitFor(() =>
+      expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(
+        false,
+      ),
+    )
+
+    fireEvent.click(screen.getByText(FIX_ACTION))
+    const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
+    act(() => onSuccess({ warning: undefined }))
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "success" }),
+    )
+    // Even though the eventually-consistent list is still empty, the button
+    // stays disabled and the empty state is suppressed — no post-success
+    // re-flash / re-enable.
+    await waitFor(() =>
+      expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(
+        true,
+      ),
+    )
+    expect(
+      screen.queryByText("assignments.template.accessModal.teamsEmpty"),
+    ).toBeNull()
+  })
+
+  it("toasts the warning and keeps fix enabled when the grant fails", async () => {
+    orgRole = "owner"
+    listRepoTeams.mockResolvedValue([])
+    renderModal()
+    await waitFor(() =>
+      expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(
+        false,
+      ),
+    )
+
+    fireEvent.click(screen.getByText(FIX_ACTION))
+    const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
+    act(() => onSuccess({ warning: "student grant failed" }))
+
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "error" }),
+    )
+    // A failed grant must not latch "satisfied" — the owner can retry.
+    expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(false)
   })
 
   it("enables fix when the classroom student team is missing", async () => {

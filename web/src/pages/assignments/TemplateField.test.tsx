@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, fireEvent } from "@testing-library/react"
+import { render, screen, cleanup, fireEvent, act } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
@@ -150,5 +150,33 @@ describe("TemplateField — inline Fix template access", () => {
       },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
     )
+  })
+
+  it("renders the inline warning when the grant reports a failure", async () => {
+    verifyTemplateAccess.mockResolvedValue(okInOrgPrivate)
+    teamHasRepoAccess.mockResolvedValue(false)
+    renderField()
+    fireEvent.click(await screen.findByText(ACTION_KEY))
+    const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
+    act(() => onSuccess({ warning: "student grant failed" }))
+    expect(
+      screen.getByText("assignments.template.reconcile.failed", {
+        exact: false,
+      }).textContent,
+    ).toContain("student grant failed")
+  })
+
+  it("shows no inline warning on a clean grant", async () => {
+    verifyTemplateAccess.mockResolvedValue(okInOrgPrivate)
+    teamHasRepoAccess.mockResolvedValue(false)
+    renderField()
+    fireEvent.click(await screen.findByText(ACTION_KEY))
+    const onSuccess = reconcileMutate.mock.calls[0][1].onSuccess
+    act(() => onSuccess({ warning: undefined }))
+    expect(
+      screen.queryByText("assignments.template.reconcile.failed", {
+        exact: false,
+      }),
+    ).toBeNull()
   })
 })
