@@ -1,17 +1,9 @@
 import { useEffect } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { githubKeys } from "@/github-core/queries"
 import { acceptAndVerifyOrgMembership } from "@/domain/users"
 import type { GitHubOrgMembership } from "@/github-core/types"
-
-// The shared membership query key, read by useGetOwnOrgMembership on both the
-// /onboard and accept pages. Kept here so success can seed it directly.
-const membershipQueryKey = (org?: string) => [
-  "github",
-  "memberships",
-  "orgs",
-  org,
-]
 
 export type UseAcceptAndVerifyMembershipResult = {
   isActive: boolean
@@ -38,10 +30,11 @@ export function useAcceptAndVerifyMembership(input: {
   const mutation = useMutation({
     mutationFn: () => acceptAndVerifyOrgMembership(client, org ?? ""),
     onSuccess: (membership: GitHubOrgMembership) => {
-      // Seed the shared membership query with the active membership the verify
-      // read, so this page's redirect gate and the accept page's read agree
-      // immediately instead of racing a lagged re-fetch.
-      queryClient.setQueryData(membershipQueryKey(org), membership)
+      // Seed the shared membership query (githubKeys.ownOrgMembership, read by
+      // useGetOwnOrgMembership on the /onboard and accept pages) with the active
+      // membership the verify read, so this page's redirect gate and the accept
+      // page's read agree immediately instead of racing a lagged re-fetch.
+      queryClient.setQueryData(githubKeys.ownOrgMembership(org), membership)
     },
   })
 

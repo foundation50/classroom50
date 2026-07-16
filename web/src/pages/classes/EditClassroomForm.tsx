@@ -27,7 +27,7 @@ type EditClassroomFormProps = {
   cl?: Classroom
 }
 
-const DeleteClassroomButton = ({
+export const DeleteClassroomButton = ({
   org,
   classroom,
   onDeleteClassroom,

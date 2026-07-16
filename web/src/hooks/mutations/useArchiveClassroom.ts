@@ -26,6 +26,13 @@ export function useArchiveClassroom(org: string, classroom: string) {
   )
 
   return useMutation({
+    // Serialize toggles on this classroom: without a scope, two rapid
+    // archive/unarchive taps run concurrently and their onMutate snapshots nest
+    // — toggle B captures A's optimistic value as `prev`, so if both writes fail
+    // B rolls back to A's optimistic state (persistently wrong until staleTime),
+    // not the true original. A shared scope id makes React Query run same-key
+    // toggles one at a time, so each snapshot sees a settled state.
+    scope: { id: `archive-classroom:${org}:${classroom}` },
     mutationFn: (active: boolean) =>
       editClassroomWithConflictRetry(client, { org, slug: classroom, active }),
     onMutate: async (active: boolean) => {

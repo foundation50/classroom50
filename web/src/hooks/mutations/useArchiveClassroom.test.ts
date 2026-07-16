@@ -8,6 +8,20 @@ import { createElement } from "react"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 
+// Capture the options passed to useMutation so we can assert the serialization
+// scope without depending on mutation timing.
+let lastMutationScopeId: string | undefined
+vi.mock("@tanstack/react-query", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@tanstack/react-query")>()
+  return {
+    ...actual,
+    useMutation: ((options: Parameters<typeof actual.useMutation>[0]) => {
+      lastMutationScopeId = options.scope?.id
+      return actual.useMutation(options)
+    }) as typeof actual.useMutation,
+  }
+})
+
 // Drives editClassroomWithConflictRetry; switchable to fail so we can assert the
 // optimistic flip rolls back.
 let editShouldFail = false
@@ -101,5 +115,25 @@ describe("useArchiveClassroom", () => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.jsonFile(ORG, CONFIG_REPO),
     })
+  })
+
+  it("cancels in-flight reads of the classroom.json key before flipping", async () => {
+    // The flicker fix: a late read of classroom.json must be cancelled so it
+    // can't resolve after and overwrite the optimistic flip.
+    const { queryClient, result } = setup()
+    const cancel = vi.spyOn(queryClient, "cancelQueries")
+
+    result.current.mutate(false)
+    await waitFor(() => expect(result.current.isSuccess).toBe(true))
+
+    expect(cancel).toHaveBeenCalledWith({ queryKey: classroomKey })
+  })
+
+  it("scopes the mutation per classroom so concurrent toggles serialize", () => {
+    // A shared scope id makes React Query run same-classroom toggles one at a
+    // time, so a second toggle's onMutate snapshot can't capture the first's
+    // optimistic value (the stale-rollback race).
+    setup()
+    expect(lastMutationScopeId).toBe(`archive-classroom:${ORG}:${SLUG}`)
   })
 })
