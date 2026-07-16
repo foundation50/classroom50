@@ -885,128 +885,61 @@ const CreateAssignmentForm = ({
                 {(emptyRepo) =>
                   emptyRepo ? null : (
                     <>
-              <form.Field name="setup_command">
-                {(field) => (
-                  <div className="mt-4">
-                    <FieldLabel
-                      htmlFor={field.name}
-                      label={t("assignments.form.setupCommand")}
-                      help={t("assignments.form.setupCommandTip")}
-                    />
-                    <Input
-                      id={field.name}
-                      name={field.name}
-                      placeholder={t(
-                        "assignments.form.setupCommandPlaceholder",
-                      )}
-                      value={field.state.value}
-                      onBlur={normalizeOnBlur(field)}
-                      onChange={(e) => field.handleChange(e.target.value)}
-                    />
-                  </div>
-                )}
-              </form.Field>
+                      <form.Field name="setup_command">
+                        {(field) => (
+                          <div className="mt-4">
+                            <FieldLabel
+                              htmlFor={field.name}
+                              label={t("assignments.form.setupCommand")}
+                              help={t("assignments.form.setupCommandTip")}
+                            />
+                            <Input
+                              id={field.name}
+                              name={field.name}
+                              placeholder={t(
+                                "assignments.form.setupCommandPlaceholder",
+                              )}
+                              value={field.state.value}
+                              onBlur={normalizeOnBlur(field)}
+                              onChange={(e) =>
+                                field.handleChange(e.target.value)
+                              }
+                            />
+                          </div>
+                        )}
+                      </form.Field>
 
-              <form.Field name="allowed_files">
-                {(field) => {
-                  const patterns = parseAllowedFiles(field.state.value)
-                  const error = field.state.meta.errors[0] as string | undefined
-                  return (
-                    <div className="mt-4">
-                      <FieldLabel
-                        htmlFor={field.name}
-                        label={t("assignments.form.allowedFiles")}
-                        help={t("assignments.form.allowedFilesTip", {
-                          gitignore: ".gitignore",
-                          bang: "!",
-                          star: "*",
-                          example: "!hello.py",
-                          result: "hello.py",
-                        })}
-                      />
-                      <Textarea
-                        id={field.name}
-                        name={field.name}
-                        className="font-mono"
-                        rows={4}
-                        spellCheck={false}
-                        placeholder={"*\n!hello.py"}
-                        value={field.state.value}
-                        onBlur={field.handleBlur}
-                        onChange={(e) => field.handleChange(e.target.value)}
-                      />
-                      {error ? (
-                        <p
-                          role="alert"
-                          className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
-                        >
-                          <AlertTriangle
-                            aria-hidden="true"
-                            className="size-4 shrink-0"
-                          />
-                          {error}
-                        </p>
-                      ) : (
-                        patterns.length > 0 && (
-                          <p className="mt-1.5 text-xs text-base-content/70">
-                            {t("assignments.form.patternCount", {
-                              count: patterns.length,
-                            })}
-                          </p>
-                        )
-                      )}
-                    </div>
-                  )
-                }}
-              </form.Field>
-
-              <form.Field name="pass_threshold_enabled">
-                {(toggle) => (
-                  <div className="mt-4">
-                    <div className="flex items-center gap-1.5">
-                      <label className="label cursor-pointer justify-start gap-3 p-0 font-bold">
-                        <input
-                          type="checkbox"
-                          className="toggle toggle-sm"
-                          checked={toggle.state.value}
-                          onChange={(e) =>
-                            toggle.handleChange(e.target.checked)
-                          }
-                        />
-                        {t("assignments.form.passThresholdToggle")}
-                      </label>
-                      <HelpTooltip
-                        help={t("assignments.form.passThresholdTip")}
-                      />
-                    </div>
-
-                    {toggle.state.value && (
-                      <form.Field name="pass_threshold">
+                      <form.Field name="allowed_files">
                         {(field) => {
+                          const patterns = parseAllowedFiles(field.state.value)
                           const error = field.state.meta.errors[0] as
                             string | undefined
                           return (
-                            <div className="mt-3">
-                              <div className="flex items-center gap-2">
-                                <Input
-                                  id={field.name}
-                                  name={field.name}
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={PASS_THRESHOLD_MIN}
-                                  max={PASS_THRESHOLD_MAX}
-                                  step={1}
-                                  className="w-28"
-                                  value={field.state.value}
-                                  onBlur={field.handleBlur}
-                                  onChange={(e) =>
-                                    field.handleChange(Number(e.target.value))
-                                  }
-                                />
-                                <span className="text-sm text-base-content/70">
-                                  {t("assignments.form.passThresholdSuffix")}
-                                </span>
-                              </div>
+                            <div className="mt-4">
+                              <FieldLabel
+                                htmlFor={field.name}
+                                label={t("assignments.form.allowedFiles")}
+                                help={t("assignments.form.allowedFilesTip", {
+                                  gitignore: ".gitignore",
+                                  bang: "!",
+                                  star: "*",
+                                  example: "!hello.py",
+                                  result: "hello.py",
+                                })}
+                              />
+                              <Textarea
+                                id={field.name}
+                                name={field.name}
+                                className="font-mono"
+                                rows={4}
+                                spellCheck={false}
+                                placeholder={"*\n!hello.py"}
+                                value={field.state.value}
+                                onBlur={field.handleBlur}
+                                onChange={(e) =>
+                                  field.handleChange(e.target.value)
+                                }
+                              />
                               {error ? (
                                 <p
                                   role="alert"
@@ -1018,15 +951,91 @@ const CreateAssignmentForm = ({
                                   />
                                   {error}
                                 </p>
-                              ) : null}
+                              ) : (
+                                patterns.length > 0 && (
+                                  <p className="mt-1.5 text-xs text-base-content/70">
+                                    {t("assignments.form.patternCount", {
+                                      count: patterns.length,
+                                    })}
+                                  </p>
+                                )
+                              )}
                             </div>
                           )
                         }}
                       </form.Field>
-                    )}
-                  </div>
-                )}
-              </form.Field>
+
+                      <form.Field name="pass_threshold_enabled">
+                        {(toggle) => (
+                          <div className="mt-4">
+                            <div className="flex items-center gap-1.5">
+                              <label className="label cursor-pointer justify-start gap-3 p-0 font-bold">
+                                <input
+                                  type="checkbox"
+                                  className="toggle toggle-sm"
+                                  checked={toggle.state.value}
+                                  onChange={(e) =>
+                                    toggle.handleChange(e.target.checked)
+                                  }
+                                />
+                                {t("assignments.form.passThresholdToggle")}
+                              </label>
+                              <HelpTooltip
+                                help={t("assignments.form.passThresholdTip")}
+                              />
+                            </div>
+
+                            {toggle.state.value && (
+                              <form.Field name="pass_threshold">
+                                {(field) => {
+                                  const error = field.state.meta.errors[0] as
+                                    string | undefined
+                                  return (
+                                    <div className="mt-3">
+                                      <div className="flex items-center gap-2">
+                                        <Input
+                                          id={field.name}
+                                          name={field.name}
+                                          type="number"
+                                          inputMode="numeric"
+                                          min={PASS_THRESHOLD_MIN}
+                                          max={PASS_THRESHOLD_MAX}
+                                          step={1}
+                                          className="w-28"
+                                          value={field.state.value}
+                                          onBlur={field.handleBlur}
+                                          onChange={(e) =>
+                                            field.handleChange(
+                                              Number(e.target.value),
+                                            )
+                                          }
+                                        />
+                                        <span className="text-sm text-base-content/70">
+                                          {t(
+                                            "assignments.form.passThresholdSuffix",
+                                          )}
+                                        </span>
+                                      </div>
+                                      {error ? (
+                                        <p
+                                          role="alert"
+                                          className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                                        >
+                                          <AlertTriangle
+                                            aria-hidden="true"
+                                            className="size-4 shrink-0"
+                                          />
+                                          {error}
+                                        </p>
+                                      ) : null}
+                                    </div>
+                                  )
+                                }}
+                              </form.Field>
+                            )}
+                          </div>
+                        )}
+                      </form.Field>
                     </>
                   )
                 }

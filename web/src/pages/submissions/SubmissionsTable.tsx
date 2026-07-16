@@ -683,8 +683,7 @@ const SubmissionsTable = ({
                                 displayName={
                                   isGroup
                                     ? undefined
-                                    : getName(rest.owner, students) ||
-                                      undefined
+                                    : getName(rest.owner, students) || undefined
                                 }
                               />
                             </>
