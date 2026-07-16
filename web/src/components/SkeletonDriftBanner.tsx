@@ -1,15 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { useParams } from "@tanstack/react-router"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { CheckCircle2, FileWarning } from "lucide-react"
 import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
-import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { ensureSkeletonFiles } from "@/github-core/mutations"
-import type { StaleSkeletonFile } from "@/github-core/mutations"
-import { githubKeys } from "@/github-core/queries"
+import { useFixSkeletonDrift } from "@/hooks/mutations/useFixSkeletonDrift"
 import { useSkeletonDrift } from "@/hooks/useSkeletonDrift"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import {
@@ -82,8 +78,6 @@ export function SkeletonDriftBanner() {
   const [dismissedOrg, setDismissedOrg] = useState<string>()
   const { t } = useTranslation()
 
-  const client = useGitHubClient()
-  const queryClient = useQueryClient()
   const runFix = useSafeSubmit()
 
   // The org whose fix just completed with nothing left drifted. Drives the green
@@ -113,30 +107,7 @@ export function SkeletonDriftBanner() {
     return () => resolveOverwriteRef.current(false)
   }, [org])
 
-  const mutation = useMutation({
-    // org is captured as a mutate variable so onSuccess attributes the result to
-    // the org the fix actually ran against, not the live param (which can change
-    // if the owner navigates while the run is in flight).
-    mutationFn: (targetOrg: string) =>
-      ensureSkeletonFiles(client, targetOrg, confirmSkeletonOverwrite),
-    onSuccess: (result, targetOrg) => {
-      if (!mountedRef.current) return
-      const key = githubKeys.skeletonDrift(targetOrg)
-      // A declined overwrite leaves files drifted -> stay on the warning view.
-      if (isFixResolvedClean(result)) {
-        setFixedCleanOrg(targetOrg)
-        // Seed the drift cache as clean directly. A post-commit tree read is
-        // eventually consistent and would refetch the old (drifted) SHAs, so
-        // invalidating here could re-flash the warning on the next mount.
-        queryClient.setQueryData<StaleSkeletonFile[]>(key, [])
-      } else {
-        void queryClient.invalidateQueries({ queryKey: key })
-      }
-    },
-    onSettled: () => {
-      if (mountedRef.current) setPendingOrg(undefined)
-    },
-  })
+  const mutation = useFixSkeletonDrift(confirmSkeletonOverwrite)
 
   const view = resolveDriftBannerView({
     hasOrg: Boolean(org),
@@ -204,8 +175,26 @@ export function SkeletonDriftBanner() {
                   disabled={pendingOrg === org}
                   onClick={() => {
                     if (org && pendingOrg !== org) {
-                      setPendingOrg(org)
-                      void runFix(() => mutation.mutateAsync(org))
+                      const targetOrg = org
+                      setPendingOrg(targetOrg)
+                      void runFix(() =>
+                        mutation.mutateAsync(targetOrg, {
+                          onSuccess: (result) => {
+                            // UI state (skipped on unmount); the drift-cache
+                            // reconcile is the hook's job. A declined overwrite
+                            // leaves files drifted -> no success view.
+                            if (
+                              mountedRef.current &&
+                              isFixResolvedClean(result)
+                            ) {
+                              setFixedCleanOrg(targetOrg)
+                            }
+                          },
+                          onSettled: () => {
+                            if (mountedRef.current) setPendingOrg(undefined)
+                          },
+                        }),
+                      )
                     }
                   }}
                 >
