@@ -1,6 +1,14 @@
 import { useNavigate } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
-import { Copy, Eye, Pencil, Trash2, UserRound, UsersRound } from "lucide-react"
+import {
+  Copy,
+  Eye,
+  KeyRound,
+  Pencil,
+  Trash2,
+  UserRound,
+  UsersRound,
+} from "lucide-react"
 
 import GitHub from "@/assets/github.svg?react"
 import useGetScores from "@/hooks/useGetScores"
@@ -14,6 +22,8 @@ import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { useQueryClient } from "@tanstack/react-query"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
+import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
+import { useToast } from "@/context/notifications/NotificationProvider"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Badge, Button } from "@/components/ui"
@@ -122,6 +132,64 @@ const ReuseAssignmentButton = ({
         />
       ) : null}
     </>
+  )
+}
+
+// Per-row recovery: re-grant the classroom team read on this assignment's in-org
+// private template (the acceptance-blocking fix from issue #305). One-click, no
+// confirmation — the grant is idempotent and additive-only, so there's nothing
+// destructive to confirm. Shown for any org-owned template (the row lacks
+// visibility info); on a public/already-granted template the grant harmlessly
+// no-ops. Feedback is a toast (the table has no per-row access verdict to flip).
+const ReconcileTemplateAccessButton = ({
+  org,
+  classroom,
+  assignment,
+}: {
+  org: string
+  classroom: string
+  assignment: Assignment
+}) => {
+  const { t } = useTranslation()
+  const { notify } = useToast()
+  const reconcile = useReconcileTemplateAccess()
+  const template = assignment.template
+  if (!template) return null
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      shape="circle"
+      loading={reconcile.isPending}
+      loadingLabel={t("assignments.template.reconcile.pending")}
+      disabled={reconcile.isPending}
+      title={t("assignments.template.reconcile.title")}
+      aria-label={t("assignments.template.reconcile.aria")}
+      onClick={(e) => {
+        e.stopPropagation()
+        reconcile.mutate(
+          { org, classroom, slug: assignment.slug, template },
+          {
+            onSuccess: (result) => {
+              if (result.warning) {
+                notify({
+                  tone: "error",
+                  message: `${t("assignments.template.reconcile.failed")} ${result.warning}`,
+                })
+              } else {
+                notify({
+                  tone: "success",
+                  message: t("assignments.template.reconcile.success"),
+                })
+              }
+            },
+          },
+        )
+      }}
+    >
+      <KeyRound aria-hidden="true" className="size-4" />
+    </Button>
   )
 }
 
@@ -361,6 +429,15 @@ const AssignmentsTable = ({
                   </Link>
                   {archived ? null : (
                     <>
+                      {assignment.template &&
+                      assignment.template.owner.toLowerCase() ===
+                        org.toLowerCase() ? (
+                        <ReconcileTemplateAccessButton
+                          org={org}
+                          classroom={classroom}
+                          assignment={assignment}
+                        />
+                      ) : null}
                       <ReuseAssignmentButton
                         org={org}
                         classroom={classroom}
