@@ -5,7 +5,6 @@ import {
   BookOpen,
   ExternalLink,
   FileText,
-  GraduationCap,
   Pencil,
   UserRound,
   UsersRound,
@@ -58,76 +57,37 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
       )}
 
       <Card.Body className="gap-4">
-        <div className="flex items-start justify-between gap-4 pr-8">
+        <div className="flex items-center gap-3 pr-8">
+          <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+            <BookOpen aria-hidden="true" className="size-5" />
+          </div>
           <div className="min-w-0">
-            <div className="mb-2 flex items-center gap-2">
-              <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <BookOpen aria-hidden="true" className="size-5" />
-              </div>
-
-              <div className="min-w-0">
-                <h3 className="truncate text-base font-semibold leading-tight">
-                  {repo.name}
-                </h3>
-                <p className="truncate text-xs text-base-content/70">
-                  {repo.owner?.login}
-                </p>
-              </div>
-            </div>
+            <h3 className="truncate text-base font-semibold leading-tight">
+              {repo.name}
+            </h3>
+            <p className="truncate text-xs text-base-content/70">
+              {repo.owner?.login}
+            </p>
           </div>
         </div>
 
-        <div className="min-h-10 text-sm">
-          {description ? (
-            <button
-              type="button"
-              onClick={() => setDescriptionOpen(true)}
-              className="link link-primary inline-flex items-center gap-1.5"
-            >
-              <FileText aria-hidden="true" className="size-4" />
-              {t("classes.repo.viewDescription")}
-            </button>
-          ) : null}
-        </div>
-
-        {(classroom || assignment) && (
-          <div className="alert alert-outline flex flex-col items-start">
-            {classroom && (
-              <Link
-                to="/$org/$classroom"
-                params={{ org, classroom }}
-                className="max-w-full truncate group inline-flex w-fit gap-1.5 text-sm text-base-content/70 transition hover:text-primary"
-              >
-                <GraduationCap aria-hidden="true" className="size-4" />
-                <span className="truncate">
-                  {t("classes.repo.classroomLabel")}{" "}
-                  <span className="font-medium text-base-content/80 group-hover:text-primary">
-                    {classroom}
-                  </span>
-                </span>
-              </Link>
-            )}
-
-            {classroom && assignment && (
-              <Link
-                to="/$org/$classroom/assignments/$assignment"
-                params={{ org, classroom, assignment }}
-                className="max-w-full truncate group inline-flex w-fit gap-1.5 text-sm text-base-content/70 transition hover:text-primary"
-              >
-                <BookOpen aria-hidden="true" className="size-4" />
-                <span className="truncate">
-                  {t("classes.repo.assignmentLabel")}{" "}
-                  <span className="font-medium text-base-content/80 group-hover:text-primary">
-                    {assignment}
-                  </span>
-                </span>
-              </Link>
-            )}
+        {assignment ? (
+          <div className="flex items-center gap-1.5 text-sm text-base-content/70">
+            <BookOpen
+              aria-hidden="true"
+              className="size-4 shrink-0 text-base-content/50"
+            />
+            <span className="truncate">
+              {t("classes.repo.assignmentLabel")}{" "}
+              <span className="font-medium text-base-content/80">
+                {assignment}
+              </span>
+            </span>
           </div>
-        )}
+        ) : null}
 
-        <Card.Actions className="items-center justify-between pt-1">
-          <div className="flex flex-wrap items-end gap-2">
+        <Card.Actions className="items-center justify-between gap-2 pt-1">
+          <div className="flex items-center gap-2">
             {assignmentData?.mode === "individual" && (
               <div className="badge badge-ghost badge-sm py-3">
                 <UserRound aria-hidden="true" className="size-4" />{" "}
@@ -135,7 +95,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
               </div>
             )}
             {assignmentData?.mode === "group" && (
-              <div className="badge badge-ghost badge-sm">
+              <div className="badge badge-ghost badge-sm py-3">
                 <UsersRound aria-hidden="true" className="size-4" />{" "}
                 {t("classes.repo.group")}
               </div>
@@ -143,16 +103,16 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            {classroom && assignment && (
-              <Link
-                to="/$org/$classroom/assignments/$assignment"
-                params={{ org, classroom, assignment }}
+            {description ? (
+              <button
+                type="button"
+                onClick={() => setDescriptionOpen(true)}
                 className="btn btn-sm btn-outline"
               >
                 <FileText aria-hidden="true" className="size-4" />
-                {t("classes.repo.viewDetails")}
-              </Link>
-            )}
+                {t("classes.repo.viewDescription")}
+              </button>
+            ) : null}
             <a
               href={repo.html_url}
               target="_blank"
@@ -173,9 +133,14 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           size="2xl"
           aria-label={t("classes.repo.descriptionModalTitle")}
         >
-          <h3 className="mb-4 text-lg font-bold">
-            {assignmentData?.name || assignment}
-          </h3>
+          <div className="mb-4 pr-8">
+            <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
+              {t("classes.repo.descriptionModalTitle")}
+            </p>
+            <h3 className="text-lg font-bold">
+              {assignmentData?.name || assignment}
+            </h3>
+          </div>
           <Markdown
             content={description}
             className="max-h-[70vh] overflow-y-auto pr-1"

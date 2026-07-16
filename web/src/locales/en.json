@@ -1364,12 +1364,10 @@
     "repo": {
       "manageGroupAria": "Manage group for {{assignment}}",
       "manageGroupTitle": "Manage group",
-      "classroomLabel": "Classroom:",
       "assignmentLabel": "Assignment:",
       "individual": "Individual",
       "group": "Group",
       "openRepo": "Open repo",
-      "viewDetails": "View details",
       "viewDescription": "View assignment description",
       "descriptionModalTitle": "Assignment description",
       "emptyTitle": "No assignment repos yet",
