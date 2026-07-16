@@ -13,7 +13,6 @@ import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useState } from "react"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
-import { useQueryClient } from "@tanstack/react-query"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import { OrgSettingsPane } from "./OrgSettingsPage"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -144,7 +143,6 @@ const NotTeamOrEnterpriseNotice = () => {
 const OrgSetupPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.setup"))
-  const queryClient = useQueryClient()
 
   const { org } = useParams({ strict: false })
   const [steps, setSteps] =
@@ -170,11 +168,17 @@ const OrgSetupPage = () => {
       setSteps((steps) => applyStepUpdate(steps, update))
     },
     confirmSkeletonOverwrite,
+    // Unmount-safe: the org-list refetch runs in the hook's onSuccess (init is
+    // long-running and the user can navigate away). Always invalidate — even on
+    // a status-"error" outcome — matching the prior unconditional invalidate.
+    invalidate: (queryClient) => {
+      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+    },
   })
 
   // Reset the board before the init call (must run before mutateAsync), then
-  // run setup. Invalidation + the status-"error" advance branch stay here via
-  // the per-call onSuccess.
+  // run setup. Only the step-advance setState stays here (skipped on unmount);
+  // the cache invalidation lives in the hook so it survives an unmount.
   const runSetupFlow = () => {
     // Reset the board before a (re-)run so a prior run's per-step results —
     // including the orgDefaults unenforced-settings list — can't linger on an
@@ -182,9 +186,6 @@ const OrgSetupPage = () => {
     setSteps(initialInitSteps)
     return mutation.mutateAsync(undefined, {
       onSuccess: (data) => {
-        queryClient.invalidateQueries({
-          queryKey: ["orgs"],
-        })
         // Don't advance if a prerequisite step failed; initClassroom50 resolves
         // with status "error" rather than throwing.
         if (data && data.status === "error") {

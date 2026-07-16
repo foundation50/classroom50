@@ -485,15 +485,33 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
     isError,
   } = useGetOrgAudit(org, planDetails?.plan?.name)
 
-  const fixMutation = useRepairOrgPolicyConcern(org, planDetails?.plan?.name)
+  // Persist the classified Fix-it outcome to the per-org store — a DURABLE
+  // write, so it runs in the hook's onSuccess (via onRepaired below), NOT the
+  // call site, to survive a mid-repair unmount.
+  const persistRepairOutcome = (result: RepairResult, id: ConcernId) => {
+    const outcome = classifyRepairOutcome(result)
+    if (outcome.pinnedFields.length > 0) {
+      mergeUnresolved(org, { fields: outcome.pinnedFields })
+    }
+    if (outcome.unresolvedConcern !== null) {
+      mergeUnresolved(org, { concerns: [id] })
+    }
+  }
+
+  const fixMutation = useRepairOrgPolicyConcern(
+    org,
+    planDetails?.plan?.name,
+    persistRepairOutcome,
+  )
   // The concern currently being repaired, so only its button shows a spinner.
   const fixingId = fixMutation.isPending
     ? (fixMutation.variables ?? null)
     : null
 
-  // Apply a Fix-it result to component state. Kept at the call site (component
-  // state); the hook owns only the audit invalidation.
-  const applyRepairOutcome = (result: RepairResult, id: ConcernId) => {
+  // Reflect a Fix-it result in component state (pins, unresolved concerns,
+  // transient-notice). Pure UI, so it stays at the call site (skipped on
+  // unmount); the durable store write is persistRepairOutcome above.
+  const applyRepairOutcomeUi = (result: RepairResult, id: ConcernId) => {
     const outcome = classifyRepairOutcome(result)
     setTransientNotice(outcome.transientNotice)
     if (outcome.pinnedFields.length > 0) {
@@ -502,7 +520,6 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
         for (const f of outcome.pinnedFields) next.add(f)
         return next
       })
-      mergeUnresolved(org, { fields: outcome.pinnedFields })
     }
     if (outcome.unresolvedConcern !== null) {
       const message = outcome.unresolvedConcern
@@ -511,7 +528,6 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
         next.set(id, message)
         return next
       })
-      mergeUnresolved(org, { concerns: [id] })
     }
   }
 
@@ -596,7 +612,7 @@ const OrgPolicyAuditPane = ({ org }: { org: string }) => {
             if (!fixMutation.isPending)
               void runFix(() =>
                 fixMutation.mutateAsync(id, {
-                  onSuccess: (result) => applyRepairOutcome(result, id),
+                  onSuccess: (result) => applyRepairOutcomeUi(result, id),
                 }),
               )
           }}

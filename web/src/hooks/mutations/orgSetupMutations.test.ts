@@ -6,6 +6,7 @@ import type { PropsWithChildren } from "react"
 import { createElement } from "react"
 
 import { githubKeys } from "@/github-core/queries"
+import type { ConcernId } from "@/orgPolicy/audit"
 
 const renameConfigRepoToMain = vi.fn<(...args: unknown[]) => Promise<void>>(
   () => Promise.resolve(),
@@ -132,21 +133,25 @@ describe("useCancelStaffInvite", () => {
 })
 
 describe("useRepairOrgPolicyConcern", () => {
-  it("repairs the concern and invalidates only the org-audit prefix", async () => {
+  it("repairs the concern, runs onRepaired, and invalidates the org-audit prefix", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
+    const onRepaired = vi.fn()
     const { result } = renderHook(
-      () => useRepairOrgPolicyConcern(ORG, "Team"),
+      () => useRepairOrgPolicyConcern(ORG, "Team", onRepaired),
       { wrapper: wrapperWith(queryClient) },
     )
-    result.current.mutate("some-concern" as never)
+    const concernId: ConcernId = "orgDefaults"
+    result.current.mutate(concernId)
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
     expect(repairConcern).toHaveBeenCalledWith(
       expect.anything(),
       ORG,
-      "some-concern",
+      concernId,
       "Team",
     )
+    // onRepaired (durable persist) runs in the hook, unmount-safe.
+    expect(onRepaired).toHaveBeenCalledWith({}, concernId)
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.orgAuditPrefix(ORG),
     })
@@ -154,10 +159,11 @@ describe("useRepairOrgPolicyConcern", () => {
 })
 
 describe("useRunOrgSetup", () => {
-  it("delegates to initClassroom50 (thin orchestration wrapper, no invalidation)", async () => {
+  it("delegates to initClassroom50 and runs the caller's invalidate in the hook (unmount-safe)", async () => {
     const queryClient = freshClient()
     const onStepUpdate = vi.fn()
     const confirmSkeletonOverwrite = vi.fn()
+    const invalidate = vi.fn()
     const { result } = renderHook(
       () =>
         useRunOrgSetup({
@@ -165,6 +171,7 @@ describe("useRunOrgSetup", () => {
           plan: "Team",
           onStepUpdate,
           confirmSkeletonOverwrite,
+          invalidate,
         }),
       { wrapper: wrapperWith(queryClient) },
     )
@@ -173,5 +180,8 @@ describe("useRunOrgSetup", () => {
     expect(initClassroom50).toHaveBeenCalledWith(
       expect.objectContaining({ org: ORG, plan: "Team", onStepUpdate }),
     )
+    // Invalidation runs in the hook's onSuccess (fires regardless of caller
+    // unmount), receiving the queryClient + init result.
+    expect(invalidate).toHaveBeenCalledWith(queryClient, { status: "ok" })
   })
 })

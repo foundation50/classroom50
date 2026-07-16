@@ -1,5 +1,4 @@
 import { useState, type ReactNode } from "react"
-import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -55,7 +54,6 @@ const RERUN_ORG_SETUP_ANCHOR = "rerun-org-setup"
 // per-concern audit (U5/U6).
 const RerunOrgSetup = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const queryClient = useQueryClient()
   const runRerun = useSafeSubmit()
 
   const { data: planDetails } = useGetOrgPlanDetails(org)
@@ -93,11 +91,22 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       setSteps((prev) => applyStepUpdate(prev, update))
     },
     confirmSkeletonOverwrite,
+    // Unmount-safe: runs in the hook's onSuccess so a mid-run navigation can't
+    // drop the post-setup refetch. Only on a non-error outcome (init resolves
+    // with status "error" on a prerequisite failure).
+    invalidate: (queryClient, result) => {
+      if (result && result.status === "error") return
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgAuditPrefix(org),
+      })
+      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+    },
   })
 
   // Reset the board before the init call (must run before mutateAsync), then
-  // run setup. Invalidation + the status-"error" branch stay here via the
-  // per-call onSuccess.
+  // run setup. The step-machine setState (done/failed) stays here via the
+  // per-call onSuccess (correctly skipped on unmount); the cache invalidation
+  // lives in the hook so it survives an unmount.
   const runRerunFlow = () => {
     setStarted(true)
     setFailed(false)
@@ -108,15 +117,11 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
         if (!mountedRef.current) return
         setDone(true)
         // init resolves (not throws) with status "error" on a prerequisite
-        // failure; surface it instead of treating it as success.
+        // failure; surface it instead of treating it as success. (The cache
+        // invalidation is the hook's job — see `invalidate` above.)
         if (data && data.status === "error") {
           setFailed(true)
-          return
         }
-        void queryClient.invalidateQueries({
-          queryKey: githubKeys.orgAuditPrefix(org),
-        })
-        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
       },
     })
   }
