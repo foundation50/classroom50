@@ -1,13 +1,17 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { putRepoSecret, validateServiceToken } from "@/github-core/mutations"
-import { githubKeys } from "@/github-core/queries"
+import {
+  githubKeys,
+  SERVICE_TOKEN_SECRET_NAME,
+  type ServiceTokenStatus,
+} from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Validate a service PAT and store it as the config repo's
-// CLASSROOM50_SERVICE_TOKEN secret. Hook invalidates the org list + this org's
-// service-token status; the field-clear/saved-kind/onSubmit UI effects (and the
-// useSafeSubmit composition) stay at the call site (see ./README.md).
+// CLASSROOM50_SERVICE_TOKEN secret. Hook seeds + invalidates the org list and
+// this org's service-token status; the field-clear/saved-kind UI effects (and
+// the useSafeSubmit composition) stay at the call site (see ./README.md).
 export function useSaveServiceToken(org: string | undefined) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -25,6 +29,20 @@ export function useSaveServiceToken(org: string | undefined) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      // Seed the status to "present" before the refetch so a UI deriving its
+      // state from token presence (the setup wizard) advances even if the
+      // invalidation refetch fails (offline / transient GitHub error) — the
+      // save itself already succeeded. The invalidate below reconciles the
+      // real created/updated timestamps once the network read lands.
+      const now = new Date().toISOString()
+      const seeded: ServiceTokenStatus = {
+        status: "present",
+        secretName: SERVICE_TOKEN_SECRET_NAME,
+        createdAt: now,
+        updatedAt: now,
+        message: "",
+      }
+      queryClient.setQueryData(githubKeys.serviceToken(org ?? ""), seeded)
       queryClient.invalidateQueries({
         queryKey: githubKeys.serviceToken(org ?? ""),
       })

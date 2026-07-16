@@ -56,7 +56,7 @@ type RepositorySecret = {
   created_at: string
   updated_at: string
 }
-const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
+export const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
 export type ServiceTokenStatus =
   | {
       status: "present"
