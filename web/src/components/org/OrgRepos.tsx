@@ -1,4 +1,5 @@
 import { Link } from "@tanstack/react-router"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   BookOpen,
@@ -10,7 +11,7 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import { Card } from "@/components/ui"
+import { Card, Markdown, Modal } from "@/components/ui"
 import type { GitHubRepo } from "@/github-core/types"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import useDotClassroom50 from "@/hooks/useDotClassroom50"
@@ -19,6 +20,7 @@ import { EnterDiv } from "@/lib/motionComponents"
 
 const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
   const { t } = useTranslation()
+  const [descriptionOpen, setDescriptionOpen] = useState(false)
   const cl50Yaml = useDotClassroom50(org, repo.name)
   const { classroom, assignment, secret } = cl50Yaml
   const { assignment: assignmentData } = useGetPublicAssignment(
@@ -27,6 +29,8 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
     assignment,
     secret,
   )
+
+  const description = assignmentData?.description?.trim()
 
   // Only group assignments have something a student can manage (collaborators);
   // for individual assignments the edit page is a dead-end, so no pencil.
@@ -73,9 +77,18 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
         </div>
 
-        <p className="line-clamp-2 min-h-10 text-sm text-base-content/70">
-          {repo.description || t("classes.repo.noDescription")}
-        </p>
+        <div className="min-h-10 text-sm">
+          {description ? (
+            <button
+              type="button"
+              onClick={() => setDescriptionOpen(true)}
+              className="link link-primary inline-flex items-center gap-1.5"
+            >
+              <FileText aria-hidden="true" className="size-4" />
+              {t("classes.repo.viewDescription")}
+            </button>
+          ) : null}
+        </div>
 
         {(classroom || assignment) && (
           <div className="alert alert-outline flex flex-col items-start">
@@ -152,6 +165,23 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
           </div>
         </Card.Actions>
       </Card.Body>
+
+      {description ? (
+        <Modal
+          open={descriptionOpen}
+          onClose={() => setDescriptionOpen(false)}
+          size="2xl"
+          aria-label={t("classes.repo.descriptionModalTitle")}
+        >
+          <h3 className="mb-4 text-lg font-bold">
+            {assignmentData?.name || assignment}
+          </h3>
+          <Markdown
+            content={description}
+            className="max-h-[70vh] overflow-y-auto pr-1"
+          />
+        </Modal>
+      ) : null}
     </Card>
   )
 }
