@@ -1,7 +1,7 @@
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ExternalLink, KeyRound, ShieldCheck } from "lucide-react"
+import { ExternalLink, ShieldCheck } from "lucide-react"
 
 import { Badge, Button, Modal, Spinner } from "@/components/ui"
 import GitHub from "@/assets/github.svg?react"
@@ -13,7 +13,16 @@ import { can } from "@/authz"
 import { githubKeys, repoTeamsQuery } from "@/github-core/queries"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { classroomTeamSlug } from "@/util/teamSlug"
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
+
+// The student classroom team read is what gates student acceptance and is
+// always expected; reconcile also grants the TA team best-effort, but a
+// classroom may have no TA team, so only the student team drives the
+// "already satisfied" decision (checking TA would dead-end a TA-less classroom).
+// Every repo permission includes read, so a team's presence in the repo-teams
+// list means it can read — reconcile only ever needs to ADD a missing team.
+const REQUIRED_ROLES = ["student"] as const
 
 // Review + fix a template's team access in one place: which template repo the
 // assignment uses, which GitHub teams can read it, and (org owners only) a
@@ -50,6 +59,25 @@ export const TemplateAccessModal = ({
   // The modal is only opened for templated assignments; narrow defensively
   // (after all hooks, to keep hook order stable).
   if (!template) return null
+
+  // Which classroom teams the template is missing. Every repo permission grants
+  // read, so a team present in the list already satisfies the requirement; only
+  // an absent required team needs the grant. We can only judge this when the
+  // team list is readable (owner + not errored) — otherwise treat it as unknown
+  // and leave the action enabled rather than falsely claiming "all set".
+  const teams = teamsQuery.data ?? []
+  const presentSlugs = new Set(teams.map((tm) => tm.slug.toLowerCase()))
+  const requiredSlugs = REQUIRED_ROLES.map((role) =>
+    classroomTeamSlug(classroom, role).toLowerCase(),
+  )
+  const accessKnown = isOwner && !teamsQuery.isPending && !teamsQuery.isError
+  const missingRequired = requiredSlugs.filter(
+    (slug) => !presentSlugs.has(slug),
+  )
+  // Enable only when we know access is missing; if unknown, stay enabled so the
+  // owner can still repair. Disable only when we can confirm all required teams
+  // are present.
+  const allRequiredPresent = accessKnown && missingRequired.length === 0
 
   const handleFix = () => {
     reconcile.mutate(
@@ -93,19 +121,10 @@ export const TemplateAccessModal = ({
       </div>
 
       <section className="mt-5">
-        <h4 className="text-sm font-semibold text-base-content/80">
-          {t("assignments.template.accessModal.templateHeading")}
-        </h4>
-        <div className="mt-2 flex items-center justify-between gap-3 rounded-box border border-base-content/10 bg-base-200/40 px-3 py-2">
-          <div className="min-w-0">
-            <div className="truncate font-mono text-sm">
-              {template.owner}/{template.repo}
-            </div>
-            <div className="text-xs text-base-content/60">
-              {t("assignments.template.accessModal.branchLabel")}:{" "}
-              <span className="font-mono">{template.branch}</span>
-            </div>
-          </div>
+        <div className="flex items-center justify-between gap-3">
+          <h4 className="text-sm font-semibold text-base-content/80">
+            {t("assignments.template.accessModal.templateHeading")}
+          </h4>
           <a
             href={githubTemplateRepoUrl(
               template.owner,
@@ -114,12 +133,21 @@ export const TemplateAccessModal = ({
             )}
             target="_blank"
             rel="noreferrer"
-            className="btn btn-sm btn-ghost shrink-0"
+            className="btn btn-xs btn-ghost shrink-0"
           >
             <GitHub aria-hidden="true" className="size-4" />
             {t("assignments.template.accessModal.openOnGitHub")}
             <ExternalLink aria-hidden="true" className="size-3.5" />
           </a>
+        </div>
+        <div className="mt-2 rounded-box border border-base-content/10 bg-base-200/40 px-3 py-2">
+          <div className="break-all font-mono text-sm">
+            {template.owner}/{template.repo}
+          </div>
+          <div className="text-xs text-base-content/60">
+            {t("assignments.template.accessModal.branchLabel")}:{" "}
+            <span className="font-mono">{template.branch}</span>
+          </div>
         </div>
       </section>
 
@@ -159,11 +187,14 @@ export const TemplateAccessModal = ({
             variant="primary"
             loading={reconcile.isPending}
             loadingLabel={t("assignments.template.reconcile.pending")}
-            disabled={reconcile.isPending}
-            title={t("assignments.template.accessModal.fixHint")}
+            disabled={reconcile.isPending || allRequiredPresent}
+            title={
+              allRequiredPresent
+                ? t("assignments.template.accessModal.fixSatisfied")
+                : t("assignments.template.accessModal.fixHint")
+            }
             onClick={handleFix}
           >
-            <KeyRound aria-hidden="true" className="size-4" />
             {t("assignments.template.accessModal.fixAction")}
           </Button>
         )}

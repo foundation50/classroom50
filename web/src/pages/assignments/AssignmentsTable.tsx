@@ -368,13 +368,6 @@ const AssignmentsTable = ({
                   })()}
                 </td>
                 <td>
-                  {assignment.template && (
-                    <TemplateAccessButton
-                      org={org}
-                      classroom={classroom}
-                      assignment={assignment}
-                    />
-                  )}
                   <Link
                     className="btn btn-circle btn-sm btn-ghost"
                     to="/$org/$classroom/assignments/$assignment/edit"
@@ -398,13 +391,30 @@ const AssignmentsTable = ({
                       <Pencil aria-hidden="true" className="size-4" />
                     )}
                   </Link>
-                  {archived ? null : (
+                  {archived ? (
+                    // Archived rows are view-only, but reviewing template access
+                    // (and reaching the source repo) stays available.
+                    assignment.template && (
+                      <TemplateAccessButton
+                        org={org}
+                        classroom={classroom}
+                        assignment={assignment}
+                      />
+                    )
+                  ) : (
                     <>
                       <ReuseAssignmentButton
                         org={org}
                         classroom={classroom}
                         assignment={assignment}
                       />
+                      {assignment.template && (
+                        <TemplateAccessButton
+                          org={org}
+                          classroom={classroom}
+                          assignment={assignment}
+                        />
+                      )}
                       <DeleteAssignmentButton
                         org={org}
                         classroom={classroom}

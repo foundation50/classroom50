@@ -1,6 +1,12 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { render, screen, cleanup, fireEvent } from "@testing-library/react"
+import {
+  render,
+  screen,
+  cleanup,
+  fireEvent,
+  waitFor,
+} from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import type { PropsWithChildren } from "react"
 import { createElement } from "react"
@@ -158,6 +164,45 @@ describe("TemplateAccessModal", () => {
     expect(reconcileMutate).toHaveBeenCalledWith(
       { org: ORG, classroom: "cs101", slug: "hw1", template },
       expect.objectContaining({ onSuccess: expect.any(Function) }),
+    )
+  })
+
+  it("enables fix when the classroom student team is missing", async () => {
+    orgRole = "owner"
+    // Only an unrelated team has access — the student team is absent.
+    listRepoTeams.mockResolvedValue([
+      {
+        id: 3,
+        name: "other",
+        slug: "some-other-team",
+        html_url: "https://x",
+        permission: "pull",
+      },
+    ])
+    renderModal()
+    await waitFor(() =>
+      expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(
+        false,
+      ),
+    )
+  })
+
+  it("disables fix once the classroom student team already has access", async () => {
+    orgRole = "owner"
+    listRepoTeams.mockResolvedValue([
+      {
+        id: 1,
+        name: "cs101 students",
+        slug: "classroom50-cs101",
+        html_url: "https://x",
+        permission: "pull",
+      },
+    ])
+    renderModal()
+    await waitFor(() =>
+      expect(screen.getByText(FIX_ACTION).closest("button")?.disabled).toBe(
+        true,
+      ),
     )
   })
 

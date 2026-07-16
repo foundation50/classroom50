@@ -857,8 +857,9 @@
         "teamsEmpty": "No teams have access to this template yet.",
         "teamsUnavailable": "Couldn't list this repository's teams — you may only see teams visible to your account.",
         "permissionLabel": "{{permission}} access",
-        "fixAction": "Grant classroom team read",
+        "fixAction": "Fix permissions",
         "fixHint": "Grants the classroom student and TA teams read access so students can accept.",
+        "fixSatisfied": "The classroom team already has read access — nothing to fix.",
         "ownerOnlyNote": "Only an organization owner can grant team access. Ask an owner to run this, or grant the teams read on the template in GitHub.",
         "close": "Close"
       }
