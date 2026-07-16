@@ -1364,7 +1364,6 @@
     "repo": {
       "manageGroupAria": "Manage group for {{assignment}}",
       "manageGroupTitle": "Manage group",
-      "assignmentLabel": "Assignment:",
       "individual": "Individual",
       "group": "Group",
       "openRepo": "Open repo",

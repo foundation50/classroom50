@@ -63,34 +63,30 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
             <BookOpen aria-hidden="true" className="size-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="truncate text-base font-semibold leading-tight">
-              {repo.name}
-            </h3>
+            {classroom && assignment ? (
+              <Link
+                to="/$org/$classroom/assignments/$assignment"
+                params={{ org, classroom, assignment }}
+                className="group inline-flex max-w-full items-center gap-1.5 transition-colors hover:text-primary"
+              >
+                <h3 className="truncate text-base font-semibold leading-tight underline decoration-base-content/30 underline-offset-2 group-hover:decoration-primary">
+                  {repo.name}
+                </h3>
+                <Link2
+                  aria-hidden="true"
+                  className="size-3.5 shrink-0 text-base-content/40 group-hover:text-primary"
+                />
+              </Link>
+            ) : (
+              <h3 className="truncate text-base font-semibold leading-tight">
+                {repo.name}
+              </h3>
+            )}
             <p className="truncate text-xs text-base-content/70">
               {repo.owner?.login}
             </p>
           </div>
         </div>
-
-        {classroom && assignment ? (
-          <Link
-            to="/$org/$classroom/assignments/$assignment"
-            params={{ org, classroom, assignment }}
-            className="group inline-flex w-fit max-w-full items-center gap-1.5 text-sm text-base-content/70 transition-colors hover:text-primary"
-          >
-            <BookOpen aria-hidden="true" className="size-4 shrink-0" />
-            <span className="truncate">
-              {t("classes.repo.assignmentLabel")}{" "}
-              <span className="font-medium text-base-content/80 underline decoration-base-content/30 underline-offset-2 group-hover:text-primary group-hover:decoration-primary">
-                {assignment}
-              </span>
-            </span>
-            <Link2
-              aria-hidden="true"
-              className="size-3.5 shrink-0 text-base-content/40 group-hover:text-primary"
-            />
-          </Link>
-        ) : null}
 
         <Card.Actions className="items-center justify-between gap-2 pt-1">
           <div className="flex items-center gap-2">
