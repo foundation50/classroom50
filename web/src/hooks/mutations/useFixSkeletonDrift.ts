@@ -4,10 +4,8 @@ import type { StaleSkeletonFile } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
-// A fix resolved clean iff it completed with nothing skipped; a declined
-// overwrite (skippedOverwrite non-empty) leaves files drifted. Pure and shared:
-// the hook uses it to pick seed-vs-invalidate, the banner uses it to pick the
-// success-vs-warning view — one contract, one source.
+// The seed-vs-invalidate / success-vs-warning contract, shared by the hook and
+// the banner: a fix is clean iff it completed with nothing skipped.
 export function isFixResolvedClean(result: {
   status: string
   skippedOverwrite: string[]
@@ -15,18 +13,12 @@ export function isFixResolvedClean(result: {
   return result.status === "complete" && result.skippedOverwrite.length === 0
 }
 
-// Refresh a config repo's drifted skeleton files (scaffolded workflows that fell
-// behind the bundled skeleton). `targetOrg` is the mutate variable — the banner
-// is a singleton across orgs, so the result must be attributed to the org the
-// fix ran against, not a live param that can change mid-run.
-//
-// The hook owns the drift-cache reconcile in its OWN onSuccess (unmount-safe):
-// a clean fix seeds the cache empty rather than invalidating, because a
-// post-commit tree read is eventually consistent and an invalidate could refetch
-// the old (drifted) SHAs and re-flash the warning; a declined/partial fix
-// (skippedOverwrite non-empty) leaves drift, so it invalidates instead. The
-// banner's per-org UI state (fixed-clean, pending) stays at the call site — see
-// ./README.md and the U9-batch-3 unmount-safety finding.
+// Refresh a config repo's drifted skeleton files, reconciling the drift cache in
+// the hook's OWN onSuccess so it survives a mid-run unmount (per ./README.md).
+// The non-obvious part: a clean fix SEEDS the cache empty rather than
+// invalidating — a post-commit tree read is eventually consistent, so an
+// invalidate could refetch the old drifted SHAs and re-flash the warning; a
+// declined/partial fix still has drift, so it invalidates instead.
 export function useFixSkeletonDrift(
   confirmOverwrite: (paths: string[]) => Promise<boolean>,
 ) {

@@ -169,12 +169,14 @@ export function SkeletonDriftBanner() {
                     if (org && pendingOrg !== org) {
                       const targetOrg = org
                       setPendingOrg(targetOrg)
+                      // Guard call-site UI state on mountedRef: these run
+                      // through useSafeSubmit, so treat the callbacks as
+                      // possibly firing after unmount and skip stale setState.
                       void runFix(() =>
                         mutation.mutateAsync(targetOrg, {
                           onSuccess: (result) => {
-                            // UI state (skipped on unmount); the drift-cache
-                            // reconcile is the hook's job. A declined overwrite
-                            // leaves files drifted -> no success view.
+                            // Success view only; the cache reconcile is the
+                            // hook's job (and runs even if we've unmounted).
                             if (
                               mountedRef.current &&
                               isFixResolvedClean(result)
