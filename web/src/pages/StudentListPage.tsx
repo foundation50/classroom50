@@ -17,6 +17,7 @@ import { useSuppressedLogins } from "@/hooks/useSuppressedLogins"
 import { invalidateInviteQueries } from "@/github-core/queries"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import RequireRole from "@/components/RequireRole"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
@@ -50,6 +51,11 @@ const StudentListContent = ({
   const [addOpen, setAddOpen] = useState(false)
   const [uploadOpen, setUploadOpen] = useState(false)
   const [inviteOpen, setInviteOpen] = useState(false)
+
+  // Adding members enrolls people into the org and (for teacher/TA) grants
+  // config-repo access — only an org owner can complete either, so non-owner
+  // staff (TAs, non-owner teachers) never see the add affordances at all.
+  const { isOwner } = useIsOrgOwner()
 
   // Counts from the team roster (same source as EnrolledStudents), so header
   // and list agree. Enrollment is team membership, not the CSV. The header shows
@@ -129,55 +135,65 @@ const StudentListContent = ({
         org={org}
         classroom={classroom}
         suppressedLogins={suppressedLogins}
-        addActions={{
-          onAddStudent: () => setAddOpen(true),
-          onUploadRoster: () => setUploadOpen(true),
-          onInviteLinks: () => setInviteOpen(true),
-        }}
+        addActions={
+          isOwner
+            ? {
+                onAddStudent: () => setAddOpen(true),
+                onUploadRoster: () => setUploadOpen(true),
+                onInviteLinks: () => setInviteOpen(true),
+              }
+            : undefined
+        }
       />
 
-      <AddStudent
-        org={org}
-        classroom={classroom}
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
-        // A re-enroll must clear any earlier session-unenroll suppression for
-        // this login, else the auto-backfills would keep skipping the student
-        // the teacher just re-added.
-        onEnrolled={(username) => suppressedLogins.forget([username])}
-      />
-      <UploadRoster
-        org={org}
-        classroom={classroom}
-        client={client}
-        open={uploadOpen}
-        onOpenChange={setUploadOpen}
-        onSuccess={(result) => {
-          // Show imported rows immediately (see useUpdateRosterCache).
-          if (result.addedStudents.length > 0) {
-            updateRosterCache((current) => [
-              ...current,
-              ...result.addedStudents.map(toStudent),
-            ])
-            // A re-uploaded student clears their earlier unenroll suppression.
-            suppressedLogins.forget(result.addedStudents.map((s) => s.username))
-          }
-          invalidateInviteQueries(queryClient, org)
-        }}
-        onEmailSuccess={() => {
-          // Email invites write no roster.csv row; they surface as `pending`
-          // rows via the org pending-invitations list, so refresh those + the
-          // team roster to show them at once.
-          invalidateInviteQueries(queryClient, org)
-          invalidateTeamRoster()
-        }}
-      />
-      <InviteLinksModal
-        org={org}
-        classroom={classroom}
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
-      />
+      {isOwner ? (
+        <>
+          <AddStudent
+            org={org}
+            classroom={classroom}
+            open={addOpen}
+            onClose={() => setAddOpen(false)}
+            // A re-enroll must clear any earlier session-unenroll suppression for
+            // this login, else the auto-backfills would keep skipping the student
+            // the teacher just re-added.
+            onEnrolled={(username) => suppressedLogins.forget([username])}
+          />
+          <UploadRoster
+            org={org}
+            classroom={classroom}
+            client={client}
+            open={uploadOpen}
+            onOpenChange={setUploadOpen}
+            onSuccess={(result) => {
+              // Show imported rows immediately (see useUpdateRosterCache).
+              if (result.addedStudents.length > 0) {
+                updateRosterCache((current) => [
+                  ...current,
+                  ...result.addedStudents.map(toStudent),
+                ])
+                // A re-uploaded student clears their earlier unenroll suppression.
+                suppressedLogins.forget(
+                  result.addedStudents.map((s) => s.username),
+                )
+              }
+              invalidateInviteQueries(queryClient, org)
+            }}
+            onEmailSuccess={() => {
+              // Email invites write no roster.csv row; they surface as `pending`
+              // rows via the org pending-invitations list, so refresh those + the
+              // team roster to show them at once.
+              invalidateInviteQueries(queryClient, org)
+              invalidateTeamRoster()
+            }}
+          />
+          <InviteLinksModal
+            org={org}
+            classroom={classroom}
+            open={inviteOpen}
+            onClose={() => setInviteOpen(false)}
+          />
+        </>
+      ) : null}
     </>
   )
 }

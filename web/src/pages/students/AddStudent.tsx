@@ -37,10 +37,13 @@ type AddStudentFormValues = {
   section: string
 }
 
-// Add-one-student modal. A username enrolls via GitHub (resolve, add to team,
-// send org invite) and stores the email; email-only sends an email invite.
-// Either way the student joins the classroom team on accepting the invite. The
-// form collects every roster.csv field (name, username, email, section).
+// Add-one-member modal (org-owner only; the roster page hides its trigger for
+// non-owners). A role picker selects student (default) vs. staff (teacher/TA).
+// Student: a username enrolls via GitHub (resolve, add to team, send org invite)
+// and stores name/email/section, or an email-only entry sends an email invite;
+// either way the student joins the classroom team on accepting. Staff: identified
+// by GitHub username only (name/email/section hidden) and delegated to the
+// staff-team backend (useAddStaffMember), which grants config-repo access.
 const AddStudent = ({
   org,
   classroom,
