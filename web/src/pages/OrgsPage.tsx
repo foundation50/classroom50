@@ -23,7 +23,7 @@ import {
 } from "lucide-react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
 import { Badge, Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
@@ -266,12 +266,13 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
 }
 
 function NoAccessBadge() {
-  const { t } = useTranslation()
   return (
     <span className="badge badge-neutral gap-1">
       <Lock aria-hidden="true" className="size-3" />
-      {t("orgs.card.noAccessBadge_prefix")} <code>classroom50</code>{" "}
-      {t("orgs.card.noAccessBadge_suffix")}
+      <Trans
+        i18nKey="orgs.card.noAccessBadge"
+        components={{ code: <code dir="ltr" /> }}
+      />
     </span>
   )
 }

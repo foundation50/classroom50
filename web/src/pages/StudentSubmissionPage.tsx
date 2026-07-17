@@ -1,5 +1,5 @@
 import { Link, useParams } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import {
   ExternalLink,
   UserRound,
@@ -166,16 +166,19 @@ const SubmissionBody = ({
     return (
       <EnterDiv className="alert alert-info alert-soft mt-6">
         <div>
-          {t("submissions.student.notAccepted_prefix")}{" "}
-          <Link
-            className="underline"
-            to="/$org/$classroom/assignments/$assignment/accept"
-            params={{ org, classroom, assignment }}
-            search={secret ? { k: secret } : undefined}
-          >
-            {t("submissions.student.notAccepted_link")}
-          </Link>{" "}
-          {t("submissions.student.notAccepted_suffix")}
+          <Trans
+            i18nKey="submissions.student.notAccepted"
+            components={{
+              acceptLink: (
+                <Link
+                  className="underline"
+                  to="/$org/$classroom/assignments/$assignment/accept"
+                  params={{ org, classroom, assignment }}
+                  search={secret ? { k: secret } : undefined}
+                />
+              ),
+            }}
+          />
         </div>
       </EnterDiv>
     )

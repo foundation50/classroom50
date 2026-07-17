@@ -10,6 +10,9 @@ vi.mock("react-i18next", async (importOriginal) => {
   return {
     ...actual,
     useTranslation: () => ({ t: (key: string) => key }),
+    // Render a <Trans> as its key so verdict assertions can target the merged
+    // key names without initializing a real i18next instance.
+    Trans: ({ i18nKey }: { i18nKey: string }) => i18nKey,
   }
 })
 
@@ -121,7 +124,7 @@ describe("TemplateField — inline Fix template access", () => {
     teamHasRepoAccess.mockResolvedValue(true)
     renderField()
     // The has-access verdict renders; the fix action must not.
-    await screen.findByText("assignments.template.privateHasAccess_2", {
+    await screen.findByText("assignments.template.privateHasAccess", {
       exact: false,
     })
     expect(screen.queryByText(ACTION_KEY)).toBeNull()
@@ -145,7 +148,7 @@ describe("TemplateField — inline Fix template access", () => {
     verifyTemplateAccess.mockResolvedValue(okInOrgPrivate)
     teamHasRepoAccess.mockResolvedValue(false)
     renderField({ slug: undefined })
-    await screen.findByText("assignments.template.privateWillGrant_2", {
+    await screen.findByText("assignments.template.privateWillGrant", {
       exact: false,
     })
     expect(screen.queryByText(ACTION_KEY)).toBeNull()

@@ -1,10 +1,10 @@
 import { useState } from "react"
 import { useNavigate } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { TriangleAlert } from "lucide-react"
 
 import { ConfirmModal } from "@/components/modals"
-import { Button } from "@/components/ui"
+import { Button, MonoLtr } from "@/components/ui"
 import {
   formatTeardownResult,
   TeardownMarkerError,
@@ -62,12 +62,13 @@ const TeardownSection = ({ org }: { org: string }) => {
         <TriangleAlert aria-hidden="true" className="size-5 text-error" />
       }
       description={
-        <>
-          {t("orgSettings.teardown.description_prefix")}{" "}
-          <strong>{t("orgSettings.teardown.description_every")}</strong>{" "}
-          {t("orgSettings.teardown.description_mid")} <code>classroom50</code>{" "}
-          {t("orgSettings.teardown.description_suffix")}
-        </>
+        <Trans
+          i18nKey="orgSettings.teardown.description"
+          components={{
+            strong: <strong />,
+            repo: <code />,
+          }}
+        />
       }
     >
       {error && (
@@ -103,23 +104,26 @@ const TeardownSection = ({ org }: { org: string }) => {
         description={
           <div className="space-y-2 text-sm">
             <p>
-              {t("orgSettings.teardown.confirmBody_prefix")}{" "}
-              <strong>{plan?.repoNames.length ?? 0}</strong>{" "}
-              {t("orgSettings.teardown.confirmBody_reposIn")}{" "}
-              <span className="font-mono">{org}</span>
-              {t("orgSettings.teardown.confirmBody_including")}{" "}
-              <code>classroom50</code>{" "}
-              {t("orgSettings.teardown.confirmBody_deletedLast")}
+              <Trans
+                i18nKey="orgSettings.teardown.confirmBody"
+                count={plan?.repoNames.length ?? 0}
+                values={{ org }}
+                components={{
+                  count: <strong />,
+                  org: <MonoLtr />,
+                  repo: <code />,
+                }}
+              />{" "}
               {plan && plan.teams.length > 0 ? (
                 <>
-                  {t("orgSettings.teardown.confirmBody_andRemove")}{" "}
-                  <strong>{plan.teams.length}</strong>{" "}
-                  {t("orgSettings.teardown.confirmBody_teams", {
-                    count: plan.teams.length,
-                  })}
+                  <Trans
+                    i18nKey="orgSettings.teardown.confirmBodyTeams"
+                    count={plan.teams.length}
+                    components={{ count: <strong /> }}
+                  />{" "}
                 </>
               ) : null}
-              {t("orgSettings.teardown.confirmBody_cannotUndo")}
+              {t("orgSettings.teardown.confirmBodyCannotUndo")}
             </p>
             {plan && plan.repoNames.length > 0 && (
               <div className="space-y-1">

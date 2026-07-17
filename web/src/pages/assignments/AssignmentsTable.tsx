@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import {
   Copy,
   Eye,
@@ -62,17 +62,17 @@ const DeleteAssignmentButton = ({
         open={open}
         title={t("assignments.table.deleteTitle")}
         description={
-          <>
-            {t("assignments.table.deleteDescription_1")}{" "}
-            <span className="font-semibold text-base-content">
-              {assignment.name || assignment.slug}
-            </span>{" "}
-            {t("assignments.table.deleteDescription_2")}{" "}
-            <span className="font-semibold text-base-content">
-              {org}/{classroom}
-            </span>{" "}
-            {t("assignments.table.deleteDescription_3")}
-          </>
+          <Trans
+            i18nKey="assignments.table.deleteDescription"
+            values={{
+              assignment: assignment.name || assignment.slug,
+              classroom: `${org}/${classroom}`,
+            }}
+            components={{
+              assignment: <span className="font-semibold text-base-content" />,
+              classroom: <span className="font-semibold text-base-content" />,
+            }}
+          />
         }
         confirmText={assignment.slug}
         confirmLabel={t("assignments.table.deleteConfirm")}

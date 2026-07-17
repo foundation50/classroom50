@@ -15,7 +15,7 @@ import {
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { Link, useParams, useSearch, useRouter } from "@tanstack/react-router"
 import { useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
@@ -79,9 +79,13 @@ const NotInvited = ({
             {t("getStarted.notInvited.title")}
           </h1>
           <p className="mt-2 text-base text-base-content/70">
-            {t("getStarted.notInvited.body_prefix")}{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            {t("getStarted.notInvited.body_suffix")}
+            <Trans
+              i18nKey="getStarted.notInvited.body"
+              values={{ org }}
+              components={{
+                org: <span className="font-semibold text-base-content" />,
+              }}
+            />
           </p>
         </div>
 
@@ -95,11 +99,15 @@ const NotInvited = ({
                 {t("getStarted.notInvited.waitingTitle")}
               </h2>
               <p className="mt-2 leading-5 text-sm text-base-content/70">
-                {t("getStarted.notInvited.waitingBody_prefix")}{" "}
-                <span className="font-semibold text-base-content">
-                  {classroom}
-                </span>
-                {t("getStarted.notInvited.waitingBody_suffix")}
+                <Trans
+                  i18nKey="getStarted.notInvited.waitingBody"
+                  values={{ classroom }}
+                  components={{
+                    classroom: (
+                      <span className="font-semibold text-base-content" />
+                    ),
+                  }}
+                />
               </p>
             </div>
           </div>

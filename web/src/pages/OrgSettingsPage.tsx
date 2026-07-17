@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { Button, Input, rtlFlip } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
@@ -126,11 +126,13 @@ export function ServiceTokenInfo() {
       {open && (
         <div className="dropdown-content z-50 mt-2 w-80 rounded-box border border-base-300 bg-base-100 p-4 text-sm shadow-xl">
           <p className="text-base-content/70">
-            {t("orgSettings.serviceToken.info_1")}{" "}
-            <code className="text-xs">CLASSROOM50_SERVICE_TOKEN</code>{" "}
-            {t("orgSettings.serviceToken.info_2")}{" "}
-            <span className="font-semibold">classroom50</span>{" "}
-            {t("orgSettings.serviceToken.info_3")}
+            <Trans
+              i18nKey="orgSettings.serviceToken.info"
+              components={{
+                secret: <code className="text-xs" />,
+                repo: <span className="font-semibold" />,
+              }}
+            />
           </p>
         </div>
       )}
@@ -330,11 +332,12 @@ export const OrgSettingsPane = () => {
             {t("orgSettings.serviceToken.generateOnGitHub")}
           </a>
           <p className="mt-2 text-xs text-base-content/70">
-            {t("orgSettings.serviceToken.generateHint_prefix")}{" "}
-            <span className="font-semibold">
-              {t("orgSettings.serviceToken.generateHint_permissions")}
-            </span>{" "}
-            {t("orgSettings.serviceToken.generateHint_suffix")}
+            <Trans
+              i18nKey="orgSettings.serviceToken.generateHint"
+              components={{
+                permissions: <span className="font-semibold" />,
+              }}
+            />
           </p>
 
           <div className="mt-3 rounded-xl border border-warning/30 bg-warning/10 p-4 text-sm">
@@ -343,47 +346,24 @@ export const OrgSettingsPane = () => {
             </p>
             <ul className="mt-2 list-disc space-y-1 ps-5 text-base-content/80">
               <li>
-                {t("orgSettings.serviceToken.repoAccess_prefix")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.repoAccess_field")}
-                </span>{" "}
-                {t("orgSettings.serviceToken.repoAccess_mid")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.repoAccess_value")}
-                </span>
-                {t("orgSettings.serviceToken.repoAccess_period")}{" "}
-                <span className="text-base-content/70">
-                  {t("orgSettings.serviceToken.repoAccess_warning")}
-                </span>
+                <Trans
+                  i18nKey="orgSettings.serviceToken.repoAccess"
+                  components={{
+                    field: <span className="font-semibold" />,
+                    value: <span className="font-semibold" />,
+                    note: <span className="text-base-content/70" />,
+                  }}
+                />
               </li>
               <li>
-                {t("orgSettings.serviceToken.permissions_prefix")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.permissions_field")}
-                </span>
-                {t("orgSettings.serviceToken.permissions_confirm")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.permissions_contents")}
-                </span>
-                {", "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.permissions_actions")}
-                </span>
-                {", "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.permissions_administration")}
-                </span>{" "}
-                {t("orgSettings.serviceToken.permissions_and")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.permissions_members")}
-                </span>{" "}
-                {t("orgSettings.serviceToken.permissions_metadata")}{" "}
-                <span className="text-base-content/70">
-                  {t("orgSettings.serviceToken.permissions_members_note")}
-                </span>{" "}
-                <span className="text-base-content/70">
-                  {t("orgSettings.serviceToken.permissions_warning")}
-                </span>
+                <Trans
+                  i18nKey="orgSettings.serviceToken.permissions"
+                  components={{
+                    field: <span className="font-semibold" />,
+                    perm: <span className="font-semibold" />,
+                    note: <span className="text-base-content/70" />,
+                  }}
+                />
               </li>
             </ul>
             <p className="mt-3 text-base-content/80">
@@ -432,11 +412,12 @@ export const OrgSettingsPane = () => {
                 }}
               />
               <p className="text-xs text-base-content/70">
-                {t("orgSettings.serviceToken.validateHint_prefix")}{" "}
-                <span className="font-semibold">
-                  {t("orgSettings.serviceToken.validateHint_allRepos")}
-                </span>{" "}
-                {t("orgSettings.serviceToken.validateHint_suffix")}
+                <Trans
+                  i18nKey="orgSettings.serviceToken.validateHint"
+                  components={{
+                    value: <span className="font-semibold" />,
+                  }}
+                />
               </p>
               {patMutation.isError && (
                 <div className="flex items-start gap-2 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
@@ -492,15 +473,19 @@ const OrgSettingsPage = () => {
         <PageHeader
           title={t("orgSettings.page.heading")}
           subtitle={
-            <>
-              {t("orgSettings.page.subheading_prefix")}{" "}
-              <OrgLink
-                org={org}
-                href={githubOrgSettingsUrl(org ?? "")}
-                title={t("common.openOrgOnGitHub", { org })}
-              />
-              {t("orgSettings.page.subheading_suffix")}
-            </>
+            <Trans
+              i18nKey="orgSettings.page.subheading"
+              values={{ org: org ?? "" }}
+              components={{
+                orgLink: (
+                  <OrgLink
+                    org={org}
+                    href={githubOrgSettingsUrl(org ?? "")}
+                    title={t("common.openOrgOnGitHub", { org })}
+                  />
+                ),
+              }}
+            />
           }
         />
         <div className="mt-8 space-y-8">

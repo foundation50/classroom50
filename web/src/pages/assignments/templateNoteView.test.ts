@@ -20,8 +20,7 @@ describe("templateForkNoteView", () => {
       parentInOrg: true,
     })
     expect(view.tone).toBe("warning")
-    expect(view.labelKey).toBe("assignments.template.privateForkInOrg_1")
-    expect(view.suffixKey).toBe("assignments.template.privateForkInOrg_2")
+    expect(view.messageKey).toBe("assignments.template.privateForkInOrg")
   })
 
   it("renders a cross-org parent as a red error with the cross-org copy", () => {
@@ -31,16 +30,13 @@ describe("templateForkNoteView", () => {
       parentInOrg: false,
     })
     expect(view.tone).toBe("error")
-    expect(view.labelKey).toBe("assignments.template.privateForkCrossOrg_1")
-    expect(view.suffixKey).toBe("assignments.template.privateForkCrossOrg_2")
+    expect(view.messageKey).toBe("assignments.template.privateForkCrossOrg")
   })
 
-  it("renders an absent parent as a red error with the no-parent label and cross-org suffix", () => {
+  it("renders an absent parent as a red error with the no-parent copy", () => {
     const view = templateForkNoteView({ ...base, parentInOrg: false })
     expect(view.tone).toBe("error")
-    expect(view.labelKey).toBe("assignments.template.privateForkNoParent_1")
-    // Unknown upstream is the higher-risk cross-org case and reuses that suffix.
-    expect(view.suffixKey).toBe("assignments.template.privateForkCrossOrg_2")
+    expect(view.messageKey).toBe("assignments.template.privateForkNoParent")
   })
 })
 

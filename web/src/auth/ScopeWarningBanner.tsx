@@ -1,7 +1,7 @@
 import { useState } from "react"
 import { ShieldAlert } from "lucide-react"
 import { AnimatePresence } from "motion/react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import { useGithubAuth } from "./useGithubAuth"
 import { AppBanner } from "@/components/AppBanner"
@@ -32,9 +32,14 @@ export function ScopeWarningBanner() {
           onDismiss={() => setDismissed(true)}
         >
           <p className="text-base-content/70">
-            {t("auth.missingScopesBody", { count: scopeCount })}{" "}
-            <code className="font-mono text-xs">{missing.join(", ")}</code>
-            {t("auth.missingScopesBody_suffix", { count: scopeCount })}
+            <Trans
+              i18nKey="auth.missingScopesBody"
+              count={scopeCount}
+              values={{ scopes: missing.join(", ") }}
+              components={{
+                scopes: <code dir="ltr" className="font-mono text-xs" />,
+              }}
+            />
           </p>
           <Button
             variant="warning"

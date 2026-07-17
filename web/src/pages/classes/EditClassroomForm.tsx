@@ -9,7 +9,7 @@ import { Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
 import { Button, Card, FormField, Input } from "@/components/ui"
 
@@ -58,13 +58,14 @@ export const DeleteClassroomButton = ({
         open={open}
         title={t("classes.deleteClassroomTitle")}
         description={
-          <>
-            {t("classes.deleteClassroomBody_1")}{" "}
-            <span className="font-semibold text-base-content">{classroom}</span>{" "}
-            {t("classes.deleteClassroomBody_2")}{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            {t("classes.deleteClassroomBody_3")}
-          </>
+          <Trans
+            i18nKey="classes.deleteClassroomBody"
+            values={{ classroom, org }}
+            components={{
+              classroom: <span className="font-semibold text-base-content" />,
+              org: <span className="font-semibold text-base-content" />,
+            }}
+          />
         }
         confirmText={`${org}/${classroom}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}
@@ -139,23 +140,13 @@ const ArchiveClassroomButton = ({
             : t("classes.archiveConfirmTitle")
         }
         description={
-          archived ? (
-            <>
-              {t("classes.unarchiveBody_prefix")}{" "}
-              <span className="font-semibold text-base-content">
-                {classroom}
-              </span>{" "}
-              {t("classes.unarchiveBody_suffix")}
-            </>
-          ) : (
-            <>
-              {t("classes.archiveBody_prefix")}{" "}
-              <span className="font-semibold text-base-content">
-                {classroom}
-              </span>
-              {t("classes.archiveBody_suffix")}
-            </>
-          )
+          <Trans
+            i18nKey={archived ? "classes.unarchiveBody" : "classes.archiveBody"}
+            values={{ classroom }}
+            components={{
+              classroom: <span className="font-semibold text-base-content" />,
+            }}
+          />
         }
         confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}

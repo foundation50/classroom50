@@ -1,5 +1,5 @@
 import { useParams, Link } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
 
 import useGetClasses from "@/hooks/useGetClasses"
@@ -67,9 +67,13 @@ const JoinOrgCard = ({ org }: { org: string }) => {
         <Card.Title className="text-xl">{t("classes.join.title")}</Card.Title>
 
         <p className="max-w-md text-base-content/70">
-          {t("classes.join.body_prefix")}{" "}
-          <span className="font-medium text-base-content">{org}</span>
-          {t("classes.join.body_suffix")}
+          <Trans
+            i18nKey="classes.join.body"
+            values={{ org }}
+            components={{
+              org: <span className="font-medium text-base-content" />,
+            }}
+          />
         </p>
 
         {mutation.isError ? (

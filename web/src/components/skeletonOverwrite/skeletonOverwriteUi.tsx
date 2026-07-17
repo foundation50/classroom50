@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import { ConfirmModal } from "@/components/modals"
 import {
@@ -82,9 +82,10 @@ export function SkeletonOverwriteModal({
             ))}
           </ul>
           <p className="mt-3">
-            {t("orgSettings.overwrite.warning_prefix")}{" "}
-            <strong>{t("orgSettings.overwrite.keepMine")}</strong>{" "}
-            {t("orgSettings.overwrite.warning_suffix")}
+            <Trans
+              i18nKey="orgSettings.overwrite.warning"
+              components={{ keepMine: <strong /> }}
+            />
           </p>
         </>
       }

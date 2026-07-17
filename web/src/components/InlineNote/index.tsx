@@ -34,6 +34,8 @@ export const InlineNote = ({
 )
 
 // Inline monospace chip readable inside an InlineNote's tinted background.
-export const InlineCode = ({ children }: { children: ReactNode }) => (
+// children is optional so it can serve as a <Trans> component tag, where the
+// translated content is injected by react-i18next.
+export const InlineCode = ({ children }: { children?: ReactNode }) => (
   <code className="rounded bg-black/10 px-1 text-xs">{children}</code>
 )

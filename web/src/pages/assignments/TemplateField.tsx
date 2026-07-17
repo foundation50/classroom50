@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query"
 import type { ReactNode } from "react"
 import { useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import {
   AlertTriangle,
   CheckCircle2,
@@ -265,9 +265,11 @@ const TemplateVerificationNote = ({
   const nonMainNote =
     resolvedBranch && resolvedBranch !== "main" ? (
       <Note tone="warning" icon={Info}>
-        {t("assignments.template.nonMainBranch_1")}{" "}
-        <Code>{resolvedBranch}</Code>
-        {t("assignments.template.nonMainBranch_2")}
+        <Trans
+          i18nKey="assignments.template.nonMainBranch"
+          values={{ branch: resolvedBranch }}
+          components={{ branch: <Code /> }}
+        />
       </Note>
     ) : null
 
@@ -329,21 +331,27 @@ function renderTemplateVerdict({
         if (teamHasAccess === true) {
           return (
             <Note tone="success" icon={CheckCircle2}>
-              {t("assignments.template.privateHasAccess_1", {
-                owner: verification.owner,
-              })}{" "}
-              <Code>{verification.branch}</Code>
-              {t("assignments.template.privateHasAccess_2")}
+              <Trans
+                i18nKey="assignments.template.privateHasAccess"
+                values={{
+                  owner: verification.owner,
+                  branch: verification.branch,
+                }}
+                components={{ branch: <Code /> }}
+              />
             </Note>
           )
         }
         return (
           <Note tone="success" icon={CheckCircle2}>
-            {t("assignments.template.privateWillGrant_1", {
-              owner: verification.owner,
-            })}{" "}
-            <Code>{verification.branch}</Code>
-            {t("assignments.template.privateWillGrant_2")}
+            <Trans
+              i18nKey="assignments.template.privateWillGrant"
+              values={{
+                owner: verification.owner,
+                branch: verification.branch,
+              }}
+              components={{ branch: <Code /> }}
+            />
             {reconcile}
           </Note>
         )
@@ -371,29 +379,34 @@ function renderTemplateVerdict({
           icon={Info}
           policy={{ owner: verification.owner, href: verification.policyUrl }}
         >
-          {t("assignments.template.okVerify_1", { owner: verification.owner })}{" "}
-          <Code>{verification.branch}</Code>
-          {t("assignments.template.okVerify_2", { owner: verification.owner })}
+          <Trans
+            i18nKey="assignments.template.okVerify"
+            values={{ owner: verification.owner, branch: verification.branch }}
+            components={{ branch: <Code /> }}
+          />
         </Note>
       )
 
     case "private-fork": {
       const view = templateForkNoteView(verification)
-      // tone/labelKey/suffixKey come from templateForkNoteView (tested source of
-      // truth). All three label keys share this interpolation set; t() ignores
-      // `parent` for the no-parent key.
-      const label = t(view.labelKey, {
-        owner: verification.owner,
-        repo: verification.repo,
-        parent: verification.parent,
-      })
+      // tone/messageKey come from templateForkNoteView (tested source of
+      // truth). All three message keys share this interpolation set; the
+      // no-parent key simply has no {{parent}} placeholder.
       return (
         <Note
           tone={view.tone}
           icon={view.tone === "warning" ? Info : AlertTriangle}
         >
-          {label} <Code>{verification.branch}</Code>
-          {t(view.suffixKey)}
+          <Trans
+            i18nKey={view.messageKey}
+            values={{
+              owner: verification.owner,
+              repo: verification.repo,
+              parent: verification.parent,
+              branch: verification.branch,
+            }}
+            components={{ branch: <Code /> }}
+          />
         </Note>
       )
     }
@@ -471,12 +484,14 @@ function renderTemplateVerdict({
     case "no-branch":
       return (
         <Note tone="error" icon={AlertTriangle}>
-          {t("assignments.template.noBranch_1", {
-            owner: verification.owner,
-            repo: verification.repo,
-          })}{" "}
-          <Code>@&lt;branch&gt;</Code>
-          {t("assignments.template.noBranch_2")}
+          <Trans
+            i18nKey="assignments.template.noBranch"
+            values={{ owner: verification.owner, repo: verification.repo }}
+            // The literal @<branch> hint lives in the component (not the
+            // translation value) so its angle brackets never collide with the
+            // Trans tag parser.
+            components={{ hint: <Code>@&lt;branch&gt;</Code> }}
+          />
         </Note>
       )
 

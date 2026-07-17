@@ -24,7 +24,7 @@ import {
   UsersRound,
 } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 type ClassroomCardProps = {
   summary: ClassroomSummary
@@ -308,19 +308,13 @@ function ClassroomMenu({
             : t("classes.archiveConfirmTitle")
         }
         description={
-          archived ? (
-            <>
-              {t("classes.unarchiveBody_prefix")}{" "}
-              <span className="font-semibold text-base-content">{slug}</span>{" "}
-              {t("classes.unarchiveBody_suffix")}
-            </>
-          ) : (
-            <>
-              {t("classes.archiveBody_prefix")}{" "}
-              <span className="font-semibold text-base-content">{slug}</span>
-              {t("classes.archiveBody_suffix")}
-            </>
-          )
+          <Trans
+            i18nKey={archived ? "classes.unarchiveBody" : "classes.archiveBody"}
+            values={{ classroom: slug }}
+            components={{
+              classroom: <span className="font-semibold text-base-content" />,
+            }}
+          />
         }
         confirmLabel={archived ? t("classes.unarchive") : t("classes.archive")}
         cancelLabel={t("common.cancel")}
@@ -363,13 +357,14 @@ function ClassroomMenu({
         open={deleteOpen}
         title={t("classes.deleteClassroomTitle")}
         description={
-          <>
-            {t("classes.deleteClassroomBody_1")}{" "}
-            <span className="font-semibold text-base-content">{slug}</span>{" "}
-            {t("classes.deleteClassroomBody_2")}{" "}
-            <span className="font-semibold text-base-content">{org}</span>{" "}
-            {t("classes.deleteClassroomBody_3")}
-          </>
+          <Trans
+            i18nKey="classes.deleteClassroomBody"
+            values={{ classroom: slug, org }}
+            components={{
+              classroom: <span className="font-semibold text-base-content" />,
+              org: <span className="font-semibold text-base-content" />,
+            }}
+          />
         }
         confirmText={`${org}/${slug}`}
         confirmLabel={t("classes.deleteClassroomConfirm")}

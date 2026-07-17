@@ -1,5 +1,5 @@
 import { useEffect, useId, useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Plus, Trash2, UsersRound } from "lucide-react"
 
@@ -12,6 +12,7 @@ import {
   Button,
   Input,
   Modal,
+  MonoLtr,
 } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetRepo from "@/hooks/useGetRepo"
@@ -433,14 +434,15 @@ export function GroupCollaboratorsModal({
 
           {!canManage && (
             <Alert tone="error" className="mt-4 text-sm">
-              {t("components.modals.groupCollaborators.onlyOwner_prefix")}
               {ownerDisplayLogin ? (
-                <>
-                  {" "}
-                  (<span className="font-mono">{ownerDisplayLogin}</span>)
-                </>
-              ) : null}{" "}
-              {t("components.modals.groupCollaborators.onlyOwner_suffix")}
+                <Trans
+                  i18nKey="components.modals.groupCollaborators.onlyOwnerNamed"
+                  values={{ owner: ownerDisplayLogin }}
+                  components={{ owner: <MonoLtr /> }}
+                />
+              ) : (
+                t("components.modals.groupCollaborators.onlyOwner")
+              )}
             </Alert>
           )}
 

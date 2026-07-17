@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import {
   AlertTriangle,
   Check,
@@ -272,9 +272,10 @@ export const RunnerField = ({
 
       {verification.kind === "self-hosted" && (
         <p className="mt-1.5 text-xs text-base-content/70">
-          {t("assignments.form.runner.selfHostedHint_prefix")}{" "}
-          <code>self-hosted, linux, x64</code>
-          {t("assignments.form.runner.selfHostedHint_suffix")}
+          <Trans
+            i18nKey="assignments.form.runner.selfHostedHint"
+            components={{ code: <code dir="ltr" /> }}
+          />
         </p>
       )}
     </div>
@@ -408,9 +409,10 @@ const RunnerVerificationNote = ({
     case "empty":
       return (
         <p className="mt-1.5 text-sm text-base-content/70">
-          {t("assignments.form.runner.emptyHint_prefix")}{" "}
-          <code>ubuntu-latest</code>
-          {t("assignments.form.runner.emptyHint_suffix")}
+          <Trans
+            i18nKey="assignments.form.runner.emptyHint"
+            components={{ code: <code dir="ltr" /> }}
+          />
         </p>
       )
 

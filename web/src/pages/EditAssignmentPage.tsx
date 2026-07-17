@@ -22,7 +22,7 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 const EditAssignmentFormStudent = ({
   org,
@@ -65,15 +65,18 @@ const EditAssignmentFormStudent = ({
     return (
       <EnterDiv className="alert alert-info alert-soft mt-6">
         <div>
-          {t("assignmentSettings.notAccepted_prefix")}{" "}
-          <Link
-            className="underline"
-            to="/$org/$classroom/assignments/$assignment/accept"
-            params={{ org, classroom, assignment }}
-          >
-            {t("assignmentSettings.notAccepted_link")}
-          </Link>{" "}
-          {t("assignmentSettings.notAccepted_suffix")}
+          <Trans
+            i18nKey="assignmentSettings.notAccepted"
+            components={{
+              acceptLink: (
+                <Link
+                  className="underline"
+                  to="/$org/$classroom/assignments/$assignment/accept"
+                  params={{ org, classroom, assignment }}
+                />
+              ),
+            }}
+          />
         </div>
       </EnterDiv>
     )
@@ -84,15 +87,18 @@ const EditAssignmentFormStudent = ({
       <div className="mt-6">
         <Alert tone="info">
           <div>
-            {t("assignmentSettings.individual_prefix")}{" "}
-            <Link
-              className="underline"
-              to="/$org/$classroom/assignments/$assignment/submission"
-              params={{ org, classroom, assignment }}
-            >
-              {t("assignmentSettings.individual_link")}
-            </Link>
-            {t("assignmentSettings.individual_suffix")}
+            <Trans
+              i18nKey="assignmentSettings.individual"
+              components={{
+                submissionLink: (
+                  <Link
+                    className="underline"
+                    to="/$org/$classroom/assignments/$assignment/submission"
+                    params={{ org, classroom, assignment }}
+                  />
+                ),
+              }}
+            />
           </div>
         </Alert>
       </div>
@@ -123,13 +129,13 @@ const EditAssignmentFormStudent = ({
                 {t("assignmentSettings.viewRepository")}
               </a>
               <p className="mt-2 text-sm text-base-content/70">
-                {t("assignmentSettings.collaboratorsHint_prefix")}{" "}
-                <span className="font-semibold text-base-content">
-                  {maxCollaborators}
-                </span>{" "}
-                {t("assignmentSettings.collaboratorsHint_suffix", {
-                  count: maxCollaborators,
-                })}
+                <Trans
+                  i18nKey="assignmentSettings.collaboratorsHint"
+                  count={maxCollaborators}
+                  components={{
+                    count: <span className="font-semibold text-base-content" />,
+                  }}
+                />
               </p>
             </div>
           </div>
@@ -195,15 +201,18 @@ const EditAssignmentPage = () => {
       <PageHeader title={t("assignmentSettings.heading")} />
       {isStaff && archived && (
         <ArchivedClassroomNotice>
-          {t("assignmentSettings.archivedNotice_prefix")}{" "}
-          <Link
-            className="link"
-            to="/$org/$classroom/edit"
-            params={{ org: org ?? "", classroom: classroom ?? "" }}
-          >
-            {t("assignmentSettings.archivedNotice_link")}
-          </Link>{" "}
-          {t("assignmentSettings.archivedNotice_suffix")}
+          <Trans
+            i18nKey="assignmentSettings.archivedNotice"
+            components={{
+              settingsLink: (
+                <Link
+                  className="link"
+                  to="/$org/$classroom/edit"
+                  params={{ org: org ?? "", classroom: classroom ?? "" }}
+                />
+              ),
+            }}
+          />
         </ArchivedClassroomNotice>
       )}
       {isStaff && org && classroom && assignment && (

@@ -6,28 +6,21 @@ import type { TemplateAccessVerification } from "@/domain/assignments"
 export type NoteTone = "warning" | "error"
 
 // Private fork used as a template. In-org parent is usually reachable (advisory
-// amber); cross-org or unknown parent likely fails at generate (error red). The
-// no-parent case reuses the cross-org suffix, treating unknown upstream as the
-// higher-risk cross-org case.
+// amber); cross-org or unknown parent likely fails at generate (error red). Each
+// messageKey is one full <Trans> sentence carrying {{owner}}/{{repo}}/{{branch}}
+// (and {{parent}} when known) with the branch wrapped in a <branch> tag.
 export function templateForkNoteView(
   verification: Extract<TemplateAccessVerification, { kind: "private-fork" }>,
-): { tone: NoteTone; labelKey: string; suffixKey: string } {
-  const labelKey = verification.parent
+): { tone: NoteTone; messageKey: string } {
+  const messageKey = verification.parent
     ? verification.parentInOrg
-      ? "assignments.template.privateForkInOrg_1"
-      : "assignments.template.privateForkCrossOrg_1"
-    : "assignments.template.privateForkNoParent_1"
-  return verification.parentInOrg
-    ? {
-        tone: "warning",
-        labelKey,
-        suffixKey: "assignments.template.privateForkInOrg_2",
-      }
-    : {
-        tone: "error",
-        labelKey,
-        suffixKey: "assignments.template.privateForkCrossOrg_2",
-      }
+      ? "assignments.template.privateForkInOrg"
+      : "assignments.template.privateForkCrossOrg"
+    : "assignments.template.privateForkNoParent"
+  return {
+    tone: verification.parentInOrg ? "warning" : "error",
+    messageKey,
+  }
 }
 
 // A 403 read denial. A real token scope gap points at re-authorizing

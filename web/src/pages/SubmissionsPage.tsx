@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
 import { Info, RefreshCw } from "lucide-react"
@@ -702,11 +702,13 @@ const SubmissionsPageContent = () => {
           )}
           {regradeAll.phase === "completed" && (
             <Alert tone="success" role="status">
-              {t("submissions.regradeAll.statusCompleted_prefix")}{" "}
-              <span className="font-semibold">
-                {t("submissions.collect.label")}
-              </span>{" "}
-              {t("submissions.regradeAll.statusCompleted_suffix")}
+              <Trans
+                i18nKey="submissions.regradeAll.statusCompleted"
+                values={{ collectLabel: t("submissions.collect.label") }}
+                components={{
+                  collectLabel: <span className="font-semibold" />,
+                }}
+              />
             </Alert>
           )}
           {regradeAll.phase === "failed" && (
@@ -798,11 +800,13 @@ const SubmissionsPageContent = () => {
             {t("submissions.regradeAll.confirmBody1")}
             <br />
             <br />
-            {t("submissions.regradeAll.confirmBody2_prefix")}{" "}
-            <span className="font-semibold">
-              {t("submissions.collect.label")}
-            </span>{" "}
-            {t("submissions.regradeAll.confirmBody2_suffix")}
+            <Trans
+              i18nKey="submissions.regradeAll.confirmBody2"
+              values={{ collectLabel: t("submissions.collect.label") }}
+              components={{
+                collectLabel: <span className="font-semibold" />,
+              }}
+            />
           </>
         }
         confirmText="regrade"

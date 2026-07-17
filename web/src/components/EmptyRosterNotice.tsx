@@ -1,5 +1,5 @@
 import { Info, UserPlus } from "lucide-react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import { RouterButton } from "@/components/ui"
 
@@ -28,19 +28,15 @@ export const EmptyRosterNotice = ({
       <div className="flex items-start gap-2">
         <Info className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
         <span className="text-sm">
-          {hasRosterRows ? (
-            <>
-              {t("components.notices.emptyRoster.hasRows_prefix")}{" "}
-              <span className="font-semibold">{org}</span>{" "}
-              {t("components.notices.emptyRoster.hasRows_suffix")}
-            </>
-          ) : (
-            <>
-              {t("components.notices.emptyRoster.empty_prefix")}{" "}
-              <span className="font-semibold">{org}</span>{" "}
-              {t("components.notices.emptyRoster.empty_suffix")}
-            </>
-          )}
+          <Trans
+            i18nKey={
+              hasRosterRows
+                ? "components.notices.emptyRoster.hasRows"
+                : "components.notices.emptyRoster.empty"
+            }
+            values={{ org }}
+            components={{ org: <span className="font-semibold" /> }}
+          />
         </span>
       </div>
       <RouterButton

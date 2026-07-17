@@ -8,7 +8,7 @@ import {
   SearchX,
 } from "lucide-react"
 import { Fragment, useId, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
 import {
@@ -20,7 +20,7 @@ import {
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
-import { Badge, Button, Modal, rtlFlip } from "@/components/ui"
+import { Badge, Button, Modal, MonoLtr, rtlFlip } from "@/components/ui"
 import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import {
@@ -172,9 +172,11 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
               {t("submissions.reviewModal.emptyTitle")}
             </h3>
             <p className="mt-2 text-sm leading-6 text-base-content/70">
-              {t("submissions.reviewModal.emptyBody_prefix")}{" "}
-              <span className="font-mono">{repo}</span>{" "}
-              {t("submissions.reviewModal.emptyBody_suffix")}
+              <Trans
+                i18nKey="submissions.reviewModal.emptyBody"
+                values={{ repo }}
+                components={{ repo: <MonoLtr /> }}
+              />
             </p>
           </>
         )}
@@ -271,19 +273,26 @@ const RegradeButton = ({
         })}
         description={
           <>
-            {t("submissions.rowRegrade.confirmBody1_prefix")}{" "}
-            <span className="font-semibold text-base-content">
-              {displayName || owner}
-            </span>
-            {displayName ? ` (${owner})` : ""}
-            {t("submissions.rowRegrade.confirmBody1_suffix")}
+            <Trans
+              i18nKey={
+                displayName
+                  ? "submissions.rowRegrade.confirmBody1WithLogin"
+                  : "submissions.rowRegrade.confirmBody1"
+              }
+              values={{ name: displayName || owner, owner }}
+              components={{
+                name: <span className="font-semibold text-base-content" />,
+              }}
+            />
             <br />
             <br />
-            {t("submissions.rowRegrade.confirmBody2_prefix")}{" "}
-            <span className="font-semibold">
-              {t("submissions.collect.label")}
-            </span>{" "}
-            {t("submissions.rowRegrade.confirmBody2_suffix")}
+            <Trans
+              i18nKey="submissions.rowRegrade.confirmBody2"
+              values={{ collectLabel: t("submissions.collect.label") }}
+              components={{
+                collectLabel: <span className="font-semibold" />,
+              }}
+            />
           </>
         }
         confirmText="regrade"
@@ -359,11 +368,20 @@ const SubmissionHistory = ({
         </li>
       ))}
       <li className="text-xs text-base-content/70">
-        {t("submissions.table.fullHistory_prefix")}{" "}
-        <a className="link" href={repoHref} target="_blank" rel="noreferrer">
-          {t("submissions.table.fullHistory_link")}
-        </a>{" "}
-        {t("submissions.table.fullHistory_suffix")}
+        <Trans
+          i18nKey="submissions.table.fullHistory"
+          components={{
+            repoLink: (
+              // eslint-disable-next-line jsx-a11y/anchor-has-content, jsx-a11y/control-has-associated-label -- <Trans> injects the translated link text
+              <a
+                className="link"
+                href={repoHref}
+                target="_blank"
+                rel="noreferrer"
+              />
+            ),
+          }}
+        />
       </li>
     </ol>
   )

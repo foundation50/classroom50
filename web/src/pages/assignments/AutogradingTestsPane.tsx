@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./assignmentFormModel"
@@ -377,9 +377,10 @@ const AutogradingTestModal = ({
 
                 {typeValue === "python" && (
                   <p className="rounded-box border border-dashed p-3 text-sm opacity-70">
-                    {t("assignments.autograder.pythonNote_prefix")}{" "}
-                    <code>python3 -m pytest -q</code>
-                    {t("assignments.autograder.pythonNote_suffix")}
+                    <Trans
+                      i18nKey="assignments.autograder.pythonNote"
+                      components={{ code: <code dir="ltr" /> }}
+                    />
                   </p>
                 )}
               </>

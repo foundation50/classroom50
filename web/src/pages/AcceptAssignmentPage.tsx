@@ -9,7 +9,7 @@ import {
 
 import GitHub from "@/assets/github.svg?react"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card, Markdown } from "@/components/ui"
+import { Alert, Button, Card, Markdown, MonoLtr } from "@/components/ui"
 import { assignmentDescription } from "@/types/classroom"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import type { GitHubUser } from "@/github-core/types"
@@ -17,7 +17,7 @@ import { Link, useParams, useSearch } from "@tanstack/react-router"
 import { useAcceptAssignment } from "@/hooks/mutations/useAcceptAssignment"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useId, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import confetti from "canvas-confetti"
 import { type AcceptStepId, type AcceptStepStatus } from "@/domain/assignments"
 import { useAcceptAndVerifyMembership } from "@/hooks/mutations/useAcceptAndVerifyMembership"
@@ -160,11 +160,15 @@ const AssignmentNotFound = ({
             </h1>
 
             <p className="mt-2 text-base text-base-content/70">
-              {t("accept.notFound.body_prefix")}{" "}
-              <span className="font-mono font-semibold text-base-content">
-                {assignment}
-              </span>{" "}
-              {t("accept.notFound.body_suffix")}
+              <Trans
+                i18nKey="accept.notFound.body"
+                values={{ assignment }}
+                components={{
+                  assignment: (
+                    <MonoLtr className="font-semibold text-base-content" />
+                  ),
+                }}
+              />
             </p>
           </div>
 
@@ -191,11 +195,12 @@ const AssignmentNotFound = ({
           </div>
 
           <div className="rounded-xl border border-base-300 bg-base-200/40 p-4 text-sm text-base-content/70">
-            {t("accept.notFound.checkUrl_prefix")}{" "}
-            <span className="font-mono text-base-content">
-              assignments.json
-            </span>
-            {t("accept.notFound.checkUrl_suffix")}
+            <Trans
+              i18nKey="accept.notFound.checkUrl"
+              components={{
+                file: <MonoLtr className="text-base-content" />,
+              }}
+            />
           </div>
 
           <div className="divider my-0" />

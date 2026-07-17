@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import useGetClasses from "@/hooks/useGetClasses"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -90,13 +90,13 @@ export const ReuseFromClassroomModal = ({
       dialogRef={dialogRef}
       title={t("components.modals.reuseFromClassroom.title")}
       description={
-        <>
-          {t("components.modals.reuseFromClassroom.description_prefix", {
-            org,
-          })}{" "}
-          <span className="font-semibold text-base-content">{classroom}</span>
-          {t("components.modals.reuseFromClassroom.description_suffix")}
-        </>
+        <Trans
+          i18nKey="components.modals.reuseFromClassroom.description"
+          values={{ org, classroom }}
+          components={{
+            classroom: <span className="font-semibold text-base-content" />,
+          }}
+        />
       }
       isPending={reuse.isPending}
       warning={reuse.warning}

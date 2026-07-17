@@ -1,11 +1,12 @@
 import { AlertTriangle } from "lucide-react"
 import { useEffect, useId, useRef, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 
 import {
   Button,
   AnimatedAlert,
   Input,
+  MonoLtr,
   type ButtonVariant,
 } from "@/components/ui"
 
@@ -215,11 +216,15 @@ export function ConfirmModal({
           <>
             <div className="mt-6 space-y-3">
               <p id={confirmHintId} className="text-sm text-base-content/70">
-                {t("components.confirmModal.typeToConfirm_prefix")}{" "}
-                <span className="font-mono font-semibold text-base-content">
-                  {confirmText}
-                </span>{" "}
-                {t("components.confirmModal.typeToConfirm_suffix")}
+                <Trans
+                  i18nKey="components.confirmModal.typeToConfirm"
+                  values={{ text: confirmText }}
+                  components={{
+                    text: (
+                      <MonoLtr className="font-semibold text-base-content" />
+                    ),
+                  }}
+                />
               </p>
 
               <Input

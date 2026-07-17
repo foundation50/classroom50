@@ -9,7 +9,7 @@ import EditClassroomForm from "./classes/EditClassroomForm"
 import ClassroomStaffSection from "./classes/ClassroomStaffSection"
 import { GitHubAPIError } from "@/github-core/errors"
 import useGetClassroom from "@/hooks/useGetClassroom"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { useEditClassroom } from "@/hooks/mutations/useEditClassroom"
 import { isClassroomArchived } from "@/types/classroom"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -61,13 +61,13 @@ const EditClassroomContent = ({
           <PageHeader
             title={t("documentTitle.classroomSettings")}
             subtitle={
-              <>
-                {t("classes.settingsSubtitle_prefix")}{" "}
-                <span className="font-semibold">
-                  {cl.name || cl.short_name || classroom}
-                </span>{" "}
-                {t("classes.settingsSubtitle_suffix")}
-              </>
+              <Trans
+                i18nKey="classes.settingsSubtitle"
+                values={{ classroom: cl.name || cl.short_name || classroom }}
+                components={{
+                  classroom: <span className="font-semibold" />,
+                }}
+              />
             }
           />
           <EditClassroomForm
