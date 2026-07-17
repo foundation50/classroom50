@@ -1,3 +1,5 @@
+import i18n from "@/i18n"
+
 // A template-generate failure at accept time, with a plain-text message the
 // accept page renders as-is. Messages point students at their teacher (they
 // can't approve an OAuth app or grant team read themselves).
@@ -17,9 +19,16 @@ export function outOfOrgTemplateError(
   status: number,
   githubMessage?: string,
 ): TemplateAccessError {
-  const detail = githubMessage ? ` GitHub said: "${githubMessage}".` : ""
+  const detail = githubMessage
+    ? i18n.t("accept.templateErrors.githubSaid", { message: githubMessage })
+    : ""
   return new TemplateAccessError(
-    `Couldn't copy the template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} This is often because the ${templateOwner} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for ${templateOwner} (or make the template public), then accept again.`,
+    i18n.t("accept.templateErrors.outOfOrg", {
+      owner: templateOwner,
+      repo: templateRepo,
+      status,
+      detail,
+    }),
   )
 }
 
@@ -30,8 +39,15 @@ export function inOrgTemplateError(
   status: number,
   githubMessage?: string,
 ): TemplateAccessError {
-  const detail = githubMessage ? ` GitHub said: "${githubMessage}".` : ""
+  const detail = githubMessage
+    ? i18n.t("accept.templateErrors.githubSaid", { message: githubMessage })
+    : ""
   return new TemplateAccessError(
-    `Couldn't copy the private template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} Ask your teacher to re-run assignment setup, then accept again.`,
+    i18n.t("accept.templateErrors.inOrg", {
+      owner: templateOwner,
+      repo: templateRepo,
+      status,
+      detail,
+    }),
   )
 }

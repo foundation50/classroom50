@@ -1486,6 +1486,11 @@
     "goToClassroom": "Go to my classroom",
     "editCollaborators": "Edit collaborators",
     "acceptButton": "Accept assignment",
+    "templateErrors": {
+      "githubSaid": " GitHub said: \"{{message}}\".",
+      "outOfOrg": "Couldn't copy the template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} This is often because the {{owner}} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for {{owner}} (or make the template public), then accept again.",
+      "inOrg": "Couldn't copy the private template {{owner}}/{{repo}} (HTTP {{status}}).{{detail}} Ask your teacher to re-run assignment setup, then accept again."
+    },
     "notFound": {
       "badge": "Assignment unavailable",
       "title": "Assignment not found",
