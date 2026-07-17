@@ -1,12 +1,4 @@
-import {
-  AlertTriangle,
-  ChevronRight,
-  Plus,
-  RefreshCw,
-  Send,
-  Upload,
-  X,
-} from "lucide-react"
+import { AlertTriangle, Plus, RefreshCw, Send, Upload, X } from "lucide-react"
 
 import {
   Alert,
@@ -17,8 +9,6 @@ import {
   Spinner,
   Toolbar,
 } from "@/components/ui"
-import Avatar from "@/components/avatar"
-import { RoleBadges } from "./RoleBadges"
 import type { Student } from "@/types/classroom"
 import { useQueryClient } from "@tanstack/react-query"
 import type { RosterCsvProblem } from "@/domain/students"
@@ -33,20 +23,11 @@ import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
-import { useMigrateRoster } from "@/hooks/mutations/useMigrateRoster"
 import { useReinviteFailedInvite } from "@/hooks/mutations/useReinviteFailedInvite"
-import {
-  dropSuppressed,
-  type SuppressedLogins,
-} from "@/hooks/useSuppressedLogins"
+import type { SuppressedLogins } from "@/hooks/useSuppressedLogins"
 import type { TeamRosterRow, ClassroomRole } from "@/util/teamRoster"
 import { STAFF_ROLES } from "@/types/classroom"
-import {
-  ROLE_LABEL_KEY,
-  STATE_BADGE_TONE,
-  STATE_LABEL_KEY,
-  hasStudentEnrollment,
-} from "@/util/classroomRoleUI"
+import { ROLE_LABEL_KEY, hasStudentEnrollment } from "@/util/classroomRoleUI"
 import {
   filterRosterRows,
   NO_SECTION,
@@ -56,7 +37,6 @@ import {
 import { studentKey, toStudent } from "@/util/roster"
 import { rosterPath } from "@/util/rosterPath"
 import { isSameGitHubUser } from "@/util/students"
-import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
 import {
   resolveSelectedRows,
   selectableRows,
@@ -65,7 +45,6 @@ import {
   toggleSelectAll,
 } from "@/pages/orgMembers/selection"
 import { useRangeSelection } from "@/pages/orgMembers/useRangeSelection"
-import { rosterRowToMemberRow, rosterRowInitials } from "@/util/memberRow"
 import RosterMemberModal from "@/pages/students/RosterMemberModal"
 import RosterBulkActionsBar, {
   type AddStudentActions,
@@ -73,45 +52,24 @@ import RosterBulkActionsBar, {
 import type { StudentCsvRow } from "@/domain/students"
 import { AnimatePresence, motion } from "motion/react"
 import { collapseVariants, enterExit } from "@/lib/motion"
-import { ClickableRow } from "@/lib/motionComponents"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
+import {
+  groupStudentsBySection,
+  nextSelectedKeyAfterSave,
+} from "./enrolledStudentsHelpers"
+import { useRosterAutoMigrate } from "./useRosterAutoMigrate"
+import { useRosterAutoSync } from "./useRosterAutoSync"
+import { RosterRow } from "./RosterRow"
+import { FailedInvitationsList } from "./FailedInvitationsList"
 
-// Group rows by `section`, sorted by name with the unlabeled ("No section")
-// bucket last. Generic over any row with a `section` field.
-export function groupStudentsBySection<T extends { section?: string }>(
-  students: T[],
-): Array<{ section: string; students: T[] }> {
-  const bySection = new Map<string, T[]>()
-  for (const student of students) {
-    const label = student.section?.trim() || NO_SECTION
-    const bucket = bySection.get(label)
-    if (bucket) bucket.push(student)
-    else bySection.set(label, [student])
-  }
-  return Array.from(bySection.entries())
-    .sort(([a], [b]) => {
-      if (a === NO_SECTION) return 1
-      if (b === NO_SECTION) return -1
-      return a.localeCompare(b, undefined, { numeric: true })
-    })
-    .map(([section, group]) => ({ section, students: group }))
-}
-
-// After a metadata save, where should the open detail modal's selection point?
-// An edit can't change an editable row's identity (rows key on
-// github_id/username; the form edits only name/email/section), so this is
-// normally a no-op — but if the key ever moves, follow it so the modal stays on
-// the same person instead of snapping shut. Only re-points the row that was
-// saved; any other selection is left alone.
-export function nextSelectedKeyAfterSave(
-  prev: string | null,
-  savedRowKey: string,
-  nextRowKey: string,
-): string | null {
-  if (!nextRowKey || nextRowKey === savedRowKey) return prev
-  return prev === savedRowKey ? nextRowKey : prev
-}
+// Preserve the module's original public surface: the pure helpers moved to
+// ./enrolledStudentsHelpers but EnrolledStudents.section.test.ts imports them
+// from here.
+export {
+  groupStudentsBySection,
+  nextSelectedKeyAfterSave,
+} from "./enrolledStudentsHelpers"
 
 const EnrolledStudents = ({
   students = [],
@@ -376,33 +334,14 @@ const EnrolledStudents = ({
       : []),
   ]
 
-  // Auto-migrate on open: converge a classroom bootstrapped before the roster
-  // rename so roster.csv always physically exists. Idempotent and cheap (a
-  // no-op once roster.csv is present). It runs BEFORE auto-sync (which gates on
-  // migrateSettledFor) so the two roster writers don't race on the ref. The
-  // rename changes only the file's path, not its content, and reads already
-  // fall back to the legacy name, so there's no cache to invalidate — a plain
-  // invalidate here would refetch eventually-consistent bytes and needlessly
-  // re-arm auto-sync.
-  const [migrateSettledFor, setMigrateSettledFor] = useState<string | null>(
-    null,
+  // Auto-migrate on open (see useRosterAutoMigrate): converge a pre-rename
+  // classroom so roster.csv physically exists, and gate auto-sync on its
+  // settling so the two roster writers don't race.
+  const { migrateSettledFor } = useRosterAutoMigrate(
+    org,
+    classroom,
+    !isLoading && !isError,
   )
-  const migrateMutation = useMigrateRoster(org, classroom)
-  // Fire once per classroom (the component instance is reused across a
-  // $classroom param switch, so a boolean would skip later classrooms).
-  const migratedForRef = useRef<string | null>(null)
-  useEffect(() => {
-    if (isLoading || isError) return
-    if (migratedForRef.current === classroom) return
-    migratedForRef.current = classroom
-    setMigrateSettledFor(null)
-    // onSettled unblocks auto-sync (mount-fired UI coordination) so it lives at
-    // the call site; even a migrate hiccup must still release the gate.
-    migrateMutation.mutate(undefined, {
-      onSettled: () => setMigrateSettledFor(classroom),
-    })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [classroom, isLoading, isError])
 
   // Explicit teacher-triggered CSV backfill (also auto-run on open). The hook
   // owns the roster-file invalidation that must always run; the toasts live
@@ -427,54 +366,19 @@ const EnrolledStudents = ({
       },
     })
 
-  // Auto-sync on open: append team members lacking a CSV row (fire once per
-  // drift episode, per classroom; re-arm when the drift clears). Gated on
-  // migrate having settled for this classroom so the two roster writers run in
-  // sequence, not a race. dropSuppressed skips any csv-missing member the
-  // teacher just unenrolled whose best-effort team-drop failed — otherwise
-  // auto-sync would re-append the student it just removed. (suppressedLogins is
-  // read in the effect, not during render; syncRosterFromTeam re-derives the
-  // authoritative set server-side.)
-  //
-  // Keyed by classroom (not a boolean): the component instance is reused across
-  // a $classroom param switch, so a boolean set true for a drifting classroom A
-  // would wrongly skip a drifting classroom B navigated to directly (no
-  // intervening zero-drift render to reset it).
-  const autoSyncedForRef = useRef<string | null>(null)
-  const csvMissingKey = csvMissingLogins.join(",")
-  const backfillNeededKey = backfillNeededLogins.join(",")
-  useEffect(() => {
-    if (isLoading || isError) return
-    // Wait for the migrate pass to settle first (converges the legacy roster
-    // name onto roster.csv) so sync's write can't race migrate's on the ref.
-    if (migrateSettledFor !== classroom) return
-    // Sync when there's drift to fix: a team member with no CSV row (missing),
-    // OR an existing CSV row that's stale against the team (blank github_id or a
-    // wrong role — the login-only row case). Without the backfill term a
-    // login-only row would never converge, since it isn't "missing". BOTH terms
-    // drop suppressed (just-unenrolled) logins so a stale row lingering during
-    // the eventual-consistency window can't re-fire a resurrecting sync.
-    const hasMissing =
-      dropSuppressed(csvMissingLogins, suppressedLogins).length > 0
-    const hasBackfill =
-      dropSuppressed(backfillNeededLogins, suppressedLogins).length > 0
-    if (!hasMissing && !hasBackfill) {
-      if (autoSyncedForRef.current === classroom)
-        autoSyncedForRef.current = null
-      return
-    }
-    if (autoSyncedForRef.current === classroom || syncMutation.isPending) return
-    autoSyncedForRef.current = classroom
-    runSync()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [
-    csvMissingKey,
-    backfillNeededKey,
-    isLoading,
-    isError,
-    migrateSettledFor,
+  // Auto-sync on open (see useRosterAutoSync): append team members lacking a
+  // CSV row when there's drift, gated on migrate settling; the caller owns
+  // runSync (and its toasts, which skip on unmount).
+  useRosterAutoSync({
     classroom,
-  ])
+    ready: !isLoading && !isError,
+    migrateSettledFor,
+    csvMissingLogins,
+    backfillNeededLogins,
+    suppressedLogins,
+    syncPending: syncMutation.isPending,
+    runSync,
+  })
 
   const onRowMetadataSaved = (rowKey: string, updated: StudentCsvRow) => {
     updateRosterCache((current) => {
@@ -529,87 +433,17 @@ const EnrolledStudents = ({
       suppressedLogins.remember(removed.map((r) => r.username))
   }
 
-  const renderRow = (row: TeamRosterRow) => {
-    const member = rosterRowToMemberRow(row)
-    const displayName = member.name
-    const displayHandle = row.username || row.email
-    const displayInitials = rosterRowInitials(row)
-    const selfRow = isSelf(row)
-
-    return (
-      <ClickableRow
-        key={row.key}
-        className="group/row flex cursor-pointer items-center justify-between gap-4 px-6 py-4 hover:bg-base-200"
-        role="button"
-        tabIndex={0}
-        onClick={() => setSelectedKey(row.key)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter" || e.key === " ") {
-            e.preventDefault()
-            setSelectedKey(row.key)
-          }
-        }}
-      >
-        <input
-          type="checkbox"
-          className="checkbox checkbox-sm shrink-0"
-          aria-label={
-            selfRow
-              ? t("students.bulk.selfNotSelectable")
-              : t("students.bulk.selectRow", { label: displayHandle })
-          }
-          disabled={selfRow}
-          title={selfRow ? t("students.bulk.selfNotSelectable") : undefined}
-          checked={selectedKeys.has(row.key)}
-          onClick={(e) => {
-            e.stopPropagation()
-            handleRowCheckboxClick(e, row.key)
-          }}
-          onChange={() => handleToggleRow(row.key)}
-        />
-        <div className="min-w-0 flex-1">
-          <Avatar
-            name={displayName}
-            github={displayHandle}
-            initials={displayInitials}
-            subtitle={<GitHubIdentity row={member} />}
-          />
-        </div>
-        <div className="flex shrink-0 items-center gap-2">
-          {(() => {
-            // Enrolled/pending rows assert role(s) (the team is the authority),
-            // shown as one badge per role via RoleBadges. Needs-attention rows
-            // have no team role yet, so they render no role badge.
-            if (
-              row.state === "needs_attention_in_org" ||
-              row.state === "needs_attention_not_in_org"
-            ) {
-              return null
-            }
-            return <RoleBadges roles={row.roles} />
-          })()}
-          {row.section.trim() ? (
-            <Badge tone="info" className="shrink-0">
-              {row.section.trim()}
-            </Badge>
-          ) : null}
-          {row.state !== "enrolled" ? (
-            <Badge
-              size="sm"
-              tone={STATE_BADGE_TONE[row.state]}
-              className="shrink-0"
-            >
-              {t(STATE_LABEL_KEY[row.state])}
-            </Badge>
-          ) : null}
-          <ChevronRight
-            aria-hidden="true"
-            className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
-          />
-        </div>
-      </ClickableRow>
-    )
-  }
+  const renderRow = (row: TeamRosterRow) => (
+    <RosterRow
+      key={row.key}
+      row={row}
+      selfRow={isSelf(row)}
+      checked={selectedKeys.has(row.key)}
+      onOpen={setSelectedKey}
+      onCheckboxClick={handleRowCheckboxClick}
+      onToggle={handleToggleRow}
+    />
+  )
 
   return (
     <div className="flex w-full flex-col gap-6">
@@ -738,74 +572,26 @@ const EnrolledStudents = ({
         </Alert>
       ) : null}
 
-      {/* Failed/expired invitations (owner-only). GitHub couldn't deliver these,
-          so they need a re-invite or dismissal — surfaced here since they never
-          appear as roster rows. */}
+      {/* Failed/expired invitations (owner-only). */}
       {!isLoading && !isError && failedInvitations.length > 0 ? (
-        <Alert tone="warning" className="flex-col items-stretch gap-2">
-          <span className="text-sm font-medium">
-            {t("students.failedInvitesTitle", {
-              count: failedInvitations.length,
-            })}
-          </span>
-          <ul className="flex flex-col divide-y divide-warning/20">
-            {failedInvitations.map((inv) => {
-              const who = inv.login || inv.email || String(inv.id)
-              return (
-                <li
-                  key={inv.id}
-                  className="flex items-center justify-between gap-3 py-1.5"
-                >
-                  <span className="min-w-0 text-sm">
-                    <span className="font-mono">{who}</span>
-                    {inv.failed_reason ? (
-                      <span className="text-base-content/60">
-                        {" "}
-                        — {inv.failed_reason}
-                      </span>
-                    ) : null}
-                  </span>
-                  <div className="flex shrink-0 items-center gap-1">
-                    {inv.login || inv.email ? (
-                      <Button
-                        variant="ghost"
-                        size="xs"
-                        disabled={
-                          reinviteFailedInvite.isPending ||
-                          dismissFailedInvite.isPending
-                        }
-                        onClick={() => reinvite(inv)}
-                      >
-                        {t("students.reinvite")}
-                      </Button>
-                    ) : null}
-                    <Button
-                      variant="ghost"
-                      size="xs"
-                      disabled={
-                        reinviteFailedInvite.isPending ||
-                        dismissFailedInvite.isPending
-                      }
-                      onClick={() =>
-                        dismissFailedInvite.mutate(inv.id, {
-                          onError: (err) =>
-                            notify({
-                              tone: "error",
-                              message: t("students.failedInviteDismissError", {
-                                error: getErrorMessage(err),
-                              }),
-                            }),
-                        })
-                      }
-                    >
-                      {t("students.dismiss")}
-                    </Button>
-                  </div>
-                </li>
-              )
-            })}
-          </ul>
-        </Alert>
+        <FailedInvitationsList
+          failedInvitations={failedInvitations}
+          actionsDisabled={
+            reinviteFailedInvite.isPending || dismissFailedInvite.isPending
+          }
+          onReinvite={reinvite}
+          onDismiss={(inv) =>
+            dismissFailedInvite.mutate(inv.id, {
+              onError: (err) =>
+                notify({
+                  tone: "error",
+                  message: t("students.failedInviteDismissError", {
+                    error: getErrorMessage(err),
+                  }),
+                }),
+            })
+          }
+        />
       ) : null}
 
       {/* Toolbar: search + status filter (group-by-section lives in the table
