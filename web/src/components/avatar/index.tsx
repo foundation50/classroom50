@@ -27,7 +27,7 @@ const Avatar = ({
         </div>
       </div>
 
-      <div className="min-w-0 flex-1 text-left">
+      <div className="min-w-0 flex-1 text-start">
         <div
           className={`font-medium text-base-content${onClick ? " group-hover/avatar:text-primary" : ""}`}
         >

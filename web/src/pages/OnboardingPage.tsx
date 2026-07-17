@@ -31,7 +31,7 @@ const OnboardNavbar = () => {
         <div className="flex p-6 text-lg font-bold">
           <GraduationCap
             aria-hidden="true"
-            className="size-8 text-primary mr-2"
+            className="size-8 text-primary me-2"
           />{" "}
           {t("nav.appName")}
         </div>

@@ -60,13 +60,13 @@ const AcceptNavbar = () => {
           <div className="flex p-6 text-lg font-bold">
             <GraduationCap
               aria-hidden="true"
-              className="size-8 text-primary mr-2"
+              className="size-8 text-primary me-2"
             />{" "}
             {t("nav.appName")}
           </div>
         </Link>
       </div>
-      <div className="flex-none pr-4">
+      <div className="flex-none pe-4">
         <Button
           variant="ghost"
           size="sm"
@@ -412,7 +412,7 @@ const AcceptProgress = ({ steps }: { steps: StepState }) => {
         type="button"
         onClick={() => setUserOpen(!expanded)}
         aria-expanded={expanded}
-        className="flex w-full items-center justify-between gap-3 p-4 text-left"
+        className="flex w-full items-center justify-between gap-3 p-4 text-start"
       >
         <span className="flex items-center gap-3">
           <CircularProgress

@@ -41,7 +41,7 @@ export function CopyableCode({
         variant={copied ? "success" : "ghost"}
         size="sm"
         shape="square"
-        className="mr-2 shrink-0"
+        className="me-2 shrink-0"
         onClick={onCopy}
         aria-label={label}
         title={label}

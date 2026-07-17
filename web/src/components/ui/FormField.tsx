@@ -10,7 +10,7 @@ import { cx } from "./cx"
 export function HelpTooltip({ help }: { help: string }) {
   return (
     <span
-      className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-left"
+      className="tooltip tooltip-bottom before:max-w-xs before:whitespace-normal before:text-start"
       data-tip={help}
     >
       <Button

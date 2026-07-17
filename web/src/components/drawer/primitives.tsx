@@ -86,7 +86,7 @@ export const ClassroomLogo = () => {
       >
         <GraduationCap
           aria-hidden="true"
-          className="size-8 text-[var(--sidebar-accent)] shrink-0 mr-2"
+          className="size-8 text-[var(--sidebar-accent)] shrink-0 me-2"
         />
         <span className="whitespace-nowrap">{t("nav.appName")}</span>
       </Link>

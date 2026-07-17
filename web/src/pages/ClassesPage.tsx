@@ -73,7 +73,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
         </p>
 
         {mutation.isError ? (
-          <Alert tone="error" className="mt-4 max-w-md text-left">
+          <Alert tone="error" className="mt-4 max-w-md text-start">
             {t("classes.join.error")}
           </Alert>
         ) : null}

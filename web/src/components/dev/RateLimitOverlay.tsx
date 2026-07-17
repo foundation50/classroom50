@@ -93,7 +93,7 @@ export function RateLimitOverlay() {
       <div className="pointer-events-auto flex items-center gap-4 rounded-t-box border border-b-0 border-base-300 bg-base-100/95 px-4 py-1.5 font-mono text-xs shadow-lg backdrop-blur">
         <button
           type="button"
-          className="flex items-center gap-2 text-left"
+          className="flex items-center gap-2 text-start"
           onClick={() => setCollapsed((c) => !c)}
           title="Toggle GitHub rate-limit details"
         >

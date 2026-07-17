@@ -72,7 +72,7 @@ const OrgSteps = ({
               (!configReady ? (
                 <Button
                   variant="primary"
-                  className="ml-auto"
+                  className="ms-auto"
                   loading={mutation.isPending}
                   loadingLabel={t("setup.runSetup")}
                   disabled={mutation.isPending}
@@ -83,7 +83,7 @@ const OrgSteps = ({
               ) : (
                 <Button
                   variant="primary"
-                  className="ml-auto"
+                  className="ms-auto"
                   onClick={onGoToServiceToken}
                 >
                   {t("setup.nextServiceToken")}

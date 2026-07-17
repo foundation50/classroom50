@@ -76,7 +76,7 @@ export function SkeletonOverwriteModal({
       description={
         <>
           <p>{t("orgSettings.overwrite.body", { count })}</p>
-          <ul className="mt-2 list-disc space-y-0.5 pl-5 font-mono text-xs">
+          <ul className="mt-2 list-disc space-y-0.5 ps-5 font-mono text-xs">
             {paths?.map((p) => (
               <li key={p}>{p}</li>
             ))}

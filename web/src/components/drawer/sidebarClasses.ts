@@ -1,7 +1,7 @@
 // Sidebar class-name recipes (dark rail). Single source so a token rename lands once.
 
 export const navItemClass = (active: boolean, collapsed: boolean) =>
-  `flex items-center gap-2 rounded-box border-l-2 px-2 py-2 transition-colors ${
+  `flex items-center gap-2 rounded-box border-s-2 px-2 py-2 transition-colors ${
     collapsed ? "justify-center" : ""
   } ${
     active
@@ -12,7 +12,7 @@ export const navItemClass = (active: boolean, collapsed: boolean) =>
 // Shared sidebar tooltip tokens (dark rail): bubble + text colors every
 // collapsed-sidebar tooltip uses.
 export const sidebarTooltip =
-  "tooltip tooltip-right [--tt-bg:var(--sidebar-surface)] before:text-neutral-content"
+  "tooltip tooltip-right rtl:tooltip-left [--tt-bg:var(--sidebar-surface)] before:text-neutral-content"
 
 // Interactive icon-button row in the rail (back-links, collapse/expand): tooltip
 // base plus a muted icon that lightens and gains a surface on hover.

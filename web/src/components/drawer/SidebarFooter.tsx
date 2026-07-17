@@ -204,7 +204,7 @@ export const SidebarFooter = () => {
         <div
           className={`
         absolute bottom-full z-50 mb-3
-        ${collapsed ? "left-2 w-48" : "left-6 right-6"}
+        ${collapsed ? "start-2 w-48" : "start-6 end-6"}
         origin-bottom rounded-box
         transition-all duration-150 ease-out
 
@@ -284,7 +284,7 @@ export const SidebarFooter = () => {
                 ) : (
                   <Sun aria-hidden="true" className="size-4" />
                 )}
-                <span className="flex-1 text-left">
+                <span className="flex-1 text-start">
                   {isDark ? t("nav.darkMode") : t("nav.lightMode")}
                 </span>
                 <input
@@ -307,7 +307,7 @@ export const SidebarFooter = () => {
                 }}
               >
                 <Languages aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-left">{t("nav.language")}</span>
+                <span className="flex-1 text-start">{t("nav.language")}</span>
               </button>
             </li>
             <div className="divider my-1" />
@@ -322,7 +322,7 @@ export const SidebarFooter = () => {
                 }}
               >
                 <BookOpen aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-left">{t("nav.docs")}</span>
+                <span className="flex-1 text-start">{t("nav.docs")}</span>
               </a>
             </li>
             <li>
@@ -335,7 +335,7 @@ export const SidebarFooter = () => {
                 }}
               >
                 <Info aria-hidden="true" className="size-4" />
-                <span className="flex-1 text-left">{t("nav.about")}</span>
+                <span className="flex-1 text-start">{t("nav.about")}</span>
               </button>
             </li>
 
@@ -349,7 +349,7 @@ export const SidebarFooter = () => {
         </div>
 
         <div
-          className={`flex w-full items-center gap-2.5 text-left ${collapsed ? "justify-center" : "justify-start"}`}
+          className={`flex w-full items-center gap-2.5 text-start ${collapsed ? "justify-center" : "justify-start"}`}
           title={collapsed ? name : undefined}
         >
           <div className="avatar avatar-placeholder">

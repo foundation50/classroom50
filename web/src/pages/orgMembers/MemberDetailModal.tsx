@@ -181,7 +181,7 @@ const MemberDetailModal = ({
                   <span className="font-medium">
                     {access.classroom}
                     {access.archived ? (
-                      <Badge size="xs" ghost className="ml-2">
+                      <Badge size="xs" ghost className="ms-2">
                         {t("orgMembers.archived")}
                       </Badge>
                     ) : null}
@@ -189,7 +189,7 @@ const MemberDetailModal = ({
                       <Badge
                         size="xs"
                         tone="warning"
-                        className="ml-2 gap-1"
+                        className="ms-2 gap-1"
                         title={t("orgMembers.unprovisionedAccessTitle")}
                       >
                         <AlertTriangle
@@ -208,7 +208,7 @@ const MemberDetailModal = ({
                     ) : null}
                     <ChevronRight
                       aria-hidden="true"
-                      className="size-4 text-base-content/30 transition-transform duration-150 group-hover/cls:translate-x-0.5 group-hover/cls:text-base-content/70"
+                      className="size-4 text-base-content/30 transition-transform duration-150 group-hover/cls:translate-x-0.5 rtl:group-hover/cls:-translate-x-0.5 group-hover/cls:text-base-content/70"
                     />
                   </span>
                 </Link>

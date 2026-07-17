@@ -184,7 +184,7 @@ export const TemplateAccessModal = ({
 
       <div className="modal-action mt-6 items-center">
         {inOrg && !isOwner && (
-          <p className="mr-auto text-xs text-base-content/60">
+          <p className="me-auto text-xs text-base-content/60">
             {t("assignments.template.accessModal.ownerOnlyNote")}
           </p>
         )}

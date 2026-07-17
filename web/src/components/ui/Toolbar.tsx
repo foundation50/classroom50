@@ -123,7 +123,7 @@ function ToolbarTrailing({
   if (!children) return null
   return (
     <div
-      className={cx("ml-auto flex flex-wrap items-center gap-2", className)}
+      className={cx("ms-auto flex flex-wrap items-center gap-2", className)}
       {...props}
     >
       {children}

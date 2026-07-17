@@ -20,14 +20,14 @@ export const DrawerContent = ({
     <div className={`${className} drawer-content`}>
       <a
         href="#main-content"
-        className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50"
+        className="btn btn-primary btn-sm sr-only focus:not-sr-only focus:fixed focus:top-3 focus:start-3 focus:z-50"
       >
         {t("common.skipToMainContent")}
       </a>
       <label
         htmlFor={MOBILE_DRAWER_ID}
         aria-label={t("nav.openMenu")}
-        className="btn btn-ghost btn-square fixed top-3 left-3 z-30 lg:hidden"
+        className="btn btn-ghost btn-square fixed top-3 start-3 z-30 lg:hidden"
       >
         <Menu className="size-6" aria-hidden="true" />
       </label>

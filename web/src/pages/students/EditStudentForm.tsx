@@ -149,7 +149,7 @@ const EditStudentForm = ({
           {(field) => (
             <div className="flex items-center">
               <UserRound
-                className="mr-2 text-base-content/70"
+                className="me-2 text-base-content/70"
                 aria-hidden="true"
               />
               <Input
@@ -169,7 +169,7 @@ const EditStudentForm = ({
           {(field) => (
             <div className="flex items-center">
               <UserRound
-                className="mr-2 text-base-content/70"
+                className="me-2 text-base-content/70"
                 aria-hidden="true"
               />
               <Input
@@ -191,7 +191,7 @@ const EditStudentForm = ({
               <div>
                 <div className="flex items-center">
                   <Mail
-                    className="size-6 mr-2 text-base-content/70"
+                    className="size-6 me-2 text-base-content/70"
                     aria-hidden="true"
                   />
                   <Input
@@ -228,7 +228,7 @@ const EditStudentForm = ({
         <form.Field name="section">
           {(field) => (
             <div className="flex items-center">
-              <Users className="mr-2 text-base-content/70" aria-hidden="true" />
+              <Users className="me-2 text-base-content/70" aria-hidden="true" />
               <Input
                 id={field.name}
                 name={field.name}

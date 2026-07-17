@@ -152,7 +152,7 @@ export const DetailsSection = ({
               label={
                 <>
                   {t("assignments.form.description")}
-                  <span className="ml-1.5 font-normal text-base-content/60">
+                  <span className="ms-1.5 font-normal text-base-content/60">
                     ({t("assignments.form.optional")})
                   </span>
                 </>
@@ -241,7 +241,7 @@ export const DetailsSection = ({
                 modeValue === "group" && (
                   <form.Field name="max_group_size">
                     {(field) => (
-                      <div className="border-l-2 border-base-300 pl-4">
+                      <div className="border-s-2 border-base-300 ps-4">
                         <FieldLabel
                           htmlFor={field.name}
                           label={t("assignments.form.maxGroupSize")}
@@ -358,7 +358,7 @@ export const DetailsSection = ({
                     help={t("assignments.form.setDueDateTip")}
                   />
                   {dueDateEnabled ? (
-                    <div className="mt-2 ml-[3.75rem]">
+                    <div className="mt-2 ms-[3.75rem]">
                       <Input
                         id={field.name}
                         name={field.name}

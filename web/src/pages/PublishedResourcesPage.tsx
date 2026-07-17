@@ -304,7 +304,7 @@ function ClassroomResources({
     >
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-left"
+        className="flex w-full items-center justify-between gap-3 px-5 py-4 text-start"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
       >

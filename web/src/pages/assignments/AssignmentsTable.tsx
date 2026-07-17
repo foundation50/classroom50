@@ -195,7 +195,7 @@ const SkeletonRows = ({ rows = 4 }: { rows?: number }) => (
           <div className="skeleton skeleton-shimmer h-4 w-56" />
         </td>
         <td>
-          <div className="skeleton skeleton-shimmer ml-auto h-8 w-16" />
+          <div className="skeleton skeleton-shimmer ms-auto h-8 w-16" />
         </td>
       </tr>
     ))}

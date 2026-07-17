@@ -341,7 +341,7 @@ export const OrgSettingsPane = () => {
             <p className="font-semibold text-base-content">
               {t("orgSettings.serviceToken.beforeGenerating")}
             </p>
-            <ul className="mt-2 list-disc space-y-1 pl-5 text-base-content/80">
+            <ul className="mt-2 list-disc space-y-1 ps-5 text-base-content/80">
               <li>
                 {t("orgSettings.serviceToken.repoAccess_prefix")}{" "}
                 <span className="font-semibold">

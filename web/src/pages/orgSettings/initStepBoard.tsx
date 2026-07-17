@@ -250,7 +250,7 @@ export const InitStep = ({
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((prev) => !prev)}
-        className="flex w-full items-start justify-between gap-4 p-4 text-left"
+        className="flex w-full items-start justify-between gap-4 p-4 text-start"
       >
         <div className="flex min-w-0 items-start gap-2">
           {open ? (
@@ -282,7 +282,7 @@ export const InitStep = ({
       </button>
 
       {open && (
-        <div className="border-t border-base-200 px-4 pb-4 pt-3 pl-10 text-sm">
+        <div className="border-t border-base-200 px-4 pb-4 pt-3 ps-10 text-sm">
           <p className="text-base-content/70">{t(meta.what)}</p>
           <p className="mt-1 text-base-content/70">
             <span className="font-medium text-base-content/70">

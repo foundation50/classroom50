@@ -27,7 +27,7 @@ export const UnenforcedDefaultsList = ({
               <span className="text-base-content/70"> — {d.manualFix}</span>
             )}
             {d.pinned && (
-              <Badge size="xs" ghost className="ml-1 align-middle">
+              <Badge size="xs" ghost className="ms-1 align-middle">
                 {t("orgSettings.audit.requiresManualFix")}
               </Badge>
             )}

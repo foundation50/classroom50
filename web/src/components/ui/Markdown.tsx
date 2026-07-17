@@ -34,8 +34,8 @@ const components: Components = {
   h1: ({ children }) => <h1 className="text-xl font-bold">{children}</h1>,
   h2: ({ children }) => <h2 className="text-lg font-bold">{children}</h2>,
   h3: ({ children }) => <h3 className="text-base font-semibold">{children}</h3>,
-  ul: ({ children }) => <ul className="list-disc pl-5">{children}</ul>,
-  ol: ({ children }) => <ol className="list-decimal pl-5">{children}</ol>,
+  ul: ({ children }) => <ul className="list-disc ps-5">{children}</ul>,
+  ol: ({ children }) => <ol className="list-decimal ps-5">{children}</ol>,
   code: ({ children }) => (
     <code className="rounded bg-base-200 px-1 py-0.5 text-sm">{children}</code>
   ),
@@ -45,7 +45,7 @@ const components: Components = {
     </pre>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="border-l-2 border-base-300 pl-3 text-base-content/80">
+    <blockquote className="border-s-2 border-base-300 ps-3 text-base-content/80">
       {children}
     </blockquote>
   ),

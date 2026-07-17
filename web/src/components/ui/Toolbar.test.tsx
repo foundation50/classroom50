@@ -189,13 +189,13 @@ describe("Toolbar.FilterSelect", () => {
 })
 
 describe("Toolbar.Trailing", () => {
-  it("renders an ml-auto group with children", () => {
+  it("renders an ms-auto group with children", () => {
     render(
       <Toolbar.Trailing data-testid="tr">
         <button>Go</button>
       </Toolbar.Trailing>,
     )
-    expect(screen.getByTestId("tr").className).toContain("ml-auto")
+    expect(screen.getByTestId("tr").className).toContain("ms-auto")
   })
 
   it("renders nothing when it has no children", () => {

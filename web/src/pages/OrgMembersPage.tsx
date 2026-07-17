@@ -587,7 +587,7 @@ const OrgMembersPage = () => {
                         <ClassificationBadge row={row} isOwner={isOwner(row)} />
                         <ChevronRight
                           aria-hidden="true"
-                          className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 group-hover/row:text-base-content/70"
+                          className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70"
                         />
                       </div>
                     </ClickableRow>

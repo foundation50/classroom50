@@ -456,7 +456,7 @@ export const LanguageSwitcher = ({
               <span className="text-xs font-semibold text-base-content/70">
                 {t("language.previewSampleLabel")}
               </span>
-              <ul className="list-disc pl-5 text-sm text-base-content/80">
+              <ul className="list-disc ps-5 text-sm text-base-content/80">
                 {preview.sample.map((s, i) => (
                   <li key={i}>{s}</li>
                 ))}

@@ -66,7 +66,7 @@ export const AppBanner = ({
             size="xs"
             shape="square"
             aria-label={t("components.banner.dismiss")}
-            className="-mr-1 shrink-0"
+            className="-me-1 shrink-0"
             onClick={onDismiss}
           >
             <X aria-hidden="true" className="size-4" />

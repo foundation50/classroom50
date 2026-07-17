@@ -20,7 +20,7 @@ export function QueryErrorAlert({
     <Alert tone="error" className={className}>
       <div>
         {message}
-        <Button variant="ghost" size="sm" className="ml-2" onClick={onRetry}>
+        <Button variant="ghost" size="sm" className="ms-2" onClick={onRetry}>
           {t("submissions.errors.retry")}
         </Button>
       </div>

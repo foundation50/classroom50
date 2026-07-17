@@ -100,7 +100,7 @@ export const StudentProfileModal = ({
             className="flex items-center justify-between gap-4 py-2.5 text-sm"
           >
             <dt className="text-base-content/70">{row.label}</dt>
-            <dd className="min-w-0 truncate text-right font-medium">
+            <dd className="min-w-0 truncate text-end font-medium">
               {row.value}
             </dd>
           </div>

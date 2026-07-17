@@ -54,7 +54,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         <Link
           to="/$org/$classroom/assignments/$assignment/edit"
           params={{ org, classroom, assignment }}
-          className="btn btn-ghost btn-sm btn-circle absolute right-3 top-3 z-10 text-base-content/70 hover:text-primary"
+          className="btn btn-ghost btn-sm btn-circle absolute end-3 top-3 z-10 text-base-content/70 hover:text-primary"
           aria-label={t("classes.repo.manageGroupAria", { assignment })}
           title={t("classes.repo.manageGroupTitle")}
         >
@@ -63,7 +63,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
       )}
 
       <Card.Body className="gap-4">
-        <div className="flex items-center gap-3 pr-8">
+        <div className="flex items-center gap-3 pe-8">
           <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
             <BookOpen aria-hidden="true" className="size-5" />
           </div>
@@ -163,7 +163,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         size="2xl"
         aria-label={t("classes.repo.descriptionModalTitle")}
       >
-        <div className="mb-4 pr-8">
+        <div className="mb-4 pe-8">
           <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
             {t("classes.repo.descriptionModalTitle")}
           </p>
@@ -172,7 +172,7 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
         {description ? (
           <Markdown
             content={description}
-            className="max-h-[70vh] overflow-y-auto pr-1"
+            className="max-h-[70vh] overflow-y-auto pe-1"
           />
         ) : null}
       </Modal>

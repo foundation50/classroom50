@@ -108,7 +108,7 @@ export function Modal({
               variant="ghost"
               size="sm"
               shape="circle"
-              className="absolute right-3 top-3"
+              className="absolute end-3 top-3"
               aria-label={t("common.close")}
               disabled={closeDisabled}
               key={closeId}

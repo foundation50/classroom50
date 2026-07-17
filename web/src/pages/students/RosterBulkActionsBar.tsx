@@ -401,7 +401,7 @@ const RosterBulkActionsBar = ({
           }
           idleActions={
             addActions ? (
-              <div className="join ml-auto">
+              <div className="join ms-auto">
                 <Button
                   size="sm"
                   className="join-item"

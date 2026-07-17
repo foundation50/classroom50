@@ -344,7 +344,7 @@ const SubmissionHistory = ({
               })}
             </span>
           ) : null}
-          <span className="ml-auto flex gap-3">
+          <span className="ms-auto flex gap-3">
             <HistoryLink
               href={safeHttpUrl(s.commit)}
               icon={GitCommitHorizontal}

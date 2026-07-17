@@ -58,7 +58,7 @@ const NewAssignmentButton = ({
           <Button
             variant="primary"
             tabIndex={0}
-            className="join-item h-full border-l border-primary-content/20 px-2"
+            className="join-item h-full border-s border-primary-content/20 px-2"
             aria-label={t("assignments.newButton.moreOptions")}
           >
             <ChevronDown aria-hidden="true" className="size-4" />

@@ -72,7 +72,7 @@ function NewOrgModal({
                       isFree ? t("orgs.newOrg.freePlanDisabled") : undefined
                     }
                     onClick={() => handleSelect(org.login)}
-                    className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-left transition-colors hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
+                    className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-transparent"
                   >
                     <img
                       src={org.avatar_url}

@@ -25,7 +25,7 @@ export const RosterParseProblems = ({
     <Alert tone="error">
       <div className="flex flex-col gap-2">
         <span className="font-medium">{t("students.rosterParseError")}</span>
-        <ul className="list-disc pl-5 text-sm">
+        <ul className="list-disc ps-5 text-sm">
           {parseProblems.map((p, i) => (
             <li key={`${p.line}-${i}`}>
               {t("students.rosterParseErrorLine", {

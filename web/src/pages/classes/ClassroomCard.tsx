@@ -200,7 +200,7 @@ function ClassroomMenu({
   const deleteMutation = useDeleteClassroom(org, slug)
 
   const menuItem =
-    "flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-base-200"
+    "flex w-full items-center gap-2 px-3 py-2 text-start text-sm hover:bg-base-200"
 
   return (
     <div ref={containerRef} className="relative">
@@ -234,7 +234,7 @@ function ClassroomMenu({
           ref={menuRef}
           role="menu"
           onKeyDown={onMenuKeyDown}
-          className="absolute right-0 z-20 mt-1 w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 py-1 shadow-lg"
+          className="absolute end-0 z-20 mt-1 w-52 overflow-hidden rounded-box border border-base-300 bg-base-100 py-1 shadow-lg"
         >
           <li role="none">
             <Link
