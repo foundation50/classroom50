@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
-import type { AssignmentForm } from "./CreateAssignmentForm"
+import type { AssignmentForm } from "./assignmentFormModel"
 
 import { Badge, Button, Card, Input, Select, Textarea } from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
