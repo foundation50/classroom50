@@ -1,4 +1,4 @@
-import type { BadgeTone } from "@/components/ui"
+import type { BadgeTone } from "@/types/badgeTone"
 import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/authz"
 import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 

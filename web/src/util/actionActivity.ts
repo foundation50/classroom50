@@ -1,9 +1,31 @@
 import type { GitHubWorkflowRun } from "@/github-core/types"
-import type { ActionOperation } from "@/context/actions/ActionActivityProvider"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Pure helpers behind the activity banner, split out so run-attribution and
 // org-parsing are testable without React / the router.
+
+// A teacher action this session that triggered a workflow; the banner turns each
+// into a tracker bound to its run. Attribution anchors:
+//  - "sha":        a push run (publish-pages), matched by head_sha.
+//  - "sinceRunId": a workflow_dispatch run (collect-scores / regrade), matched
+//                  by workflow + the oldest run past the pre-POST baseline.
+// Lives here (the pure module) rather than the provider so run-attribution
+// helpers stay dependency-free; the provider imports these down.
+export type ActionAnchor =
+  | { kind: "sha"; sha: string }
+  | { kind: "sinceRunId"; workflow: string; sinceRunId: number | null }
+
+export type ActionOperation = {
+  // Stable id for dedup, storage, and dismissal.
+  id: string
+  org: string
+  // Human label, already translated by the caller.
+  label: string
+  anchor: ActionAnchor
+  // Dispatch time; anchors GC and same-workflow registration order. Survives a
+  // remount via sessionStorage.
+  startedAt: number
+}
 
 // Reserved top-level URL segments that aren't an org slug.
 const RESERVED_FIRST_SEGMENTS = new Set(["login"])
@@ -151,4 +173,12 @@ export const PHASE_LABEL_KEY: Record<TrackerPhase, string> = {
   running: "actionsBanner.state.running",
   success: "actionsBanner.state.success",
   failed: "actionsBanner.state.failed",
+}
+
+// The i18n key for a workflow file's human label. Shared by the activity banner
+// (useActionActivity) and the org activity page so the mapping has one source.
+export const WORKFLOW_LABEL_KEY: Record<string, string> = {
+  "publish-pages.yaml": "actionsBanner.workflow.publishPages",
+  "collect-scores.yaml": "actionsBanner.workflow.collectScores",
+  "regrade.yaml": "actionsBanner.workflow.regrade",
 }

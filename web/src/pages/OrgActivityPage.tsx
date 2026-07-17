@@ -33,14 +33,7 @@ import {
   type ActivityFilterState,
 } from "./orgActivity/ActivityToolbar"
 import { TimelineRow } from "./orgActivity/TimelineRow"
-
-// Workflow file -> i18n label key, reused from the actions banner. Module-level
-// so the map isn't reallocated per render / per run item.
-const WORKFLOW_LABEL_KEY: Record<string, string> = {
-  "publish-pages.yaml": "actionsBanner.workflow.publishPages",
-  "collect-scores.yaml": "actionsBanner.workflow.collectScores",
-  "regrade.yaml": "actionsBanner.workflow.regrade",
-}
+import { WORKFLOW_LABEL_KEY } from "@/util/actionActivity"
 
 // Unified, owner-only org Activity view. Merges three sources into one filterable,
 // newest-first timeline:

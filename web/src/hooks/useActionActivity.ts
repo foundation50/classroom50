@@ -21,6 +21,7 @@ import {
   runUrl,
   trackerPhase,
   workflowFile,
+  WORKFLOW_LABEL_KEY,
   type TrackerPhase,
 } from "@/util/actionActivity"
 
@@ -48,13 +49,6 @@ const RETRY_OPTIMISTIC_MS = 20_000
 // failure present anywhere cancels this — failures stay until dismissed so the
 // teacher (and the Retry affordance) aren't hidden.
 const ALL_SUCCESS_DISMISS_MS = 8000
-
-// Generic label for a discovered run (cron, another teacher) matching no op.
-const WORKFLOW_LABEL_KEY: Record<string, string> = {
-  "publish-pages.yaml": "actionsBanner.workflow.publishPages",
-  "collect-scores.yaml": "actionsBanner.workflow.collectScores",
-  "regrade.yaml": "actionsBanner.workflow.regrade",
-}
 
 // One row in the banner: an action and its live state.
 export type Tracker = {

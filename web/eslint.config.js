@@ -202,11 +202,14 @@ export default defineConfig([
     },
   },
   // Enforce the layered architecture (features -> components -> domain ->
-  // github-core -> util/types, strictly downward) by disallowing the three
+  // github-core -> util/types, strictly downward) by disallowing the
   // load-bearing inversions. `default: allow` + explicit disallows (not
   // deny-by-default) keeps benign lateral edges quiet; dependency-cruiser adds
-  // the CI-side holistic pass. Rationale for the policy shape and the deferred
-  // util/types leaf rule lives in the Tier-2E PR (#290).
+  // the CI-side holistic pass. The leaf layers (util/lib/types) are guarded by
+  // the leaf policy below — they may not import ANY higher layer, at value OR
+  // type kind (a leaf that needs a view/data type means the type is misfiled;
+  // lift it into types/). Rationale for the policy shape lives in the Tier-2E
+  // PR (#290); the leaf rule landed in Tier-3.
   //
   // Adding a new src/<layer>/ dir needs THREE coordinated edits or it is
   // silently unenforced: (1) a boundaries/elements entry below, (2) a disallow
@@ -262,6 +265,11 @@ export default defineConfig([
         { type: "types", pattern: "src/types/**", partialMatch: false },
         { type: "i18n", pattern: "src/i18n/**", partialMatch: false },
         { type: "locales", pattern: "src/locales/**", partialMatch: false },
+        {
+          type: "eslintTooling",
+          pattern: "src/eslint/**",
+          partialMatch: false,
+        },
       ],
     },
     rules: {
@@ -317,6 +325,38 @@ export default defineConfig([
               },
               message:
                 "github-core/ is the lowest data layer: it must not import domain or view code at runtime. Keep dependencies downward (util/types).",
+            },
+            {
+              // Leaf layers: pure helpers (util), app infra (lib), shared types
+              // (types), and lint tooling (eslintTooling) must not import the
+              // view or orchestration layers, at value OR type kind. A leaf that
+              // "needs" a page/component/hook/context/domain type means the type
+              // is misfiled — lift it into types/ (see the BadgeTone -> types/
+              // move in Tier-3). They may still depend downward/laterally on
+              // github-core, authz, auth, and each other, which is why those are
+              // NOT in the disallow set. eslintTooling (src/eslint/**) is a lint
+              // rule impl that must never import app code at all.
+              from: {
+                element: { type: ["util", "lib", "types", "eslintTooling"] },
+              },
+              disallow: {
+                to: {
+                  element: {
+                    type: [
+                      "pages",
+                      "components",
+                      "hooks",
+                      "context",
+                      "routes",
+                      "domain",
+                      "orgPolicy",
+                      "skeleton",
+                    ],
+                  },
+                },
+              },
+              message:
+                "util/lib/types/eslint are leaf layers: they must not import view or orchestration code (pages/components/hooks/context/routes/domain/orgPolicy/skeleton). Move any shared type into types/.",
             },
           ],
         },

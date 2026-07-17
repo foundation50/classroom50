@@ -8,29 +8,11 @@ import {
 } from "react"
 
 import { logger } from "@/lib/logger"
+import type { ActionAnchor, ActionOperation } from "@/util/actionActivity"
 
 const log = logger.scope("context:actions")
 
-// A teacher action this session that triggered a workflow; the banner turns each
-// into a tracker bound to its run. Attribution anchors:
-//  - "sha":        a push run (publish-pages), matched by head_sha.
-//  - "sinceRunId": a workflow_dispatch run (collect-scores / regrade), matched
-//                  by workflow + the oldest run past the pre-POST baseline.
-export type ActionAnchor =
-  | { kind: "sha"; sha: string }
-  | { kind: "sinceRunId"; workflow: string; sinceRunId: number | null }
-
-export type ActionOperation = {
-  // Stable id for dedup, storage, and dismissal.
-  id: string
-  org: string
-  // Human label, already translated by the caller.
-  label: string
-  anchor: ActionAnchor
-  // Dispatch time; anchors GC and same-workflow registration order. Survives a
-  // remount via sessionStorage.
-  startedAt: number
-}
+export type { ActionAnchor, ActionOperation }
 
 type ActionActivityContextValue = {
   // Record a session op for later run attribution. Returns its id.

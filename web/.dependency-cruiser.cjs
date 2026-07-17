@@ -44,6 +44,19 @@ module.exports = {
         path: "^src/(domain|pages|components|hooks|context|routes)/",
       },
     },
+    {
+      name: "leaf-not-up",
+      severity: "error",
+      comment:
+        "util/lib/types/eslint are leaf layers: no import of view or orchestration code (pages/components/hooks/context/routes/domain/orgPolicy/skeleton). Move any shared type into types/. Value edges only here (tsPreCompilationDeps off); the eslint boundaries rule also blocks type edges.",
+      from: {
+        path: "^src/(util|lib|types|eslint)/",
+        pathNot: "\\.test\\.(ts|tsx)$",
+      },
+      to: {
+        path: "^src/(pages|components|hooks|context|routes|domain|orgPolicy|skeleton)/",
+      },
+    },
   ],
   options: {
     doNotFollow: { path: "node_modules" },

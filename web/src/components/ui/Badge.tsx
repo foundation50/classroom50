@@ -1,14 +1,16 @@
 import type { ComponentPropsWithoutRef, ReactNode } from "react"
 
 import { cx } from "./cx"
+import type { BadgeTone } from "@/types/badgeTone"
 
 // The canonical status chip. Wraps daisyUI `badge` so the ~45 inline sites
 // share one mapping. `soft` (default true) is the house style for semantic
 // status; `ghost` covers neutral count/tag chips. Semantic tones inherit the
 // per-theme `.badge-soft` contrast nudge from index.css.
 
-export type BadgeTone =
-  "neutral" | "primary" | "secondary" | "info" | "success" | "warning" | "error"
+// Re-exported so existing `@/components/ui` importers of BadgeTone are unchanged;
+// the canonical definition now lives in types/ (a leaf) so pure util can use it.
+export type { BadgeTone }
 
 export type BadgeSize = "xs" | "sm" | "md"
 
