@@ -19,7 +19,6 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import type { GitHubOrgInvitation } from "@/github-core/types"
 import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/github-core/queries"
-import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { useUpdateRosterCache } from "@/hooks/useGetStudents"
 import { useTeamRoster, useInvalidateTeamRoster } from "@/hooks/useTeamRoster"
 import { useSyncRoster } from "@/hooks/mutations/useSyncRoster"
@@ -35,7 +34,6 @@ import {
   type StatusFilter,
 } from "@/pages/students/rosterFilter"
 import { studentKey, toStudent } from "@/util/roster"
-import { rosterPath } from "@/util/rosterPath"
 import { isSameGitHubUser } from "@/util/students"
 import {
   resolveSelectedRows,
@@ -50,8 +48,8 @@ import RosterBulkActionsBar, {
   type AddStudentActions,
 } from "@/pages/students/RosterBulkActionsBar"
 import type { StudentCsvRow } from "@/domain/students"
-import { AnimatePresence, motion } from "motion/react"
-import { collapseVariants, enterExit } from "@/lib/motion"
+import { motion } from "motion/react"
+import { enterExit } from "@/lib/motion"
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
@@ -62,6 +60,8 @@ import { useRosterAutoMigrate } from "./useRosterAutoMigrate"
 import { useRosterAutoSync } from "./useRosterAutoSync"
 import { RosterRow } from "./RosterRow"
 import { FailedInvitationsList } from "./FailedInvitationsList"
+import { RosterParseProblems } from "./RosterParseProblems"
+import { RosterWarnings } from "./RosterWarnings"
 
 // Preserve the module's original public surface: the pure helpers moved to
 // ./enrolledStudentsHelpers but EnrolledStudents.section.test.ts imports them
@@ -450,80 +450,21 @@ const EnrolledStudents = ({
       {/* Malformed roster.csv: name every bad line so the teacher can fix
           the file on GitHub. Distinct from a network load error — this is a bad
           file, and reads/writes silently misbehave until it's corrected. */}
+      {/* Malformed roster.csv: name every bad line so the teacher can fix the
+          file on GitHub. */}
       {parseProblems.length > 0 ? (
-        <Alert tone="error">
-          <div className="flex flex-col gap-2">
-            <span className="font-medium">
-              {t("students.rosterParseError")}
-            </span>
-            <ul className="list-disc pl-5 text-sm">
-              {parseProblems.map((p, i) => (
-                <li key={`${p.line}-${i}`}>
-                  {t("students.rosterParseErrorLine", {
-                    line: p.line,
-                    message: p.message,
-                  })}
-                </li>
-              ))}
-            </ul>
-            <a
-              href={`https://github.com/${encodeURIComponent(org)}/${CONFIG_REPO}/edit/${DEFAULT_BRANCH}/${rosterPath(
-                classroom,
-              )
-                .split("/")
-                .map(encodeURIComponent)
-                .join("/")}`}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
-            >
-              {t("students.rosterEditOnGitHub")}
-            </a>
-            {onRecheckRoster ? (
-              <div>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  loading={rechecking}
-                  loadingLabel={t("students.rosterRechecking")}
-                  disabled={rechecking}
-                  onClick={onRecheckRoster}
-                >
-                  {t("students.rosterRecheck")}
-                </Button>
-              </div>
-            ) : null}
-          </div>
-        </Alert>
+        <RosterParseProblems
+          parseProblems={parseProblems}
+          org={org}
+          classroom={classroom}
+          onRecheckRoster={onRecheckRoster}
+          rechecking={rechecking}
+        />
       ) : null}
 
-      {/* Warnings / action results. */}
+      {/* Per-row action warnings/results. */}
       {Object.keys(warnings).length > 0 ? (
-        <div className="flex w-full flex-col gap-2">
-          <AnimatePresence initial={false}>
-            {Object.entries(warnings).map(([key, warning]) => (
-              <motion.div
-                key={key}
-                layout
-                variants={collapseVariants}
-                initial="initial"
-                animate="animate"
-                exit="exit"
-                role="alert"
-                className="alert alert-warning alert-soft overflow-hidden"
-              >
-                <span className="text-sm">{warning}</span>
-                <Button
-                  variant="ghost"
-                  size="xs"
-                  onClick={() => dismissWarning(key)}
-                >
-                  {t("students.dismiss")}
-                </Button>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
+        <RosterWarnings warnings={warnings} onDismiss={dismissWarning} />
       ) : null}
 
       {/* Pending-invites banner: clicking "Review" filters to pending so the
