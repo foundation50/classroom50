@@ -19,6 +19,7 @@ vi.mock("@/github-core/mutations", () => ({
 }))
 
 import { useTeacherTeamMigration } from "./useTeacherTeamMigration"
+import { GitHubAPIError } from "@/github-core/errors"
 
 // A QueryClient whose invalidateQueries we can observe, mounted so useMutation
 // works. onSuccess's invalidations are what a stale-closure bug would misdirect.
@@ -101,7 +102,7 @@ describe("useTeacherTeamMigration", () => {
     expect(hitCs202).toBe(false)
   })
 
-  it("retries on re-entry after a failed run (attemptedRef reset on error)", async () => {
+  it("retries on re-entry after a transient failed run (key released on error)", async () => {
     migrate.mockRejectedValueOnce(new Error("boom"))
     migrate.mockResolvedValue({ changed: false })
 
@@ -111,8 +112,8 @@ describe("useTeacherTeamMigration", () => {
       { wrapper: wrapper(), initialProps: { classroom: "cs101" } },
     )
     await waitFor(() => expect(migrate).toHaveBeenCalledTimes(1))
-    // Navigate away and back: the failed cs101 run cleared its latch on error, so
-    // re-entering cs101 retries rather than staying permanently latched.
+    // Navigate away and back: the transient cs101 failure released its in-flight
+    // key on error, so re-entering cs101 retries rather than staying latched.
     rerender({ classroom: "cs202" })
     await waitFor(() => expect(migrate).toHaveBeenCalledTimes(2))
     rerender({ classroom: "cs101" })
@@ -123,5 +124,39 @@ describe("useTeacherTeamMigration", () => {
       "org",
       "cs101",
     )
+  })
+
+  it("does NOT re-fire on re-entry after a permanent (403) failure", async () => {
+    // A forbidden, non-rate-limited refusal is one the viewer can't fix; the
+    // hopeless create/grant/copy/commit chain must not re-run on every entry.
+    const forbidden = new GitHubAPIError({
+      status: 403,
+      url: "/orgs/org/teams",
+      message: "forbidden",
+      body: {},
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+    migrate.mockRejectedValueOnce(forbidden)
+    migrate.mockResolvedValue({ changed: false })
+
+    const { rerender } = renderHook(
+      ({ classroom }: { classroom: string }) =>
+        useTeacherTeamMigration("org", classroom, true),
+      { wrapper: wrapper(), initialProps: { classroom: "cs101" } },
+    )
+    await waitFor(() => expect(migrate).toHaveBeenCalledTimes(1))
+    rerender({ classroom: "cs202" })
+    await waitFor(() => expect(migrate).toHaveBeenCalledTimes(2))
+    // Back to cs101: the permanent failure kept its key latched, so no re-fire.
+    rerender({ classroom: "cs101" })
+    await new Promise((r) => setTimeout(r, 50))
+    expect(migrate).toHaveBeenCalledTimes(2)
   })
 })

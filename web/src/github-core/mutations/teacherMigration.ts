@@ -39,14 +39,13 @@ export type TeacherMigrationResult =
 //   recorded under `teams.teacher` — leaving `-instructor` intact.
 //
 //   Phase 2 (delete): once `teams.teacher` is recorded AND the legacy
-//   `-instructor` team is still present, the `teams.instructor` ref is dropped
-//   first and then the instructor team is deleted (via the fail-closed
-//   deleteClassroomTeam guards) — ref-drop-before-delete so no reader resolves a
-//   live ref to a just-deleted team.
+//   `-instructor` team is still present, the instructor team is deleted and
+//   then its `teams.instructor` ref dropped (see migratePhaseDelete for the
+//   ordering rationale).
 //
 // A classroom with neither ref (or already fully migrated) is a no-op. All GitHub
 // calls are org-owner operations; a caller lacking permission should not invoke
-// this (the settings route already gates on the top staff role).
+// this (the web hook gates on the viewer's resolved teacher role).
 export async function migrateInstructorTeamToTeacher(
   client: GitHubClient,
   org: string,
@@ -108,7 +107,7 @@ async function migratePhaseCreate(
   return { changed: true, phase: "create", teacherSlug: teacher.slug }
 }
 
-// Phase 2: delete the legacy instructor team and drop its ref, now that the
+// Phase 2: delete the legacy instructor team, then drop its ref, now that the
 // teacher team is recorded. When the teacher ref ADOPTED the same team as the
 // instructor ref (shared slug), skip the delete and only drop the duplicate ref.
 async function migratePhaseDelete(
@@ -118,23 +117,28 @@ async function migratePhaseDelete(
   teacher: { id: number; slug: string },
   instructor: { id: number; slug: string },
 ): Promise<TeacherMigrationResult> {
-  // Drop the ref FIRST, then delete the team. classroom.json no longer points
-  // at the instructor team before it disappears, so a concurrent read can't
-  // resolve a live ref to a just-deleted team (a transient 404 -> non-member).
-  await commitTeamsPatch(client, org, classroom, (teams) => {
-    const next = { ...teams }
-    delete next.instructor
-    return next
-  })
-  // When the teacher ref ADOPTED the same team as the instructor ref (shared
-  // slug), the ref drop is the whole migration — deleting would remove the live
-  // teacher team.
+  // Delete the team BEFORE dropping the ref. deleteClassroomTeam is idempotent
+  // (404 = already gone) and id-verified, so a failed delete leaves
+  // teams.instructor recorded and a later touch retries Phase 2 — whereas
+  // dropping the ref first would strand the team beyond any ref-based reaper if
+  // the delete then failed. When the teacher ref ADOPTED the same team (shared
+  // slug), skip the delete: it's the live teacher team.
   if (teacher.slug !== instructor.slug) {
     // deleteClassroomTeam is fail-closed: it refuses a ref outside the
     // classroom50- namespace or without a positive id, and verifies the live
     // team's id before deleting (see isDeletableClassroomTeamRef / TeamIdMismatch).
     await deleteClassroomTeam(client, org, instructor)
   }
+  // The instructor team is gone (or was never distinct); drop the now-dangling
+  // ref. A concurrent reader in the brief window between delete and this commit
+  // resolves teams.instructor to a 404'd team, but Phase 1 already seeded the
+  // teacher team, so combineTeacherMembership still reads the viewer via the
+  // live `-teacher` probe.
+  await commitTeamsPatch(client, org, classroom, (teams) => {
+    const next = { ...teams }
+    delete next.instructor
+    return next
+  })
 
   log.info("teacher migration: phase-delete complete", {
     org,
