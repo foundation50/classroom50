@@ -18,6 +18,8 @@ import {
   type TemplateAccessVerification,
 } from "@/domain/assignments"
 import { teamHasRepoAccess } from "@/github-core/queries"
+import { useGitHubHealth } from "@/lib/githubHealth"
+import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useReconcileTemplateAccess } from "@/hooks/mutations/useReconcileTemplateAccess"
 import {
   useDebouncedValue,
@@ -241,6 +243,7 @@ const TemplateVerificationNote = ({
   reconcile?: ReactNode
 }) => {
   const { t } = useTranslation()
+  const { suspected, statusDescription } = useGitHubHealth()
   if (pending) {
     return (
       <p className="mt-1.5 flex items-center gap-1.5 text-sm text-base-content/70">
@@ -274,6 +277,8 @@ const TemplateVerificationNote = ({
     fallbackOrg,
     teamHasAccess,
     reconcile,
+    outageSuspected: suspected,
+    statusDescription,
   })
 
   if (!nonMainNote) return verdict
@@ -291,12 +296,19 @@ function renderTemplateVerdict({
   fallbackOrg,
   teamHasAccess,
   reconcile,
+  outageSuspected,
+  statusDescription,
 }: {
   verification: Exclude<TemplateAccessVerification, { kind: "empty" }>
   t: ReturnType<typeof useTranslation>["t"]
   fallbackOrg: string
   teamHasAccess?: boolean
   reconcile?: ReactNode
+  // When the app suspects a GitHub outage, the inconclusive verdicts (unknown /
+  // rate-limited) get an outage hint so a transient degradation doesn't read as
+  // a broken template. No effect on definitive verdicts.
+  outageSuspected: boolean
+  statusDescription: string | null
 }): ReactNode {
   switch (verification.kind) {
     case "ok": {
@@ -431,6 +443,11 @@ function renderTemplateVerdict({
             owner: verification.owner,
             repo: verification.repo,
           })}
+          {outageSuspected && (
+            <span className="mt-1 block text-xs text-base-content/70">
+              <GitHubStatusNote statusDescription={statusDescription} />
+            </span>
+          )}
         </Note>
       )
 
@@ -461,6 +478,11 @@ function renderTemplateVerdict({
       return (
         <Note tone="neutral" icon={HelpCircle}>
           {t("assignments.template.rateLimited")}
+          {outageSuspected && (
+            <span className="mt-1 block text-xs text-base-content/70">
+              <GitHubStatusNote statusDescription={statusDescription} />
+            </span>
+          )}
         </Note>
       )
 

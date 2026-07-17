@@ -16,6 +16,8 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { logger } from "@/lib/logger"
 import { logWriteFailure } from "@/lib/logWriteFailure"
+import { useGitHubHealth, useOutageHint } from "@/lib/githubHealth"
+import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -29,7 +31,11 @@ const CreateAssignmentPage = () => {
   const { notify } = useToast()
   const trackPublishDeploy = useTrackPublishDeploy()
   const [errorMessage, setErrorMessage] = useState("")
+  const [outageError, setOutageError] = useState(false)
   const [warningMessage, setWarningMessage] = useState("")
+
+  const { statusDescription: outageStatusDescription } = useGitHubHealth()
+  const outageHint = useOutageHint()
 
   const { data: assignmentsData } = useGetClassroomAssignments(org, classroom)
   const takenSlugs = (assignmentsData?.assignments ?? []).map((a) => a.slug)
@@ -64,7 +70,11 @@ const CreateAssignmentPage = () => {
           />
         ) : null}
         <AnimatedAlert tone="error" show={!!errorMessage}>
-          {errorMessage}
+          {outageError ? (
+            <GitHubStatusNote statusDescription={outageStatusDescription} />
+          ) : (
+            errorMessage
+          )}
         </AnimatedAlert>
         <AnimatedAlert
           tone="warning"
@@ -91,6 +101,7 @@ const CreateAssignmentPage = () => {
           takenSlugs={takenSlugs}
           onSubmit={(values) => {
             setErrorMessage("")
+            setOutageError(false)
             setWarningMessage("")
             createAssignmentMutation.mutateAsync(
               {
@@ -124,7 +135,16 @@ const CreateAssignmentPage = () => {
               {
                 onError: (err) => {
                   logWriteFailure(log, err, "create assignment failed")
-                  setErrorMessage(err.message)
+                  // A transient outage-shaped failure during save reads as a
+                  // local "fetch failed" — swap in the outage hint when the app
+                  // suspects GitHub is degraded, so the teacher knows to retry.
+                  if (outageHint(err)) {
+                    setOutageError(true)
+                    setErrorMessage(t("githubStatus.title"))
+                  } else {
+                    setOutageError(false)
+                    setErrorMessage(err.message)
+                  }
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 },
                 onSuccess: (result, variables) => {

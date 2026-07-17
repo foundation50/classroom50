@@ -1,4 +1,8 @@
-import { GitHubAPIError, readGitHubRateLimitHeaders } from "./errors"
+import {
+  GitHubAPIError,
+  githubNonJsonResponseError,
+  readGitHubRateLimitHeaders,
+} from "./errors"
 import { logger } from "@/lib/logger"
 import { LOG_SCOPE_GITHUB_CLIENT } from "@/lib/logScopes"
 import { countApiCall, publishRateLimit } from "@/lib/diagnostics/rateLimit"
@@ -178,7 +182,17 @@ export function createGitHubClient(args: {
         return undefined as T
       }
 
-      return JSON.parse(text) as T
+      try {
+        return JSON.parse(text) as T
+      } catch {
+        // A 2xx whose body isn't JSON means the response never reached GitHub's
+        // app layer — an edge/proxy served HTML (a known GitHub-outage shape:
+        // "requests not consistently reaching the application layer, returning
+        // HTML instead of the expected API format"). Surface it as a synthetic
+        // 5xx so it classifies as outage-shaped (feeds the health detector and
+        // the outage hint) instead of leaking a raw `SyntaxError` to the user.
+        throw githubNonJsonResponseError(res.url || path, res.status)
+      }
     },
 
     async requestRaw(path: string, options?: GitHubRequestOptions) {

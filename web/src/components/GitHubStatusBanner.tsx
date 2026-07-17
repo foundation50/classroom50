@@ -4,52 +4,8 @@ import { AnimatePresence } from "motion/react"
 import { useTranslation } from "react-i18next"
 
 import { AppBanner } from "@/components/AppBanner"
+import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useGitHubHealth } from "@/lib/githubHealth"
-
-export const GITHUB_STATUS_URL = "https://www.githubstatus.com"
-
-// The outage body text (confirmed vs generic) plus the githubstatus.com link —
-// the single source of both, so the copy and URL can't drift between the authed
-// banner and the unauthed stuck-bootstrap screen. `block` renders the banner's
-// muted-paragraph + own-line link; the default is the inline fragment the
-// unauthed screen wraps in its own <p>.
-export function GitHubStatusNote({
-  statusDescription,
-  block = false,
-}: {
-  statusDescription: string | null
-  block?: boolean
-}) {
-  const { t } = useTranslation()
-  const body = statusDescription
-    ? t("githubStatus.bodyConfirmed", { status: statusDescription })
-    : t("githubStatus.bodyGeneric")
-  const link = (
-    <a
-      href={GITHUB_STATUS_URL}
-      target="_blank"
-      rel="noreferrer"
-      className={`link link-hover font-semibold text-base-content${
-        block ? " self-start" : ""
-      }`}
-    >
-      {t("githubStatus.checkStatusLink")}
-    </a>
-  )
-  if (block) {
-    return (
-      <>
-        <p className="text-base-content/70">{body}</p>
-        {link}
-      </>
-    )
-  }
-  return (
-    <>
-      {body} {link}
-    </>
-  )
-}
 
 // Global warning banner shown when the app suspects GitHub is having trouble
 // (repeated outage-shaped API failures), optionally enriched with the

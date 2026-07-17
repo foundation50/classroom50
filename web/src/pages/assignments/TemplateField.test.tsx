@@ -39,8 +39,19 @@ vi.mock("@/hooks/mutations/useReconcileTemplateAccess", () => ({
   }),
 }))
 
+// The health store fires a best-effort githubstatus.com probe once suspicion
+// trips; stub it so these tests never hit the network.
+vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
+  fetchGitHubStatusIndicator: () => Promise.resolve(null),
+}))
+
 import { TemplateField } from "./TemplateField"
 import type { StringField } from "./formFieldHelpers"
+import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
+import {
+  __resetGitHubHealthForTest,
+  recordGitHubFailure,
+} from "@/lib/githubHealth/githubHealthStore"
 
 const ORG = "cs50"
 const CLASSROOM = "cs50"
@@ -80,9 +91,13 @@ beforeEach(() => {
   teamHasRepoAccess.mockReset()
   reconcileMutate.mockReset()
   reconcilePending = false
+  __resetGitHubHealthForTest()
 })
 
-afterEach(() => cleanup())
+afterEach(() => {
+  cleanup()
+  __resetGitHubHealthForTest()
+})
 
 describe("TemplateField — inline Fix template access", () => {
   const okInOrgPrivate = {
@@ -178,5 +193,82 @@ describe("TemplateField — inline Fix template access", () => {
         exact: false,
       }),
     ).toBeNull()
+  })
+})
+
+describe("TemplateField — outage hint on inconclusive verdicts", () => {
+  const noRateLimit: GitHubRateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+  const apiError = (status: number) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/x",
+      message: `HTTP ${status}`,
+      body: null,
+      rateLimit: noRateLimit,
+    })
+
+  function suspectOutage() {
+    const base = Date.now()
+    recordGitHubFailure(apiError(500), base)
+    recordGitHubFailure(apiError(500), base + 100)
+    recordGitHubFailure(apiError(500), base + 200)
+  }
+
+  const STATUS_LINK = "githubStatus.checkStatusLink"
+
+  it("shows the githubstatus.com hint on an 'unknown' verdict when an outage is suspected", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "unknown",
+      owner: ORG,
+      repo: "tmpl",
+    })
+    act(() => suspectOutage())
+    renderField()
+    expect(await screen.findByText(STATUS_LINK)).toBeTruthy()
+    // The local verdict copy still renders alongside the hint.
+    expect(screen.getByText("assignments.template.unknown")).toBeTruthy()
+  })
+
+  it("does NOT show the hint on an 'unknown' verdict when no outage is suspected", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "unknown",
+      owner: ORG,
+      repo: "tmpl",
+    })
+    renderField()
+    await screen.findByText("assignments.template.unknown")
+    expect(screen.queryByText(STATUS_LINK)).toBeNull()
+  })
+
+  it("shows the hint on a 'rate-limited' verdict when an outage is suspected", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "rate-limited",
+      owner: ORG,
+      repo: "tmpl",
+    })
+    act(() => suspectOutage())
+    renderField()
+    expect(await screen.findByText(STATUS_LINK)).toBeTruthy()
+  })
+
+  it("does NOT show the hint on a definitive verdict even when suspected", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "not-template",
+      owner: ORG,
+      repo: "tmpl",
+    })
+    act(() => suspectOutage())
+    renderField()
+    await screen.findByText("assignments.template.notTemplate", {
+      exact: false,
+    })
+    expect(screen.queryByText(STATUS_LINK)).toBeNull()
   })
 })

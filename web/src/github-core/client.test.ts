@@ -133,3 +133,63 @@ describe("createGitHubClient request logging", () => {
     debug.mockRestore()
   })
 })
+
+describe("createGitHubClient non-JSON response (GitHub-outage shape)", () => {
+  function stubTextFetch(status: number, body: string): void {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(body, {
+          status,
+          headers: { "content-type": "text/html" },
+        }),
+      ),
+    )
+  }
+
+  // A 5xx-with-HTML already flows through the non-OK branch as a GitHubAPIError
+  // carrying the real status, so isOutageShapedError classifies it (>= 500).
+  it("throws a 5xx GitHubAPIError when a failed response carries an HTML body", async () => {
+    stubTextFetch(503, "<html><body>Service Unavailable</body></html>")
+    const client = createGitHubClient({ token: "t" })
+
+    await expect(
+      client.request("/rate_limit", { method: "GET" }),
+    ).rejects.toMatchObject({ name: "GitHubAPIError", status: 503 })
+  })
+
+  // The gap this closes: a 200 whose body is HTML (edge served a page without
+  // reaching GitHub's app layer) must not leak a raw JSON SyntaxError. It's
+  // remapped to a synthetic 502 GitHubAPIError so it reads as an outage.
+  it("remaps a 200 with an HTML body to a synthetic 5xx instead of a SyntaxError", async () => {
+    stubTextFetch(200, "<!DOCTYPE html><html><body>proxy error</body></html>")
+    const client = createGitHubClient({ token: "t" })
+
+    const err = await client.request("/rate_limit", { method: "GET" }).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect(err).toBeInstanceOf(Error)
+    expect((err as Error).name).toBe("GitHubAPIError")
+    expect((err as { status: number }).status).toBe(502)
+    // Never leak the parser's raw message or the HTML body.
+    expect((err as Error).message).not.toMatch(/Unexpected token/i)
+    expect((err as Error).message).not.toContain("proxy error")
+  })
+
+  it("still returns parsed JSON on a normal 200", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response(JSON.stringify({ hello: "world" }), {
+          status: 200,
+          headers: { "content-type": "application/json" },
+        }),
+      ),
+    )
+    const client = createGitHubClient({ token: "t" })
+
+    await expect(
+      client.request<{ hello: string }>("/x", { method: "GET" }),
+    ).resolves.toEqual({ hello: "world" })
+  })
+})

@@ -7,7 +7,7 @@ import { Spinner } from "@/components/Spinner"
 import { Button } from "@/components/ui"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useGitHubHealth } from "@/lib/githubHealth"
-import { GitHubStatusNote } from "@/components/GitHubStatusBanner"
+import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { BASE_PATH, isAuthedPath } from "@/auth/authedPath"
 import { logger } from "@/lib/logger"
 
