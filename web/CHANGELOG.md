@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.9.0](https://github.com/foundation50/classroom50/compare/web-v1.8.0...web-v1.9.0) (2026-07-17)
+
+
+### Features
+
+* **assignments:** add opt-in empty-repo option ([#311](https://github.com/foundation50/classroom50/issues/311)) ([f06ee63](https://github.com/foundation50/classroom50/commit/f06ee632d0005a3db499178f57c0504a6be01052))
+* standardize on "teacher" terminology (backward-compatible role/team migration) ([#321](https://github.com/foundation50/classroom50/issues/321)) ([0b6d5a0](https://github.com/foundation50/classroom50/commit/0b6d5a0a24d8d874724cca549d20dd9e618c8d05))
+* **web:** harden setup + auth flow against stuck GitHub reads (derive wizard stage, add recovery affordances, warn on outages) ([#310](https://github.com/foundation50/classroom50/issues/310)) ([1967f67](https://github.com/foundation50/classroom50/commit/1967f67f55b563eec608da8422ea4c13282ad9ae))
+* **web:** hint at GitHub outages on transient template-verify and save failures ([#319](https://github.com/foundation50/classroom50/issues/319)) ([8253ae0](https://github.com/foundation50/classroom50/commit/8253ae0dee918e0384f97b32c58cd0eea4407b8d))
+
+
+### Bug Fixes
+
+* **web:** recover classroom team read access to assignment templates ([#305](https://github.com/foundation50/classroom50/issues/305)) ([#308](https://github.com/foundation50/classroom50/issues/308)) ([02e52ea](https://github.com/foundation50/classroom50/commit/02e52ea8239f02b8199a6d77459e3c0458f470e6))
+
 ## [1.8.0](https://github.com/foundation50/classroom50/compare/web-v1.7.0...web-v1.8.0) (2026-07-16)
 
 
