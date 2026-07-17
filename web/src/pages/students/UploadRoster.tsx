@@ -69,7 +69,6 @@ type UploadRosterProps = {
 }
 type ImportPhase = "idle" | "preview" | "importing" | "complete" | "error"
 
-// BODY
 const UploadRoster = ({
   org,
   classroom,
@@ -175,7 +174,6 @@ const UploadRoster = ({
     onOpenChange?.(false)
   }
 
-  // PREFLIGHT
   // Preflight the parsed rows against current GitHub membership whenever we're
   // in the preview and the rows or their assigned roles change. Read-only. A
   // stale-response guard (token) drops a slow classification superseded by a
@@ -347,7 +345,6 @@ const UploadRoster = ({
     if (file) await ingestFile(file)
   }
 
-  // STARTIMPORT
   const startImport = async () => {
     // Re-entry guard: a synchronous double-click would otherwise fire two
     // concurrent imports racing the same roster.csv read-modify-write.
@@ -432,7 +429,6 @@ const UploadRoster = ({
       ? 0
       : Math.round((progress.processed / progress.total) * 100)
 
-  // RENDER
   return (
     <>
       <input
