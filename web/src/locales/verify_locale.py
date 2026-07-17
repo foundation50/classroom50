@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Verify a translated language pack against the base en.json.
 
-Fails loudly on any dropped/added/renamed key, non-string leaf value, or
-placeholder mismatch. Run from the src/locales folder:
+Fails loudly on any dropped/added/renamed key, non-string leaf value,
+placeholder mismatch, or markup-marker mismatch. Run from the src/locales
+folder:
 
     python verify_locale.py <CODE>.json      # e.g. python verify_locale.py de.json
 
@@ -36,6 +37,20 @@ def placeholders(value):
     if not isinstance(value, str):
         return []
     return sorted(re.findall(r"\{\{.*?\}\}", value))
+
+
+def markup_markers(value):
+    """Sorted list of <tag>/</tag>/<tag/> markers in a string (empty for non-strings).
+
+    These are react-i18next <Trans> component tags (e.g. <repo>{{repo}}</repo>)
+    that translations must carry over verbatim. The tag name must start with a
+    letter so non-markup angle-bracket text like "<1 day" or the literal
+    "<owner>/<repo>" placeholder hint still compare as-is between packs without
+    false positives on digits.
+    """
+    if not isinstance(value, str):
+        return []
+    return sorted(re.findall(r"</?[a-zA-Z]\w*\s*/?>", value))
 
 
 def is_allowed_plural_variant(key, base_keys):
@@ -72,11 +87,14 @@ def main():
     bad_type = sorted(k for k, v in trans.items() if not isinstance(v, str))
 
     ph_mismatch = []
+    mk_mismatch = []
     for key in sorted(base_keys & trans_keys):
         if placeholders(base[key]) != placeholders(trans[key]):
             ph_mismatch.append((key, placeholders(base[key]), placeholders(trans[key])))
+        if markup_markers(base[key]) != markup_markers(trans[key]):
+            mk_mismatch.append((key, markup_markers(base[key]), markup_markers(trans[key])))
 
-    passed = not (missing or extra or bad_type or ph_mismatch)
+    passed = not (missing or extra or bad_type or ph_mismatch or mk_mismatch)
 
     print(f"base keys: {len(base_keys)} | translated keys: {len(trans_keys)}")
     print(f"MISSING keys ({len(missing)}): {missing or '(none)'}")
@@ -86,6 +104,11 @@ def main():
     for key, base_ph, trans_ph in ph_mismatch:
         print(f"  {key}: base={base_ph} translated={trans_ph}")
     if not ph_mismatch:
+        print("  (none)")
+    print(f"MARKUP mismatches ({len(mk_mismatch)}):")
+    for key, base_mk, trans_mk in mk_mismatch:
+        print(f"  {key}: base={base_mk} translated={trans_mk}")
+    if not mk_mismatch:
         print("  (none)")
 
     print("\nRESULT:", "PASS" if passed else "FAIL")
