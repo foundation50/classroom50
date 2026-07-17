@@ -61,9 +61,10 @@ type RosterRow struct {
 	Email     string
 	Section   string
 	GitHubID  int64
-	// Role is best-effort recorded metadata: "instructor", "ta", "student", or
-	// "" (unknown / a pre-role file). Refreshed from team membership on sync;
-	// never consulted for enrollment decisions.
+	// Role is best-effort recorded metadata: "teacher" (or the legacy
+	// "instructor"), "ta", "student", or "" (unknown / a pre-role file).
+	// Refreshed from team membership on sync; never consulted for enrollment
+	// decisions.
 	Role string
 	// Extra carries non-canonical columns keyed by header name, so a
 	// read/modify/write round-trips them. nil for a plain canonical file.

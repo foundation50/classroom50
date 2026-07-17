@@ -102,7 +102,10 @@ export async function ensureClassroomTeam(
 }
 
 // The per-classroom staff team refs persisted under classroom.json `teams`.
+// `teacher` is canonical; `instructor` is the legacy alias retained for
+// backward-compatible reads during the rename migration.
 export type StaffTeamRefs = {
+  teacher?: ClassroomTeamRef
   instructor?: ClassroomTeamRef
   ta?: ClassroomTeamRef
 }

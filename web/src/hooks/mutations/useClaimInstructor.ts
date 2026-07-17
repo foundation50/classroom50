@@ -9,9 +9,9 @@ import {
 } from "@/github-core/mutations"
 import { githubKeys } from "@/github-core/queries"
 
-// Self-repair "claim instructor": ensure-and-grant the classroom's instructor
+// Self-repair "claim teacher": ensure-and-grant the classroom's teacher
 // team, then idempotently add the acting owner to it. Hook invalidates the
-// instructor team's members + the viewer's team-membership (what the role
+// teacher team's members + the viewer's team-membership (what the role
 // context reads); success/error toasts stay at the call site (see ./README.md).
 export function useClaimInstructor(
   org: string,
@@ -30,7 +30,7 @@ export function useClaimInstructor(
         client,
         org,
         classroom,
-        "instructor",
+        "teacher",
       )
       await grantTeamConfigRepoWrite(client, org, team.slug)
       // Idempotent: PUT membership is a no-op (200) if already a member.
@@ -46,16 +46,16 @@ export function useClaimInstructor(
       queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(
           org,
-          classroomTeamSlug(classroom, "instructor"),
+          classroomTeamSlug(classroom, "teacher"),
         ),
       })
-      // Re-resolve the viewer's classroom role: their instructor-team membership
+      // Re-resolve the viewer's classroom role: their teacher-team membership
       // is what the role context reads.
       queryClient.invalidateQueries({
         queryKey: [
           "team-membership",
           org,
-          classroomTeamSlug(classroom, "instructor"),
+          classroomTeamSlug(classroom, "teacher"),
           username,
         ],
       })

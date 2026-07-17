@@ -130,27 +130,27 @@ const classroomWithStaffTeams = `{
   "org": "o",
   "team": {"id": 1, "slug": "classroom50-cs-principles"},
   "teams": {
-    "instructor": {"id": 2, "slug": "classroom50-cs-principles-instructor"},
+    "teacher": {"id": 2, "slug": "classroom50-cs-principles-teacher"},
     "ta": {"id": 3, "slug": "classroom50-cs-principles-ta"}
   }
 }`
 
 func TestRunStaffAdd(t *testing.T) {
-	t.Run("adds to the instructor team by default", func(t *testing.T) {
+	t.Run("adds to the teacher team by default", func(t *testing.T) {
 		mock := &staffMock{classroomJSON: classroomWithStaffTeams}
 		server := httptest.NewServer(mock.handler(t))
 		t.Cleanup(server.Close)
 		client := githubtest.NewTestClient(t, server)
 
 		var out, errOut bytes.Buffer
-		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleInstructor); err != nil {
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd: %v", err)
 		}
-		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-instructor/memberships/alice") {
-			t.Errorf("membership PUTs = %v, want one for the instructor team + alice", mock.membershipPUT)
+		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-teacher/memberships/alice") {
+			t.Errorf("membership PUTs = %v, want one for the teacher team + alice", mock.membershipPUT)
 		}
-		if !strings.Contains(out.String(), "added alice to instructor team") {
-			t.Errorf("stdout = %q, want an instructor add confirmation", out.String())
+		if !strings.Contains(out.String(), "added alice to teacher team") {
+			t.Errorf("stdout = %q, want a teacher add confirmation", out.String())
 		}
 	})
 
@@ -176,20 +176,20 @@ func TestRunStaffAdd(t *testing.T) {
 		client := githubtest.NewTestClient(t, server)
 
 		var out, errOut bytes.Buffer
-		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleInstructor); err != nil {
+		if err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTeacher); err != nil {
 			t.Fatalf("runStaffAdd should self-heal, got err = %v", err)
 		}
-		if len(mock.teamsCreated) != 1 || mock.teamsCreated[0] != "classroom50-cs-principles-instructor" {
-			t.Errorf("teamsCreated = %v, want the instructor team", mock.teamsCreated)
+		if len(mock.teamsCreated) != 1 || mock.teamsCreated[0] != "classroom50-cs-principles-teacher" {
+			t.Errorf("teamsCreated = %v, want the teacher team", mock.teamsCreated)
 		}
-		if mock.grantedRepo["classroom50-cs-principles-instructor"] != "push" {
-			t.Errorf("grantedRepo = %v, want push on the instructor team", mock.grantedRepo)
+		if mock.grantedRepo["classroom50-cs-principles-teacher"] != "push" {
+			t.Errorf("grantedRepo = %v, want push on the teacher team", mock.grantedRepo)
 		}
 		if _, ok := mock.committed["cs-principles/classroom.json"]; !ok {
 			t.Errorf("committed = %v, want a classroom.json write recording the team ref", mock.committed)
 		}
-		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-instructor/memberships/alice") {
-			t.Errorf("membership PUTs = %v, want alice added to the instructor team", mock.membershipPUT)
+		if len(mock.membershipPUT) != 1 || !strings.Contains(mock.membershipPUT[0], "classroom50-cs-principles-teacher/memberships/alice") {
+			t.Errorf("membership PUTs = %v, want alice added to the teacher team", mock.membershipPUT)
 		}
 	})
 
@@ -200,7 +200,7 @@ func TestRunStaffAdd(t *testing.T) {
 		client := githubtest.NewTestClient(t, server)
 
 		var out, errOut bytes.Buffer
-		err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "ghost", configrepo.RoleInstructor)
+		err := runStaffAdd(client, &out, &errOut, "o", "cs-principles", "ghost", configrepo.RoleTeacher)
 		if err == nil || !strings.Contains(err.Error(), "not found") {
 			t.Fatalf("err = %v, want a user-not-found error", err)
 		}
@@ -231,9 +231,11 @@ func TestParseRole(t *testing.T) {
 		want    string // string(StaffRole); "" means expect error
 		wantErr bool
 	}{
-		{"", "instructor", false},
-		{"instructor", "instructor", false},
-		{"INSTRUCTOR", "instructor", false},
+		{"", "teacher", false},
+		{"teacher", "teacher", false},
+		{"TEACHER", "teacher", false},
+		{"instructor", "teacher", false}, // legacy alias resolves to teacher
+		{"INSTRUCTOR", "teacher", false},
 		{"ta", "ta", false},
 		{"TA", "ta", false},
 		{"grader", "", true},

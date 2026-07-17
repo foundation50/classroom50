@@ -1,5 +1,5 @@
 // Package staff implements the `gh teacher staff` command: managing the
-// per-classroom staff teams (instructor, ta) that back the web GUI's in-app
+// per-classroom staff teams (teacher, ta) that back the web GUI's in-app
 // roles. Membership lives in the GitHub teams (`classroom50-<classroom>-{...}`),
 // not roster.csv, so staff is identical from CLI or web. Only NewCmd is
 // exported.
@@ -26,16 +26,16 @@ import (
 func NewCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "staff",
-		Short: "Manage a classroom's staff teams (instructor, ta)",
-		Long: "Add or remove instructors and teaching assistants on a\n" +
-			"classroom's staff teams (classroom50-<classroom>-{instructor,ta}).\n\n" +
+		Short: "Manage a classroom's staff teams (teacher, ta)",
+		Long: "Add or remove teachers and teaching assistants on a\n" +
+			"classroom's staff teams (classroom50-<classroom>-{teacher,ta}).\n\n" +
 			"Staff roles are GitHub Teams, granted write on the config repo so\n" +
 			"members can author assignments. This mirrors the web GUI's\n" +
 			"\"Staff & roles\" section — a classroom managed from either surface\n" +
 			"has the same staff.\n\n" +
 			"Subcommands:\n" +
-			"  add     add a user to a classroom's instructor or ta team\n" +
-			"  remove  remove a user from a classroom's instructor or ta team\n\n" +
+			"  add     add a user to a classroom's teacher or ta team\n" +
+			"  remove  remove a user from a classroom's teacher or ta team\n\n" +
 			"The staff teams are normally created by `gh teacher classroom\n" +
 			"add`; if a classroom predates that (no `teams` block in\n" +
 			"classroom.json), `staff add` creates and records the team on\n" +
@@ -46,16 +46,17 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
-// parseRole maps --role to a StaffRole (default instructor). Accepts
-// "instructor" or "ta" (case-insensitive).
+// parseRole maps --role to a StaffRole (default teacher). Accepts "teacher"
+// (canonical), "instructor" (legacy alias → teacher), or "ta"
+// (case-insensitive).
 func parseRole(role string) (configrepo.StaffRole, error) {
 	switch strings.ToLower(strings.TrimSpace(role)) {
-	case "", "instructor":
-		return configrepo.RoleInstructor, nil
+	case "", "teacher", "instructor":
+		return configrepo.RoleTeacher, nil
 	case "ta":
 		return configrepo.RoleTA, nil
 	default:
-		return "", fmt.Errorf("invalid --role %q: must be \"instructor\" or \"ta\"", role)
+		return "", fmt.Errorf("invalid --role %q: must be \"teacher\" or \"ta\"", role)
 	}
 }
 
@@ -65,7 +66,7 @@ func staffAddCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "add <org> <classroom> <username>",
 		Short: "Add a user to a classroom's staff team",
-		Long: "Add <username> to the classroom's instructor (default) or ta\n" +
+		Long: "Add <username> to the classroom's teacher (default) or ta\n" +
 			"staff team. The user gets write on the config repo through the\n" +
 			"team, so they can author assignments.\n\n" +
 			"If the user isn't yet an org member the membership goes pending\n" +
@@ -101,7 +102,7 @@ func staffAddCmd() *cobra.Command {
 			return runStaffAdd(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, username, r)
 		},
 	}
-	cmd.Flags().StringVar(&role, "role", "instructor", `Staff role: "instructor" or "ta"`)
+	cmd.Flags().StringVar(&role, "role", "teacher", `Staff role: "teacher" or "ta"`)
 	return cmd
 }
 
@@ -111,7 +112,7 @@ func staffRemoveCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove <org> <classroom> <username>",
 		Short: "Remove a user from a classroom's staff team",
-		Long: "Remove <username> from the classroom's instructor (default) or\n" +
+		Long: "Remove <username> from the classroom's teacher (default) or\n" +
 			"ta staff team. Does NOT touch the user's org membership. A user\n" +
 			"who isn't on the team is a clean no-op (idempotent).",
 		Example: "  gh teacher staff remove cs50-fall-2026 cs-principles alice\n" +
@@ -139,7 +140,7 @@ func staffRemoveCmd() *cobra.Command {
 			return runStaffRemove(client, cmd.OutOrStdout(), org, classroom, username, r)
 		},
 	}
-	cmd.Flags().StringVar(&role, "role", "instructor", `Staff role: "instructor" or "ta"`)
+	cmd.Flags().StringVar(&role, "role", "teacher", `Staff role: "teacher" or "ta"`)
 	return cmd
 }
 
@@ -150,6 +151,10 @@ func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom,
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
+	}
+	// Self-heal the instructor→teacher rename on touch (best-effort).
+	if merr := MigrateInstructorTeamToTeacher(client, out, org, classroom, branch); merr != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: instructor→teacher team migration skipped for %s (%v); continuing.\n", classroom, merr)
 	}
 	// Resolve the canonical login and confirm the user exists first.
 	login, _, err := membership.LookupUser(client, username)
@@ -216,8 +221,8 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 		}
 		ref := team
 		switch role {
-		case configrepo.RoleInstructor:
-			c.Teams.Instructor = &ref
+		case configrepo.RoleTeacher:
+			c.Teams.Teacher = &ref
 		case configrepo.RoleTA:
 			c.Teams.TA = &ref
 		}

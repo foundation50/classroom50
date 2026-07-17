@@ -43,12 +43,19 @@ type TeamRef struct {
 type StaffRole string
 
 const (
+	RoleTeacher StaffRole = "teacher"
+	RoleTA      StaffRole = "ta"
+	// RoleInstructor is the legacy name for RoleTeacher, kept so pre-rename
+	// classrooms (whose team slug + `teams.instructor` ref say "instructor")
+	// still resolve. New writes use RoleTeacher; reads accept either.
 	RoleInstructor StaffRole = "instructor"
-	RoleTA         StaffRole = "ta"
 )
 
-// StaffRoles is every staff role, in a stable order (instructor first).
-var StaffRoles = []StaffRole{RoleInstructor, RoleTA}
+// StaffRoles is every CANONICAL staff role, in a stable order (teacher first).
+// The legacy RoleInstructor is intentionally absent — creation and enumeration
+// use the canonical set, while reads fall back to the legacy team via
+// ResolveClassroomStaffTeam.
+var StaffRoles = []StaffRole{RoleTeacher, RoleTA}
 
 // StaffTeamRepoPermissions maps a staff role to the repo permission a staff
 // team gets on each student assignment repo and on private in-org templates.
@@ -59,7 +66,7 @@ var StaffRoles = []StaffRole{RoleInstructor, RoleTA}
 // collect-scores reads the value. Source of truth for the collector's
 // hand-mirrored STAFF_TEAM_PERMISSIONS (collect_scores.py) — keep in lockstep.
 //
-// A role absent from this map is granted nothing (the instructor team already
+// A role absent from this map is granted nothing (the teacher team already
 // gets its access at classroom setup, so only the TA team needs a grant today).
 // Adding a future non-read staff permission is a one-line addition here and in
 // the mirror, but would also need the eager sites to consume the value instead
@@ -75,8 +82,11 @@ func staffTeamName(shortName string, role StaffRole) string {
 }
 
 // StaffTeamsRef holds the per-classroom staff team refs the web GUI persists
-// under classroom.json `teams`. Mirrors classroom-v1's `teams` $def.
+// under classroom.json `teams`. Mirrors classroom-v1's `teams` $def. `Teacher`
+// is the canonical staff team; `Instructor` is the legacy pre-rename ref, read
+// as a fallback and migrated to `Teacher` on touch.
 type StaffTeamsRef struct {
+	Teacher    *TeamRef `json:"teacher,omitempty"`
 	Instructor *TeamRef `json:"instructor,omitempty"`
 	TA         *TeamRef `json:"ta,omitempty"`
 }
@@ -110,8 +120,13 @@ func ResolveClassroomStaffTeam(client githubapi.Client, org, shortName, ref stri
 	}
 	var team *TeamRef
 	switch role {
-	case RoleInstructor:
-		team = c.Teams.Instructor
+	case RoleTeacher, RoleInstructor:
+		// Prefer the canonical teacher ref; fall back to the legacy
+		// instructor ref so pre-rename classrooms still resolve.
+		team = c.Teams.Teacher
+		if team == nil || team.Slug == "" {
+			team = c.Teams.Instructor
+		}
 	case RoleTA:
 		team = c.Teams.TA
 	}
@@ -162,7 +177,7 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role))
 }
 
-// EnsureStaffTeams creates (or adopts) both staff teams (instructor, ta) and
+// EnsureStaffTeams creates (or adopts) both staff teams (teacher, ta) and
 // grants each `push` on the org's `classroom50` config repo so staff can author
 // assignments. Returns the refs to record under classroom.json `teams`.
 // Mirrors the web's ensureStaffTeams.
@@ -177,8 +192,8 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 			return nil, fmt.Errorf("grant %s staff team write on %s: %w", role, ConfigRepoName, err)
 		}
 		switch role {
-		case RoleInstructor:
-			refs.Instructor = &team
+		case RoleTeacher:
+			refs.Teacher = &team
 		case RoleTA:
 			refs.TA = &team
 		}
@@ -312,6 +327,32 @@ func DeleteClassroomTeam(client githubapi.Client, org string, team TeamRef) erro
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
 	return nil
+}
+
+// ResolveLegacyInstructorTeam reads the legacy `teams.instructor` ref only when
+// it is DISTINCT from the canonical `teams.teacher` team — the
+// partially-migrated case where both refs point at different teams. Used by
+// teardown to sweep a stale instructor team that ResolveClassroomStaffTeam
+// (which prefers `teacher`) would otherwise skip. Returns ok=false when there
+// is no teacher ref yet (the legacy team is already covered by the RoleTeacher
+// fallback), when the instructor ref is absent, or when both refs share a slug.
+func ResolveLegacyInstructorTeam(client githubapi.Client, org, shortName, ref string) (TeamRef, bool, error) {
+	c, ok, err := LoadClassroom(client, org, shortName, ref)
+	if err != nil {
+		return TeamRef{}, false, err
+	}
+	if !ok || c.Teams == nil || c.Teams.Instructor == nil || c.Teams.Instructor.Slug == "" {
+		return TeamRef{}, false, nil
+	}
+	// No canonical teacher ref: the RoleTeacher resolve already falls back to
+	// this instructor team, so returning it here would double-count.
+	if c.Teams.Teacher == nil || c.Teams.Teacher.Slug == "" {
+		return TeamRef{}, false, nil
+	}
+	if c.Teams.Teacher.Slug == c.Teams.Instructor.Slug {
+		return TeamRef{}, false, nil
+	}
+	return *c.Teams.Instructor, true, nil
 }
 
 // TeamMemberRole is a GitHub team-membership role — distinct from the

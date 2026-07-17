@@ -28,6 +28,7 @@ import {
   type GitTreeFileMode,
   type StaffTeamRefs,
 } from "@/github-core/mutations"
+import type { StaffRole } from "@/types/classroom"
 import { prefixCommit } from "@/util/commit"
 import { logger } from "@/lib/logger"
 
@@ -50,7 +51,7 @@ export async function createClassroomFiles(
   })
   // Create (or adopt) the teams BEFORE scaffolding so their { id, slug } land in
   // classroom.json (mirrors the CLI). The students team grants rostered students
-  // read on private org templates; the staff teams (instructor, ta) get
+  // read on private org templates; the staff teams (teacher, ta) get
   // config-repo write and back the in-app roles.
   const { created: teamCreated, ...team } = await ensureClassroomTeam(
     client,
@@ -63,19 +64,19 @@ export async function createClassroomFiles(
     input.classroom,
   )
 
-  // The creator becomes an instructor (the only way to seed staff membership in
+  // The creator becomes a teacher (the only way to seed staff membership in
   // a serverless app). Best-effort: a membership hiccup must not fail creation —
   // an owner can re-add via the roster UI.
-  if (input.creator && teams.instructor) {
+  if (input.creator && teams.teacher) {
     try {
       await addUserToTeam(client, {
         org: input.org,
-        teamSlug: teams.instructor.slug,
+        teamSlug: teams.teacher.slug,
         username: input.creator,
         role: "maintainer",
       })
     } catch {
-      log.warn("create classroom: seeding creator as instructor failed", {
+      log.warn("create classroom: seeding creator as teacher failed", {
         org: input.org,
         classroom: input.classroom,
         creator: input.creator,
@@ -177,7 +178,7 @@ async function rollbackCreatedTeams(
   args: {
     students?: { id: number; slug: string }
     staff: StaffTeamRefs
-    staffCreated: ReadonlyArray<"instructor" | "ta">
+    staffCreated: ReadonlyArray<StaffRole>
   },
 ): Promise<void> {
   const toDelete = [
@@ -236,8 +237,8 @@ export type CreateClassroomInput = {
   // it and published Pages resources live under `<classroom>/<secret>/...`.
   // Validated to `[a-z0-9]{4,64}` before the mutation runs.
   secret?: string
-  // The viewer's GitHub login, added to the instructor staff team on create so
-  // the creator gets the instructor role. Optional — the classroom still
+  // The viewer's GitHub login, added to the teacher staff team on create so
+  // the creator gets the teacher role. Optional — the classroom still
   // scaffolds without it.
   creator?: string
 }
@@ -475,9 +476,12 @@ export async function deleteClassroom(
   // failure must NOT undo the already-committed config removal — surface it as a
   // non-fatal warning. Each delete retries a transient blip; a permanent refusal
   // is recorded without retrying.
-  const refsToDelete = [team, staffTeams.instructor, staffTeams.ta].filter(
-    isDeletableClassroomTeamRef,
-  )
+  const refsToDelete = [
+    team,
+    staffTeams.teacher,
+    staffTeams.instructor,
+    staffTeams.ta,
+  ].filter(isDeletableClassroomTeamRef)
   const failedTeamSlugs: string[] = []
   for (const teamRef of refsToDelete) {
     try {

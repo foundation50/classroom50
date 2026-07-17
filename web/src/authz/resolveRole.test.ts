@@ -28,30 +28,28 @@ const apiError = (status: number) =>
 const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",
-  instructor: "non-member",
+  teacher: "non-member",
   ta: "non-member",
   student: "non-member",
 }
 
 describe("resolveClassroomRole", () => {
-  it("instructor when in the instructor team", () => {
-    expect(resolveClassroomRole({ ...base, instructor: "member" })).toBe(
-      "instructor",
-    )
+  it("teacher when in the teacher team", () => {
+    expect(resolveClassroomRole({ ...base, teacher: "member" })).toBe("teacher")
   })
 
-  it("instructor outranks ta and student when in several", () => {
+  it("teacher outranks ta and student when in several", () => {
     expect(
       resolveClassroomRole({
         ...base,
-        instructor: "member",
+        teacher: "member",
         ta: "member",
         student: "member",
       }),
-    ).toBe("instructor")
+    ).toBe("teacher")
   })
 
-  it("ta when in the ta team but not the instructor team", () => {
+  it("ta when in the ta team but not the teacher team", () => {
     expect(resolveClassroomRole({ ...base, ta: "member" })).toBe("ta")
   })
 
@@ -72,8 +70,8 @@ describe("resolveClassroomRole", () => {
   })
 
   describe("fail-closed (unresolved) on transient ELEVATION signals we depend on", () => {
-    it("unresolved when an elevation read (instructor/ta) is in flight", () => {
-      expect(resolveClassroomRole({ ...base, instructor: "unresolved" })).toBe(
+    it("unresolved when an elevation read (teacher/ta) is in flight", () => {
+      expect(resolveClassroomRole({ ...base, teacher: "unresolved" })).toBe(
         "unresolved",
       )
       expect(resolveClassroomRole({ ...base, ta: "unresolved" })).toBe(
@@ -83,7 +81,7 @@ describe("resolveClassroomRole", () => {
 
     it("does NOT hold on an in-flight/errored STUDENTS read — falls through to student (never strand a real student)", () => {
       // The students team can't grant access, so its read is fail-open-to-
-      // student once instructor/ta are definitive non-member.
+      // student once teacher/ta are definitive non-member.
       expect(resolveClassroomRole({ ...base, student: "unresolved" })).toBe(
         "student",
       )
@@ -93,11 +91,11 @@ describe("resolveClassroomRole", () => {
       expect(
         resolveClassroomRole({
           ...base,
-          instructor: "member",
+          teacher: "member",
           ta: "unresolved",
           student: "unresolved",
         }),
-      ).toBe("instructor")
+      ).toBe("teacher")
     })
   })
 
@@ -199,8 +197,8 @@ describe("membershipFromQuery", () => {
 })
 
 describe("role predicates", () => {
-  it("roleLabelKey: instructor => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
-    expect(roleLabelKey("instructor")).toBe("nav.roleInstructor")
+  it("roleLabelKey: teacher => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
+    expect(roleLabelKey("teacher")).toBe("nav.roleInstructor")
     expect(roleLabelKey("ta")).toBe("nav.roleTa")
     expect(roleLabelKey("student")).toBe("nav.roleStudent")
     expect(roleLabelKey("unresolved")).toBeNull()
@@ -209,13 +207,13 @@ describe("role predicates", () => {
 
 describe("applyViewAs (downgrade-only preview)", () => {
   it("passes through when no preview is set", () => {
-    expect(applyViewAs("instructor", null)).toBe("instructor")
+    expect(applyViewAs("teacher", null)).toBe("teacher")
     expect(applyViewAs("ta", null)).toBe("ta")
   })
 
-  it("lets an instructor preview ta or student", () => {
-    expect(applyViewAs("instructor", "ta")).toBe("ta")
-    expect(applyViewAs("instructor", "student")).toBe("student")
+  it("lets a teacher preview ta or student", () => {
+    expect(applyViewAs("teacher", "ta")).toBe("ta")
+    expect(applyViewAs("teacher", "student")).toBe("student")
   })
 
   it("NEVER escalates: a real ta/student previewing higher stays put", () => {

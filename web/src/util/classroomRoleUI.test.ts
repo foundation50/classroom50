@@ -34,18 +34,18 @@ describe("hasStudentEnrollment", () => {
   })
   it("is false for a pure staff role", () => {
     expect(hasStudentEnrollment(row(["ta"]))).toBe(false)
-    expect(hasStudentEnrollment(row(["instructor"]))).toBe(false)
+    expect(hasStudentEnrollment(row(["teacher"]))).toBe(false)
   })
   it("is true for a student who is also staff (unenroll drops only the student side)", () => {
-    expect(hasStudentEnrollment(row(["instructor", "student"]))).toBe(true)
+    expect(hasStudentEnrollment(row(["teacher", "student"]))).toBe(true)
   })
 })
 
 describe("sortRolesByRank", () => {
-  it("orders instructor > ta > student and does not mutate input", () => {
-    const input: ClassroomRole[] = ["student", "ta", "instructor"]
-    expect(sortRolesByRank(input)).toEqual(["instructor", "ta", "student"])
-    expect(input).toEqual(["student", "ta", "instructor"])
+  it("orders teacher > ta > student and does not mutate input", () => {
+    const input: ClassroomRole[] = ["student", "ta", "teacher"]
+    expect(sortRolesByRank(input)).toEqual(["teacher", "ta", "student"])
+    expect(input).toEqual(["student", "ta", "teacher"])
   })
 })
 
@@ -54,10 +54,15 @@ describe("countByRole", () => {
     const rows = [
       row(["student"]),
       row(["student"]),
-      row(["instructor", "student"]),
+      row(["teacher", "student"]),
       row(["ta"]),
     ]
-    expect(countByRole(rows)).toEqual({ instructor: 1, ta: 1, student: 3 })
+    expect(countByRole(rows)).toEqual({
+      teacher: 1,
+      instructor: 0,
+      ta: 1,
+      student: 3,
+    })
   })
 })
 
@@ -67,12 +72,13 @@ describe("enrolledCountsByRole", () => {
       row(["student"], "enrolled"),
       row(["student"], "pending"),
       row(["ta"], "enrolled"),
-      row(["instructor", "student"], "enrolled"),
+      row(["teacher", "student"], "enrolled"),
     ]
-    // enrolled: 2 students (plain + the instructor-who-is-also-student) + the
-    // instructor + the ta. pending excluded.
+    // enrolled: 2 students (plain + the teacher-who-is-also-student) + the
+    // teacher + the ta. pending excluded.
     expect(enrolledCountsByRole(rows)).toEqual({
-      instructor: 1,
+      teacher: 1,
+      instructor: 0,
       ta: 1,
       student: 2,
     })

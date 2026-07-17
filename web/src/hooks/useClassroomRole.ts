@@ -2,16 +2,16 @@ import { useCallback } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { GitHubAPIError, retryTransientGitHubError } from "@/github-core/errors"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { classroomTeamSlug, type ClassroomTeamRole } from "@/util/teamSlug"
 import { useRoleView } from "@/context/roleView/RoleViewProvider"
 import {
   resolveClassroomRole,
   applyViewAs,
   membershipFromQuery,
   type ResolvedRole,
+  type GitHubTeamMembership,
 } from "@/authz"
 import type { GitHubClient } from "@/github-core/client"
-import type { StaffRole } from "@/types/classroom"
 
 // Team-membership query: 2xx + active => member, 404 => definitive non-member,
 // anything else throws so React Query can retry and the verdict stays
@@ -59,7 +59,10 @@ export function teamMembershipQuery(
 }
 
 // Resolve the viewer's effective CLASSROOM role from live team-membership
-// reads: the instructor, ta, and students teams (instructor > ta > student).
+// reads: the teacher, ta, and students teams (teacher > ta > student).
+// The teacher signal probes BOTH the canonical `-teacher` team and the legacy
+// `-instructor` team (during the rename migration a classroom may still back
+// staff with either), and treats membership in either as teacher.
 // Org-admin status is NOT consulted here (KTD-4) — that is GitHubOrgRole,
 // resolved at the org boundary. Applies "view as" as a downgrade-only lens:
 // `role` reflects the preview, `actualRole` is the real one.
@@ -77,11 +80,22 @@ export function useClassroomRole(
   const client = useGitHubClient()
   const { viewAs } = useRoleView()
 
-  const teamSlug = (role: StaffRole) =>
+  const teamSlug = (role: ClassroomTeamRole) =>
     org && classroom ? classroomTeamSlug(classroom, role) : ""
   const studentSlug = org && classroom ? classroomTeamSlug(classroom) : ""
 
   const enabled = Boolean(org && classroom && username)
+  const teacherQuery = useQuery({
+    ...teamMembershipQuery(
+      client,
+      org ?? "",
+      teamSlug("teacher"),
+      username ?? "",
+    ),
+    enabled,
+  })
+  // Legacy fallback: a not-yet-migrated classroom backs teachers with the
+  // `-instructor` team. Membership in either team resolves to teacher.
   const instructorQuery = useQuery({
     ...teamMembershipQuery(
       client,
@@ -103,9 +117,9 @@ export function useClassroomRole(
   const actualRole = resolveClassroomRole({
     org,
     classroom,
-    instructor: membershipFromQuery(
-      instructorQuery.isSuccess,
-      instructorQuery.error,
+    teacher: combineTeacherMembership(
+      membershipFromQuery(teacherQuery.isSuccess, teacherQuery.error),
+      membershipFromQuery(instructorQuery.isSuccess, instructorQuery.error),
     ),
     ta: membershipFromQuery(taQuery.isSuccess, taQuery.error),
     student: membershipFromQuery(studentQuery.isSuccess, studentQuery.error),
@@ -118,6 +132,7 @@ export function useClassroomRole(
   // (e.g. team reads on an org-level route) is `pending` but idle and must not
   // pin the guard's spinner.
   const isLoading =
+    teacherQuery.fetchStatus === "fetching" ||
     instructorQuery.fetchStatus === "fetching" ||
     taQuery.fetchStatus === "fetching" ||
     studentQuery.fetchStatus === "fetching"
@@ -129,19 +144,36 @@ export function useClassroomRole(
   const isError =
     actualRole === "unresolved" &&
     !isLoading &&
-    (instructorQuery.isError || taQuery.isError)
+    (teacherQuery.isError || instructorQuery.isError || taQuery.isError)
 
-  // Re-run all three team reads so an error surface can offer a retry without a
+  // Re-run all team reads so an error surface can offer a retry without a
   // full page reload (mirrors useTeamRoster's refetch). Stable identity so it
   // doesn't churn the context value it's threaded through.
+  const { refetch: refetchTeacher } = teacherQuery
   const { refetch: refetchInstructor } = instructorQuery
   const { refetch: refetchTa } = taQuery
   const { refetch: refetchStudent } = studentQuery
   const refetch = useCallback(() => {
+    void refetchTeacher()
     void refetchInstructor()
     void refetchTa()
     void refetchStudent()
-  }, [refetchInstructor, refetchTa, refetchStudent])
+  }, [refetchTeacher, refetchInstructor, refetchTa, refetchStudent])
 
   return { role, actualRole, isLoading, isError, refetch }
+}
+
+// Combine the canonical teacher-team and legacy instructor-team membership
+// signals into one teacher tri-state: membership in EITHER is "member"; both
+// definitive non-members is "non-member"; otherwise (any in-flight/transient)
+// hold "unresolved" so a blip never demotes a real teacher.
+export function combineTeacherMembership(
+  teacher: GitHubTeamMembership,
+  instructor: GitHubTeamMembership,
+): GitHubTeamMembership {
+  if (teacher === "member" || instructor === "member") return "member"
+  if (teacher === "non-member" && instructor === "non-member") {
+    return "non-member"
+  }
+  return "unresolved"
 }

@@ -2176,11 +2176,12 @@ const makeTeamClient = (opts: {
         const slug = decodeURIComponent(
           path.split("/teams/")[1].split("/invitations")[0],
         )
-        const seed = slug.endsWith("-instructor")
-          ? (opts.instructorInvites ?? [])
-          : slug.endsWith("-ta")
-            ? (opts.taInvites ?? [])
-            : (opts.teamInvites ?? [])
+        const seed =
+          slug.endsWith("-instructor") || slug.endsWith("-teacher")
+            ? (opts.instructorInvites ?? [])
+            : slug.endsWith("-ta")
+              ? (opts.taInvites ?? [])
+              : (opts.teamInvites ?? [])
         return Promise.resolve(
           seed.map((i) => ({ login: i.login ?? null, email: i.email ?? null })),
         )
@@ -2194,7 +2195,14 @@ const makeTeamClient = (opts: {
           path.split("/teams/")[1].split("/members")[0],
         )
         const rejects = opts.staffReadRejects
-        if (rejects && slug.endsWith(`-${rejects.role}`)) {
+        // The sync reads the canonical teacher slug; a test that rejects the
+        // legacy "instructor" staff read applies to the teacher team too.
+        const rejectsTeacher =
+          rejects &&
+          (rejects.role === "ta"
+            ? slug.endsWith("-ta")
+            : slug.endsWith("-teacher") || slug.endsWith("-instructor"))
+        if (rejects && rejectsTeacher) {
           return Promise.reject(
             new GitHubAPIError({
               status: rejects.status,
@@ -2212,11 +2220,12 @@ const makeTeamClient = (opts: {
             }),
           )
         }
-        const seed = slug.endsWith("-instructor")
-          ? (opts.instructorHas ?? [])
-          : slug.endsWith("-ta")
-            ? (opts.taHas ?? [])
-            : (opts.teamHas ?? [])
+        const seed =
+          slug.endsWith("-instructor") || slug.endsWith("-teacher")
+            ? (opts.instructorHas ?? [])
+            : slug.endsWith("-ta")
+              ? (opts.taHas ?? [])
+              : (opts.teamHas ?? [])
         const members = seed.map((m) => ({
           login: m.login,
           id: m.id,
@@ -2459,8 +2468,8 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     expect(result.noop).toBe(true)
   })
 
-  it("syncs instructors and TAs with their role, not just students", async () => {
-    // The nice-classroom scenario: only an instructor and a TA, no students,
+  it("syncs teachers and TAs with their role, not just students", async () => {
+    // The nice-classroom scenario: only a teacher and a TA, no students,
     // and no roster.csv rows yet. Both must be appended with their role so the
     // roster is populated from the staff teams alone.
     const { client, committed } = makeTeamClient({
@@ -2481,7 +2490,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     const rows = rowsFromCsv(committed.content!)
     expect(rows.find((r) => r.username === "prof")).toMatchObject({
       github_id: "1",
-      role: "instructor",
+      role: "teacher",
     })
     expect(rows.find((r) => r.username === "helper")).toMatchObject({
       github_id: "2",
@@ -2490,8 +2499,8 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
   })
 
   it("records the highest-precedence role for a member on multiple teams", async () => {
-    // An instructor who is also on the student team records "instructor"
-    // (instructor > ta > student), matching the roster view's primary role.
+    // A teacher who is also on the student team records "teacher"
+    // (teacher > ta > student), matching the roster view's primary role.
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER,
       users: {},
@@ -2508,11 +2517,11 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     const rows = rowsFromCsv(committed.content!)
     // One row, not one per team.
     expect(rows.filter((r) => r.username === "prof")).toHaveLength(1)
-    expect(rows[0].role).toBe("instructor")
+    expect(rows[0].role).toBe("teacher")
   })
 
   it("refreshes a role that changed (promotion) on an existing row", async () => {
-    // grace was recorded as a student; she's now on the instructor team. Sync
+    // grace was recorded as a student; she's now on the teacher team. Sync
     // updates her role in place without adding a row.
     const { client, committed } = makeTeamClient({
       startingCsv: HEADER + "grace,Grace,Hopper,g@x.edu,A,707,student\n",
@@ -2533,7 +2542,7 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     )
     // role refreshed; teacher-owned metadata untouched.
     expect(grace).toMatchObject({
-      role: "instructor",
+      role: "teacher",
       first_name: "Grace",
       email: "g@x.edu",
       section: "A",

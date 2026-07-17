@@ -323,6 +323,12 @@ export async function resolveClassroomTeamSlugs(
   return {
     student: json?.team?.slug || classroomTeamSlug(classroom),
     staff: {
+      // Prefer the canonical teacher team; fall back to a not-yet-migrated
+      // classroom's legacy instructor team, then the derived teacher slug.
+      teacher:
+        json?.teams?.teacher?.slug ||
+        json?.teams?.instructor?.slug ||
+        classroomTeamSlug(classroom, "teacher"),
       instructor:
         json?.teams?.instructor?.slug ||
         classroomTeamSlug(classroom, "instructor"),
@@ -513,6 +519,7 @@ export async function resolveTeamIdByRole(
 ): Promise<Record<ClassroomRole, number | undefined>> {
   const result: Record<ClassroomRole, number | undefined> = {
     student: undefined,
+    teacher: undefined,
     instructor: undefined,
     ta: undefined,
   }
@@ -522,17 +529,22 @@ export async function resolveTeamIdByRole(
     // so no catch here: a blip must surface, not be mistaken for "no team".
     result.student = (await resolveClassroomTeam(client, org, classroom)).id
   }
+  // A legacy `instructor` role in the batch resolves to the canonical teacher
+  // team (both map to org-owner). Treat it as teacher for team provisioning.
+  const wantsTeacher =
+    rolesPresent.has("teacher") || rolesPresent.has("instructor")
   for (const role of STAFF_ROLES) {
-    if (!rolesPresent.has(role)) continue
+    if (role === "teacher" ? !wantsTeacher : !rolesPresent.has(role)) continue
     try {
       const team = await ensureClassroomRoleTeam(client, org, classroom, role)
       await grantTeamConfigRepoWrite(client, org, team.slug)
       result[role] = team.id
+      if (role === "teacher") result.instructor = team.id
     } catch (err) {
       // Only a DEFINITIVE failure (e.g. 403 no permission to create/grant the
       // staff team) degrades to a teamless invite. A transient 5xx/429/network
-      // error must propagate — sending an instructor an org-OWNER invite while
-      // silently dropping them off the instructor team is worse than retrying.
+      // error must propagate — sending a teacher an org-OWNER invite while
+      // silently dropping them off the teacher team is worse than retrying.
       if (
         err instanceof GitHubAPIError &&
         isDefinitiveGitHubStatus(err.status)

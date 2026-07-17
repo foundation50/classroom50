@@ -17,37 +17,39 @@ export type { ResolvedRole, GitHubOrgRole, GitHubTeamMembership, ViewAsRole }
 export type ClassroomRoleInput = {
   org: string | undefined
   classroom: string | undefined
-  // Per-classroom team memberships (instructor > ta > student precedence).
-  instructor: GitHubTeamMembership
+  // Per-classroom team memberships (teacher > ta > student precedence). The
+  // `teacher` signal combines membership in either the canonical `-teacher`
+  // team or the legacy `-instructor` team (see useClassroomRole).
+  teacher: GitHubTeamMembership
   ta: GitHubTeamMembership
   student: GitHubTeamMembership
 }
 
-// Pure classroom role from the three per-classroom teams (instructor > ta >
+// Pure classroom role from the three per-classroom teams (teacher > ta >
 // student). Fail posture is asymmetric: an in-flight ELEVATION read holds
 // (`unresolved`, fail-closed); an in-flight students read can't grant access so
 // it falls through to the safe `student` default (fail-open). See inline notes.
 export function resolveClassroomRole(input: ClassroomRoleInput): ResolvedRole {
-  const { org, classroom, instructor, ta, student } = input
+  const { org, classroom, teacher, ta, student } = input
 
   if (!org || !classroom) return "student"
 
   // A confirmed membership is definitive and resolves immediately, highest
-  // precedence first — so a confirmed instructor isn't held on a slower ta/
+  // precedence first — so a confirmed teacher isn't held on a slower ta/
   // student read.
-  if (instructor === "member") return "instructor"
+  if (teacher === "member") return "teacher"
   if (ta === "member") return "ta"
   if (student === "member") return "student"
 
-  // No confirmed membership. Only the ELEVATION reads gate: if an instructor or
+  // No confirmed membership. Only the ELEVATION reads gate: if a teacher or
   // ta read is still in flight, hold rather than demote a real staffer. The
   // students-team read is intentionally NOT a gate (it can't grant access), so
   // its being unresolved falls through to the student default below.
-  if (instructor === "unresolved" || ta === "unresolved") {
+  if (teacher === "unresolved" || ta === "unresolved") {
     return "unresolved"
   }
 
-  // Instructor and ta are definitive non-member — no path to elevated access —
+  // Teacher and ta are definitive non-member — no path to elevated access —
   // so the viewer is a student (whether their students-team read confirmed
   // membership, 404'd, or errored). Safe default.
   return "student"
@@ -87,9 +89,11 @@ export function applyViewAs(
 }
 
 // Translation key for the human role label; null while `unresolved` so callers
-// show a skeleton mid-load. Pass through t().
+// show a skeleton mid-load. Pass through t(). The canonical `teacher` and the
+// legacy `instructor` alias share the same label key.
 export function roleLabelKey(role: ResolvedRole): string | null {
   switch (role) {
+    case "teacher":
     case "instructor":
       return "nav.roleInstructor"
     case "ta":

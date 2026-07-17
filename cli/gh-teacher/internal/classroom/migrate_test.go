@@ -242,11 +242,11 @@ func TestRunMigrate_NonDryRun_HappyPath(t *testing.T) {
 		t.Errorf("classroom.json missing migrated_from.classroom_id=95884, got %+v", classroom.MigratedFrom)
 	}
 	// The migrate path seeds + records the staff teams, same as add.
-	if classroom.Teams == nil || classroom.Teams.Instructor == nil || classroom.Teams.TA == nil {
-		t.Errorf("classroom.json missing teams.{instructor,ta}, got %+v", classroom.Teams)
+	if classroom.Teams == nil || classroom.Teams.Teacher == nil || classroom.Teams.TA == nil {
+		t.Errorf("classroom.json missing teams.{teacher,ta}, got %+v", classroom.Teams)
 	} else {
-		if classroom.Teams.Instructor.Slug != "classroom50-classroom50test-instructor" {
-			t.Errorf("instructor team slug = %q, want classroom50-classroom50test-instructor", classroom.Teams.Instructor.Slug)
+		if classroom.Teams.Teacher.Slug != "classroom50-classroom50test-teacher" {
+			t.Errorf("teacher team slug = %q, want classroom50-classroom50test-teacher", classroom.Teams.Teacher.Slug)
 		}
 		if classroom.Teams.TA.Slug != "classroom50-classroom50test-ta" {
 			t.Errorf("ta team slug = %q, want classroom50-classroom50test-ta", classroom.Teams.TA.Slug)

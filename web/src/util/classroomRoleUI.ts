@@ -9,8 +9,10 @@ import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 // re-exported here so UI callers have one import for all role presentation.
 export { ROLE_RANK, sortRolesByRank }
 
-// i18n key per role for row badges and filter labels.
+// i18n key per role for row badges and filter labels. `teacher` and its legacy
+// `instructor` alias share the label key.
 export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
+  teacher: "students.roleInstructor",
   instructor: "students.roleInstructor",
   ta: "students.roleTa",
   student: "students.roleStudent",
@@ -20,6 +22,7 @@ export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
 // enrollment state read as separate facets. `student` uses the neutral ghost
 // chip (rendered with the Badge `ghost` prop), so it maps to "neutral" here.
 export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
+  teacher: "primary",
   instructor: "primary",
   ta: "secondary",
   student: "neutral",
@@ -64,7 +67,7 @@ export function hasStudentEnrollment(
 export type RoleCounts = Record<ClassroomRole, number>
 
 export function countByRole(rows: TeamRosterRow[]): RoleCounts {
-  const counts: RoleCounts = { instructor: 0, ta: 0, student: 0 }
+  const counts: RoleCounts = { teacher: 0, instructor: 0, ta: 0, student: 0 }
   for (const row of rows) {
     for (const role of row.roles) counts[role] += 1
   }

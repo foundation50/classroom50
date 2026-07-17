@@ -156,17 +156,17 @@ export async function resolveRosterUploadPreflight(
   const { org, classroom, rows } = input
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
 
-  const [orgMembers, studentMembers, instructorMembers, taMembers] =
+  const [orgMembers, studentMembers, teacherMembers, taMembers] =
     await Promise.all([
       listAllOrgMembers(client, org),
       listTeamMembers(client, org, slugs.student),
-      listTeamMembers(client, org, slugs.staff.instructor),
+      listTeamMembers(client, org, slugs.staff.teacher),
       listTeamMembers(client, org, slugs.staff.ta),
     ])
 
   const orgSets = memberIdentitySets(orgMembers)
   const studentSets = memberIdentitySets(studentMembers)
-  const instructorSets = memberIdentitySets(instructorMembers)
+  const teacherSets = memberIdentitySets(teacherMembers)
   const taSets = memberIdentitySets(taMembers)
 
   const resolved: ResolvedMembership = {
@@ -174,12 +174,14 @@ export async function resolveRosterUploadPreflight(
     orgMemberLogins: orgSets.logins,
     teamIdsByRole: {
       student: studentSets.ids,
-      instructor: instructorSets.ids,
+      teacher: teacherSets.ids,
+      instructor: teacherSets.ids,
       ta: taSets.ids,
     },
     teamLoginsByRole: {
       student: studentSets.logins,
-      instructor: instructorSets.logins,
+      teacher: teacherSets.logins,
+      instructor: teacherSets.logins,
       ta: taSets.logins,
     },
   }
@@ -261,8 +263,11 @@ export async function applyClassroomRoleChange(
   const slugForRole = (role: ClassroomRole): string =>
     role === "student" ? slugs.student : slugs.staff[role]
 
-  const wasInstructor = fromRoles.includes("instructor")
-  const demotesOwner = wasInstructor && toRole !== "instructor"
+  // Teacher (and its legacy `instructor` alias) is the org-owner role.
+  const wasTeacher =
+    fromRoles.includes("teacher") || fromRoles.includes("instructor")
+  const toIsTeacher = toRole === "teacher" || toRole === "instructor"
+  const demotesOwner = wasTeacher && !toIsTeacher
 
   // Guard the org-OWNER revocation before touching anything. Demoting yourself
   // strips your own admin mid-operation (you may then lose permission to finish
@@ -275,7 +280,7 @@ export async function applyClassroomRoleChange(
     const viewer = await getAuthenticatedUser(client)
     if (isSameGitHubUser(viewer, { github_id: input.github_id, username })) {
       throw new Error(
-        `You can't demote yourself from instructor here — it would revoke ` +
+        `You can't demote yourself from teacher here — it would revoke ` +
           `your own organization-owner access mid-change. Ask another owner ` +
           `to change your role.`,
       )
@@ -287,12 +292,12 @@ export async function applyClassroomRoleChange(
     if (soleOwner) {
       throw new Error(
         `${username} is the only organization owner, so they can't be demoted ` +
-          `from instructor — promote another owner first.`,
+          `from teacher — promote another owner first.`,
       )
     }
   }
 
-  // 1) Demote org owner FIRST when leaving instructor for a non-instructor role.
+  // 1) Demote org owner FIRST when leaving teacher for a non-teacher role.
   // Doing this before any team mutation guarantees a failure here leaves the
   // member fully unchanged (still owner) rather than partially moved but still
   // an owner — the dangerous partial state.
@@ -304,7 +309,7 @@ export async function applyClassroomRoleChange(
     }
 
     // 2) Add to the target team (ensure a staff team exists + config write),
-    // then promote to org owner for an instructor target.
+    // then promote to org owner for a teacher target.
     if (toRole === "student") {
       await addUserToTeam(client, {
         org,
@@ -322,7 +327,7 @@ export async function applyClassroomRoleChange(
         role: "member",
       })
     }
-    if (toRole === "instructor") {
+    if (toIsTeacher) {
       await setOrgMembershipRole(client, { org, username, role: "admin" })
     }
   } catch (err) {

@@ -19,8 +19,10 @@ import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 
 // i18n key for each role's singular label. A map (not inline t()) so it works in
-// module scope; components translate via t(ROLE_LABEL_KEY[role]).
+// module scope; components translate via t(ROLE_LABEL_KEY[role]). `teacher` and
+// its legacy `instructor` alias share the label key.
 const ROLE_LABEL_KEY: Record<StaffRole, string> = {
+  teacher: "classes.staff.roleInstructor",
   instructor: "classes.staff.roleInstructor",
   ta: "classes.staff.roleTa",
 }

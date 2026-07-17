@@ -18,9 +18,10 @@ func TestStaffTeamName(t *testing.T) {
 		role  StaffRole
 		want  string
 	}{
+		{"cs-principles", RoleTeacher, "classroom50-cs-principles-teacher"},
 		{"cs-principles", RoleInstructor, "classroom50-cs-principles-instructor"},
 		{"cs-principles", RoleTA, "classroom50-cs-principles-ta"},
-		{"cs50", RoleInstructor, "classroom50-cs50-instructor"},
+		{"cs50", RoleTeacher, "classroom50-cs50-teacher"},
 	}
 	for _, tc := range cases {
 		if got := staffTeamName(tc.short, tc.role); got != tc.want {
@@ -30,12 +31,15 @@ func TestStaffTeamName(t *testing.T) {
 }
 
 // TestStaffTeamRepoPermissions pins the collect-time grant map: the TA team
-// gets read (pull), and the instructor role is intentionally absent (its access
+// gets read (pull), and the teacher role is intentionally absent (its access
 // is granted at classroom setup, not by the collector). This map is the source
 // of truth the collector's STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
 func TestStaffTeamRepoPermissions(t *testing.T) {
 	if got := StaffTeamRepoPermissions[RoleTA]; got != "pull" {
 		t.Errorf("StaffTeamRepoPermissions[ta] = %q, want %q", got, "pull")
+	}
+	if _, ok := StaffTeamRepoPermissions[RoleTeacher]; ok {
+		t.Error("teacher must NOT be in StaffTeamRepoPermissions — the collector grants it nothing")
 	}
 	if _, ok := StaffTeamRepoPermissions[RoleInstructor]; ok {
 		t.Error("instructor must NOT be in StaffTeamRepoPermissions — the collector grants it nothing")
@@ -94,8 +98,8 @@ func TestEnsureStaffTeams(t *testing.T) {
 	if err != nil {
 		t.Fatalf("EnsureStaffTeams: %v", err)
 	}
-	if refs.Instructor == nil || refs.Instructor.Slug != "classroom50-cs-principles-instructor" {
-		t.Errorf("instructor ref = %+v, want slug classroom50-cs-principles-instructor", refs.Instructor)
+	if refs.Teacher == nil || refs.Teacher.Slug != "classroom50-cs-principles-teacher" {
+		t.Errorf("teacher ref = %+v, want slug classroom50-cs-principles-teacher", refs.Teacher)
 	}
 	if refs.TA == nil || refs.TA.Slug != "classroom50-cs-principles-ta" {
 		t.Errorf("ta ref = %+v, want slug classroom50-cs-principles-ta", refs.TA)
@@ -103,7 +107,7 @@ func TestEnsureStaffTeams(t *testing.T) {
 	if len(createdNames) != 2 {
 		t.Fatalf("created %d teams, want 2: %v", len(createdNames), createdNames)
 	}
-	for _, slug := range []string{"classroom50-cs-principles-instructor", "classroom50-cs-principles-ta"} {
+	for _, slug := range []string{"classroom50-cs-principles-teacher", "classroom50-cs-principles-ta"} {
 		if grantPerms[slug] != "push" {
 			t.Errorf("staff team %q granted %q on config repo, want push", slug, grantPerms[slug])
 		}

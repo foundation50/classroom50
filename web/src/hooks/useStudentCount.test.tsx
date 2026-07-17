@@ -18,6 +18,7 @@ vi.mock("@/hooks/useTeamRoster", () => ({
 import useStudentCount from "./useStudentCount"
 
 const roleCounts = (student: number): RoleCounts => ({
+  teacher: 0,
   instructor: 0,
   ta: 0,
   student,

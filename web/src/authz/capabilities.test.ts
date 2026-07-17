@@ -13,6 +13,7 @@ const orgRoles: GitHubOrgRole[] = [
   "unresolved",
 ]
 const classroomRoles: ResolvedRole[] = [
+  "teacher",
   "instructor",
   "ta",
   "student",
@@ -41,7 +42,11 @@ describe("can — org capabilities", () => {
 })
 
 describe("can — classroom capabilities (fail-closed on unresolved)", () => {
-  it("viewClassroomStaffContent: instructor|ta; unresolved and student denied", () => {
+  it("viewClassroomStaffContent: teacher|ta; unresolved and student denied", () => {
+    expect(can("viewClassroomStaffContent", { classroomRole: "teacher" })).toBe(
+      true,
+    )
+    // Legacy instructor alias still resolves to staff.
     expect(
       can("viewClassroomStaffContent", { classroomRole: "instructor" }),
     ).toBe(true)
@@ -58,7 +63,10 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
     expect(can("viewClassroomStaffContent", {})).toBe(false)
   })
 
-  it("editClassroomSettings: instructor only (TA, student, unresolved all denied)", () => {
+  it("editClassroomSettings: teacher only (TA, student, unresolved all denied)", () => {
+    expect(can("editClassroomSettings", { classroomRole: "teacher" })).toBe(
+      true,
+    )
     expect(can("editClassroomSettings", { classroomRole: "instructor" })).toBe(
       true,
     )
@@ -72,7 +80,8 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
     expect(can("editClassroomSettings", {})).toBe(false)
   })
 
-  it("previewAsRole: a real instructor only (never TA/student/unresolved)", () => {
+  it("previewAsRole: a real teacher only (never TA/student/unresolved)", () => {
+    expect(can("previewAsRole", { classroomRole: "teacher" })).toBe(true)
     expect(can("previewAsRole", { classroomRole: "instructor" })).toBe(true)
     expect(can("previewAsRole", { classroomRole: "ta" })).toBe(false)
     expect(can("previewAsRole", { classroomRole: "student" })).toBe(false)
@@ -90,7 +99,13 @@ describe("can — claimInstructor (KTD-4 self-repair)", () => {
     ).toBe(true)
   })
 
-  it("KTD-4: an org owner is NOT auto-instructor — but an owner already on the instructor team never sees the affordance", () => {
+  it("KTD-4: an org owner is NOT auto-teacher — but an owner already on the teacher team never sees the affordance", () => {
+    expect(
+      can("claimInstructor", {
+        githubOrgRole: "owner",
+        classroomRole: "teacher",
+      }),
+    ).toBe(false)
     expect(
       can("claimInstructor", {
         githubOrgRole: "owner",

@@ -36,4 +36,4 @@ export {
 
 // --- Capability policy (capabilities.ts) ------------------------------------
 export type { Capability, CapabilityInput } from "./capabilities"
-export { can } from "./capabilities"
+export { can, isTeacherRole } from "./capabilities"

@@ -67,9 +67,9 @@ describe("ClaimInstructorNotice visibility", () => {
     expect(screen.queryByText(action)).toBeTruthy()
   })
 
-  it("hidden for an owner who is already an instructor", () => {
+  it("hidden for an owner who is already a teacher", () => {
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
-    classroomCtxMock.mockReturnValue({ actualRole: "instructor" })
+    classroomCtxMock.mockReturnValue({ actualRole: "teacher" })
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     expect(screen.queryByText(action)).toBeNull()
   })
@@ -93,24 +93,19 @@ describe("ClaimInstructorNotice self-add", () => {
   it("ensures the team, grants write, and adds the viewer as maintainer", async () => {
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
-    ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-instructor" })
+    ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-teacher" })
     grantWriteMock.mockResolvedValue(undefined)
     addUserMock.mockResolvedValue(undefined)
 
     wrap(<ClaimInstructorNotice org="acme" classroom="cs101" />)
     await userEvent.click(screen.getByText(action))
 
-    expect(ensureTeamMock).toHaveBeenCalledWith(
-      {},
-      "acme",
-      "cs101",
-      "instructor",
-    )
+    expect(ensureTeamMock).toHaveBeenCalledWith({}, "acme", "cs101", "teacher")
     expect(addUserMock).toHaveBeenCalledWith(
       {},
       {
         org: "acme",
-        teamSlug: "classroom50-cs101-instructor",
+        teamSlug: "classroom50-cs101-teacher",
         username: "owner1",
         role: "maintainer",
       },
@@ -123,7 +118,7 @@ describe("ClaimInstructorNotice self-add", () => {
   it("surfaces an error toast when the add fails", async () => {
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     classroomCtxMock.mockReturnValue({ actualRole: "student" })
-    ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-instructor" })
+    ensureTeamMock.mockResolvedValue({ slug: "classroom50-cs101-teacher" })
     grantWriteMock.mockResolvedValue(undefined)
     addUserMock.mockRejectedValue(new Error("boom"))
 
