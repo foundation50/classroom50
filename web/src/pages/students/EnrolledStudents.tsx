@@ -63,14 +63,6 @@ import { FailedInvitationsList } from "./FailedInvitationsList"
 import { RosterParseProblems } from "./RosterParseProblems"
 import { RosterWarnings } from "./RosterWarnings"
 
-// Preserve the module's original public surface: the pure helpers moved to
-// ./enrolledStudentsHelpers but EnrolledStudents.section.test.ts imports them
-// from here.
-export {
-  groupStudentsBySection,
-  nextSelectedKeyAfterSave,
-} from "./enrolledStudentsHelpers"
-
 const EnrolledStudents = ({
   students = [],
   parseProblems = [],
@@ -447,11 +439,6 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Malformed roster.csv: name every bad line so the teacher can fix
-          the file on GitHub. Distinct from a network load error — this is a bad
-          file, and reads/writes silently misbehave until it's corrected. */}
-      {/* Malformed roster.csv: name every bad line so the teacher can fix the
-          file on GitHub. */}
       {parseProblems.length > 0 ? (
         <RosterParseProblems
           parseProblems={parseProblems}

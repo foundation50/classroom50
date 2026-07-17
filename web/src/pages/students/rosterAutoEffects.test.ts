@@ -73,6 +73,19 @@ describe("useRosterAutoSync", () => {
     expect(runSync).toHaveBeenCalledTimes(1)
   })
 
+  it("fires on backfill-only drift (login-only row, no csv-missing)", () => {
+    const runSync = vi.fn()
+    renderHook(() =>
+      useRosterAutoSync({
+        ...base,
+        csvMissingLogins: [],
+        backfillNeededLogins: ["legacyRow"],
+        runSync,
+      }),
+    )
+    expect(runSync).toHaveBeenCalledTimes(1)
+  })
+
   it("stays gated until migrate settles for this classroom", () => {
     const runSync = vi.fn()
     const { rerender } = renderHook((props) => useRosterAutoSync(props), {

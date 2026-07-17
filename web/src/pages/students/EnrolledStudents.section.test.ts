@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   groupStudentsBySection,
   nextSelectedKeyAfterSave,
-} from "./EnrolledStudents"
+} from "./enrolledStudentsHelpers"
 import type { Student } from "@/types/classroom"
 
 const student = (username: string, section?: string): Student =>
