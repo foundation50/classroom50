@@ -13,6 +13,11 @@ import {
   buttonFormSelector,
   buttonFormMessage,
 } from "./src/eslint/buttonFormRule.ts"
+import {
+  directionalClassLiteralSelector,
+  directionalClassTemplateSelector,
+  directionalClassMessage,
+} from "./src/eslint/directionalClassRule.ts"
 
 export default defineConfig([
   globalIgnores(["dist"]),
@@ -109,6 +114,21 @@ export default defineConfig([
           // child component rendered inside a form isn't reachable here.
           selector: buttonFormSelector,
           message: buttonFormMessage,
+        },
+        // RTL support: physical directional utilities (ml-/pr-/left-/
+        // text-left/border-l/rounded-r...) don't mirror under dir="rtl";
+        // the codebase is fully converted to logical equivalents and these
+        // keep it that way. Two selectors because template-literal
+        // classNames have no Literal child — their static chunks are
+        // TemplateElements. audit_i18n.py carries the same regex as a CI
+        // backstop for non-JSX class recipes these selectors can't see.
+        {
+          selector: directionalClassLiteralSelector,
+          message: directionalClassMessage,
+        },
+        {
+          selector: directionalClassTemplateSelector,
+          message: directionalClassMessage,
         },
       ],
     },

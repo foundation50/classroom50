@@ -319,6 +319,133 @@ class TestHardcodedExemptions:
 
 
 # --------------------------------------------------------------------------
+# SPLIT keys: the retired _prefix/_suffix fragment convention is a hard
+# failure (no --strict needed) so it can't quietly return after the Trans
+# refactor. Plural suffixes and camelCase near-misses must stay legal.
+# --------------------------------------------------------------------------
+
+
+class TestSplitKeyGate:
+    def test_split_key_fails_without_strict(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"body_prefix": "Open", "body_suffix": "to continue."}},
+            sources={"App.tsx": 't("nav.body_prefix"); t("nav.body_suffix")'},
+        )
+        assert code == 1
+
+    def test_numbered_fragment_fails(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"body_1": "Part one", "body_2": "part two."}},
+            sources={"App.tsx": 't("nav.body_1"); t("nav.body_2")'},
+        )
+        assert code == 1
+
+    def test_plural_suffixes_are_legal(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"students": {"count_one": "1 student", "count_other": "{{count}}"}},
+            sources={"App.tsx": 't("students.count")'},
+        )
+        assert code == 0
+
+    def test_camelcase_link_key_is_legal(self, monkeypatch, tmp_path):
+        # nav.allClassesLink ends in "Link" but not "_link" — must pass.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"allClassesLink": "All Classrooms"}},
+            sources={"App.tsx": 't("nav.allClassesLink")'},
+        )
+        assert code == 0
+
+
+# --------------------------------------------------------------------------
+# PHYSICAL directional classes: warning by default, fails --strict; the
+# physical-ok marker exempts a deliberate physical edge. Logical classes and
+# lookalike tokens must never trip it.
+# --------------------------------------------------------------------------
+
+
+class TestPhysicalClassGate:
+    def test_physical_class_fails_strict(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={"App.tsx": 't("nav.home"); const c = "btn ml-2"'},
+            strict=True,
+        )
+        assert code == 1
+
+    def test_physical_class_advisory_by_default(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={"App.tsx": 't("nav.home"); const c = "btn ml-2"'},
+        )
+        assert code == 0
+
+    def test_template_literal_chunk_detected(self, monkeypatch, tmp_path):
+        # Class recipes in plain .ts template literals are the reason this
+        # backstop exists — the eslint selectors can't reach them.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={
+                "classes.ts": 't("nav.home"); export const row = `flex pl-4 ${accent}`'
+            },
+            strict=True,
+        )
+        assert code == 1
+
+    def test_physical_ok_marker_exempts(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={
+                "App.tsx": 't("nav.home"); const c = "fixed left-3" // physical-ok: viewport chrome'
+            },
+            strict=True,
+        )
+        assert code == 0
+
+    def test_logical_and_lookalike_classes_pass(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={
+                "App.tsx": (
+                    't("nav.home"); '
+                    'const c = "ms-2 me-auto ps-5 text-start border-s-2 start-2 end-3 '
+                    'rounded-lg translate-x-0.5 rtl:-translate-x-0.5 space-x-3 '
+                    'inset-x-0 tooltip-right rtl:tooltip-left col-start-2 justify-start"'
+                )
+            },
+            strict=True,
+        )
+        assert code == 0
+
+    def test_variant_prefixed_physical_detected(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={"App.tsx": 't("nav.home"); const c = "sm:right-4"'},
+            strict=True,
+        )
+        assert code == 1
+
+
+# --------------------------------------------------------------------------
 # flatten() / PLURAL_SUFFIXES parity with the sibling verify_locale.py.
 # The two copies are intentionally duplicated (both scripts are standalone,
 # zero-import), so guard against silent drift the way translate_locales does.

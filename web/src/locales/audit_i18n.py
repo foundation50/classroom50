@@ -32,7 +32,25 @@ It reports three independent things:
      classes.filter.*, ...) -- an orphan there can't be flagged and a
      runtime-missing key falls back to English silently. DEAD is a lower bound.
 
-  3. HARDCODED strings -- user-facing string literals that bypass i18n entirely
+  3. SPLIT keys    -- keys in en.json using the retired fragment convention
+     (_prefix/_suffix/_middle/_from/_emphasis/_link/_1...) that stitched
+     sentences together in JSX. Fragments force English word order onto every
+     language and break RTL; sentences must be single keys with {{placeholders}}
+     and <tag> markers (see TRANSLATION_PROMPT.md). i18next plural suffixes
+     (_one/_other/...) are exempt. Always fails the run (exit 1) -- the
+     convention was fully removed and must not return.
+
+  4. PHYSICAL directional classes -- Tailwind utilities that pin a physical
+     edge (ml-/pr-/left-/text-left/border-l/rounded-r...) and therefore don't
+     mirror under dir="rtl". The codebase is fully converted to logical
+     equivalents (ms-/me-/ps-/pe-/start-/end-/...); this line-based scan is the
+     CI backstop behind the eslint no-restricted-syntax rule (see
+     web/src/eslint/directionalClassRule.ts -- keep the two regexes in sync),
+     catching what AST selectors can't: class recipes in plain .ts files and
+     dynamic template chunks. A `physical-ok` comment on the line exempts a
+     deliberate physical edge. Reported as a warning; fails under --strict.
+
+  5. HARDCODED strings -- user-facing string literals that bypass i18n entirely
      (so no language pack can ever translate them). Heuristic; reported as a
      warning, only fails under --strict. Coverage is deliberately narrow -- green
      means "the covered shapes hardcode no prose", not "no hardcoded prose
@@ -43,7 +61,8 @@ It reports three independent things:
      helper. Dev-only UI (HARDCODED_IGNORE_PREFIXES) and scoped format-hint
      values (HARDCODED_ALLOWED_VALUES) are exempt.
 
-Exit code: 0 when clean (no MISSING, and under --strict no DEAD/HARDCODED), else 1.
+Exit code: 0 when clean (no MISSING/SPLIT, and under --strict no
+DEAD/PHYSICAL/HARDCODED), else 1.
 """
 
 from __future__ import annotations
@@ -90,6 +109,27 @@ USERFACING_CALL_RE = re.compile(
 
 # literals that look like code/config, not prose worth translating
 CODEISH_RE = re.compile(r"^[a-z0-9]+(?:[-_/][a-z0-9]+)*$")  # ubuntu-latest, foo_bar
+
+# The retired sentence-fragment suffixes (SPLIT check). Match on the literal
+# underscore suffix so camelCase keys like nav.allClassesLink stay legal.
+# _<digits> covers the numbered variants (_1, _2, ...).
+SPLIT_SUFFIX_RE = re.compile(r"_(?:prefix|suffix|middle|from|emphasis|link|\d+)$")
+
+# Physical directional Tailwind utilities (PHYSICAL check). Keep in sync with
+# directionalClassPattern in web/src/eslint/directionalClassRule.ts -- same
+# token shapes, Python syntax. A token starts the string, or follows
+# whitespace, a quote/backtick (string openings), or a variant colon.
+PHYSICAL_CLASS_RE = re.compile(
+    r"""(?:^|[\s:"'`])-?(?:(?:scroll-)?[mp][lr]|left|right)-(?:\d|\[|auto|full|px)
+      | (?:^|[\s:"'`])text-(?:left|right)(?![A-Za-z0-9_-])
+      | (?:^|[\s:"'`])(?:border|rounded)-(?:[lr]|t[lr]|b[lr])(?![A-Za-z])
+    """,
+    re.VERBOSE,
+)
+
+# Escape hatch for a deliberately physical edge (viewport-anchored chrome,
+# animation sheens): a `physical-ok` comment on the same line skips the scan.
+PHYSICAL_OK_MARKER = "physical-ok"
 
 # Source path prefixes exempt from the HARDCODED scan: dev-only UI that never
 # ships to end users (gated behind import.meta.env.DEV), so translating its
@@ -203,6 +243,7 @@ def main() -> int:
     dynamic_prefixes: set[str] = set()
     literal_strings: set[str] = set()
     hardcoded: list[tuple[str, int, str]] = []
+    physical: list[tuple[str, int, str]] = []
 
     for path in iter_source_files():
         text = path.read_text(encoding="utf-8")
@@ -216,6 +257,14 @@ def main() -> int:
                 dynamic_prefixes.add(m.group(1))
         for m in STRING_LITERAL_RE.finditer(text):
             literal_strings.add(m.group(1))
+        # Physical directional classes can hide in any string (class recipes in
+        # .ts files, template chunks), so scan line-by-line over all source.
+        for i, line in enumerate(text.splitlines(), 1):
+            if PHYSICAL_OK_MARKER in line:
+                continue
+            m = PHYSICAL_CLASS_RE.search(line)
+            if m:
+                physical.append((relpath, i, m.group(0).strip()))
         # Hardcoded JSX-attribute prose can appear in any component-bearing file
         # (a .ts helper returning JSX via createElement, not just .tsx), so scan
         # every source file; ATTR_RE is specific enough that non-JSX files match
@@ -255,7 +304,12 @@ def main() -> int:
 
     dead = sorted(k for k in en_keys if not is_used(k))
 
-    # 3) HARDCODED already collected
+    # 3) SPLIT: retired fragment-suffix keys (plural suffixes exempt via the
+    #    regex requiring the exact retired names / digits).
+    split = sorted(k for k in en_keys if SPLIT_SUFFIX_RE.search(k))
+
+    # 4) PHYSICAL and 5) HARDCODED already collected
+    physical.sort()
     hardcoded.sort()
 
     print(f"en.json flat keys:          {len(en_keys)}")
@@ -274,13 +328,31 @@ def main() -> int:
     if not dead:
         print("  (none)")
 
+    print(f"\n=== SPLIT keys ({len(split)}) — retired _prefix/_suffix fragment convention ===")
+    for k in split:
+        print(f"  {k}")
+    if not split:
+        print("  (none)")
+
+    print(
+        f"\n=== PHYSICAL directional classes ({len(physical)}) — don't mirror in RTL ==="
+    )
+    for p, i, s in physical:
+        print(f"  {p}:{i}: {s!r}")
+    if not physical:
+        print("  (none)")
+
     print(f"\n=== HARDCODED user-facing strings ({len(hardcoded)}) — bypass i18n ===")
     for p, i, s in hardcoded:
         print(f"  {p}:{i}: {s!r}")
     if not hardcoded:
         print("  (none)")
 
-    failed = bool(missing) or (args.strict and (dead or hardcoded))
+    failed = (
+        bool(missing)
+        or bool(split)
+        or (args.strict and (dead or hardcoded or physical))
+    )
     print("\nRESULT:", "FAIL" if failed else "PASS")
     return 1 if failed else 0
 
