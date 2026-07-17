@@ -13,37 +13,48 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("useTeacherTeamMigration")
 
-// Self-heal the instructor -> teacher team rename when classroom settings load.
-// Fires once per (org, classroom) mount, best-effort: it never blocks the page
-// and a failure is logged, not surfaced (the next settings load retries). Only
-// the settings route (gated on the top staff role) mounts this, so the viewer
-// is an org owner able to create/delete teams and commit to the config repo.
+type MigrationVars = { org: string; classroom: string }
+
+// Self-heal the instructor -> teacher team rename on classroom entry, best-effort.
+// Mounted once at the $org/$classroom boundary and fired once per (org,
+// classroom) the viewer visits, so a classroom converges on any owner entry
+// rather than only on the settings page.
+//
+// `enabled` MUST gate on the viewer being an org owner (the resolved teacher
+// role): the migration creates/deletes teams and commits to the config repo, so
+// firing it for a TA/student would only generate failing API calls. It never
+// blocks the page and a failure is logged, not surfaced (a later entry retries).
 //
 // The migration itself is a no-op unless the classroom still records a legacy
-// `teams.instructor` team, so mounting this on an already-migrated (or brand-new)
+// `teams.instructor` team, so entering an already-migrated (or brand-new)
 // classroom does nothing beyond one classroom.json read. On a committed change
 // it invalidates classroom.json and the team caches so the roster, RBAC, and
 // capability gating re-resolve off the now-authoritative `-teacher` team.
 export function useTeacherTeamMigration(
   org: string | undefined,
   classroom: string | undefined,
+  enabled: boolean,
 ): void {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  // Guard against re-firing on every render / StrictMode double-invoke.
+  // Guard against re-firing for the same classroom on this mount. Cleared on
+  // failure (below) so a transient error retries on the next render pass rather
+  // than staying latched until a full remount.
   const attemptedRef = useRef<string | null>(null)
 
-  const migration = useMutation<TeacherMigrationResult, Error, void>({
-    mutationFn: () =>
+  const migration = useMutation<TeacherMigrationResult, Error, MigrationVars>({
+    // Take org/classroom as variables (not closed-over props) so a run that
+    // resolves after a fast classroom switch invalidates ITS OWN classroom's
+    // caches, never the one now on screen.
+    mutationFn: ({ org, classroom }) =>
       withGitConflictRetry(() =>
-        migrateInstructorTeamToTeacher(client, org!, classroom!),
+        migrateInstructorTeamToTeacher(client, org, classroom),
       ),
-    onSuccess: (result) => {
+    onSuccess: (result, { org, classroom }) => {
       if (!result.changed) return
-      // classroom.json changed (teams block), so the detail read must refetch.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.jsonFile(
-          org!,
+          org,
           CONFIG_REPO,
           `${classroom}/classroom.json`,
         ),
@@ -52,36 +63,38 @@ export function useTeacherTeamMigration(
       // roster reflects the copied membership / removed team.
       void queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(
-          org!,
-          classroomTeamSlug(classroom!, "teacher"),
+          org,
+          classroomTeamSlug(classroom, "teacher"),
         ),
       })
       void queryClient.invalidateQueries({
         queryKey: githubKeys.teamMembers(
-          org!,
-          classroomTeamSlug(classroom!, "instructor"),
+          org,
+          classroomTeamSlug(classroom, "instructor"),
         ),
       })
       // The viewer's per-team membership probes feed useClassroomRole; after the
       // instructor team is deleted, RBAC must re-resolve off the teacher team.
       void queryClient.invalidateQueries({ queryKey: ["team-membership"] })
     },
-    onError: (err) => {
+    onError: (err, { org, classroom }) => {
       // Best-effort: a permission/transient failure just leaves the classroom on
-      // the legacy team (still fully functional via backward-compat reads); the
-      // next settings load retries.
+      // the legacy team (still fully functional via backward-compat reads).
+      // Clear the latch for this key so the next entry/render retries.
+      const key = `${org}/${classroom}`
+      if (attemptedRef.current === key) attemptedRef.current = null
       log.warn("teacher team migration skipped", { org, classroom, err })
     },
   })
 
   const { mutate } = migration
   useEffect(() => {
-    if (!org || !classroom) return
+    if (!enabled || !org || !classroom) return
     const key = `${org}/${classroom}`
     if (attemptedRef.current === key) return
     attemptedRef.current = key
-    mutate()
-  }, [org, classroom, mutate])
+    mutate({ org, classroom })
+  }, [enabled, org, classroom, mutate])
 }
 
 export default useTeacherTeamMigration

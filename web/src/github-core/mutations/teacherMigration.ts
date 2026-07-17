@@ -39,9 +39,10 @@ export type TeacherMigrationResult =
 //   recorded under `teams.teacher` — leaving `-instructor` intact.
 //
 //   Phase 2 (delete): once `teams.teacher` is recorded AND the legacy
-//   `-instructor` team is still present, the instructor team is deleted (via the
-//   fail-closed deleteClassroomTeam guards) and its ref dropped from
-//   `teams.instructor`.
+//   `-instructor` team is still present, the `teams.instructor` ref is dropped
+//   first and then the instructor team is deleted (via the fail-closed
+//   deleteClassroomTeam guards) — ref-drop-before-delete so no reader resolves a
+//   live ref to a just-deleted team.
 //
 // A classroom with neither ref (or already fully migrated) is a no-op. All GitHub
 // calls are org-owner operations; a caller lacking permission should not invoke
@@ -117,17 +118,23 @@ async function migratePhaseDelete(
   teacher: { id: number; slug: string },
   instructor: { id: number; slug: string },
 ): Promise<TeacherMigrationResult> {
+  // Drop the ref FIRST, then delete the team. classroom.json no longer points
+  // at the instructor team before it disappears, so a concurrent read can't
+  // resolve a live ref to a just-deleted team (a transient 404 -> non-member).
+  await commitTeamsPatch(client, org, classroom, (teams) => {
+    const next = { ...teams }
+    delete next.instructor
+    return next
+  })
+  // When the teacher ref ADOPTED the same team as the instructor ref (shared
+  // slug), the ref drop is the whole migration — deleting would remove the live
+  // teacher team.
   if (teacher.slug !== instructor.slug) {
     // deleteClassroomTeam is fail-closed: it refuses a ref outside the
     // classroom50- namespace or without a positive id, and verifies the live
     // team's id before deleting (see isDeletableClassroomTeamRef / TeamIdMismatch).
     await deleteClassroomTeam(client, org, instructor)
   }
-  await commitTeamsPatch(client, org, classroom, (teams) => {
-    const next = { ...teams }
-    delete next.instructor
-    return next
-  })
 
   log.info("teacher migration: phase-delete complete", {
     org,

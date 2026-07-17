@@ -213,8 +213,8 @@ func TestRunStaffRemove(t *testing.T) {
 	t.Cleanup(server.Close)
 	client := githubtest.NewTestClient(t, server)
 
-	var out bytes.Buffer
-	if err := runStaffRemove(client, &out, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
+	var out, errOut bytes.Buffer
+	if err := runStaffRemove(client, &out, &errOut, "o", "cs-principles", "alice", configrepo.RoleTA); err != nil {
 		t.Fatalf("runStaffRemove: %v", err)
 	}
 	if len(mock.membershipDEL) != 1 || !strings.Contains(mock.membershipDEL[0], "classroom50-cs-principles-ta/memberships/alice") {

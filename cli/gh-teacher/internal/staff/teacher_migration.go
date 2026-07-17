@@ -24,9 +24,10 @@ import (
 //	working.
 //
 //	Phase 2 (delete): once `teams.teacher` is recorded AND the legacy
-//	`-instructor` team is still present (a later touch), the instructor team is
-//	deleted via the fail-closed IsDeletableClassroomTeamRef / id-match guards and
-//	its ref dropped from `teams.instructor`.
+//	`-instructor` team is still present (a later touch), the `teams.instructor`
+//	ref is dropped first and then the instructor team is deleted via the
+//	fail-closed IsDeletableClassroomTeamRef / id-match guards — ref-drop-before-
+//	delete so no reader resolves a live ref to a just-deleted team.
 //
 // Splitting create and delete across two touches keeps a client release that
 // only reads `-instructor` from losing access mid-migration. A classroom with
@@ -107,19 +108,22 @@ func migratePhaseCreate(client githubapi.Client, out io.Writer, org, classroom, 
 	return nil
 }
 
-// migratePhaseDelete performs Phase 2: delete the legacy instructor team and
-// drop its ref, now that the teacher team is recorded. A distinct-slug guard
-// avoids deleting an instructor team that was adopted AS the teacher team.
+// migratePhaseDelete performs Phase 2: drop the legacy instructor ref and then
+// delete the instructor team, now that the teacher team is recorded. Dropping
+// the ref before the delete means classroom.json no longer points at the team
+// before it disappears, so a concurrent read can't resolve a live ref to a
+// just-deleted team. A distinct-slug guard avoids deleting an instructor team
+// that was adopted AS the teacher team.
 func migratePhaseDelete(client githubapi.Client, out io.Writer, org, classroom, branch string, teacher, instr configrepo.TeamRef) error {
 	if teacher.Slug == instr.Slug {
 		// The teacher ref adopted the same team; only drop the duplicate ref.
 		return dropInstructorRef(client, org, classroom, branch)
 	}
-	if err := configrepo.DeleteClassroomTeam(client, org, instr); err != nil {
-		return fmt.Errorf("delete legacy instructor team %s: %w", instr.Slug, err)
-	}
 	if err := dropInstructorRef(client, org, classroom, branch); err != nil {
 		return err
+	}
+	if err := configrepo.DeleteClassroomTeam(client, org, instr); err != nil {
+		return fmt.Errorf("delete legacy instructor team %s: %w", instr.Slug, err)
 	}
 	_, _ = fmt.Fprintf(out, "%s: removed legacy instructor team %s in %s\n", org, instr.Slug, classroom)
 	return nil

@@ -6,7 +6,8 @@ import {
 } from "react"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
-import { type ResolvedRole } from "@/authz"
+import { useTeacherTeamMigration } from "@/hooks/useTeacherTeamMigration"
+import { isTeacherRole, type ResolvedRole } from "@/authz"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child
@@ -48,6 +49,13 @@ function useClassroomRoleResolution(
     classroom,
     user?.login,
   )
+
+  // Self-heal the instructor -> teacher team rename on classroom entry, for the
+  // whole classroom subtree rather than only the settings page. Gated on the
+  // viewer being an org owner (the resolved teacher role) since the migration
+  // creates/deletes teams and commits config; use actualRole so a teacher
+  // previewing as a lower role still triggers the (idempotent) heal.
+  useTeacherTeamMigration(org, classroom, isTeacherRole(actualRole))
 
   const roleResolved = role !== "unresolved"
 

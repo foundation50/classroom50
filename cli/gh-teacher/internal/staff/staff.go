@@ -137,7 +137,7 @@ func staffRemoveCmd() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			return runStaffRemove(client, cmd.OutOrStdout(), org, classroom, username, r)
+			return runStaffRemove(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, classroom, username, r)
 		},
 	}
 	cmd.Flags().StringVar(&role, "role", "teacher", `Staff role: "teacher" or "ta"`)
@@ -244,10 +244,16 @@ func ensureStaffTeamRecorded(client githubapi.Client, out io.Writer, org, classr
 
 // runStaffRemove resolves the staff team and removes the user. Idempotent — a
 // non-member or already-gone team is a no-op.
-func runStaffRemove(client githubapi.Client, out io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
+func runStaffRemove(client githubapi.Client, out, errOut io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
 		return err
+	}
+	// Self-heal the instructor→teacher rename on touch (best-effort), symmetric
+	// with `staff add`, so the migration converges regardless of which staff op
+	// a teacher happens to run.
+	if merr := MigrateInstructorTeamToTeacher(client, out, org, classroom, branch); merr != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: instructor→teacher team migration skipped for %s (%v); continuing.\n", classroom, merr)
 	}
 	login, _, err := membership.LookupUser(client, username)
 	if err != nil {

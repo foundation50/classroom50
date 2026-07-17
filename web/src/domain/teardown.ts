@@ -99,7 +99,12 @@ async function collectClassroomTeams(
       // without schema validation, so its team refs are untrusted input to a
       // destructive bulk DELETE. Only queue refs the app owns and can safely
       // delete — see isDeletableClassroomTeamRef.
-      const candidates = [json.team, json.teams?.instructor, json.teams?.ta]
+      const candidates = [
+        json.team,
+        json.teams?.teacher,
+        json.teams?.instructor,
+        json.teams?.ta,
+      ]
       for (const team of candidates) {
         if (isDeletableClassroomTeamRef(team)) {
           bySlug.set(team.slug, { id: team.id, slug: team.slug })

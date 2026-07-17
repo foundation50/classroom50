@@ -16,6 +16,13 @@ vi.mock("@/hooks/useClassroomRole", async (importOriginal) => {
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "prof" } }),
 }))
+// The provider mounts the best-effort teacher-team self-heal migration; it
+// needs the GitHub client + query client and is orthogonal to role resolution,
+// so stub it out here (its own behavior is covered in
+// useTeacherTeamMigration.test.tsx).
+vi.mock("@/hooks/useTeacherTeamMigration", () => ({
+  useTeacherTeamMigration: () => {},
+}))
 
 import {
   ClassroomRoleProvider,

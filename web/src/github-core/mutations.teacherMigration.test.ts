@@ -186,6 +186,37 @@ describe("migrateInstructorTeamToTeacher", () => {
     expect(teams.teacher).toBeTruthy()
   })
 
+  it("phase-delete adopted-same-slug: teacher ref adopted the instructor team -> drops the ref WITHOUT deleting the live team", async () => {
+    const { client, committed, teamsCreated, teamDeleted } = makeClient({
+      classroomJson: {
+        ...CLASSROOM_BASE,
+        teams: {
+          // teacher and instructor both point at the one adopted team.
+          teacher: { id: 2, slug: "classroom50-cs101-instructor" },
+          instructor: { id: 2, slug: "classroom50-cs101-instructor" },
+          ta: { id: 3, slug: "classroom50-cs101-ta" },
+        },
+      },
+    })
+
+    const result = await migrateInstructorTeamToTeacher(client, "o", "cs101")
+
+    expect(result).toEqual({
+      changed: true,
+      phase: "delete",
+      teacherSlug: "classroom50-cs101-instructor",
+    })
+    expect(teamsCreated).toEqual([])
+    // Deleting would remove the live teacher team — the shared-slug guard must skip it.
+    expect(teamDeleted).toEqual([])
+    const teams = committed.content?.teams as Record<string, unknown>
+    expect(teams.instructor).toBeUndefined()
+    expect(teams.teacher).toEqual({
+      id: 2,
+      slug: "classroom50-cs101-instructor",
+    })
+  })
+
   it("no-op: a fully-migrated classroom (teacher only) makes no change", async () => {
     const { client, teamsCreated, teamDeleted, membershipPUT } = makeClient({
       classroomJson: {

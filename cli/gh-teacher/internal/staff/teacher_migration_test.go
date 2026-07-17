@@ -191,6 +191,49 @@ func TestMigrate_PhaseDelete(t *testing.T) {
 	}
 }
 
+// adoptedSameSlugClassroom: the teacher ref adopted the SAME team as the
+// instructor ref (shared slug) — e.g. a prior partial migration recorded both
+// pointing at the one team.
+const adoptedSameSlugClassroom = `{
+  "schema": "classroom50/classroom/v1",
+  "short_name": "cs",
+  "org": "o",
+  "teams": {
+    "teacher": {"id": 2, "slug": "classroom50-cs-instructor"},
+    "instructor": {"id": 2, "slug": "classroom50-cs-instructor"},
+    "ta": {"id": 3, "slug": "classroom50-cs-ta"}
+  }
+}`
+
+// TestMigrate_PhaseDelete_AdoptedSameSlug: when teacher.Slug == instructor.Slug
+// the phase-delete MUST skip the team DELETE (deleting would remove the live
+// teacher team) and only drop the duplicate instructor ref. Guards the fail-safe
+// branch a regression could silently drop.
+func TestMigrate_PhaseDelete_AdoptedSameSlug(t *testing.T) {
+	mock := &migrationMock{classroomJSON: adoptedSameSlugClassroom}
+	server := httptest.NewServer(mock.handler(t))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	var out bytes.Buffer
+	if err := MigrateInstructorTeamToTeacher(client, &out, "o", "cs", "main"); err != nil {
+		t.Fatalf("MigrateInstructorTeamToTeacher adopted-same-slug: %v", err)
+	}
+	if len(mock.teamDeleted) != 0 {
+		t.Errorf("shared-slug phase-delete must NOT delete the (live teacher) team, deleted = %v", mock.teamDeleted)
+	}
+	if len(mock.teamsCreated) != 0 {
+		t.Errorf("phase-delete must not create teams, got %v", mock.teamsCreated)
+	}
+	committed, ok := mock.committed["cs/classroom.json"]
+	if !ok || strings.Contains(committed, `"instructor"`) {
+		t.Errorf("committed classroom.json should drop the duplicate instructor ref, got %q", committed)
+	}
+	if !strings.Contains(committed, "classroom50-cs-instructor") {
+		t.Errorf("the adopted team slug must remain as teams.teacher, got %q", committed)
+	}
+}
+
 // TestMigrate_NoTeamsBlock: a classroom with no teams block is a clean no-op.
 func TestMigrate_NoTeamsBlock(t *testing.T) {
 	mock := &migrationMock{classroomJSON: `{"schema":"classroom50/classroom/v1","short_name":"cs","org":"o"}`}
