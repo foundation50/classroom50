@@ -15,9 +15,9 @@ import { normalizeOnBlur } from "./formFieldHelpers"
 import { PASS_THRESHOLD_MAX, PASS_THRESHOLD_MIN } from "@/types/classroom"
 import type { AssignmentForm } from "./assignmentFormModel"
 
-// The collapsible Advanced Settings pane: runtime environment (hosted runner vs
-// container), runner label, language toolchain versions, apt packages, setup
-// command, allowed-files patterns, and the opt-in pass threshold.
+// The collapsible Advanced Settings pane. runtime_env gates which runtime
+// fields render (container image/user vs apt) so the mutually exclusive wire
+// shapes stay unrepresentable rather than merely validated-against.
 export const AdvancedSection = ({
   form,
   org,

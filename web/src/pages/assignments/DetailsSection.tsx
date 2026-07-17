@@ -21,8 +21,8 @@ const FormErrors = ({ form }: { form: AssignmentForm }) => (
   </form.Subscribe>
 )
 
-// The assignment details + core settings: name/slug/description/template, then
-// type (individual/group + max size), feedback PR, and the opt-in due date.
+// The assignment details + core settings. Owns the create-only slug auto-fill
+// and the opt-in due-date toggle, wired via props from the orchestrator.
 export const DetailsSection = ({
   form,
   edit,

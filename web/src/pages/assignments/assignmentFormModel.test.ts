@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { TFunction } from "i18next"
+import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
   validateAssignmentForm,
   toSubmitValues,
@@ -8,6 +9,26 @@ import {
 
 // Echo the i18n key (+ any interpolation) so assertions match on stable keys.
 const t = ((key: string) => key) as unknown as TFunction
+
+// A minimal well-formed test draft; individual fields are overridden per case
+// to exercise validateTestDrafts' per-index error keying.
+const draft = (
+  over: Partial<AssignmentTestDraft> = {},
+): AssignmentTestDraft => ({
+  name: "adds numbers",
+  type: "run",
+  setup: "",
+  run: "pytest",
+  input: "",
+  inputFile: "",
+  expected: "",
+  expectedFile: "",
+  comparison: "exact",
+  timeout: 30,
+  exitCode: "",
+  points: 10,
+  ...over,
+})
 
 const base: CreateAssignmentFormValues = {
   name: "Homework 1",
@@ -176,6 +197,29 @@ describe("validateAssignmentForm — runtime env", () => {
     )
     expect(errors.runtime_python).toBeDefined()
     expect(errors.runtime_node).toBeUndefined()
+  })
+})
+
+// The validator delegates to two shared helpers and folds their results into
+// the same error map — these prove the parse-then-merge wiring, which the
+// per-field cases above don't touch.
+describe("validateAssignmentForm — delegated helpers", () => {
+  it("merges validateTestDrafts errors under a per-index key", () => {
+    const errors = validateAssignmentForm(
+      { ...base, tests: [draft({ name: "  " })] },
+      t,
+    )
+    expect(errors["tests[0].name"]).toBeDefined()
+  })
+
+  it("folds a validateAllowedFiles error under errors.allowed_files", () => {
+    // A NUL survives parseAllowedFiles (only blank lines are dropped), so it
+    // reaches validateAllowedFiles' shape check.
+    const errors = validateAssignmentForm(
+      { ...base, allowed_files: "*\n\u0000" },
+      t,
+    )
+    expect(errors.allowed_files).toBeDefined()
   })
 })
 
