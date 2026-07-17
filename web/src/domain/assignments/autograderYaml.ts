@@ -144,7 +144,7 @@ export async function resolveAutograderWorkflow(params: {
 
   if (!workflow.includes("jobs:")) {
     throw new Error(
-      `Autograder ${autograderName} may be malformed YAML. Ask your instructor to check the file in the config repo.`,
+      `Autograder ${autograderName} may be malformed YAML. Ask your teacher to check the file in the config repo.`,
     )
   }
 

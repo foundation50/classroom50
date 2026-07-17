@@ -19,14 +19,14 @@ afterEach(() => {
 describe("RoleBadges", () => {
   it("renders a chip per role for a mixed-team member (instructor + student)", () => {
     render(<RoleBadges roles={["student", "instructor"]} />)
-    expect(screen.getByText("students.roleInstructor")).toBeTruthy()
+    expect(screen.getByText("students.roleTeacher")).toBeTruthy()
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
   })
 
   it("renders exactly one chip for a single-role member", () => {
     const { container } = render(<RoleBadges roles={["student"]} />)
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
-    expect(screen.queryByText("students.roleInstructor")).toBeNull()
+    expect(screen.queryByText("students.roleTeacher")).toBeNull()
     // One badge element, not a collapsed-then-duplicated render.
     expect(container.querySelectorAll(".badge")).toHaveLength(1)
   })
@@ -39,7 +39,7 @@ describe("RoleBadges", () => {
       (el) => el.textContent,
     )
     expect(labels).toEqual([
-      "students.roleInstructor",
+      "students.roleTeacher",
       "students.roleTa",
       "students.roleStudent",
     ])

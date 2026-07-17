@@ -41,7 +41,7 @@ export async function addFounderCollaborator(params: {
     )
   ) {
     throw new Error(
-      `Expected ${username} to have "${permission}" access on ${owner}/${repo}, but GitHub reports "${effective.permission}" (role "${effective.role_name}") — a repo creator holds admin and a self-downgrade may be blocked by org policy. Ask your instructor to set your access to "${permission}".`,
+      `Expected ${username} to have "${permission}" access on ${owner}/${repo}, but GitHub reports "${effective.permission}" (role "${effective.role_name}") — a repo creator holds admin and a self-downgrade may be blocked by org policy. Ask your teacher to set your access to "${permission}".`,
     )
   }
 }
@@ -84,7 +84,7 @@ export function assertAssignmentModeCoherent(
 ): void {
   if ((maxGroupSize ?? 0) > 0 && mode !== "group") {
     throw new Error(
-      `Assignment "${slug}" has max_group_size ${maxGroupSize} but mode "${mode}" (want "group") — its published metadata is inconsistent. Ask your instructor to re-run assignment setup.`,
+      `Assignment "${slug}" has max_group_size ${maxGroupSize} but mode "${mode}" (want "group") — its published metadata is inconsistent. Ask your teacher to re-run assignment setup.`,
     )
   }
 }

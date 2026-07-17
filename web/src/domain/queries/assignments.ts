@@ -49,7 +49,7 @@ export async function fetchTextWithFriendlyErrors(
 
   if (response.status === 404) {
     throw new Error(
-      `${label} is not published yet. Ask your instructor to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
+      `${label} is not published yet. Ask your teacher to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
     )
   }
 

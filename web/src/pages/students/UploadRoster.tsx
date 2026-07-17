@@ -565,7 +565,7 @@ const UploadRoster = ({
                 any row is assigned the instructor role. */}
             {!preflight && anyInstructorAssigned ? (
               <Alert tone="warning" className="mb-4">
-                <span>{t("students.uploadInstructorOwnerNotice")}</span>
+                <span>{t("students.uploadTeacherOwnerNotice")}</span>
               </Alert>
             ) : null}
 

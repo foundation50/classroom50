@@ -113,7 +113,7 @@ export const EmailInvitePreview = ({
                           </option>
                           <option value="ta">{t("students.roleTa")}</option>
                           <option value="instructor">
-                            {t("students.roleInstructor")}
+                            {t("students.roleTeacher")}
                           </option>
                         </Select>
                       </td>
@@ -127,7 +127,7 @@ export const EmailInvitePreview = ({
           {emailHasInstructor ? (
             <div className="mt-3 flex flex-col gap-2 rounded-box border border-error/30 bg-error/5 p-4">
               <Alert tone="warning">
-                <span>{t("students.uploadInstructorOwnerNotice")}</span>
+                <span>{t("students.uploadTeacherOwnerNotice")}</span>
               </Alert>
               <label className="flex items-start gap-2 text-sm">
                 <input

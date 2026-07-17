@@ -57,7 +57,7 @@ afterEach(() => {
   addUserMock.mockReset()
 })
 
-const action = "classes.claimInstructor.action"
+const action = "classes.claimTeacher.action"
 
 describe("ClaimInstructorNotice visibility", () => {
   it("shows for an org owner resolving to student in the classroom", () => {

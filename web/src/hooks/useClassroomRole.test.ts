@@ -64,7 +64,7 @@ describe("combineTeacherMembership (teacher OR legacy instructor team)", () => {
 
 describe("role predicates stay wired", () => {
   it("roleLabelKey", () => {
-    expect(roleLabelKey("teacher")).toBe("nav.roleInstructor")
+    expect(roleLabelKey("teacher")).toBe("nav.roleTeacher")
     expect(roleLabelKey("unresolved")).toBeNull()
   })
   it("applyViewAs downgrade-only", () => {

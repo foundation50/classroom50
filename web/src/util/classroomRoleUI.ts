@@ -12,8 +12,8 @@ export { ROLE_RANK, sortRolesByRank }
 // i18n key per role for row badges and filter labels. `teacher` and its legacy
 // `instructor` alias share the label key.
 export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
-  teacher: "students.roleInstructor",
-  instructor: "students.roleInstructor",
+  teacher: "students.roleTeacher",
+  instructor: "students.roleTeacher",
   ta: "students.roleTa",
   student: "students.roleStudent",
 }

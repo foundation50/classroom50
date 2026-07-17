@@ -38,14 +38,14 @@ export function ClaimInstructorNotice({
       onSuccess: () => {
         notify({
           tone: "success",
-          message: t("classes.claimInstructor.success"),
+          message: t("classes.claimTeacher.success"),
         })
       },
       onError: (err) => {
         log.warn("claim instructor failed", { org, classroom, err })
         notify({
           tone: "error",
-          message: t("classes.claimInstructor.failed", {
+          message: t("classes.claimTeacher.failed", {
             message:
               err instanceof Error
                 ? err.message
@@ -68,7 +68,7 @@ export function ClaimInstructorNotice({
     >
       <ShieldPlus aria-hidden="true" className="size-5 shrink-0" />
       <span className="flex-1 text-sm">
-        {t("classes.claimInstructor.message")}
+        {t("classes.claimTeacher.message")}
       </span>
       <Button
         variant="primary"
@@ -81,7 +81,7 @@ export function ClaimInstructorNotice({
         ) : (
           <ShieldPlus aria-hidden="true" className="size-4" />
         )}
-        {t("classes.claimInstructor.action")}
+        {t("classes.claimTeacher.action")}
       </Button>
     </Alert>
   )

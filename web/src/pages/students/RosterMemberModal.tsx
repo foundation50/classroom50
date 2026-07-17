@@ -765,7 +765,7 @@ const RosterMemberModal = ({
                     <option value="student">{t("students.roleStudent")}</option>
                     <option value="ta">{t("students.roleTa")}</option>
                     <option value="instructor">
-                      {t("students.roleInstructor")}
+                      {t("students.roleTeacher")}
                     </option>
                   </Select>
                 </div>

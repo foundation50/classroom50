@@ -16,15 +16,15 @@ Translate the JSON **values** in `en.json` into the target language (locale code
 
 ## Audience & register
 
-- Two audiences: **instructors/TAs** (comfortable with GitHub jargon) and
+- Two audiences: **teachers/TAs** (comfortable with GitHub jargon) and
   **students**. Use a clear, professional, friendly register.
 - **Audience-appropriate vocabulary.** The product is used across a wide range of
   educational settings, from K-12 through higher education. Prefer **neutral,
-  widely-applicable** terms for words like "student," "instructor,"
-  "class/classroom," and "term" — wording that reads naturally to teachers and
-  learners at any level, rather than terms that lock the text to one specific
-  level of schooling. If your language forces a choice, pick the most inclusive
-  general-purpose option.
+  widely-applicable** terms for words like "student," "teacher," "classroom,"
+  and "term" — wording that reads naturally to teachers and learners at any
+  level, rather than terms that lock the text to one specific level of schooling.
+  If your language forces a choice, pick the most inclusive general-purpose
+  option.
 - **Follow the target language's own conventions.** Every language has its own
   norms for punctuation, quotation marks, ellipsis, spacing (e.g. around Latin
   words/numbers), word order, honorific/politeness level, measure words, and
@@ -91,10 +91,10 @@ everywhere.
 
 ## Terminology consistency
 
-Pick one translation per recurring domain term (assignment, submission, classroom
-vs class, roster, onboarding, autograder, runner, template, repository, service
-token, organization, unenroll, regrade, collect, …) and use it consistently across
-the entire file.
+Pick one translation per recurring domain term (assignment, submission,
+classroom, teacher, roster, onboarding, autograder, runner, template,
+repository, service token, organization, unenroll, regrade, collect, …) and use
+it consistently across the entire file.
 
 ## Output
 

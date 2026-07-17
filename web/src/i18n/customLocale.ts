@@ -461,7 +461,7 @@ export type PackPreview = {
 // Sample keys shown in the preview so the user sees real translated text before
 // applying (core classroom vocabulary plus a common action).
 const SAMPLE_KEYS = [
-  "nav.roleInstructor",
+  "nav.roleTeacher",
   "nav.roleStudent",
   "nav.myClasses",
   "nav.assignment",

@@ -1,5 +1,5 @@
 // A template-generate failure at accept time, with a plain-text message the
-// accept page renders as-is. Messages point students at their instructor (they
+// accept page renders as-is. Messages point students at their teacher (they
 // can't approve an OAuth app or grant team read themselves).
 export class TemplateAccessError extends Error {
   constructor(message: string) {
@@ -19,7 +19,7 @@ export function outOfOrgTemplateError(
 ): TemplateAccessError {
   const detail = githubMessage ? ` GitHub said: "${githubMessage}".` : ""
   return new TemplateAccessError(
-    `Couldn't copy the template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} This is often because the ${templateOwner} organization restricts third-party apps — ask your instructor to approve the Classroom 50 app for ${templateOwner} (or make the template public), then accept again.`,
+    `Couldn't copy the template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} This is often because the ${templateOwner} organization restricts third-party apps — ask your teacher to approve the Classroom 50 app for ${templateOwner} (or make the template public), then accept again.`,
   )
 }
 
@@ -32,6 +32,6 @@ export function inOrgTemplateError(
 ): TemplateAccessError {
   const detail = githubMessage ? ` GitHub said: "${githubMessage}".` : ""
   return new TemplateAccessError(
-    `Couldn't copy the private template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} Ask your instructor to re-run assignment setup, then accept again.`,
+    `Couldn't copy the private template ${templateOwner}/${templateRepo} (HTTP ${status}).${detail} Ask your teacher to re-run assignment setup, then accept again.`,
   )
 }

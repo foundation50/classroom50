@@ -270,7 +270,7 @@ export async function acceptAssignment(params: {
       id: "membership",
       label: "Confirming your classroom membership",
       actions:
-        "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your instructor to confirm your invitation.",
+        "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your teacher to confirm your invitation.",
       doneMessage: "Confirmed your classroom membership",
       onStepUpdate,
     },
@@ -286,7 +286,7 @@ export async function acceptAssignment(params: {
     {
       id: "assignment",
       label: `Looking up ${assignmentSlug}`,
-      actions: `Couldn't load assignment "${assignmentSlug}" for ${org}/${classroom}. Check the link, or ask your instructor to confirm the assignment is published.`,
+      actions: `Couldn't load assignment "${assignmentSlug}" for ${org}/${classroom}. Check the link, or ask your teacher to confirm the assignment is published.`,
       doneMessage: `Found assignment ${assignmentSlug}`,
       onStepUpdate,
     },
@@ -308,7 +308,7 @@ export async function acceptAssignment(params: {
   // control files). Mirrors the CLI's guard.
   if (isEmptyRepo && assignment.template) {
     throw new Error(
-      `Assignment "${assignmentSlug}" sets both empty_repo and a template — the entry is invalid; ask your instructor to re-run assignment setup.`,
+      `Assignment "${assignmentSlug}" sets both empty_repo and a template — the entry is invalid; ask your teacher to re-run assignment setup.`,
     )
   }
 
@@ -336,7 +336,7 @@ export async function acceptAssignment(params: {
         {
           id: "autograder",
           label: "Resolving the autograder",
-          actions: `Couldn't resolve the autograder for "${assignmentSlug}". Ask your instructor to confirm it's published, then accept again.`,
+          actions: `Couldn't resolve the autograder for "${assignmentSlug}". Ask your teacher to confirm it's published, then accept again.`,
           doneMessage: "Resolved the autograder",
           onStepUpdate,
         },
@@ -382,7 +382,7 @@ export async function acceptAssignment(params: {
     {
       id: "repo",
       label: "Creating your repository",
-      actions: `Couldn't create ${org}/${studentRepoNameValue}. Confirm you're a member of ${org} and ask your instructor to verify the assignment's template repository is configured correctly, then accept again.`,
+      actions: `Couldn't create ${org}/${studentRepoNameValue}. Confirm you're a member of ${org} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.`,
       doneMessage: `Created ${org}/${studentRepoNameValue}`,
       onStepUpdate,
     },

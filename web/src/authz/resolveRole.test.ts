@@ -197,8 +197,8 @@ describe("membershipFromQuery", () => {
 })
 
 describe("role predicates", () => {
-  it("roleLabelKey: teacher => nav.roleInstructor, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
-    expect(roleLabelKey("teacher")).toBe("nav.roleInstructor")
+  it("roleLabelKey: teacher => nav.roleTeacher, ta => nav.roleTa, student => nav.roleStudent, unresolved => null", () => {
+    expect(roleLabelKey("teacher")).toBe("nav.roleTeacher")
     expect(roleLabelKey("ta")).toBe("nav.roleTa")
     expect(roleLabelKey("student")).toBe("nav.roleStudent")
     expect(roleLabelKey("unresolved")).toBeNull()

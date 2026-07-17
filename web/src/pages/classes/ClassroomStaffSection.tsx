@@ -22,8 +22,8 @@ import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 // module scope; components translate via t(ROLE_LABEL_KEY[role]). `teacher` and
 // its legacy `instructor` alias share the label key.
 const ROLE_LABEL_KEY: Record<StaffRole, string> = {
-  teacher: "classes.staff.roleInstructor",
-  instructor: "classes.staff.roleInstructor",
+  teacher: "classes.staff.roleTeacher",
+  instructor: "classes.staff.roleTeacher",
   ta: "classes.staff.roleTa",
 }
 
@@ -215,7 +215,7 @@ const StaffRoleList = ({
 
   const rolePlural =
     role === "instructor"
-      ? t("classes.staff.roleInstructorPlural")
+      ? t("classes.staff.roleTeacherPlural")
       : t("classes.staff.roleTaPlural")
 
   return (
@@ -282,7 +282,7 @@ const StaffMemberRow = ({
   const roleLabel = t(ROLE_LABEL_KEY[role])
   const rolePlural =
     role === "instructor"
-      ? t("classes.staff.roleInstructorPlural")
+      ? t("classes.staff.roleTeacherPlural")
       : t("classes.staff.roleTaPlural")
 
   const removeMutation = useRemoveStaffMember(org, classroom, teamSlug)

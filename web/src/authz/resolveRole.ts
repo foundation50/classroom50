@@ -95,7 +95,7 @@ export function roleLabelKey(role: ResolvedRole): string | null {
   switch (role) {
     case "teacher":
     case "instructor":
-      return "nav.roleInstructor"
+      return "nav.roleTeacher"
     case "ta":
       return "nav.roleTa"
     case "student":

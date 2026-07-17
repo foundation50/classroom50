@@ -95,7 +95,7 @@ const StudentListContent = ({
                 ) : null}
                 {showInstructorCount ? (
                   <Badge tone={ROLE_BADGE_TONE.instructor} className="shrink-0">
-                    {t("students.instructorCount", {
+                    {t("students.teacherCount", {
                       count: roleCounts.instructor,
                     })}
                   </Badge>

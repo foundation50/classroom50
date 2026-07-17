@@ -14,7 +14,7 @@ const base = {
 describe("orgFooterRoleLabel", () => {
   it("confirmed org owner => Instructor, not pending", () => {
     expect(orgFooterRoleLabel({ ...base, isOwner: true })).toEqual({
-      labelKey: "nav.roleInstructor",
+      labelKey: "nav.roleTeacher",
       pending: false,
     })
   })
@@ -25,14 +25,14 @@ describe("orgFooterRoleLabel", () => {
     expect(
       orgFooterRoleLabel({ ...base, isOwner: true, isNonStaff: true }),
     ).toEqual({
-      labelKey: "nav.roleInstructor",
+      labelKey: "nav.roleTeacher",
       pending: false,
     })
   })
 
   it("org setup route => Instructor even without an owner verdict yet", () => {
     expect(orgFooterRoleLabel({ ...base, isOrgSetup: true })).toEqual({
-      labelKey: "nav.roleInstructor",
+      labelKey: "nav.roleTeacher",
       pending: false,
     })
   })
