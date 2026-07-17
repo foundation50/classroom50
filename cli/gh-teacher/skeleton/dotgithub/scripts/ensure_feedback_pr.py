@@ -187,12 +187,20 @@ def label_for_mode(mode: str) -> tuple[str, str]:
     return _LABELS.get((mode or "").strip().lower(), _LABELS["individual"])
 
 
-def pr_body(head: str) -> str:
-    """The Feedback PR body (GitHub Classroom-style)."""
+def pr_body(head: str, release_url: str) -> str:
+    """The Feedback PR body (GitHub Classroom-style).
+
+    release_url is the static `.../releases/latest` link (not a pinned tag), so
+    it self-updates as new submissions publish even though this body is written
+    once at PR creation and only refreshed to backfill a missing link.
+    """
     return "\n".join([
         ":wave:! Classroom 50 opened this pull request as a place for your "
         "teacher to leave feedback on your work. It updates automatically. "
         "**Don't close or merge this pull request** unless your teacher tells you to.",
+        "",
+        f"Each commit is automatically graded — the latest autograding result "
+        f"is [here]({release_url}).",
         "",
         "Your teacher can leave comments and feedback on your code here. Click "
         "the **Subscribe** button to be notified when that happens.",
@@ -211,6 +219,8 @@ def pr_body(head: str) -> str:
         "- **Commits** lists each pushed commit; open one to see its changes.",
         "- Autograde results appear as the `classroom50/autograde` commit "
         "status / check on each submission.",
+        f"- The [latest autograding result]({release_url}) has the per-test "
+        f"detail behind that status.",
         "- This page is an overview — commits, line comments, and a general "
         "comment box below.",
         "",
@@ -222,7 +232,7 @@ def pr_body(head: str) -> str:
     ])
 
 
-def create_pr(repo: str, head: str, mode: str) -> str:
+def create_pr(repo: str, head: str, mode: str, release_url: str) -> str:
     """Create the Feedback PR, returning its URL. Best-effort labels it first.
     Raises GhError on a create failure (caller handles the race)."""
     label, color = label_for_mode(mode)
@@ -231,7 +241,8 @@ def create_pr(repo: str, head: str, mode: str) -> str:
        "--description", "Classroom 50 teacher-managed feedback PR", check=False)
     return gh("pr", "create", "--repo", repo,
               "--base", BASE_BRANCH, "--head", head,
-              "--title", "Feedback", "--body", pr_body(head), "--label", label)
+              "--title", "Feedback", "--body", pr_body(head, release_url),
+              "--label", label)
 
 
 def existing_pr_url(repo: str, head: str) -> str:
@@ -240,6 +251,30 @@ def existing_pr_url(repo: str, head: str) -> str:
     return gh("pr", "list", "--repo", repo, "--base", BASE_BRANCH,
               "--head", head, "--state", "all", "--json", "url",
               "--jq", "(.[0] // {}).url // \"\"", check=False)
+
+
+def backfill_release_link(repo: str, number: str, head: str,
+                          release_url: str) -> None:
+    """Add the latest-submission link to an OPEN PR whose body lacks it.
+
+    Best-effort and idempotent (mirrors the label/reopen tolerance): if the body
+    already contains the link it's left alone; an empty/transient body read skips
+    the edit rather than risk clobbering; a failed edit logs a warning and never
+    flips the run's outcome (the PR is still in place). Caller gates on OPEN
+    state so merged/closed PRs are never edited.
+    """
+    body = gh("pr", "view", number, "--repo", repo,
+              "--json", "body", "--jq", ".body", check=False)
+    if not body or release_url in body:
+        return
+    try:
+        gh("pr", "edit", number, "--repo", repo,
+           "--body", pr_body(head, release_url))
+    except GhError as exc:
+        print(f"::warning::could not backfill latest-submission link on "
+              f"Feedback PR #{number}: {exc.output}")
+        return
+    print(f"Backfilled latest-submission link on Feedback PR #{number}")
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +289,10 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
     the EXIT-trap status emission is replaced by main()'s finally block.
     """
     run_url = f"{server_url}/{repo}/actions/runs/{run_id}"
+    # Static "latest" pointer (set-latest job keeps it current), not a pinned
+    # submit-tag URL — the body is written once at creation, so a tag would go
+    # stale but /releases/latest self-updates. See #262.
+    release_url = f"{server_url}/{repo}/releases/latest"
 
     head = head_branch(repo)  # GhError here -> main() reports error (no false success)
 
@@ -277,7 +316,7 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
     pr = find_pr(repo, head)
     if pr is None:
         try:
-            url = create_pr(repo, head, mode)
+            url = create_pr(repo, head, mode, release_url)
         except GhError as exc:
             # A concurrent run (submit/* tag vs main push use different
             # concurrency groups) can win the create race; re-query before
@@ -317,6 +356,12 @@ def ensure_feedback_pr(repo: str, base_sha: str, mode: str, server_url: str,
             return ("failure", "could not reopen the closed Feedback PR", url)
         print(f"Reopened Feedback PR #{pr['number']} (was closed unmerged)")
         return ("success", "Feedback PR reopened", url)
+
+    # Backfill the latest-submission link onto an already-open PR whose body
+    # predates it (#262). Only OPEN, unmerged PRs are edited — a merged/closed
+    # PR is the teacher's "grading done" signal and must stay untouched.
+    if pr["state"] == "OPEN":
+        backfill_release_link(repo, pr["number"], head, release_url)
 
     print(f"Feedback PR #{pr['number']} already present "
           f"(state={pr['state']} merged={pr['mergedAt'] or 'none'}); nothing to do")

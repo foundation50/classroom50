@@ -63,6 +63,10 @@ class FakeGh:
                 # existing_pr_url (--json url) so the race-recovery query can
                 # be driven through the stub, not monkeypatched out.
                 return "pr_list_url" if "url" in args else "pr_list"
+            if args[1] == "view":
+                # Disambiguate the reopen state read (--json state) from the
+                # backfill body read (--json body).
+                return "pr_view_body" if "body" in args else "pr_view"
             return f"pr_{args[1]}"
         if args[0] == "label":
             return "label"
@@ -154,16 +158,19 @@ def test_base_check_transient_error_does_not_open_pr(monkeypatch):
 
 
 def test_existing_open_pr_left_in_place(monkeypatch):
+    linked = f"body with {SERVER}/{REPO}/releases/latest"
     fake, state, desc, url = _run(monkeypatch, {
         "head_branch": "main",
         "base_sha": BASE_SHA,                 # base already correct
         "pr_list": _pr_list_json("7", "OPEN", ""),
+        "pr_view_body": linked,               # already has the link -> no edit
     })
     assert state == "success"
     assert desc == "Feedback PR in place"
     assert url.endswith("/pull/7")
     assert not fake.made("pr create")
     assert not fake.made("pr reopen")
+    assert not fake.made("pr edit")
 
 
 def test_closed_unmerged_pr_reopened(monkeypatch):
@@ -177,6 +184,8 @@ def test_closed_unmerged_pr_reopened(monkeypatch):
     assert state == "success"
     assert desc == "Feedback PR reopened"
     assert fake.made("pr reopen 7")
+    # Reopen path returns before backfill — a just-reopened PR is not edited.
+    assert not fake.made("pr edit")
 
 
 def test_failed_reopen_reports_failure(monkeypatch):
@@ -215,6 +224,66 @@ def test_merged_pr_left_alone(monkeypatch):
     assert state == "success"
     assert desc == "Feedback PR in place"
     assert not fake.made("pr reopen")
+    # AE4: a merged PR is never body-edited (grading-done signal stays put).
+    assert not fake.made("pr view")
+    assert not fake.made("pr edit")
+
+
+def test_open_pr_missing_link_is_backfilled(monkeypatch):
+    # AE2: OPEN PR whose body lacks the link -> edited with a link-bearing body.
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        "base_sha": BASE_SHA,
+        "pr_list": _pr_list_json("7", "OPEN", ""),
+        "pr_view_body": "old body without the link",
+        "pr_edit": "",
+    })
+    assert state == "success"
+    assert desc == "Feedback PR in place"
+    assert fake.made("pr edit 7")
+    edit = [c for c in fake.calls if c[0] == "pr" and c[1] == "edit"]
+    assert any("/releases/latest" in arg for arg in edit[0])
+
+
+def test_open_pr_already_linked_not_edited(monkeypatch):
+    # AE3: body already contains the link -> no edit.
+    linked = f"body with {SERVER}/{REPO}/releases/latest already"
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        "base_sha": BASE_SHA,
+        "pr_list": _pr_list_json("7", "OPEN", ""),
+        "pr_view_body": linked,
+    })
+    assert state == "success"
+    assert desc == "Feedback PR in place"
+    assert not fake.made("pr edit")
+
+
+def test_open_pr_empty_body_read_skips_edit(monkeypatch):
+    # Skip-on-empty: a transient/empty body read must not trigger a clobbering
+    # edit; the run still succeeds.
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        "base_sha": BASE_SHA,
+        "pr_list": _pr_list_json("7", "OPEN", ""),
+        "pr_view_body": "",
+    })
+    assert state == "success"
+    assert desc == "Feedback PR in place"
+    assert not fake.made("pr edit")
+
+
+def test_open_pr_backfill_edit_failure_still_success(monkeypatch):
+    # AE5: a failed backfill edit is best-effort -> run still succeeds.
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        "base_sha": BASE_SHA,
+        "pr_list": _pr_list_json("7", "OPEN", ""),
+        "pr_view_body": "old body without the link",
+        "pr_edit": efp.GhError(["pr", "edit"], 1, "not allowed"),
+    })
+    assert state == "success"
+    assert desc == "Feedback PR in place"
 
 
 def test_create_race_lost_recovers_to_success(monkeypatch):
@@ -303,10 +372,31 @@ def test_label_for_mode(mode, want_label):
 
 
 def test_pr_body_mentions_head_and_base(monkeypatch):
-    body = efp.pr_body("main")
+    body = efp.pr_body("main", "https://github.com/cs50/x/releases/latest")
     assert "`main`" in body
     assert f"`{efp.BASE_BRANCH}`" in body
     assert "Classroom 50" in body
+
+
+def test_pr_body_links_latest_submission():
+    release_url = "https://github.com/cs50/x/releases/latest"
+    body = efp.pr_body("main", release_url)
+    # The link is present, and appears in both the student intro and the
+    # teacher-notes <details> block so both audiences can reach it (#262/#260).
+    assert release_url in body
+    intro, _, teacher_notes = body.partition("<details>")
+    assert release_url in intro
+    assert release_url in teacher_notes
+
+
+def test_create_pr_threads_latest_release_url(monkeypatch):
+    fake = FakeGh({"pr_create": "https://github.com/cs50/x/pull/1", "label": ""})
+    monkeypatch.setattr(efp, "gh", fake)
+    efp.create_pr(REPO, "main", "individual",
+                  f"{SERVER}/{REPO}/releases/latest")
+    create = [c for c in fake.calls if c[0] == "pr" and c[1] == "create"]
+    assert create, "expected a pr create call"
+    assert any("/releases/latest" in arg for arg in create[0])
 
 
 @pytest.mark.parametrize("out, want", [
