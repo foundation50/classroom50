@@ -5,10 +5,20 @@ import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 import useEnsureTeam from "@/hooks/useEnsureTeam"
 import { useEnrollOrInviteStudent } from "@/hooks/mutations/useEnrollOrInviteStudent"
+import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
+import { useToast } from "@/context/notifications/NotificationProvider"
+import { GitHubAPIError } from "@/github-core/errors"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { StudentAlreadyEnrolledError } from "@/domain/students"
 import { isValidEmail } from "@/util/orgMembership"
-import { AnimatedAlert, Button, Input, Modal } from "@/components/ui"
+import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
+import { ROLE_LABEL_KEY } from "@/util/classroomRoleUI"
+import type { ClassroomRole } from "@/authz"
+import { AnimatedAlert, Button, Input, Modal, Select } from "@/components/ui"
+
+// Roster "Add member" roles, in display order. Student (default) enrolls via the
+// student team; teacher/TA delegate to the staff-team backend.
+const MEMBER_ROLES: readonly ClassroomRole[] = ["student", ...STAFF_ROLES]
 
 type AddStudentProps = {
   org: string
@@ -40,11 +50,18 @@ const AddStudent = ({
 }: AddStudentProps) => {
   const { team } = useEnsureTeam(org, classroom)
   const { t } = useTranslation()
+  const { notify } = useToast()
   const titleId = useId()
+  const roleId = useId()
   const [warning, setWarning] = useState("")
   const [success, setSuccess] = useState("")
+  const [role, setRole] = useState<ClassroomRole>("student")
+  const isStaffRole = role !== "student"
 
   const addMutation = useEnrollOrInviteStudent(org, classroom, onEnrolled)
+  const addStaffMutation = useAddStaffMember(org, classroom, {
+    enterUsername: t("classes.staff.enterUsername"),
+  })
 
   const form = useForm({
     defaultValues: {
@@ -63,11 +80,20 @@ const AddStudent = ({
         const username = value.username.trim()
         const email = value.email.trim()
 
-        if (!username && !email) {
-          errors.username = t("validation.githubOrEmailRequired")
-        }
-        if (email && !isValidEmail(email)) {
-          errors.email = t("validation.validEmail")
+        // Staff (teacher/TA) are identified by GitHub username only — the staff
+        // backend takes no email/section, so a username is required and email is
+        // ignored.
+        if (isStaffRole) {
+          if (!username) {
+            errors.username = t("classes.staff.enterUsername")
+          }
+        } else {
+          if (!username && !email) {
+            errors.username = t("validation.githubOrEmailRequired")
+          }
+          if (email && !isValidEmail(email)) {
+            errors.email = t("validation.validEmail")
+          }
         }
 
         return Object.keys(errors).length > 0 ? { fields: errors } : undefined
@@ -76,6 +102,10 @@ const AddStudent = ({
     onSubmit: async ({ value }) => {
       setWarning("")
       setSuccess("")
+      if (isStaffRole) {
+        await submitStaff(value.username, role)
+        return
+      }
       // onError already surfaces failures; swallow the rejection so it isn't
       // also recorded as a form-level error. UI effects (success/warning + form
       // reset) live here so they skip when the modal unmounts; the hook's
@@ -112,7 +142,39 @@ const AddStudent = ({
     },
   })
 
-  const submitting = form.state.isSubmitting
+  // Staff branch: delegate to the staff-team backend (config-repo write). A
+  // successful add toasts and clears the username; failures stay in-modal as a
+  // warning so the teacher can correct and retry.
+  const submitStaff = async (username: string, staffRole: StaffRole) => {
+    await addStaffMutation
+      .mutateAsync(
+        { username, role: staffRole },
+        {
+          onSuccess: ({ trimmed, role: addedRole }) => {
+            form.reset()
+            notify({
+              tone: "success",
+              durationMs: 5000,
+              message: t("toasts.staffAdded", {
+                username: trimmed,
+                role: t(ROLE_LABEL_KEY[addedRole]),
+              }),
+            })
+          },
+          onError: (err) => {
+            setSuccess("")
+            const message =
+              err instanceof GitHubAPIError && err.status === 404
+                ? t("classes.staff.noSuchUser")
+                : getErrorMessage(err)
+            setWarning(t("classes.staff.addFailed", { message }))
+          },
+        },
+      )
+      .catch(() => {})
+  }
+
+  const submitting = form.state.isSubmitting || addStaffMutation.isPending
 
   // Reset transient state whenever the modal opens (Modal owns the open/close
   // sync now).
@@ -120,6 +182,7 @@ const AddStudent = ({
     if (!open) return
     setWarning("")
     setSuccess("")
+    setRole("student")
     form.reset()
   }, [open, form])
 
@@ -142,7 +205,7 @@ const AddStudent = ({
             {t("students.addTitle")}
           </h3>
           <p className="mt-1 text-sm text-base-content/70">
-            {t("students.addHint")}
+            {isStaffRole ? t("students.addStaffHint") : t("students.addHint")}
           </p>
         </div>
       </div>
@@ -163,26 +226,45 @@ const AddStudent = ({
         </AnimatedAlert>
 
         <div className="mt-4 flex flex-col gap-3">
-          <form.Field name="name">
-            {(field) => (
-              <Input
-                leadingIcon={
-                  <UserRound
-                    className="size-4 text-base-content/50"
-                    aria-hidden="true"
-                  />
-                }
-                id={field.name}
-                name={field.name}
-                type="text"
-                placeholder={t("students.namePlaceholder")}
-                aria-label={t("students.namePlaceholder")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-            )}
-          </form.Field>
+          <div>
+            <label htmlFor={roleId} className="mb-1 block text-sm font-medium">
+              {t("students.addRoleLabel")}
+            </label>
+            <Select
+              id={roleId}
+              value={role}
+              onChange={(e) => setRole(e.target.value as ClassroomRole)}
+            >
+              {MEMBER_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {t(ROLE_LABEL_KEY[r])}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          {!isStaffRole && (
+            <form.Field name="name">
+              {(field) => (
+                <Input
+                  leadingIcon={
+                    <UserRound
+                      className="size-4 text-base-content/50"
+                      aria-hidden="true"
+                    />
+                  }
+                  id={field.name}
+                  name={field.name}
+                  type="text"
+                  placeholder={t("students.namePlaceholder")}
+                  aria-label={t("students.namePlaceholder")}
+                  value={field.state.value}
+                  onBlur={field.handleBlur}
+                  onChange={(e) => field.handleChange(e.target.value)}
+                />
+              )}
+            </form.Field>
+          )}
 
           <form.Field name="username">
             {(field) => (
@@ -219,64 +301,68 @@ const AddStudent = ({
             )}
           </form.Field>
 
-          <form.Field name="email">
-            {(field) => (
-              <div>
+          {!isStaffRole && (
+            <form.Field name="email">
+              {(field) => (
+                <div>
+                  <Input
+                    leadingIcon={
+                      <Mail
+                        className="size-4 text-base-content/50"
+                        aria-hidden="true"
+                      />
+                    }
+                    id={field.name}
+                    name={field.name}
+                    type="email"
+                    placeholder={t("students.emailPlaceholder")}
+                    aria-label={t("students.emailAria")}
+                    aria-invalid={field.state.meta.errors.length > 0}
+                    aria-describedby={
+                      field.state.meta.errors.length > 0
+                        ? `${field.name}-error`
+                        : undefined
+                    }
+                    value={field.state.value}
+                    onBlur={field.handleBlur}
+                    onChange={(e) => field.handleChange(e.target.value)}
+                  />
+                  {field.state.meta.errors.length > 0 && (
+                    <p
+                      id={`${field.name}-error`}
+                      className="text-error text-sm mt-1"
+                      role="alert"
+                    >
+                      {String(field.state.meta.errors[0] ?? "")}
+                    </p>
+                  )}
+                </div>
+              )}
+            </form.Field>
+          )}
+
+          {!isStaffRole && (
+            <form.Field name="section">
+              {(field) => (
                 <Input
                   leadingIcon={
-                    <Mail
+                    <Users
                       className="size-4 text-base-content/50"
                       aria-hidden="true"
                     />
                   }
                   id={field.name}
                   name={field.name}
-                  type="email"
-                  placeholder={t("students.emailPlaceholder")}
-                  aria-label={t("students.emailAria")}
-                  aria-invalid={field.state.meta.errors.length > 0}
-                  aria-describedby={
-                    field.state.meta.errors.length > 0
-                      ? `${field.name}-error`
-                      : undefined
-                  }
+                  type="text"
+                  placeholder={t("students.sectionPlaceholder")}
+                  aria-label={t("students.sectionAria")}
                   value={field.state.value}
                   onBlur={field.handleBlur}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {field.state.meta.errors.length > 0 && (
-                  <p
-                    id={`${field.name}-error`}
-                    className="text-error text-sm mt-1"
-                    role="alert"
-                  >
-                    {String(field.state.meta.errors[0] ?? "")}
-                  </p>
-                )}
-              </div>
-            )}
-          </form.Field>
-
-          <form.Field name="section">
-            {(field) => (
-              <Input
-                leadingIcon={
-                  <Users
-                    className="size-4 text-base-content/50"
-                    aria-hidden="true"
-                  />
-                }
-                id={field.name}
-                name={field.name}
-                type="text"
-                placeholder={t("students.sectionPlaceholder")}
-                aria-label={t("students.sectionAria")}
-                value={field.state.value}
-                onBlur={field.handleBlur}
-                onChange={(e) => field.handleChange(e.target.value)}
-              />
-            )}
-          </form.Field>
+              )}
+            </form.Field>
+          )}
         </div>
 
         <div className="modal-action">
@@ -294,7 +380,7 @@ const AddStudent = ({
             {([canSubmit, isSubmitting]) => (
               <Button
                 type="submit"
-                disabled={!canSubmit || isSubmitting || !team}
+                disabled={!canSubmit || isSubmitting || (!isStaffRole && !team)}
                 variant="primary"
               >
                 {!isSubmitting
