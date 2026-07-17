@@ -162,6 +162,8 @@
     "errorNetworkProxyTarget": "the Cloudflare Worker proxy",
     "errorOffline": "You appear to be offline. Check your connection and try again — signing in needs a network connection.",
     "offlineHold": "You're offline. Waiting for a connection to restore your session…",
+    "validationStuck": "Still trying to reach GitHub to verify your session. This is usually a temporary GitHub, network, or browser-extension issue. Retry, or sign in again to start fresh.",
+    "validationStuckSignIn": "Sign in again",
     "errorStateMismatch": "State mismatch -- possible CSRF. Please try signing in again.",
     "errorMissingPkce": "Missing PKCE verifier or client ID. Please try signing in again.",
     "errorClientIdMissing": "GitHub OAuth client ID is not configured (VITE_GITHUB_CLIENT_ID).",
@@ -1003,6 +1005,8 @@
     "setupComplete": "Organization setup is complete. Review the steps below, then continue to set the service token.",
     "allSetTitle": "You're all set!",
     "allSetBody": "Your organization is ready to use Classroom 50. Head to your organization to create your first classroom and assignments.",
+    "manageServiceToken": "Manage service token",
+    "statusIndeterminate": "Couldn't determine your organization's setup status. This is usually a temporary GitHub or permissions issue, not a problem with your setup.",
     "goToOrg": "Go to {{org}}",
     "yourOrganization": "your organization",
     "notAdmin": "Classroom 50 setup requires org owner permissions. Ask an org owner to run setup.",
@@ -1259,6 +1263,12 @@
   "offline": {
     "title": "You're offline",
     "body": "Classroom 50 works with live data from GitHub, so it needs a connection. This banner clears automatically when you're back online."
+  },
+  "githubStatus": {
+    "title": "GitHub may be having problems",
+    "bodyConfirmed": "GitHub is reporting: {{status}}. Some actions may fail or be slow until it recovers.",
+    "bodyGeneric": "Classroom 50 is having trouble reaching GitHub. This is usually a temporary GitHub outage, but a VPN, proxy, or browser extension blocking api.github.com can cause it too.",
+    "checkStatusLink": "Check GitHub status"
   },
   "skeletonDrift": {
     "title": "Classroom workflow files are out of date",

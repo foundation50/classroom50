@@ -90,5 +90,6 @@ export {
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,
   getLastCollectScoresRun,
+  SERVICE_TOKEN_SECRET_NAME,
   type ServiceTokenStatus,
 } from "./queries/releaseRunReads"

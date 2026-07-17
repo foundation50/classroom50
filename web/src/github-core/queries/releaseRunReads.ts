@@ -5,7 +5,6 @@ import type { GitHubRelease, GitHubWorkflowRun } from "../types"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubAPIError, tolerateGitHubError } from "../errors"
 import { COLLECT_SCORES_WORKFLOW, REGRADE_WORKFLOW } from "../workflows"
-import { getErrorMessage } from "../errorMessage"
 import { githubKeys } from "./keys"
 
 // The submission-tag convention written by the autograde runner: each graded
@@ -56,7 +55,7 @@ type RepositorySecret = {
   created_at: string
   updated_at: string
 }
-const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
+export const SERVICE_TOKEN_SECRET_NAME = "CLASSROOM50_SERVICE_TOKEN"
 export type ServiceTokenStatus =
   | {
       status: "present"
@@ -115,14 +114,12 @@ export async function getServiceTokenStatus(
       }
     }
 
-    return {
-      status: "unknown",
-      secretName: SERVICE_TOKEN_SECRET_NAME,
-      reason: "unknown",
-      message: `Could not check the service token on the ${CONFIG_REPO} config repo: ${getErrorMessage(
-        err,
-      )}`,
-    }
+    // A transient failure (5xx/network) is not a verdict — resolving "unknown"
+    // here would let an invalidation refetch overwrite an optimistically-seeded
+    // "present" (useSaveServiceToken) and bounce the setup wizard off its
+    // derived stage. Rethrow so react-query retries/keeps the prior data, like
+    // the config-repo probe. Only definitive statuses above resolve a verdict.
+    throw err
   }
 }
 

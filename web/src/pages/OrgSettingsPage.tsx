@@ -138,7 +138,7 @@ export function ServiceTokenInfo() {
   )
 }
 
-export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
+export const OrgSettingsPane = () => {
   const { t } = useTranslation()
   const runPat = useSafeSubmit()
   const { org } = useParams({ strict: false })
@@ -404,7 +404,6 @@ export const OrgSettingsPane = ({ onSubmit }: { onSubmit?: () => void }) => {
                     onSuccess: () => {
                       setServiceToken("")
                       setSavedKind(tokenAlreadySet ? "updated" : "saved")
-                      onSubmit?.()
                     },
                   }),
                 )

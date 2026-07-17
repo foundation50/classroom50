@@ -31,7 +31,7 @@ import {
   useDebouncedValue,
   type StringField,
 } from "./formFieldHelpers"
-import type { AssignmentForm } from "./CreateAssignmentForm"
+import type { AssignmentForm } from "./assignmentFormModel"
 
 // A question-mark help affordance now lives in the shared ui module; re-exported
 // here so existing importers (CreateAssignmentForm) keep working.

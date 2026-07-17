@@ -122,6 +122,33 @@ export type AuthStatusInput = {
   hasUser: boolean
 }
 
+// Whether a token holder is stranded on the loading hold with no way forward:
+// online, no cached user, and the /user validation has SETTLED into a transient
+// error (retries exhausted, not still fetching). resolveAuthStatus keeps this
+// case at "loading" on purpose (#187 — don't eject a valid session on a blip),
+// but a *persistent* transient failure (a proxy/extension blocking
+// api.github.com, or a wedged stored session) would otherwise spin forever with
+// no escape. This drives the retry / sign-in-again affordance on the hold
+// screen. A 401 (dead token) and a definitive non-401 don't reach here — the
+// first signs out, the second resolves to "authenticated".
+export function isValidationStuck(input: {
+  hasToken: boolean
+  isOnline: boolean
+  hasUser: boolean
+  userQueryErrored: boolean
+  userErrorIsTransient: boolean
+  userQueryFetching: boolean
+}): boolean {
+  return (
+    input.hasToken &&
+    input.isOnline &&
+    !input.hasUser &&
+    input.userQueryErrored &&
+    input.userErrorIsTransient &&
+    !input.userQueryFetching
+  )
+}
+
 // Resolve the auth status for the router guard.
 //
 // Two offline cases, deliberately split:
@@ -797,6 +824,31 @@ function useGithubAuthState() {
     ],
   )
 
+  // Live isValidationStuck against the current /user query state (see its doc).
+  const isValidatingStuck = useMemo(
+    () =>
+      isValidationStuck({
+        hasToken: Boolean(token),
+        isOnline,
+        hasUser: Boolean(githubUserQuery.data),
+        userQueryErrored: githubUserQuery.isError,
+        userErrorIsTransient: isTransientUserError(githubUserQuery.error),
+        userQueryFetching: githubUserQuery.isFetching,
+      }),
+    [
+      token,
+      isOnline,
+      githubUserQuery.data,
+      githubUserQuery.isError,
+      githubUserQuery.error,
+      githubUserQuery.isFetching,
+    ],
+  )
+
+  const retryUserValidation = useCallback(() => {
+    void githubUserQuery.refetch()
+  }, [githubUserQuery])
+
   // Navigate to the stashed deep link once status is "authenticated", so the
   // target _authed guard sees an authenticated context instead of bouncing
   // through /login (#71). history.push (not navigate({ to })) preserves the
@@ -841,6 +893,8 @@ function useGithubAuthState() {
     expireSession,
     sessionExpired,
     status,
+    isValidatingStuck,
+    retryUserValidation,
     isOnline,
   }
 }

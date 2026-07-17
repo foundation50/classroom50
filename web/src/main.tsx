@@ -2,6 +2,7 @@ import { StrictMode } from "react"
 import { createRoot } from "react-dom/client"
 import {
   MutationCache,
+  QueryCache,
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query"
@@ -21,6 +22,7 @@ import { appVersion, formatAppVersion } from "./version"
 import { installDiagnosticsHandlers } from "./lib/diagnostics/globalHandlers"
 import { recordError } from "./lib/activity/activityStore"
 import { retryTransientGitHubError } from "./github-core/errors"
+import { recordGitHubFailure, recordGitHubSuccess } from "./lib/githubHealth"
 import { RateLimitOverlay } from "./components/dev/RateLimitOverlay"
 
 // Safe query defaults so a new `useQuery` can't silently inherit React Query's
@@ -41,6 +43,15 @@ const client = new QueryClient({
       staleTime: 30_000,
     },
   },
+  // Feed the GitHub-health detector from the read path: onError sees every
+  // rejected query — including the network/timeout failures that throw before
+  // the client's onResponse (see client.ts) — and onSuccess is proof GitHub is
+  // reachable, which clears any suspicion. The detector ignores non-outage
+  // errors (4xx/rate-limit), so this is safe to feed unfiltered.
+  queryCache: new QueryCache({
+    onError: (error) => recordGitHubFailure(error),
+    onSuccess: () => recordGitHubSuccess(),
+  }),
   // Record every failed mutation as session activity. Mutations are the app's
   // real write operations (create/delete/dispatch/enroll), so a rejection here is
   // a genuine, user-affecting failure — unlike the benign existence-check 404s on
@@ -49,7 +60,9 @@ const client = new QueryClient({
   mutationCache: new MutationCache({
     onError: (error, _variables, _context, mutation) => {
       recordError(error, { dedupKey: `mutation-${mutation.mutationId}` })
+      recordGitHubFailure(error)
     },
+    onSuccess: () => recordGitHubSuccess(),
   }),
 })
 
