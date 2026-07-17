@@ -24,6 +24,7 @@ const COMPONENTS_DIR = fileURLToPath(new URL("./components", import.meta.url))
 const GITHUB_CORE_DIR = fileURLToPath(new URL("./github-core", import.meta.url))
 const DOMAIN_DIR = fileURLToPath(new URL("./domain", import.meta.url))
 const UTIL_DIR = fileURLToPath(new URL("./util", import.meta.url))
+const ESLINT_TOOLING_DIR = fileURLToPath(new URL("./eslint", import.meta.url))
 const WEB_ROOT = fileURLToPath(new URL("../", import.meta.url))
 const ESLINT_BIN = fileURLToPath(
   new URL("../node_modules/.bin/eslint", import.meta.url),
@@ -67,6 +68,9 @@ describe("layered-architecture boundary guard is live", () => {
       const coreDir = mkdtempSync(`${GITHUB_CORE_DIR}/__boundaries_probe_`)
       const domainDir = mkdtempSync(`${DOMAIN_DIR}/__boundaries_probe_`)
       const utilDir = mkdtempSync(`${UTIL_DIR}/__boundaries_probe_`)
+      const eslintToolingDir = mkdtempSync(
+        `${ESLINT_TOOLING_DIR}/__boundaries_probe_`,
+      )
       try {
         // components -> pages: an upward reach-up. Must be flagged.
         writeFileSync(
@@ -122,6 +126,15 @@ describe("layered-architecture boundary guard is live", () => {
           `${utilDir}/leafDownward.ts`,
           `import { GitHubAPIError } from "@/github-core/errors"\nexport const g = GitHubAPIError\n`,
         )
+        // eslintTooling -> components: the eslintTooling element shares the leaf
+        // policy's `from`-set, but src/eslint/** imports no app code today, so
+        // only this probe proves it's actually classified and enforced — without
+        // it, dropping eslintTooling (or lib/types) from the `from`-set would
+        // pass green since util alone still trips the rule.
+        writeFileSync(
+          `${eslintToolingDir}/toolingUpward.ts`,
+          `import { Badge } from "@/components/ui"\nexport const h = Badge\n`,
+        )
 
         const byFile = ruleIdsByFile([
           `${compDir}/compUpward.ts`,
@@ -133,6 +146,7 @@ describe("layered-architecture boundary guard is live", () => {
           `${utilDir}/leafUpwardValue.ts`,
           `${utilDir}/leafUpwardType.ts`,
           `${utilDir}/leafDownward.ts`,
+          `${eslintToolingDir}/toolingUpward.ts`,
         ])
 
         expect(
@@ -181,11 +195,16 @@ describe("layered-architecture boundary guard is live", () => {
           byFile["leafDownward.ts"],
           "boundaries/dependencies fired on a legal util->util downward import — the leaf policy is too strict.",
         ).not.toContain("boundaries/dependencies")
+        expect(
+          byFile["toolingUpward.ts"],
+          "boundaries/dependencies did not fire on a src/eslint (eslintTooling) -> components import — eslintTooling was dropped from the leaf policy `from`-set or its boundaries/elements entry is missing (eslint.config.js).",
+        ).toContain("boundaries/dependencies")
       } finally {
         rmSync(compDir, { recursive: true, force: true })
         rmSync(coreDir, { recursive: true, force: true })
         rmSync(domainDir, { recursive: true, force: true })
         rmSync(utilDir, { recursive: true, force: true })
+        rmSync(eslintToolingDir, { recursive: true, force: true })
       }
     },
   )
