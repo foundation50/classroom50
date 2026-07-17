@@ -9,14 +9,10 @@ import {
   type CreateAssignmentFormValues,
 } from "./assignmentFormModel"
 
-// Preserve the module's original public surface — importers (EditAssignmentForm,
-// AutogradingTestsPane, AdvancedRuntimeFields, tests) pull these from here.
-export {
-  assignmentToFormValues,
-  type CreateAssignmentFormValues,
-  type AssignmentForm,
-  type RuntimeEnv,
-} from "./assignmentFormModel"
+// EditAssignmentForm (and the create-form test) map a stored assignment to form
+// values through this module; the rest of the model's surface is imported from
+// assignmentFormModel directly.
+export { assignmentToFormValues } from "./assignmentFormModel"
 
 type CreateAssignmentFormProps = {
   defaultValues?: Partial<CreateAssignmentFormValues>
