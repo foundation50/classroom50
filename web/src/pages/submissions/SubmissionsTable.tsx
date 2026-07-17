@@ -20,7 +20,7 @@ import {
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
-import { Badge, Button, Modal } from "@/components/ui"
+import { Badge, Button, Modal, rtlFlip } from "@/components/ui"
 import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import {
@@ -574,7 +574,7 @@ const SubmissionsTable = ({
                           >
                             <ChevronRight
                               aria-hidden="true"
-                              className={`size-3.5 transition-transform ${isOpen ? "rotate-90" : ""}`}
+                              className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
                             />
                             {t("submissions.table.submissionCount", {
                               count: submissionCount,

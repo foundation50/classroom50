@@ -1,7 +1,7 @@
 import { ChevronRight, LinkIcon } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { CopyableCode, Modal } from "@/components/ui"
+import { CopyableCode, Modal, rtlFlip } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
 // The "How students accept" content, moved out of the page into a modal so the
@@ -58,7 +58,7 @@ export function AcceptLinkModal({
           <summary className="flex w-fit cursor-pointer list-none items-center gap-1 text-sm text-base-content/70 hover:text-base-content">
             <ChevronRight
               aria-hidden="true"
-              className="size-4 transition-transform group-open/cli:rotate-90"
+              className={`size-4 transition-transform ${rtlFlip} group-open/cli:rotate-90`}
             />
             {t("submissions.accept.preferCli")}
           </summary>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Button, Input } from "@/components/ui"
+import { Button, Input, rtlFlip } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -242,7 +242,7 @@ export const OrgSettingsPane = () => {
           {configOpen ? (
             <ChevronUp aria-hidden="true" className="size-4" />
           ) : (
-            <ChevronRight aria-hidden="true" className="size-4" />
+            <ChevronRight aria-hidden="true" className={`size-4 ${rtlFlip}`} />
           )}
           {configOpen
             ? t("orgSettings.serviceToken.hideConfig")

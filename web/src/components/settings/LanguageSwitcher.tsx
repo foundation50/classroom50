@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { AnimatedAlert, Button } from "@/components/ui"
+import { AnimatedAlert, Button, rtlFlip } from "@/components/ui"
 import { useLanguage } from "@/hooks/useLanguage"
 import { useLanguageRegistry } from "@/hooks/useLanguageRegistry"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
@@ -524,7 +524,7 @@ const AccordionSection = ({
       onClick={(e) => onToggle(e, section)}
     >
       <ChevronRight
-        className={`size-4 transition-transform ${open ? "rotate-90" : ""}`}
+        className={`size-4 transition-transform ${rtlFlip} ${open ? "rotate-90" : ""}`}
         aria-hidden="true"
       />
       {title}

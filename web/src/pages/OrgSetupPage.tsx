@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card, RouterButton } from "@/components/ui"
+import { Alert, Button, Card, RouterButton, rtlFlip } from "@/components/ui"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
@@ -87,12 +87,15 @@ const OrgSteps = ({
                   onClick={onGoToServiceToken}
                 >
                   {t("setup.nextServiceToken")}
-                  <ArrowRight aria-hidden="true" className="size-4" />
+                  <ArrowRight
+                    aria-hidden="true"
+                    className={`size-4 ${rtlFlip}`}
+                  />
                 </Button>
               ))}
             {stage === 2 && (
               <Button variant="ghost" onClick={onLeaveServiceToken}>
-                <ArrowLeft aria-hidden="true" className="size-4" />
+                <ArrowLeft aria-hidden="true" className={`size-4 ${rtlFlip}`} />
                 {t("setup.back")}
               </Button>
             )}
@@ -131,7 +134,10 @@ const OrgSteps = ({
                     org: org || t("setup.yourOrganization"),
                   })}
                 </span>
-                <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
+                <ArrowRight
+                  aria-hidden="true"
+                  className={`size-4 shrink-0 ${rtlFlip}`}
+                />
               </RouterButton>
               <Button variant="ghost" onClick={onManageToken}>
                 {t("setup.manageServiceToken")}

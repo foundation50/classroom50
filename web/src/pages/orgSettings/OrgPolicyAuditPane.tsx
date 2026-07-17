@@ -13,7 +13,13 @@ import {
 import { githubKeys } from "@/github-core/queries"
 import useRenameConfigRepoToMain from "@/hooks/mutations/useRenameConfigRepoToMain"
 import useRepairOrgPolicyConcern from "@/hooks/mutations/useRepairOrgPolicyConcern"
-import { Badge, Button, Spinner, type BadgeTone } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Spinner,
+  rtlFlip,
+  type BadgeTone,
+} from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import PlanBadge from "@/components/PlanBadge"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
@@ -405,7 +411,10 @@ function AuditBody({
             {showPermissions ? (
               <ChevronUp aria-hidden="true" className="size-4" />
             ) : (
-              <ChevronRight aria-hidden="true" className="size-4" />
+              <ChevronRight
+                aria-hidden="true"
+                className={`size-4 ${rtlFlip}`}
+              />
             )}
             {t("orgSettings.audit.memberPermsToggle")}
           </button>

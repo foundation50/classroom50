@@ -7,7 +7,7 @@ import {
   UserPlus,
 } from "lucide-react"
 import { Spinner } from "@/components/Spinner"
-import { Badge, Button, Card, RouterButton } from "@/components/ui"
+import { Badge, Button, Card, RouterButton, rtlFlip } from "@/components/ui"
 import {
   MembershipError,
   classifyMembershipError,
@@ -165,7 +165,7 @@ const AllSet = ({
               className="w-full"
             >
               {t("getStarted.active.goToClassroom")}
-              <ArrowRight aria-hidden="true" className="size-4" />
+              <ArrowRight aria-hidden="true" className={`size-4 ${rtlFlip}`} />
             </RouterButton>
           )
         )}

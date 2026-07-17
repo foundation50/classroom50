@@ -14,6 +14,7 @@ import {
   sidebarTooltip,
   sidebarIconButton,
 } from "./sidebarClasses"
+import { rtlFlip } from "@/components/ui"
 
 export const Tip = ({
   label,
@@ -97,7 +98,7 @@ export const ClassroomLogo = () => {
         aria-label={t("nav.collapseSidebar")}
         title={t("nav.collapseSidebar")}
       >
-        <ChevronLeft aria-hidden="true" className="size-5" />
+        <ChevronLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
       </button>
     </div>
   )
@@ -117,7 +118,7 @@ export const ExpandSidebarButton = () => {
         data-tip={t("nav.expandSidebar")}
         aria-label={t("nav.expandSidebar")}
       >
-        <ChevronRight aria-hidden="true" className="size-5" />
+        <ChevronRight aria-hidden="true" className={`size-5 ${rtlFlip}`} />
       </button>
     </div>
   )
@@ -137,7 +138,7 @@ export const AllClasses = ({ org }: { org: string }) => {
           data-tip={t("nav.allClasses")}
           aria-label={t("nav.allClasses")}
         >
-          <ArrowLeft aria-hidden="true" className="size-5" />
+          <ArrowLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
         </Link>
       </div>
     )
@@ -145,8 +146,16 @@ export const AllClasses = ({ org }: { org: string }) => {
 
   return (
     <div className="py-4 text-sm">
-      <Link to="/$org/classes" params={{ org }} className="text-center">
-        {t("nav.allClassesArrow")}
+      <Link
+        to="/$org/classes"
+        params={{ org }}
+        className="inline-flex items-center gap-1"
+      >
+        <ArrowLeft
+          aria-hidden="true"
+          className={`size-3.5 shrink-0 ${rtlFlip}`}
+        />
+        {t("nav.allClassesLink")}
       </Link>
     </div>
   )

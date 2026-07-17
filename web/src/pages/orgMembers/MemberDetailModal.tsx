@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Badge, Button, Modal } from "@/components/ui"
+import { Badge, Button, Modal, rtlFlip } from "@/components/ui"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -208,7 +208,7 @@ const MemberDetailModal = ({
                     ) : null}
                     <ChevronRight
                       aria-hidden="true"
-                      className="size-4 text-base-content/30 transition-transform duration-150 group-hover/cls:translate-x-0.5 rtl:group-hover/cls:-translate-x-0.5 group-hover/cls:text-base-content/70"
+                      className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/cls:translate-x-0.5 rtl:group-hover/cls:-translate-x-0.5 group-hover/cls:text-base-content/70 ${rtlFlip}`}
                     />
                   </span>
                 </Link>

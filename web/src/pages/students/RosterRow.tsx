@@ -1,7 +1,7 @@
 import { ChevronRight } from "lucide-react"
 import { useTranslation } from "react-i18next"
 import Avatar from "@/components/avatar"
-import { Badge } from "@/components/ui"
+import { Badge, rtlFlip } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
 import { GitHubIdentity } from "@/pages/orgMembers/memberPresentation"
 import { STATE_BADGE_TONE, STATE_LABEL_KEY } from "@/util/classroomRoleUI"
@@ -98,7 +98,7 @@ export const RosterRow = ({
         ) : null}
         <ChevronRight
           aria-hidden="true"
-          className="size-4 text-base-content/30 transition-transform duration-150 group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70"
+          className={`size-4 text-base-content/30 transition-transform duration-150 ltr:group-hover/row:translate-x-0.5 rtl:group-hover/row:-translate-x-0.5 group-hover/row:text-base-content/70 ${rtlFlip}`}
         />
       </div>
     </ClickableRow>

@@ -18,6 +18,7 @@ import useGetAssignmentRepo from "@/hooks/useGetAssignmentRepo"
 import { studentRepoName } from "@/util/studentRepo"
 import { Tip, SidebarItemBody } from "./primitives"
 import { sidebarIconButton } from "./sidebarClasses"
+import { rtlFlip } from "@/components/ui"
 import { useSidebarCollapse } from "./collapseContext"
 
 export const AssignmentSidebarMenu = ({
@@ -118,13 +119,21 @@ export const AssignmentSidebarMenu = ({
             data-tip={t("nav.allAssignments")}
             aria-label={t("nav.allAssignments")}
           >
-            <ArrowLeft aria-hidden="true" className="size-5" />
+            <ArrowLeft aria-hidden="true" className={`size-5 ${rtlFlip}`} />
           </Link>
         </div>
       ) : (
         <div className="py-4 text-sm">
-          <Link to="/$org/$classroom/assignments" params={{ org, classroom }}>
-            {t("nav.allAssignmentsArrow")}
+          <Link
+            to="/$org/$classroom/assignments"
+            params={{ org, classroom }}
+            className="inline-flex items-center gap-1"
+          >
+            <ArrowLeft
+              aria-hidden="true"
+              className={`size-3.5 shrink-0 ${rtlFlip}`}
+            />
+            {t("nav.allAssignmentsLink")}
           </Link>
         </div>
       )}

@@ -19,7 +19,7 @@ import {
   isOrgDefaultsStepData,
   unenforcedDefaultItems,
 } from "./orgDefaultsStepData"
-import { Badge, Spinner, type BadgeTone } from "@/components/ui"
+import { Badge, Spinner, rtlFlip, type BadgeTone } from "@/components/ui"
 import { CONFIG_REPO } from "@/util/configRepo"
 
 // Shared init "badge board" used by the org setup wizard (OrgSetupPage) and the
@@ -261,7 +261,7 @@ export const InitStep = ({
           ) : (
             <ChevronRight
               aria-hidden="true"
-              className="mt-0.5 size-4 shrink-0 text-base-content/70"
+              className={`mt-0.5 size-4 shrink-0 text-base-content/70 ${rtlFlip}`}
             />
           )}
           <div className="min-w-0">
