@@ -16,7 +16,7 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { logger } from "@/lib/logger"
 import { logWriteFailure } from "@/lib/logWriteFailure"
-import { useGitHubHealth, useOutageHint } from "@/lib/githubHealth"
+import { useOutageHint } from "@/lib/githubHealth"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
@@ -34,8 +34,8 @@ const CreateAssignmentPage = () => {
   const [outageError, setOutageError] = useState(false)
   const [warningMessage, setWarningMessage] = useState("")
 
-  const { statusDescription: outageStatusDescription } = useGitHubHealth()
   const outageHint = useOutageHint()
+  const outageStatusDescription = outageHint.statusDescription
 
   const { data: assignmentsData } = useGetClassroomAssignments(org, classroom)
   const takenSlugs = (assignmentsData?.assignments ?? []).map((a) => a.slug)
@@ -136,9 +136,10 @@ const CreateAssignmentPage = () => {
                 onError: (err) => {
                   logWriteFailure(log, err, "create assignment failed")
                   // A transient outage-shaped failure during save reads as a
-                  // local "fetch failed" — swap in the outage hint when the app
-                  // suspects GitHub is degraded, so the teacher knows to retry.
-                  if (outageHint(err)) {
+                  // local "fetch failed" — swap in the outage hint (the strict
+                  // classifier keeps a definitive 4xx / rate limit reading as
+                  // the real message), so the teacher knows to retry.
+                  if (outageHint.isOutage(err)) {
                     setOutageError(true)
                     setErrorMessage(t("githubStatus.title"))
                   } else {

@@ -33,6 +33,8 @@ import useGetRepo from "@/hooks/useGetRepo"
 import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsModal"
 import { LanguageDialog } from "@/components/LanguageDialog"
+import { GitHubStatusNote } from "@/components/GitHubStatusNote"
+import { useOutageHint } from "@/lib/githubHealth"
 import { EnterDiv } from "@/lib/motionComponents"
 import { collapseVariants } from "@/lib/motion"
 import { AnimatePresence, motion } from "motion/react"
@@ -555,6 +557,7 @@ const AcceptAssignmentPage = () => {
   const [collaboratorsOpen, setCollaboratorsOpen] = useState(false)
   const [repairOpen, setRepairOpen] = useState(false)
   const runAccept = useSafeSubmit()
+  const outageHint = useOutageHint()
 
   // A pending invitee opened the accept link before becoming an active member.
   // Rather than bouncing to /onboard, accept + verify membership inline (shared
@@ -753,6 +756,13 @@ const AcceptAssignmentPage = () => {
                       ? acceptMutation.error.message
                       : t("accept.errorGeneric")}
                   </div>
+                  {outageHint.isOutage(acceptMutation.error) && (
+                    <div className="mt-2 text-sm">
+                      <GitHubStatusNote
+                        statusDescription={outageHint.statusDescription}
+                      />
+                    </div>
+                  )}
                   <div className="mt-2 text-xs opacity-80">
                     {t("accept.errorRetryHint")}
                   </div>

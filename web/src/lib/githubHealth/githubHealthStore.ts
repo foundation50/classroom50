@@ -75,16 +75,73 @@ function setState(next: GitHubHealth) {
 // these before onResponse — see client.ts). Definitive statuses (401/403/404)
 // and rate limits (429 / 403-with-retry) are the user's own state, never an
 // outage, so they must never trip the detector.
+//
+// Errors are unwrapped along `.cause` first: some flows rethrow a friendly
+// wrapper (e.g. AcceptStepError) that preserves the original GitHubAPIError as
+// its cause, and the classification must key off that original, not the wrapper.
+//
+// This is the PERMISSIVE detector classifier: an unrecognized throw counts as
+// outage-shaped, because over-counting toward suspicion is harmless (a single
+// success clears it) and we'd rather notice a real outage than miss it. For a
+// user-facing hint (where a false positive is misleading) use
+// `isDefiniteOutageError`, which only returns true on a positively-identified
+// outage shape.
 export function isOutageShapedError(error: unknown): boolean {
-  if (error instanceof GitHubAPIError) {
-    if (error.isRateLimited) return false
-    return error.status >= 500
+  const unwrapped = outageRelevantError(error)
+  if (unwrapped instanceof GitHubAPIError) {
+    if (unwrapped.isRateLimited) return false
+    return unwrapped.status >= 500
   }
   // A bare abort (caller cancel / navigation) is not a fault.
-  if (error instanceof DOMException && error.name === "AbortError") return false
+  if (unwrapped instanceof DOMException && unwrapped.name === "AbortError") {
+    return false
+  }
   // Anything else reaching a query/mutation error handler is a network/timeout
   // failure (TypeError "Failed to fetch", timeout AbortError is handled above).
   return true
+}
+
+// The STRICT classifier for user-facing outage hints: true ONLY when the error
+// (after unwrapping `.cause`) is a positively-identified outage — a 5xx
+// GitHubAPIError or a network-failure TypeError. Everything else is false,
+// including a definitive 4xx, a rate limit, an abort, a friendly wrapper with
+// no outage cause (e.g. a TemplateAccessError — an instructor-action problem),
+// and any unrecognized throw. This is what keeps the hint free of false
+// positives (a bad template / not-a-member / SSO gate must never read as "GitHub
+// is down").
+export function isDefiniteOutageError(error: unknown): boolean {
+  const unwrapped = outageRelevantError(error)
+  if (unwrapped instanceof GitHubAPIError) {
+    if (unwrapped.isRateLimited) return false
+    return unwrapped.status >= 500
+  }
+  // A genuine network failure — the fetch never got a response. `TypeError`
+  // ("Failed to fetch") is what the browser throws; a timeout is a (non-abort)
+  // DOMException. A caller/navigation abort is not a fault.
+  if (unwrapped instanceof DOMException) return unwrapped.name !== "AbortError"
+  return unwrapped instanceof TypeError
+}
+
+// Follow the `.cause` chain to the error that actually carries the outage
+// signal. Bounded so a self-referential cause can't loop. Returns the deepest
+// GitHubAPIError/DOMException/TypeError if one exists in the chain, else the
+// original error.
+function outageRelevantError(error: unknown): unknown {
+  let current = error
+  for (let hops = 0; hops < 8; hops++) {
+    if (
+      current instanceof GitHubAPIError ||
+      current instanceof DOMException ||
+      current instanceof TypeError
+    ) {
+      return current
+    }
+    const cause: unknown =
+      current instanceof Error ? (current.cause as unknown) : undefined
+    if (cause === undefined || cause === null || cause === current) break
+    current = cause
+  }
+  return current
 }
 
 async function probeStatus(now: number) {

@@ -68,6 +68,8 @@ describe("classifyMembershipError", () => {
       org: "acme",
     })
     expect(info.cause).toBe("generic")
+    // A 403 is definitive, not an outage.
+    expect(info.isOutage).toBe(false)
   })
 
   it("routes a 500 to generic", () => {
@@ -75,6 +77,32 @@ describe("classifyMembershipError", () => {
       org: "acme",
     })
     expect(info.cause).toBe("generic")
+    // A 5xx is an outage — the card adds the githubstatus.com hint.
+    expect(info.isOutage).toBe(true)
+  })
+
+  it("flags a network error as an outage on the generic branch", () => {
+    const info = classifyMembershipError(new TypeError("Failed to fetch"), {
+      org: "acme",
+    })
+    expect(info.cause).toBe("generic")
+    expect(info.isOutage).toBe(true)
+  })
+
+  it("does not flag a definitive cause as an outage", () => {
+    expect(
+      classifyMembershipError(makeError({ status: 404 }), {}).isOutage,
+    ).toBe(false)
+    expect(
+      classifyMembershipError(
+        makeError({
+          status: 403,
+          ssoHeader:
+            "required; url=https://github.com/orgs/acme/sso?authorization_request=abc",
+        }),
+        {},
+      ).isOutage,
+    ).toBe(false)
   })
 
   it("routes a non-GitHub error (or null) to generic without diagnostics", () => {

@@ -1,5 +1,6 @@
 export {
   isOutageShapedError,
+  isDefiniteOutageError,
   recordGitHubFailure,
   recordGitHubSuccess,
   type GitHubHealth,

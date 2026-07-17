@@ -31,6 +31,7 @@ import {
   __resetGitHubHealthForTest,
   getGitHubHealthSnapshot,
   isOutageShapedError,
+  isDefiniteOutageError,
   recordGitHubFailure,
   recordGitHubSuccess,
 } from "./githubHealthStore"
@@ -71,6 +72,58 @@ describe("isOutageShapedError", () => {
     expect(isOutageShapedError(new DOMException("aborted", "AbortError"))).toBe(
       false,
     )
+  })
+
+  it("unwraps `.cause`: a wrapper around a 5xx is outage-shaped; around a 404 is not", () => {
+    class Wrapper extends Error {
+      constructor(cause: unknown) {
+        super("wrapped")
+        this.cause = cause
+      }
+    }
+    expect(isOutageShapedError(new Wrapper(apiError(502)))).toBe(true)
+    expect(isOutageShapedError(new Wrapper(apiError(404)))).toBe(false)
+    expect(isOutageShapedError(new Wrapper(apiError(429)))).toBe(false)
+  })
+})
+
+describe("isDefiniteOutageError (strict, for user-facing hints)", () => {
+  class Wrapper extends Error {
+    constructor(cause?: unknown) {
+      super("wrapped")
+      if (cause !== undefined) this.cause = cause
+    }
+  }
+
+  it("is true only for a 5xx or a network TypeError, unwrapping `.cause`", () => {
+    expect(isDefiniteOutageError(apiError(500))).toBe(true)
+    expect(isDefiniteOutageError(apiError(503))).toBe(true)
+    expect(isDefiniteOutageError(new TypeError("Failed to fetch"))).toBe(true)
+    expect(isDefiniteOutageError(new Wrapper(apiError(502)))).toBe(true)
+    expect(
+      isDefiniteOutageError(new Wrapper(new TypeError("Failed to fetch"))),
+    ).toBe(true)
+  })
+
+  it("is false for definitive 4xx, rate limit, abort — even wrapped", () => {
+    expect(isDefiniteOutageError(apiError(401))).toBe(false)
+    expect(isDefiniteOutageError(apiError(403))).toBe(false)
+    expect(isDefiniteOutageError(apiError(404))).toBe(false)
+    expect(isDefiniteOutageError(apiError(429))).toBe(false)
+    expect(isDefiniteOutageError(apiError(403, { retryAfter: 60 }))).toBe(false)
+    expect(
+      isDefiniteOutageError(new DOMException("aborted", "AbortError")),
+    ).toBe(false)
+    expect(isDefiniteOutageError(new Wrapper(apiError(404)))).toBe(false)
+  })
+
+  it("is false for a plain/unknown error with no outage cause (no false positive)", () => {
+    // A TemplateAccessError-like plain Error must never read as an outage.
+    expect(isDefiniteOutageError(new Error("ask your instructor"))).toBe(false)
+    expect(isDefiniteOutageError(new Wrapper())).toBe(false)
+    expect(isDefiniteOutageError("string")).toBe(false)
+    expect(isDefiniteOutageError(undefined)).toBe(false)
+    expect(isDefiniteOutageError(null)).toBe(false)
   })
 })
 

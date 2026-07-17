@@ -13,7 +13,6 @@ vi.mock("./githubStatusApi", () => ({
 import {
   __resetGitHubHealthForTest,
   recordGitHubFailure,
-  recordGitHubSuccess,
 } from "./githubHealthStore"
 import { useOutageHint } from "./useOutageHint"
 
@@ -35,45 +34,86 @@ const apiError = (status: number, over: Partial<GitHubRateLimit> = {}) =>
     rateLimit: { ...noRateLimit, ...over },
   })
 
-// Trip suspicion the way the app does: >= 3 outage-shaped failures in the window.
-function suspectOutage() {
-  const base = Date.now()
-  recordGitHubFailure(apiError(500), base)
-  recordGitHubFailure(apiError(500), base + 100)
-  recordGitHubFailure(apiError(500), base + 200)
+// A friendly wrapper that preserves the original error as `.cause`, mirroring
+// AcceptStepError / any rethrown wrapper the app produces.
+class WrapperError extends Error {
+  constructor(message: string, cause?: unknown) {
+    super(message)
+    this.name = "WrapperError"
+    if (cause !== undefined) this.cause = cause
+  }
 }
 
 beforeEach(() => __resetGitHubHealthForTest())
 afterEach(() => __resetGitHubHealthForTest())
 
-describe("useOutageHint", () => {
-  it("does not hint when no outage is suspected, even for an outage-shaped error", () => {
+describe("useOutageHint().isOutage — strict, false-positive-proof", () => {
+  it("is true for a 5xx and a network TypeError (regardless of suspicion)", () => {
     const { result } = renderHook(() => useOutageHint())
-    expect(result.current(apiError(500))).toBe(false)
-    expect(result.current(new TypeError("Failed to fetch"))).toBe(false)
+    expect(result.current.isOutage(apiError(500))).toBe(true)
+    expect(result.current.isOutage(apiError(503))).toBe(true)
+    expect(result.current.isOutage(new TypeError("Failed to fetch"))).toBe(true)
   })
 
-  it("hints for an outage-shaped error once an outage is suspected", () => {
+  it("is false for definitive 4xx, rate limits, and aborts", () => {
     const { result } = renderHook(() => useOutageHint())
-    act(() => suspectOutage())
-    expect(result.current(apiError(503))).toBe(true)
-    expect(result.current(new TypeError("Failed to fetch"))).toBe(true)
+    expect(result.current.isOutage(apiError(401))).toBe(false)
+    expect(result.current.isOutage(apiError(403))).toBe(false)
+    expect(result.current.isOutage(apiError(404))).toBe(false)
+    expect(result.current.isOutage(apiError(429))).toBe(false)
+    expect(result.current.isOutage(apiError(403, { retryAfter: 60 }))).toBe(
+      false,
+    )
+    expect(
+      result.current.isOutage(new DOMException("aborted", "AbortError")),
+    ).toBe(false)
   })
 
-  it("never hints for a definitive 4xx or rate limit, even when suspected", () => {
+  it("is false for a bare/unknown error (no false positive on a plain throw)", () => {
     const { result } = renderHook(() => useOutageHint())
-    act(() => suspectOutage())
-    expect(result.current(apiError(404))).toBe(false)
-    expect(result.current(apiError(403))).toBe(false)
-    expect(result.current(apiError(429))).toBe(false)
+    // A TemplateAccessError-like plain Error with no outage cause.
+    expect(result.current.isOutage(new Error("ask your instructor"))).toBe(
+      false,
+    )
+    expect(result.current.isOutage("some string")).toBe(false)
+    expect(result.current.isOutage(undefined)).toBe(false)
   })
 
-  it("stops hinting after a success clears suspicion (partial-outage flicker)", () => {
+  it("unwraps `.cause` — a wrapper around a 5xx hints, around a 404 does not", () => {
     const { result } = renderHook(() => useOutageHint())
-    act(() => suspectOutage())
-    expect(result.current(apiError(500))).toBe(true)
-    // A single success mid-outage clears the window and suspicion.
-    act(() => recordGitHubSuccess())
-    expect(result.current(apiError(500))).toBe(false)
+    expect(
+      result.current.isOutage(new WrapperError("failed", apiError(502))),
+    ).toBe(true)
+    expect(
+      result.current.isOutage(
+        new WrapperError("failed", new TypeError("Failed to fetch")),
+      ),
+    ).toBe(true)
+    // Definitive causes must never read as an outage through the wrapper.
+    expect(
+      result.current.isOutage(new WrapperError("not found", apiError(404))),
+    ).toBe(false)
+    expect(
+      result.current.isOutage(new WrapperError("rate limited", apiError(429))),
+    ).toBe(false)
+    // A wrapper with no cause is not an outage (e.g. TemplateAccessError).
+    expect(result.current.isOutage(new WrapperError("ask instructor"))).toBe(
+      false,
+    )
+  })
+})
+
+describe("useOutageHint().suspected — background signal", () => {
+  it("reflects the detector: false until tripped, true after 3 failures in the window", () => {
+    const { result, rerender } = renderHook(() => useOutageHint())
+    expect(result.current.suspected).toBe(false)
+    act(() => {
+      const base = Date.now()
+      recordGitHubFailure(apiError(500), base)
+      recordGitHubFailure(apiError(500), base + 100)
+      recordGitHubFailure(apiError(500), base + 200)
+    })
+    rerender()
+    expect(result.current.suspected).toBe(true)
   })
 })

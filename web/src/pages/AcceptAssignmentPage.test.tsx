@@ -67,6 +67,12 @@ vi.mock("@/components/modals/GroupCollaboratorsModal", () => ({
 }))
 vi.mock("canvas-confetti", () => ({ default: vi.fn() }))
 
+// The health store fires a best-effort githubstatus.com probe once suspicion
+// trips; stub it so these tests never hit the network.
+vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
+  fetchGitHubStatusIndicator: () => Promise.resolve(null),
+}))
+
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
   return {
@@ -90,6 +96,8 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
 })
 
 import AcceptAssignmentPage from "./AcceptAssignmentPage"
+import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
+import { __resetGitHubHealthForTest } from "@/lib/githubHealth/githubHealthStore"
 
 const acceptedRepo: GitHubRepo = {
   id: 1,
@@ -118,9 +126,13 @@ const renderPage = (client: QueryClient) =>
 
 beforeEach(() => {
   acceptAssignment.mockReset()
+  __resetGitHubHealthForTest()
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  __resetGitHubHealthForTest()
+})
 
 describe("AcceptAssignmentPage repository cache", () => {
   it.each(["created", "already-accepted"] as const)(
@@ -175,4 +187,82 @@ describe("AcceptAssignmentPage repository cache", () => {
       )
     },
   )
+})
+
+describe("AcceptAssignmentPage outage hint", () => {
+  const noRateLimit: GitHubRateLimit = {
+    limit: null,
+    remaining: null,
+    used: null,
+    reset: null,
+    resource: null,
+    retryAfter: null,
+  }
+  const apiError = (status: number, over: Partial<GitHubRateLimit> = {}) =>
+    new GitHubAPIError({
+      status,
+      url: "https://api.github.com/x",
+      message: `HTTP ${status}`,
+      body: null,
+      rateLimit: { ...noRateLimit, ...over },
+    })
+
+  // Mirrors AcceptStepError: a friendly wrapper preserving the underlying
+  // GitHubAPIError as `.cause` (what the accept flow actually throws).
+  class AcceptStepLike extends Error {
+    constructor(message: string, cause?: unknown) {
+      super(message)
+      this.name = "AcceptStepError"
+      if (cause !== undefined) this.cause = cause
+    }
+  }
+
+  const STATUS_LINK = "githubStatus.checkStatusLink"
+
+  const renderAndAccept = async (rejection: unknown) => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    acceptAssignment.mockRejectedValue(rejection)
+    renderPage(client)
+    fireEvent.click(screen.getByRole("button", { name: "accept.acceptButton" }))
+    await waitFor(() =>
+      expect(screen.queryByText("accept.errorTitle")).not.toBeNull(),
+    )
+  }
+
+  it("shows the githubstatus.com hint when accept fails with a wrapped 5xx", async () => {
+    await renderAndAccept(
+      new AcceptStepLike("Provisioning failed (HTTP 502).", apiError(502)),
+    )
+    expect(screen.queryByText(STATUS_LINK)).not.toBeNull()
+  })
+
+  it("shows the hint when accept fails with a bare network error", async () => {
+    await renderAndAccept(new TypeError("Failed to fetch"))
+    expect(screen.queryByText(STATUS_LINK)).not.toBeNull()
+  })
+
+  it("does NOT show the hint for a wrapped 404 (not-found is a real, local problem)", async () => {
+    await renderAndAccept(
+      new AcceptStepLike("Repository not found (HTTP 404).", apiError(404)),
+    )
+    expect(screen.queryByText(STATUS_LINK)).toBeNull()
+  })
+
+  it("does NOT show the hint for a rate limit", async () => {
+    await renderAndAccept(new AcceptStepLike("Rate limited.", apiError(429)))
+    expect(screen.queryByText(STATUS_LINK)).toBeNull()
+  })
+
+  it("does NOT show the hint for a template-access error (instructor action, no cause)", async () => {
+    // A TemplateAccessError is a plain Error with no outage `.cause`.
+    await renderAndAccept(
+      new Error("Couldn't copy the template — ask your instructor."),
+    )
+    expect(screen.queryByText(STATUS_LINK)).toBeNull()
+  })
 })
