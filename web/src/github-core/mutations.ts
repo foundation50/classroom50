@@ -103,3 +103,7 @@ export {
   type EditClassroomInput,
   type EditClassroomResult,
 } from "./mutations/classroomEdit"
+export {
+  migrateInstructorTeamToTeacher,
+  type TeacherMigrationResult,
+} from "./mutations/teacherMigration"

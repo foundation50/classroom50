@@ -16,6 +16,7 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireRole from "@/components/RequireRole"
+import { useTeacherTeamMigration } from "@/hooks/useTeacherTeamMigration"
 import { LoadingSwap } from "@/lib/LoadingSwap"
 import { Alert } from "@/components/ui"
 
@@ -34,6 +35,11 @@ const EditClassroomContent = ({
     org,
     classroom,
   )
+
+  // Self-heal the instructor -> teacher team rename on settings load
+  // (best-effort; a no-op once migrated). The settings route is gated on the top
+  // staff role, so the viewer can create/delete teams and commit config.
+  useTeacherTeamMigration(org, classroom)
 
   const editClassroomMutation = useEditClassroom(org, classroom, (result) => {
     trackPublishDeploy(
