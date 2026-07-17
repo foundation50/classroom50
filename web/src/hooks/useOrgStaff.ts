@@ -14,7 +14,7 @@ export type UseOrgStaffResult = OrgStaffVerdict & {
 
 // Org-level "staff of any classroom" signal for surfaces with NO classroom in
 // scope (Published page, "My Classes" nav, ClassesPage): staff iff the viewer is
-// an org owner OR a confirmed member of >=1 classroom's instructor/ta team in
+// an org owner OR a confirmed member of >=1 classroom's teacher/ta team in
 // this org.
 //
 // The team signal is derived DIRECTLY from the viewer's own team memberships
@@ -29,7 +29,7 @@ export type UseOrgStaffResult = OrgStaffVerdict & {
 // An org owner is staff here regardless of team membership: a freshly-configured
 // org has no classroom teams yet, and the owner still needs the org-staff chrome
 // (My Classrooms, the create-classroom CTA, the owner nav shortcuts) to bootstrap
-// their first classroom. Creating it seeds the owner onto its instructor team, so
+// their first classroom. Creating it seeds the owner onto its teacher team, so
 // the team signal takes over naturally afterward.
 //
 // Fail-closed tri-state: a confirmed owner or staff team => staff; a successful

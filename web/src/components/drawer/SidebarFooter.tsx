@@ -51,7 +51,7 @@ export const SidebarFooter = () => {
   // the setup/audit panes; `plan` is only visible to org owners, so this is
   // often undefined (the snapshot then reports "unknown" with a reason).
   const { data: orgPlanDetails } = useGetOrgPlanDetails(org)
-  // Precise classroom role (Instructor vs TA); respects the "view as" preview.
+  // Precise classroom role (Teacher vs TA); respects the "view as" preview.
   // `actualRole` is the real (preview-independent) role. Null off a classroom
   // route (no provider), where the org-level label logic below applies instead.
   const classroomCtx = useClassroomRoleContextOptional()
@@ -59,8 +59,8 @@ export const SidebarFooter = () => {
   const actualClassroomRole = classroomCtx?.actualRole ?? "unresolved"
   const classroomRoleLoading = classroomCtx?.isLoading ?? false
   const { viewAs, setViewAs } = useRoleView()
-  // Offer "View as" only to a real instructor of THIS classroom — the role with
-  // something lower to preview. Keyed off instructor-team membership, not
+  // Offer "View as" only to a real teacher of THIS classroom — the role with
+  // something lower to preview. Keyed off teacher-team membership, not
   // org-admin status (KTD-4). Uses the REAL role (actualClassroomRole), not the
   // preview-clamped one.
   const canPreviewRoles =
@@ -108,7 +108,7 @@ export const SidebarFooter = () => {
     isError: ownerError,
   } = useIsOrgOwner()
 
-  // Role label per product mapping (owner shows as Instructor). On a classroom
+  // Role label per product mapping (owner shows as Teacher). On a classroom
   // route use the precise role; org-level routes delegate to the pure helper.
   let roleLabelText: string | null
   let labelPending: boolean

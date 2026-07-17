@@ -268,7 +268,7 @@ const RosterBulkActionsBar = ({
           inviteeId,
           invitationId: row.invitation_id,
           teamIds: teamId ? [teamId] : undefined,
-          // Preserve the original invite's org role (instructor -> org OWNER).
+          // Preserve the original invite's org role (teacher -> org OWNER).
           role: githubOrgRoleForRole(role),
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })

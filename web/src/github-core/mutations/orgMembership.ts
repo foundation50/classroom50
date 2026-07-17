@@ -82,7 +82,7 @@ export type OrgMembershipState = "active" | "pending"
 // Set an EXISTING member's (or invitee's) org-level role. PUT
 // /orgs/{org}/memberships/{username} with { role } — "admin" promotes to org
 // owner, "member" demotes to a plain member. Used to promote an already-active
-// member to owner on a confirmed instructor role change (the invite path only
+// member to owner on a confirmed teacher role change (the invite path only
 // sets the role on a FRESH invite, so an existing member is never escalated
 // there). Idempotent — setting the role a member already holds is a no-op PUT.
 export async function setOrgMembershipRole(
@@ -206,7 +206,7 @@ export async function ensureOrgMembership(
     inviteeId: number
     teamIds?: number[]
     // Org-level role for a FRESH invite: "admin" makes the invitee an org owner
-    // (used for an instructor invite), else a plain member. Ignored when the
+    // (used for a teacher invite), else a plain member. Ignored when the
     // person is already active/pending (we don't escalate an existing member).
     role?: "direct_member" | "admin"
   },
@@ -263,8 +263,8 @@ export async function resendOrgInvitation(
     // recreated team-less and the accepted invitee is orphaned (uncollected).
     teamIds?: number[]
     // Org role to re-issue with so the resend matches the original invite: an
-    // instructor invite is "admin" (org OWNER), everyone else "direct_member".
-    // Omitted defaults to direct_member — a caller resending an instructor must
+    // teacher invite is "admin" (org OWNER), everyone else "direct_member".
+    // Omitted defaults to direct_member — a caller resending a teacher must
     // pass "admin" or the re-sent invite would silently downgrade to a member.
     role?: "direct_member" | "admin"
   },

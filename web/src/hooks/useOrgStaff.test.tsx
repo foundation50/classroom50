@@ -54,7 +54,7 @@ beforeEach(() => {
 describe("useOrgStaff — team-based org-staff signal", () => {
   it("is staff when the viewer is on a classroom staff team in this org", () => {
     useQueryMock.mockReturnValue(
-      teams({ data: [team("classroom50-cs101-instructor")], isSuccess: true }),
+      teams({ data: [team("classroom50-cs101-teacher")], isSuccess: true }),
     )
     const { result } = renderHook(() => useOrgStaff("acme"))
     expect(result.current).toMatchObject({
@@ -67,7 +67,7 @@ describe("useOrgStaff — team-based org-staff signal", () => {
 
   it("is non-staff when the viewer is on no staff team (successful empty-ish listing)", () => {
     // A student: on some non-classroom team + the students team, but no
-    // instructor/ta team. Cleanly non-staff, no 404 (self-scoped read).
+    // teacher/ta team. Cleanly non-staff, no 404 (self-scoped read).
     useQueryMock.mockReturnValue(
       teams({
         data: [team("classroom50-cs101"), team("some-other-team")],

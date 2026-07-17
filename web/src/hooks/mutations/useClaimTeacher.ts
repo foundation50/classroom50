@@ -13,7 +13,7 @@ import { githubKeys } from "@/github-core/queries"
 // team, then idempotently add the acting owner to it. Hook invalidates the
 // teacher team's members + the viewer's team-membership (what the role
 // context reads); success/error toasts stay at the call site (see ./README.md).
-export function useClaimInstructor(
+export function useClaimTeacher(
   org: string,
   classroom: string,
   messages: { somethingWentWrong: string },

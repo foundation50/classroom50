@@ -19,7 +19,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
-import { ClaimInstructorNotice } from "./classes/ClaimInstructorNotice"
+import { ClaimTeacherNotice } from "./classes/ClaimTeacherNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
@@ -107,7 +107,7 @@ export const TeacherAssignmentsView = ({
   const { data: classData, isLoading: assignmentsLoading } =
     useGetClassroomAssignments(org, classroom)
   // Authoritative student-role count for the header and the table denominator,
-  // so neither counts instructors/TAs. The count comes from team membership
+  // so neither counts teachers/TAs. The count comes from team membership
   // (one source); roster.csv identity is fetched by useStudentCount internally.
   const {
     studentCount,
@@ -265,7 +265,7 @@ const AssignmentsPage = () => {
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("nav.assignments")} />
       {org && classroom && (
-        <ClaimInstructorNotice org={org} classroom={classroom} />
+        <ClaimTeacherNotice org={org} classroom={classroom} />
       )}
       {!roleResolved && (
         <div className="space-y-4">

@@ -135,7 +135,7 @@ const EditClassroomPage = () => {
   return (
     <PageShell selected="settings">
       <Breadcrumb endpoint={t("nav.settings")} />
-      <RequireRole allow="instructor">
+      <RequireRole allow="teacher">
         {!org || !classroom ? (
           <MissingParams message={t("classes.missingOrgOrClassroom")} />
         ) : (

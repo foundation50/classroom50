@@ -18,10 +18,10 @@ export type Capability =
   // signal (member of >=1 classroom staff team).
   | "viewOrgStaffContent"
   // Classroom-scoped.
-  | "viewClassroomStaffContent" // roster / authoring / submissions (instructor|ta)
-  | "editClassroomSettings" // instructor only
-  | "previewAsRole" // the "view as" offer — instructor only
-  | "claimInstructor" // org owner who currently resolves to student here
+  | "viewClassroomStaffContent" // roster / authoring / submissions (teacher|ta)
+  | "editClassroomSettings" // teacher only
+  | "previewAsRole" // the "view as" offer — teacher only
+  | "claimTeacher" // org owner who currently resolves to student here
 
 // The resolved signals a capability decision draws on. All optional: a
 // classroom-scoped capability doesn't need `githubOrgRole`, an org-scoped one
@@ -53,7 +53,7 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
       return isTeacherRole(classroomRole)
     case "previewAsRole":
       return isTeacherRole(classroomRole)
-    case "claimInstructor":
+    case "claimTeacher":
       return githubOrgRole === "owner" && classroomRole === "student"
   }
 }

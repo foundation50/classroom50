@@ -74,7 +74,7 @@ function setState(next: GitHubHealth) {
 // is a positively-identified outage — a 5xx GitHubAPIError, a network-failure
 // TypeError, or a non-abort timeout DOMException. Everything else is false:
 // a definitive 4xx, a rate limit, a caller/navigation abort, a friendly wrapper
-// with no outage cause (e.g. a TemplateAccessError — an instructor-action
+// with no outage cause (e.g. a TemplateAccessError — a teacher-action
 // problem), and any unrecognized local throw. Positive-identification only is
 // what keeps both the detector and the hint free of false positives — a bad
 // template / not-a-member / SSO gate / local app bug must never read as "GitHub

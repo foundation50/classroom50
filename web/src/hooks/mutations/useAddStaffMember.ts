@@ -42,7 +42,7 @@ export async function syncRosterAfterStaffChange(
   }
 }
 
-// Add a staff member (instructor/ta) to a classroom's role team. The multi-step
+// Add a staff member (teacher/ta) to a classroom's role team. The multi-step
 // chain — verify the account exists, ensure-and-grant the role team, strip the
 // auto-added creator on a fresh team, add the target — lives here behind one
 // named mutation. Hook invalidates team-members + best-effort roster sync; the
@@ -73,7 +73,7 @@ export function useAddStaffMember(
       await grantTeamConfigRepoWrite(client, org, team.slug)
       // GitHub auto-adds the team CREATOR as maintainer. If this action just
       // created the team, remove the acting user unless they're the target — so
-      // adding a TA doesn't also make the instructor a TA.
+      // adding a TA doesn't also make the teacher a TA.
       if (
         team.created &&
         user?.login &&

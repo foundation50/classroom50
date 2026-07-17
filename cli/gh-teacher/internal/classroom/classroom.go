@@ -209,8 +209,8 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 		return fmt.Errorf("create classroom team: %w", err)
 	}
 
-	// Create (or adopt) the staff teams (instructor, ta), grant each write on
-	// the config repo, and seed the acting teacher as instructor maintainer,
+	// Create (or adopt) the staff teams (teacher, ta), grant each write on
+	// the config repo, and seed the acting teacher as teacher-team maintainer,
 	// mirroring the web.
 	staffTeams, login, err := seedStaffTeams(client, errOut, org, shortName)
 	if err != nil {

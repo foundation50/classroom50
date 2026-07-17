@@ -28,7 +28,7 @@ function assertInviteSent(
 }
 
 // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue an
-// equivalent fresh invite — same classroom role (instructor -> org OWNER), by
+// equivalent fresh invite — same classroom role (teacher -> org OWNER), by
 // username when known (carries the team) else by email. A login-less,
 // email-less invite can't be re-issued (dismiss-only). Hook owns the
 // invite-query invalidation; the error toast stays at the call site (see

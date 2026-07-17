@@ -28,7 +28,7 @@ export function resolveSkeletonDrift(input: SkeletonDriftInput): boolean {
 // read-only — no version marker.
 //
 // Gated on org owner (admin), not any staff: the banner routes to the owner-only
-// Re-run org setup section, so surfacing it to a TA/non-owner instructor would
+// Re-run org setup section, so surfacing it to a TA/non-owner teacher would
 // dead-end their CTA on a NotFound.
 export function useSkeletonDrift(org: string | undefined) {
   const client = useGitHubClient()

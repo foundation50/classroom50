@@ -44,11 +44,11 @@ vi.mock("@/assets/duck.png", () => ({ default: "" }))
 
 import { StaffSidebarMenu } from "./index"
 
-// Roster is staff-only (instructor|ta); Settings is instructor-only. Both keyed
+// Roster is staff-only (teacher|ta); Settings is teacher-only. Both keyed
 // off the resolved fine role via can().
 const ctx = (over: Record<string, unknown> = {}) => ({
-  role: "instructor",
-  actualRole: "instructor",
+  role: "teacher",
+  actualRole: "teacher",
   isLoading: false,
   isError: false,
   retry: () => {},
@@ -77,25 +77,25 @@ afterEach(() => {
 })
 
 describe("StaffSidebarMenu — RBAC nav affordances via can()", () => {
-  it("an instructor sees Roster and Settings", () => {
+  it("an teacher sees Roster and Settings", () => {
     classroomCtxMock.mockReturnValue(ctx())
     renderMenu()
     expect(hasRoster()).toBe(true)
     expect(hasSettings()).toBe(true)
   })
 
-  it("a TA sees Roster (staff) but not Settings (instructor-only)", () => {
+  it("a TA sees Roster (staff) but not Settings (teacher-only)", () => {
     classroomCtxMock.mockReturnValue(ctx({ role: "ta", actualRole: "ta" }))
     renderMenu()
     expect(hasRoster()).toBe(true)
     expect(hasSettings()).toBe(false)
   })
 
-  it("an instructor previewing as student sees neither (downgrade-only clamp)", () => {
+  it("an teacher previewing as student sees neither (downgrade-only clamp)", () => {
     // role is the preview-clamped one; showStaffItems/canEditSettings key off it,
-    // so a real instructor previewing as a student sees the student surface.
+    // so a real teacher previewing as a student sees the student surface.
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "student", actualRole: "instructor" }),
+      ctx({ role: "student", actualRole: "teacher" }),
     )
     renderMenu()
     expect(hasRoster()).toBe(false)

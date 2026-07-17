@@ -77,14 +77,21 @@ describe("parseRosterImportFile", () => {
 
   it("parses a role column into the row role (case-insensitive)", () => {
     const csv =
-      "username,role\nada,student\nprof,Instructor\nhelper,TA\nghost,dean\n"
+      "username,role\nada,student\nprof,Teacher\nhelper,TA\nghost,dean\n"
     expect(parseRosterImportFile(csv).map((r) => [r.username, r.role])).toEqual(
       [
         ["ada", "student"],
-        ["prof", "instructor"],
+        ["prof", "teacher"],
         ["helper", "ta"],
         ["ghost", undefined], // unrecognized -> undefined (upload defaults student)
       ],
+    )
+  })
+
+  it("normalizes a legacy 'instructor' role column to teacher", () => {
+    const csv = "username,role\nprof,Instructor\n"
+    expect(parseRosterImportFile(csv).map((r) => [r.username, r.role])).toEqual(
+      [["prof", "teacher"]],
     )
   })
 })
@@ -138,12 +145,17 @@ describe("detectImportHeaderIssue", () => {
 })
 
 describe("coerceImportRole", () => {
-  it("accepts the three known roles, case-insensitively", () => {
+  it("accepts the known roles, case-insensitively", () => {
     expect(coerceImportRole("student")).toBe("student")
-    expect(coerceImportRole("instructor")).toBe("instructor")
+    expect(coerceImportRole("teacher")).toBe("teacher")
     expect(coerceImportRole("ta")).toBe("ta")
-    expect(coerceImportRole("Instructor")).toBe("instructor")
+    expect(coerceImportRole("Teacher")).toBe("teacher")
     expect(coerceImportRole("  TA  ")).toBe("ta")
+  })
+
+  it("normalizes the legacy 'instructor' value to teacher", () => {
+    expect(coerceImportRole("instructor")).toBe("teacher")
+    expect(coerceImportRole("Instructor")).toBe("teacher")
   })
 
   it("returns undefined for an unknown, empty, or missing value", () => {

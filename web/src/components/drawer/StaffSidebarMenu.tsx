@@ -16,7 +16,7 @@ export const StaffSidebarMenu = ({
 }) => {
   // Placeholder while pending so items never flash in then out.
   const { roleResolved, role: classroomRole } = useClassroomRoleContext()
-  // Staff nav (Roster staff-only, Settings instructor-only) gates on the
+  // Staff nav (Roster staff-only, Settings teacher-only) gates on the
   // preview-aware classroom role through the central can() policy, so "View as
   // student/TA" faithfully hides what a real student/TA wouldn't see. can()
   // already denies `unresolved`, so no separate resolved conjunct is needed.

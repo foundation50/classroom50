@@ -41,7 +41,7 @@ export type UseTeamRosterResult = {
   rows: TeamRosterRow[]
   counts: Record<TeamRosterRowState, number>
   // Enrolled (active-member) head counts by role for the header: how many
-  // students, instructors, and TAs are actually on a team. A person on two
+  // students, teachers, and TAs are actually on a team. A person on two
   // teams counts toward each of their roles (tallies, not a partition).
   roleCounts: RoleCounts
   // The team-member fetch (the enrolled source of truth) is still resolving.
@@ -54,7 +54,7 @@ export type UseTeamRosterResult = {
   // The classroom has zero team members AND zero pending invites — a brand-new
   // classroom nobody has joined yet.
   isEmpty: boolean
-  // Pending invites couldn't be read (owner-only; a non-owner TA/instructor
+  // Pending invites couldn't be read (owner-only; a non-owner TA/teacher
   // can't read them). The view then hides the pending section and shows an
   // "owners only" note instead of rendering zero pending.
   pendingHidden: boolean
@@ -66,7 +66,7 @@ export type UseTeamRosterResult = {
   // The resolved team slug (classroom.json.team.slug, else classroom50-<c>).
   teamSlug: string
   // Resolved team slug per role, so the detail view can link each role a member
-  // actually holds to its real team (student -> classroom team, instructor/ta ->
+  // actually holds to its real team (student -> classroom team, teacher/ta ->
   // the staff team) rather than assuming everyone is on the student team.
   teamSlugByRole: Record<ClassroomRole, string>
   // Count of team members with no roster.csv row — the exact set "Sync roster"

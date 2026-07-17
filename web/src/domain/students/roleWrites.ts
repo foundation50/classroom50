@@ -212,26 +212,26 @@ export type ApplyClassroomRoleChangeResult = {
 // Apply a CONFIRMED role change (or an additive enroll) for an active org
 // member: move them onto the CSV role's team and off every other classroom
 // team. The caller must only invoke this for a member the preflight classified
-// as `role_change` or `enroll` and — for an instructor target or a demotion off
-// instructor — the teacher confirmed, since it grants/revokes org-OWNER.
+// as `role_change` or `enroll` and — for a teacher target or a demotion off
+// teacher — the teacher confirmed, since it grants/revokes org-OWNER.
 //
 // Ordering is chosen so a mid-sequence failure never leaves ELEVATED access
 // dangling:
 //  0) Before any change, refuse an org-OWNER revocation that would be
 //     self-inflicted or strip the last owner (self-demotion / sole-owner
 //     demotion) — both are unrecoverable-in-place, so they're blocked outright.
-//  1) Demote org owner -> member FIRST when leaving instructor for a
-//     non-instructor role. Done before any team change, so if it throws we abort
-//     with the member unchanged (still instructor + owner) rather than
+//  1) Demote org owner -> member FIRST when leaving teacher for a
+//     non-teacher role. Done before any team change, so if it throws we abort
+//     with the member unchanged (still teacher + owner) rather than
 //     half-moved-but-still-owner. If a LATER step fails after this committed,
 //     the error explicitly says the owner was revoked so the caller re-runs.
-//  2) Add to the target team (student -> classroom team; ta/instructor -> the
+//  2) Add to the target team (student -> classroom team; ta/teacher -> the
 //     staff team, created + granted config-repo write if missing), then promote
-//     to org owner when the target is instructor.
+//     to org owner when the target is teacher.
 //  3) Remove from EVERY currently-held classroom team that isn't the target
 //     (best-effort — a failed drop is a warning, since the target add + any
 //     owner change already landed). Dropping all non-target teams (not just the
-//     primary) means a member on both the instructor and TA teams moved to
+//     primary) means a member on both the teacher and TA teams moved to
 //     student leaves neither staff team behind.
 //
 // NEVER team-adds a non-member (that would create a stray team invitation); the

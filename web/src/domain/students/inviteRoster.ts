@@ -18,7 +18,7 @@ export type InviteRosterStudentsInput = {
   // Rows to invite. Each carries at least a username (a roster.csv row always
   // has one); github_id is used when present, else derived from the username.
   // `role` (default "student") selects the target team and org role: student ->
-  // classroom team, ta -> TA team, instructor -> org OWNER (admin) + instructor
+  // classroom team, ta -> TA team, teacher -> org OWNER (admin) + teacher
   // team. `pending` rows are handled by resendOrgInvitation, not here.
   students: { username: string; github_id?: string; role?: ClassroomRole }[]
   onProgress?: (progress: {
@@ -51,8 +51,8 @@ export type InviteRosterStudentsResult = {
 // Resolves each username to its immutable GitHub id (stored github_id when
 // present, else GET /users/{username}) and sends a fresh org invitation
 // carrying the role's team so accepting it activates the right membership
-// atomically: student -> classroom team, ta -> TA team, instructor -> the
-// instructor team AND org OWNER (role "admin"). Does NOT write roster.csv
+// atomically: student -> classroom team, ta -> TA team, teacher -> the
+// teacher team AND org OWNER (role "admin"). Does NOT write roster.csv
 // (writeback is the caller's job) and never touches an existing active/pending
 // state (ensureOrgMembership no-ops those, so an existing member is never
 // escalated).
@@ -217,13 +217,13 @@ export type BulkInviteByEmailResult = {
 
 // Bulk-invite a list of EMAIL addresses to the org, carrying the role's team so
 // accepting the single invite activates the right membership: student ->
-// classroom team, ta -> TA team, instructor -> the instructor team AND org
+// classroom team, ta -> TA team, teacher -> the teacher team AND org
 // OWNER (role "admin"). Writes NOTHING to roster.csv — an email carries no
 // reliable GitHub identity until accepted; the invite surfaces as a `pending`
 // row via the org pending-invitations list. Mirrors inviteRosterStudents'
 // rate-limit handling (stop issuing new invites once throttled; defer the rest),
 // and the same team resolution (resolveTeamIdByRole ensures the staff team for
-// an instructor/ta invite, students-only never creates empty staff teams).
+// a teacher/ta invite, students-only never creates empty staff teams).
 export async function bulkInviteByEmail(
   client: GitHubClient,
   input: BulkInviteByEmailInput,

@@ -30,7 +30,7 @@ export function normalizeStudentRow(
     email: String(row.email ?? "").trim(),
     section: String(row.section ?? "").trim(),
     github_id: String(row.github_id ?? "").trim(),
-    // Best-effort recorded metadata (instructor/ta/student, or ""), refreshed
+    // Best-effort recorded metadata (teacher/ta/student, or ""), refreshed
     // from the classroom's GitHub teams on sync. A pre-role file has no role
     // column, so this coerces to "".
     role: String(row.role ?? "").trim(),
@@ -49,7 +49,7 @@ export function splitName(name: string | null): {
 }
 
 // A structured problem in a roster.csv file: a 1-based file line (header is
-// line 1) and a human-readable message. Surfaced to the instructor so a
+// line 1) and a human-readable message. Surfaced to the teacher so a
 // malformed roster names exactly what's wrong and where, rather than failing
 // silently or with an opaque blob.
 export type RosterCsvProblem = {

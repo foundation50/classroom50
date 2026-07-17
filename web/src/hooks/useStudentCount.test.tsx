@@ -56,7 +56,7 @@ describe("useStudentCount", () => {
 
   it("counts a student-who-is-also-staff once (roleCounts already unions)", () => {
     // roleCounts.student tallies every row carrying the student role, including
-    // student+instructor, exactly once — the wrapper passes it through.
+    // student+teacher, exactly once — the wrapper passes it through.
     teamRoster.mockReturnValue(rosterResult({ roleCounts: roleCounts(3) }))
 
     const { result } = renderHook(() => useStudentCount("org", "cs101"))

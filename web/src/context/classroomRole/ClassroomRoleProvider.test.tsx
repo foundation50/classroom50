@@ -49,13 +49,13 @@ afterEach(() => {
 describe("ClassroomRoleProvider", () => {
   it("supplies role/actualRole to children", () => {
     classroomRoleMock.mockReturnValue({
-      role: "instructor",
-      actualRole: "instructor",
+      role: "teacher",
+      actualRole: "teacher",
       isLoading: false,
     })
     renderProvider()
-    expect(screen.getByTestId("role").textContent).toBe("instructor")
-    expect(screen.getByTestId("actualRole").textContent).toBe("instructor")
+    expect(screen.getByTestId("role").textContent).toBe("teacher")
+    expect(screen.getByTestId("actualRole").textContent).toBe("teacher")
     expect(screen.getByTestId("roleResolved").textContent).toBe("true")
   })
 
@@ -75,12 +75,12 @@ describe("ClassroomRoleProvider", () => {
     // on `actualRole`.
     classroomRoleMock.mockReturnValue({
       role: "student",
-      actualRole: "instructor",
+      actualRole: "teacher",
       isLoading: false,
     })
     renderProvider()
     expect(screen.getByTestId("role").textContent).toBe("student")
-    expect(screen.getByTestId("actualRole").textContent).toBe("instructor")
+    expect(screen.getByTestId("actualRole").textContent).toBe("teacher")
     expect(screen.getByTestId("roleResolved").textContent).toBe("true")
   })
 

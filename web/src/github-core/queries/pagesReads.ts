@@ -83,7 +83,7 @@ export function extractAssignments(json: AssignmentsJson): Assignment[] {
 
   if (!Array.isArray(json.assignments)) {
     throw new Error(
-      "assignments.json has an invalid v1 shape. Ask your instructor to check classroom50 configuration.",
+      "assignments.json has an invalid v1 shape. Ask your teacher to check classroom50 configuration.",
     )
   }
 

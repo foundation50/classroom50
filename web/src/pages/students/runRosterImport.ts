@@ -212,8 +212,8 @@ export async function runRosterImport(
 
   // 4) Apply the CONFIRMED team assignments the preflight identified:
   //    - role_change: an active member on a DIFFERENT classroom team -> move
-  //      them (drop every non-target team; instructor target grants org owner, a
-  //      demotion off instructor revokes it). Gated behind the confirmation
+  //      them (drop every non-target team; teacher target grants org owner, a
+  //      demotion off teacher revokes it). Gated behind the confirmation
   //      checkbox in the preview.
   //    - enroll: an active member on NO classroom team -> an additive team-add
   //      onto the CSV role's team (empty fromRoles, so nothing is dropped).

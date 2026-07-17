@@ -38,7 +38,7 @@ function PermissionDeniedMessage() {
   )
 }
 
-// Error boundary mounted at the classroom route. Catches instructor/owner-only
+// Error boundary mounted at the classroom route. Catches teacher/owner-only
 // 403/404 that slip past pre-flight gating and renders a friendly, translated
 // message. Any non-permission error is rethrown so the app-wide error boundary
 // (or an ancestor) still handles it.

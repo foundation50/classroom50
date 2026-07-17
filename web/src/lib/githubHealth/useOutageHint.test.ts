@@ -72,9 +72,7 @@ describe("useOutageHint().isOutage — strict, false-positive-proof", () => {
   it("is false for a bare/unknown error (no false positive on a plain throw)", () => {
     const { result } = renderHook(() => useOutageHint())
     // A TemplateAccessError-like plain Error with no outage cause.
-    expect(result.current.isOutage(new Error("ask your instructor"))).toBe(
-      false,
-    )
+    expect(result.current.isOutage(new Error("ask your teacher"))).toBe(false)
     expect(result.current.isOutage("some string")).toBe(false)
     expect(result.current.isOutage(undefined)).toBe(false)
   })
@@ -97,9 +95,7 @@ describe("useOutageHint().isOutage — strict, false-positive-proof", () => {
       result.current.isOutage(new WrapperError("rate limited", apiError(429))),
     ).toBe(false)
     // A wrapper with no cause is not an outage (e.g. TemplateAccessError).
-    expect(result.current.isOutage(new WrapperError("ask instructor"))).toBe(
-      false,
-    )
+    expect(result.current.isOutage(new WrapperError("ask teacher"))).toBe(false)
   })
 })
 

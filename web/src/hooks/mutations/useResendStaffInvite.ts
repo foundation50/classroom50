@@ -44,7 +44,7 @@ export function useResendStaffInvite(
         inviteeId,
         invitationId: input.invitationId,
         teamIds: teamId ? [teamId] : undefined,
-        // Preserve the original org role: an instructor invite is org OWNER.
+        // Preserve the original org role: a teacher invite is org OWNER.
         role: githubOrgRoleForRole(role),
       })
     },

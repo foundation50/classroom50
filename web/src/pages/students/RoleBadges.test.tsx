@@ -17,8 +17,8 @@ afterEach(() => {
 })
 
 describe("RoleBadges", () => {
-  it("renders a chip per role for a mixed-team member (instructor + student)", () => {
-    render(<RoleBadges roles={["student", "instructor"]} />)
+  it("renders a chip per role for a mixed-team member (teacher + student)", () => {
+    render(<RoleBadges roles={["student", "teacher"]} />)
     expect(screen.getByText("students.roleTeacher")).toBeTruthy()
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
   })
@@ -31,9 +31,9 @@ describe("RoleBadges", () => {
     expect(container.querySelectorAll(".badge")).toHaveLength(1)
   })
 
-  it("orders chips by precedence (instructor before ta before student)", () => {
+  it("orders chips by precedence (teacher before ta before student)", () => {
     const { container } = render(
-      <RoleBadges roles={["student", "ta", "instructor"]} />,
+      <RoleBadges roles={["student", "ta", "teacher"]} />,
     )
     const labels = [...container.querySelectorAll(".badge")].map(
       (el) => el.textContent,

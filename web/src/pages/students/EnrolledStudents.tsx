@@ -125,7 +125,7 @@ const EnrolledStudents = ({
 }: {
   students: Student[]
   // Per-line problems from the strict roster.csv parse (empty when the file is
-  // well-formed). Surfaced as a banner so the instructor can fix the file.
+  // well-formed). Surfaced as a banner so the teacher can fix the file.
   parseProblems?: RosterCsvProblem[]
   // Re-read roster.csv so a teacher who just fixed it can re-verify in place.
   onRecheckRoster?: () => void
@@ -194,7 +194,7 @@ const EnrolledStudents = ({
   const dismissFailedInvite = useDismissFailedInvite(org)
 
   // Re-invite a failed/expired invitation: dismiss the dead one, then re-issue
-  // an equivalent fresh invite — same classroom role (instructor -> org OWNER),
+  // an equivalent fresh invite — same classroom role (teacher -> org OWNER),
   // by username when known (carries the team) else by email. A login-less,
   // email-less invite can't be re-issued (dismiss-only). The hook owns the
   // invite-query invalidation; the error toast lives here so it skips when
@@ -222,7 +222,7 @@ const EnrolledStudents = ({
   // enrollment. A student who is ALSO staff IS selectable — unenroll drops only
   // their student side and leaves the staff role intact — matching the row
   // modal's unenroll gate (both use hasStudentEnrollment) so the two never
-  // diverge (previously a student+instructor was removable in the modal but
+  // diverge (previously a student+teacher was removable in the modal but
   // silently skipped by select-all).
   const isSelf = (row: TeamRosterRow) =>
     isSameGitHubUser(viewer ?? null, {
@@ -269,7 +269,7 @@ const EnrolledStudents = ({
     )
   }, [rows])
 
-  // A stale role selection (the last instructor/TA was removed) falls back to
+  // A stale role selection (the last teacher/TA was removed) falls back to
   // "all" so the list never filters on a role no row carries.
   const effectiveRole =
     roleFilter !== "all" && roleFilterOptions.includes(roleFilter)
@@ -613,7 +613,7 @@ const EnrolledStudents = ({
 
   return (
     <div className="flex w-full flex-col gap-6">
-      {/* Malformed roster.csv: name every bad line so the instructor can fix
+      {/* Malformed roster.csv: name every bad line so the teacher can fix
           the file on GitHub. Distinct from a network load error — this is a bad
           file, and reads/writes silently misbehave until it's corrected. */}
       {parseProblems.length > 0 ? (

@@ -52,7 +52,7 @@ export const STATE_LABEL_KEY: Record<TeamRosterRowState, string> = {
 // enrollment (CSV row + student-team membership), leaving any staff role intact,
 // so it applies to anyone with a student role — shared by the row modal's
 // unenroll gate and the bulk-select gate so the two can't diverge (a
-// student+instructor must be offered unenroll in BOTH surfaces, never one).
+// student+teacher must be offered unenroll in BOTH surfaces, never one).
 export function hasStudentEnrollment(
   row: Pick<TeamRosterRow, "roles">,
 ): boolean {
@@ -61,7 +61,7 @@ export function hasStudentEnrollment(
 
 // Per-role head counts across the roster. `student` counts every row carrying
 // the student role (a student who is also staff still counts as a student);
-// `instructor`/`ta` count every row holding that staff role. A person on two
+// `teacher`/`ta` count every row holding that staff role. A person on two
 // teams contributes to each of their roles — these are role tallies, not a
 // partition, so they can sum to more than the row count.
 export type RoleCounts = Record<ClassroomRole, number>

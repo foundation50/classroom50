@@ -124,7 +124,7 @@ const SubmissionsPageContent = () => {
   // Team-driven usernames: the classroom GitHub team is authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
   // Student[], so map enrolled team rows into that shape.
-  // Restrict to rows carrying a STUDENT enrollment — a pure instructor/TA is an
+  // Restrict to rows carrying a STUDENT enrollment — a pure teacher/TA is an
   // enrolled team member but not a gradee, and "Collect scores" already runs
   // only against the student team, so excluding them keeps this roster in step
   // with what's actually graded (a student who is also staff still counts).

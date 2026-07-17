@@ -23,7 +23,7 @@ const apiError = (status: number, url: string) =>
     },
   })
 
-// Drive each GitHub request by URL. Members: student + instructor succeed; the
+// Drive each GitHub request by URL. Members: student + teacher succeed; the
 // TA members endpoint is switchable (fail -> recover) so we can assert isError
 // folds in a STAFF-team failure and that refetch() re-runs the staff query.
 // Invitations: the STUDENT team's pending endpoint is switchable to a transient

@@ -9,8 +9,8 @@ import {
 import type { ClassroomRole } from "@/util/teamRoster"
 
 // One badge per classroom role a member holds, highest-precedence first
-// (instructor > ta > student; student renders as the neutral ghost chip). A
-// person on more than one team (e.g. an instructor who is also a student) shows
+// (teacher > ta > student; student renders as the neutral ghost chip). A
+// person on more than one team (e.g. a teacher who is also a student) shows
 // a chip for each, making a "mixed team" membership visible at a glance rather
 // than collapsing to a single primary role. Uses the shared role presentation
 // maps so the roster row and any other role-badge surface can't drift.

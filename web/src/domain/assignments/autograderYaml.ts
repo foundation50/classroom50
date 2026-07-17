@@ -14,7 +14,7 @@ export function createClassroom50Yaml(params: {
   // at accept. Written only for a protected classroom; when present, submit and
   // the autograde runner build the `<classroom>/<secret>/...` Pages path.
   secret?: string
-  // Lets `gh student submit` re-fetch instructor files; omitted when template-less.
+  // Lets `gh student submit` re-fetch teacher files; omitted when template-less.
   sourceOwner?: string
   sourceOwnerId?: number | null
   sourceRepo?: string

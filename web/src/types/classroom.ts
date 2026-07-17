@@ -206,9 +206,10 @@ export type AssignmentTest = {
 // The roster's identity/metadata columns — the classroom GitHub team is the
 // source of truth for enrollment, so the email-first onboarding lifecycle
 // columns were pruned. `role` is best-effort recorded metadata
-// (instructor/ta/student, or ""), refreshed from the classroom's GitHub teams
-// on sync; nothing reads it for logic. A data contract shared with the
-// gh-teacher CLI and the Python collector; all three moved in lockstep.
+// (teacher/ta/student, the legacy "instructor", or ""), refreshed from the
+// classroom's GitHub teams on sync; nothing reads it for logic. A data contract
+// shared with the gh-teacher CLI and the Python collector; all moved in
+// lockstep.
 export type Student = {
   username: string
   first_name: string

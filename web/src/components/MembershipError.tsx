@@ -26,7 +26,7 @@ export type MembershipErrorInfo = {
   // / network), so the card can add the githubstatus.com hint instead of reading
   // as a local problem. Never set for definitive causes (SSO / not-a-member).
   isOutage: boolean
-  // Data-minimized diagnostics for the copyable "for your instructor" block.
+  // Data-minimized diagnostics for the copyable "for your teacher" block.
   // NOT the raw response body or raw X-GitHub-SSO header (which carries an
   // authorization_request token) — only an allow-listed, non-sensitive subset.
   details: {
@@ -130,7 +130,7 @@ const MembershipDetails = ({
 
 // Shared, cause-specific membership error card for the onboarding and accept
 // pages: a per-cause title/body, at least one recovery action (never a dead
-// end), and a collapsed, data-minimized diagnostics block for the instructor.
+// end), and a collapsed, data-minimized diagnostics block for the teacher.
 // `onRetry` backs the generic Retry action; SSO/not-a-member causes point
 // elsewhere.
 export const MembershipError = ({

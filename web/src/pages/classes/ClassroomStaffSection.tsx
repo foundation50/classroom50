@@ -27,9 +27,9 @@ const ROLE_LABEL_KEY: Record<StaffRole, string> = {
   ta: "classes.staff.roleTa",
 }
 
-// Manage a classroom's staff (instructor / TA), backed by the per-classroom
+// Manage a classroom's staff (teacher / TA), backed by the per-classroom
 // GitHub teams `classroom50-<classroom>-<role>`. The route already gates; the
-// actions assume instructor/owner.
+// actions assume teacher/owner.
 const ClassroomStaffSection = ({
   org,
   classroom,
@@ -214,7 +214,7 @@ const StaffRoleList = ({
   const pendingInvites = invitesQuery.data ?? []
 
   const rolePlural =
-    role === "instructor"
+    role === "teacher"
       ? t("classes.staff.roleTeacherPlural")
       : t("classes.staff.roleTaPlural")
 
@@ -281,7 +281,7 @@ const StaffMemberRow = ({
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
   const rolePlural =
-    role === "instructor"
+    role === "teacher"
       ? t("classes.staff.roleTeacherPlural")
       : t("classes.staff.roleTaPlural")
 
@@ -303,7 +303,7 @@ const StaffMemberRow = ({
         <span className="truncate text-sm">@{member.login}</span>
         <Badge
           size="xs"
-          tone={role === "instructor" ? "primary" : "secondary"}
+          tone={role === "teacher" ? "primary" : "secondary"}
           className="shrink-0"
         >
           {roleLabel}

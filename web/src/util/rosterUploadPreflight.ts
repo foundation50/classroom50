@@ -13,9 +13,9 @@ import { sortRolesByRank, type ClassroomRole } from "@/util/teamRoster"
 //                 additive team-add onto the CSV role's team (no team to leave,
 //                 so no destructive move and no confirmation needed).
 //  - role_change: an active org member whose current classroom role differs from
-//                 the CSV role (student<->ta<->instructor). Requires explicit
+//                 the CSV role (student<->ta<->teacher). Requires explicit
 //                 teacher confirmation because applying it MOVES them between
-//                 teams (and an instructor promotion grants org-owner access).
+//                 teams (and a teacher promotion grants org-owner access).
 //
 // GitHub teams remain the source of truth: this never fabricates a role, only
 // compares the CSV's intended role to the live team membership.
@@ -54,7 +54,7 @@ export type PreflightOutcome =
       // The account's current highest-precedence classroom role (for display).
       currentRole: ClassroomRole
       // ALL classroom roles the account currently holds. applyClassroomRoleChange
-      // drops every non-target team, so a member on both the instructor and TA
+      // drops every non-target team, so a member on both the teacher and TA
       // teams moved to student leaves neither staff team behind.
       currentRoles: ClassroomRole[]
     }
@@ -70,7 +70,7 @@ export type PreflightResult = {
   allAlreadyMembers: boolean
 }
 
-// The highest-precedence role in a set (instructor > ta > student), or undefined
+// The highest-precedence role in a set (teacher > ta > student), or undefined
 // for an account on no classroom team. Uses the canonical sortRolesByRank so the
 // precedence order has a single source (teamRoster.ROLE_RANK).
 function primaryOf(roles: ClassroomRole[]): ClassroomRole | undefined {
@@ -116,7 +116,7 @@ export function classifyRosterUpload(
     }
 
     // Active member whose current role differs from the CSV role -> a move that
-    // requires confirmation (student<->ta<->instructor, up or down). Carry the
+    // requires confirmation (student<->ta<->teacher, up or down). Carry the
     // full current role set so the move drops every non-target team, not just
     // the primary one.
     outcomes.push({
@@ -190,10 +190,13 @@ export function membershipLookup(
 // fold.)
 export { memberIdentitySets } from "@/util/identity"
 
-// Whether any confirmed role change promotes someone to instructor (org owner),
-// so the UI can surface the owner-access warning only when relevant.
-export function hasInstructorPromotion(
+// Whether any confirmed role change promotes someone to teacher (org owner),
+// so the UI can surface the owner-access warning only when relevant. Matches the
+// canonical "teacher" and the legacy "instructor" alias.
+export function hasTeacherPromotion(
   roleChanges: Extract<PreflightOutcome, { kind: "role_change" }>[],
 ): boolean {
-  return roleChanges.some((c) => c.role === "instructor")
+  return roleChanges.some(
+    (c) => c.role === "teacher" || c.role === "instructor",
+  )
 }

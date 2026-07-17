@@ -4,7 +4,7 @@ import type { ResolvedRole, GitHubOrgRole } from "./resolveRole"
 
 // Table-driven parity: the policy must exactly mirror the role semantics the
 // scattered role-literal checks used to encode. Includes the KTD-4 rule (org
-// owner is NOT a classroom instructor) and the deny-by-default posture.
+// owner is NOT a classroom teacher) and the deny-by-default posture.
 
 const orgRoles: GitHubOrgRole[] = [
   "owner",
@@ -89,10 +89,10 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
   })
 })
 
-describe("can — claimInstructor (KTD-4 self-repair)", () => {
+describe("can — claimTeacher (KTD-4 self-repair)", () => {
   it("only an org owner who currently resolves to student in the classroom", () => {
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "owner",
         classroomRole: "student",
       }),
@@ -101,43 +101,43 @@ describe("can — claimInstructor (KTD-4 self-repair)", () => {
 
   it("KTD-4: an org owner is NOT auto-teacher — but an owner already on the teacher team never sees the affordance", () => {
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "owner",
         classroomRole: "teacher",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "owner",
         classroomRole: "instructor",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", { githubOrgRole: "owner", classroomRole: "ta" }),
+      can("claimTeacher", { githubOrgRole: "owner", classroomRole: "ta" }),
     ).toBe(false)
   })
 
   it("never offered to a non-owner or mid-resolution", () => {
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "member",
         classroomRole: "student",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "non-member",
         classroomRole: "student",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "owner",
         classroomRole: "unresolved",
       }),
     ).toBe(false)
     expect(
-      can("claimInstructor", {
+      can("claimTeacher", {
         githubOrgRole: "unresolved",
         classroomRole: "student",
       }),
@@ -152,7 +152,7 @@ describe("deny-by-default coverage across the whole matrix", () => {
     "viewClassroomStaffContent",
     "editClassroomSettings",
     "previewAsRole",
-    "claimInstructor",
+    "claimTeacher",
   ]
 
   it("every capability returns a boolean for every role combination", () => {

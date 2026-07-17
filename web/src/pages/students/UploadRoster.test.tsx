@@ -69,7 +69,7 @@ const primaryButton = () =>
     .closest("button") as HTMLButtonElement
 
 describe("UploadRoster email-invite owner-confirmation gate", () => {
-  it("keeps Send disabled for an instructor email until the owner checkbox is ticked", async () => {
+  it("keeps Send disabled for a teacher email until the owner checkbox is ticked", async () => {
     const user = userEvent.setup()
     renderModal(
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
@@ -78,14 +78,14 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     await uploadFile(user, file("emails.txt", "prof@x.edu\n"))
 
     // Auto-detected as email-list; the send button renders and is disabled
-    // while an instructor role would grant owner but is unconfirmed.
+    // while a teacher role would grant owner but is unconfirmed.
     const send = await waitFor(() => primaryButton())
 
-    // Assign the sole address the instructor role -> owner-grant path.
+    // Assign the sole address the teacher role -> owner-grant path.
     const roleSelect = screen.getByLabelText(
       "students.assignRoleLabel",
     ) as HTMLSelectElement
-    await user.selectOptions(roleSelect, "instructor")
+    await user.selectOptions(roleSelect, "teacher")
 
     expect(send.disabled).toBe(true)
 
@@ -96,7 +96,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
 
     // And it actually sends when clicked.
     bulkInviteByEmail.mockResolvedValue({
-      invited: [{ email: "prof@x.edu", role: "instructor" }],
+      invited: [{ email: "prof@x.edu", role: "teacher" }],
       skipped: [],
       failed: [],
       deferred: [],
@@ -105,7 +105,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     await waitFor(() => expect(bulkInviteByEmail).toHaveBeenCalledTimes(1))
   })
 
-  it("never sends an instructor email invite while the box is unchecked", async () => {
+  it("never sends a teacher email invite while the box is unchecked", async () => {
     const user = userEvent.setup()
     renderModal(
       <UploadRoster org="acme" classroom="cs50" client={client} open={true} />,
@@ -115,7 +115,7 @@ describe("UploadRoster email-invite owner-confirmation gate", () => {
     await waitFor(() => primaryButton())
     await user.selectOptions(
       screen.getByLabelText("students.assignRoleLabel"),
-      "instructor",
+      "teacher",
     )
 
     // The disabled button can't be clicked to send.

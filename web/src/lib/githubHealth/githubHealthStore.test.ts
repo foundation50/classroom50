@@ -104,7 +104,7 @@ describe("isDefiniteOutageError", () => {
 
   it("is false for a plain/unknown error with no outage cause (no false positive)", () => {
     // A TemplateAccessError-like plain Error must never read as an outage.
-    expect(isDefiniteOutageError(new Error("ask your instructor"))).toBe(false)
+    expect(isDefiniteOutageError(new Error("ask your teacher"))).toBe(false)
     expect(isDefiniteOutageError(new Wrapper())).toBe(false)
     expect(isDefiniteOutageError("string")).toBe(false)
     expect(isDefiniteOutageError(undefined)).toBe(false)

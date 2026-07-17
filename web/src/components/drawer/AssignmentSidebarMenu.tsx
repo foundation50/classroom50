@@ -50,7 +50,7 @@ export const AssignmentSidebarMenu = ({
   // A protected classroom's public Pages fetch needs the capability secret. A
   // student reads it from their own repo's .classroom50.yaml (their only
   // source); a teacher gets it from classroom.json. Gate the classroom.json read
-  // on the viewer's ACTUAL role (not the preview) so an instructor previewing as
+  // on the viewer's ACTUAL role (not the preview) so a teacher previewing as
   // a student still resolves the secret for a working accept link — a real
   // student's read stays disabled (guaranteed 404).
   const studentRepoNameForSecret = user?.login

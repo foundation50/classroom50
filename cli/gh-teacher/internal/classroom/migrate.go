@@ -233,7 +233,7 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 			plan.ShortName, plan.TargetOrg, configrepo.ConfigRepoName)
 	}
 
-	// Create (or adopt) staff teams + config-repo write grant + instructor
+	// Create (or adopt) staff teams + config-repo write grant + teacher
 	// seed, same as `classroom add`.
 	staffTeams, login, err := seedStaffTeams(client, errOut, plan.TargetOrg, plan.ShortName)
 	if err != nil {
@@ -241,7 +241,7 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	}
 
 	// Drop the acting teacher from the students + TA teams so their only role is
-	// instructor — mixed roles aren't allowed, same as `classroom add`.
+	// teacher — mixed roles aren't allowed, same as `classroom add`.
 	dropCreatorFromNonTeacherTeams(client, errOut, plan.TargetOrg, login, team.Slug, staffTeams)
 
 	build := func(parentSHA string) (map[string]string, error) {

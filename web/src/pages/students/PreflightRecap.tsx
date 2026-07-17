@@ -35,12 +35,12 @@ const PreflightBucket = ({
 }
 
 // The resolved-preflight recap: the all-members / invite banner, the four
-// action-bucket tiles, and the role-change/instructor-enroll confirmation box
+// action-bucket tiles, and the role-change/teacher-enroll confirmation box
 // that gates the primary button. Rendered only once the preflight resolves.
 export const PreflightRecap = ({
   preflight,
   roleChanges,
-  instructorEnrolls,
+  teacherEnrolls,
   needsRoleConfirm,
   confirmGrantsOwner,
   roleChangesConfirmed,
@@ -48,7 +48,7 @@ export const PreflightRecap = ({
 }: {
   preflight: PreflightResult
   roleChanges: PreflightResult["roleChanges"]
-  instructorEnrolls: PreflightResult["enroll"]
+  teacherEnrolls: PreflightResult["enroll"]
   needsRoleConfirm: boolean
   confirmGrantsOwner: boolean
   roleChangesConfirmed: boolean
@@ -95,7 +95,7 @@ export const PreflightRecap = ({
       </div>
 
       {/* Team moves and org-owner grants need explicit confirmation: a role
-          change is a destructive team move, and an instructor target (role
+          change is a destructive team move, and a teacher target (role
           change OR enroll) grants org OWNER. List each and gate the primary
           button on the checkbox. */}
       {needsRoleConfirm ? (
@@ -118,7 +118,7 @@ export const PreflightRecap = ({
                 </span>
               </li>
             ))}
-            {instructorEnrolls.map((e) => (
+            {teacherEnrolls.map((e) => (
               <li
                 key={`enroll-${e.username}`}
                 className="flex items-center justify-between gap-2"
@@ -146,7 +146,7 @@ export const PreflightRecap = ({
             />
             <span>
               {t("students.preflightConfirmRoleChanges", {
-                count: roleChanges.length + instructorEnrolls.length,
+                count: roleChanges.length + teacherEnrolls.length,
               })}
             </span>
           </label>

@@ -4,20 +4,20 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubOrgRole } from "@/context/githubOrgRole/GitHubOrgRoleProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { can } from "@/authz"
-import { useClaimInstructor } from "@/hooks/mutations/useClaimInstructor"
+import { useClaimTeacher } from "@/hooks/mutations/useClaimTeacher"
 import { Alert, Button } from "@/components/ui"
 import { logger } from "@/lib/logger"
 
-const log = logger.scope("classroom:claim-instructor")
+const log = logger.scope("classroom:claim-teacher")
 
 // Self-repair for the KTD-4 edge case: an org OWNER who is on none of a
 // classroom's staff teams resolves to `student` there (org-admin no longer
-// auto-instructs a classroom). New classrooms seed their creator onto the
-// instructor team (createClassroomFiles), but a PRE-EXISTING classroom — or one
-// whose creator left — can have no resolvable instructor. This surfaces an
-// explicit, idempotent "add yourself as instructor" affordance so an owner can
+// auto-teaches a classroom). New classrooms seed their creator onto the
+// teacher team (createClassroomFiles), but a PRE-EXISTING classroom — or one
+// whose creator left — can have no resolvable teacher. This surfaces an
+// explicit, idempotent "add yourself as teacher" affordance so an owner can
 // recover access in one click.
-export function ClaimInstructorNotice({
+export function ClaimTeacherNotice({
   org,
   classroom,
 }: {
@@ -29,7 +29,7 @@ export function ClaimInstructorNotice({
   const { githubOrgRole } = useGitHubOrgRole()
   const { actualRole } = useClassroomRoleContext()
 
-  const claimMutation = useClaimInstructor(org, classroom, {
+  const claimMutation = useClaimTeacher(org, classroom, {
     somethingWentWrong: t("classes.somethingWentWrong"),
   })
 
@@ -42,7 +42,7 @@ export function ClaimInstructorNotice({
         })
       },
       onError: (err) => {
-        log.warn("claim instructor failed", { org, classroom, err })
+        log.warn("claim teacher failed", { org, classroom, err })
         notify({
           tone: "error",
           message: t("classes.claimTeacher.failed", {
@@ -56,9 +56,9 @@ export function ClaimInstructorNotice({
     })
 
   // Only an org owner who currently resolves to `student` here needs repair. A
-  // TA/instructor of this classroom, or a non-owner, never sees it. `unresolved`
+  // TA/teacher of this classroom, or a non-owner, never sees it. `unresolved`
   // holds the affordance back (fail-closed — don't offer it mid-resolution).
-  if (!can("claimInstructor", { githubOrgRole, classroomRole: actualRole }))
+  if (!can("claimTeacher", { githubOrgRole, classroomRole: actualRole }))
     return null
 
   return (
@@ -87,4 +87,4 @@ export function ClaimInstructorNotice({
   )
 }
 
-export default ClaimInstructorNotice
+export default ClaimTeacherNotice

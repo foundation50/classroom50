@@ -14,7 +14,7 @@ import type {
 import type { GitHubClient } from "@/github-core/client"
 import { Alert, Button, Modal, Spinner } from "@/components/ui"
 import {
-  hasInstructorPromotion,
+  hasTeacherPromotion,
   type PreflightResult,
 } from "@/util/rosterUploadPreflight"
 import { logger } from "@/lib/logger"
@@ -102,7 +102,7 @@ const UploadRoster = ({
   // Why an empty parse produced no rows, when the cause is the file's shape (no
   // `username` header, or malformed CSV) rather than merely invalid handles.
   const [headerIssue, setHeaderIssue] = useState<ImportHeaderIssue | null>(null)
-  // Per-row role the instructor is about to invite as, keyed by lowercased
+  // Per-row role the teacher is about to invite as, keyed by lowercased
   // username. Seeded from the CSV `role` column (else "student") and editable.
   const [rolesByUser, setRolesByUser] = useState<Record<string, ClassroomRole>>(
     {},
@@ -224,26 +224,25 @@ const UploadRoster = ({
   }, [phase, rolesKey, org, classroom])
 
   const roleChanges = useMemo(() => preflight?.roleChanges ?? [], [preflight])
-  // Enroll rows targeting instructor grant org OWNER on process, so — like a
+  // Enroll rows targeting teacher grant org OWNER on process, so — like a
   // confirmed role change — they must sit behind the confirmation checkbox.
-  const instructorEnrolls = useMemo(
-    () => (preflight?.enroll ?? []).filter((e) => e.role === "instructor"),
+  const teacherEnrolls = useMemo(
+    () => (preflight?.enroll ?? []).filter((e) => e.role === "teacher"),
     [preflight],
   )
-  const needsRoleConfirm =
-    roleChanges.length > 0 || instructorEnrolls.length > 0
+  const needsRoleConfirm = roleChanges.length > 0 || teacherEnrolls.length > 0
   const confirmGrantsOwner = useMemo(
-    () => hasInstructorPromotion(roleChanges) || instructorEnrolls.length > 0,
-    [roleChanges, instructorEnrolls],
+    () => hasTeacherPromotion(roleChanges) || teacherEnrolls.length > 0,
+    [roleChanges, teacherEnrolls],
   )
-  const anyInstructorAssigned = useMemo(
+  const anyTeacherAssigned = useMemo(
     () =>
       confirmGrantsOwner ||
-      Object.values(rolesByUser).some((r) => r === "instructor"),
+      Object.values(rolesByUser).some((r) => r === "teacher"),
     [confirmGrantsOwner, rolesByUser],
   )
-  const emailHasInstructor = emails.some(
-    (e) => (emailRoles[e.toLowerCase()] ?? "student") === "instructor",
+  const emailHasTeacher = emails.some(
+    (e) => (emailRoles[e.toLowerCase()] ?? "student") === "teacher",
   )
   const hasActionableWork =
     (preflight?.needsInvite.length ?? 0) +
@@ -252,7 +251,7 @@ const UploadRoster = ({
     0
   const canProcess =
     uploadKind === "email-list"
-      ? emails.length > 0 && (!emailHasInstructor || emailOwnerConfirmed)
+      ? emails.length > 0 && (!emailHasTeacher || emailOwnerConfirmed)
       : rows.length > 0 &&
         !preflighting &&
         !preflightError &&
@@ -514,7 +513,7 @@ const UploadRoster = ({
                 emails={emails}
                 emailRoles={emailRoles}
                 emailOwnerConfirmed={emailOwnerConfirmed}
-                emailHasInstructor={emailHasInstructor}
+                emailHasTeacher={emailHasTeacher}
                 canProcess={canProcess}
                 onRoleChange={(key, rawValue) => {
                   const role = coerceImportRole(rawValue) ?? "student"
@@ -553,7 +552,7 @@ const UploadRoster = ({
               <PreflightRecap
                 preflight={preflight}
                 roleChanges={roleChanges}
-                instructorEnrolls={instructorEnrolls}
+                teacherEnrolls={teacherEnrolls}
                 needsRoleConfirm={needsRoleConfirm}
                 confirmGrantsOwner={confirmGrantsOwner}
                 roleChangesConfirmed={roleChangesConfirmed}
@@ -561,9 +560,9 @@ const UploadRoster = ({
               />
             ) : null}
 
-            {/* Instructor-owner notice even before preflight resolves, whenever
-                any row is assigned the instructor role. */}
-            {!preflight && anyInstructorAssigned ? (
+            {/* Teacher-owner notice even before preflight resolves, whenever
+                any row is assigned the teacher role. */}
+            {!preflight && anyTeacherAssigned ? (
               <Alert tone="warning" className="mb-4">
                 <span>{t("students.uploadTeacherOwnerNotice")}</span>
               </Alert>

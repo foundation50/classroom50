@@ -10,7 +10,7 @@ import { type ResolvedRole } from "@/authz"
 
 // The single authoritative effective-role signal for the current classroom,
 // resolved ONCE at the $org/$classroom boundary and shared with every child
-// page + guard. Carries the fine classroom role (instructor/ta/student) plus
+// page + guard. Carries the fine classroom role (teacher/ta/student) plus
 // the `roleResolved` load signal; permission verdicts are derived at call sites
 // through the central `can()` policy off `role` (preview-aware; `actualRole` is
 // the real one).
@@ -18,7 +18,7 @@ export type ClassroomRoleContextValue = {
   role: ResolvedRole
   actualRole: ResolvedRole
   isLoading: boolean
-  // An elevation (instructor/ta) read settled in a non-definitive error with
+  // An elevation (teacher/ta) read settled in a non-definitive error with
   // the role still `unresolved` and nothing in flight — the guard shows an
   // error+retry surface instead of holding a spinner forever.
   isError: boolean

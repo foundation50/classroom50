@@ -13,10 +13,10 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("context:roleView")
 
-// "View as" preview: a client-side lens letting an instructor/owner preview the
+// "View as" preview: a client-side lens letting a teacher/owner preview the
 // app as a TA or student. Persisted per org+classroom in sessionStorage and
 // applied DOWNGRADE-ONLY by useClassroomRole. CLASSROOM-scoped so a teacher who
-// is an instructor in one classroom and a TA in another can't carry "view as
+// is a teacher in one classroom and a TA in another can't carry "view as
 // student" across (a silent demote with no visible control to clear it); keying
 // by org+classroom and clearing on classroom change isolates each.
 type RoleViewContextValue = {

@@ -258,10 +258,10 @@ describe("AcceptAssignmentPage outage hint", () => {
     expect(screen.queryByText(STATUS_LINK)).toBeNull()
   })
 
-  it("does NOT show the hint for a template-access error (instructor action, no cause)", async () => {
+  it("does NOT show the hint for a template-access error (teacher action, no cause)", async () => {
     // A TemplateAccessError is a plain Error with no outage `.cause`.
     await renderAndAccept(
-      new Error("Couldn't copy the template — ask your instructor."),
+      new Error("Couldn't copy the template — ask your teacher."),
     )
     expect(screen.queryByText(STATUS_LINK)).toBeNull()
   })

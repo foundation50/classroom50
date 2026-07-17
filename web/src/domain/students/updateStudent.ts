@@ -45,7 +45,7 @@ export type UpdateStudentInput = {
   key: string
   patch: StudentEditableFields
   // Identity columns for the row, used to CREATE it when no roster.csv row
-  // matches `key` yet — a team member (e.g. a staff instructor/TA) added on
+  // matches `key` yet — a team member (e.g. a staff teacher/TA) added on
   // GitHub whose blank metadata row hasn't been written by syncRosterFromTeam.
   // Editing then upserts rather than failing. Omitted -> a missing key is an
   // error (the legacy strict behavior, for callers that guarantee the row).

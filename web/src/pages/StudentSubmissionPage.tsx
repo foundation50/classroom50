@@ -240,7 +240,7 @@ const StudentSubmissionPage = () => {
   // Resolve the capability-URL secret (protected classrooms) from two sources
   // in order: (1) the student's accepted repo's .classroom50.yaml — the only
   // source a real student can read; (2) the private classroom.json — staff-only
-  // (incl. an instructor previewing as a student), so a not-yet-accepted
+  // (incl. a teacher previewing as a student), so a not-yet-accepted
   // preview still gets a working link. Empty when unprotected.
   const repoName =
     classroom && assignment && user?.login

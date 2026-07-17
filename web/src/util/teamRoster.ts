@@ -131,7 +131,7 @@ export type BuildTeamRosterInput = {
   // (owner-only endpoint) — enrolled rows still render.
   invitations?: GitHubOrgInvitation[]
   // Active members of the per-classroom staff teams, keyed by role. Merged into
-  // the same rows as `members` (a person on both the student and instructor
+  // the same rows as `members` (a person on both the student and teacher
   // team is one enrolled row with roles ["instructor","student"]).
   staffMembers?: Partial<Record<StaffRole, GitHubUser[]>>
   // Pending team invitations for the staff teams, keyed by role. Team-scoped, so
@@ -201,7 +201,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
   // another PENDING invite, which must instead union its role onto that pending
   // row. Adding a not-yet-org-member to a staff team lists the same person in
   // BOTH the org-level invitations (tagged student) and the team invitations
-  // (tagged ta/instructor); keying only on member logins would drop the second.
+  // (tagged ta/teacher); keying only on member logins would drop the second.
   const memberLogins = new Set<string>()
   // Enrolled rows already emitted, keyed by member id, so a person on several
   // teams gets one row with their roles unioned rather than duplicate rows.
@@ -246,7 +246,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
 
   // Pending, tagged by role. Staff-team invitations are AUTHORITATIVE for a
   // staff role and are processed FIRST: adding a not-yet-org-member to a staff
-  // team lists them in BOTH the team invitations (tagged ta/instructor) AND the
+  // team lists them in BOTH the team invitations (tagged ta/teacher) AND the
   // org-level invitations (which we can only blanket-tag "student"). Ordering
   // staff first lets the org-level "student" invite recognize the person as an
   // already-tagged pending staffer and NOT add a spurious "student" role.
@@ -276,7 +276,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     if (existingPending) {
       // A staffer already pending: the org-level list re-reports them as a
       // generic invite, but they aren't a student — don't add the "student"
-      // role. A genuine multi-team pending (e.g. instructor + ta) still unions.
+      // role. A genuine multi-team pending (e.g. teacher + ta) still unions.
       if (role !== "student") addRole(existingPending, role)
       continue
     }
@@ -400,7 +400,7 @@ export function rowToStudent(row: TeamRosterRow): Student {
     section: row.section,
     github_id: row.github_id,
     // Primary (highest-precedence) role as recorded metadata. roles is always
-    // non-empty and rank-sorted (instructor > ta > student).
+    // non-empty and rank-sorted (teacher > ta > student).
     role: row.roles[0],
   }
 }
@@ -453,7 +453,7 @@ export function teamMembersMissingFromCsv(
 // they aren't "missing" (teamMembersMissingFromCsv skips them because their
 // login/id is claimed), so the drift trigger would otherwise never fire for a
 // login-only row like `student1,,,,,,`. `staffMembers` is keyed by role so the
-// primary role can be derived (instructor > ta > student). Pure + testable.
+// primary role can be derived (teacher > ta > student). Pure + testable.
 export function rowsNeedingBackfill(
   members: GitHubUser[],
   staffMembers: Partial<Record<StaffRole, GitHubUser[]>>,

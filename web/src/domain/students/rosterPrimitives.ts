@@ -292,7 +292,7 @@ export class NoNewStudentsError extends Error {
 }
 
 // A single classroom member unioned across the student + staff teams, tagged
-// with their highest-precedence role (instructor > ta > student).
+// with their highest-precedence role (teacher > ta > student).
 export type MemberWithRole = {
   id: number
   login: string
@@ -408,7 +408,7 @@ export async function listClassroomMembersWithRoles(
   ) => {
     const existing = byId.get(member.id)
     // Keep the highest-precedence role when a person is on several teams
-    // (e.g. an instructor also on the student team records "instructor").
+    // (e.g. a teacher also on the student team records "teacher").
     if (existing && ROLE_RANK[existing.role] >= ROLE_RANK[role]) return
     byId.set(member.id, {
       id: member.id,
@@ -505,11 +505,11 @@ export async function retryDeferred<T>(opts: {
 }
 
 // Resolve the team id for each role present in the invite batch: student ->
-// classroom team, instructor/ta -> the staff team (created if missing, mirroring
-// the Settings staff flow so an instructor/ta invite lands them on the right
+// classroom team, teacher/ta -> the staff team (created if missing, mirroring
+// the Settings staff flow so a teacher/ta invite lands them on the right
 // team on acceptance). Only ensures a staff team when that role is actually
 // being invited — a students-only upload must not create (and grant config-repo
-// write to) empty instructor/ta teams as a side effect. A failed resolve leaves
+// write to) empty teacher/ta teams as a side effect. A failed resolve leaves
 // that role's id undefined — the invite still sends teamless.
 export async function resolveTeamIdByRole(
   client: GitHubClient,

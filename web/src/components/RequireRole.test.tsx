@@ -48,10 +48,10 @@ const shown = () => {
   return "none"
 }
 
-// Default classroom context: an instructor (overridden per test).
+// Default classroom context: an teacher (overridden per test).
 const ctx = (over: Record<string, unknown> = {}) => ({
-  role: "instructor",
-  actualRole: "instructor",
+  role: "teacher",
+  actualRole: "teacher",
   isLoading: false,
   isError: false,
   retry: () => {},
@@ -107,27 +107,27 @@ describe("RequireRole — staff gate on a classroom", () => {
   })
 })
 
-describe("RequireRole — instructor gate on a classroom", () => {
-  it("an instructor reaches classroom settings", () => {
+describe("RequireRole — teacher gate on a classroom", () => {
+  it("an teacher reaches classroom settings", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
-    classroomCtxMock.mockReturnValue(ctx({ role: "instructor" }))
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    classroomCtxMock.mockReturnValue(ctx({ role: "teacher" }))
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
-  it("a TA is 404'd from instructor settings", () => {
+  it("a TA is 404'd from teacher settings", () => {
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "ta" }))
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
-  it("a non-instructor-team org owner is treated as student inside the classroom (KTD-4)", () => {
-    // KTD-4: org-admin no longer implies classroom instructor. The classroom
-    // context resolves them to `student`, so the instructor gate 404s.
+  it("a non-teacher-team org owner is treated as student inside the classroom (KTD-4)", () => {
+    // KTD-4: org-admin no longer implies classroom teacher. The classroom
+    // context resolves them to `student`, so the teacher gate 404s.
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(ctx({ role: "student" }))
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("notfound")
   })
 
@@ -136,18 +136,18 @@ describe("RequireRole — instructor gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "unresolved", roleResolved: false }),
     )
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("spinner")
   })
 
-  it("admits a confirmed instructor even while sibling reads are still loading (no spinner-over-wait)", () => {
-    // roleResolved is true once the instructor read confirms; the gate must not
+  it("admits a confirmed teacher even while sibling reads are still loading (no spinner-over-wait)", () => {
+    // roleResolved is true once the teacher read confirms; the gate must not
     // hold on isLoading waiting for the irrelevant ta/student reads.
     paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
     classroomCtxMock.mockReturnValue(
-      ctx({ role: "instructor", roleResolved: true, isLoading: true }),
+      ctx({ role: "teacher", roleResolved: true, isLoading: true }),
     )
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("child")
   })
 
@@ -156,7 +156,7 @@ describe("RequireRole — instructor gate on a classroom", () => {
     classroomCtxMock.mockReturnValue(
       ctx({ role: "unresolved", roleResolved: false, isError: true }),
     )
-    render(<RequireRole allow="instructor">{child}</RequireRole>)
+    render(<RequireRole allow="teacher">{child}</RequireRole>)
     expect(shown()).toBe("error")
   })
 })
@@ -169,7 +169,7 @@ describe("RequireRole — owner gate on org-level routes", () => {
     expect(shown()).toBe("child")
   })
 
-  it("a non-instructor-team org owner is STILL an owner org-wide (KTD-4)", () => {
+  it("a non-teacher-team org owner is STILL an owner org-wide (KTD-4)", () => {
     paramsMock.mockReturnValue({ org: "acme" })
     orgRoleMock.mockReturnValue({ githubOrgRole: "owner" })
     render(<RequireRole allow="owner">{child}</RequireRole>)

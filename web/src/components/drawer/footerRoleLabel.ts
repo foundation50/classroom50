@@ -13,7 +13,7 @@ export type OrgFooterLabelInput = {
   isOwner: boolean
   ownerPending: boolean
   // Owner read settled in a transient error (retries exhausted). The verdict is
-  // not trustworthy, so it neither grants "Instructor" nor falls back to
+  // not trustworthy, so it neither grants "Teacher" nor falls back to
   // "Student".
   ownerError: boolean
   isNonStaff: boolean

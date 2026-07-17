@@ -54,7 +54,7 @@ export type ImportRosterRow = {
   section?: string
   // Classroom role from an optional `role` column, validated to a ClassroomRole.
   // Undefined when absent or unrecognized; the upload defaults it to "student"
-  // and lets the instructor override per row before inviting.
+  // and lets the teacher override per row before inviting.
   role?: ClassroomRole
 }
 

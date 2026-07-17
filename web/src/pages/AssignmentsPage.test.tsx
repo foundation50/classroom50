@@ -46,7 +46,7 @@ vi.mock("@/hooks/useEmptyRosterWarning", () => ({
   default: () => ({ show: false, hasRosterRows: false }),
 }))
 vi.mock("@/context/classroomRole/ClassroomRoleProvider", () => ({
-  useClassroomRoleContext: () => ({ role: "instructor" }),
+  useClassroomRoleContext: () => ({ role: "teacher" }),
 }))
 // Stub the heavy children so the test targets only the header subtitle.
 vi.mock("@/pages/assignments/AssignmentsTable", () => ({ default: () => null }))

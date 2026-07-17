@@ -12,16 +12,16 @@ const base = {
 }
 
 describe("orgFooterRoleLabel", () => {
-  it("confirmed org owner => Instructor, not pending", () => {
+  it("confirmed org owner => Teacher, not pending", () => {
     expect(orgFooterRoleLabel({ ...base, isOwner: true })).toEqual({
       labelKey: "nav.roleTeacher",
       pending: false,
     })
   })
 
-  it("owner on no staff team (isNonStaff from the team signal) still => Instructor", () => {
+  it("owner on no staff team (isNonStaff from the team signal) still => Teacher", () => {
     // An org owner on no classroom staff team reads isNonStaff:true, but owner
-    // precedence must still label them Instructor, not Student.
+    // precedence must still label them Teacher, not Student.
     expect(
       orgFooterRoleLabel({ ...base, isOwner: true, isNonStaff: true }),
     ).toEqual({
@@ -30,7 +30,7 @@ describe("orgFooterRoleLabel", () => {
     })
   })
 
-  it("org setup route => Instructor even without an owner verdict yet", () => {
+  it("org setup route => Teacher even without an owner verdict yet", () => {
     expect(orgFooterRoleLabel({ ...base, isOrgSetup: true })).toEqual({
       labelKey: "nav.roleTeacher",
       pending: false,

@@ -38,7 +38,7 @@ describe("filterRosterRows", () => {
     row({ username: "stu", roles: ["student"], state: "enrolled" }),
     row({
       username: "prof",
-      roles: ["instructor", "student"],
+      roles: ["teacher", "student"],
       state: "enrolled",
     }),
     row({
@@ -55,7 +55,7 @@ describe("filterRosterRows", () => {
 
   it("a multi-role person appears under each of their roles", () => {
     expect(
-      filterRosterRows(rows, { ...base, roleFilter: "instructor" }).map(
+      filterRosterRows(rows, { ...base, roleFilter: "teacher" }).map(
         (r) => r.username,
       ),
     ).toEqual(["prof"])

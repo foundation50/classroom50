@@ -10,15 +10,15 @@ import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 
 // What a guarded surface requires:
-// - "staff": any classroom staff (instructor/ta) — for classroom CONTENT
+// - "staff": any classroom staff (teacher/ta) — for classroom CONTENT
 //   (roster, authoring, submissions). On an org-level surface (no $classroom,
 //   e.g. Published) this is the org-scoped team-based "staff of any classroom"
 //   signal (useOrgStaff); on a classroom surface it reads the shared context.
-// - "instructor": instructor of THIS classroom (excludes TAs) — for classroom
+// - "teacher": teacher of THIS classroom (excludes TAs) — for classroom
 //   SETTINGS. Reads the classroom context. Needs a $classroom route.
 // - "owner": org admin only — for ORG-wide settings/setup. Reads the org-role
 //   context. Independent of any classroom team (KTD-4).
-export type RoleRequirement = "staff" | "instructor" | "owner"
+export type RoleRequirement = "staff" | "teacher" | "owner"
 
 // Gate page content by role. While the role resolves we show a spinner (never
 // flash a 404 at a real staffer), then children or NotFound. Access is
@@ -32,8 +32,7 @@ const RequireRole = ({
   allow?: RoleRequirement
 }) => {
   if (allow === "owner") return <RequireOwner>{children}</RequireOwner>
-  if (allow === "instructor")
-    return <RequireInstructor>{children}</RequireInstructor>
+  if (allow === "teacher") return <RequireTeacher>{children}</RequireTeacher>
   return <RequireStaff>{children}</RequireStaff>
 }
 
@@ -114,13 +113,13 @@ const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
   )
 }
 
-// Instructor gate: instructor of this classroom (TAs excluded). An org owner is
-// permitted only when they are on the classroom instructor team — org-admin
-// status alone no longer grants classroom-instructor access (KTD-4). Gate on
-// `roleResolved` (the fine role short-circuits to instructor on the instructor
-// read alone) — NOT `!isLoading`, which would hold a confirmed instructor on
+// Teacher gate: teacher of this classroom (TAs excluded). An org owner is
+// permitted only when they are on the classroom teacher team — org-admin
+// status alone no longer grants classroom-teacher access (KTD-4). Gate on
+// `roleResolved` (the fine role short-circuits to teacher on the teacher
+// read alone) — NOT `!isLoading`, which would hold a confirmed teacher on
 // the spinner while the irrelevant ta/student reads finish.
-const RequireInstructor = ({ children }: { children: ReactNode }) => {
+const RequireTeacher = ({ children }: { children: ReactNode }) => {
   const { role, roleResolved, isError, retry } = useClassroomRoleContext()
   return (
     <RoleGate
