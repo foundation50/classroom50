@@ -6,7 +6,7 @@ Visit [classroom50.org](https://www.classroom50.org) to access the web interface
 
 This guide describes how to use Classroom 50 via its web interface at [classroom50.org](https://www.classroom50.org). Classroom 50 is also available as a [command-line tool](/CLI-Student-Guide.md).
 
-This guide will cover the following topics, roughly in the order a student is likely to encounter them when taking a class with Classroom 50:
+This guide will cover the following topics, roughly in the order a student is likely to encounter them when joining a classroom in Classroom 50:
 
 - [GitHub Setup](#github-setup)
 - [Joining Your Classroom](#joining-your-classroom)
@@ -21,7 +21,7 @@ This guide will cover the following topics, roughly in the order a student is li
 
 # GitHub Setup
 
-Classroom 50 is built entirely atop GitHub's existing infrastructure; as a result, in order to use Classroom 50 for your classes and assignments, [you will need a GitHub account first](https://docs.github.com/en/get-started/start-your-journey/creating-an-account-on-github).
+Classroom 50 is built entirely atop GitHub's existing infrastructure; as a result, in order to use Classroom 50 for your classrooms and assignments, [you will need a GitHub account first](https://docs.github.com/en/get-started/start-your-journey/creating-an-account-on-github).
 
 # Joining Your Classroom
 
@@ -46,7 +46,7 @@ Classroom 50 uses your GitHub credentials to establish a connection to GitHub us
 
 ![Organizations view of Classroom 50](images/web_organizations_student.png)
 
-After logging in, you'll see a list of GitHub organizations. Look for the organization that corresponds to the class you're taking and that has a "Student" label beneath it.
+After logging in, you'll see a list of GitHub organizations. Look for the organization that corresponds to the classroom you're joining and that has a "Student" label beneath it.
 
 Clicking on any organization will then show you your list of assignments across the organization's classrooms to which you have access and have accepted.
 

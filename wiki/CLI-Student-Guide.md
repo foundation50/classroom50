@@ -6,7 +6,7 @@ End-to-end walkthrough for students. Install the CLI first — see [Installation
 
 Your teacher must have already:
 
-1. Set up a GitHub organization for the class.
+1. Set up a GitHub organization for the classroom.
 2. Registered the assignment (optionally with a template repo).
 3. Invited you to the org (you'll get an email invitation).
 
@@ -32,7 +32,7 @@ gh student accept <org> <classroom> <assignment>
 
 ![Demo: gh student accept](images/gh_student_accept.gif)
 
-- `<org>` — the GitHub org your class uses.
+- `<org>` — the GitHub org your classroom uses.
 - `<classroom>` — the classroom your teacher set up (e.g. `cs-principles`). Has to match a real classroom directory in your org's `classroom50` config repo.
 - `<assignment>` — the slug your teacher registered with `gh teacher assignment add` (e.g. `hello`).
 

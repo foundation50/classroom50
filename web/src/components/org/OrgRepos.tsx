@@ -4,7 +4,6 @@ import { useTranslation } from "react-i18next"
 import {
   BookOpen,
   ExternalLink,
-  FileText,
   FolderGit2,
   GraduationCap,
   Link2,
@@ -137,7 +136,6 @@ const RepoCard = ({ org, repo }: { org: string; repo: GitHubRepo }) => {
                 size="sm"
                 onClick={() => setDescriptionOpen(true)}
               >
-                <FileText aria-hidden="true" className="size-4" />
                 {t("classes.repo.details")}
               </Button>
             ) : null}

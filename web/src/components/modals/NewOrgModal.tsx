@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { ExternalLink, Settings } from "lucide-react"
+import { ExternalLink } from "lucide-react"
 import { useId } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -102,7 +102,6 @@ function NewOrgModal({
                     )}
                     {!isFree && (
                       <span className="btn btn-primary btn-xs shrink-0">
-                        <Settings aria-hidden="true" className="size-3" />
                         {t("orgs.newOrg.setUp")}
                       </span>
                     )}
