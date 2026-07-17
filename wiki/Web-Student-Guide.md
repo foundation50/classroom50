@@ -9,7 +9,7 @@ This guide describes how to use Classroom 50 via its web interface at [classroom
 This guide will cover the following topics, roughly in the order a student is likely to encounter them when taking a class with Classroom 50:
 
 - [GitHub Setup](#github-setup)
-- [Joining Your Class](#joining-your-class)
+- [Joining Your Classroom](#joining-your-classroom)
 - [Logging Into Classroom 50](#logging-into-classroom-50)
 - [Viewing Organizations](#viewing-organizations)
 - [Accepting Assignments](#accepting-assignments)
@@ -23,9 +23,9 @@ This guide will cover the following topics, roughly in the order a student is li
 
 Classroom 50 is built entirely atop GitHub's existing infrastructure; as a result, in order to use Classroom 50 for your classes and assignments, [you will need a GitHub account first](https://docs.github.com/en/get-started/start-your-journey/creating-an-account-on-github).
 
-# Joining Your Class
+# Joining Your Classroom
 
-Before you can view and accept assignments for your class, you will need to be invited to the [GitHub organization](https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/about-organizations) to which your class belongs.
+Before you can view and accept assignments for your classroom, you will need to be invited to the [GitHub organization](https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/about-organizations) to which your classroom belongs.
 
 When your teacher invites you to the organization, you'll receive an email from GitHub with a link to accept the invitation. Accept the invitation before logging into Classroom 50.
 
@@ -78,7 +78,7 @@ To access the interface for adding collaborators, first click the edit pencil at
 
 ![View of group assignment page for student](images/web_assignment_edit_student.png)
 
-Then, click the "Manage collaborators" button for the assignment to be taken to the following interface, where you can then add collaborators to your project (note that they must be members of the organization and enrolled in the class for this to work):
+Then, click the "Manage collaborators" button for the assignment to be taken to the following interface, where you can then add collaborators to your project (note that they must be members of the organization and enrolled in the classroom for this to work):
 
 ![View of managing collaborators for student](images/web_assignment_manage_collaborators_student.png)
 

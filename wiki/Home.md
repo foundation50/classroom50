@@ -24,7 +24,7 @@ Classroom 50 supports:
 - Distributing individual and group assignments
 - Collecting and auto-grading submissions
 - Providing inline qualitative feedback on submissions
-- Managing course rosters and scores
+- Managing classroom rosters and scores
 
 Classroom 50 is entirely GitHub-based and does not have any servers of its own: all data lives in GitHub repositories and all auto-grading runs in GitHub Actions.
 

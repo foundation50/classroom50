@@ -91,7 +91,7 @@ To view a configured Classroom 50 organization, click "Open" on its card on the 
 
 ![View of the "+ Create classroom" form](images/web_create_classroom.png)
 
-Click "Create classroom" on the "My classes" page to create a new classroom. Each classroom needs a **name** and a **slug** (a unique identifier for the classroom). The **term** is optional but is displayed in various places and can help differentiate between different offerings of the same course.
+Click "Create classroom" on the "My classrooms" page to create a new classroom. Each classroom needs a **name** and a **slug** (a unique identifier for the classroom). The **term** is optional but is displayed in various places and can help differentiate between different offerings of the same course.
 
 ![View of "unlisted links" toggle form in "+ Create classroom form"](images/web_create_classroom_hash.png)
 
@@ -185,7 +185,7 @@ In order for students to accept an assignment, they need to be added to the clas
 
 ![View of Students page with no students](images/web_students_none.png)
 
-On the "Students" page within each classroom, you can add students to your class roster for that classroom, as well as see which students have already been added and which students still have pending invitations. When students are added to the roster, they will be sent an invitation to join your GitHub organization. Students **must accept the invitation in order to start work on assignments in the classroom**.
+On the "Students" page within each classroom, you can add students to your classroom roster for that classroom, as well as see which students have already been added and which students still have pending invitations. When students are added to the roster, they will be sent an invitation to join your GitHub organization. Students **must accept the invitation in order to start work on assignments in the classroom**.
 
 ### Add Student
 
@@ -219,8 +219,8 @@ Assuming you have students who have accepted the assignment, the next important 
 
 As you can see, we have a few important pieces of data we can now view:
 
-- **Submitted**: The number of submissions / the number of students enrolled in the course.
-- **Class Average**: The average grade of the students who have submitted thus far.
+- **Submitted**: The number of submissions / the number of students enrolled in the classroom.
+- **Classroom Average**: The average grade of the students who have submitted thus far.
 - **Passing**: The number of students who are passing the assignment, as well as the number who are failing.
 - **Accepted**: The number of submissions that have been accepted (one per student).
 
