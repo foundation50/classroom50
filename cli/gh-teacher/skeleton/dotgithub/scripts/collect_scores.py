@@ -363,6 +363,15 @@ def load_roster_metadata(classroom_dir: pathlib.Path) -> dict[str, dict[str, str
 # Per-classroom collection ----------------------------------------------------
 
 
+def is_empty_repo(entry: dict[str, Any]) -> bool:
+    """True only when empty_repo is the boolean `true`. The wire contract is a
+    JSON boolean (schema type "boolean"; Go decodes into a strict `bool`), so a
+    non-boolean value from a hand-edited manifest is not empty_repo — matching
+    the Go and TypeScript readers (TS uses `=== true`). Every Python reader
+    (collect/regrade/runner) MUST use this predicate so all tools agree."""
+    return entry.get("empty_repo") is True
+
+
 def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     """Slugs worth collecting: non-empty strings, in manifest order, excluding
     empty_repo assignments (their bare repos never autograde, so polling them
@@ -372,7 +381,7 @@ def valid_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     slugs: list[str] = []
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
-        if isinstance(slug, str) and slug and not entry.get("empty_repo"):
+        if isinstance(slug, str) and slug and not is_empty_repo(entry):
             slugs.append(slug)
     return slugs
 
@@ -466,7 +475,7 @@ def collect_classroom(
             continue
         # empty_repo assignments never autograde — same predicate as
         # valid_assignment_slugs, kept in lockstep.
-        if entry.get("empty_repo"):
+        if is_empty_repo(entry):
             print(
                 f"{classroom_short}/{slug}: empty_repo assignment — autograding "
                 f"is disabled; skipping collection"

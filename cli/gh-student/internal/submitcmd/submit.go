@@ -75,6 +75,18 @@ func NewCmd() *cobra.Command {
 	return cmd
 }
 
+// annotateMissingConfig turns a failed .classroom50.yaml read into the most
+// helpful error. A missing marker (fs.ErrNotExist) is the empty_repo case:
+// those repos carry no marker and submit can't identify the assignment, so
+// hint that students on them push directly. Any other read error passes
+// through unchanged.
+func annotateMissingConfig(err error) error {
+	if errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("%w — if this is an empty-repository assignment, autograding is disabled and `gh student submit` is not used; commit and `git push` directly", err)
+	}
+	return err
+}
+
 func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool, out io.Writer, errOut io.Writer) error {
 	const remote = "origin"
 
@@ -90,13 +102,7 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 	config, err := classroomcfg.ReadConfig(filepath.Join(root, classroomcfg.MetadataPath))
 	if err != nil {
-		// A bare (empty_repo) assignment repo never carries the marker, and
-		// submit can't identify the assignment without it — the best help is
-		// a hint, since students on those assignments push directly.
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("%w — if this is an empty-repository assignment, autograding is disabled and `gh student submit` is not used; commit and `git push` directly", err)
-		}
-		return err
+		return annotateMissingConfig(err)
 	}
 
 	message := contract.PrefixCommit(fmt.Sprintf("Submit %s", config.Assignment))

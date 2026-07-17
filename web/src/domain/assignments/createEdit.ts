@@ -178,7 +178,7 @@ export async function editAssignment(
   // the real constraint rather than a mutual-exclusion side effect.
   if (Boolean(input.empty_repo) !== Boolean(targetAssignment.empty_repo)) {
     throw new Error(
-      `empty_repo cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Delete the assignment and create a new one instead.`,
+      `empty_repo cannot be changed after creation (assignment "${slug}"): repositories students already accepted are not retrofitted. Create a new assignment under a different slug instead — reusing this slug (even after removing it) would leave already-accepted repos on the old setting.`,
     )
   }
 

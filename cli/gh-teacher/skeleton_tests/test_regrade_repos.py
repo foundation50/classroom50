@@ -777,6 +777,19 @@ def _http_error(code: int, *, body: dict | None = None) -> urllib.error.HTTPErro
 # empty_repo skip -------------------------------------------------------------
 
 
+def test_is_empty_repo_is_strict_boolean_true():
+    # Must be byte-identical in meaning to collect_scores.is_empty_repo and the
+    # runner guard: only the literal True is empty_repo, so a non-boolean from a
+    # hand-edited manifest is NOT treated as bare (matching Go bool / TS ===
+    # true). A truthiness check here would let regrade silently no-op on a
+    # non-boolean the other readers would still grade.
+    assert rr.is_empty_repo({"empty_repo": True}) is True
+    assert rr.is_empty_repo({"empty_repo": False}) is False
+    assert rr.is_empty_repo({}) is False
+    for non_bool in ("true", "yes", 1, [1], {"x": 1}):
+        assert rr.is_empty_repo({"empty_repo": non_bool}) is False, non_bool
+
+
 def test_load_roster_empty_repo_raises_sentinel(monkeypatch, tmp_path):
     # An empty_repo assignment raises EmptyRepoAssignment BEFORE the team
     # listing — bare repos carry no autograde workflow, so there is nothing to

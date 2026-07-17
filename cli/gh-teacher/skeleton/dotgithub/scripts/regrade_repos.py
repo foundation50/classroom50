@@ -554,6 +554,15 @@ class EmptyRepoAssignment(Exception):
     main() treats this as a successful no-op, not an error."""
 
 
+def is_empty_repo(entry: dict[str, Any]) -> bool:
+    """True only when empty_repo is the boolean `true`. The wire contract is a
+    JSON boolean (Go decodes a strict `bool`; TS uses `=== true`), so a
+    non-boolean value from a hand-edited manifest is not empty_repo. Keep this
+    byte-identical to collect_scores.py / the autograde-runner so every tool
+    agrees on the predicate."""
+    return entry.get("empty_repo") is True
+
+
 def load_roster(
     classroom_dir: pathlib.Path,
     assignment_slug: str,
@@ -599,7 +608,7 @@ def load_roster(
     # empty_repo assignments never autograde (accept commits no workflow), so
     # skip before the team listing — otherwise the first-grade fallback would
     # push useless submit/* tags into every student repo.
-    if entries[assignment_slug].get("empty_repo"):
+    if is_empty_repo(entries[assignment_slug]):
         raise EmptyRepoAssignment(assignment_slug)
 
     # Resolve the classroom team slug: classroom.json's authoritative team.slug

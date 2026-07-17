@@ -1822,3 +1822,65 @@ describe("resolveAutograderWorkflow default shim branch templating", () => {
     ).resolves.toContain('branches: ["main"]')
   })
 })
+
+describe("createAssignmentRepo (bare / empty_repo)", () => {
+  // The empty_repo wire contract: a bare create POSTs auto_init:false (no
+  // initial commit, no branches) and returns the dedicated kind:"bare" so no
+  // caller trusts a default_branch or attempts a commit. Mirrors the CLI's
+  // TestCreateEmptyPrivateAssignmentRepoInOrg_Bare.
+  function makeClient() {
+    let createBody: Record<string, unknown> | undefined
+    const request = vi.fn(async (url: string, init?: unknown) => {
+      const method = (init as { method?: string })?.method ?? "GET"
+      if (method === "POST" && url === "/orgs/cs50/repos") {
+        createBody = (init as { body?: Record<string, unknown> }).body
+        return {
+          name: "cs101-actions-lab-alice",
+          full_name: "cs50/cs101-actions-lab-alice",
+          html_url: "https://github.com/cs50/cs101-actions-lab-alice",
+          ssh_url: "git@github.com:cs50/cs101-actions-lab-alice.git",
+          default_branch: "main",
+        }
+      }
+      throw new Error(`unexpected request: ${method} ${url}`)
+    })
+    return {
+      client: { request } as unknown as GitHubClient,
+      getCreateBody: () => createBody,
+    }
+  }
+
+  it("bare:true POSTs auto_init:false and returns kind:bare", async () => {
+    const { client, getCreateBody } = makeClient()
+
+    const result = await createAssignmentRepo({
+      client,
+      owner: "cs50",
+      name: "cs101-actions-lab-alice",
+      fallbackBranch: "main",
+      bare: true,
+    })
+
+    expect(getCreateBody()).toMatchObject({ auto_init: false, private: true })
+    expect(result.kind).toBe("bare")
+  })
+
+  it("without bare, POSTs auto_init:true (the shim-only path)", async () => {
+    const { client, getCreateBody } = makeClient()
+
+    // The non-bare template-less path commits control files after create; here
+    // we only assert the create body's auto_init, so the follow-up commit
+    // requests are irrelevant (the create response drives kind resolution).
+    await createAssignmentRepo({
+      client,
+      owner: "cs50",
+      name: "cs101-actions-lab-alice",
+      fallbackBranch: "main",
+    }).catch(() => {
+      // The full non-bare flow makes further requests this minimal mock
+      // doesn't stub; the create body assertion below is what matters.
+    })
+
+    expect(getCreateBody()).toMatchObject({ auto_init: true })
+  })
+})

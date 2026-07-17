@@ -892,6 +892,68 @@ func TestAcceptIntoBareRepo(t *testing.T) {
 			t.Errorf("expected an already-accepted report on stdout:\n%s", out.String())
 		}
 	})
+
+	// A healthy already-accepted bare repo must tolerate a transient grant
+	// failure best-effort, exactly like the templated already-accepted path —
+	// a re-accept that previously succeeded must not hard-fail on an SSO-403 /
+	// left-org / 5xx blip. (Regression guard for the empty_repo re-accept fix.)
+	t.Run("already exists -> best-effort grant, tolerates a transient founder-grant failure", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, bareParams(true))
+		if err != nil {
+			t.Fatalf("already-accepted bare re-accept must not hard-fail on a transient grant error: %v", err)
+		}
+		if !strings.Contains(out.String(), "already accepted") {
+			t.Errorf("expected an already-accepted report despite the grant blip:\n%s", out.String())
+		}
+	})
+
+	// A fresh create hard-fails the grant (an un-granted new repo is a broken
+	// accept) and first asserts mode/size coherence: a group-shaped-but-
+	// individual entry must be rejected before any grant, matching the
+	// templated fresh-create path.
+	t.Run("fresh create -> hard-fails on grant error", func(t *testing.T) {
+		mux := http.NewServeMux()
+		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		})
+		server := httptest.NewServer(mux)
+		t.Cleanup(server.Close)
+
+		var out bytes.Buffer
+		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, bareParams(false))
+		if err == nil {
+			t.Error("a fresh bare create must hard-fail when the founder grant fails")
+		}
+	})
+
+	t.Run("fresh create -> rejects incoherent group metadata before granting", func(t *testing.T) {
+		var (
+			collaboratorPut, forbiddenCall bool
+			grantedPermission              string
+		)
+		server := httptest.NewServer(newMux(&collaboratorPut, &grantedPermission, &forbiddenCall))
+		t.Cleanup(server.Close)
+
+		p := bareParams(false)
+		p.mode = "individual" // individual mode...
+		p.maxGroupSize = 3    // ...but a group size -> inconsistent, must be rejected
+		var out bytes.Buffer
+		err := acceptIntoRepo(newTestRESTClient(t, server), ui.NewForced(&out, false), false, &out, p)
+		if err == nil {
+			t.Error("bare create with incoherent mode/size must be rejected")
+		}
+		if collaboratorPut {
+			t.Error("the coherence check must run before the founder grant")
+		}
+	})
 }
 
 // TestCreateEmptyPrivateAssignmentRepoInOrg_Bare: autoInit=false posts

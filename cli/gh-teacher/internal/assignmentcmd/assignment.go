@@ -273,7 +273,12 @@ func assignmentRemoveCmd() *cobra.Command {
 			"Does NOT touch any existing student repos that were created\n" +
 			"against this assignment. The starter code and submission\n" +
 			"history stay intact; only new `gh student accept` invocations\n" +
-			"stop finding the slug.",
+			"stop finding the slug.\n\n" +
+			"Because the repos survive, re-adding the SAME slug is not a\n" +
+			"clean reset: an --empty-repo flag that differs from the removed\n" +
+			"entry would leave already-accepted repos on the old behavior\n" +
+			"(the immutability guard only fires on an in-place edit, which a\n" +
+			"remove+add bypasses). To change empty_repo, add under a NEW slug.",
 		Example: "  gh teacher assignment remove cs50-fall-2026 cs-principles hello",
 		Args:    cobra.ExactArgs(3),
 		RunE: func(cmd *cobra.Command, args []string) error {

@@ -529,25 +529,36 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 // marker probe, no read-back of a marker. The repo has no commits (auto_init
 // false), so the sole provisioning step is the founder role grant — the same
 // least-privilege rule as the normal path (`push` for individual, `admin` for
-// group) — idempotent, hence safe to re-run whether the repo was just created
-// or already existed.
+// group). It splits on alreadyExisted like the templated path: a healthy
+// already-accepted repo reconciles the grant best-effort (a transient failure
+// must not fail a re-run), while a fresh create hard-fails the grant and first
+// asserts mode/size coherence.
 func acceptIntoBareRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writer, p acceptRepoParams) error {
 	if p.alreadyExisted {
 		p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
-	} else {
-		p.createSp.Stop(fmt.Sprintf("Created %s", p.fullName))
+
+		// Already accepted: reconcile the role best-effort, matching the
+		// templated already-accepted path. The bare repo is already healthy
+		// (its only provisioning is this grant), so a transient/SSO-403/
+		// left-org failure must not fail a re-run that previously succeeded.
+		if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil && verbose {
+			u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
+		}
+		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
+	}
+	p.createSp.Stop(fmt.Sprintf("Created %s", p.fullName))
+
+	// Fresh create: a group-shaped entry whose mode isn't group would found
+	// the repo under-privileged, so reject incoherent metadata before the
+	// grant — same guard the templated fresh-create path runs.
+	if err := assertModeCoherentForCreate(p.assignment, p.mode, p.maxGroupSize); err != nil {
+		return err
 	}
 
-	// Re-run the grant even for an existing repo: a prior accept may have
-	// died between repo creation and the grant, and the upsert makes the
-	// repair free.
 	if err := inviteFounder(client, u, verbose, p.username, p.org, p.repoName, founderPermission(p.mode), p.isOwner); err != nil {
 		return err
 	}
 
-	if p.alreadyExisted {
-		return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
-	}
 	return reportBareAccepted(u, out, p.fullName, p.htmlURL)
 }
 

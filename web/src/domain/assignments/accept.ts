@@ -383,22 +383,16 @@ export async function acceptAssignment(params: {
   if (isEmptyRepo) {
     const alreadyAccepted = created.kind === "already-accepted"
     if (alreadyAccepted) {
+      // Healthy already-accepted bare repo: reconcile the founder role
+      // best-effort, matching the templated already-accepted path. A bare
+      // repo's only provisioning IS this grant, so a transient failure must
+      // not fail a re-run that previously succeeded.
       onStepUpdate?.({
         id: "repo",
         status: "complete",
         message: `Repository already exists: ${org}/${created.repo.name}`,
       })
-    }
-
-    await withAcceptStep(
-      {
-        id: "access",
-        label: "Granting you access to your repository",
-        actions: `Your repository ${org}/${created.repo.name} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
-        doneMessage: "Granted you access to your repository",
-        onStepUpdate,
-      },
-      async () => {
+      try {
         await patchRepoSurface(client, org, created.repo.name)
         await addFounderCollaborator({
           client,
@@ -408,8 +402,39 @@ export async function acceptAssignment(params: {
           permission: founderPermission(assignment.mode),
           isOwner,
         })
-      },
-    )
+      } catch (err) {
+        log.debug("accept: best-effort role reconcile failed (non-fatal)", {
+          org,
+          repo: created.repo.name,
+          err,
+        })
+      }
+      onStepUpdate?.({ id: "access", status: "complete" })
+    } else {
+      // Fresh create: the grant hard-fails (an un-granted repo is a broken
+      // accept the student can't push to), inside the throwing step so the
+      // checklist surfaces the error and its recovery guidance.
+      await withAcceptStep(
+        {
+          id: "access",
+          label: "Granting you access to your repository",
+          actions: `Your repository ${org}/${created.repo.name} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
+          doneMessage: "Granted you access to your repository",
+          onStepUpdate,
+        },
+        async () => {
+          await patchRepoSurface(client, org, created.repo.name)
+          await addFounderCollaborator({
+            client,
+            owner: org,
+            repo: created.repo.name,
+            username,
+            permission: founderPermission(assignment.mode),
+            isOwner,
+          })
+        },
+      )
+    }
     onStepUpdate?.({
       id: "setup",
       status: "complete",

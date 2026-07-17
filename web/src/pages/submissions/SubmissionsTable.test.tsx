@@ -34,6 +34,7 @@ vi.mock("@/components/modals/StudentProfileModal", () => ({
 
 import SubmissionsTable from "./SubmissionsTable"
 import type { Student } from "@/types/classroom"
+import type { SubmissionRow } from "@/hooks/useGetScores"
 
 const student = (over: Partial<Student> = {}): Student => ({
   username: "alice",
@@ -43,6 +44,21 @@ const student = (over: Partial<Student> = {}): Student => ({
   section: "",
   github_id: "1",
   role: "student",
+  ...over,
+})
+
+const scoreRow = (over: Partial<SubmissionRow> = {}): SubmissionRow => ({
+  usernames: ["alice"],
+  owner: "alice",
+  datetime: "2026-06-20T10:00:00Z",
+  commit: "",
+  release: "",
+  review: "",
+  score: 8,
+  "max-score": 10,
+  submissionCount: 1,
+  late: false,
+  submissions: [],
   ...over,
 })
 
@@ -120,5 +136,32 @@ describe("SubmissionsTable non-submitter repo links", () => {
         enabled: false,
       },
     )
+  })
+})
+
+describe("SubmissionsTable empty_repo score cell", () => {
+  it("renders a no-grading em-dash instead of a score for an empty_repo assignment", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+        emptyRepo
+      />,
+    )
+    // The score cell shows the placeholder titled noGradingTitle instead of a
+    // numeric score badge (bare repos never autograde).
+    expect(screen.getByTitle("submissions.table.noGradingTitle")).toBeTruthy()
+  })
+
+  it("shows a score badge (not the no-grading placeholder) when not empty_repo", () => {
+    render(
+      <SubmissionsTable
+        {...baseProps}
+        scores={[scoreRow()]}
+        acceptedUsernames={new Set(["alice"])}
+      />,
+    )
+    expect(screen.queryByTitle("submissions.table.noGradingTitle")).toBeNull()
   })
 })
