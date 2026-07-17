@@ -1,5 +1,4 @@
 export {
-  isOutageShapedError,
   isDefiniteOutageError,
   recordGitHubFailure,
   recordGitHubSuccess,

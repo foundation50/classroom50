@@ -69,57 +69,62 @@ function setState(next: GitHubHealth) {
   emit()
 }
 
-// An error that plausibly signals GitHub being down, as opposed to a
-// client-side verdict. A GitHubAPIError with a 5xx status is a server fault; a
-// non-GitHubAPIError throw is a network failure or timeout (the client throws
-// these before onResponse — see client.ts). Definitive statuses (401/403/404)
-// and rate limits (429 / 403-with-retry) are the user's own state, never an
-// outage, so they must never trip the detector.
+// The single outage classifier, used both to feed the suspicion detector and to
+// gate user-facing hints. True ONLY when the error (after unwrapping `.cause`)
+// is a positively-identified outage — a 5xx GitHubAPIError, a network-failure
+// TypeError, or a non-abort timeout DOMException. Everything else is false:
+// a definitive 4xx, a rate limit, a caller/navigation abort, a friendly wrapper
+// with no outage cause (e.g. a TemplateAccessError — an instructor-action
+// problem), and any unrecognized local throw. Positive-identification only is
+// what keeps both the detector and the hint free of false positives — a bad
+// template / not-a-member / SSO gate / local app bug must never read as "GitHub
+// is down".
 //
 // Errors are unwrapped along `.cause` first: some flows rethrow a friendly
 // wrapper (e.g. AcceptStepError) that preserves the original GitHubAPIError as
 // its cause, and the classification must key off that original, not the wrapper.
-//
-// This is the PERMISSIVE detector classifier: an unrecognized throw counts as
-// outage-shaped, because over-counting toward suspicion is harmless (a single
-// success clears it) and we'd rather notice a real outage than miss it. For a
-// user-facing hint (where a false positive is misleading) use
-// `isDefiniteOutageError`, which only returns true on a positively-identified
-// outage shape.
-export function isOutageShapedError(error: unknown): boolean {
-  const unwrapped = outageRelevantError(error)
-  if (unwrapped instanceof GitHubAPIError) {
-    if (unwrapped.isRateLimited) return false
-    return unwrapped.status >= 500
-  }
-  // A bare abort (caller cancel / navigation) is not a fault.
-  if (unwrapped instanceof DOMException && unwrapped.name === "AbortError") {
-    return false
-  }
-  // Anything else reaching a query/mutation error handler is a network/timeout
-  // failure (TypeError "Failed to fetch", timeout AbortError is handled above).
-  return true
-}
-
-// The STRICT classifier for user-facing outage hints: true ONLY when the error
-// (after unwrapping `.cause`) is a positively-identified outage — a 5xx
-// GitHubAPIError or a network-failure TypeError. Everything else is false,
-// including a definitive 4xx, a rate limit, an abort, a friendly wrapper with
-// no outage cause (e.g. a TemplateAccessError — an instructor-action problem),
-// and any unrecognized throw. This is what keeps the hint free of false
-// positives (a bad template / not-a-member / SSO gate must never read as "GitHub
-// is down").
 export function isDefiniteOutageError(error: unknown): boolean {
   const unwrapped = outageRelevantError(error)
-  if (unwrapped instanceof GitHubAPIError) {
-    if (unwrapped.isRateLimited) return false
-    return unwrapped.status >= 500
-  }
-  // A genuine network failure — the fetch never got a response. `TypeError`
-  // ("Failed to fetch") is what the browser throws; a timeout is a (non-abort)
-  // DOMException. A caller/navigation abort is not a fault.
+  if (unwrapped instanceof GitHubAPIError)
+    return isServerFaultApiError(unwrapped)
+  // A genuine network failure — the fetch never got a response. A timeout is a
+  // (non-abort) DOMException; a caller/navigation abort is not a fault.
   if (unwrapped instanceof DOMException) return unwrapped.name !== "AbortError"
-  return unwrapped instanceof TypeError
+  // The browser's "fetch never reached the server" throw is a TypeError, but so
+  // is any `x.y`-on-undefined app bug — so require the network shape, else a
+  // local code bug would falsely read as "GitHub is down" (and hide its real
+  // message). `TypeError.cause` is not reliably set by the fetch path, so key
+  // off the message the platform uses ("Failed to fetch" / "NetworkError" /
+  // "Load failed" across engines).
+  return (
+    unwrapped instanceof TypeError && isNetworkFailureMessage(unwrapped.message)
+  )
+}
+
+// The one server-fault rule: a 5xx GitHubAPIError that isn't a rate limit.
+//
+// Deliberate trade-off (accepted, not a gap): a definitive 4xx is never an
+// outage even during a real incident. GitHub's edge can return 403/404 for
+// endpoints that would normally 200 while degraded, so those failures won't trip
+// the hint and the user may hit a "not-a-member"/"blocked" dead-end. We accept
+// that false-negative because 403/404 are overwhelmingly legitimate user state
+// (not-a-member, org restriction, SSO gate); counting them would reintroduce the
+// false-positive class this classifier exists to prevent. Corroborating a 4xx
+// burst with the githubstatus.com probe was considered and rejected as too risky
+// for the payoff.
+function isServerFaultApiError(error: GitHubAPIError): boolean {
+  if (error.isRateLimited) return false
+  return error.status >= 500
+}
+
+// Browsers throw a bare `TypeError` for a failed fetch, with an engine-specific
+// message: Chromium "Failed to fetch", Firefox "NetworkError when attempting to
+// fetch resource", Safari "Load failed". Match those so a non-network TypeError
+// (an ordinary app bug) is never mistaken for an outage.
+function isNetworkFailureMessage(message: string): boolean {
+  return /failed to fetch|networkerror|network request failed|load failed/i.test(
+    message,
+  )
 }
 
 // Follow the `.cause` chain to the error that actually carries the outage
@@ -178,13 +183,18 @@ async function probeStatus(now: number) {
   }
 }
 
-// Record an API failure. Only outage-shaped errors count toward suspicion; the
-// rest are ignored so a 404/403/rate-limit never reads as an outage.
+// Record an API failure. Only a positively-identified outage (5xx, network
+// failure, or timeout — see isDefiniteOutageError) counts toward suspicion, so a
+// definitive 4xx / rate limit, a caller abort, or an ordinary local app error
+// (a thrown plain Error/string that reaches React Query's global onError) never
+// trips the banner. Under-counting a genuinely ambiguous failure is the safe
+// direction here: suspicion drives user-visible surfaces, so a false "GitHub is
+// down" is worse than a missed one, and any success immediately clears it.
 export function recordGitHubFailure(
   error: unknown,
   now: number = Date.now(),
 ): void {
-  if (!isOutageShapedError(error)) return
+  if (!isDefiniteOutageError(error)) return
 
   failureTimestamps = failureTimestamps.filter((t) => now - t < WINDOW_MS)
   failureTimestamps.push(now)

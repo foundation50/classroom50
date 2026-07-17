@@ -44,5 +44,3 @@ export function GitHubStatusNote({
     </>
   )
 }
-
-export default GitHubStatusNote

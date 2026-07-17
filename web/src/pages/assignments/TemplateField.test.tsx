@@ -228,6 +228,7 @@ describe("TemplateField — outage hint on inconclusive verdicts", () => {
       kind: "unknown",
       owner: ORG,
       repo: "tmpl",
+      outage: false,
     })
     act(() => suspectOutage())
     renderField()
@@ -236,11 +237,27 @@ describe("TemplateField — outage hint on inconclusive verdicts", () => {
     expect(screen.getByText("assignments.template.unknown")).toBeTruthy()
   })
 
-  it("does NOT show the hint on an 'unknown' verdict when no outage is suspected", async () => {
+  it("shows the hint on an 'unknown' verdict flagged as an outage, even with no global suspicion", async () => {
+    // The verify query resolves-successfully with this verdict, which clears the
+    // global suspicion — so a verify that itself failed with a 5xx/network error
+    // must still surface the hint via the verdict's own `outage` flag.
     verifyTemplateAccess.mockResolvedValue({
       kind: "unknown",
       owner: ORG,
       repo: "tmpl",
+      outage: true,
+    })
+    renderField()
+    expect(await screen.findByText(STATUS_LINK)).toBeTruthy()
+    expect(screen.getByText("assignments.template.unknown")).toBeTruthy()
+  })
+
+  it("does NOT show the hint on an 'unknown' verdict with no outage and no suspicion", async () => {
+    verifyTemplateAccess.mockResolvedValue({
+      kind: "unknown",
+      owner: ORG,
+      repo: "tmpl",
+      outage: false,
     })
     renderField()
     await screen.findByText("assignments.template.unknown")
@@ -252,6 +269,7 @@ describe("TemplateField — outage hint on inconclusive verdicts", () => {
       kind: "rate-limited",
       owner: ORG,
       repo: "tmpl",
+      outage: false,
     })
     act(() => suspectOutage())
     renderField()

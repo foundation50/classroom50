@@ -191,7 +191,11 @@ export function createGitHubClient(args: {
         // HTML instead of the expected API format"). Surface it as a synthetic
         // 5xx so it classifies as outage-shaped (feeds the health detector and
         // the outage hint) instead of leaking a raw `SyntaxError` to the user.
-        throw githubNonJsonResponseError(res.url || path, res.status)
+        throw githubNonJsonResponseError(
+          res.url || path,
+          res.status,
+          res.headers.get("x-github-request-id"),
+        )
       }
     },
 

@@ -310,6 +310,16 @@ function renderTemplateVerdict({
   outageSuspected: boolean
   statusDescription: string | null
 }): ReactNode {
+  // The inconclusive verdicts hint at an outage when either the global suspicion
+  // is up OR this verify itself failed with an outage — the latter matters
+  // because the verify query resolves-successfully, clearing the global flag.
+  const outageHintNote = (verdictIsOutage: boolean) =>
+    verdictIsOutage || outageSuspected ? (
+      <span className="mt-1 block text-xs text-base-content/70">
+        <GitHubStatusNote statusDescription={statusDescription} />
+      </span>
+    ) : null
+
   switch (verification.kind) {
     case "ok": {
       // Students can't read an in-org private template directly; the classroom
@@ -443,11 +453,7 @@ function renderTemplateVerdict({
             owner: verification.owner,
             repo: verification.repo,
           })}
-          {outageSuspected && (
-            <span className="mt-1 block text-xs text-base-content/70">
-              <GitHubStatusNote statusDescription={statusDescription} />
-            </span>
-          )}
+          {outageHintNote(verification.outage)}
         </Note>
       )
 
@@ -478,11 +484,7 @@ function renderTemplateVerdict({
       return (
         <Note tone="neutral" icon={HelpCircle}>
           {t("assignments.template.rateLimited")}
-          {outageSuspected && (
-            <span className="mt-1 block text-xs text-base-content/70">
-              <GitHubStatusNote statusDescription={statusDescription} />
-            </span>
-          )}
+          {outageHintNote(verification.outage)}
         </Note>
       )
 

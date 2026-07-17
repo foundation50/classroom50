@@ -30,8 +30,15 @@ const CreateAssignmentPage = () => {
   const { org, classroom } = useParams({ strict: false })
   const { notify } = useToast()
   const trackPublishDeploy = useTrackPublishDeploy()
-  const [errorMessage, setErrorMessage] = useState("")
-  const [outageError, setOutageError] = useState(false)
+  // The error alert's content and its visibility are tracked separately so the
+  // AnimatePresence exit animation keeps rendering the last content while it
+  // collapses. Clearing the content on hide (a single `errorMessage` string)
+  // would blank the alert mid-collapse; instead we only flip `errorShown` off
+  // and leave `errorContent` frozen until the next failure replaces it.
+  const [errorContent, setErrorContent] = useState<
+    { kind: "message"; message: string } | { kind: "outage" }
+  >({ kind: "message", message: "" })
+  const [errorShown, setErrorShown] = useState(false)
   const [warningMessage, setWarningMessage] = useState("")
 
   const outageHint = useOutageHint()
@@ -69,11 +76,11 @@ const CreateAssignmentPage = () => {
             hasRosterRows={emptyRoster.hasRosterRows}
           />
         ) : null}
-        <AnimatedAlert tone="error" show={!!errorMessage}>
-          {outageError ? (
+        <AnimatedAlert tone="error" show={errorShown}>
+          {errorContent.kind === "outage" ? (
             <GitHubStatusNote statusDescription={outageStatusDescription} />
           ) : (
-            errorMessage
+            errorContent.message
           )}
         </AnimatedAlert>
         <AnimatedAlert
@@ -100,8 +107,9 @@ const CreateAssignmentPage = () => {
           classroom={classroom}
           takenSlugs={takenSlugs}
           onSubmit={(values) => {
-            setErrorMessage("")
-            setOutageError(false)
+            // Hide the alert but keep its content frozen for the exit collapse;
+            // the next failure (if any) replaces the content when it re-shows.
+            setErrorShown(false)
             setWarningMessage("")
             createAssignmentMutation.mutateAsync(
               {
@@ -139,13 +147,12 @@ const CreateAssignmentPage = () => {
                   // local "fetch failed" — swap in the outage hint (the strict
                   // classifier keeps a definitive 4xx / rate limit reading as
                   // the real message), so the teacher knows to retry.
-                  if (outageHint.isOutage(err)) {
-                    setOutageError(true)
-                    setErrorMessage(t("githubStatus.title"))
-                  } else {
-                    setOutageError(false)
-                    setErrorMessage(err.message)
-                  }
+                  setErrorContent(
+                    outageHint.isOutage(err)
+                      ? { kind: "outage" }
+                      : { kind: "message", message: err.message },
+                  )
+                  setErrorShown(true)
                   window.scrollTo({ top: 0, behavior: "smooth" })
                 },
                 onSuccess: (result, variables) => {

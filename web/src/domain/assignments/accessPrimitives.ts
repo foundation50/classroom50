@@ -3,6 +3,7 @@ import type { Assignment } from "@/types/classroom"
 import { getRepo } from "@/github-core/repoReads"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { GitHubAPIError } from "@/github-core/errors"
+import { isDefiniteOutageError } from "@/lib/githubHealth/githubHealthStore"
 import type { GitHubRepo } from "@/github-core/types"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
 import { TemplateAccessError } from "@/util/templateAccessError"
@@ -190,10 +191,14 @@ export type TemplateAccessVerification =
       httpStatus: number
       scopeGap: boolean
     }
-  // Rate limit hit; the check is inconclusive and should be retried.
-  | { kind: "rate-limited"; owner: string; repo: string }
-  // Verification couldn't complete (network or unexpected error).
-  | { kind: "unknown"; owner: string; repo: string }
+  // Rate limit hit; the check is inconclusive and should be retried. `outage` is
+  // true when the failure that produced this verdict is a positively-identified
+  // GitHub outage (5xx / network), so the note can add the githubstatus.com hint
+  // even if the global suspicion flag was cleared by this query resolving.
+  | { kind: "rate-limited"; owner: string; repo: string; outage: boolean }
+  // Verification couldn't complete (network or unexpected error). `outage` as
+  // above — set when the underlying failure was a positively-identified outage.
+  | { kind: "unknown"; owner: string; repo: string; outage: boolean }
   | {
       kind: "ok"
       owner: string
@@ -296,7 +301,13 @@ export async function verifyTemplateAccess(
     repo = await getRepo(client, parsed.owner, parsed.repo)
   } catch (err) {
     if (err instanceof GitHubAPIError && err.isRateLimited) {
-      return { kind: "rate-limited", owner: parsed.owner, repo: parsed.repo }
+      // A rate limit is the user's own state, never an outage.
+      return {
+        kind: "rate-limited",
+        owner: parsed.owner,
+        repo: parsed.repo,
+        outage: false,
+      }
     }
     if (err instanceof GitHubAPIError && err.isForbidden) {
       return {
@@ -313,7 +324,15 @@ export async function verifyTemplateAccess(
         scopeGap: err.isScopeGap,
       }
     }
-    return { kind: "unknown", owner: parsed.owner, repo: parsed.repo }
+    // The verify query resolves-successfully with this verdict, which clears the
+    // global outage suspicion — so carry the outage signal on the verdict itself
+    // (a 5xx / network failure here) rather than relying on the suspicion flag.
+    return {
+      kind: "unknown",
+      owner: parsed.owner,
+      repo: parsed.repo,
+      outage: isDefiniteOutageError(err),
+    }
   }
 
   if (!repo) {

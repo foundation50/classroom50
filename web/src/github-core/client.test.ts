@@ -147,7 +147,7 @@ describe("createGitHubClient non-JSON response (GitHub-outage shape)", () => {
   }
 
   // A 5xx-with-HTML already flows through the non-OK branch as a GitHubAPIError
-  // carrying the real status, so isOutageShapedError classifies it (>= 500).
+  // carrying the real status, so isDefiniteOutageError classifies it (>= 500).
   it("throws a 5xx GitHubAPIError when a failed response carries an HTML body", async () => {
     stubTextFetch(503, "<html><body>Service Unavailable</body></html>")
     const client = createGitHubClient({ token: "t" })
@@ -191,5 +191,32 @@ describe("createGitHubClient non-JSON response (GitHub-outage shape)", () => {
     await expect(
       client.request<{ hello: string }>("/x", { method: "GET" }),
     ).resolves.toEqual({ hello: "world" })
+  })
+
+  // The synthetic 502 keeps X-GitHub-Request-Id (non-sensitive) so a real edge
+  // outage stays correlatable in support/audit, matching the non-OK branch.
+  it("preserves X-GitHub-Request-Id on the synthetic 502", async () => {
+    vi.stubGlobal("fetch", () =>
+      Promise.resolve(
+        new Response("<html><body>proxy error</body></html>", {
+          status: 200,
+          headers: {
+            "content-type": "text/html",
+            "x-github-request-id": "ABCD:1234:EF",
+          },
+        }),
+      ),
+    )
+    const client = createGitHubClient({ token: "t" })
+
+    const err = await client.request("/rate_limit", { method: "GET" }).then(
+      () => null,
+      (e: unknown) => e,
+    )
+
+    expect((err as { status: number }).status).toBe(502)
+    expect((err as { requestId: string | null }).requestId).toBe("ABCD:1234:EF")
+    // The raw HTML body is still dropped.
+    expect((err as Error).message).not.toContain("proxy error")
   })
 })
