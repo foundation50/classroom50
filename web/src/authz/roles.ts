@@ -53,6 +53,16 @@ export function sortRolesByRank(roles: ClassroomRole[]): ClassroomRole[] {
   return [...roles].sort((a, b) => ROLE_RANK[b] - ROLE_RANK[a])
 }
 
+// The single predicate for "is this the top staff role" — the canonical
+// `teacher` or its legacy `instructor` alias. Lives here (the leaf role-
+// vocabulary module) so every consumer — capabilities, resolution, role
+// writes, roster preflight — shares one definition and can't drift on the two
+// names during the rename migration. When the alias is retired, this is the
+// one place the `instructor` arm is dropped.
+export function isTeacherRole(role: ResolvedRole | undefined): boolean {
+  return role === "teacher" || role === "instructor"
+}
+
 // --- 3. Team-membership probe primitive -------------------------------------
 
 // The result of a single "is the viewer on THIS team?" probe: definitively on /
@@ -73,7 +83,7 @@ export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 export function githubOrgRoleForRole(
   role: ClassroomRole,
 ): "admin" | "direct_member" {
-  return role === "teacher" || role === "instructor" ? "admin" : "direct_member"
+  return isTeacherRole(role) ? "admin" : "direct_member"
 }
 
 // READ (inverse): the classroom role an existing invite's org role implies.

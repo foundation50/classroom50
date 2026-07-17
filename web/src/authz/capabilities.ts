@@ -1,11 +1,5 @@
 import type { ResolvedRole, GitHubOrgRole } from "./resolveRole"
-
-// A viewer whose resolved role is the top staff role — the canonical `teacher`
-// or its legacy `instructor` alias. Single-sourced so capability checks can't
-// drift between the two names during the rename migration.
-export function isTeacherRole(role: ResolvedRole | undefined): boolean {
-  return role === "teacher" || role === "instructor"
-}
+import { isTeacherRole } from "./roles"
 
 // The capability vocabulary — WHAT a viewer can do, decoupled from WHICH role
 // they hold. Consumers ask `can("editClassroomSettings")` instead of comparing

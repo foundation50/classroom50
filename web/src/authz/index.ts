@@ -19,6 +19,7 @@ export type {
 export {
   ROLE_RANK,
   sortRolesByRank,
+  isTeacherRole,
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
   isOwnerGitHubOrgRole,
@@ -36,4 +37,4 @@ export {
 
 // --- Capability policy (capabilities.ts) ------------------------------------
 export type { Capability, CapabilityInput } from "./capabilities"
-export { can, isTeacherRole } from "./capabilities"
+export { can } from "./capabilities"

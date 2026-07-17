@@ -1,5 +1,9 @@
 import { STAFF_ROLES } from "@/types/classroom"
-import { sortRolesByRank, type ClassroomRole } from "@/util/teamRoster"
+import {
+  sortRolesByRank,
+  isTeacherRole,
+  type ClassroomRole,
+} from "@/util/teamRoster"
 
 // Preflight classification for a CSV roster upload. Pure: given the uploaded
 // rows (each resolved to a username + intended role) and the classroom's CURRENT
@@ -196,7 +200,5 @@ export { memberIdentitySets } from "@/util/identity"
 export function hasTeacherPromotion(
   roleChanges: Extract<PreflightOutcome, { kind: "role_change" }>[],
 ): boolean {
-  return roleChanges.some(
-    (c) => c.role === "teacher" || c.role === "instructor",
-  )
+  return roleChanges.some((c) => isTeacherRole(c.role))
 }

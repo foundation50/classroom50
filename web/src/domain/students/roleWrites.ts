@@ -33,6 +33,7 @@ import {
 } from "@/util/rosterCsv"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { type ClassroomRole } from "@/util/teamRoster"
+import { isTeacherRole } from "@/authz"
 import { memberIdentitySets } from "@/util/identity"
 import {
   classifyRosterUpload,
@@ -264,9 +265,8 @@ export async function applyClassroomRoleChange(
     role === "student" ? slugs.student : slugs.staff[role]
 
   // Teacher (and its legacy `instructor` alias) is the org-owner role.
-  const wasTeacher =
-    fromRoles.includes("teacher") || fromRoles.includes("instructor")
-  const toIsTeacher = toRole === "teacher" || toRole === "instructor"
+  const wasTeacher = fromRoles.some(isTeacherRole)
+  const toIsTeacher = isTeacherRole(toRole)
   const demotesOwner = wasTeacher && !toIsTeacher
 
   // Guard the org-OWNER revocation before touching anything. Demoting yourself

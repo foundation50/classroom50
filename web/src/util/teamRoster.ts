@@ -6,6 +6,7 @@ import {
   type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
+  isTeacherRole,
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
 } from "@/authz"
@@ -18,6 +19,7 @@ export {
   type ClassroomRole,
   ROLE_RANK,
   sortRolesByRank,
+  isTeacherRole,
   githubOrgRoleForRole,
   roleForGitHubOrgRole,
 }

@@ -21,6 +21,7 @@ import {
 } from "@/github-core/errors"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
 import { ROLE_RANK, type ClassroomRole } from "@/util/teamRoster"
+import { isTeacherRole } from "@/authz"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/util/rosterCsv"
@@ -531,8 +532,7 @@ export async function resolveTeamIdByRole(
   }
   // A legacy `instructor` role in the batch resolves to the canonical teacher
   // team (both map to org-owner). Treat it as teacher for team provisioning.
-  const wantsTeacher =
-    rolesPresent.has("teacher") || rolesPresent.has("instructor")
+  const wantsTeacher = [...rolesPresent].some(isTeacherRole)
   for (const role of STAFF_ROLES) {
     if (role === "teacher" ? !wantsTeacher : !rolesPresent.has(role)) continue
     try {
