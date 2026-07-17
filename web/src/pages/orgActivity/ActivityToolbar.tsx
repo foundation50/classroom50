@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { Download, FileText, X } from "lucide-react"
+import { Download } from "lucide-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import type { TimelineSource, TimelineType } from "@/lib/activity/timeline"
@@ -106,7 +106,6 @@ export function ActivityToolbar({
 
       {hasActiveFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll}>
-          <X aria-hidden="true" className="size-4" />
           {t("orgActivity.clearFilters")}
         </Button>
       )}
@@ -122,7 +121,6 @@ export function ActivityToolbar({
           {t("orgActivity.exportCsv")}
         </Button>
         <Button variant="outline" size="sm" onClick={onShowDiagnostics}>
-          <FileText aria-hidden="true" className="size-4" />
           {t("orgActivity.showDiagnostics")}
         </Button>
       </Toolbar.Trailing>

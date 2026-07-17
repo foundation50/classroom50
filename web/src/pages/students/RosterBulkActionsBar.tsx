@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, Send, Upload, UserMinus, X, XCircle } from "lucide-react"
+import { Plus, Send, Upload, X } from "lucide-react"
 
 import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
@@ -465,7 +465,6 @@ const RosterBulkActionsBar = ({
                   }
                   onClick={() => setConfirmingCancel(true)}
                 >
-                  <XCircle aria-hidden="true" className="size-4" />
                   {t("students.bulk.cancelInvite")}
                 </Button>
                 <Button
@@ -480,7 +479,6 @@ const RosterBulkActionsBar = ({
                   })}
                   onClick={() => setConfirmingUnenroll(true)}
                 >
-                  <UserMinus aria-hidden="true" className="size-4" />
                   {t("students.bulk.unenroll")}
                 </Button>
               </div>

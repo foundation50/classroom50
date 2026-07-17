@@ -1,4 +1,3 @@
-import { X } from "lucide-react"
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -152,7 +151,6 @@ const SubmissionsControls = ({
 
       {hasActiveFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll}>
-          <X aria-hidden="true" className="size-4" />{" "}
           {t("submissions.filters.clear")}
         </Button>
       )}

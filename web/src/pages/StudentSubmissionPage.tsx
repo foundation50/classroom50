@@ -2,7 +2,6 @@ import { Link, useParams } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import {
   ExternalLink,
-  FileText,
   UserRound,
   UsersRound,
   CalendarClock,
@@ -60,7 +59,6 @@ const ReleaseRow = ({ release }: { release: GitHubRelease }) => {
           rel="noreferrer"
           className="shrink-0"
         >
-          <FileText aria-hidden="true" className="size-4" />
           {t("submissions.student.viewGrade")}
         </Button>
       ) : (

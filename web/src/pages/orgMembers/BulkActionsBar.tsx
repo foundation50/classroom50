@@ -1,6 +1,6 @@
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Plus, UserMinus, X } from "lucide-react"
+import { Plus, X } from "lucide-react"
 
 import { Alert, Button, Modal, Select, Toolbar } from "@/components/ui"
 import type { GitHubClient } from "@/github-core/client"
@@ -349,7 +349,6 @@ const BulkActionsBar = ({
                   })}
                   onClick={() => setConfirmingRemove(true)}
                 >
-                  <UserMinus aria-hidden="true" className="size-4" />
                   {t("orgMembers.bulk.remove")}
                 </Button>
               </div>

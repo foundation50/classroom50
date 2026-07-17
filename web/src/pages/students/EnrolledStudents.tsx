@@ -655,7 +655,6 @@ const EnrolledStudents = ({
                   disabled={rechecking}
                   onClick={onRecheckRoster}
                 >
-                  <RefreshCw aria-hidden="true" className="size-4" />
                   {t("students.rosterRecheck")}
                 </Button>
               </div>
@@ -909,7 +908,6 @@ const EnrolledStudents = ({
               {t("students.rosterLoadError")}
             </span>
             <Button variant="ghost" size="sm" onClick={() => refetchRoster()}>
-              <RefreshCw aria-hidden="true" className="size-4" />
               {t("students.rosterRetry")}
             </Button>
           </div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
-import { BarChart3, Info, LinkIcon, RefreshCw } from "lucide-react"
+import { Info, RefreshCw } from "lucide-react"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -745,7 +745,6 @@ const SubmissionsPageContent = () => {
               onClick={() => setMetricsOpen(true)}
               title={t("submissions.metrics.title")}
             >
-              <BarChart3 aria-hidden="true" className="size-4" />
               {t("submissions.menu.metrics")}
             </Button>
             <Button
@@ -754,7 +753,6 @@ const SubmissionsPageContent = () => {
               onClick={() => setAcceptOpen(true)}
               title={t("submissions.accept.heading")}
             >
-              <LinkIcon aria-hidden="true" className="size-4" />
               {t("submissions.menu.invite")}
             </Button>
             <SubmissionsActionsMenu

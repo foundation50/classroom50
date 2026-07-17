@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, ExternalLink, KeyRound } from "lucide-react"
+import { AlertTriangle, ExternalLink } from "lucide-react"
 
 import { REQUIRED_SCOPES } from "./scopes"
 import { Alert, Button, Input } from "@/components/ui"
@@ -121,9 +121,6 @@ export function GitHubPatPrompt({
           loading={isValidating}
           disabled={!trimmed || isValidating}
         >
-          {isValidating ? null : (
-            <KeyRound aria-hidden="true" className="size-4" />
-          )}
           {t("auth.patSubmit")}
         </Button>
 

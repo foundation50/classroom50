@@ -5,7 +5,7 @@ import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
 import { useDeleteClassroom } from "@/hooks/mutations/useDeleteClassroom"
 import { useForm } from "@tanstack/react-form"
 import { useNavigate, useParams } from "@tanstack/react-router"
-import { Archive, ArchiveRestore, Trash2 } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
@@ -128,17 +128,7 @@ const ArchiveClassroomButton = ({
           archived ? t("classes.unarchiveTitle") : t("classes.archiveTitle")
         }
       >
-        {archived ? (
-          <>
-            <ArchiveRestore aria-hidden="true" className="size-4" />{" "}
-            {t("classes.unarchive")}
-          </>
-        ) : (
-          <>
-            <Archive aria-hidden="true" className="size-4" />{" "}
-            {t("classes.archive")}
-          </>
-        )}
+        {archived ? <>{t("classes.unarchive")}</> : <>{t("classes.archive")}</>}
       </Button>
 
       <ConfirmModal

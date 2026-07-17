@@ -1,14 +1,6 @@
 import { useEffect, useId, useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  ExternalLink,
-  Pencil,
-  Send,
-  UserMinus,
-  UserPlus,
-  X,
-  XCircle,
-} from "lucide-react"
+import { ExternalLink, Send, UserPlus, X } from "lucide-react"
 
 import Avatar from "@/components/avatar"
 import GitHub from "@/assets/github.svg?react"
@@ -517,7 +509,6 @@ const RosterMemberModal = ({
                 disabled={busy}
                 onClick={() => setConfirmingResend(true)}
               >
-                <Send aria-hidden="true" className="size-4" />
                 {t("students.resend")}
               </Button>
             ) : null}
@@ -530,7 +521,6 @@ const RosterMemberModal = ({
                 disabled={busy}
                 onClick={() => setConfirmingCancel(true)}
               >
-                <XCircle aria-hidden="true" className="size-4" />
                 {t("students.cancelInvite")}
               </Button>
             ) : null}
@@ -543,7 +533,6 @@ const RosterMemberModal = ({
                 disabled={busy}
                 onClick={() => setConfirmingUnenroll(true)}
               >
-                <UserMinus aria-hidden="true" className="size-4" />
                 {t("students.remove")}
               </Button>
             ) : null}
@@ -829,10 +818,8 @@ const RosterMemberModal = ({
               <Button
                 variant="ghost"
                 size="xs"
-                className="gap-1"
                 onClick={() => setEditingProfile(true)}
               >
-                <Pencil aria-hidden="true" className="size-3.5" />
                 {t("common.edit")}
               </Button>
             ) : null}

@@ -1,4 +1,3 @@
-import { X } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button, Toolbar } from "@/components/ui"
@@ -80,7 +79,6 @@ const AssignmentsToolbar = ({
 
       {hasActiveFilter && (
         <Button variant="ghost" size="sm" onClick={clearAll}>
-          <X aria-hidden="true" className="size-4" />{" "}
           {t("assignments.toolbar.clear")}
         </Button>
       )}

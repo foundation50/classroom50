@@ -139,7 +139,6 @@ const EditAssignmentFormStudent = ({
               variant="primary"
               onClick={() => setCollaboratorsOpen(true)}
             >
-              <UsersRound aria-hidden="true" className="size-4" />
               {t("assignmentSettings.manageCollaborators")}
             </Button>
           </Card.Actions>

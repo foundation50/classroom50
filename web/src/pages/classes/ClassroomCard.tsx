@@ -497,7 +497,6 @@ function ViewAssignmentsButton({
       params={{ org, classroom: slug }}
       className={`btn btn-outline btn-primary btn-sm ${block ? "w-full" : ""}`}
     >
-      <BookText aria-hidden="true" className="size-4" />
       {t("classes.viewAssignments")}
     </Link>
   )

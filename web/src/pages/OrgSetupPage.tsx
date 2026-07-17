@@ -1,5 +1,5 @@
 import { useParams } from "@tanstack/react-router"
-import { ArrowLeft, ArrowRight, CheckCircle2, KeyRound } from "lucide-react"
+import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
 
@@ -134,7 +134,6 @@ const OrgSteps = ({
                 <ArrowRight aria-hidden="true" className="size-4 shrink-0" />
               </RouterButton>
               <Button variant="ghost" onClick={onManageToken}>
-                <KeyRound aria-hidden="true" className="size-4" />
                 {t("setup.manageServiceToken")}
               </Button>
             </div>
