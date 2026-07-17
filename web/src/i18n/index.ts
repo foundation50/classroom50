@@ -11,6 +11,7 @@ import {
   hydratePacks,
   refreshInstalledPacks,
 } from "./customLocale"
+import { applyDocumentDirection } from "./direction"
 
 // Single i18next instance. English is bundled as the base; custom packs are
 // registered at runtime (see customLocale.ts). No provider needed.
@@ -27,6 +28,17 @@ void i18n.use(initReactI18next).init({
   },
   returnNull: false,
 })
+
+// Keep <html dir>/<html lang> in step with the active language. Registered
+// before the changeLanguage chain below so every switch — startup activation,
+// deep links, and user selections — updates document direction. The explicit
+// call covers the case where the stored language is the init default ("en")
+// and no languageChanged event fires. Skipped without a DOM (node tests import
+// this module).
+if (typeof document !== "undefined") {
+  i18n.on("languageChanged", applyDocumentDirection)
+  applyDocumentDirection(i18n.language)
+}
 
 // Re-hydrate + re-validate installed packs, then apply the persisted choice.
 // Runs after init so addResourceBundle has an instance to attach to.

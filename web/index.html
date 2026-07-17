@@ -22,6 +22,20 @@
           document.documentElement.setAttribute("data-theme", theme)
         } catch (e) {}
       })()
+      // Anti-flash: apply the persisted language's direction before the app
+      // renders so RTL languages don't paint left-to-right first. The RTL
+      // subtag list mirrors RTL_LANGS in src/i18n/direction.ts — keep in sync.
+      ;(function () {
+        try {
+          var lang = localStorage.getItem("classroom50:lang")
+          if (!lang) return
+          document.documentElement.lang = lang
+          var primary = lang.toLowerCase().split("-")[0]
+          if (["ar", "he", "fa", "ur"].indexOf(primary) !== -1) {
+            document.documentElement.dir = "rtl"
+          }
+        } catch (e) {}
+      })()
     </script>
   </head>
   <body>
