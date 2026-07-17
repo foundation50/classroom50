@@ -278,7 +278,7 @@ export async function assertClassroomNotArchived(
   }
   if (isClassroomArchived(classroomJson)) {
     throw new Error(
-      `Classroom "${classroom}" is archived — changes are disabled. Unarchive it in Classroom Settings first.`,
+      `Classroom "${classroom}" is archived — changes are disabled. Unarchive it in Classroom settings first.`,
     )
   }
 }
