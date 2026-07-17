@@ -135,9 +135,9 @@ func FetchEntry(ctx context.Context, org, classroom, secret, assignment string) 
 	// scope.
 	if errors.Is(err, errManifestNotFound) {
 		if secret != "" {
-			return entry, fmt.Errorf("%w; the access key (--key) may be wrong — double-check the key your instructor gave you", err)
+			return entry, fmt.Errorf("%w; the access key (--key) may be wrong — double-check the key your teacher gave you", err)
 		}
-		return entry, fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your instructor gave you with `--key <key>`", err)
+		return entry, fmt.Errorf("%w; if this is an unlisted classroom, you must pass the access key your teacher gave you with `--key <key>`", err)
 	}
 	return entry, err
 }
@@ -155,12 +155,12 @@ func fetchEntryFromURL(ctx context.Context, rawURL, assignment string) (Entry, e
 	client := &http.Client{Timeout: PagesFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return Entry{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your instructor to verify `publish-pages.yaml` has run successfully)", rawURL, err)
+		return Entry{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your teacher to verify `publish-pages.yaml` has run successfully)", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return Entry{}, fmt.Errorf("%s returned 404 — the classroom may not exist yet, or `publish-pages.yaml` may not have run; ask your instructor to confirm the Pages site has deployed: %w", rawURL, errManifestNotFound)
+		return Entry{}, fmt.Errorf("%s returned 404 — the classroom may not exist yet, or `publish-pages.yaml` may not have run; ask your teacher to confirm the Pages site has deployed: %w", rawURL, errManifestNotFound)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return Entry{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
@@ -207,10 +207,10 @@ type NotFoundError struct {
 
 func (e *NotFoundError) Error() string {
 	if e.Org != "" && e.Classroom != "" {
-		return fmt.Sprintf("assignment %q is not registered in %s — ask your instructor to run `gh teacher assignment add %s %s %s`",
+		return fmt.Sprintf("assignment %q is not registered in %s — ask your teacher to run `gh teacher assignment add %s %s %s`",
 			e.Assignment, e.URL, e.Org, e.Classroom, e.Assignment)
 	}
-	return fmt.Sprintf("assignment %q is not registered in %s — ask your instructor to run `gh teacher assignment add`",
+	return fmt.Sprintf("assignment %q is not registered in %s — ask your teacher to run `gh teacher assignment add`",
 		e.Assignment, e.URL)
 }
 
@@ -251,12 +251,12 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	client := &http.Client{Timeout: PagesFetchTimeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your instructor to verify `publish-pages.yaml` has run successfully)", rawURL, err)
+		return AutogradeWorkflow{}, fmt.Errorf("GET %s: %w (the classroom50 Pages site may not be deployed yet — ask your teacher to verify `publish-pages.yaml` has run successfully)", rawURL, err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode == http.StatusNotFound {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404) — ask your instructor to confirm that file exists in the config repo and that `publish-pages.yaml` has run", name, rawURL)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q not published yet (%s returned 404) — ask your teacher to confirm that file exists in the config repo and that `publish-pages.yaml` has run", name, rawURL)
 	}
 	if resp.StatusCode != http.StatusOK {
 		return AutogradeWorkflow{}, fmt.Errorf("GET %s: unexpected status %d", rawURL, resp.StatusCode)
@@ -276,7 +276,7 @@ func fetchAutograderWorkflowFromURL(ctx context.Context, rawURL, name string) (A
 	// release asset, `classroom50/autograde` commit status).
 	var sink any
 	if err := yaml.Unmarshal(body, &sink); err != nil {
-		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your instructor to check the file in the config repo: %w", name, rawURL, err)
+		return AutogradeWorkflow{}, fmt.Errorf("autograder %q is malformed YAML (parsed from %s) — ask your teacher to check the file in the config repo: %w", name, rawURL, err)
 	}
 
 	return AutogradeWorkflow{Content: string(body)}, nil

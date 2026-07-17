@@ -30,7 +30,7 @@ Classroom 50 is a monorepo of independently built but co-shipped pieces:
 
 | Folder         | Stack                     | Role                                                       |
 | -------------- | ------------------------- | ---------------------------------------------------------- |
-| `cli/gh-teacher/` | Go (`gh` extension)    | Instructor CLI: org setup, classrooms, roster, autograding |
+| `cli/gh-teacher/` | Go (`gh` extension)    | Teacher CLI: org setup, classrooms, roster, autograding |
 | `cli/gh-student/` | Go (`gh` extension)    | Student CLI: accept, submit                                |
 | `cli/shared/`  | Go module                 | Shared contract constants and GitHub/Git/UI helpers        |
 | `web/`         | React + TypeScript + Vite | Teacher web app deployed to classroom50.org                |

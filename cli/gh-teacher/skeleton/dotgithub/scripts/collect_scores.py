@@ -1482,7 +1482,7 @@ def list_repo_collaborator_logins(
     `role_name == "admin"` here was a bug: a group teammate who is also an org
     owner (admin on every repo), or a founder kept as repo `admin` to invite
     teammates, is `admin` yet a legitimate student — the old filter dropped
-    them, crediting only the owner. Non-student instructors/TAs/org-owners are
+    them, crediting only the owner. Non-student teachers/TAs/org-owners are
     excluded downstream because they're not on the roster, so dropping the admin
     filter here loses no protection.
 
@@ -1536,7 +1536,7 @@ def group_member_usernames(
     sorted and deduped, owner guaranteed present. Crediting is gated on team
     membership, NOT collaborator permission: a teammate on the classroom team is
     credited whether push or admin (an org owner is admin everywhere; a founder
-    is kept admin to invite). A collaborator not on the team (instructor, TA,
+    is kept admin to invite). A collaborator not on the team (teacher, TA,
     non-student org owner, or an account added out-of-band) is never credited.
     Raises on the underlying HTTP/parse error so the caller can fall back to
     owner-only.

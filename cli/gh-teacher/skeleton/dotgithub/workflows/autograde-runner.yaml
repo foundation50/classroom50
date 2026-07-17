@@ -251,7 +251,7 @@ jobs:
               with get(manifest_url) as resp:
                   manifest = json.load(resp)
           except urllib.error.HTTPError as exc:
-              fail(f"GET {manifest_url}: HTTP {exc.code} — ask your instructor to confirm publish-pages.yaml has run")
+              fail(f"GET {manifest_url}: HTTP {exc.code} — ask your teacher to confirm publish-pages.yaml has run")
           except urllib.error.URLError as exc:
               fail(f"GET {manifest_url}: {exc.reason} — the Pages site may not be deployed yet")
 
@@ -263,7 +263,7 @@ jobs:
               None,
           )
           if entry is None:
-              fail(f"assignment {assignment!r} not registered in {manifest_url} — ask your instructor to run `gh teacher assignment add`")
+              fail(f"assignment {assignment!r} not registered in {manifest_url} — ask your teacher to run `gh teacher assignment add`")
 
           # empty_repo assignments never autograde — same predicate as
           # collect_scores.py / regrade_repos.py (is_empty_repo: strictly the

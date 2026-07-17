@@ -61,7 +61,7 @@ You've already accepted this assignment; the repo exists at `<org>/<classroom>-<
 
 1. **The template repo must be readable by the student.** A **public** template always works. A **private** template works if it lives **inside your org**: `gh teacher assignment add` grants the classroom's GitHub team (`classroom50-<classroom>`) read on it, and rostered students inherit that read. A private template **outside** your org can't be granted to the team, so `gh teacher assignment add` rejects it — if you registered one before this check existed, re-add the assignment with an in-org copy or a public template. (GitHub Enterprise Cloud's "internal" visibility also works.) If a student still 404s, confirm they're on the roster (so they're in the classroom team) — `gh teacher roster add` adds them.
 2. **The repo must be flagged as a template** in `Settings → General → Template repository`.
-3. **The `<assignment>` argument must match the slug your instructor registered** with `gh teacher assignment add` in `assignments.json` — case is normalized, but spelling has to be exact. It does not have to match the template repo's name.
+3. **The `<assignment>` argument must match the slug your teacher registered** with `gh teacher assignment add` in `assignments.json` — case is normalized, but spelling has to be exact. It does not have to match the template repo's name.
 
 ## "Could not find `.classroom50.yaml`" on `gh student submit`
 
@@ -71,12 +71,12 @@ You've already accepted this assignment; the repo exists at `<org>/<classroom>-<
 
 The assignment's `assignments.json` references an autograder workflow whose YAML isn't on the Pages site. Two common causes:
 
-1. **The file doesn't exist.** This error only fires for non-default `--autograder <name>` values. The `default` autograder is embedded in `gh-student` itself and never needs a config-repo file. For other names (e.g. `--autograder c-makefile`), the corresponding `<classroom>/autograders/<name>.yaml` must be hand-created in the config repo before the assignment is registered. Ask your instructor to confirm the file is there.
-2. **`publish-pages.yaml` hasn't run yet.** Even when the file exists in the config repo, the Pages site needs the publish workflow to deploy. A fresh classroom dir requires one Pages deployment to surface the autograders; ask your instructor to wait a minute and try again.
+1. **The file doesn't exist.** This error only fires for non-default `--autograder <name>` values. The `default` autograder is embedded in `gh-student` itself and never needs a config-repo file. For other names (e.g. `--autograder c-makefile`), the corresponding `<classroom>/autograders/<name>.yaml` must be hand-created in the config repo before the assignment is registered. Ask your teacher to confirm the file is there.
+2. **`publish-pages.yaml` hasn't run yet.** Even when the file exists in the config repo, the Pages site needs the publish workflow to deploy. A fresh classroom dir requires one Pages deployment to surface the autograders; ask your teacher to wait a minute and try again.
 
 ## "autograder `<name>` is malformed YAML" on `gh student accept`
 
-The instructor's autograder workflow has a YAML syntax error. `gh student` validates the fetched YAML before writing it into your repo, so a broken file never lands. Ask the instructor to check `<classroom>/autograders/<name>.yaml` in the config repo and re-run after they fix it.
+The teacher's autograder workflow has a YAML syntax error. `gh student` validates the fetched YAML before writing it into your repo, so a broken file never lands. Ask the teacher to check `<classroom>/autograders/<name>.yaml` in the config repo and re-run after they fix it.
 
 ## Submit pushed a commit but the teacher doesn't see new work
 

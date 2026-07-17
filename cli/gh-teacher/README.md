@@ -1,6 +1,6 @@
 # gh-teacher
 
-A `gh` CLI extension targeted at instructors. Written in Go using [`go-gh`](https://github.com/cli/go-gh) and [`cobra`](https://github.com/spf13/cobra).
+A `gh` CLI extension targeted at teachers. Written in Go using [`go-gh`](https://github.com/cli/go-gh) and [`cobra`](https://github.com/spf13/cobra).
 
 End-user documentation lives in the wiki — install, walkthrough, and full command reference:
 

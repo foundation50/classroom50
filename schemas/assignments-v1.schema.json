@@ -90,7 +90,7 @@
         },
         "feedback_pr": {
           "type": "boolean",
-          "description": "Opt the assignment into the Feedback Pull Request: the autograde runner opens one long-lived PR per student repo (base = a frozen branch at the baseline commit, head = the default branch) for inline instructor review of the full starter→submission diff. Product default is ON (both `gh teacher assignment add` and the GUI create it enabled). On the wire it is collapsed: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; the GUI may also write `false` explicitly, so accept both. Absent or false means the PR never opens."
+          "description": "Opt the assignment into the Feedback Pull Request: the autograde runner opens one long-lived PR per student repo (base = a frozen branch at the baseline commit, head = the default branch) for inline teacher review of the full starter→submission diff. Product default is ON (both `gh teacher assignment add` and the GUI create it enabled). On the wire it is collapsed: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; the GUI may also write `false` explicitly, so accept both. Absent or false means the PR never opens."
         },
         "empty_repo": {
           "type": "boolean",

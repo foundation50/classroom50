@@ -81,7 +81,7 @@ func acceptCmd() *cobra.Command {
 			"<org>/<classroom>-<assignment>-<username> (lowercased). The\n" +
 			"assignment is looked up in the published assignments.json on the\n" +
 			"classroom's GitHub Pages site (no token required).\n\n" +
-			"If the classroom uses an unlisted URL, your instructor will give\n" +
+			"If the classroom uses an unlisted URL, your teacher will give\n" +
 			"you an access key; pass it with `--key <key>`. The key is part\n" +
 			"of the published URL (`<classroom>/<key>/...`); without it the\n" +
 			"classroom's assignments can't be found. Normal classrooms need\n" +
@@ -190,7 +190,7 @@ func acceptCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&key, "key", "", "Access key for a classroom that uses an unlisted URL (provided by your instructor); omit for normal classrooms")
+	cmd.Flags().StringVar(&key, "key", "", "Access key for a classroom that uses an unlisted URL (provided by your teacher); omit for normal classrooms")
 	return cmd
 }
 
@@ -264,7 +264,7 @@ func checkAcceptableMode(assignment, mode string) error {
 // still reconcile even if a later-published entry drifted incoherent.
 func assertModeCoherentForCreate(assignment, mode string, maxGroupSize int) error {
 	if maxGroupSize > 0 && mode != contract.ModeGroup {
-		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your instructor to re-run `gh teacher assignment add`",
+		return fmt.Errorf("assignment %q has max_group_size %d but mode %q (want %q) — its published metadata is inconsistent; ask your teacher to re-run `gh teacher assignment add`",
 			assignment, maxGroupSize, mode, contract.ModeGroup)
 	}
 	return nil
@@ -305,7 +305,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// autograder shim — see the hasTemplate fork below.
 	hasTemplate := entry.HasTemplate()
 	if entry.Template != nil && !hasTemplate {
-		return fmt.Errorf("assignment %q has an incomplete template ref (owner=%q repo=%q branch=%q) — ask your instructor to re-run `gh teacher assignment add`",
+		return fmt.Errorf("assignment %q has an incomplete template ref (owner=%q repo=%q branch=%q) — ask your teacher to re-run `gh teacher assignment add`",
 			assignment, entry.Template.Owner, entry.Template.Repo, entry.Template.Branch)
 	}
 	// empty_repo and template are mutually exclusive at write time, but
@@ -314,7 +314,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 	// fork would generate starter content, then the bare fork would skip every
 	// control file — a templated repo the grading pipeline ignores).
 	if entry.EmptyRepo && entry.Template != nil {
-		return fmt.Errorf("assignment %q sets both empty_repo and a template — the entry is invalid; ask your instructor to re-run `gh teacher assignment add`", assignment)
+		return fmt.Errorf("assignment %q sets both empty_repo and a template — the entry is invalid; ask your teacher to re-run `gh teacher assignment add`", assignment)
 	}
 
 	// 2) Resolve the autograder shim. A non-default (Pages-fetched) autograder
@@ -360,7 +360,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		// is where control files land and what the shim must trigger on.
 		commitBranch = genBranch
 		// Resolve the template owner's immutable id best-effort so a rename
-		// of the template org/user doesn't break submit's instructor-file
+		// of the template org/user doesn't break submit's teacher-file
 		// re-fetch. A failed lookup is non-fatal — leave owner_id null.
 		templateOwnerID := lookupUserID(client, entry.Template.Owner)
 		if templateOwnerID == nil && verbose {
@@ -786,7 +786,7 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 					return created.HTMLURL, created.FullName, defaultBranchOrMain(created.DefaultBranch), true, nil
 				}
 			case http.StatusNotFound:
-				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your instructor to make it public or grant your account access",
+				return "", "", "", false, fmt.Errorf("template `%s/%s` is not accessible to you — ask your teacher to make it public or grant your account access",
 					tmpl.Owner, tmpl.Repo)
 			}
 		}
@@ -969,7 +969,7 @@ func verifyFounderPermission(client githubapi.Client, org, repoName, username, w
 	if permissionSatisfies(got.Permission, got.RoleName, want, isOwner) {
 		return nil
 	}
-	return fmt.Errorf("expected %s to have %q access on %s/%s after setup, but GitHub reports %q (role %q) — a repo creator holds admin and a self-downgrade may be blocked by org policy; ask your instructor to set your access to %q",
+	return fmt.Errorf("expected %s to have %q access on %s/%s after setup, but GitHub reports %q (role %q) — a repo creator holds admin and a self-downgrade may be blocked by org policy; ask your teacher to set your access to %q",
 		username, want, org, repoName, got.Permission, got.RoleName, want)
 }
 

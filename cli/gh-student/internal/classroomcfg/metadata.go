@@ -45,7 +45,7 @@ const SchemaRepoConfigV1 = "classroom50/repo-config/v1"
 
 // Config is the on-disk shape of `.classroom50.yaml`. classroom + assignment
 // identify the submission; source.* records the template repo so
-// `gh student submit` can re-fetch the latest instructor `.gitignore` /
+// `gh student submit` can re-fetch the latest teacher `.gitignore` /
 // `.github/` on each push. source is omitted for a template-less assignment.
 //
 // Secret is the optional capability-URL path segment, written here at accept so
@@ -75,7 +75,7 @@ type Identity struct {
 	AcceptedAt string `yaml:"accepted_at,omitempty"`
 }
 
-// Source is the source.* block (template repo). Submit reads instructor-side
+// Source is the source.* block (template repo). Submit reads teacher-side
 // `.gitignore` / `.github/` from here. Absent for a template-less assignment.
 // OwnerID is the template owner's immutable id (org or user), resolved
 // best-effort at accept time and null when the lookup failed.

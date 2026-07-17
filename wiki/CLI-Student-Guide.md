@@ -4,7 +4,7 @@ End-to-end walkthrough for students. Install the CLI first — see [Installation
 
 ## Before you start
 
-Your instructor must have already:
+Your teacher must have already:
 
 1. Set up a GitHub organization for the class.
 2. Registered the assignment (optionally with a template repo).
@@ -33,14 +33,14 @@ gh student accept <org> <classroom> <assignment>
 ![Demo: gh student accept](images/gh_student_accept.gif)
 
 - `<org>` — the GitHub org your class uses.
-- `<classroom>` — the classroom your instructor set up (e.g. `cs-principles`). Has to match a real classroom directory in your org's `classroom50` config repo.
-- `<assignment>` — the slug your instructor registered with `gh teacher assignment add` (e.g. `hello`).
+- `<classroom>` — the classroom your teacher set up (e.g. `cs-principles`). Has to match a real classroom directory in your org's `classroom50` config repo.
+- `<assignment>` — the slug your teacher registered with `gh teacher assignment add` (e.g. `hello`).
 
 What this command does:
 
 1. Auto-accepts any pending org invitation for your account.
-2. Looks up the assignment in the classroom's published manifest (`https://<org>.github.io/classroom50/<classroom>/assignments.json`). If the assignment has a template repo, that's used as the starter; the template may live in another org — your instructor's `gh teacher assignment add --template <owner>/<repo>` chose it. Some assignments are **template-less** (your instructor omitted `--template`) — those start from an empty repo.
-3. Resolves the autograder workflow shim. For the default autograder (the common case), the universal shim embedded in `gh-student` is used directly. For a non-default `--autograder <name>` your instructor registered, the shim is fetched from Pages (`https://<org>.github.io/classroom50/<classroom>/autograders/<name>.yaml`) — if that fetch fails, no half-baked repo is left behind.
+2. Looks up the assignment in the classroom's published manifest (`https://<org>.github.io/classroom50/<classroom>/assignments.json`). If the assignment has a template repo, that's used as the starter; the template may live in another org — your teacher's `gh teacher assignment add --template <owner>/<repo>` chose it. Some assignments are **template-less** (your teacher omitted `--template`) — those start from an empty repo.
+3. Resolves the autograder workflow shim. For the default autograder (the common case), the universal shim embedded in `gh-student` is used directly. For a non-default `--autograder <name>` your teacher registered, the shim is fetched from Pages (`https://<org>.github.io/classroom50/<classroom>/autograders/<name>.yaml`) — if that fetch fails, no half-baked repo is left behind.
 4. Creates a **private** repo at `<org>/<classroom>-<assignment>-<username>` (lowercased), with issues, projects, and wiki disabled. With a template it's a copy of that template; for a template-less assignment it's an empty repo (just the autograder shim — write your solution from scratch).
 5. Keeps you as an `admin` collaborator on the new repo (so a group founder can add teammates with `gh student invite`).
 6. Writes `.classroom50.yaml` and `.github/workflows/autograde.yaml` (the resolved shim) in a single commit. The metadata records the classroom and assignment (plus the template-repo identity when there is one); the runner derives everything else at workflow time.
@@ -50,12 +50,12 @@ If you've already accepted this assignment, the command short-circuits with `Ass
 
 **Errors you might see:**
 
-- _"the classroom may not exist yet, or `publish-pages.yaml` may not have run"_ — your instructor hasn't completed the classroom setup yet, or the Pages site hasn't deployed. Wait a few minutes and try again, or ask your instructor to confirm.
-- _"assignment X is not registered in ..."_ — typo, or your instructor hasn't run `gh teacher assignment add` yet for this assignment.
-- _"autograder `<name>` not published yet"_ — the assignment references an autograder workflow whose YAML isn't on the Pages site. Ask your instructor to confirm `<classroom>/autograders/<name>.yaml` exists in the config repo and that `publish-pages.yaml` has run.
+- _"the classroom may not exist yet, or `publish-pages.yaml` may not have run"_ — your teacher hasn't completed the classroom setup yet, or the Pages site hasn't deployed. Wait a few minutes and try again, or ask your teacher to confirm.
+- _"assignment X is not registered in ..."_ — typo, or your teacher hasn't run `gh teacher assignment add` yet for this assignment.
+- _"autograder `<name>` not published yet"_ — the assignment references an autograder workflow whose YAML isn't on the Pages site. Ask your teacher to confirm `<classroom>/autograders/<name>.yaml` exists in the config repo and that `publish-pages.yaml` has run.
 - _"autograder `<name>` is malformed YAML"_ — the teacher's autograder workflow has a YAML syntax error. Ask them to fix the file in the config repo before retrying.
-- _"template `<owner>/<repo>` is not accessible to you"_ — the template repo is private and not shared with you; ask your instructor to make it public or grant your account access.
-- _"assignment `<X>` has unsupported mode `<mode>`"_ — the assignment's `mode` in the manifest is neither `individual` nor `group` (likely a hand-edited `assignments.json`). Ask your instructor to fix it. (Both `individual` and `group` assignments accept normally — see the group-assignment note below.)
+- _"template `<owner>/<repo>` is not accessible to you"_ — the template repo is private and not shared with you; ask your teacher to make it public or grant your account access.
+- _"assignment `<X>` has unsupported mode `<mode>`"_ — the assignment's `mode` in the manifest is neither `individual` nor `group` (likely a hand-edited `assignments.json`). Ask your teacher to fix it. (Both `individual` and `group` assignments accept normally — see the group-assignment note below.)
 
 ## 3. Clone and work
 
@@ -71,7 +71,7 @@ That adds them with `push` permission.
 
 ### Group assignments
 
-If your instructor registered the assignment with `--mode group`, teammates share **one** repo instead of each getting their own:
+If your teacher registered the assignment with `--mode group`, teammates share **one** repo instead of each getting their own:
 
 1. **One teammate accepts first.** Whoever runs `gh student accept <org> <classroom> <assignment>` first creates the shared repo, named after them (`<classroom>-<assignment>-<their-username>`). They become the repo's **admin**.
 2. **That same teammate adds the others** — the founder (not the joiners) runs, once per teammate:
@@ -80,7 +80,7 @@ If your instructor registered the assignment with `--mode group`, teammates shar
 gh student invite <org>/<repo> <teammate-username>
 ```
 
-`<repo>` is the shared repo (`<classroom>-<assignment>-<founder-username>`). Each teammate is added with `push` permission and receives a GitHub invitation to accept. Only the repo's admin (the founder) can add collaborators, which is why joins are founder-driven — a plain org member can't see or modify a teammate's private repo. Keep the group within the size your instructor set (the CLI doesn't hard-enforce the cap on `invite`, so coordinate within your group).
+`<repo>` is the shared repo (`<classroom>-<assignment>-<founder-username>`). Each teammate is added with `push` permission and receives a GitHub invitation to accept. Only the repo's admin (the founder) can add collaborators, which is why joins are founder-driven — a plain org member can't see or modify a teammate's private repo. Keep the group within the size your teacher set (the CLI doesn't hard-enforce the cap on `invite`, so coordinate within your group).
 
 The whole group works in the one repo and submits from it like any other assignment (below). At grading time everyone on the roster who is a collaborator on the repo is credited with the same score.
 
@@ -96,7 +96,7 @@ gh student submit
 
 `gh student submit` snapshots your current branch and pushes it as a new commit on top of `main`. The autograde workflow runs automatically on the push: it tags the commit with `submit/<UTC-timestamp>-<short-sha>`, runs the autograder, and publishes a GitHub Release with your score a minute or two later.
 
-You can also `git push` directly — the result is identical. `gh student submit` exists mainly to refresh the instructor's `.gitignore` and `.github/` from the assignment template before pushing, so any teacher-side updates flow through. (For a template-less assignment there's no template to refresh from, so submit just commits and pushes.)
+You can also `git push` directly — the result is identical. `gh student submit` exists mainly to refresh the teacher's `.gitignore` and `.github/` from the assignment template before pushing, so any teacher-side updates flow through. (For a template-less assignment there's no template to refresh from, so submit just commits and pushes.)
 
 When submit finishes, two URLs are printed:
 

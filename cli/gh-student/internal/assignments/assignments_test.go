@@ -127,7 +127,7 @@ func TestFetchAutograderWorkflow_404SurfacesActionableGuidance(t *testing.T) {
 
 func TestFetchAutograderWorkflow_RejectsMalformedYAML(t *testing.T) {
 	// Malformed YAML must fail at fetch time, before landing in the student
-	// repo. The error is the signal the student forwards to the instructor.
+	// repo. The error is the signal the student forwards to the teacher.
 	server, cleanup := newAutograderServer(t, "name: Autograde\non: { invalid: [\n", http.StatusOK)
 	defer cleanup()
 

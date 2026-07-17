@@ -44,7 +44,7 @@ func NewCmd() *cobra.Command {
 			"creates its own `submit/<UTC-timestamp>-<short-sha>` tag at the\n" +
 			"pushed commit and (b) publishes a scored Release at that tag a\n" +
 			"minute or two later.\n\n" +
-			"Before snapshotting, the latest instructor `.gitignore` and\n" +
+			"Before snapshotting, the latest teacher `.gitignore` and\n" +
 			"`.github/` (both optional) are fetched from the template repo\n" +
 			"recorded in `.classroom50.yaml` so any teacher-side updates\n" +
 			"flow through. The autograder workflow shim itself is set\n" +
@@ -165,7 +165,7 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 	if config.Source != nil {
 		if verbose {
-			u.Detail("Fetching latest instructor .gitignore and .github from %s/%s@%s",
+			u.Detail("Fetching latest teacher .gitignore and .github from %s/%s@%s",
 				config.Source.Owner,
 				config.Source.Repo,
 				config.Source.Branch,
@@ -174,17 +174,17 @@ func submitAssignment(ctx context.Context, client githubapi.Client, verbose bool
 
 		if err := fetchRepoPath(client, workTree, config.Source.Owner, config.Source.Repo, config.Source.Branch, ".gitignore"); err != nil {
 			if !classroomcfg.IsHTTPNotFound(err) {
-				return fmt.Errorf("fetch instructor .gitignore: %w", err)
+				return fmt.Errorf("fetch teacher .gitignore: %w", err)
 			}
 		}
 		if err := fetchRepoPath(client, workTree, config.Source.Owner, config.Source.Repo, config.Source.Branch, ".github"); err != nil {
 			if !classroomcfg.IsHTTPNotFound(err) {
-				return fmt.Errorf("fetch instructor .github: %w", err)
+				return fmt.Errorf("fetch teacher .github: %w", err)
 			}
 		}
 	} else if verbose {
 		// Template-less assignment: no source repo to refresh from.
-		u.Detail("No template source recorded; skipping instructor .gitignore/.github refresh")
+		u.Detail("No template source recorded; skipping teacher .gitignore/.github refresh")
 	}
 
 	// The push (clone history + commit + push) is the slowest step, so drive a

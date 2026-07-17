@@ -51,7 +51,7 @@
       "type": "object",
       "required": ["owner"],
       "additionalProperties": true,
-      "description": "Template repo coordinates so `gh student submit` can re-fetch instructor files. Absent for a template-less assignment.",
+      "description": "Template repo coordinates so `gh student submit` can re-fetch teacher files. Absent for a template-less assignment.",
       "properties": {
         "owner": {
           "type": "string",

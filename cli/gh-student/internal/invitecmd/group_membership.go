@@ -16,7 +16,7 @@ import (
 // listGroupMemberLogins returns the logins of student-level collaborators on
 // org/repo, walking pagination. The repo `owner` (founder) is always kept even
 // though they are repo `admin` (the org lockdown keeps them admin so they can
-// manage collaborators). Every *other* admin — org owner, instructors, any
+// manage collaborators). Every *other* admin — org owner, teachers, any
 // admin-granted TA — is excluded so they don't consume student slots against
 // max_group_size (push collaborators count; the founder and added teammates
 // count, a non-founder admin does not).
@@ -58,7 +58,7 @@ func listGroupMemberLogins(ctx context.Context, client githubapi.Client, org, re
 			return nil, fmt.Errorf("GET %s: decode body: %w", path, decodeErr)
 		}
 		for _, c := range batch {
-			// Exclude admins (org owners, admin-granted instructors/TAs) so
+			// Exclude admins (org owners, admin-granted teachers/TAs) so
 			// they don't count toward the student group limit — but keep the
 			// founder, who is admin on their own repo.
 			if strings.EqualFold(c.RoleName, "admin") && !strings.EqualFold(c.Login, owner) {
@@ -106,7 +106,7 @@ func checkGroupSizeBeforeInvite(ctx context.Context, client githubapi.Client, or
 		}
 	}
 	if len(members) >= maxGroupSize {
-		return fmt.Errorf("group is full: %s/%s already has %d member(s), at the max of %d for this assignment — ask your instructor to raise --max-group-size if you need more",
+		return fmt.Errorf("group is full: %s/%s already has %d member(s), at the max of %d for this assignment — ask your teacher to raise --max-group-size if you need more",
 			org, repo, len(members), maxGroupSize)
 	}
 	return nil
