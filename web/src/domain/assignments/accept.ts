@@ -131,6 +131,42 @@ type AcceptAssignmentResult = {
   cloneCommand: string
 }
 
+// The tracked "access" step: patch the repo surface + grant the founder role
+// (both idempotent upserts). Throws on failure so the checklist surfaces the
+// recovery guidance — shared by the templated setup path and the bare-accept
+// fresh-create path so that recovery copy lives in one place.
+function grantFounderAccessStep(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  username: string
+  mode: AssignmentMode
+  isOwner: boolean
+  onStepUpdate?: OnAcceptStepUpdate
+}) {
+  const { client, org, repo, username, mode, isOwner, onStepUpdate } = params
+  return withAcceptStep(
+    {
+      id: "access",
+      label: "Granting you access to your repository",
+      actions: `Your repository ${org}/${repo} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
+      doneMessage: "Granted you access to your repository",
+      onStepUpdate,
+    },
+    async () => {
+      await patchRepoSurface(client, org, repo)
+      await addFounderCollaborator({
+        client,
+        owner: org,
+        repo,
+        username,
+        permission: founderPermission(mode),
+        isOwner,
+      })
+    },
+  )
+}
+
 // Provision (or heal) a just-created student repo — grant the founder role,
 // land the control files. Idempotent, so safe to re-run mid-flow.
 async function provisionAcceptedRepo(params: {
@@ -160,26 +196,15 @@ async function provisionAcceptedRepo(params: {
     onStepUpdate,
   } = params
 
-  await withAcceptStep(
-    {
-      id: "access",
-      label: "Granting you access to your repository",
-      actions: `Your repository ${org}/${repo.name} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
-      doneMessage: "Granted you access to your repository",
-      onStepUpdate,
-    },
-    async () => {
-      await patchRepoSurface(client, org, repo.name)
-      await addFounderCollaborator({
-        client,
-        owner: org,
-        repo: repo.name,
-        username,
-        permission: founderPermission(mode),
-        isOwner,
-      })
-    },
-  )
+  await grantFounderAccessStep({
+    client,
+    org,
+    repo: repo.name,
+    username,
+    mode,
+    isOwner,
+    onStepUpdate,
+  })
 
   // Land the metadata + autograde shim, retrying through GitHub's post-generate
   // git-data lag (see commitAcceptFilesWithFreshRepoRetry).
@@ -414,26 +439,15 @@ export async function acceptAssignment(params: {
       // Fresh create: the grant hard-fails (an un-granted repo is a broken
       // accept the student can't push to), inside the throwing step so the
       // checklist surfaces the error and its recovery guidance.
-      await withAcceptStep(
-        {
-          id: "access",
-          label: "Granting you access to your repository",
-          actions: `Your repository ${org}/${created.repo.name} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
-          doneMessage: "Granted you access to your repository",
-          onStepUpdate,
-        },
-        async () => {
-          await patchRepoSurface(client, org, created.repo.name)
-          await addFounderCollaborator({
-            client,
-            owner: org,
-            repo: created.repo.name,
-            username,
-            permission: founderPermission(assignment.mode),
-            isOwner,
-          })
-        },
-      )
+      await grantFounderAccessStep({
+        client,
+        org,
+        repo: created.repo.name,
+        username,
+        mode: assignment.mode,
+        isOwner,
+        onStepUpdate,
+      })
     }
     onStepUpdate?.({
       id: "setup",
