@@ -36,9 +36,11 @@ export const createClassroomMetadata = (
   // Written only when a team was provisioned (matches the CLI's `omitempty`).
   // Grants rostered students read on private org templates.
   ...(team ? { team } : {}),
-  // Per-classroom staff teams (instructor/ta) backing in-app roles. Written only
-  // when provisioned.
-  ...(teams && (teams.instructor || teams.ta) ? { teams } : {}),
+  // Per-classroom staff teams (teacher/ta) backing in-app roles. Written only
+  // when provisioned. `instructor` is the legacy alias of teacher.
+  ...(teams && (teams.teacher || teams.instructor || teams.ta)
+    ? { teams }
+    : {}),
   // Written only when the teacher opted into protected resources (CLI
   // `omitempty`). When present, Pages resources publish under
   // `<classroom>/<secret>/...`.

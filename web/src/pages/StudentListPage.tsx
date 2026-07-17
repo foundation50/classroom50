@@ -66,7 +66,7 @@ const StudentListContent = ({
   // Per-role breakdown badges after the member total; each shown only when the
   // class has at least one enrolled member in that role.
   const showStudentCount = roleCounts.student > 0
-  const showInstructorCount = roleCounts.instructor > 0
+  const showTeacherCount = roleCounts.teacher > 0
   const showTaCount = roleCounts.ta > 0
 
   return (
@@ -93,10 +93,10 @@ const StudentListContent = ({
                     })}
                   </Badge>
                 ) : null}
-                {showInstructorCount ? (
-                  <Badge tone={ROLE_BADGE_TONE.instructor} className="shrink-0">
+                {showTeacherCount ? (
+                  <Badge tone={ROLE_BADGE_TONE.teacher} className="shrink-0">
                     {t("students.teacherCount", {
-                      count: roleCounts.instructor,
+                      count: roleCounts.teacher,
                     })}
                   </Badge>
                 ) : null}

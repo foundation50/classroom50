@@ -105,10 +105,10 @@ describe("assertClassroomNotArchived", () => {
   })
 })
 
-// createClassroomFiles provisions three secret teams (students, instructor, ta).
+// createClassroomFiles provisions three secret teams (students, teacher, ta).
 // GitHub auto-adds the authenticated creator as a maintainer of every team it
 // creates, so the flow must drop the creator from the students + ta teams
-// (leaving them only on instructor) — else the team-driven roster counts the
+// (leaving them only on teacher) — else the team-driven roster counts the
 // owner as an enrolled student/TA. These tests route client.request by
 // path+method, record the membership DELETEs, and assert exactly which teams the
 // creator is removed from.
@@ -173,7 +173,7 @@ describe("createClassroomFiles creator team cleanup", () => {
         if (method === "PATCH" && path.includes("/git/refs/heads/")) {
           return { object: { sha: "new-commit-sha" } }
         }
-        // Repo-grant PUT, instructor membership PUT, and anything else.
+        // Repo-grant PUT, teacher membership PUT, and anything else.
         return undefined
       },
     )
@@ -187,7 +187,7 @@ describe("createClassroomFiles creator team cleanup", () => {
     creator: "prof",
   }
 
-  it("removes the creator from the students and ta teams but never instructor", async () => {
+  it("removes the creator from the students and ta teams but never teacher", async () => {
     const deleted: string[] = []
     const client = routingClient({ onDelete: (p) => deleted.push(p) })
 
@@ -200,7 +200,7 @@ describe("createClassroomFiles creator team cleanup", () => {
       "/orgs/acme/teams/classroom50-cs101-ta/memberships/prof",
     )
     expect(deleted).not.toContain(
-      "/orgs/acme/teams/classroom50-cs101-instructor/memberships/prof",
+      "/orgs/acme/teams/classroom50-cs101-teacher/memberships/prof",
     )
   })
 
