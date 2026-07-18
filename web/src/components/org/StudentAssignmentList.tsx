@@ -170,11 +170,9 @@ function AssignmentCard({
       className="col-span-12 border border-base-200 md:col-span-6"
     >
       <Card.Body className="gap-3">
-        <div className="flex items-start justify-between gap-2">
-          <h3 className="truncate text-base font-semibold">
-            {assignment.name || assignment.slug}
-          </h3>
-        </div>
+        <h3 className="min-w-0 truncate text-base font-semibold">
+          {assignment.name || assignment.slug}
+        </h3>
         <div className="flex flex-wrap items-center gap-2">
           {!accepted && <NotAcceptedBadge />}
           <ModeBadge mode={assignment.mode} />
@@ -205,11 +203,9 @@ function AssignmentListItem({
   return (
     <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-200 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 flex-col gap-1.5">
-        <div className="flex min-w-0 items-center gap-2">
-          <h3 className="truncate text-base font-semibold">
-            {assignment.name || assignment.slug}
-          </h3>
-        </div>
+        <h3 className="min-w-0 truncate text-base font-semibold">
+          {assignment.name || assignment.slug}
+        </h3>
         <div className="flex flex-wrap items-center gap-2">
           {!accepted && <NotAcceptedBadge />}
           <ModeBadge mode={assignment.mode} />

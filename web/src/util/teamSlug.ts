@@ -66,13 +66,9 @@ export function parseClassroomTeamSlug(
 export function parseStudentClassroomSlug(
   slug: string,
 ): { classroom: string } | null {
-  const prefix = `${CONFIG_REPO}-`
-  if (!slug.startsWith(prefix)) return null
   // A staff slug is not a student team — let parseClassroomTeamSlug own those.
   if (parseClassroomTeamSlug(slug)) return null
-  const classroom = slug.slice(prefix.length)
-  if (classroom.length === 0) return null
-  return { classroom }
+  return parseBareClassroomSlug(slug)
 }
 
 // Extract the whole post-prefix segment as the classroom, WITHOUT the staff-role

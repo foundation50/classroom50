@@ -1,3 +1,4 @@
+import { useMemo } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useGithubAuth } from "@/auth/useGithubAuth"
@@ -54,49 +55,53 @@ export function useStudentClassrooms(
   // Dedup by classroom: a TA or teacher previewing as a student may hold both a
   // student and a staff team for the same classroom. The student team is the
   // authoritative source for the bootstrap description (staff teams carry none),
-  // so prefer its record when merging.
-  const byClassroom = new Map<string, StudentClassroom>()
-  for (const team of teamsQuery.data ?? []) {
-    if (team.organization.login !== org) continue
-    const student = parseStudentClassroomSlug(team.slug)
-    const staff = parseClassroomTeamSlug(team.slug)
-    // A slug like `classroom50-ml-ta` is ambiguous: the STUDENT team of a
-    // role-suffixed classroom (`ml-ta`) is byte-identical to the TA team of
-    // classroom `ml`. The bootstrap description disambiguates — only a student
-    // team carries a classroom50/team/v1 record (staff teams get none). So a
-    // slug that parses as staff but carries a valid record is really the student
-    // team of the role-suffixed classroom: its classroom is the whole
-    // post-prefix slug (`ml-ta`), and we lift its name/term/secret. Trust the
-    // record over the staff parse.
-    const desc = parseTeamDescription(team.description)
-    const bareStudent = parseBareClassroomSlug(team.slug)
-    const isStudentByRecord =
-      Boolean(staff) && desc.schema !== undefined && Boolean(bareStudent)
-    const classroom = isStudentByRecord
-      ? bareStudent!.classroom
-      : (student?.classroom ?? staff?.classroom)
-    if (!classroom) continue
+  // so prefer its record when merging. Memoized on the query data + org so the
+  // per-team zod parse and the returned array reference are stable across
+  // renders (an unstable reference would defeat useStudentClassroomSummaries'
+  // downstream memo).
+  const classrooms = useMemo<StudentClassroom[]>(() => {
+    const byClassroom = new Map<string, StudentClassroom>()
+    for (const team of teamsQuery.data ?? []) {
+      if (team.organization.login !== org) continue
+      const student = parseStudentClassroomSlug(team.slug)
+      const staff = parseClassroomTeamSlug(team.slug)
+      // A slug like `classroom50-ml-ta` is ambiguous: the STUDENT team of a
+      // role-suffixed classroom (`ml-ta`) is byte-identical to the TA team of
+      // classroom `ml`. The bootstrap description disambiguates — only a student
+      // team carries a classroom50/team/v1 record (staff teams get none). So a
+      // slug that parses as staff but carries a valid record is really the student
+      // team of the role-suffixed classroom: its classroom is the whole
+      // post-prefix slug (`ml-ta`), and we lift its name/term/secret. Trust the
+      // record over the staff parse.
+      const desc = parseTeamDescription(team.description)
+      const bareStudent = parseBareClassroomSlug(team.slug)
+      const isStudentByRecord =
+        Boolean(staff) && desc.schema !== undefined && Boolean(bareStudent)
+      const classroom = isStudentByRecord
+        ? bareStudent!.classroom
+        : (student?.classroom ?? staff?.classroom)
+      if (!classroom) continue
 
-    const existing = byClassroom.get(classroom)
-    if (student || isStudentByRecord) {
-      // Student team: authoritative for the bootstrap record.
-      byClassroom.set(classroom, {
-        classroom,
-        name: desc.name,
-        term: desc.term,
-        active: desc.active,
-        secret: desc.secret,
-      })
-    } else if (!existing) {
-      // Staff-only membership (no student team seen yet): record the classroom
-      // so it still appears; a later student team overwrites with its record.
-      byClassroom.set(classroom, { classroom })
+      const existing = byClassroom.get(classroom)
+      if (student || isStudentByRecord) {
+        // Student team: authoritative for the bootstrap record.
+        byClassroom.set(classroom, {
+          classroom,
+          name: desc.name,
+          term: desc.term,
+          active: desc.active,
+          secret: desc.secret,
+        })
+      } else if (!existing) {
+        // Staff-only membership (no student team seen yet): record the classroom
+        // so it still appears; a later student team overwrites with its record.
+        byClassroom.set(classroom, { classroom })
+      }
     }
-  }
-
-  const classrooms = Array.from(byClassroom.values()).sort((a, b) =>
-    (a.name ?? a.classroom).localeCompare(b.name ?? b.classroom),
-  )
+    return Array.from(byClassroom.values()).sort((a, b) =>
+      (a.name ?? a.classroom).localeCompare(b.name ?? b.classroom),
+    )
+  }, [teamsQuery.data, org])
 
   const roleResolved = Boolean(org) && teamsQuery.isSuccess
   const isLoading = !roleResolved && teamsQuery.fetchStatus === "fetching"
