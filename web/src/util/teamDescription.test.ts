@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest"
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { marshalTeamDescription, parseTeamDescription } from "./teamDescription"
 
 describe("parseTeamDescription", () => {
@@ -115,4 +117,44 @@ describe("marshalTeamDescription", () => {
       secret: "a1b2c3d4",
     })
   })
+
+  it("HTML-escapes <, >, & to match Go's json.Marshal (byte-identical contract)", () => {
+    // Go's json.Marshal escapes these by default; JSON.stringify does not.
+    // Without matching, the CLI and web would perpetually rewrite each other's
+    // description for a classroom whose name/term contains them.
+    const out = marshalTeamDescription({ name: "C++ & <Data>", active: true })
+    expect(out).toContain("\\u0026")
+    expect(out).toContain("\\u003c")
+    expect(out).toContain("\\u003e")
+    expect(out).not.toMatch(/[<>&]/)
+    // Still valid JSON that parses back to the original name.
+    expect(parseTeamDescription(out).name).toBe("C++ & <Data>")
+  })
+})
+
+// Cross-language byte-identity: the same golden cases the Go
+// MarshalTeamDescription asserts (cli/gh-teacher/internal/configrepo/
+// teamdescription_test.go). A drift on either side fails here — the web
+// reconcile compares exact strings, so divergence causes perpetual rewrites.
+describe("marshalTeamDescription — shared fixture parity", () => {
+  const fixtureUrl = new URL(
+    "../../../cli/shared/testdata/team_description_cases.json",
+    import.meta.url,
+  )
+  const doc = JSON.parse(readFileSync(fileURLToPath(fixtureUrl), "utf8")) as {
+    cases: {
+      input: { name?: string; term?: string; secret?: string; active: boolean }
+      encoded: string
+    }[]
+  }
+
+  it("has cases", () => {
+    expect(doc.cases.length).toBeGreaterThan(0)
+  })
+
+  for (const [i, c] of doc.cases.entries()) {
+    it(`case ${i} encodes byte-identically to the Go writer`, () => {
+      expect(marshalTeamDescription(c.input)).toBe(c.encoded)
+    })
+  }
 })

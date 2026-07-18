@@ -62,5 +62,13 @@ export function marshalTeamDescription(input: {
   if (input.term) record.term = input.term
   if (input.secret && isValidSecret(input.secret)) record.secret = input.secret
   if (!input.active) record.active = false
+  // Match Go's json.Marshal, which HTML-escapes <, >, & by default (no
+  // SetEscapeHTML(false) on the CLI writer). JSON.stringify does NOT escape
+  // these, so without this the two tools would produce different bytes for a
+  // name/term containing them and perpetually overwrite each other's
+  // description (the reconcile compares strings for exact equality).
   return JSON.stringify(record)
+    .replace(/</g, "\\u003c")
+    .replace(/>/g, "\\u003e")
+    .replace(/&/g, "\\u0026")
 }

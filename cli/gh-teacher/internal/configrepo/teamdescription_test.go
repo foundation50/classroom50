@@ -2,6 +2,8 @@ package configrepo
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
@@ -91,4 +93,47 @@ func TestMarshalTeamDescription(t *testing.T) {
 			t.Errorf("encoded description is %d chars, want <= 250: %q", len(got), got)
 		}
 	})
+}
+
+// sharedTeamDescriptionCasesPath locates the cross-language golden fixture, also
+// consumed by the TS mirror (web/src/util/teamDescription.test.ts).
+const sharedTeamDescriptionCasesPath = "../../../shared/testdata/team_description_cases.json"
+
+// TestMarshalTeamDescription_SharedFixtureParity pins the Go encoding to the
+// shared golden bytes so the Go writer and the TS marshalTeamDescription can't
+// drift: a one-sided edit (e.g. HTML-escaping) fails on the other language's
+// copy of these same cases. Byte-identity matters because the web reconcile
+// compares the current description to the desired string for exact equality —
+// any divergence makes the CLI and web perpetually overwrite each other.
+func TestMarshalTeamDescription_SharedFixtureParity(t *testing.T) {
+	raw, err := os.ReadFile(filepath.Clean(sharedTeamDescriptionCasesPath))
+	if err != nil {
+		t.Fatalf("read shared fixture: %v", err)
+	}
+	var doc struct {
+		Cases []struct {
+			Input struct {
+				Name   string `json:"name"`
+				Term   string `json:"term"`
+				Secret string `json:"secret"`
+				Active bool   `json:"active"`
+			} `json:"input"`
+			Encoded string `json:"encoded"`
+		} `json:"cases"`
+	}
+	if err := json.Unmarshal(raw, &doc); err != nil {
+		t.Fatalf("parse shared fixture: %v", err)
+	}
+	if len(doc.Cases) == 0 {
+		t.Fatal("shared fixture has no cases")
+	}
+	for _, c := range doc.Cases {
+		got, err := MarshalTeamDescription(c.Input.Name, c.Input.Term, c.Input.Secret, c.Input.Active)
+		if err != nil {
+			t.Fatalf("MarshalTeamDescription(%+v): %v", c.Input, err)
+		}
+		if got != c.Encoded {
+			t.Errorf("MarshalTeamDescription(%+v) = %q, want %q (cross-language drift — update every copy in lockstep)", c.Input, got, c.Encoded)
+		}
+	}
 }

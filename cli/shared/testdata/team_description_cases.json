@@ -1,0 +1,21 @@
+{
+  "comment": "Cross-language golden cases for the classroom50/team/v1 team-description encoding. Both the Go MarshalTeamDescription (cli/gh-teacher/internal/configrepo) and the TS marshalTeamDescription (web/src/util/teamDescription.ts) must produce the `encoded` bytes verbatim for each `input`, so a student reading the description and the two writers never disagree. Go's json.Marshal HTML-escapes < > & by default; the TS side matches. Update every copy in lockstep.",
+  "cases": [
+    {
+      "input": { "name": "Intro CS", "term": "Fall 2026", "secret": "a1b2c3d4", "active": true },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"Intro CS\",\"term\":\"Fall 2026\",\"secret\":\"a1b2c3d4\"}"
+    },
+    {
+      "input": { "name": "CS", "term": "", "secret": "", "active": true },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\"}"
+    },
+    {
+      "input": { "name": "CS", "term": "", "secret": "", "active": false },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"CS\",\"active\":false}"
+    },
+    {
+      "input": { "name": "C++ & <Data>", "term": "", "secret": "", "active": true },
+      "encoded": "{\"schema\":\"classroom50/team/v1\",\"name\":\"C++ \\u0026 \\u003cData\\u003e\"}"
+    }
+  ]
+}
