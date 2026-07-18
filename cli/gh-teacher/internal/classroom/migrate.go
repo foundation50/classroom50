@@ -217,8 +217,15 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	migration := classroomMigratedFromFromDetail(plan.Classroom, plan.MigratedAt)
 
 	// Create (or adopt) the per-classroom team so its ref lands in
-	// classroom.json, same as `classroom add`.
-	team, err := configrepo.EnsureClassroomTeam(client, plan.TargetOrg, plan.ShortName)
+	// classroom.json, same as `classroom add`. Its description carries the
+	// classroom50/team/v1 bootstrap record so students can enumerate the
+	// classroom without config-repo access. Migrated classrooms get a plain
+	// (listed) URL — no secret — so the description omits it.
+	teamDesc, err := configrepo.MarshalTeamDescription(plan.Classroom.Name, plan.Term, "", true)
+	if err != nil {
+		return err
+	}
+	team, err := configrepo.EnsureClassroomTeam(client, plan.TargetOrg, plan.ShortName, teamDesc)
 	if err != nil {
 		return fmt.Errorf("create classroom team: %w", err)
 	}

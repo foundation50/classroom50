@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/foundation50/classroom50/main/schemas/classroom-team-v1.schema.json",
+  "title": "classroom50/team/v1",
+  "description": "Compact bootstrap record stored in the DESCRIPTION of a classroom's `secret` student team (`classroom50-<short_name>`). Written by the teacher tooling (gh teacher classroom add/migrate) so a plain org member — who cannot read the private config repo — can enumerate their classrooms and, for an unlisted classroom, extract the capability secret needed to fetch published Pages resources. Readable only by team members and org owners (the team is secret), so the secret is not exposed beyond the classroom's own members. additionalProperties is true so a field a newer binary adds survives a reader verbatim (tolerate AND preserve). Keep the encoded JSON small (well under ~250 chars): per-assignment data stays on Pages, never here.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": ["schema"],
+  "properties": {
+    "schema": { "const": "classroom50/team/v1" },
+    "name": {
+      "type": "string",
+      "description": "Human-readable classroom name, so a student's classrooms list renders a friendly title without a Pages round-trip. Omitted when empty."
+    },
+    "term": {
+      "type": "string",
+      "description": "Free-form term label (e.g. \"Fall 2026\"). Omitted when empty."
+    },
+    "active": {
+      "type": "boolean",
+      "description": "Classroom lifecycle flag mirrored from classroom.json: false = archived, true or ABSENT = active. Omitted when true (the default) to save bytes."
+    },
+    "secret": {
+      "type": "string",
+      "pattern": "^[a-z0-9]{4,64}$",
+      "description": "Capability-URL access key, present only for an unlisted classroom (mirrors classroom.json.secret). Lets a member fetch this classroom's published Pages resources at the unguessable `<classroom>/<secret>/...` path before accepting any assignment. Obscurity, not access control. Omitted for a listed classroom."
+    }
+  }
+}

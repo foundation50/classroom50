@@ -203,8 +203,15 @@ func addClassroom(client githubapi.Client, out, errOut io.Writer, org, shortName
 
 	// Create (or adopt) the per-classroom team before scaffolding so its
 	// id/slug can be recorded in classroom.json. This team later lets rostered
-	// students read private org-owned templates.
-	team, err := configrepo.EnsureClassroomTeam(client, org, shortName)
+	// students read private org-owned templates. Its description carries the
+	// classroom50/team/v1 bootstrap record so a plain student can enumerate
+	// their classrooms (and read the capability secret) without config-repo
+	// access — safe because the team is secret.
+	teamDesc, err := configrepo.MarshalTeamDescription(name, term, secret, true)
+	if err != nil {
+		return err
+	}
+	team, err := configrepo.EnsureClassroomTeam(client, org, shortName, teamDesc)
 	if err != nil {
 		return fmt.Errorf("create classroom team: %w", err)
 	}

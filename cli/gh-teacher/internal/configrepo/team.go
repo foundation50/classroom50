@@ -156,15 +156,21 @@ func CanonicalTeamSlugShortName(shortName string) bool {
 // rostered students read on private org-owned templates so `student accept`
 // can generate their repo.
 //
+// `description` is the classroom50/team/v1 bootstrap record (see
+// MarshalTeamDescription) written into the team so a plain student can
+// enumerate their classrooms and read the capability secret without config-repo
+// access. Safe because the team is `secret` (members + owners only). Pass ""
+// to leave the description unset.
+//
 // `members_can_create_teams: false` (init's lockdown) doesn't block this — the
 // teacher authenticates as an org owner.
-func EnsureClassroomTeam(client githubapi.Client, org, shortName string) (TeamRef, error) {
+func EnsureClassroomTeam(client githubapi.Client, org, shortName, description string) (TeamRef, error) {
 	// Guard the slug==name invariant (see CanonicalTeamSlugShortName):
 	// ShortNamePattern alone permits hyphens GitHub would slugify away.
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
-	return ensureSecretTeamByName(client, org, classroomTeamName(shortName))
+	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description)
 }
 
 // EnsureClassroomStaffTeam creates (or adopts) the per-classroom STAFF team for
@@ -174,7 +180,9 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking staff membership and config-repo grants)", shortName)
 	}
-	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role))
+	// Staff teams carry no bootstrap description: staff read the authoritative
+	// classroom.json directly, and the secret belongs only on the student team.
+	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role), "")
 }
 
 // EnsureStaffTeams creates (or adopts) both staff teams (teacher, ta) and
@@ -203,15 +211,21 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 
 // ensureSecretTeamByName creates a `secret` GitHub team named `name`,
 // adopting an existing team of the same name rather than failing. `name` is a
-// canonical short-name-derived value, so its slug equals the name.
+// canonical short-name-derived value, so its slug equals the name. A non-empty
+// `description` is written on create AND reconciled on adopt so a rotated
+// secret / renamed classroom propagates to the student-facing record.
 //
 // `members_can_create_teams: false` (init's lockdown) doesn't block this — the
 // teacher authenticates as an org owner.
-func ensureSecretTeamByName(client githubapi.Client, org, name string) (TeamRef, error) {
-	body, err := json.Marshal(map[string]any{
+func ensureSecretTeamByName(client githubapi.Client, org, name, description string) (TeamRef, error) {
+	teamBody := map[string]any{
 		"name":    name,
 		"privacy": "secret",
-	})
+	}
+	if description != "" {
+		teamBody["description"] = description
+	}
+	body, err := json.Marshal(teamBody)
 	if err != nil {
 		return TeamRef{}, fmt.Errorf("encode team body: %w", err)
 	}
@@ -219,11 +233,11 @@ func ensureSecretTeamByName(client githubapi.Client, org, name string) (TeamRef,
 	var created TeamRef
 	if err := client.Post(createPath, bytes.NewReader(body), &created); err != nil {
 		// 422 = a team with this name already exists. Adopt it in place
-		// (read id/slug, ensure privacy `secret`) so a re-run reconciles. If
-		// the adopt read 404s, the 422 wasn't a name collision — surface the
-		// original create error.
+		// (read id/slug, ensure privacy `secret`, reconcile description) so a
+		// re-run reconciles. If the adopt read 404s, the 422 wasn't a name
+		// collision — surface the original create error.
 		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			adopted, adoptErr := adoptSecretTeamByName(client, org, name)
+			adopted, adoptErr := adoptSecretTeamByName(client, org, name, description)
 			if adoptErr != nil {
 				if cliutil.IsHTTPStatus(adoptErr, http.StatusNotFound) {
 					return TeamRef{}, fmt.Errorf("POST %s: %w", createPath, err)
@@ -239,27 +253,40 @@ func ensureSecretTeamByName(client githubapi.Client, org, name string) (TeamRef,
 
 // adoptSecretTeamByName reads an existing team by slug (== name, given the
 // canonical short-name guard) and reconciles its privacy to `secret` (an older
-// or hand-created team might be `closed`). Used on the 422 already-exists path.
-func adoptSecretTeamByName(client githubapi.Client, org, name string) (TeamRef, error) {
+// or hand-created team might be `closed`) and, when `description` is non-empty
+// and differs, its description. Used on the 422 already-exists path.
+func adoptSecretTeamByName(client githubapi.Client, org, name, description string) (TeamRef, error) {
 	slug := name
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var existing struct {
-		ID      int64  `json:"id"`
-		Slug    string `json:"slug"`
-		Privacy string `json:"privacy"`
+		ID          int64  `json:"id"`
+		Slug        string `json:"slug"`
+		Privacy     string `json:"privacy"`
+		Description string `json:"description"`
 	}
 	if err := client.Get(getPath, &existing); err != nil {
 		return TeamRef{}, fmt.Errorf("GET %s (adopting existing team): %w", getPath, err)
 	}
-	if existing.Privacy != "secret" {
-		body, err := json.Marshal(map[string]any{"privacy": "secret"})
+	// Reconcile privacy and (for the student team) the bootstrap description in
+	// one PATCH when either drifts from the desired state.
+	needPrivacy := existing.Privacy != "secret"
+	needDescription := description != "" && existing.Description != description
+	if needPrivacy || needDescription {
+		patch := map[string]any{}
+		if needPrivacy {
+			patch["privacy"] = "secret"
+		}
+		if needDescription {
+			patch["description"] = description
+		}
+		body, err := json.Marshal(patch)
 		if err != nil {
 			return TeamRef{}, fmt.Errorf("encode team patch: %w", err)
 		}
 		patchPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(existing.Slug))
 		resp, err := client.Request(http.MethodPatch, patchPath, bytes.NewReader(body))
 		if err != nil {
-			return TeamRef{}, fmt.Errorf("PATCH %s (set privacy secret): %w", patchPath, err)
+			return TeamRef{}, fmt.Errorf("PATCH %s (reconcile team): %w", patchPath, err)
 		}
 		defer func() { _ = resp.Body.Close() }()
 		_, _ = io.Copy(io.Discard, resp.Body)

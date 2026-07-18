@@ -25,6 +25,7 @@ func TestContractLiterals(t *testing.T) {
 	}{
 		{"ConfigRepoName", ConfigRepoName, "classroom50"},
 		{"AssignmentsSchemaV1", AssignmentsSchemaV1, "classroom50/assignments/v1"},
+		{"TeamSchemaV1", TeamSchemaV1, "classroom50/team/v1"},
 		{"DefaultAutograderName", DefaultAutograderName, "default"},
 		{"ModeIndividual", ModeIndividual, "individual"},
 		{"ModeGroup", ModeGroup, "group"},

@@ -27,6 +27,14 @@ const (
 	// AssignmentsSchemaV1 is the schema sentinel for <classroom>/assignments.json.
 	AssignmentsSchemaV1 = "classroom50/assignments/v1"
 
+	// TeamSchemaV1 is the schema sentinel for the bootstrap JSON stored in a
+	// classroom's secret student-team description (`classroom50-<short>`). Lets a
+	// plain org member enumerate their classrooms and read the capability secret
+	// without config-repo access. Mirrored in schemas/classroom-team-v1.schema.json
+	// and the web reader (web/src/util/teamDescription.ts) with NO compile-time
+	// link — keep byte-identical; contract_test.go pins the Go half.
+	TeamSchemaV1 = "classroom50/team/v1"
+
 	// DefaultAutograderName is the universal-shim autograder name; resolves to
 	// the shim embedded in gh-student, not a per-classroom override.
 	DefaultAutograderName = "default"
