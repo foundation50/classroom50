@@ -613,6 +613,18 @@
     "studentHeading": "Classroom assignments",
     "studentViewAll_prefix": "View all assignments for the",
     "studentViewAll_suffix": "classroom.",
+    "discover": {
+      "accept": "Accept assignment",
+      "accepted": "Accepted",
+      "viewSubmission": "View my submission",
+      "modeIndividual": "Individual",
+      "modeGroup": "Group",
+      "due": "Due {{date}}",
+      "noDue": "No due date",
+      "emptyTitle": "No assignments yet",
+      "emptyBody": "When a teacher publishes assignments for this classroom, they'll appear here.",
+      "protectedNoSecret": "This classroom's assignments open from the invite link your teacher shared. Open that link to accept and see them here."
+    },
     "newButton": {
       "assignment": "Assignment",
       "moreOptions": "More assignment options",

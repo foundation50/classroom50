@@ -29,7 +29,7 @@ import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
 import { roleLabelKey, can } from "@/authz"
 import { isClassroomArchived } from "@/types/classroom"
-import { OrgRepos } from "@/components/org/OrgRepos"
+import StudentAssignmentList from "@/components/org/StudentAssignmentList"
 
 // Split button: primary "Assignment" creates; the caret reveals "Reuse
 // assignment", pulling one from another classroom into this one.
@@ -248,7 +248,7 @@ const StudentAssignmentsView = ({
           </>
         }
       />
-      <OrgRepos org={org} classroom={classroom} />
+      <StudentAssignmentList org={org} classroom={classroom} />
     </div>
   )
 }
