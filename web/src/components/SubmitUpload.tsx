@@ -12,7 +12,11 @@ import {
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSubmitAssignment } from "@/hooks/mutations/useSubmitAssignment"
-import { normalizeRepoPath, type UploadFile } from "@/domain/assignments"
+import {
+  normalizeRepoPath,
+  isReservedUploadPath,
+  type UploadFile,
+} from "@/domain/assignments"
 
 // A picked file plus a stable key for the list (path can repeat across picks
 // until dedup; the key disambiguates React rows).
@@ -24,12 +28,9 @@ const formatBytes = (n: number): string => {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`
 }
 
-// Web upload submission. A page button opens a modal; inside, the student drops
-// or browses files, sees them in a table (name/path + size + remove), adds or
-// removes files, then uploads. Upload commits the files as a snapshot on the
-// assignment repo's default branch (via useSubmitAssignment), which triggers
-// autograding when configured. Replace-all semantics — the confirm copy makes it
-// explicit — with .github/** and .classroom50.yaml preserved by the domain layer.
+// Web upload submission: a button opens a modal where the student picks files
+// and uploads them. Replace-all semantics (the confirm copy makes it explicit)
+// with .github/** and .classroom50.yaml preserved by the domain layer.
 export function SubmitUpload({
   org,
   repo,
@@ -71,9 +72,9 @@ export function SubmitUpload({
           })
           continue
         }
-        // A control path can't be uploaded — the domain layer preserves the real
-        // one; accepting it here would only be ignored, so reject up front.
-        if (path === ".classroom50.yaml" || path.startsWith(".github/")) {
+        // Reject reserved control paths (.github/**, .classroom50.yaml): the
+        // domain preserves the real ones, so an upload here would be ignored.
+        if (isReservedUploadPath(path)) {
           notify({
             tone: "warning",
             message: t("submissions.student.upload.reservedPath", { path }),

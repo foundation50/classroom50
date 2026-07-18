@@ -12,9 +12,11 @@ import {
   getBranchRefRepo,
   getCommitByRepo,
   withFreshRepoRetry,
+  REPO_READ_CONCURRENCY,
 } from "@/github-core/queries"
 import { prefixCommit } from "@/util/commit"
 import { fileToBase64 } from "@/util/fileBytes"
+import { mapWithConcurrency } from "@/util/concurrency"
 
 // A file the student picked, with its repo-relative path. `path` is the drop's
 // relative path (or the bare name) — POSIX-normalized by the caller.
@@ -23,12 +25,11 @@ export type UploadFile = {
   file: File
 }
 
-// Paths carried over verbatim from the current tree into a replace-all snapshot.
-// The autograde workflow (.github/**) MUST survive — without it the push doesn't
-// grade — and .classroom50.yaml is the control marker the runner reads. Anything
-// else the student previously had is dropped (a full snapshot, matching the
-// submit model the teacher chose).
-const isPreservedPath = (path: string): boolean =>
+// Control paths the runner owns: the autograde workflow (.github/**) and the
+// .classroom50.yaml marker. On a submit they are carried over from the current
+// tree and an upload may not overwrite them — losing .github/** would silently
+// break grading. Shared with the UI so both layers reject/preserve the same set.
+export const isReservedUploadPath = (path: string): boolean =>
   path === ".classroom50.yaml" ||
   path === ".github" ||
   path.startsWith(".github/")
@@ -39,18 +40,14 @@ export type SubmitAssignmentResult = {
   fileCount: number
 }
 
-// Commit the uploaded files as a snapshot on the student repo's default branch —
-// the browser equivalent of `gh student submit`. A push to the default branch is
-// what triggers autograding (the runner then tags submit/* and publishes the
-// scored release), and a user-OAuth-token commit fires on:push normally, so no
-// tag/release is created here.
+// Commit the uploaded files as a replace-all snapshot on the student repo's
+// default branch — the browser equivalent of `gh student submit`. The push
+// (authored with the user's OAuth token) fires on:push and triggers autograding.
 //
-// Snapshot semantics (replace-all): the new tree is AUTHORITATIVE (built without
-// base_tree), so only the uploaded files plus the preserved control paths
-// (.github/**, .classroom50.yaml) remain — prior submission files not re-uploaded
-// are dropped. The whole read→build→commit→update runs inside withFreshRepoRetry
-// to ride out transient git-data lag; a truncated tree read aborts rather than
-// build a partial (destructive) snapshot.
+// The new tree is AUTHORITATIVE (no base_tree), so prior files not re-uploaded
+// are dropped; the runner's control paths (.github/**, .classroom50.yaml) are
+// carried over so grading keeps working. A truncated tree read aborts here — see
+// getRepoTreeRecursive for why a partial read is destructive.
 export async function submitAssignment(params: {
   client: GitHubClient
   org: string
@@ -64,11 +61,18 @@ export async function submitAssignment(params: {
     throw new Error("No files selected to submit.")
   }
 
-  // Encode file bytes once, outside the retry loop — the blobs are re-POSTed per
-  // attempt but the (potentially large) base64 conversion shouldn't repeat.
+  // Normalize + dedupe uploaded paths (last pick wins) and reject reserved
+  // control paths — the domain owns this invariant, not the UI. Encode bytes
+  // once here, outside the retry loop, so the (large) base64 work never repeats.
+  const byPath = new Map<string, UploadFile>()
+  for (const f of files) {
+    const path = normalizeRepoPath(f.path)
+    if (isReservedUploadPath(path)) continue
+    byPath.set(path, { path, file: f.file })
+  }
   const encoded = await Promise.all(
-    files.map(async (f) => ({
-      path: normalizeRepoPath(f.path),
+    Array.from(byPath.values(), async (f) => ({
+      path: f.path,
       base64: await fileToBase64(f.file),
     })),
   )
@@ -91,9 +95,9 @@ export async function submitAssignment(params: {
       )
     }
 
-    // Carry over the preserved control paths by their existing blob SHAs. Refuse
-    // a truncated listing: building an authoritative tree from a partial read
-    // would silently drop the autograde workflow (breaking grading).
+    // Read the current tree so the runner's control paths carry over. Refuse a
+    // truncated listing: an authoritative tree built from a partial read would
+    // silently drop the autograde workflow (breaking grading).
     const existing = await getRepoTreeRecursive({
       client,
       owner: org,
@@ -105,17 +109,18 @@ export async function submitAssignment(params: {
         "Your repository is too large to submit from the browser — use `gh student submit` from the CLI instead.",
       )
     }
+    // Carry over the control paths by their existing blob SHAs.
     const preserved: GitHubTreeEntryFull[] = existing.tree.filter(
-      (e) => e.type === "blob" && isPreservedPath(e.path),
+      (e) => e.type === "blob" && isReservedUploadPath(e.path),
     )
 
-    // Upload the picked files as base64 blobs, then reference them by SHA. An
-    // uploaded path that collides with a preserved control path is ignored on
-    // the preserved side (the upload wins) — but control paths are hidden from
-    // the picker, so this is defense-in-depth.
-    const uploadedPaths = new Set(encoded.map((e) => e.path))
-    const uploadedEntries: GitHubTreeEntryFull[] = await Promise.all(
-      encoded.map(async (e) => {
+    // Upload the picked files as base64 blobs, then reference them by SHA. Bound
+    // the fan-out at REPO_READ_CONCURRENCY so a large submit stays under GitHub's
+    // secondary-rate-limit threshold (and a retry doesn't re-burst).
+    const uploadedEntries = await mapWithConcurrency(
+      encoded,
+      REPO_READ_CONCURRENCY,
+      async (e): Promise<GitHubTreeEntryFull> => {
         const blob = await createBlobForRepo({
           client,
           owner: org,
@@ -130,13 +135,12 @@ export async function submitAssignment(params: {
           type: "blob" as const,
           sha: blob.sha,
         }
-      }),
+      },
     )
 
-    const tree = [
-      ...uploadedEntries,
-      ...preserved.filter((e) => !uploadedPaths.has(e.path)),
-    ]
+    // Reserved paths were filtered out of `encoded`, so preserved control paths
+    // can't collide with an upload — carry them all through unconditionally.
+    const tree = [...uploadedEntries, ...preserved]
 
     const newTree = await createTreeFromFullEntries({
       client,

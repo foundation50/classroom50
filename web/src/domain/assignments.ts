@@ -51,6 +51,7 @@ export { acceptAssignment } from "./assignments/accept"
 export {
   submitAssignment,
   normalizeRepoPath,
+  isReservedUploadPath,
   type UploadFile,
   type SubmitAssignmentResult,
 } from "./assignments/submit"

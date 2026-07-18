@@ -1,4 +1,4 @@
-import { useId, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 import { Upload } from "lucide-react"
 
 import { Button } from "./Button"
@@ -99,6 +99,17 @@ export function FileDropzone({
   const [dragActive, setDragActive] = useState(false)
   const inputId = useId()
 
+  // A folder drop's entry traversal is async and can outlive this node (modal
+  // closed, or the component unmounted by a parent re-render). Gate the trailing
+  // onFiles on liveness so a late resolve can't push files onto a torn-down zone.
+  const alive = useRef(true)
+  useEffect(() => {
+    alive.current = true
+    return () => {
+      alive.current = false
+    }
+  }, [])
+
   // Flat picker / drop with no directory structure: path is the bare name (or
   // webkitRelativePath when the browser supplies one).
   const emitFlat = (list: FileList | null) => {
@@ -137,7 +148,7 @@ export function FileDropzone({
       return
     }
     const collected = (await Promise.all(entries.map(collectEntry))).flat()
-    if (collected.length > 0) onFiles(collected)
+    if (alive.current && collected.length > 0) onFiles(collected)
   }
 
   const openPicker = () => {

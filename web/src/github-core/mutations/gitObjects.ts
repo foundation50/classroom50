@@ -437,24 +437,19 @@ export async function getRepoTreeRecursive(params: {
   )
 }
 
-// Create a tree in an arbitrary repo from explicit entries. Omitting base_tree
-// makes the tree AUTHORITATIVE — only the listed paths exist, so a replace-all
-// snapshot drops prior files not carried over (the submit semantics). Pass a
-// base_tree for an additive update instead.
+// Create an AUTHORITATIVE tree in an arbitrary repo from explicit entries.
+// Omitting base_tree means only the listed paths exist, so a replace-all
+// snapshot drops prior files not carried over (the submit semantics).
 export async function createTreeFromFullEntries(params: {
   client: GitHubClient
   owner: string
   repo: string
   tree: GitHubTreeEntryFull[]
-  baseTreeSha?: string
 }) {
-  const { client, owner, repo, tree, baseTreeSha } = params
+  const { client, owner, repo, tree } = params
   return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {
     method: "POST",
-    body: {
-      ...(baseTreeSha ? { base_tree: baseTreeSha } : {}),
-      tree,
-    },
+    body: { tree },
   })
 }
 

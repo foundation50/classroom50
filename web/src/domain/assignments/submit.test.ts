@@ -166,9 +166,10 @@ describe("submitAssignment", () => {
     expect(created.updatedRef?.branch).toBe("master")
   })
 
-  it("lets an uploaded file override a same-path preserved entry (upload wins)", async () => {
-    // Defense-in-depth: a .github path can't be picked in the UI, but if it were,
-    // the uploaded blob must not be duplicated by the preserved carry-over.
+  it("drops an uploaded reserved path and preserves the real control blob (domain-enforced)", async () => {
+    // The domain owns the "don't overwrite control paths" invariant, not the UI:
+    // an uploaded .github/** path is dropped, and the existing workflow blob is
+    // carried over by its own SHA — never uploaded, never duplicated.
     const { client, created } = makeClient({
       defaultBranch: "main",
       existingTree: [blob(".github/workflows/autograde.yaml", "wf-sha")],
@@ -178,12 +179,34 @@ describe("submitAssignment", () => {
       org: "acme",
       repo: "r",
       assignment: "hw",
-      files: [upload(".github/workflows/autograde.yaml")],
+      files: [upload(".github/workflows/autograde.yaml"), upload("main.py")],
     })
+    // No blob was created for the reserved path — only main.py was uploaded.
+    expect(created.blobs).toHaveLength(1)
     const wf = created.tree?.paths.filter(
       (p) => p === ".github/workflows/autograde.yaml",
     )
     expect(wf).toHaveLength(1)
+  })
+
+  it("rejects a bare `.github` upload so it can't collide with the workflow dir", async () => {
+    // `.github` (a file) would otherwise clash with the preserved `.github/`
+    // tree in one authoritative tree — git can't have both, so the submit would
+    // fail. The domain drops the reserved upload up front.
+    const { client, created } = makeClient({
+      defaultBranch: "main",
+      existingTree: [blob(".github/workflows/autograde.yaml", "wf-sha")],
+    })
+    await submitAssignment({
+      client,
+      org: "acme",
+      repo: "r",
+      assignment: "hw",
+      files: [upload(".github"), upload("main.py")],
+    })
+    expect(created.tree?.paths).not.toContain(".github")
+    expect(created.tree?.paths).toContain(".github/workflows/autograde.yaml")
+    expect(created.tree?.paths).toContain("main.py")
   })
 
   it("refuses to build a snapshot from a truncated tree read (would drop the workflow)", async () => {
