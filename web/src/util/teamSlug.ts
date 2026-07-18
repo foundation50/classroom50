@@ -55,3 +55,22 @@ export function parseClassroomTeamSlug(
   }
   return null
 }
+
+// Inverse of classroomTeamSlug for the STUDENT team: parse a bare
+// `classroom50-<classroom>` slug (no role suffix) back to its classroom, else
+// null. Used to enumerate a student's classrooms from GET /user/teams without
+// reading the config repo. Deliberately the complement of parseClassroomTeamSlug
+// (staff-only): a slug ending in a known staff-role suffix returns null here so
+// a staff team is never mistaken for a student membership. `classroom50` alone
+// (no classroom segment) returns null.
+export function parseStudentClassroomSlug(
+  slug: string,
+): { classroom: string } | null {
+  const prefix = `${CONFIG_REPO}-`
+  if (!slug.startsWith(prefix)) return null
+  // A staff slug is not a student team — let parseClassroomTeamSlug own those.
+  if (parseClassroomTeamSlug(slug)) return null
+  const classroom = slug.slice(prefix.length)
+  if (classroom.length === 0) return null
+  return { classroom }
+}
