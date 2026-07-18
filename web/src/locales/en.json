@@ -1412,6 +1412,23 @@
       "emptyTitle": "No assignment repos yet",
       "emptyBody": "Repositories you can write to will appear here once assignments have been created for this organization."
     },
+    "student": {
+      "emptyTitle": "No classrooms yet",
+      "emptyBody": "When a teacher adds you to a classroom, it will show up here.",
+      "toolbar": {
+        "searchPlaceholder": "Search classrooms…",
+        "searchLabel": "Search your classrooms",
+        "sort": {
+          "nameAsc": "Name (A–Z)",
+          "accepted": "Accepted assignments"
+        }
+      },
+      "card": {
+        "noneAccepted": "No assignments accepted yet",
+        "acceptedCount_one": "{{count}} assignment accepted",
+        "acceptedCount_other": "{{count}} assignments accepted"
+      }
+    },
     "form": {
       "basicInfo": "Basic information",
       "name": "Classroom name",

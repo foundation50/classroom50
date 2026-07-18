@@ -17,7 +17,8 @@ import useGetOwnOrgMembership from "@/hooks/useGetOwnOrgMembership"
 import { useAcceptPendingOrgInvite } from "@/hooks/mutations/useAcceptPendingOrgInvite"
 import OrgPreflightNotice from "@/pages/orgSettings/OrgPreflightNotice"
 import ClassroomList from "@/pages/classes/ClassroomList"
-import { OrgRepos } from "@/components/org/OrgRepos"
+import StudentClassroomList from "@/pages/classes/StudentClassroomList"
+import { useStudentClassroomSummaries } from "@/hooks/useStudentClassroomSummaries"
 
 const CreateClassroomPane = ({ org }: { org: string }) => {
   const { t } = useTranslation()
@@ -98,6 +99,13 @@ const JoinOrgCard = ({ org }: { org: string }) => {
   )
 }
 
+const StudentClasses = ({ org }: { org: string }) => {
+  const { summaries, isLoading } = useStudentClassroomSummaries(org)
+  return (
+    <StudentClassroomList org={org} summaries={summaries} loading={isLoading} />
+  )
+}
+
 const ClassesPage = () => {
   const { t } = useTranslation()
   useDocumentTitle(t("documentTitle.classes"))
@@ -146,7 +154,7 @@ const ClassesPage = () => {
           {isStaff && classes.length > 0 && (
             <ClassroomList org={org} dirs={classes} />
           )}
-          {isNonStaff && isMember && <OrgRepos org={org} />}
+          {isNonStaff && isMember && <StudentClasses org={org} />}
         </>
       )}
     </PageShell>
