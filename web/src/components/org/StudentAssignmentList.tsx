@@ -3,7 +3,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   CalendarClock,
-  CheckCircle2,
+  CircleAlert,
   FilePlus2,
   UserRound,
   UsersRound,
@@ -25,7 +25,12 @@ import {
   type StudentAssignmentSort,
 } from "@/components/org/studentAssignmentFilters"
 import { studentRepoName } from "@/util/studentRepo"
-import { formatDueDateTime, isPastDue } from "@/util/formatDate"
+import {
+  dueDeadlineInstant,
+  formatDueDateTime,
+  formatRelativeToNow,
+  isPastDue,
+} from "@/util/formatDate"
 import type { Assignment } from "@/types/classroom"
 
 // Resolve the classroom's capability secret for a student, config-free: the
@@ -62,6 +67,12 @@ function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
 function DueBadge({ due }: { due?: string }) {
   const { t } = useTranslation()
   const overdue = due ? isPastDue(due) : false
+  // Relative countdown ("in 3 days" / "2 hours ago") next to the absolute date,
+  // reusing the same helper the teacher submissions dashboard uses so the two
+  // agree on bare-date deadline semantics (end-of-local-day).
+  const relative = due
+    ? formatRelativeToNow(dueDeadlineInstant(due) ?? new Date(due))
+    : null
   return (
     <Badge
       tone={overdue ? "error" : "neutral"}
@@ -69,9 +80,14 @@ function DueBadge({ due }: { due?: string }) {
       className="gap-1"
     >
       <CalendarClock aria-hidden="true" className="size-3.5" />
-      {due
-        ? t("assignments.discover.due", { date: formatDueDateTime(due) })
-        : t("assignments.discover.noDue")}
+      {due ? (
+        <>
+          {t("assignments.discover.due", { date: formatDueDateTime(due) })}
+          {relative ? ` (${relative})` : ""}
+        </>
+      ) : (
+        t("assignments.discover.noDue")
+      )}
     </Badge>
   )
 }
@@ -117,12 +133,14 @@ function AssignmentCta({
   )
 }
 
-function AcceptedBadge() {
+// Shown only for a not-yet-accepted assignment (accepted ones need no badge —
+// the "View my submission" CTA already conveys that state). Red to nudge action.
+function NotAcceptedBadge() {
   const { t } = useTranslation()
   return (
-    <Badge tone="success" ghost className="shrink-0 gap-1">
-      <CheckCircle2 aria-hidden="true" className="size-3.5" />
-      {t("assignments.discover.accepted")}
+    <Badge tone="error" className="shrink-0 gap-1">
+      <CircleAlert aria-hidden="true" className="size-3.5" />
+      {t("assignments.discover.notAccepted")}
     </Badge>
   )
 }
@@ -156,9 +174,9 @@ function AssignmentCard({
           <h3 className="truncate text-base font-semibold">
             {assignment.name || assignment.slug}
           </h3>
-          {accepted && <AcceptedBadge />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {!accepted && <NotAcceptedBadge />}
           <ModeBadge mode={assignment.mode} />
           <DueBadge due={assignment.due} />
         </div>
@@ -191,9 +209,9 @@ function AssignmentListItem({
           <h3 className="truncate text-base font-semibold">
             {assignment.name || assignment.slug}
           </h3>
-          {accepted && <AcceptedBadge />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {!accepted && <NotAcceptedBadge />}
           <ModeBadge mode={assignment.mode} />
           <DueBadge due={assignment.due} />
         </div>

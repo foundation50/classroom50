@@ -104,6 +104,11 @@ describe("StudentAssignmentList", () => {
     // hw1 accepted -> "view submission"; hw2 not -> "accept".
     expect(screen.getByText("assignments.discover.viewSubmission")).toBeTruthy()
     expect(screen.getByText("assignments.discover.accept")).toBeTruthy()
+    // Only the not-accepted assignment gets the red "Not accepted" badge; the
+    // accepted one shows no status badge (the CTA already conveys it).
+    expect(
+      screen.getAllByText("assignments.discover.notAccepted"),
+    ).toHaveLength(1)
   })
 
   it("threads the capability secret into the accept link", () => {
