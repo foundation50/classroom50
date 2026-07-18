@@ -1762,6 +1762,13 @@
       "notAccepted_suffix": "to get your repository, then push your work to be graded.",
       "noGradedYet": "No graded submission yet. Push a commit to your assignment repository and the autograder will publish your result here.",
       "openMyRepo": "Open my repository",
+      "submitGuide": {
+        "title": "How to submit",
+        "step1": "Clone your assignment repository (once):",
+        "step2": "From inside the repository, submit your work for grading:",
+        "copyClone": "Copy clone command",
+        "copySubmit": "Copy submit command"
+      },
       "releasesIntro": "Each submission opens its graded release on GitHub, with your score and per-test results.",
       "fallbackTitle": "Submission",
       "missingParams": "Missing classroom or assignment information."

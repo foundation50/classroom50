@@ -26,6 +26,7 @@ import type { Assignment } from "@/types/classroom"
 import { assignmentDescription } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
 import { Alert, Badge, Button, Card, Markdown } from "@/components/ui"
+import SubmitGuidance from "@/components/SubmitGuidance"
 
 // Strips the `submit/` tag prefix for a friendlier label, falling back to the
 // release name when present.
@@ -196,6 +197,7 @@ const SubmissionBody = ({
           <ExternalLink aria-hidden="true" className="size-4" />
           {t("submissions.student.openMyRepo")}
         </Button>
+        <SubmitGuidance repoHtmlUrl={studentRepo.html_url} />
       </EnterDiv>
     )
   }
