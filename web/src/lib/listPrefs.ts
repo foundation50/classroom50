@@ -6,7 +6,15 @@
 import { useState } from "react"
 
 function canUseStorage() {
-  return typeof window !== "undefined"
+  // `window` can exist while `localStorage` is absent (some SSR/test DOMs, or a
+  // browser with storage disabled). Probe the actual API, not just `window`, so
+  // a read/write never throws and list prefs degrade to defaults.
+  try {
+    return typeof window !== "undefined" && window.localStorage != null
+  } catch {
+    // Accessing localStorage can itself throw (sandboxed iframes, blocked cookies).
+    return false
+  }
 }
 
 export type ListPrefsConfig<ViewMode extends string, SortKey extends string> = {

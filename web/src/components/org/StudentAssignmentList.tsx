@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import {
   CalendarClock,
@@ -9,13 +9,21 @@ import {
   UsersRound,
 } from "lucide-react"
 
-import { Alert, Badge, Card } from "@/components/ui"
-import { EmptyState } from "@/components/list"
+import { Alert, Badge, Button, Card, Toolbar } from "@/components/ui"
+import { EmptyState, NoSearchResults } from "@/components/list"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useStudentClassrooms } from "@/hooks/useStudentClassrooms"
+import { useListPrefsState } from "@/lib/listPrefs"
+import { studentAssignmentListPrefs } from "@/lib/studentAssignmentListPrefs"
+import {
+  DEFAULT_STUDENT_FILTERS,
+  filterAndSortStudentAssignments,
+  type StudentAssignmentFilters,
+  type StudentAssignmentSort,
+} from "@/components/org/studentAssignmentFilters"
 import { studentRepoName } from "@/util/studentRepo"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import type { Assignment } from "@/types/classroom"
@@ -134,6 +142,139 @@ function AssignmentRow({
   )
 }
 
+// Student-relevant toolbar: search, plus status (to-do vs accepted — the axis a
+// student cares about most), type, and an overdue filter, with a due-first sort.
+// Deliberately omits teacher-only facets (there's no roster/publish/edit here).
+function StudentAssignmentsToolbar({
+  query,
+  onQueryChange,
+  filters,
+  onFiltersChange,
+  sort,
+  onSortChange,
+}: {
+  query: string
+  onQueryChange: (value: string) => void
+  filters: StudentAssignmentFilters
+  onFiltersChange: (filters: StudentAssignmentFilters) => void
+  sort: StudentAssignmentSort
+  onSortChange: (sort: StudentAssignmentSort) => void
+}) {
+  const { t } = useTranslation()
+  const hasActiveFilter =
+    query.trim() !== "" ||
+    filters.status !== "all" ||
+    filters.type !== "all" ||
+    filters.due !== "all"
+
+  return (
+    <Toolbar>
+      <Toolbar.Search
+        placeholder={t("assignments.discover.toolbar.searchPlaceholder")}
+        value={query}
+        onChange={onQueryChange}
+        ariaLabel={t("assignments.discover.toolbar.searchAria")}
+      />
+
+      <Toolbar.FilterSelect
+        label={t("assignments.discover.toolbar.statusLabel")}
+        value={filters.status}
+        onChange={(e) =>
+          onFiltersChange({
+            ...filters,
+            status: e.target.value as StudentAssignmentFilters["status"],
+          })
+        }
+        aria-label={t("assignments.discover.toolbar.statusAria")}
+      >
+        <option value="all">
+          {t("assignments.discover.toolbar.statusAll")}
+        </option>
+        <option value="todo">
+          {t("assignments.discover.toolbar.statusTodo")}
+        </option>
+        <option value="accepted">
+          {t("assignments.discover.toolbar.statusAccepted")}
+        </option>
+      </Toolbar.FilterSelect>
+
+      <Toolbar.FilterSelect
+        label={t("assignments.discover.toolbar.typeLabel")}
+        value={filters.type}
+        onChange={(e) =>
+          onFiltersChange({
+            ...filters,
+            type: e.target.value as StudentAssignmentFilters["type"],
+          })
+        }
+        aria-label={t("assignments.discover.toolbar.typeAria")}
+      >
+        <option value="all">{t("assignments.discover.toolbar.typeAll")}</option>
+        <option value="individual">
+          {t("assignments.discover.toolbar.typeIndividual")}
+        </option>
+        <option value="group">
+          {t("assignments.discover.toolbar.typeGroup")}
+        </option>
+      </Toolbar.FilterSelect>
+
+      <Toolbar.FilterSelect
+        label={t("assignments.discover.toolbar.dueLabel")}
+        value={filters.due}
+        onChange={(e) =>
+          onFiltersChange({
+            ...filters,
+            due: e.target.value as StudentAssignmentFilters["due"],
+          })
+        }
+        aria-label={t("assignments.discover.toolbar.dueAria")}
+      >
+        <option value="all">{t("assignments.discover.toolbar.dueAll")}</option>
+        <option value="overdue">
+          {t("assignments.discover.toolbar.dueOverdue")}
+        </option>
+      </Toolbar.FilterSelect>
+
+      {hasActiveFilter && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            onQueryChange("")
+            onFiltersChange({ ...DEFAULT_STUDENT_FILTERS })
+          }}
+        >
+          {t("assignments.discover.toolbar.clear")}
+        </Button>
+      )}
+
+      <Toolbar.Trailing>
+        <Toolbar.FilterSelect
+          label={t("assignments.discover.toolbar.sortLabel")}
+          value={sort}
+          onChange={(e) =>
+            onSortChange(e.target.value as StudentAssignmentSort)
+          }
+          aria-label={t("assignments.discover.toolbar.sortAria")}
+        >
+          <option value="due-asc">
+            {t("assignments.discover.toolbar.sortDueAsc")}
+          </option>
+          <option value="due-desc">
+            {t("assignments.discover.toolbar.sortDueDesc")}
+          </option>
+          <option value="name-asc">
+            {t("assignments.discover.toolbar.sortNameAsc")}
+          </option>
+          <option value="name-desc">
+            {t("assignments.discover.toolbar.sortNameDesc")}
+          </option>
+        </Toolbar.FilterSelect>
+      </Toolbar.Trailing>
+    </Toolbar>
+  )
+}
+
 // The student's per-classroom assignment discovery list: every published
 // assignment (not just accepted ones), each with the right CTA. The secret
 // (team description, config-free) unlocks a protected classroom's Pages data
@@ -149,6 +290,11 @@ export function StudentAssignmentList({
   const { t } = useTranslation()
   const { user } = useGithubAuth()
   const secret = useClassroomSecret(org, classroom)
+  const { sortKey, changeSort } = useListPrefsState(studentAssignmentListPrefs)
+  const [query, setQuery] = useState("")
+  const [filters, setFilters] = useState<StudentAssignmentFilters>({
+    ...DEFAULT_STUDENT_FILTERS,
+  })
 
   const {
     data: assignments,
@@ -175,6 +321,17 @@ export function StudentAssignmentList({
     }
     return set
   }, [repos, assignments, classroom, user?.login])
+
+  const visible = useMemo(
+    () =>
+      filterAndSortStudentAssignments(assignments ?? [], {
+        query,
+        filters,
+        sort: sortKey,
+        acceptedSlugs,
+      }),
+    [assignments, query, filters, sortKey, acceptedSlugs],
+  )
 
   if (isLoading) {
     return (
@@ -210,17 +367,40 @@ export function StudentAssignmentList({
   }
 
   return (
-    <div className="grid grid-cols-12 gap-4">
-      {assignments.map((assignment) => (
-        <AssignmentRow
-          key={assignment.slug}
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-          accepted={acceptedSlugs.has(assignment.slug)}
-          secret={secret}
+    <div className="space-y-4">
+      <StudentAssignmentsToolbar
+        query={query}
+        onQueryChange={setQuery}
+        filters={filters}
+        onFiltersChange={setFilters}
+        sort={sortKey}
+        onSortChange={changeSort}
+      />
+
+      {visible.length === 0 ? (
+        <NoSearchResults
+          title={t("assignments.discover.noResults.title")}
+          body={t("assignments.discover.noResults.body")}
+          clearLabel={t("assignments.discover.toolbar.clear")}
+          onClear={() => {
+            setQuery("")
+            setFilters({ ...DEFAULT_STUDENT_FILTERS })
+          }}
         />
-      ))}
+      ) : (
+        <div className="grid grid-cols-12 gap-4">
+          {visible.map((assignment) => (
+            <AssignmentRow
+              key={assignment.slug}
+              org={org}
+              classroom={classroom}
+              assignment={assignment}
+              accepted={acceptedSlugs.has(assignment.slug)}
+              secret={secret}
+            />
+          ))}
+        </div>
+      )}
     </div>
   )
 }

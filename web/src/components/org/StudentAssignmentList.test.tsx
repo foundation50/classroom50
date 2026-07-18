@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen } from "@testing-library/react"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
@@ -28,6 +28,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       search?: Record<string, string>
     }) => (
       <a
+        href="https://example.test/link"
         data-to={to}
         data-params={JSON.stringify(params ?? {})}
         data-search={JSON.stringify(search ?? {})}
@@ -144,5 +145,50 @@ describe("StudentAssignmentList", () => {
     render(<StudentAssignmentList org="acme" classroom="cs" />)
 
     expect(screen.getByText("assignments.discover.emptyTitle")).toBeTruthy()
+  })
+
+  it("renders the toolbar and orders assignments due-soonest-first by default", () => {
+    pagesAssignments.mockReturnValue({
+      data: [
+        assignment("late", { name: "Late", due: "2026-12-01" }),
+        assignment("soon", { name: "Soon", due: "2026-06-15" }),
+      ],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    // Toolbar present (search input by its aria label).
+    expect(
+      screen.getByLabelText("assignments.discover.toolbar.searchAria"),
+    ).toBeTruthy()
+    // Due-soonest-first: "Soon" heading appears before "Late".
+    const headings = screen.getAllByRole("heading", { level: 3 })
+    const names = headings.map((h) => h.textContent)
+    expect(names.indexOf("Soon")).toBeLessThan(names.indexOf("Late"))
+  })
+
+  it("filters to accepted-only via the status control", () => {
+    pagesAssignments.mockReturnValue({
+      data: [
+        assignment("hw1", { name: "HW1", due: "2026-06-15" }),
+        assignment("hw2", { name: "HW2", due: "2026-07-15" }),
+      ],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [repo("cs-hw1-student1")] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    fireEvent.change(
+      screen.getByLabelText("assignments.discover.toolbar.statusAria"),
+      { target: { value: "accepted" } },
+    )
+
+    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
+    expect(screen.queryByRole("heading", { name: "HW2" })).toBeNull()
   })
 })
