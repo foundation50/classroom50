@@ -562,6 +562,13 @@ func editClassroom(client githubapi.Client, out, errOut io.Writer, org, shortNam
 		_, _ = fmt.Fprintf(out, "%s/%s: classroom %s already up to date (no changes)\n", org, configrepo.ConfigRepoName, shortName)
 		return nil
 	}
+	// Re-project the classroom50/team/v1 record onto the student team so a
+	// renamed/re-termed classroom isn't left showing a stale title in a
+	// student's "My Classrooms". Best-effort: a reconcile failure must not fail
+	// the edit (the config write already landed); a later add/migrate converges.
+	if _, rErr := configrepo.ReconcileClassroomTeamDescription(client, org, shortName, branch); rErr != nil {
+		_, _ = fmt.Fprintf(errOut, "Note: couldn't refresh the student team's classroom record: %v\n", rErr)
+	}
 	_, _ = fmt.Fprintf(out, "%s/%s: updated classroom %s\n", org, configrepo.ConfigRepoName, shortName)
 	_, _ = fmt.Fprintf(errOut, "View at https://github.com/%s/%s/tree/%s/%s\n", org, configrepo.ConfigRepoName, branch, shortName)
 	return nil
@@ -675,6 +682,12 @@ func setClassroomActive(client githubapi.Client, out, errOut io.Writer, org, sho
 		}
 		_, _ = fmt.Fprintf(out, "%s/%s: classroom %s already %s (no changes)\n", org, configrepo.ConfigRepoName, shortName, state)
 		return nil
+	}
+	// The `active` flag is mirrored into the classroom50/team/v1 record, so
+	// re-project it onto the student team (best-effort; a failure doesn't undo
+	// the archive/unarchive that already committed).
+	if _, rErr := configrepo.ReconcileClassroomTeamDescription(client, org, shortName, branch); rErr != nil {
+		_, _ = fmt.Fprintf(errOut, "Note: couldn't refresh the student team's classroom record: %v\n", rErr)
 	}
 	if active {
 		_, _ = fmt.Fprintf(out, "%s/%s: unarchived classroom %s (now active)\n", org, configrepo.ConfigRepoName, shortName)

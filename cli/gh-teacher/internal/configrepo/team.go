@@ -209,6 +209,77 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 	return refs, nil
 }
 
+// ReconcileClassroomTeamDescription re-derives the classroom50/team/v1 bootstrap
+// record from the authoritative classroom.json at `ref` and PATCHes it onto the
+// SECRET student team's description when it drifts — the CLI counterpart of the
+// web's reconcileStudentTeamDescription. The record is a PROJECTION of
+// classroom.json, so a name/term/secret/active change must be re-projected here;
+// classroom `add` writes it at create, but `edit`/`archive`/`unarchive` mutate
+// only classroom.json and would otherwise leave a student seeing a stale title.
+//
+// Best-effort and idempotent: resolves the team by its authoritative slug
+// (classroom.json `team.slug`, else derived), and only PATCHes a `secret` team
+// whose description differs. A missing team block, a non-secret team, a 404, or
+// an unchanged description is a no-op — never an error that fails the edit
+// (matching the web reconcile's skip-don't-expose posture). Returns whether a
+// PATCH was applied.
+func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, ref string) (changed bool, err error) {
+	c, ok, err := LoadClassroom(client, org, shortName, ref)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+
+	desired, err := MarshalTeamDescription(c.Name, c.Term, c.Secret, !c.IsArchived())
+	if err != nil {
+		return false, err
+	}
+
+	// The persisted slug is authoritative (GitHub may re-slug on collision);
+	// fall back to the derived slug for a pre-team-ref classroom.
+	slug := classroomTeamSlug(shortName)
+	if c.Team != nil && c.Team.Slug != "" {
+		slug = c.Team.Slug
+	}
+
+	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
+	var existing struct {
+		Slug        string `json:"slug"`
+		Privacy     string `json:"privacy"`
+		Description string `json:"description"`
+	}
+	if err := client.Get(getPath, &existing); err != nil {
+		// A 404 (wrong derived slug / deleted team) is a skip, not a failure:
+		// the projection just can't be reconciled from here.
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return false, nil
+		}
+		return false, fmt.Errorf("GET %s (reconcile team description): %w", getPath, err)
+	}
+
+	// Only ever write the record (which may carry the capability secret) onto a
+	// `secret` team, so it can't leak via a `closed` team's description. A
+	// non-secret team is a misconfiguration the adopt path reconciles; skip here.
+	if existing.Privacy != "secret" || existing.Description == desired {
+		return false, nil
+	}
+
+	patch, err := json.Marshal(map[string]any{"description": desired})
+	if err != nil {
+		return false, fmt.Errorf("encode team description patch: %w", err)
+	}
+	patchPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(existing.Slug))
+	resp, err := client.Request(http.MethodPatch, patchPath, bytes.NewReader(patch))
+	if err != nil {
+		return false, fmt.Errorf("PATCH %s (reconcile team description): %w", patchPath, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return true, nil
+}
+
 // ensureSecretTeamByName creates a `secret` GitHub team named `name`,
 // adopting an existing team of the same name rather than failing. `name` is a
 // canonical short-name-derived value, so its slug equals the name. A non-empty

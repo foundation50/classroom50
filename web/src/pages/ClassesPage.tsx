@@ -100,7 +100,19 @@ const JoinOrgCard = ({ org }: { org: string }) => {
 }
 
 const StudentClasses = ({ org }: { org: string }) => {
-  const { summaries, isLoading } = useStudentClassroomSummaries(org)
+  const { t } = useTranslation()
+  const { summaries, isLoading, isError, refetch } =
+    useStudentClassroomSummaries(org)
+  if (isError) {
+    return (
+      <Alert tone="error" className="items-start">
+        <span className="text-sm">{t("classes.student.loadError")}</span>
+        <Button variant="ghost" size="sm" onClick={() => refetch()}>
+          {t("classes.student.retry")}
+        </Button>
+      </Alert>
+    )
+  }
   return (
     <StudentClassroomList org={org} summaries={summaries} loading={isLoading} />
   )

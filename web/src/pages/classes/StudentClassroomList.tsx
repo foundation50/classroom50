@@ -4,7 +4,7 @@ import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
-import { Card, Input, LabeledControl, Select } from "@/components/ui"
+import { Badge, Card, Input, LabeledControl, Select } from "@/components/ui"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useListPrefsState } from "@/lib/listPrefs"
 import {
@@ -56,11 +56,7 @@ function ViewAssignmentsLink({
 
 function TermBadge({ term }: { term?: string }) {
   const { t } = useTranslation()
-  return (
-    <span className="badge badge-soft badge-primary">
-      {term || t("classes.noTermSpecified")}
-    </span>
-  )
+  return <Badge tone="primary">{term || t("classes.noTermSpecified")}</Badge>
 }
 
 function StudentClassroomCard({

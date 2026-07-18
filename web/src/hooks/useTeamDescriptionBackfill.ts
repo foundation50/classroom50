@@ -1,5 +1,4 @@
-import { useEffect, useRef } from "react"
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import { useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { withGitConflictRetry } from "@/domain/classrooms"
 import {
@@ -9,10 +8,9 @@ import {
 import { githubKeys } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
 import { logger } from "@/lib/logger"
+import { useBestEffortOwnerReconcile } from "@/hooks/useBestEffortOwnerReconcile"
 
 const log = logger.scope("useTeamDescriptionBackfill")
-
-type BackfillVars = { org: string; classroom: string }
 
 // Backfill the classroom50/team/v1 bootstrap record onto the student team's
 // GitHub description when a teacher/owner enters a classroom, best-effort.
@@ -30,6 +28,10 @@ type BackfillVars = { org: string; classroom: string }
 // already-reconciled classroom does nothing beyond one classroom.json + one team
 // read. On a rewrite it invalidates the viewer's /user/teams cache so a
 // teacher previewing as a student sees the fresh record.
+//
+// The fire-once guard, transient/permanent latch, and fire-once effect live in
+// useBestEffortOwnerReconcile (shared with useTeacherTeamMigration); this hook
+// supplies only the reconcile, the invalidation, and the permanent-error rule.
 export function useTeamDescriptionBackfill(
   org: string | undefined,
   classroom: string | undefined,
@@ -37,57 +39,37 @@ export function useTeamDescriptionBackfill(
 ): void {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  // Keys with a reconcile in flight (or terminally failed) for this mount. A
-  // Set (mirrors useTeacherTeamMigration) so a superseded run's late onError
-  // can't clear a newer same-key run's guard and StrictMode's paired invoke is
-  // a no-op. A transient failure deletes its key so a later render retries; a
-  // permanent 403 (a viewer who can't PATCH) or 404 (a team that never resolves)
-  // stays latched so it doesn't re-fire.
-  const inFlight = useRef<Set<string>>(new Set())
 
-  const backfill = useMutation<
-    TeamDescriptionReconcileResult,
-    Error,
-    BackfillVars
-  >({
-    // org/classroom as variables (not closed-over) so a run resolving after a
-    // fast classroom switch invalidates ITS OWN classroom's caches.
-    mutationFn: ({ org, classroom }) =>
+  useBestEffortOwnerReconcile<TeamDescriptionReconcileResult>({
+    enabled,
+    org,
+    classroom,
+    run: ({ org, classroom }) =>
       withGitConflictRetry(() =>
         reconcileStudentTeamDescription(client, org, classroom),
       ),
-    onSuccess: (result) => {
+    onSettled: (result) => {
       if (!result.changed) return
       // The student-facing enumeration reads GET /user/teams; refresh it so a
       // teacher previewing as a student picks up the rewritten description.
       void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
     },
-    onError: (err, { org, classroom }) => {
-      const key = `${org}/${classroom}`
-      // Latch as permanent both a 403 the viewer can't fix AND a 404 team read
-      // (a wrong derived slug / deleted team never converges) so a hopeless
-      // reconcile doesn't re-fire the classroom.json + team read on every entry.
-      // A transient/rate-limited failure releases its key so a later render retries.
-      const isPermanent =
-        err instanceof GitHubAPIError &&
-        (err.isNotFound || (err.isForbidden && !err.isRateLimited))
-      if (!isPermanent) inFlight.current.delete(key)
+    // Latch as permanent a 403 the viewer can't fix AND a 404 on the TEAM read
+    // (a wrong derived slug / deleted team never converges) so a hopeless
+    // reconcile doesn't re-fire on every entry. A classroom.json read miss
+    // arrives as ClassroomSourceReadError (not a GitHubAPIError), so it — like a
+    // transient/rate-limited failure — releases its key for a later retry (a
+    // fresh config commit may still be propagating).
+    isPermanent: (err) =>
+      err instanceof GitHubAPIError &&
+      (err.isNotFound || (err.isForbidden && !err.isRateLimited)),
+    logSkip: (err, { org, classroom }) =>
       log.warn("student team description backfill skipped", {
         org,
         classroom,
         err,
-      })
-    },
+      }),
   })
-
-  const { mutate } = backfill
-  useEffect(() => {
-    if (!enabled || !org || !classroom) return
-    const key = `${org}/${classroom}`
-    if (inFlight.current.has(key)) return
-    inFlight.current.add(key)
-    mutate({ org, classroom })
-  }, [enabled, org, classroom, mutate])
 }
 
 export default useTeamDescriptionBackfill

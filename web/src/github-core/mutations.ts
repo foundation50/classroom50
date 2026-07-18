@@ -109,5 +109,6 @@ export {
 } from "./mutations/teacherMigration"
 export {
   reconcileStudentTeamDescription,
+  ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,
 } from "./mutations/teamDescription"
