@@ -41,7 +41,8 @@ export function useTeamDescriptionBackfill(
   // Set (mirrors useTeacherTeamMigration) so a superseded run's late onError
   // can't clear a newer same-key run's guard and StrictMode's paired invoke is
   // a no-op. A transient failure deletes its key so a later render retries; a
-  // permanent 403 (a viewer who can't PATCH) stays latched so it doesn't re-fire.
+  // permanent 403 (a viewer who can't PATCH) or 404 (a team that never resolves)
+  // stays latched so it doesn't re-fire.
   const inFlight = useRef<Set<string>>(new Set())
 
   const backfill = useMutation<
@@ -63,8 +64,13 @@ export function useTeamDescriptionBackfill(
     },
     onError: (err, { org, classroom }) => {
       const key = `${org}/${classroom}`
+      // Latch as permanent both a 403 the viewer can't fix AND a 404 team read
+      // (a wrong derived slug / deleted team never converges) so a hopeless
+      // reconcile doesn't re-fire the classroom.json + team read on every entry.
+      // A transient/rate-limited failure releases its key so a later render retries.
       const isPermanent =
-        err instanceof GitHubAPIError && err.isForbidden && !err.isRateLimited
+        err instanceof GitHubAPIError &&
+        (err.isNotFound || (err.isForbidden && !err.isRateLimited))
       if (!isPermanent) inFlight.current.delete(key)
       log.warn("student team description backfill skipped", {
         org,

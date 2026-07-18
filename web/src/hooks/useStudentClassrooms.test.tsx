@@ -127,6 +127,43 @@ describe("useStudentClassrooms", () => {
     expect(result.current.classrooms).toEqual([{ classroom: "cs101" }])
   })
 
+  it("disambiguates a role-suffixed classroom's student team by its bootstrap record", () => {
+    // `classroom50-ml-ta` is byte-identical to the TA team of `ml`, but a
+    // classroom50/team/v1 record proves it's the STUDENT team of classroom
+    // `ml-ta` (staff teams carry no record). Trust the record: classroom is
+    // `ml-ta`, and its name/secret are lifted (not dropped as a phantom `ml`).
+    useQueryMock.mockReturnValue(
+      teams({
+        data: [
+          team("classroom50-ml-ta", {
+            description: desc({ name: "ML for TAs", secret: "a1b2c3d4" }),
+          }),
+        ],
+        isSuccess: true,
+      }),
+    )
+    const { result } = renderHook(() => useStudentClassrooms("acme"))
+    expect(result.current.classrooms).toEqual([
+      {
+        classroom: "ml-ta",
+        name: "ML for TAs",
+        term: undefined,
+        active: undefined,
+        secret: "a1b2c3d4",
+      },
+    ])
+  })
+
+  it("keeps treating a genuine staff team (no record) as a staff membership", () => {
+    // Same slug shape, but NO bootstrap record => a real TA team of classroom
+    // `ml`; the staff parse stands.
+    useQueryMock.mockReturnValue(
+      teams({ data: [team("classroom50-ml-ta")], isSuccess: true }),
+    )
+    const { result } = renderHook(() => useStudentClassrooms("acme"))
+    expect(result.current.classrooms).toEqual([{ classroom: "ml" }])
+  })
+
   it("yields no secret for a pre-schema team (plain-text description)", () => {
     useQueryMock.mockReturnValue(
       teams({

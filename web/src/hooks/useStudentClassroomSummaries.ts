@@ -1,4 +1,5 @@
 import { useMemo } from "react"
+import { useGithubAuth } from "@/auth/useGithubAuth"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import {
   useStudentClassrooms,
@@ -20,11 +21,12 @@ export type UseStudentClassroomSummariesResult = {
 }
 
 // Combine the teams-derived classroom list (useStudentClassrooms) with the
-// student's accepted-repo counts (useGetMyOrgRepos), grouping repos by the
-// `<classroom>-<assignment>-<owner>` name prefix. The capability secret already
-// rides along on each classroom's bootstrap record (team description); the
-// per-classroom view (StudentAssignmentList) resolves the repo-`.classroom50.yaml`
-// fallback for a pre-schema team, since that read is scoped to one classroom.
+// student's accepted-repo counts (useGetMyOrgRepos). An accepted repo is the
+// student's OWN `<classroom>-<assignment>-<login>` repo, so we match both the
+// `<classroom>-` prefix AND the `-<login>` suffix — the same identity
+// StudentAssignmentList checks via studentRepoName. This keeps the card's count
+// consistent with the assignment list and excludes unrelated writable repos
+// (e.g. a personal `<classroom>-notes`) and other owners' group repos.
 export function useStudentClassroomSummaries(
   org: string | undefined,
 ): UseStudentClassroomSummariesResult {
@@ -35,21 +37,27 @@ export function useStudentClassroomSummaries(
     roleResolved,
     refetch,
   } = useStudentClassrooms(org)
+  const { user } = useGithubAuth()
   const { data: repos } = useGetOrgRepos(org ?? "")
 
   const summaries = useMemo<StudentClassroomSummary[]>(() => {
-    const writable = (repos ?? []).filter((repo) => repo.permissions?.push)
+    const login = user?.login?.toLowerCase()
+    const writableNames = (repos ?? [])
+      .filter((repo) => repo.permissions?.push)
+      .map((repo) => repo.name.toLowerCase())
     return classrooms.map((c) => {
-      // Classroom repos are `<classroom>-<assignment>-<owner>`; require the
-      // trailing "-" so a sibling classroom whose name extends this one (e.g.
-      // "cs" vs "cs101-...") isn't miscounted.
-      const prefix = `${c.classroom}-`
-      const acceptedCount = writable.filter((repo) =>
-        repo.name.toLowerCase().startsWith(prefix.toLowerCase()),
+      // Match the student's own repo identity: `<classroom>-<assignment>-<login>`
+      // (require the trailing "-" on the prefix so a sibling classroom whose name
+      // extends this one — "cs" vs "cs101-..." — isn't miscounted). Without a
+      // resolved login, fall back to the prefix-only count rather than reporting 0.
+      const prefix = `${c.classroom.toLowerCase()}-`
+      const suffix = login ? `-${login}` : ""
+      const acceptedCount = writableNames.filter(
+        (name) => name.startsWith(prefix) && name.endsWith(suffix),
       ).length
       return { ...c, acceptedCount }
     })
-  }, [classrooms, repos])
+  }, [classrooms, repos, user?.login])
 
   return {
     summaries,

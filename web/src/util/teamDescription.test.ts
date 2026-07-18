@@ -118,10 +118,10 @@ describe("marshalTeamDescription", () => {
     })
   })
 
-  it("HTML-escapes <, >, & to match Go's json.Marshal (byte-identical contract)", () => {
-    // Go's json.Marshal escapes these by default; JSON.stringify does not.
-    // Without matching, the CLI and web would perpetually rewrite each other's
-    // description for a classroom whose name/term contains them.
+  it("escapes <, >, &, U+2028, U+2029 to match Go's json.Marshal (byte-identical contract)", () => {
+    // Go's json.Marshal escapes all five by default; JSON.stringify escapes
+    // none. Without matching, the CLI and web would perpetually rewrite each
+    // other's description for a classroom whose name/term contains them.
     const out = marshalTeamDescription({ name: "C++ & <Data>", active: true })
     expect(out).toContain("\\u0026")
     expect(out).toContain("\\u003c")
@@ -129,6 +129,17 @@ describe("marshalTeamDescription", () => {
     expect(out).not.toMatch(/[<>&]/)
     // Still valid JSON that parses back to the original name.
     expect(parseTeamDescription(out).name).toBe("C++ & <Data>")
+
+    // Line/paragraph separators (a common paste vector) are the only other
+    // divergence Go escapes; pin them explicitly.
+    const seps = marshalTeamDescription({
+      name: "a\u2028b\u2029c",
+      active: true,
+    })
+    expect(seps).toContain("\\u2028")
+    expect(seps).toContain("\\u2029")
+    expect(seps).not.toMatch(/[\u2028\u2029]/)
+    expect(parseTeamDescription(seps).name).toBe("a\u2028b\u2029c")
   })
 })
 

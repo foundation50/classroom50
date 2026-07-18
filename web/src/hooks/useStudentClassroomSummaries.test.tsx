@@ -11,6 +11,9 @@ vi.mock("@/hooks/useStudentClassrooms", () => ({
 vi.mock("@/hooks/useGetMyOrgRepos", () => ({
   default: () => orgReposMock(),
 }))
+vi.mock("@/auth/useGithubAuth", () => ({
+  useGithubAuth: () => ({ user: { login: "student1" } }),
+}))
 
 import { useStudentClassroomSummaries } from "./useStudentClassroomSummaries"
 
@@ -56,6 +59,25 @@ describe("useStudentClassroomSummaries", () => {
       { classroom: "cs101", name: "Intro CS", acceptedCount: 2 },
       { classroom: "ml", name: "ML", secret: "a1b2c3d4", acceptedCount: 1 },
     ])
+  })
+
+  it("counts only the student's OWN repos, excluding unrelated and other-owner repos", () => {
+    useStudentClassroomsMock.mockReturnValue({
+      classrooms: [{ classroom: "ml", name: "ML" }],
+      isLoading: false,
+      isError: false,
+      roleResolved: true,
+      refetch: () => {},
+    })
+    orgReposMock.mockReturnValue({
+      data: [
+        repo("ml-project-student1"), // the student's own accepted repo -> counts
+        repo("ml-notes"), // personal writable repo under the prefix -> excluded
+        repo("ml-project-otherstudent"), // a peer's / group founder's repo -> excluded
+      ],
+    })
+    const { result } = renderHook(() => useStudentClassroomSummaries("acme"))
+    expect(result.current.summaries[0].acceptedCount).toBe(1)
   })
 
   it("does not miscount a sibling classroom whose name extends this one", () => {

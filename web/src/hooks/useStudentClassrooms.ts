@@ -5,6 +5,7 @@ import { myTeamsQuery } from "@/github-core/queries"
 import {
   parseStudentClassroomSlug,
   parseClassroomTeamSlug,
+  parseBareClassroomSlug,
 } from "@/util/teamSlug"
 import { parseTeamDescription } from "@/util/teamDescription"
 
@@ -59,13 +60,26 @@ export function useStudentClassrooms(
     if (team.organization.login !== org) continue
     const student = parseStudentClassroomSlug(team.slug)
     const staff = parseClassroomTeamSlug(team.slug)
-    const classroom = student?.classroom ?? staff?.classroom
+    // A slug like `classroom50-ml-ta` is ambiguous: the STUDENT team of a
+    // role-suffixed classroom (`ml-ta`) is byte-identical to the TA team of
+    // classroom `ml`. The bootstrap description disambiguates — only a student
+    // team carries a classroom50/team/v1 record (staff teams get none). So a
+    // slug that parses as staff but carries a valid record is really the student
+    // team of the role-suffixed classroom: its classroom is the whole
+    // post-prefix slug (`ml-ta`), and we lift its name/term/secret. Trust the
+    // record over the staff parse.
+    const desc = parseTeamDescription(team.description)
+    const bareStudent = parseBareClassroomSlug(team.slug)
+    const isStudentByRecord =
+      Boolean(staff) && desc.schema !== undefined && Boolean(bareStudent)
+    const classroom = isStudentByRecord
+      ? bareStudent!.classroom
+      : (student?.classroom ?? staff?.classroom)
     if (!classroom) continue
 
     const existing = byClassroom.get(classroom)
-    if (student) {
+    if (student || isStudentByRecord) {
       // Student team: authoritative for the bootstrap record.
-      const desc = parseTeamDescription(team.description)
       byClassroom.set(classroom, {
         classroom,
         name: desc.name,

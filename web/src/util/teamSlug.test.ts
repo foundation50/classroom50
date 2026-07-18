@@ -3,6 +3,7 @@ import {
   classroomTeamSlug,
   parseClassroomTeamSlug,
   parseStudentClassroomSlug,
+  parseBareClassroomSlug,
 } from "./teamSlug"
 
 // Byte-identity guard: these strings are a cross-tool contract (CLI + schema
@@ -92,5 +93,26 @@ describe("parseStudentClassroomSlug", () => {
     // parser owns it, so the student parser must yield null (safe-degrade: a
     // real ml-ta student team collision would 404 the membership read).
     expect(parseStudentClassroomSlug("classroom50-ml-ta")).toBeNull()
+  })
+})
+
+describe("parseBareClassroomSlug", () => {
+  it("returns the whole post-prefix segment, ignoring role suffixes", () => {
+    expect(parseBareClassroomSlug("classroom50-cs101")).toEqual({
+      classroom: "cs101",
+    })
+    // Unlike parseStudentClassroomSlug, it does NOT exclude a role-suffixed slug
+    // — this is the whole point: `classroom50-ml-ta` -> `ml-ta`, so the caller
+    // (gated on a bootstrap record) can recover the role-suffixed student
+    // classroom the staff parser would otherwise claim as `ml`.
+    expect(parseBareClassroomSlug("classroom50-ml-ta")).toEqual({
+      classroom: "ml-ta",
+    })
+  })
+
+  it("returns null for a non-classroom slug or empty segment", () => {
+    expect(parseBareClassroomSlug("some-other-team")).toBeNull()
+    expect(parseBareClassroomSlug("classroom50")).toBeNull()
+    expect(parseBareClassroomSlug("classroom50-")).toBeNull()
   })
 })

@@ -74,3 +74,19 @@ export function parseStudentClassroomSlug(
   if (classroom.length === 0) return null
   return { classroom }
 }
+
+// Extract the whole post-prefix segment as the classroom, WITHOUT the staff-role
+// exclusion parseStudentClassroomSlug applies. Used only to resolve the ambiguous
+// case where a slug parses as staff (`classroom50-ml-ta`) yet is really the
+// student team of a role-suffixed classroom (`ml-ta`) — proven by a
+// classroom50/team/v1 record on the team (staff teams carry none). The caller
+// gates on that record; on its own this does not distinguish student from staff.
+export function parseBareClassroomSlug(
+  slug: string,
+): { classroom: string } | null {
+  const prefix = `${CONFIG_REPO}-`
+  if (!slug.startsWith(prefix)) return null
+  const classroom = slug.slice(prefix.length)
+  if (classroom.length === 0) return null
+  return { classroom }
+}

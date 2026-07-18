@@ -11,7 +11,9 @@ export const TEAM_DESCRIPTION_SCHEMA = "classroom50/team/v1"
 // their classrooms (and, for an unlisted classroom, recover the capability
 // secret) without config-repo access. All fields optional except the record is
 // only recognized when the schema sentinel matches; unknown fields are ignored
-// (tolerate-and-preserve, additive evolution).
+// (tolerate-only: the record is a projection of classroom.json, re-derived on
+// every write, so an unknown field is dropped on the next rewrite — not
+// preserved, unlike the read-modify-write files classroom.json/assignments.json).
 const TeamDescriptionSchema = z.object({
   schema: z.literal(TEAM_DESCRIPTION_SCHEMA),
   name: z.string().optional(),
@@ -62,13 +64,16 @@ export function marshalTeamDescription(input: {
   if (input.term) record.term = input.term
   if (input.secret && isValidSecret(input.secret)) record.secret = input.secret
   if (!input.active) record.active = false
-  // Match Go's json.Marshal, which HTML-escapes <, >, & by default (no
-  // SetEscapeHTML(false) on the CLI writer). JSON.stringify does NOT escape
-  // these, so without this the two tools would produce different bytes for a
-  // name/term containing them and perpetually overwrite each other's
-  // description (the reconcile compares strings for exact equality).
+  // Match Go's json.Marshal, which HTML-escapes <, >, & AND the U+2028/U+2029
+  // line/paragraph separators by default (no SetEscapeHTML(false) on the CLI
+  // writer). JSON.stringify escapes none of these, so without this the two tools
+  // would produce different bytes for a name/term containing them and perpetually
+  // overwrite each other's description (the reconcile compares strings for exact
+  // equality).
   return JSON.stringify(record)
     .replace(/</g, "\\u003c")
     .replace(/>/g, "\\u003e")
     .replace(/&/g, "\\u0026")
+    .replace(/\u2028/g, "\\u2028")
+    .replace(/\u2029/g, "\\u2029")
 }
