@@ -44,6 +44,9 @@ export type { CopyableCodeProps } from "./CopyableCode"
 export { CopyableDetails } from "./CopyableDetails"
 export type { CopyableDetailsProps } from "./CopyableDetails"
 
+export { FileDropzone } from "./FileDropzone"
+export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
+
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 

@@ -16,9 +16,13 @@ export {
   createGitTree,
   createGitCommit,
   createBlob,
+  createBlobForRepo,
   createTreeFromEntries,
+  createTreeFromFullEntries,
+  getRepoTreeRecursive,
   type GitTreeFileMode,
   type GitTreeEntry,
+  type GitHubTreeEntryFull,
   type CreateGitTreeInput,
   type CreateGitCommitInput,
 } from "./mutations/gitObjects"

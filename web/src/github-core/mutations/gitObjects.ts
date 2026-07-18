@@ -391,6 +391,73 @@ export async function createBlob(
   )
 }
 
+// Create a blob in an ARBITRARY repo with an explicit encoding. Unlike createBlob
+// (pinned to CONFIG_REPO + utf-8), this backs student-repo writes that may carry
+// binary content (base64). The caller base64-encodes bytes and passes
+// encoding:"base64"; utf-8 text can pass through as-is. A longer timeout suits a
+// large upload blob (the default request timeout is tuned for small JSON writes).
+export async function createBlobForRepo(params: {
+  client: GitHubClient
+  owner: string
+  repo: string
+  content: string
+  encoding: "utf-8" | "base64"
+  timeoutMs?: number
+}) {
+  const { client, owner, repo, content, encoding, timeoutMs } = params
+  return client.request<GitHubBlob>(`/repos/${owner}/${repo}/git/blobs`, {
+    method: "POST",
+    body: { content, encoding },
+    ...(timeoutMs ? { timeoutMs } : {}),
+  })
+}
+
+// One entry in a raw git tree read. GitHub returns `mode` too, which a tree
+// rewrite must echo back so a file's executable/symlink bit isn't lost.
+export type GitHubTreeEntryFull = {
+  path: string
+  mode: string
+  type: "blob" | "tree" | "commit"
+  sha: string
+}
+
+// Recursively list every entry in a repo's tree at `treeSha`. Used to carry
+// preserved paths (.github/**, .classroom50.yaml) into a replace-all snapshot by
+// their existing blob SHAs. `truncated` is surfaced so a caller can refuse to
+// build a partial (and thus destructive) tree from an incomplete listing.
+export async function getRepoTreeRecursive(params: {
+  client: GitHubClient
+  owner: string
+  repo: string
+  treeSha: string
+}): Promise<{ tree: GitHubTreeEntryFull[]; truncated: boolean }> {
+  const { client, owner, repo, treeSha } = params
+  return client.request<{ tree: GitHubTreeEntryFull[]; truncated: boolean }>(
+    `/repos/${owner}/${repo}/git/trees/${treeSha}?recursive=1`,
+  )
+}
+
+// Create a tree in an arbitrary repo from explicit entries. Omitting base_tree
+// makes the tree AUTHORITATIVE — only the listed paths exist, so a replace-all
+// snapshot drops prior files not carried over (the submit semantics). Pass a
+// base_tree for an additive update instead.
+export async function createTreeFromFullEntries(params: {
+  client: GitHubClient
+  owner: string
+  repo: string
+  tree: GitHubTreeEntryFull[]
+  baseTreeSha?: string
+}) {
+  const { client, owner, repo, tree, baseTreeSha } = params
+  return client.request<GitHubTree>(`/repos/${owner}/${repo}/git/trees`, {
+    method: "POST",
+    body: {
+      ...(baseTreeSha ? { base_tree: baseTreeSha } : {}),
+      tree,
+    },
+  })
+}
+
 export async function createTreeFromEntries(
   client: GitHubClient,
   input: {
