@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { parseTeamDescription } from "./teamDescription"
+import { marshalTeamDescription, parseTeamDescription } from "./teamDescription"
 
 describe("parseTeamDescription", () => {
   it("parses a valid v1 record", () => {
@@ -60,5 +60,59 @@ describe("parseTeamDescription", () => {
     expect(parseTeamDescription(null)).toEqual({})
     expect(parseTeamDescription(undefined)).toEqual({})
     expect(parseTeamDescription("")).toEqual({})
+  })
+})
+
+describe("marshalTeamDescription", () => {
+  it("encodes an unlisted active classroom with secret, omitting active", () => {
+    const out = marshalTeamDescription({
+      name: "Intro CS",
+      term: "Fall 2026",
+      secret: "a1b2c3d4",
+      active: true,
+    })
+    expect(JSON.parse(out)).toEqual({
+      schema: "classroom50/team/v1",
+      name: "Intro CS",
+      term: "Fall 2026",
+      secret: "a1b2c3d4",
+    })
+  })
+
+  it("omits empty name/term and the secret for a listed classroom", () => {
+    const out = marshalTeamDescription({ name: "CS", active: true })
+    expect(JSON.parse(out)).toEqual({
+      schema: "classroom50/team/v1",
+      name: "CS",
+    })
+  })
+
+  it("drops a malformed secret rather than persisting it", () => {
+    const out = marshalTeamDescription({
+      name: "CS",
+      secret: "BAD secret!",
+      active: true,
+    })
+    expect(JSON.parse(out).secret).toBeUndefined()
+  })
+
+  it("emits active:false for an archived classroom", () => {
+    const out = marshalTeamDescription({ name: "CS", active: false })
+    expect(JSON.parse(out).active).toBe(false)
+  })
+
+  it("round-trips through parseTeamDescription", () => {
+    const out = marshalTeamDescription({
+      name: "Intro CS",
+      term: "Fall 2026",
+      secret: "a1b2c3d4",
+      active: true,
+    })
+    expect(parseTeamDescription(out)).toEqual({
+      schema: "classroom50/team/v1",
+      name: "Intro CS",
+      term: "Fall 2026",
+      secret: "a1b2c3d4",
+    })
   })
 })

@@ -107,3 +107,7 @@ export {
   migrateInstructorTeamToTeacher,
   type TeacherMigrationResult,
 } from "./mutations/teacherMigration"
+export {
+  reconcileStudentTeamDescription,
+  type TeamDescriptionReconcileResult,
+} from "./mutations/teamDescription"

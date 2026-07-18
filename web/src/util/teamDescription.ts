@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { SECRET_PATTERN } from "./secret"
+import { SECRET_PATTERN, isValidSecret } from "./secret"
 
 // Schema sentinel for the classroom50/team/v1 bootstrap record stored in a
 // classroom's secret student-team description. Byte-mirror of the CLI's
@@ -41,4 +41,26 @@ export function parseTeamDescription(
   }
   const parsed = TeamDescriptionSchema.safeParse(raw)
   return parsed.success ? parsed.data : {}
+}
+
+// marshalTeamDescription encodes the classroom50/team/v1 bootstrap record for a
+// student team's description — the inverse of parseTeamDescription and a
+// byte-for-byte mirror of the Go MarshalTeamDescription
+// (cli/gh-teacher/internal/configrepo/teamdescription.go). Compact JSON, empty
+// name/term omitted, `secret` included only when valid ([a-z0-9]{4,64}; a
+// malformed value is dropped, not persisted into a URL segment), and `active`
+// omitted when true (readers default absent -> active) to save bytes. Kept small
+// (well under ~250 chars): per-assignment data lives on Pages, never here.
+export function marshalTeamDescription(input: {
+  name?: string
+  term?: string
+  secret?: string
+  active: boolean
+}): string {
+  const record: Record<string, unknown> = { schema: TEAM_DESCRIPTION_SCHEMA }
+  if (input.name) record.name = input.name
+  if (input.term) record.term = input.term
+  if (input.secret && isValidSecret(input.secret)) record.secret = input.secret
+  if (!input.active) record.active = false
+  return JSON.stringify(record)
 }

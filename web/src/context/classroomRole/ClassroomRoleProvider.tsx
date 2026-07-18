@@ -7,6 +7,7 @@ import {
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import { useClassroomRole } from "@/hooks/useClassroomRole"
 import { useTeacherTeamMigration } from "@/hooks/useTeacherTeamMigration"
+import { useTeamDescriptionBackfill } from "@/hooks/useTeamDescriptionBackfill"
 import { isTeacherRole, type ResolvedRole } from "@/authz"
 
 // The single authoritative effective-role signal for the current classroom,
@@ -56,6 +57,13 @@ function useClassroomRoleResolution(
   // creates/deletes teams and commits config; use actualRole so a teacher
   // previewing as a lower role still triggers the (idempotent) heal.
   useTeacherTeamMigration(org, classroom, isTeacherRole(actualRole))
+
+  // Backfill the classroom50/team/v1 bootstrap record onto the student team's
+  // description (the web mirror of the CLI's write-at-create), so classrooms
+  // created via the GUI or before this feature converge on any owner entry.
+  // Same gate/rationale as the migration above: an org-owner PATCH, keyed on
+  // actualRole so a preview still triggers the idempotent reconcile.
+  useTeamDescriptionBackfill(org, classroom, isTeacherRole(actualRole))
 
   const roleResolved = role !== "unresolved"
 

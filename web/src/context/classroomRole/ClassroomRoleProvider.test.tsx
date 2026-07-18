@@ -23,6 +23,11 @@ vi.mock("@/auth/useGithubAuth", () => ({
 vi.mock("@/hooks/useTeacherTeamMigration", () => ({
   useTeacherTeamMigration: () => {},
 }))
+// Same rationale: the provider also mounts the best-effort student-team
+// description backfill (covered in mutations.teamDescription.test.ts); stub it.
+vi.mock("@/hooks/useTeamDescriptionBackfill", () => ({
+  useTeamDescriptionBackfill: () => {},
+}))
 
 import {
   ClassroomRoleProvider,
