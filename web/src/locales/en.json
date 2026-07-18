@@ -647,7 +647,12 @@
         "sortDueDesc": "Due latest",
         "sortNameAsc": "Name (A–Z)",
         "sortNameDesc": "Name (Z–A)",
-        "clear": "Clear filters"
+        "clear": "Clear filters",
+        "view": {
+          "label": "View",
+          "gridLabel": "Grid view",
+          "listLabel": "List view"
+        }
       },
       "noResults": {
         "title": "No assignments match your filters",

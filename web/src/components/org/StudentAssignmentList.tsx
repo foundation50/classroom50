@@ -10,7 +10,7 @@ import {
 } from "lucide-react"
 
 import { Alert, Badge, Button, Card, Toolbar } from "@/components/ui"
-import { EmptyState, NoSearchResults } from "@/components/list"
+import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import { EnterDiv } from "@/lib/motionComponents"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
@@ -76,7 +76,8 @@ function DueBadge({ due }: { due?: string }) {
   )
 }
 
-function AssignmentRow({
+// The accept/view-submission CTA, shared by the grid card and the list row.
+function AssignmentCta({
   org,
   classroom,
   assignment,
@@ -90,6 +91,58 @@ function AssignmentRow({
   secret?: string
 }) {
   const { t } = useTranslation()
+  if (accepted) {
+    return (
+      <Link
+        type="button"
+        to="/$org/$classroom/assignments/$assignment/submission"
+        params={{ org, classroom, assignment: assignment.slug }}
+        className="btn btn-outline btn-primary btn-sm"
+      >
+        {t("assignments.discover.viewSubmission")}
+      </Link>
+    )
+  }
+  return (
+    <Link
+      type="button"
+      to="/$org/$classroom/assignments/$assignment/accept"
+      params={{ org, classroom, assignment: assignment.slug }}
+      search={secret ? { k: secret } : undefined}
+      className="btn btn-primary btn-sm"
+    >
+      <FilePlus2 aria-hidden="true" className="size-4" />
+      {t("assignments.discover.accept")}
+    </Link>
+  )
+}
+
+function AcceptedBadge() {
+  const { t } = useTranslation()
+  return (
+    <Badge tone="success" ghost className="shrink-0 gap-1">
+      <CheckCircle2 aria-hidden="true" className="size-3.5" />
+      {t("assignments.discover.accepted")}
+    </Badge>
+  )
+}
+
+type AssignmentItemProps = {
+  org: string
+  classroom: string
+  assignment: Assignment
+  accepted: boolean
+  secret?: string
+}
+
+// Grid layout: a two-per-row card.
+function AssignmentCard({
+  org,
+  classroom,
+  assignment,
+  accepted,
+  secret,
+}: AssignmentItemProps) {
   return (
     <Card
       as={EnterDiv}
@@ -103,42 +156,58 @@ function AssignmentRow({
           <h3 className="truncate text-base font-semibold">
             {assignment.name || assignment.slug}
           </h3>
-          {accepted && (
-            <Badge tone="success" ghost className="shrink-0 gap-1">
-              <CheckCircle2 aria-hidden="true" className="size-3.5" />
-              {t("assignments.discover.accepted")}
-            </Badge>
-          )}
+          {accepted && <AcceptedBadge />}
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ModeBadge mode={assignment.mode} />
           <DueBadge due={assignment.due} />
         </div>
         <Card.Actions className="pt-1">
-          {accepted ? (
-            <Link
-              type="button"
-              to="/$org/$classroom/assignments/$assignment/submission"
-              params={{ org, classroom, assignment: assignment.slug }}
-              className="btn btn-outline btn-primary btn-sm"
-            >
-              {t("assignments.discover.viewSubmission")}
-            </Link>
-          ) : (
-            <Link
-              type="button"
-              to="/$org/$classroom/assignments/$assignment/accept"
-              params={{ org, classroom, assignment: assignment.slug }}
-              search={secret ? { k: secret } : undefined}
-              className="btn btn-primary btn-sm"
-            >
-              <FilePlus2 aria-hidden="true" className="size-4" />
-              {t("assignments.discover.accept")}
-            </Link>
-          )}
+          <AssignmentCta
+            org={org}
+            classroom={classroom}
+            assignment={assignment}
+            accepted={accepted}
+            secret={secret}
+          />
         </Card.Actions>
       </Card.Body>
     </Card>
+  )
+}
+
+// List layout: a full-width row, title + badges on the left, CTA on the right.
+function AssignmentListItem({
+  org,
+  classroom,
+  assignment,
+  accepted,
+  secret,
+}: AssignmentItemProps) {
+  return (
+    <EnterDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-200 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div className="flex min-w-0 flex-col gap-1.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="truncate text-base font-semibold">
+            {assignment.name || assignment.slug}
+          </h3>
+          {accepted && <AcceptedBadge />}
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <ModeBadge mode={assignment.mode} />
+          <DueBadge due={assignment.due} />
+        </div>
+      </div>
+      <div className="flex shrink-0 items-center justify-end">
+        <AssignmentCta
+          org={org}
+          classroom={classroom}
+          assignment={assignment}
+          accepted={accepted}
+          secret={secret}
+        />
+      </div>
+    </EnterDiv>
   )
 }
 
@@ -152,6 +221,8 @@ function StudentAssignmentsToolbar({
   onFiltersChange,
   sort,
   onSortChange,
+  viewMode,
+  onViewChange,
 }: {
   query: string
   onQueryChange: (value: string) => void
@@ -159,6 +230,8 @@ function StudentAssignmentsToolbar({
   onFiltersChange: (filters: StudentAssignmentFilters) => void
   sort: StudentAssignmentSort
   onSortChange: (sort: StudentAssignmentSort) => void
+  viewMode: "grid" | "list"
+  onViewChange: (mode: "grid" | "list") => void
 }) {
   const { t } = useTranslation()
   const hasActiveFilter =
@@ -270,6 +343,14 @@ function StudentAssignmentsToolbar({
             {t("assignments.discover.toolbar.sortNameDesc")}
           </option>
         </Toolbar.FilterSelect>
+
+        <ViewToggle
+          viewMode={viewMode}
+          onChange={onViewChange}
+          groupLabel={t("assignments.discover.toolbar.view.label")}
+          gridLabel={t("assignments.discover.toolbar.view.gridLabel")}
+          listLabel={t("assignments.discover.toolbar.view.listLabel")}
+        />
       </Toolbar.Trailing>
     </Toolbar>
   )
@@ -290,7 +371,9 @@ export function StudentAssignmentList({
   const { t } = useTranslation()
   const { user } = useGithubAuth()
   const secret = useClassroomSecret(org, classroom)
-  const { sortKey, changeSort } = useListPrefsState(studentAssignmentListPrefs)
+  const { viewMode, sortKey, changeView, changeSort } = useListPrefsState(
+    studentAssignmentListPrefs,
+  )
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<StudentAssignmentFilters>({
     ...DEFAULT_STUDENT_FILTERS,
@@ -375,6 +458,8 @@ export function StudentAssignmentList({
         onFiltersChange={setFilters}
         sort={sortKey}
         onSortChange={changeSort}
+        viewMode={viewMode}
+        onViewChange={changeView}
       />
 
       {visible.length === 0 ? (
@@ -389,16 +474,27 @@ export function StudentAssignmentList({
         />
       ) : (
         <div className="grid grid-cols-12 gap-4">
-          {visible.map((assignment) => (
-            <AssignmentRow
-              key={assignment.slug}
-              org={org}
-              classroom={classroom}
-              assignment={assignment}
-              accepted={acceptedSlugs.has(assignment.slug)}
-              secret={secret}
-            />
-          ))}
+          {visible.map((assignment) =>
+            viewMode === "grid" ? (
+              <AssignmentCard
+                key={assignment.slug}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                accepted={acceptedSlugs.has(assignment.slug)}
+                secret={secret}
+              />
+            ) : (
+              <AssignmentListItem
+                key={assignment.slug}
+                org={org}
+                classroom={classroom}
+                assignment={assignment}
+                accepted={acceptedSlugs.has(assignment.slug)}
+                secret={secret}
+              />
+            ),
+          )}
         </div>
       )}
     </div>

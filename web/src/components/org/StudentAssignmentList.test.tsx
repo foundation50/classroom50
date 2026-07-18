@@ -78,9 +78,15 @@ beforeEach(() => {
   orgRepos.mockReset()
   studentClassrooms.mockReset()
   studentClassrooms.mockReturnValue({ classrooms: [{ classroom: "cs" }] })
+  // View mode + sort persist in localStorage; clear so one test's toggle
+  // doesn't bleed the stored view into another's default-view assertion.
+  globalThis.localStorage?.clear()
 })
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  globalThis.localStorage?.clear()
+})
 
 describe("StudentAssignmentList", () => {
   it("lists all published assignments, accepted and not", () => {
@@ -190,5 +196,33 @@ describe("StudentAssignmentList", () => {
 
     expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
     expect(screen.queryByRole("heading", { name: "HW2" })).toBeNull()
+  })
+
+  it("defaults to list view and switches to grid via the view toggle", () => {
+    pagesAssignments.mockReturnValue({
+      data: [assignment("hw1", { name: "HW1", due: "2026-06-15" })],
+      isLoading: false,
+      isError: false,
+    })
+    orgRepos.mockReturnValue({ data: [] })
+
+    render(<StudentAssignmentList org="acme" classroom="cs" />)
+
+    const gridBtn = screen.getByLabelText(
+      "assignments.discover.toolbar.view.gridLabel",
+    )
+    const listBtn = screen.getByLabelText(
+      "assignments.discover.toolbar.view.listLabel",
+    )
+    // List is the default.
+    expect(listBtn.getAttribute("aria-pressed")).toBe("true")
+    expect(gridBtn.getAttribute("aria-pressed")).toBe("false")
+
+    fireEvent.click(gridBtn)
+
+    expect(gridBtn.getAttribute("aria-pressed")).toBe("true")
+    expect(listBtn.getAttribute("aria-pressed")).toBe("false")
+    // Assignment still rendered after the layout switch.
+    expect(screen.getByRole("heading", { name: "HW1" })).toBeTruthy()
   })
 })
