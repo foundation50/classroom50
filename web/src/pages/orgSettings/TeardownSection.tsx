@@ -66,7 +66,7 @@ const TeardownSection = ({ org }: { org: string }) => {
           i18nKey="orgSettings.teardown.description"
           components={{
             strong: <strong />,
-            repo: <code />,
+            repo: <MonoLtr />,
           }}
         />
       }
@@ -111,7 +111,7 @@ const TeardownSection = ({ org }: { org: string }) => {
                 components={{
                   count: <strong />,
                   org: <MonoLtr />,
-                  repo: <code />,
+                  repo: <MonoLtr />,
                 }}
               />{" "}
               {plan && plan.teams.length > 0 ? (

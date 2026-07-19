@@ -1,5 +1,5 @@
 import { Link } from "@tanstack/react-router"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { XCircle } from "lucide-react"
 
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
@@ -52,11 +52,14 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
             count: failing.length,
             categories,
           })}{" "}
-          {t("orgSettings.preflight.reviewFixOn")}{" "}
-          <Link to="/$org/settings" params={{ org }} className="link">
-            {t("orgSettings.preflight.settingsPageLink")}
-          </Link>
-          {t("orgSettings.preflight.reviewFixSuffix")}
+          <Trans
+            i18nKey="orgSettings.preflight.reviewFix"
+            components={{
+              settingsLink: (
+                <Link to="/$org/settings" params={{ org }} className="link" />
+              ),
+            }}
+          />
         </p>
       </div>
     </CalloutDiv>

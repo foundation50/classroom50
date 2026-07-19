@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
-import { Button, Input, rtlFlip } from "@/components/ui"
+import { Button, Input, MonoLtr, rtlFlip } from "@/components/ui"
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -129,7 +129,7 @@ export function ServiceTokenInfo() {
             <Trans
               i18nKey="orgSettings.serviceToken.info"
               components={{
-                secret: <code className="text-xs" />,
+                secret: <MonoLtr className="text-xs" />,
                 repo: <span className="font-semibold" />,
               }}
             />

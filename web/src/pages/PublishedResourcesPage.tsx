@@ -12,12 +12,12 @@ import {
   ShieldAlert,
 } from "lucide-react"
 import { motion } from "motion/react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { enterExit, staggerTransition } from "@/lib/motion"
 
 import PageShell from "@/components/PageShell"
 import PageHeader, { OrgLink } from "@/components/PageHeader"
-import { Badge, Button, type BadgeTone } from "@/components/ui"
+import { Badge, Button, MonoLtr, type BadgeTone } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import RequireRole from "@/components/RequireRole"
 import useGetClasses from "@/hooks/useGetClasses"
@@ -400,8 +400,11 @@ export const PublishedResourcesPane = ({ org }: { org: string }) => {
           <h2 className="text-lg font-bold">{t("published.orgLevel")}</h2>
         </div>
         <p className="mt-1 text-sm text-base-content/70">
-          {t("published.orgLevelServedPrefix")}{" "}
-          <code className="text-xs">{base}/</code>.
+          <Trans
+            i18nKey="published.orgLevelServed"
+            values={{ base }}
+            components={{ path: <MonoLtr className="text-xs" /> }}
+          />
         </p>
         <div className="mt-4 flex flex-col gap-3">
           {orgResources.map((r) => (
@@ -453,15 +456,19 @@ const PublishedResourcesPage = () => {
         <PageHeader
           title={t("published.pageHeading")}
           subtitle={
-            <>
-              {t("published.pageSubheadingPrefix")}{" "}
-              <OrgLink
-                org={org}
-                href={githubOrgUrl(org ?? "")}
-                title={t("common.openOrgOnGitHub", { org })}
-              />
-              {t("published.pageSubheadingSuffix")}
-            </>
+            <Trans
+              i18nKey="published.pageSubheading"
+              values={{ org: org ?? "" }}
+              components={{
+                orgLink: (
+                  <OrgLink
+                    org={org}
+                    href={githubOrgUrl(org ?? "")}
+                    title={t("common.openOrgOnGitHub", { org })}
+                  />
+                ),
+              }}
+            />
           }
         />
         {org && <PublishedResourcesPane org={org} />}

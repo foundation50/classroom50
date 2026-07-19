@@ -39,10 +39,8 @@ It reports five independent things:
      and <tag> markers (see TRANSLATION_PROMPT.md). i18next plural suffixes
      (_one/_other/...) are exempt. Always fails the run (exit 1) so the
      convention can't return. Scope caveat: the check matches the underscore
-     naming only -- a few stitched sentences survive under camelCase names it
-     cannot see (assignments.template.okPrefix*/okSuffix,
-     orgSettings.preflight.reviewFixOn/reviewFixSuffix); convert those on
-     touch rather than adding lookalikes.
+     naming only -- a camelCase lookalike (fooPrefix/fooSuffix) would evade
+     it, so reviewers should treat any Prefix/Suffix key pair as a smell.
 
   4. PHYSICAL directional classes -- Tailwind utilities that pin a physical
      edge (ml-/pr-/left-/text-left/border-l/rounded-r...) and therefore don't

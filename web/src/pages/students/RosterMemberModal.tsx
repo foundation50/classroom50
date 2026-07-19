@@ -1,5 +1,5 @@
 import { useEffect, useId, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { ExternalLink, Send, UserPlus, X } from "lucide-react"
 
 import Avatar from "@/components/avatar"
@@ -627,13 +627,16 @@ const RosterMemberModal = ({
             {confirmingUnenroll ? (
               <div className="flex flex-col gap-3 rounded-box border border-error/30 bg-error/5 p-4 text-sm">
                 <p className="text-base-content/80">
-                  {t("students.unenrollBodyPrefix")}{" "}
-                  <span className="font-semibold text-base-content">
-                    {label}
-                  </span>{" "}
-                  {t("students.unenrollBodyFrom")}{" "}
-                  <span className="font-semibold text-base-content">{org}</span>{" "}
-                  {t("students.unenrollBodySuffix", { classroom })}
+                  <Trans
+                    i18nKey="students.unenrollBody"
+                    values={{ label, org, classroom }}
+                    components={{
+                      label: (
+                        <span className="font-semibold text-base-content" />
+                      ),
+                      org: <span className="font-semibold text-base-content" />,
+                    }}
+                  />
                 </p>
                 <div className="flex justify-end gap-2">
                   <Button

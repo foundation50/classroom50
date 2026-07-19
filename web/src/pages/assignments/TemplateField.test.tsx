@@ -140,7 +140,9 @@ describe("TemplateField — inline Fix template access", () => {
       inOrg: true,
     })
     renderField()
-    await screen.findByText("assignments.template.okSuffix", { exact: false })
+    await screen.findByText("assignments.template.okPublicInOrg", {
+      exact: false,
+    })
     expect(screen.queryByText(ACTION_KEY)).toBeNull()
   })
 

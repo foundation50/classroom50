@@ -356,18 +356,20 @@ function renderTemplateVerdict({
           </Note>
         )
       }
-      const okPrefixKey = verification.inOrg
+      const okKey = verification.inOrg
         ? verification.visibility === "public"
-          ? "assignments.template.okPrefixPublicInOrg"
-          : "assignments.template.okPrefixPrivateInOrg"
+          ? "assignments.template.okPublicInOrg"
+          : "assignments.template.okPrivateInOrg"
         : verification.visibility === "public"
-          ? "assignments.template.okPrefixPublic"
-          : "assignments.template.okPrefixPrivate"
+          ? "assignments.template.okPublic"
+          : "assignments.template.okPrivate"
       return (
         <Note tone="success" icon={CheckCircle2}>
-          {t(okPrefixKey, { owner: verification.owner })}{" "}
-          <Code>{verification.branch}</Code>
-          {t("assignments.template.okSuffix")}
+          <Trans
+            i18nKey={okKey}
+            values={{ owner: verification.owner, branch: verification.branch }}
+            components={{ branch: <Code /> }}
+          />
         </Note>
       )
     }

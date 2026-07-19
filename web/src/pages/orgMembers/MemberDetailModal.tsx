@@ -1,5 +1,5 @@
 import { useId, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { Link } from "@tanstack/react-router"
 import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 
@@ -225,11 +225,11 @@ const MemberDetailModal = ({
           row.github_id ? (
             <div className="rounded-box border border-warning/30 bg-warning/5 p-4 text-sm">
               <p className="text-base-content/80">
-                {t("orgMembers.notMemberPrefix", { label })}{" "}
-                <span className="font-semibold">
-                  {t("orgMembers.notMemberEmphasis")}
-                </span>
-                {t("orgMembers.notMemberSuffix")}
+                <Trans
+                  i18nKey="orgMembers.notMember"
+                  values={{ label }}
+                  components={{ emphasis: <span className="font-semibold" /> }}
+                />
               </p>
               <Button
                 variant="primary"
@@ -286,27 +286,27 @@ const MemberDetailModal = ({
           <div className="rounded-box border border-error/30 bg-error/5 p-4 text-sm">
             <p className="text-base-content/80">
               {activeClassrooms.length > 0 ? (
-                <>
-                  {t("orgMembers.confirmUnenrollPrefix", { label })}{" "}
-                  <span className="font-semibold">
-                    {t("orgMembers.confirmClassroomCount", {
-                      count: activeClassrooms.length,
-                    })}
-                  </span>{" "}
-                  {t("orgMembers.confirmUnenrollMid", {
+                <Trans
+                  i18nKey="orgMembers.confirmUnenroll"
+                  count={activeClassrooms.length}
+                  values={{
+                    label,
+                    org,
                     classrooms: activeClassrooms
                       .map((c) => c.classroom)
                       .join(", "),
-                  })}{" "}
-                  <span className="font-semibold">{org}</span>{" "}
-                  {t("orgMembers.confirmUnenrollSuffix")}
-                </>
+                  }}
+                  components={{
+                    count: <span className="font-semibold" />,
+                    org: <span className="font-semibold" />,
+                  }}
+                />
               ) : (
-                <>
-                  {t("orgMembers.confirmRemovePrefix", { label })}{" "}
-                  <span className="font-semibold">{org}</span>{" "}
-                  {t("orgMembers.confirmRemoveSuffix")}
-                </>
+                <Trans
+                  i18nKey="orgMembers.confirmRemove"
+                  values={{ label, org }}
+                  components={{ org: <span className="font-semibold" /> }}
+                />
               )}
             </p>
             <div className="mt-3 flex justify-end gap-2">

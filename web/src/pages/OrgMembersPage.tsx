@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import { useParams } from "@tanstack/react-router"
 import { useQueryClient } from "@tanstack/react-query"
 import {
@@ -376,13 +376,19 @@ const OrgMembersPage = () => {
             title={t("orgMembers.heading")}
             subtitle={
               <>
-                {t("orgMembers.subtitlePrefix")}{" "}
-                <OrgLink
-                  org={org}
-                  href={githubOrgPeopleUrl(org ?? "")}
-                  title={t("common.openOrgOnGitHub", { org })}
-                />{" "}
-                {t("orgMembers.subtitleSuffix")}
+                <Trans
+                  i18nKey="orgMembers.subtitle"
+                  values={{ org: org ?? "" }}
+                  components={{
+                    orgLink: (
+                      <OrgLink
+                        org={org}
+                        href={githubOrgPeopleUrl(org ?? "")}
+                        title={t("common.openOrgOnGitHub", { org })}
+                      />
+                    ),
+                  }}
+                />
                 {org && (
                   <a
                     href={githubOrgPeopleUrl(org)}
