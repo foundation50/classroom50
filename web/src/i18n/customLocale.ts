@@ -146,6 +146,16 @@ export function flattenBundle(input: unknown, prefix = ""): FlatBundle {
   return out
 }
 
+// react-i18next's <Trans> parses translated strings as HTML and merges any
+// attributes found on a marker tag onto the mapped component — with the
+// pack's attributes winning. A hostile pack value like
+// `<repoLink href="https://evil.example">` would repoint a trusted link
+// (phishing; React blocks javascript: hrefs, so scripts are not reachable).
+// Our own locale contract is bare markers only (<repo>, </repo>, <hint/>;
+// see verify_locale.py), so any attribute-bearing tag is rejected outright.
+// The lookahead permits the space in a bare self-closing `<br />`.
+const ATTR_MARKER_RE = /<\/?[a-zA-Z][\w-]*\s+(?!\/?>)[^>]*>/
+
 // Parse + validate raw JSON. Enforces the byte cap before parsing so an
 // oversized string never reaches JSON.parse.
 export function parseBundle(text: string): FlatBundle {
@@ -164,6 +174,14 @@ export function parseBundle(text: string): FlatBundle {
     throw new LanguagePackError(
       result.error.issues[0]?.message ?? "Invalid language pack",
     )
+  }
+  for (const [key, value] of Object.entries(result.data)) {
+    if (ATTR_MARKER_RE.test(value)) {
+      throw new LanguagePackError(
+        `Value at "${key}" contains a markup tag with attributes — ` +
+          `only bare tags like <name>…</name> are allowed`,
+      )
+    }
   }
   return result.data
 }

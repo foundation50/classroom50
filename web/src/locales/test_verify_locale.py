@@ -200,3 +200,54 @@ class TestExistingGate:
             },
         )
         assert code == 0
+
+
+# --------------------------------------------------------------------------
+# missing_plural_categories(): CLDR completeness is advisory — i18next renders
+# English for counts whose category key is absent, but long-published packs
+# (ru/pl/cs) predate the check, so gaps warn without failing.
+# --------------------------------------------------------------------------
+
+
+class TestPluralCategoryGaps:
+    def test_arabic_pack_missing_categories_reported(self):
+        gaps = verify.missing_plural_categories(
+            "ar",
+            base_keys={"count_one", "count_other", "title"},
+            trans_keys={"count_one", "count_other", "title"},
+        )
+        assert gaps == ["count_few", "count_many", "count_two", "count_zero"]
+
+    def test_complete_arabic_pack_reports_none(self):
+        cats = ("zero", "one", "two", "few", "many", "other")
+        trans = {f"count_{c}" for c in cats}
+        assert (
+            verify.missing_plural_categories(
+                "ar", base_keys={"count_one", "count_other"}, trans_keys=trans
+            )
+            == []
+        )
+
+    def test_unlisted_language_assumes_one_other(self):
+        assert (
+            verify.missing_plural_categories(
+                "de",
+                base_keys={"count_one", "count_other"},
+                trans_keys={"count_one", "count_other"},
+            )
+            == []
+        )
+
+    def test_gap_is_warning_not_failure(self, monkeypatch, tmp_path):
+        # An ar.json missing _few/_many/... must still PASS (exit 0).
+        (tmp_path / "en.json").write_text(
+            json.dumps({"count_one": "{{n}} item", "count_other": "{{n}} items"}),
+            encoding="utf-8",
+        )
+        (tmp_path / "ar.json").write_text(
+            json.dumps({"count_one": "{{n}}", "count_other": "{{n}}"}),
+            encoding="utf-8",
+        )
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setattr("sys.argv", ["verify_locale.py", "ar.json"])
+        assert verify.main() == 0

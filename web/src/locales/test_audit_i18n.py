@@ -405,6 +405,27 @@ class TestPhysicalClassGate:
         )
         assert code == 1
 
+    # The quote/backtick opening branch is the one alternative unique to the
+    # Python copy of the regex (the eslint pattern opens on ^|[\s:] only, its
+    # selectors having already scoped to the string content) — a blind re-sync
+    # from directionalClassRule.ts would drop it while every space-preceded
+    # fixture stayed green. Pin it explicitly.
+    @pytest.mark.parametrize(
+        "src",
+        ['const c = "ml-2 btn"', "const c = `pl-4 ${x}`"],
+    )
+    def test_physical_class_at_string_opening_detected(
+        self, monkeypatch, tmp_path, src
+    ):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            en={"nav": {"home": "Home"}},
+            sources={"App.tsx": f't("nav.home"); {src}'},
+            strict=True,
+        )
+        assert code == 1
+
     def test_physical_ok_marker_exempts(self, monkeypatch, tmp_path):
         code = _run(
             monkeypatch,

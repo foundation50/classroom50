@@ -71,6 +71,25 @@ describe("parseBundle", () => {
     const huge = JSON.stringify({ k: "a".repeat(MAX_PACK_BYTES + 1) })
     expect(() => parseBundle(huge)).toThrow(/too large/)
   })
+
+  // <Trans> merges attributes from pack-controlled marker tags onto the mapped
+  // component (pack side wins), so an attribute-bearing tag in a hostile pack
+  // can repoint a trusted link's href. Bare markers only.
+  it("rejects markup tags carrying attributes", () => {
+    for (const hostile of [
+      '{"k":"click <repoLink href=\\"https://evil.example\\">here</repoLink>"}',
+      '{"k":"x <a title=\\"t\\">y</a>"}',
+      '{"k":"x <span onmouseover=x>y</span>"}',
+    ]) {
+      expect(() => parseBundle(hostile)).toThrow(/attributes/)
+    }
+  })
+
+  it("accepts bare markers including spaced self-closing tags", () => {
+    expect(
+      parseBundle('{"k":"No PR for <repo>{{repo}}</repo> yet <br />"}'),
+    ).toEqual({ k: "No PR for <repo>{{repo}}</repo> yet <br />" })
+  })
 })
 
 describe("normalizeLangCode", () => {

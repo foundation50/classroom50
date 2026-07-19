@@ -69,10 +69,10 @@ app for coverage problems:
 
 ```bash
 python web/src/locales/audit_i18n.py            # report
-python web/src/locales/audit_i18n.py --strict   # also fail on dead/hardcoded
+python web/src/locales/audit_i18n.py --strict   # also fail on dead/physical/hardcoded
 ```
 
-It reports three things:
+It reports five things:
 
 - **MISSING keys** — a `t("...")` in code whose key isn't in `en.json` (renders
   the raw key; always a bug). Fails the run. Recognizes double/single-quoted and
@@ -85,6 +85,15 @@ It reports three things:
   string constant (`labelKey`/`titleKey`/`what`/`why`/…) or a dynamic
   ``t(`prefix.${x}`)`` prefix. These waste translator effort — every pack
   translates a string that never renders. Warning; fails only under `--strict`.
+- **SPLIT keys** — keys using the retired `_prefix`/`_suffix`/`_1…` fragment
+  convention that stitched sentences together in JSX (forces English word
+  order on every language and breaks RTL; sentences are single keys with
+  `{{placeholders}}` and `<tag>` markers instead). Always fails the run.
+- **PHYSICAL directional classes** — Tailwind utilities pinning a physical
+  edge (`ml-`/`pr-`/`left-`/`text-left`/…) that don't mirror under
+  `dir="rtl"`; the CI backstop behind the eslint rule in
+  `web/src/eslint/directionalClassRule.ts`. A same-line `physical-ok` comment
+  exempts a deliberate physical edge. Warning; fails only under `--strict`.
 - **HARDCODED strings** — user-facing literals that bypass i18n entirely
   (prose in `aria-label`/`alt`/`title`/`placeholder`, or `setError`/`toast`
   calls), so **no pack can ever translate them.** Heuristic; warning, fails

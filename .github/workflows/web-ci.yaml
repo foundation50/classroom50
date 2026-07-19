@@ -91,19 +91,28 @@ jobs:
         working-directory: ${{ github.workspace }}
         run: python -m pip install --quiet pytest
 
+      # Both locale-tooling pytest suites run ahead of the gates they pin
+      # (audit_i18n.py below; verify_locale.py in translate-locales.yaml) so a
+      # regex regression can't silently turn either gate into a no-op.
       - name: i18n audit tests
         working-directory: ${{ github.workspace }}
-        run: python -m pytest web/src/locales/test_audit_i18n.py -v
+        run: python -m pytest web/src/locales/ -v
 
       # i18n coverage gate (--strict): fails on any of
       #   1. MISSING keys  — a t("...") referencing a key absent from en.json
       #      (renders the raw key / English fallback in every language),
       #   2. DEAD keys      — an en.json key no source literal/prefix references
-      #      (translation dead weight; drifts packs), and
-      #   3. HARDCODED prose — user-facing string literals bypassing i18n.
+      #      (translation dead weight; drifts packs),
+      #   3. SPLIT keys     — retired _prefix/_suffix sentence-fragment keys
+      #      (break word order in RTL and many LTR languages; always fails),
+      #   4. PHYSICAL directional classes — Tailwind utilities that don't
+      #      mirror under dir="rtl" (backstop behind the eslint rule), and
+      #   5. HARDCODED prose — user-facing string literals bypassing i18n.
       # Dev-only UI (components/dev/) and a tiny allowlist of format examples are
-      # exempt from (3); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES.
-      # Coverage limits (green here is NOT "no hardcoded prose anywhere"): (3) is
+      # exempt from (5); see HARDCODED_IGNORE_PREFIXES / _ALLOWED_VALUES; a
+      # same-line `physical-ok` comment exempts a deliberate physical edge
+      # from (4).
+      # Coverage limits (green here is NOT "no hardcoded prose anywhere"): (5) is
       # a heuristic over double-quoted aria-label/alt/title/placeholder + raw
       # toast/setError/failDeviceFlow args only — it misses JSX children text,
       # brace/template-literal attributes, and single-quoted attributes; (1)/(2)

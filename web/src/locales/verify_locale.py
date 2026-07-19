@@ -53,6 +53,53 @@ def markup_markers(value):
     return sorted(re.findall(r"</?[a-zA-Z]\w*\s*/?>", value))
 
 
+# CLDR plural categories per target language (Intl.PluralRules cardinal set).
+# en.json carries only _one/_other, and i18next does NOT fall back to the
+# pack's own _other when a category-specific key is missing -- it jumps
+# straight to English (e.g. an ar pack without _few renders English for
+# counts 3-10). Python's stdlib has no CLDR data, so the map is hand-pinned
+# for the languages in targets.json; unlisted codes assume (one, other).
+# Reported as a WARNING, not a failure: several long-published packs (ru, pl,
+# cs) predate this check and would otherwise hard-fail the patch pipeline.
+PLURAL_CATEGORIES = {
+    "zh-CN": ("other",),
+    "zh-TW": ("other",),
+    "ja": ("other",),
+    "ko": ("other",),
+    "fr": ("one", "many", "other"),
+    "it": ("one", "many", "other"),
+    "es": ("one", "many", "other"),
+    "pt-BR": ("one", "many", "other"),
+    "ru": ("one", "few", "many", "other"),
+    "pl": ("one", "few", "many", "other"),
+    "cs": ("one", "few", "many", "other"),
+    "ar": ("zero", "one", "two", "few", "many", "other"),
+    "he": ("one", "two", "other"),
+}
+
+
+def missing_plural_categories(lang, base_keys, trans_keys):
+    """Plural keys the target language needs but the pack lacks.
+
+    For every base key that is pluralized in en.json (has _one/_other), the
+    pack should carry the target language's full CLDR category set; a missing
+    category renders ENGLISH for the counts it covers. Returns sorted
+    "stem_category" entries.
+    """
+    required = PLURAL_CATEGORIES.get(lang, ("one", "other"))
+    stems = {
+        key.rsplit("_", 1)[0]
+        for key in base_keys
+        if key.endswith(("_one", "_other"))
+    }
+    return sorted(
+        f"{stem}_{cat}"
+        for stem in stems
+        for cat in required
+        if f"{stem}_{cat}" not in trans_keys
+    )
+
+
 def is_allowed_plural_variant(key, base_keys):
     """Allow extra keys only when they are i18next plural variants of a base key."""
     if not any(key.endswith(suffix) for suffix in PLURAL_SUFFIXES):
@@ -94,6 +141,11 @@ def main():
         if markup_markers(base[key]) != markup_markers(trans[key]):
             mk_mismatch.append((key, markup_markers(base[key]), markup_markers(trans[key])))
 
+    # Advisory only (see PLURAL_CATEGORIES): missing categories render English
+    # for the counts they cover, but must not fail long-published packs.
+    lang = trans_path.stem
+    plural_gaps = missing_plural_categories(lang, base_keys, trans_keys)
+
     passed = not (missing or extra or bad_type or ph_mismatch or mk_mismatch)
 
     print(f"base keys: {len(base_keys)} | translated keys: {len(trans_keys)}")
@@ -109,6 +161,16 @@ def main():
     for key, base_mk, trans_mk in mk_mismatch:
         print(f"  {key}: base={base_mk} translated={trans_mk}")
     if not mk_mismatch:
+        print("  (none)")
+    print(f"PLURAL category gaps ({len(plural_gaps)}) — WARNING, not a failure:")
+    for key in plural_gaps:
+        print(f"  {key}")
+    if plural_gaps:
+        print(
+            f"  ({lang} needs {'/'.join(PLURAL_CATEGORIES.get(lang, ('one', 'other')))};"
+            " i18next renders ENGLISH for counts whose category key is absent)"
+        )
+    else:
         print("  (none)")
 
     print("\nRESULT:", "PASS" if passed else "FAIL")

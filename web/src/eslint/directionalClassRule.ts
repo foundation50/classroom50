@@ -24,4 +24,5 @@ export const directionalClassTemplateSelector = `JSXAttribute[name.name='classNa
 export const directionalClassMessage =
   "Physical directional class breaks RTL mirroring: use the logical equivalent " +
   "(ms-/me-/ps-/pe-/start-/end-/text-start/text-end/border-s/border-e/rounded-s/rounded-e). " +
-  "If a physical edge is genuinely intended, add an eslint-disable with the reason."
+  "If a physical edge is genuinely intended, add a same-line `physical-ok: <reason>` " +
+  "comment (which also exempts it from the audit_i18n.py CI backstop) plus an eslint-disable."

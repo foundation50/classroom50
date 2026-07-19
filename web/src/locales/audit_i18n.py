@@ -11,7 +11,7 @@ Run from the repo root (or anywhere -- it locates web/src relative to itself):
     python web/src/locales/audit_i18n.py            # human-readable report
     python web/src/locales/audit_i18n.py --strict   # also exit 1 on dead/hardcoded
 
-It reports three independent things:
+It reports five independent things:
 
   1. MISSING keys  -- a t("...") / i18n.t("...") reference in code whose key is
      absent from en.json. These render as the raw key (or English fallback) and
@@ -37,8 +37,12 @@ It reports three independent things:
      sentences together in JSX. Fragments force English word order onto every
      language and break RTL; sentences must be single keys with {{placeholders}}
      and <tag> markers (see TRANSLATION_PROMPT.md). i18next plural suffixes
-     (_one/_other/...) are exempt. Always fails the run (exit 1) -- the
-     convention was fully removed and must not return.
+     (_one/_other/...) are exempt. Always fails the run (exit 1) so the
+     convention can't return. Scope caveat: the check matches the underscore
+     naming only -- a few stitched sentences survive under camelCase names it
+     cannot see (assignments.template.okPrefix*/okSuffix,
+     orgSettings.preflight.reviewFixOn/reviewFixSuffix); convert those on
+     touch rather than adding lookalikes.
 
   4. PHYSICAL directional classes -- Tailwind utilities that pin a physical
      edge (ml-/pr-/left-/text-left/border-l/rounded-r...) and therefore don't
@@ -228,7 +232,7 @@ def main() -> int:
     parser.add_argument(
         "--strict",
         action="store_true",
-        help="also fail (exit 1) on dead keys and hardcoded strings",
+        help="also fail (exit 1) on dead keys, physical classes, and hardcoded strings",
     )
     args = parser.parse_args()
 
@@ -341,6 +345,11 @@ def main() -> int:
         print(f"  {p}:{i}: {s!r}")
     if not physical:
         print("  (none)")
+    else:
+        print(
+            "  (convert to the logical equivalent, or append a"
+            " `physical-ok: <reason>` comment to exempt a deliberate edge)"
+        )
 
     print(f"\n=== HARDCODED user-facing strings ({len(hardcoded)}) — bypass i18n ===")
     for p, i, s in hardcoded:
