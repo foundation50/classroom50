@@ -13,7 +13,8 @@
 export const directionalClassPattern =
   "(?:^|[\\s:])-?(?:(?:scroll-)?[mp][lr]|left|right)-(?:\\d|\\[|auto|full|px)" +
   "|(?:^|[\\s:])text-(?:left|right)(?![A-Za-z0-9_-])" +
-  "|(?:^|[\\s:])(?:border|rounded)-(?:[lr]|t[lr]|b[lr])(?![A-Za-z])"
+  "|(?:^|[\\s:])(?:border|rounded)-(?:[lr]|t[lr]|b[lr])(?![A-Za-z])" +
+  "|(?:^|[\\s:])(?:float|clear)-(?:left|right)(?![A-Za-z0-9_-])"
 
 export const directionalClassLiteralSelector = `JSXAttribute[name.name='className'] > Literal[value=/${directionalClassPattern}/]`
 

@@ -1,5 +1,6 @@
 // @vitest-environment node
 import path from "path"
+import directionalClassProbes from "./directionalClassProbes.json"
 import { fileURLToPath } from "url"
 import { describe, expect, it } from "vitest"
 import { ESLint } from "eslint"
@@ -236,6 +237,26 @@ describe("no-restricted-syntax physical directional class guard", () => {
     "justify-start",
   ])("pattern ignores logical/lookalike class: %s", (cls) => {
     expect(pattern.test(cls)).toBe(false)
+  })
+
+  // Cross-language parity: the same probe fixture is asserted against
+  // PHYSICAL_CLASS_RE in test_audit_i18n.py. If either pattern changes without
+  // the fixture (and therefore the other pattern), one of the two suites fails
+  // — the sync is a tested contract, not a comment.
+  describe("shared probe fixture (parity with audit_i18n.py)", () => {
+    it.each(directionalClassProbes.matches)(
+      "fixture match probe: %s",
+      (cls) => {
+        expect(pattern.test(cls)).toBe(true)
+      },
+    )
+
+    it.each(directionalClassProbes.nonMatches)(
+      "fixture non-match probe: %s",
+      (cls) => {
+        expect(pattern.test(cls)).toBe(false)
+      },
+    )
   })
 
   it("warns for a physical class in a className string literal", async () => {
