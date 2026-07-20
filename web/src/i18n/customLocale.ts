@@ -152,9 +152,24 @@ export function flattenBundle(input: unknown, prefix = ""): FlatBundle {
 // `<repoLink href="https://evil.example">` would repoint a trusted link
 // (phishing; React blocks javascript: hrefs, so scripts are not reachable).
 // Our own locale contract is bare markers only (<repo>, </repo>, <hint/>;
-// see verify_locale.py), so any attribute-bearing tag is rejected outright.
-// The lookahead permits the space in a bare self-closing `<br />`.
-const ATTR_MARKER_RE = /<\/?[a-zA-Z][\w-]*\s+(?!\/?>)[^>]*>/
+// see verify_locale.py).
+//
+// Validate with an allowlist, not a denylist: extract every angle-bracket tag
+// and require each to be a bare marker. A denylist keyed on `name\s+attr` let
+// `<repoLink/ href="…">` slip through — html-parse-stringify (the parser
+// <Trans> uses) treats `/` as an attribute separator too, so it still
+// extracted a clean `href`. Matching only the exact bare-marker shape rejects
+// any tag carrying anything beyond an optional self-closing slash, closing
+// that and any future tokenizer-shape gap by construction. `<owner>/<repo>`
+// (two bare tags) and non-tag text like "< 1 day" pass; "<a href=…>",
+// "<a/href=…>", and newline/tab-bearing tags are rejected.
+const TAG_RE = /<[^>]*>/g
+const BARE_MARKER_RE = /^<\/?[a-zA-Z][\w-]*\s*\/?>$/
+
+function hasAttributeMarker(value: string): boolean {
+  const tags = value.match(TAG_RE)
+  return tags !== null && tags.some((tag) => !BARE_MARKER_RE.test(tag))
+}
 
 // Parse + validate raw JSON. Enforces the byte cap before parsing so an
 // oversized string never reaches JSON.parse.
@@ -176,7 +191,7 @@ export function parseBundle(text: string): FlatBundle {
     )
   }
   for (const [key, value] of Object.entries(result.data)) {
-    if (ATTR_MARKER_RE.test(value)) {
+    if (hasAttributeMarker(value)) {
       throw new LanguagePackError(
         `Value at "${key}" contains a markup tag with attributes — ` +
           `only bare tags like <name>…</name> are allowed`,
@@ -588,34 +603,39 @@ export async function prepareFromUrl(
 
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  let res: Response
   try {
-    res = await fetch(parsed.toString(), { signal: controller.signal })
-  } catch {
-    throw new LanguagePackError(
-      "Couldn't fetch (CORS/network) — download the file and upload it instead.",
-    )
+    let res: Response
+    try {
+      res = await fetch(parsed.toString(), { signal: controller.signal })
+    } catch {
+      throw new LanguagePackError(
+        "Couldn't fetch (CORS/network) — download the file and upload it instead.",
+      )
+    }
+
+    if (!res.ok) {
+      throw new LanguagePackError(
+        `Couldn't fetch (HTTP ${res.status}) — download the file and upload it instead.`,
+      )
+    }
+
+    // A chunked response omits Content-Length (Number(null) === 0 passes a
+    // header-only check), so also enforce the cap while streaming (below).
+    const declared = Number(res.headers.get("content-length"))
+    if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
+      controller.abort()
+      throw tooLargeError()
+    }
+
+    // Keep the timeout armed across the body read: clearing it once headers
+    // arrive would leave a slow-drip response (bytes trickled under the cap)
+    // with no deadline, hanging the stream read indefinitely.
+    const text = await readCappedText(res, controller)
+    const bundle = parseBundle(text)
+    return buildPreview(resolved, bundle)
   } finally {
     clearTimeout(timeout)
   }
-
-  if (!res.ok) {
-    throw new LanguagePackError(
-      `Couldn't fetch (HTTP ${res.status}) — download the file and upload it instead.`,
-    )
-  }
-
-  // A chunked response omits Content-Length (Number(null) === 0 passes a
-  // header-only check), so also enforce the cap while streaming (below).
-  const declared = Number(res.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > MAX_PACK_BYTES) {
-    controller.abort()
-    throw tooLargeError()
-  }
-
-  const text = await readCappedText(res, controller)
-  const bundle = parseBundle(text)
-  return buildPreview(resolved, bundle)
 }
 
 // ---- Built-in registry ------------------------------------------------------
@@ -659,60 +679,65 @@ export function fetchRegistry(): Promise<RegistryLanguage[]> {
 async function fetchRegistryUncached(): Promise<RegistryLanguage[]> {
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
-  let res: Response
   try {
-    res = await fetch(REGISTRY_INDEX_URL, { signal: controller.signal })
-  } catch {
-    throw new LanguagePackError(
-      "Couldn't reach the language registry — check your connection or try again.",
-    )
+    let res: Response
+    try {
+      res = await fetch(REGISTRY_INDEX_URL, { signal: controller.signal })
+    } catch {
+      throw new LanguagePackError(
+        "Couldn't reach the language registry — check your connection or try again.",
+      )
+    }
+
+    if (!res.ok) {
+      throw new LanguagePackError(
+        `Couldn't load the language registry (HTTP ${res.status}).`,
+      )
+    }
+
+    const declared = Number(res.headers.get("content-length"))
+    if (Number.isFinite(declared) && declared > MAX_REGISTRY_BYTES) {
+      controller.abort()
+      throw new LanguagePackError("Language registry manifest is too large.")
+    }
+
+    // Keep the timeout armed across the streaming read (see prepareFromUrl).
+    let text: string
+    try {
+      text = await readCappedText(res, controller, MAX_REGISTRY_BYTES)
+    } catch {
+      throw new LanguagePackError("Language registry manifest is too large.")
+    }
+
+    let json: unknown
+    try {
+      json = JSON.parse(text)
+    } catch {
+      throw new LanguagePackError(
+        "Language registry manifest is not valid JSON.",
+      )
+    }
+
+    const parsed = registrySchema.safeParse(json)
+    if (!parsed.success) {
+      throw new LanguagePackError("Language registry manifest is malformed.")
+    }
+
+    // Keep well-formed entries, drop the base language, dedupe.
+    const seen = new Set<string>()
+    const langs: RegistryLanguage[] = []
+    for (const entry of parsed.data.languages) {
+      const one = registryEntrySchema.safeParse(entry)
+      if (!one.success) continue
+      const { code, version, hash } = one.data
+      if (code === BASE_LANG || seen.has(code)) continue
+      seen.add(code)
+      langs.push({ code, version, hash })
+    }
+    return langs
   } finally {
     clearTimeout(timeout)
   }
-
-  if (!res.ok) {
-    throw new LanguagePackError(
-      `Couldn't load the language registry (HTTP ${res.status}).`,
-    )
-  }
-
-  const declared = Number(res.headers.get("content-length"))
-  if (Number.isFinite(declared) && declared > MAX_REGISTRY_BYTES) {
-    controller.abort()
-    throw new LanguagePackError("Language registry manifest is too large.")
-  }
-
-  let text: string
-  try {
-    text = await readCappedText(res, controller, MAX_REGISTRY_BYTES)
-  } catch {
-    throw new LanguagePackError("Language registry manifest is too large.")
-  }
-
-  let json: unknown
-  try {
-    json = JSON.parse(text)
-  } catch {
-    throw new LanguagePackError("Language registry manifest is not valid JSON.")
-  }
-
-  const parsed = registrySchema.safeParse(json)
-  if (!parsed.success) {
-    throw new LanguagePackError("Language registry manifest is malformed.")
-  }
-
-  // Keep well-formed entries, drop the base language, dedupe.
-  const seen = new Set<string>()
-  const langs: RegistryLanguage[] = []
-  for (const entry of parsed.data.languages) {
-    const one = registryEntrySchema.safeParse(entry)
-    if (!one.success) continue
-    const { code, version, hash } = one.data
-    if (code === BASE_LANG || seen.has(code)) continue
-    seen.add(code)
-    langs.push({ code, version, hash })
-  }
-  return langs
 }
 
 // Build the registry URL for a language pack.

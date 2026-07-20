@@ -81,6 +81,17 @@ describe("parseBundle", () => {
       '{"k":"click <repoLink href=\\"https://evil.example\\">here</repoLink>"}',
       '{"k":"x <a title=\\"t\\">y</a>"}',
       '{"k":"x <span onmouseover=x>y</span>"}',
+      // Slash-separated attribute: html-parse-stringify treats `/` as an
+      // attribute separator and extracts a clean href, so this must be rejected
+      // even though there's no space between the tag name and the attribute.
+      '{"k":"click <repoLink/ href=\\"https://evil.example\\">here</repoLink>"}',
+      '{"k":"x <br/ href=\\"https://evil.example\\">y"}',
+      // Whitespace other than a space (newline/tab) between name and attribute.
+      '{"k":"x <a\\nhref=\\"https://evil.example\\">y</a>"}',
+      '{"k":"x <a\\thref=\\"https://evil.example\\">y</a>"}',
+      // A hostile attribute tag following a legitimate bare marker in the same
+      // value must still be caught.
+      '{"k":"<repo>{{repo}}</repo> <a href=\\"https://evil.example\\">x</a>"}',
     ]) {
       expect(() => parseBundle(hostile)).toThrow(/attributes/)
     }
@@ -90,6 +101,18 @@ describe("parseBundle", () => {
     expect(
       parseBundle('{"k":"No PR for <repo>{{repo}}</repo> yet <br />"}'),
     ).toEqual({ k: "No PR for <repo>{{repo}}</repo> yet <br />" })
+  })
+
+  it("accepts non-markup angle brackets and adjacent bare markers", () => {
+    // "<owner>/<repo>" is two bare marker tags; "< 1 day" is not a tag at all.
+    expect(
+      parseBundle(
+        '{"a":"<owner>{{owner}}</owner>/<repo>{{repo}}</repo>","b":"less than < 1 day"}',
+      ),
+    ).toEqual({
+      a: "<owner>{{owner}}</owner>/<repo>{{repo}}</repo>",
+      b: "less than < 1 day",
+    })
   })
 })
 
