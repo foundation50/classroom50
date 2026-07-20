@@ -30,8 +30,9 @@ type StudentRole = "student"
 export type ClassroomRole = StudentRole | StaffRole
 
 // A resolved classroom role for guards/UI: the base plus the fail-closed
-// sentinel. Precedence (highest first): teacher > ta > student. `unresolved`
-// means "let the page load; don't redirect" rather than demoting a real staffer.
+// sentinel. Precedence (highest first): teacher > hta > ta > student.
+// `unresolved` means "let the page load; don't redirect" rather than demoting a
+// real staffer.
 export type ResolvedRole = ClassroomRole | "unresolved"
 
 // The roles a teacher can preview the app AS — a client-side lens that never
@@ -39,12 +40,13 @@ export type ResolvedRole = ClassroomRole | "unresolved"
 // roles so it can't drift: you can't preview as the top role.
 export type ViewAsRole = Exclude<ClassroomRole, "teacher" | "instructor">
 
-// Role precedence (teacher > ta > student), shared by the primary-badge/
+// Role precedence (teacher > hta > ta > student), shared by the primary-badge/
 // roster sort and the view-as downgrade clamp so the two can't disagree. The
 // legacy `instructor` alias shares the teacher rank.
 export const ROLE_RANK: Record<ClassroomRole, number> = {
-  teacher: 2,
-  instructor: 2,
+  teacher: 3,
+  instructor: 3,
+  hta: 2,
   ta: 1,
   student: 0,
 }

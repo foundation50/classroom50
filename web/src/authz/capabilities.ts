@@ -12,7 +12,7 @@ export type Capability =
   // signal (member of >=1 classroom staff team).
   | "viewOrgStaffContent"
   // Classroom-scoped.
-  | "viewClassroomStaffContent" // roster / authoring / submissions (teacher|ta)
+  | "viewClassroomStaffContent" // roster / authoring / submissions (teacher|hta|ta)
   | "editClassroomSettings" // teacher only
   | "previewAsRole" // the "view as" offer — teacher only
   | "claimTeacher" // org owner who currently resolves to student here
@@ -42,7 +42,11 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
     case "viewOrgStaffContent":
       return orgStaff === true
     case "viewClassroomStaffContent":
-      return isTeacherRole(classroomRole) || classroomRole === "ta"
+      return (
+        isTeacherRole(classroomRole) ||
+        classroomRole === "hta" ||
+        classroomRole === "ta"
+      )
     case "editClassroomSettings":
       return isTeacherRole(classroomRole)
     case "previewAsRole":

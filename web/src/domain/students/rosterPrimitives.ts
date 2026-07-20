@@ -3,7 +3,7 @@ import {
   addUserToTeam,
   cancelOrgInvitation,
   ensureClassroomRoleTeam,
-  grantTeamConfigRepoWrite,
+  grantTeamConfigRepoAccess,
   type GitTreeEntry,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -333,6 +333,7 @@ export async function resolveClassroomTeamSlugs(
       instructor:
         json?.teams?.instructor?.slug ||
         classroomTeamSlug(classroom, "instructor"),
+      hta: json?.teams?.hta?.slug || classroomTeamSlug(classroom, "hta"),
       ta: json?.teams?.ta?.slug || classroomTeamSlug(classroom, "ta"),
     },
   }
@@ -522,6 +523,7 @@ export async function resolveTeamIdByRole(
     student: undefined,
     teacher: undefined,
     instructor: undefined,
+    hta: undefined,
     ta: undefined,
   }
   if (rolesPresent.has("student")) {
@@ -537,7 +539,7 @@ export async function resolveTeamIdByRole(
     if (role === "teacher" ? !wantsTeacher : !rolesPresent.has(role)) continue
     try {
       const team = await ensureClassroomRoleTeam(client, org, classroom, role)
-      await grantTeamConfigRepoWrite(client, org, team.slug)
+      await grantTeamConfigRepoAccess(client, org, team.slug, role)
       result[role] = team.id
       if (role === "teacher") result.instructor = team.id
     } catch (err) {

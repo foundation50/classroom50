@@ -60,6 +60,7 @@ describe("countByRole", () => {
     expect(countByRole(rows)).toEqual({
       teacher: 1,
       instructor: 0,
+      hta: 0,
       ta: 1,
       student: 3,
     })
@@ -79,6 +80,7 @@ describe("enrolledCountsByRole", () => {
     expect(enrolledCountsByRole(rows)).toEqual({
       teacher: 1,
       instructor: 0,
+      hta: 0,
       ta: 1,
       student: 2,
     })

@@ -15,6 +15,7 @@ import useCancelStaffInvite from "@/hooks/mutations/useCancelStaffInvite"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
+import { ROLE_BADGE_TONE } from "@/util/classroomRoleUI"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 
@@ -24,7 +25,17 @@ import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
 const ROLE_LABEL_KEY: Record<StaffRole, string> = {
   teacher: "classes.staff.roleTeacher",
   instructor: "classes.staff.roleTeacher",
+  hta: "classes.staff.roleHeadTa",
   ta: "classes.staff.roleTa",
+}
+
+// i18n key for each role's plural label (section headings). Keyed by role so a
+// new staff role renders correctly rather than defaulting to the TA branch.
+const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
+  teacher: "classes.staff.roleTeacherPlural",
+  instructor: "classes.staff.roleTeacherPlural",
+  hta: "classes.staff.roleHeadTaPlural",
+  ta: "classes.staff.roleTaPlural",
 }
 
 // Manage a classroom's staff (teacher / TA), backed by the per-classroom
@@ -213,10 +224,7 @@ const StaffRoleList = ({
   const invitesQuery = useQuery(teamInvitationsQuery(client, org, teamSlug))
   const pendingInvites = invitesQuery.data ?? []
 
-  const rolePlural =
-    role === "teacher"
-      ? t("classes.staff.roleTeacherPlural")
-      : t("classes.staff.roleTaPlural")
+  const rolePlural = t(ROLE_PLURAL_KEY[role])
 
   return (
     <div>
@@ -280,10 +288,7 @@ const StaffMemberRow = ({
   const teamSlug = classroomTeamSlug(classroom, role)
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
-  const rolePlural =
-    role === "teacher"
-      ? t("classes.staff.roleTeacherPlural")
-      : t("classes.staff.roleTaPlural")
+  const rolePlural = t(ROLE_PLURAL_KEY[role])
 
   const removeMutation = useRemoveStaffMember(org, classroom, teamSlug)
 
@@ -301,11 +306,7 @@ const StaffMemberRow = ({
           className="size-6 rounded-full shrink-0"
         />
         <span className="truncate text-sm">@{member.login}</span>
-        <Badge
-          size="xs"
-          tone={role === "teacher" ? "primary" : "secondary"}
-          className="shrink-0"
-        >
+        <Badge size="xs" tone={ROLE_BADGE_TONE[role]} className="shrink-0">
           {roleLabel}
         </Badge>
       </a>

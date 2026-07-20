@@ -2123,12 +2123,14 @@ const makeTeamClient = (opts: {
   members?: string[]
   teamHas?: TeamMemberSeed[]
   instructorHas?: TeamMemberSeed[]
+  htaHas?: TeamMemberSeed[]
   taHas?: TeamMemberSeed[]
   // Pending team invitations per role (login, and/or email for email-only
   // invitees). syncRosterFromTeam reads these so it never clears the role of a
   // person who is invited-but-not-yet-a-member.
   teamInvites?: { login?: string; email?: string }[]
   instructorInvites?: { login?: string; email?: string }[]
+  htaInvites?: { login?: string; email?: string }[]
   taInvites?: { login?: string; email?: string }[]
   // When set, a members read for the instructor/ta team rejects with this
   // non-404 status (to exercise the best-effort staff-read degradation).
@@ -2179,9 +2181,11 @@ const makeTeamClient = (opts: {
         const seed =
           slug.endsWith("-instructor") || slug.endsWith("-teacher")
             ? (opts.instructorInvites ?? [])
-            : slug.endsWith("-ta")
-              ? (opts.taInvites ?? [])
-              : (opts.teamInvites ?? [])
+            : slug.endsWith("-hta")
+              ? (opts.htaInvites ?? [])
+              : slug.endsWith("-ta")
+                ? (opts.taInvites ?? [])
+                : (opts.teamInvites ?? [])
         return Promise.resolve(
           seed.map((i) => ({ login: i.login ?? null, email: i.email ?? null })),
         )
@@ -2223,9 +2227,11 @@ const makeTeamClient = (opts: {
         const seed =
           slug.endsWith("-instructor") || slug.endsWith("-teacher")
             ? (opts.instructorHas ?? [])
-            : slug.endsWith("-ta")
-              ? (opts.taHas ?? [])
-              : (opts.teamHas ?? [])
+            : slug.endsWith("-hta")
+              ? (opts.htaHas ?? [])
+              : slug.endsWith("-ta")
+                ? (opts.taHas ?? [])
+                : (opts.teamHas ?? [])
         const members = seed.map((m) => ({
           login: m.login,
           id: m.id,

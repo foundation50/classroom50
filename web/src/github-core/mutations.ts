@@ -31,6 +31,7 @@ export {
   ensureClassroomTeam,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoWrite,
+  grantTeamConfigRepoAccess,
   ensureStaffTeams,
   deleteClassroomTeam,
   addRepositoryToTeam,

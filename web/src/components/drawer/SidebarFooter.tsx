@@ -226,44 +226,54 @@ export const SidebarFooter = () => {
                       <span className="flex-1">{t("nav.viewAs")}</span>
                     </summary>
                     <ul>
-                      {(["self", "ta", "student"] as const).map((option) => {
-                        const active =
-                          option === "self"
-                            ? viewAs === null
-                            : viewAs === option
-                        const label =
-                          option === "self"
-                            ? t("nav.viewAsMyself", {
-                                role: (() => {
-                                  const key = roleLabelKey(actualClassroomRole)
-                                  return key
-                                    ? t(key)
-                                    : t("nav.viewAsMyselfFallback")
-                                })(),
-                              })
-                            : option === "ta"
-                              ? t("nav.viewAsTA")
-                              : t("nav.viewAsStudent")
-                        return (
-                          <li key={option}>
-                            <button
-                              type="button"
-                              className={active ? "active font-semibold" : ""}
-                              onClick={() => {
-                                selectViewAs(option === "self" ? null : option)
-                                setMenuOpen(false)
-                              }}
-                            >
-                              {active ? (
-                                <Check aria-hidden="true" className="size-4" />
-                              ) : (
-                                <span className="size-4" />
-                              )}
-                              {label}
-                            </button>
-                          </li>
-                        )
-                      })}
+                      {(["self", "hta", "ta", "student"] as const).map(
+                        (option) => {
+                          const active =
+                            option === "self"
+                              ? viewAs === null
+                              : viewAs === option
+                          const label =
+                            option === "self"
+                              ? t("nav.viewAsMyself", {
+                                  role: (() => {
+                                    const key =
+                                      roleLabelKey(actualClassroomRole)
+                                    return key
+                                      ? t(key)
+                                      : t("nav.viewAsMyselfFallback")
+                                  })(),
+                                })
+                              : option === "hta"
+                                ? t("nav.viewAsHeadTa")
+                                : option === "ta"
+                                  ? t("nav.viewAsTA")
+                                  : t("nav.viewAsStudent")
+                          return (
+                            <li key={option}>
+                              <button
+                                type="button"
+                                className={active ? "active font-semibold" : ""}
+                                onClick={() => {
+                                  selectViewAs(
+                                    option === "self" ? null : option,
+                                  )
+                                  setMenuOpen(false)
+                                }}
+                              >
+                                {active ? (
+                                  <Check
+                                    aria-hidden="true"
+                                    className="size-4"
+                                  />
+                                ) : (
+                                  <span className="size-4" />
+                                )}
+                                {label}
+                              </button>
+                            </li>
+                          )
+                        },
+                      )}
                     </ul>
                   </details>
                 </li>

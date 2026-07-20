@@ -44,7 +44,7 @@ function readStored(
   const key = keyFor(org, classroom)
   if (!key) return null
   const raw = sessionStorage.getItem(key)
-  return raw === "ta" || raw === "student" ? raw : null
+  return raw === "hta" || raw === "ta" || raw === "student" ? raw : null
 }
 
 // Scoped to one org (remounts on org change via `key`) and one classroom

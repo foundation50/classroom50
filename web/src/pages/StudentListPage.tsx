@@ -73,6 +73,7 @@ const StudentListContent = ({
   // class has at least one enrolled member in that role.
   const showStudentCount = roleCounts.student > 0
   const showTeacherCount = roleCounts.teacher > 0
+  const showHtaCount = roleCounts.hta > 0
   const showTaCount = roleCounts.ta > 0
 
   return (
@@ -104,6 +105,11 @@ const StudentListContent = ({
                     {t("students.teacherCount", {
                       count: roleCounts.teacher,
                     })}
+                  </Badge>
+                ) : null}
+                {showHtaCount ? (
+                  <Badge tone={ROLE_BADGE_TONE.hta} className="shrink-0">
+                    {t("students.headTaCount", { count: roleCounts.hta })}
                   </Badge>
                 ) : null}
                 {showTaCount ? (

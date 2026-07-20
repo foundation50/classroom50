@@ -381,6 +381,7 @@ describe("buildTeamRoster — needs-attention (CSV row on no team)", () => {
     expect(enrolledCountsByRole(rows)).toEqual({
       teacher: 0,
       instructor: 0,
+      hta: 0,
       ta: 0,
       student: 1,
     })

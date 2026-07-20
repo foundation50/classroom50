@@ -5,7 +5,7 @@ import { githubKeys, getUserQuery } from "@/github-core/queries"
 import {
   addUserToTeam,
   ensureClassroomRoleTeam,
-  grantTeamConfigRepoWrite,
+  grantTeamConfigRepoAccess,
   removeUserFromTeam,
 } from "@/github-core/mutations"
 import { syncRosterFromTeam } from "@/domain/students"
@@ -70,7 +70,7 @@ export function useAddStaffMember(
         classroom,
         input.role,
       )
-      await grantTeamConfigRepoWrite(client, org, team.slug)
+      await grantTeamConfigRepoAccess(client, org, team.slug, input.role)
       // GitHub auto-adds the team CREATOR as maintainer. If this action just
       // created the team, remove the acting user unless they're the target — so
       // adding a TA doesn't also make the teacher a TA.

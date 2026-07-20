@@ -14,6 +14,7 @@ export { ROLE_RANK, sortRolesByRank }
 export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
   teacher: "students.roleTeacher",
   instructor: "students.roleTeacher",
+  hta: "students.roleHeadTa",
   ta: "students.roleTa",
   student: "students.roleStudent",
 }
@@ -24,6 +25,7 @@ export const ROLE_LABEL_KEY: Record<ClassroomRole, string> = {
 export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
   teacher: "primary",
   instructor: "primary",
+  hta: "info",
   ta: "secondary",
   student: "neutral",
 }
@@ -61,13 +63,19 @@ export function hasStudentEnrollment(
 
 // Per-role head counts across the roster. `student` counts every row carrying
 // the student role (a student who is also staff still counts as a student);
-// `teacher`/`ta` count every row holding that staff role. A person on two
+// `teacher`/`hta`/`ta` count every row holding that staff role. A person on two
 // teams contributes to each of their roles — these are role tallies, not a
 // partition, so they can sum to more than the row count.
 export type RoleCounts = Record<ClassroomRole, number>
 
 export function countByRole(rows: TeamRosterRow[]): RoleCounts {
-  const counts: RoleCounts = { teacher: 0, instructor: 0, ta: 0, student: 0 }
+  const counts: RoleCounts = {
+    teacher: 0,
+    instructor: 0,
+    hta: 0,
+    ta: 0,
+    student: 0,
+  }
   for (const row of rows) {
     for (const role of row.roles) counts[role] += 1
   }

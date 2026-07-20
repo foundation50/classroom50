@@ -29,6 +29,7 @@ const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",
   teacher: "non-member",
+  hta: "non-member",
   ta: "non-member",
   student: "non-member",
 }
@@ -51,6 +52,24 @@ describe("resolveClassroomRole", () => {
 
   it("ta when in the ta team but not the teacher team", () => {
     expect(resolveClassroomRole({ ...base, ta: "member" })).toBe("ta")
+  })
+
+  it("hta when in the hta team but not the teacher team (ranks above ta)", () => {
+    expect(resolveClassroomRole({ ...base, hta: "member" })).toBe("hta")
+    // Teacher still outranks hta when in both.
+    expect(
+      resolveClassroomRole({ ...base, teacher: "member", hta: "member" }),
+    ).toBe("teacher")
+    // hta outranks ta when in both.
+    expect(resolveClassroomRole({ ...base, hta: "member", ta: "member" })).toBe(
+      "hta",
+    )
+  })
+
+  it("unresolved when the hta read is in flight and teacher/ta are non-member", () => {
+    expect(resolveClassroomRole({ ...base, hta: "unresolved" })).toBe(
+      "unresolved",
+    )
   })
 
   it("student when on the students team only (positive student signal)", () => {

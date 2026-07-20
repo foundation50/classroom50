@@ -4,7 +4,7 @@ import {
   createGitCommit,
   createGitTree,
   ensureClassroomRoleTeam,
-  grantTeamConfigRepoWrite,
+  grantTeamConfigRepoAccess,
   readOrgMembershipState,
   removeUserFromTeam,
   setOrgMembershipRole,
@@ -157,17 +157,19 @@ export async function resolveRosterUploadPreflight(
   const { org, classroom, rows } = input
   const slugs = await resolveClassroomTeamSlugs(client, org, classroom)
 
-  const [orgMembers, studentMembers, teacherMembers, taMembers] =
+  const [orgMembers, studentMembers, teacherMembers, htaMembers, taMembers] =
     await Promise.all([
       listAllOrgMembers(client, org),
       listTeamMembers(client, org, slugs.student),
       listTeamMembers(client, org, slugs.staff.teacher),
+      listTeamMembers(client, org, slugs.staff.hta),
       listTeamMembers(client, org, slugs.staff.ta),
     ])
 
   const orgSets = memberIdentitySets(orgMembers)
   const studentSets = memberIdentitySets(studentMembers)
   const teacherSets = memberIdentitySets(teacherMembers)
+  const htaSets = memberIdentitySets(htaMembers)
   const taSets = memberIdentitySets(taMembers)
 
   const resolved: ResolvedMembership = {
@@ -177,12 +179,14 @@ export async function resolveRosterUploadPreflight(
       student: studentSets.ids,
       teacher: teacherSets.ids,
       instructor: teacherSets.ids,
+      hta: htaSets.ids,
       ta: taSets.ids,
     },
     teamLoginsByRole: {
       student: studentSets.logins,
       teacher: teacherSets.logins,
       instructor: teacherSets.logins,
+      hta: htaSets.logins,
       ta: taSets.logins,
     },
   }
@@ -319,7 +323,7 @@ export async function applyClassroomRoleChange(
       })
     } else {
       const team = await ensureClassroomRoleTeam(client, org, classroom, toRole)
-      await grantTeamConfigRepoWrite(client, org, team.slug)
+      await grantTeamConfigRepoAccess(client, org, team.slug, toRole)
       await addUserToTeam(client, {
         org,
         teamSlug: team.slug,
@@ -411,7 +415,7 @@ export async function assignRosterMemberRole(
       ? await resolveClassroomTeamSlug(client, org, classroom)
       : (await ensureClassroomRoleTeam(client, org, classroom, role)).slug
   if (role !== "student") {
-    await grantTeamConfigRepoWrite(client, org, teamSlug)
+    await grantTeamConfigRepoAccess(client, org, teamSlug, role)
   }
 
   await addUserToTeam(client, { org, teamSlug, username, role: "member" })

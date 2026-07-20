@@ -3,7 +3,7 @@ import { STAFF_ROLES_WITH_LEGACY, type StaffRole } from "@/types/classroom"
 
 // Roles a per-classroom team can back. Broader than StaffRole: also the students
 // team, a real team but not a staff role (no `-<role>` suffix, absent from
-// classroom.json.teams). Layered on StaffRole so a future head-ta flows in free.
+// classroom.json.teams). Layered on StaffRole so the head-ta role flows in free.
 export type ClassroomTeamRole = "student" | StaffRole
 
 // The single derivation of a per-classroom team's slug (== name, given the
@@ -28,9 +28,10 @@ export function classroomTeamSlug(
 }
 
 // Inverse of classroomTeamSlug for a STAFF team: parse a team slug back to its
-// { classroom, role } when it is a `classroom50-<classroom>-<teacher|instructor|ta>`
-// team, else null. Used to derive an org-level staff signal from the viewer's
-// own team memberships (GET /user/teams) without reading the config repo.
+// { classroom, role } when it is a
+// `classroom50-<classroom>-<teacher|instructor|hta|ta>` team, else null. Used to
+// derive an org-level staff signal from the viewer's own team memberships
+// (GET /user/teams) without reading the config repo.
 //
 // A classroom short-name may contain hyphens (e.g. `cs-principles`), so match a
 // known role SUFFIX first, then take the middle as the classroom — never split

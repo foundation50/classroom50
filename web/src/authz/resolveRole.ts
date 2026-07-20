@@ -17,41 +17,43 @@ export type { ResolvedRole, GitHubOrgRole, GitHubTeamMembership, ViewAsRole }
 export type ClassroomRoleInput = {
   org: string | undefined
   classroom: string | undefined
-  // Per-classroom team memberships (teacher > ta > student precedence). The
-  // `teacher` signal combines membership in either the canonical `-teacher`
+  // Per-classroom team memberships (teacher > hta > ta > student precedence).
+  // The `teacher` signal combines membership in either the canonical `-teacher`
   // team or the legacy `-instructor` team (see useClassroomRole).
   teacher: GitHubTeamMembership
+  hta: GitHubTeamMembership
   ta: GitHubTeamMembership
   student: GitHubTeamMembership
 }
 
-// Pure classroom role from the three per-classroom teams (teacher > ta >
+// Pure classroom role from the per-classroom teams (teacher > hta > ta >
 // student). Fail posture is asymmetric: an in-flight ELEVATION read holds
 // (`unresolved`, fail-closed); an in-flight students read can't grant access so
 // it falls through to the safe `student` default (fail-open). See inline notes.
 export function resolveClassroomRole(input: ClassroomRoleInput): ResolvedRole {
-  const { org, classroom, teacher, ta, student } = input
+  const { org, classroom, teacher, hta, ta, student } = input
 
   if (!org || !classroom) return "student"
 
   // A confirmed membership is definitive and resolves immediately, highest
-  // precedence first — so a confirmed teacher isn't held on a slower ta/
+  // precedence first — so a confirmed teacher isn't held on a slower hta/ta/
   // student read.
   if (teacher === "member") return "teacher"
+  if (hta === "member") return "hta"
   if (ta === "member") return "ta"
   if (student === "member") return "student"
 
-  // No confirmed membership. Only the ELEVATION reads gate: if a teacher or
-  // ta read is still in flight, hold rather than demote a real staffer. The
+  // No confirmed membership. Only the ELEVATION reads gate: if a teacher, hta,
+  // or ta read is still in flight, hold rather than demote a real staffer. The
   // students-team read is intentionally NOT a gate (it can't grant access), so
   // its being unresolved falls through to the student default below.
-  if (teacher === "unresolved" || ta === "unresolved") {
+  if (teacher === "unresolved" || hta === "unresolved" || ta === "unresolved") {
     return "unresolved"
   }
 
-  // Teacher and ta are definitive non-member — no path to elevated access —
-  // so the viewer is a student (whether their students-team read confirmed
-  // membership, 404'd, or errored). Safe default.
+  // Teacher, hta, and ta are definitive non-member — no path to elevated
+  // access — so the viewer is a student (whether their students-team read
+  // confirmed membership, 404'd, or errored). Safe default.
   return "student"
 }
 
@@ -96,6 +98,8 @@ export function roleLabelKey(role: ResolvedRole): string | null {
     case "teacher":
     case "instructor":
       return "nav.roleTeacher"
+    case "hta":
+      return "nav.roleHeadTa"
     case "ta":
       return "nav.roleTa"
     case "student":

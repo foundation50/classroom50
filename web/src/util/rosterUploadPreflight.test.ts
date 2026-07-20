@@ -146,12 +146,14 @@ describe("membershipLookup", () => {
       student: new Set(["101"]),
       teacher: new Set<string>(),
       instructor: new Set<string>(),
+      hta: new Set<string>(),
       ta: new Set<string>(),
     },
     teamLoginsByRole: {
       student: new Set(["ada"]),
       teacher: new Set<string>(),
       instructor: new Set<string>(),
+      hta: new Set<string>(),
       ta: new Set(["helper"]),
     },
   }

@@ -14,13 +14,15 @@ export type Classroom = {
   // templates. Absent on classrooms created before this feature.
   team?: TeamRef
   // Per-classroom GitHub staff teams backing in-app roles. Each is a `secret`
-  // team `classroom50-<short_name>-<role>` granted config-repo write, ensured
-  // on touch. Absent on classrooms created before this feature. `instructor`
-  // is the legacy name for `teacher`, kept for backward-compatible reads during
+  // team `classroom50-<short_name>-<role>`. Teacher and head-TA (`hta`) teams
+  // are granted config-repo write; the `ta` team is read-only. Ensured on
+  // touch. Absent on classrooms created before this feature. `instructor` is
+  // the legacy name for `teacher`, kept for backward-compatible reads during
   // the rename migration; writers prefer `teacher`.
   teams?: {
     teacher?: TeamRef
     instructor?: TeamRef
+    hta?: TeamRef
     ta?: TeamRef
   }
   // Optional capability-URL secret. When present, this classroom's Pages
@@ -38,22 +40,25 @@ export type TeamRef = {
 }
 
 // The staff roles modeled as per-classroom GitHub teams, named
-// `classroom50-<short_name>-<StaffRole>`. `teacher` is canonical; `instructor`
-// is its legacy alias, retained so pre-rename classrooms (whose team slug and
-// `teams.instructor` ref say "instructor") still resolve. New teams/writes use
-// `teacher`; reads accept either.
-export type StaffRole = "teacher" | "instructor" | "ta"
+// `classroom50-<short_name>-<StaffRole>`. `teacher` is canonical; `hta` (head
+// TA) is the middle tier granted config-repo write but never org-owner;
+// `instructor` is teacher's legacy alias, retained so pre-rename classrooms
+// (whose team slug and `teams.instructor` ref say "instructor") still resolve.
+// New teams/writes use `teacher`; reads accept either.
+export type StaffRole = "teacher" | "instructor" | "hta" | "ta"
 
-// The canonical staff roles used for creation, enumeration, and slug parsing.
-// `teacher` first (top precedence); the legacy `instructor` is intentionally
-// absent — reads fall back to it explicitly where needed.
-export const STAFF_ROLES: readonly StaffRole[] = ["teacher", "ta"]
+// The canonical staff roles used for creation, enumeration, and slug parsing,
+// in rank order (`teacher` first, then the `hta` middle tier, then `ta`). The
+// legacy `instructor` is intentionally absent — reads fall back to it
+// explicitly where needed.
+export const STAFF_ROLES: readonly StaffRole[] = ["teacher", "hta", "ta"]
 
 // Every staff role including the legacy `instructor` alias — for slug parsing
 // that must still recognize a pre-rename `-instructor` team.
 export const STAFF_ROLES_WITH_LEGACY: readonly StaffRole[] = [
   "teacher",
   "instructor",
+  "hta",
   "ta",
 ]
 

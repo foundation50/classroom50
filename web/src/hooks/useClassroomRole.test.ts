@@ -15,6 +15,7 @@ const base: ClassroomRoleInput = {
   org: "acme",
   classroom: "cs101",
   teacher: "non-member",
+  hta: "non-member",
   ta: "non-member",
   student: "non-member",
 }

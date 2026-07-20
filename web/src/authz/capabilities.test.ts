@@ -51,6 +51,10 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
       can("viewClassroomStaffContent", { classroomRole: "instructor" }),
     ).toBe(true)
     expect(can("viewClassroomStaffContent", { classroomRole: "ta" })).toBe(true)
+    // Head TA sees staff content (R6).
+    expect(can("viewClassroomStaffContent", { classroomRole: "hta" })).toBe(
+      true,
+    )
     // Fail-closed: an unresolved role is denied by the policy itself; the
     // caller's separate `resolved` gate holds a spinner rather than NotFound.
     expect(
@@ -74,6 +78,8 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
       false,
     )
     expect(can("editClassroomSettings", { classroomRole: "ta" })).toBe(false)
+    // Head TA cannot see Settings — teacher-only (R7).
+    expect(can("editClassroomSettings", { classroomRole: "hta" })).toBe(false)
     expect(can("editClassroomSettings", { classroomRole: "student" })).toBe(
       false,
     )
@@ -84,6 +90,7 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
     expect(can("previewAsRole", { classroomRole: "teacher" })).toBe(true)
     expect(can("previewAsRole", { classroomRole: "instructor" })).toBe(true)
     expect(can("previewAsRole", { classroomRole: "ta" })).toBe(false)
+    expect(can("previewAsRole", { classroomRole: "hta" })).toBe(false)
     expect(can("previewAsRole", { classroomRole: "student" })).toBe(false)
     expect(can("previewAsRole", { classroomRole: "unresolved" })).toBe(false)
   })

@@ -129,11 +129,23 @@ export async function ensureClassroomTeam(
 
 // The per-classroom staff team refs persisted under classroom.json `teams`.
 // `teacher` is canonical; `instructor` is the legacy alias retained for
-// backward-compatible reads during the rename migration.
+// backward-compatible reads during the rename migration; `hta` (head TA) is the
+// middle tier granted config-repo write but never org-owner.
 export type StaffTeamRefs = {
   teacher?: ClassroomTeamRef
   instructor?: ClassroomTeamRef
+  hta?: ClassroomTeamRef
   ta?: ClassroomTeamRef
+}
+
+// Config-repo permission per staff role: teacher/instructor/hta author
+// assignments (write), a plain TA is read-only. Mirrors the CLI's
+// configrepo.ConfigRepoPermission. A role absent here gets no config-repo grant.
+const CONFIG_REPO_PERMISSION: Partial<Record<StaffRole, "pull" | "push">> = {
+  teacher: "push",
+  instructor: "push",
+  hta: "push",
+  ta: "pull",
 }
 
 // Create (or adopt) the per-classroom STAFF team for `role`, a `secret` team
@@ -172,10 +184,36 @@ export async function grantTeamConfigRepoWrite(
   })
 }
 
-// Ensure BOTH staff teams exist and are granted config-repo write, returning
-// their refs for classroom.json. Idempotent — used at create AND as a preflight,
-// so a classroom missing a staff team self-heals on next touch. `created` lists
-// the roles this call newly created (for create-failure rollback).
+// Set a staff team's config-repo permission to the role's mapped level —
+// `push` for teacher/instructor/hta, `pull` for ta. Unlike a bare
+// grantTeamConfigRepoWrite this is role-aware and, because addRepositoryToTeam
+// PUTs unconditionally, it DOWNGRADES an existing stronger grant (a TA team
+// that held `push` drops to `pull`) — the behavior the TA read-only demotion
+// depends on. A role with no mapped permission is a no-op. Route every
+// config-repo grant site through this so a role can't silently keep write.
+export async function grantTeamConfigRepoAccess(
+  client: GitHubClient,
+  org: string,
+  teamSlug: string,
+  role: StaffRole,
+): Promise<void> {
+  const permission = CONFIG_REPO_PERMISSION[role]
+  if (!permission) return
+  await addRepositoryToTeam(client, {
+    org,
+    teamSlug,
+    owner: org,
+    repo: CONFIG_REPO,
+    permission,
+  })
+}
+
+// Ensure every staff team exists and holds its role's config-repo access
+// (teacher/hta write, ta read-only), returning their refs for classroom.json.
+// Idempotent — used at create AND as a preflight, so a classroom missing a
+// staff team self-heals on next touch, and a TA team that still holds write is
+// downgraded to read on re-affirm. `created` lists the roles this call newly
+// created (for create-failure rollback).
 export async function ensureStaffTeams(
   client: GitHubClient,
   org: string,
@@ -187,7 +225,7 @@ export async function ensureStaffTeams(
     const team = await ensureClassroomRoleTeam(client, org, classroom, role)
     teams[role] = { id: team.id, slug: team.slug }
     if (team.created) created.push(role)
-    await grantTeamConfigRepoWrite(client, org, team.slug)
+    await grantTeamConfigRepoAccess(client, org, team.slug, role)
   }
   return { teams, created }
 }

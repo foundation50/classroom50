@@ -105,6 +105,10 @@ export function useClassroomRole(
     ),
     enabled,
   })
+  const htaQuery = useQuery({
+    ...teamMembershipQuery(client, org ?? "", teamSlug("hta"), username ?? ""),
+    enabled,
+  })
   const taQuery = useQuery({
     ...teamMembershipQuery(client, org ?? "", teamSlug("ta"), username ?? ""),
     enabled,
@@ -122,6 +126,7 @@ export function useClassroomRole(
       membershipFromQuery(instructorQuery.isSuccess, instructorQuery.error),
     ),
     ta: membershipFromQuery(taQuery.isSuccess, taQuery.error),
+    hta: membershipFromQuery(htaQuery.isSuccess, htaQuery.error),
     student: membershipFromQuery(studentQuery.isSuccess, studentQuery.error),
   })
 
@@ -134,6 +139,7 @@ export function useClassroomRole(
   const isLoading =
     teacherQuery.fetchStatus === "fetching" ||
     instructorQuery.fetchStatus === "fetching" ||
+    htaQuery.fetchStatus === "fetching" ||
     taQuery.fetchStatus === "fetching" ||
     studentQuery.fetchStatus === "fetching"
 
@@ -144,21 +150,26 @@ export function useClassroomRole(
   const isError =
     actualRole === "unresolved" &&
     !isLoading &&
-    (teacherQuery.isError || instructorQuery.isError || taQuery.isError)
+    (teacherQuery.isError ||
+      instructorQuery.isError ||
+      htaQuery.isError ||
+      taQuery.isError)
 
   // Re-run all team reads so an error surface can offer a retry without a
   // full page reload (mirrors useTeamRoster's refetch). Stable identity so it
   // doesn't churn the context value it's threaded through.
   const { refetch: refetchTeacher } = teacherQuery
   const { refetch: refetchInstructor } = instructorQuery
+  const { refetch: refetchHta } = htaQuery
   const { refetch: refetchTa } = taQuery
   const { refetch: refetchStudent } = studentQuery
   const refetch = useCallback(() => {
     void refetchTeacher()
     void refetchInstructor()
+    void refetchHta()
     void refetchTa()
     void refetchStudent()
-  }, [refetchTeacher, refetchInstructor, refetchTa, refetchStudent])
+  }, [refetchTeacher, refetchInstructor, refetchHta, refetchTa, refetchStudent])
 
   return { role, actualRole, isLoading, isError, refetch }
 }
