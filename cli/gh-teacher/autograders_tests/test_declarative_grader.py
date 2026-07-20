@@ -372,6 +372,62 @@ class TestRenderDeclarativeBody:
 
 
 # ---------------------------------------------------------------------------
+# render_log_report
+# ---------------------------------------------------------------------------
+
+
+class TestRenderLogReport:
+    def _outcomes(self):
+        return [
+            {"test-name": "good", "passed": True, "score": 2, "max-score": 2, "detail": "ok"},
+            {"test-name": "bad", "passed": False, "score": 0, "max-score": 1,
+             "detail": "exit 1\n--- expected\n+++ actual stdout\n-two\n+nope"},
+        ]
+
+    def test_all_pass_has_no_groups(self):
+        outcomes = [{"test-name": "a", "passed": True, "score": 1, "max-score": 1, "detail": ""}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "PASS  a  (1/1)" in report
+        assert "::group::" not in report
+
+    def test_failures_get_one_group_each(self):
+        report = ag.render_log_report(self._outcomes(), color=False)
+        assert "PASS  good  (2/2)" in report
+        assert "FAIL  bad  (0/1)" in report
+        assert report.count("::group::FAIL: bad") == 1
+        assert report.count("::endgroup::") == 1
+        # Detail lines are inside the group, indented.
+        assert "\n  exit 1\n" in report
+
+    def test_color_off_emits_no_ansi(self):
+        report = ag.render_log_report(self._outcomes(), color=False)
+        assert "\x1b[" not in report
+
+    def test_color_on_colors_verdicts_and_diff_lines(self):
+        report = ag.render_log_report(self._outcomes(), color=True)
+        assert f"{ag.ANSI_GREEN}PASS{ag.ANSI_RESET}" in report
+        assert f"{ag.ANSI_BOLD}{ag.ANSI_RED}FAIL{ag.ANSI_RESET}" in report
+        assert f"  {ag.ANSI_RED}-two{ag.ANSI_RESET}" in report
+        assert f"  {ag.ANSI_GREEN}+nope{ag.ANSI_RESET}" in report
+
+    def test_detail_cannot_inject_workflow_commands(self):
+        # Detail carries student-controlled output; GitHub only interprets
+        # workflow commands at column 0, so every detail line must be
+        # indented. A student's ::endgroup::/::error:: must never take effect.
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1,
+                     "detail": "::endgroup::\n::error::pwned\n::stop-commands::x"}]
+        report = ag.render_log_report(outcomes, color=False)
+        for line in report.splitlines():
+            if line.startswith("::"):
+                assert line in ("::group::FAIL: t", "::endgroup::")
+
+    def test_missing_detail_renders_empty_group(self):
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "::group::FAIL: t\n::endgroup::" in report
+
+
+# ---------------------------------------------------------------------------
 # run_declarative (end-to-end)
 # ---------------------------------------------------------------------------
 
@@ -398,7 +454,9 @@ class TestRunDeclarative:
         p.write_text(json.dumps({"schema": "classroom50/tests/v1", "tests": specs}))
         return p
 
-    def test_grades_and_writes_all_artifacts(self, tmp_path):
+    def test_grades_and_writes_all_artifacts(self, tmp_path, monkeypatch, capsys):
+        step_summary = tmp_path / "step-summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary))
         fin, gho = _finalizer(tmp_path)
         p = self._write_tests(tmp_path, [
             {"name": "compiles", "type": "run", "run": "true", "points": 1},
@@ -420,6 +478,16 @@ class TestRunDeclarative:
         body = (tmp_path / "release-body.md").read_text()
         assert "classroom50 autograde: 3/4" in body
         assert "Failure details" in body  # `bad` failed
+
+        # The release body is mirrored to the run's Summary page.
+        assert step_summary.read_text() == body
+
+        # The per-test report reaches stdout (the workflow log). Plain text
+        # here: GITHUB_ACTIONS is unset under pytest, so the color gate holds.
+        out = capsys.readouterr().out
+        assert "FAIL  bad  (0/1)" in out
+        assert "::group::FAIL: bad" in out
+        assert "\x1b[" not in out
 
         out = gho.read_text()
         assert "status=failure" in out  # not all tests passed

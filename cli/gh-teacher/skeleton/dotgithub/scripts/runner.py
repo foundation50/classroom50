@@ -82,6 +82,15 @@ DEFAULT_TEST_TIMEOUT = 10
 # bloat the published release.
 MAX_CAPTURED_CHARS = 2000
 
+# ANSI codes for the log report -- the Actions log viewer renders these, the
+# release body (Markdown) must never see them, so color is applied only at
+# render time in render_log_report.
+ANSI_RED = "\x1b[31m"
+ANSI_GREEN = "\x1b[32m"
+ANSI_CYAN = "\x1b[36m"
+ANSI_BOLD = "\x1b[1m"
+ANSI_RESET = "\x1b[0m"
+
 # Test types and io comparison modes -- mirror the allow-lists in tests.go.
 TEST_TYPE_IO = "io"
 TEST_TYPE_RUN = "run"
@@ -1519,6 +1528,64 @@ def render_declarative_body(result: dict[str, Any], outcomes: list[dict[str, Any
     return "\n".join(lines) + "\n"
 
 
+def _colorize(text: str, code: str, *, color: bool) -> str:
+    """Wrap `text` in an ANSI code, or return it untouched when color is off."""
+    if not color:
+        return text
+    return f"{code}{text}{ANSI_RESET}"
+
+
+def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
+    """Per-test report for the workflow log: a PASS/FAIL line per test, then
+    one collapsible ::group:: per failing test with its captured detail.
+    Failures only get groups — folding every passing test would bury the red
+    ones. The release body carries the same data as Markdown; this is the
+    log-surface rendering (ANSI is fine here, Markdown tables are not).
+
+    Detail lines are indented two spaces: detail carries student-controlled
+    program output, and GitHub only interprets workflow commands (::error::,
+    ::endgroup::, ::stop-commands::) at column 0 — the indent makes command
+    injection impossible. This is the log-surface analogue of _fence on the
+    Markdown surface.
+    """
+    lines = []
+    for o in outcomes:
+        if o["passed"]:
+            verdict = _colorize("PASS", ANSI_GREEN, color=color)
+        else:
+            verdict = _colorize("FAIL", ANSI_BOLD + ANSI_RED, color=color)
+        lines.append(f"{verdict}  {o['test-name']}  ({o['score']}/{o['max-score']})")
+
+    for o in outcomes:
+        if o["passed"]:
+            continue
+        lines.append(f"::group::FAIL: {o['test-name']}")
+        for dl in (o.get("detail") or "").rstrip().splitlines():
+            if color and dl.startswith("+"):
+                dl = _colorize(dl, ANSI_GREEN, color=color)
+            elif color and dl.startswith("-"):
+                dl = _colorize(dl, ANSI_RED, color=color)
+            elif color and dl.startswith("@@"):
+                dl = _colorize(dl, ANSI_CYAN, color=color)
+            lines.append(f"  {dl}")
+        lines.append("::endgroup::")
+    return "\n".join(lines) + "\n"
+
+
+def append_step_summary(markdown: str) -> None:
+    """Append Markdown to the workflow run's Summary page ($GITHUB_STEP_SUMMARY).
+    Best-effort: the summary is a convenience surface, so an unset var (local
+    runs, tests) or a write failure must never affect the grading outcome."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(markdown)
+    except OSError:
+        pass
+
+
 class DeclarativeGrader:
     """Runs a list of declarative test specs and builds the v1 result.json.
     Constructed with the same identity context the Finalizer carries."""
@@ -1614,10 +1681,17 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
         return finalize.error(f"declarative grader produced invalid result: {err}")
 
     status, summary = derive_status_and_summary(result)
+    # Failure details used to live only in the release body, forcing a
+    # detour from the (natural) Actions log to the release to see why a
+    # test failed. Print the per-test report to the log too, ANSI-colored
+    # only under Actions so pytest-captured and local output stay clean.
+    color = os.environ.get("GITHUB_ACTIONS") == "true" and "NO_COLOR" not in os.environ
+    print(render_log_report(outcomes, color=color), end="")
     print(f"runner: {summary}")
     (finalize.workspace / RESULT_FILENAME).write_text(json.dumps(result, indent=2) + "\n")
-    (finalize.workspace / RELEASE_BODY_FILENAME).write_text(
-        render_declarative_body(result, outcomes, summary))
+    body = render_declarative_body(result, outcomes, summary)
+    (finalize.workspace / RELEASE_BODY_FILENAME).write_text(body)
+    append_step_summary(body)
     append_outputs(finalize.github_output, status, summary)
     return 0
 
@@ -1779,11 +1853,16 @@ def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
     if err is not None:
         return finalize.error(err)
 
-    # Synthesize release-body.md if the autograder didn't write one.
+    # Synthesize release-body.md if the autograder didn't write one. Either
+    # way, mirror it to the run's Summary page (parity with run_declarative).
     body_path = workspace / RELEASE_BODY_FILENAME
     if not body_path.is_file():
         _, fallback = derive_status_and_summary(result)
         body_path.write_text(render_release_body(result, fallback))
+    try:
+        append_step_summary(body_path.read_text())
+    except OSError:
+        pass
 
     # Synthesize status / summary if the autograder didn't write them.
     if not output_has_status(github_output):

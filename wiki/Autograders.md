@@ -114,6 +114,8 @@ Or set the whole array at once with `gh teacher assignment add ... --tests <file
 
 The tests live inline on the assignment's entry in `assignments.json`. On the next config-repo push, the publish-pages workflow **materializes** them into `<classroom>/autograders/<slug>/tests.json` and tars that into the per-assignment Pages bundle, alongside any fixture files in the same directory. At grade time, `runner.py` runs each spec in the student checkout: one row per test in `result.json`, plus a pass/fail breakdown in the release body with failure details for each failing test — a unified diff of expected vs. actual stdout for `exact` io tests, verbatim expected/actual blocks for `included`/`regex`, and captured stderr. Captured output is truncated at 2000 characters.
 
+The same breakdown surfaces in three places per run: the **release body** (Markdown, as above), the **grade job's log** under the "Grade details" step (one ANSI-colored PASS/FAIL line per test, plus a collapsible log group per failing test with its details), and the **run's Summary page** (the release-body Markdown, mirrored via `$GITHUB_STEP_SUMMARY` — custom autograders get this too). Students and teachers debugging from the Actions tab see failures without opening the release.
+
 Test commands are teacher-authored shell, executed at the same privilege as a hand-written `autograder.py` — inside the sandboxed grade job, fetched as data from Pages, never interpolated into workflow YAML. Students can't edit `assignments.json`; it lives in your config repo.
 
 ### Test types
@@ -495,7 +497,7 @@ The runner synthesizes a v1-shaped `result.json` on every error path so the work
 | `autograder.py` exits non-zero | Same — runner captures the rc, synthesizes `status=error` |
 | `autograder.py` exits 0 but doesn't write `result.json` | Same — runner synthesizes `status=error` |
 | `result.json` is malformed (bad schema, identity mismatch, non-list `tests`) | Same — runner rejects with a specific error message |
-| Tests run, some fail | Normal case. Release publishes with per-test breakdown; `status=failure` if any failed. |
+| Tests run, some fail | Normal case. Release publishes with per-test breakdown; `status=failure` if any failed. Failure details also appear in the grade job's log ("Grade details" step) and on the run's Summary page — no need to open the release. |
 | All tests pass (or `tests: []` in `result.json`) | Normal case. Release publishes with `status=success`. |
 
 Workflow-load failures (the early rows above, where the runner workflow itself doesn't even start) do **not** show up in `scores.json`. Collect-scores' per-assignment "X of Y submitted" summary reports the student as not-yet-submitted, and the teacher debugs from the student's Actions tab. The runner-workflow failures show up *in the student's Actions tab* as a nested job — GitHub's reusable-workflow runs are visible to the calling repo's Actions UI.
