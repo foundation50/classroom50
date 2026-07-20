@@ -140,6 +140,74 @@ func TestEnsureClassroomTeam_AdoptSkipsPatchWhenDescriptionMatches(t *testing.T)
 	}
 }
 
+// TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted: GitHub
+// returns notification_setting only to org members, so it can be absent from
+// the adopt GET. An absent value must read as "unknown, not read" — not as
+// drift — so an already-secret team issues no PATCH (#335 guard).
+func TestEnsureClassroomStaffTeam_AdoptSkipsPatchWhenNotificationOmitted(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodGet:
+			// notification_setting omitted (not visible to this token).
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "secret",
+			})
+		case r.Method == http.MethodPatch:
+			t.Errorf("must not PATCH when notification_setting is absent from the GET (unknown, not drifted)")
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if _, err := EnsureClassroomStaffTeam(client, "o", "cs101", RoleTeacher); err != nil {
+		t.Fatalf("EnsureClassroomStaffTeam adopt: %v", err)
+	}
+}
+
+// TestEnsureClassroomStaffTeam_AdoptReconcilesNotification: when the adopt GET
+// returns a concrete notification_setting that differs from the desired one,
+// the reconcile PATCHes it (a staff team left disabled gets enabled — #335).
+func TestEnsureClassroomStaffTeam_AdoptReconcilesNotification(t *testing.T) {
+	var patched map[string]any
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodGet:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"id": 7, "slug": "classroom50-cs101-teacher", "privacy": "secret",
+				"notification_setting": "notifications_disabled",
+			})
+		case r.URL.Path == "/orgs/o/teams/classroom50-cs101-teacher" && r.Method == http.MethodPatch:
+			_ = json.NewDecoder(r.Body).Decode(&patched)
+			w.WriteHeader(http.StatusOK)
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	if _, err := EnsureClassroomStaffTeam(client, "o", "cs101", RoleTeacher); err != nil {
+		t.Fatalf("EnsureClassroomStaffTeam adopt: %v", err)
+	}
+	if patched == nil {
+		t.Fatal("expected a PATCH reconciling the drifted notification_setting")
+	}
+	if patched["notification_setting"] != "notifications_enabled" {
+		t.Errorf("PATCH notification_setting = %v, want notifications_enabled", patched["notification_setting"])
+	}
+}
+
 func TestStaffTeamName(t *testing.T) {
 	cases := []struct {
 		short string

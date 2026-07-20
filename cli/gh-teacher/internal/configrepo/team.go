@@ -348,9 +348,13 @@ func adoptSecretTeamByName(client githubapi.Client, org, name, description, noti
 		return TeamRef{}, fmt.Errorf("GET %s (adopting existing team): %w", getPath, err)
 	}
 	// Batch every drifted field into one PATCH (description only drifts for the
-	// student team, which carries the bootstrap record).
+	// student team, which carries the bootstrap record). GitHub returns
+	// notification_setting only to org members, so an empty value is "unknown,
+	// not read" — skip it rather than force a PATCH every reconcile. A concrete
+	// value that differs is reconciled on purpose (e.g. a student team left
+	// enabled gets disabled — #335).
 	needPrivacy := existing.Privacy != "secret"
-	needNotification := existing.NotificationSetting != notificationSetting
+	needNotification := existing.NotificationSetting != "" && existing.NotificationSetting != notificationSetting
 	needDescription := description != "" && existing.Description != description
 	if needPrivacy || needNotification || needDescription {
 		patch := map[string]any{}

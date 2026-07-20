@@ -82,7 +82,14 @@ async function adoptSecretTeamByName(
     notification_setting?: TeamNotificationSetting
   } = {}
   if (existing.privacy !== "secret") patch.privacy = "secret"
-  if (existing.notification_setting !== notify)
+  // GitHub returns notification_setting only to org members, so an absent value
+  // is "unknown, not read" — skip it rather than PATCH every reconcile. A
+  // concrete value that differs is reconciled on purpose (a student team left
+  // enabled gets disabled — #335).
+  if (
+    existing.notification_setting !== undefined &&
+    existing.notification_setting !== notify
+  )
     patch.notification_setting = notify
   if (Object.keys(patch).length > 0) {
     await client.request(`/orgs/${org}/teams/${existing.slug}`, {
@@ -139,8 +146,8 @@ export async function ensureClassroomRoleTeam(
   role: StaffRole,
 ): Promise<ClassroomTeamRef & { created: boolean }> {
   assertCanonicalTeamShortName(classroom)
-  // Staff teams enable notifications so @mentions in issues/discussions reach
-  // the teachers/TAs (#335) — unlike the student team, which stays disabled.
+  // Staff enable notifications (student team stays disabled); see
+  // TeamNotificationSetting.
   return ensureSecretTeamByName(
     client,
     org,
