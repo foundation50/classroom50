@@ -44,6 +44,7 @@ type StaffRole string
 
 const (
 	RoleTeacher StaffRole = "teacher"
+	RoleHeadTA  StaffRole = "hta"
 	RoleTA      StaffRole = "ta"
 	// RoleInstructor is the legacy name for RoleTeacher, kept so pre-rename
 	// classrooms (whose team slug + `teams.instructor` ref say "instructor")
@@ -51,11 +52,11 @@ const (
 	RoleInstructor StaffRole = "instructor"
 )
 
-// StaffRoles is every CANONICAL staff role, in a stable order (teacher first).
-// The legacy RoleInstructor is intentionally absent — creation and enumeration
-// use the canonical set, while reads fall back to the legacy team via
-// ResolveClassroomStaffTeam.
-var StaffRoles = []StaffRole{RoleTeacher, RoleTA}
+// StaffRoles is every CANONICAL staff role, in rank order (teacher, then the
+// head-TA middle tier, then ta). The legacy RoleInstructor is intentionally
+// absent — creation and enumeration use the canonical set, while reads fall
+// back to the legacy team via ResolveClassroomStaffTeam.
+var StaffRoles = []StaffRole{RoleTeacher, RoleHeadTA, RoleTA}
 
 // GitHub team-level notification toggle, set at create and reconciled on adopt.
 // Students stay disabled (assignment-repo churn would spam the class); staff
@@ -83,6 +84,19 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 	RoleTA: "pull",
 }
 
+// ConfigRepoPermission is the permission a staff role's team gets on the org's
+// `classroom50` config repo. Teacher (and its legacy instructor alias) and the
+// head-TA can author assignments → `push`; a plain TA is read-only → `pull`.
+// This is a SEPARATE axis from StaffTeamRepoPermissions above, which governs
+// student assignment repos and private templates. A role absent here is granted
+// nothing on the config repo.
+var ConfigRepoPermission = map[StaffRole]string{
+	RoleTeacher:    "push",
+	RoleInstructor: "push",
+	RoleHeadTA:     "push",
+	RoleTA:         "pull",
+}
+
 // staffTeamName derives the staff-role team name: `classroom50-<short>-<role>`.
 // Mirrors the web's classroomTeamSlug(short, role). The short-name is canonical, so slug == name.
 func staffTeamName(shortName string, role StaffRole) string {
@@ -92,10 +106,12 @@ func staffTeamName(shortName string, role StaffRole) string {
 // StaffTeamsRef holds the per-classroom staff team refs the web GUI persists
 // under classroom.json `teams`. Mirrors classroom-v1's `teams` $def. `Teacher`
 // is the canonical staff team; `Instructor` is the legacy pre-rename ref, read
-// as a fallback and migrated to `Teacher` on touch.
+// as a fallback and migrated to `Teacher` on touch. `HeadTA` is the middle-tier
+// role granted config-repo write like teacher but never org-owner.
 type StaffTeamsRef struct {
 	Teacher    *TeamRef `json:"teacher,omitempty"`
 	Instructor *TeamRef `json:"instructor,omitempty"`
+	HeadTA     *TeamRef `json:"hta,omitempty"`
 	TA         *TeamRef `json:"ta,omitempty"`
 }
 
@@ -137,6 +153,8 @@ func ResolveClassroomStaffTeam(client githubapi.Client, org, shortName, ref stri
 		}
 	case RoleTA:
 		team = c.Teams.TA
+	case RoleHeadTA:
+		team = c.Teams.HeadTA
 	}
 	if team == nil || team.Slug == "" {
 		return TeamRef{}, false, nil
@@ -193,10 +211,12 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role), "", notificationsEnabled)
 }
 
-// EnsureStaffTeams creates (or adopts) both staff teams (teacher, ta) and
-// grants each `push` on the org's `classroom50` config repo so staff can author
-// assignments. Returns the refs to record under classroom.json `teams`.
-// Mirrors the web's ensureStaffTeams.
+// EnsureStaffTeams creates (or adopts) all staff teams (teacher, hta, ta) and
+// grants each its config-repo permission — `push` for teacher/hta so staff can
+// author assignments, `pull` for ta (read-only). The grant is permission-aware,
+// so re-affirming an existing TA team that holds `push` downgrades it to `pull`.
+// Returns the refs to record under classroom.json `teams`. Mirrors the web's
+// ensureStaffTeams.
 func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTeamsRef, error) {
 	refs := &StaffTeamsRef{}
 	for _, role := range StaffRoles {
@@ -204,12 +224,14 @@ func EnsureStaffTeams(client githubapi.Client, org, shortName string) (*StaffTea
 		if err != nil {
 			return nil, fmt.Errorf("ensure %s staff team: %w", role, err)
 		}
-		if _, err := GrantTeamRepoWrite(client, org, team.Slug, org, ConfigRepoName); err != nil {
-			return nil, fmt.Errorf("grant %s staff team write on %s: %w", role, ConfigRepoName, err)
+		if _, err := GrantTeamConfigRepoAccess(client, org, team.Slug, role); err != nil {
+			return nil, fmt.Errorf("grant %s staff team config-repo access: %w", role, err)
 		}
 		switch role {
 		case RoleTeacher:
 			refs.Teacher = &team
+		case RoleHeadTA:
+			refs.HeadTA = &team
 		case RoleTA:
 			refs.TA = &team
 		}
@@ -539,6 +561,82 @@ func teamHasRepoAccess(client githubapi.Client, org, slug, repoOwner, repo strin
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, resp.Body)
+	return true, nil
+}
+
+// teamRepoPermission returns the team's current permission string on
+// <repoOwner>/<repo> ("admin"/"maintain"/"push"/"triage"/"pull"), or "" when
+// the team has no access (404). Unlike teamHasRepoAccess it reads the actual
+// permission so a grant can DOWNGRADE (e.g. push → pull), which the demotion of
+// a TA team from write to read-only requires.
+func teamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo string) (string, error) {
+	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(repoOwner), url.PathEscape(repo))
+	resp, err := client.Request(http.MethodGet, path, nil)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusNotFound) {
+			return "", nil
+		}
+		return "", fmt.Errorf("GET %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	var payload struct {
+		Permissions map[string]bool `json:"permissions"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return "", fmt.Errorf("decode %s: %w", path, err)
+	}
+	// GitHub returns a boolean permission set; report the highest granted.
+	for _, p := range []string{"admin", "maintain", "push", "triage", "pull"} {
+		if payload.Permissions[p] {
+			return p, nil
+		}
+	}
+	return "", nil
+}
+
+// putTeamRepoPermission unconditionally PUTs `permission` for the team on
+// <repoOwner>/<repo>. Used by the permission-aware config-repo grant, which
+// must be able to lower an existing grant (unlike grantTeamRepo, which
+// short-circuits on any existing access).
+func putTeamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo, permission string) error {
+	body, err := json.Marshal(map[string]any{"permission": permission})
+	if err != nil {
+		return fmt.Errorf("encode grant body: %w", err)
+	}
+	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
+		url.PathEscape(org), url.PathEscape(slug), url.PathEscape(repoOwner), url.PathEscape(repo))
+	resp, err := client.Request(http.MethodPut, path, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("PUT %s: %w", path, err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	_, _ = io.Copy(io.Discard, resp.Body)
+	return nil
+}
+
+// GrantTeamConfigRepoAccess sets the staff team's permission on the org's
+// `classroom50` config repo to the role's ConfigRepoPermission — `push` for
+// teacher/instructor/hta, `pull` for ta. Unlike GrantTeamRepoWrite this is
+// permission-AWARE: it re-PUTs when the current permission differs, so
+// re-affirming an existing TA team that holds `push` downgrades it to `pull`.
+// Returns whether a change was applied. A role with no config-repo permission
+// is a no-op.
+func GrantTeamConfigRepoAccess(client githubapi.Client, org, slug string, role StaffRole) (changed bool, err error) {
+	want, ok := ConfigRepoPermission[role]
+	if !ok {
+		return false, nil
+	}
+	current, err := teamRepoPermission(client, org, slug, org, ConfigRepoName)
+	if err != nil {
+		return false, err
+	}
+	if current == want {
+		return false, nil
+	}
+	if err := putTeamRepoPermission(client, org, slug, org, ConfigRepoName, want); err != nil {
+		return false, fmt.Errorf("grant %s config-repo %s: %w", role, want, err)
+	}
 	return true, nil
 }
 

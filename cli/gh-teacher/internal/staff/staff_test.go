@@ -238,6 +238,8 @@ func TestParseRole(t *testing.T) {
 		{"INSTRUCTOR", "teacher", false},
 		{"ta", "ta", false},
 		{"TA", "ta", false},
+		{"hta", "hta", false},
+		{"HTA", "hta", false},
 		{"grader", "", true},
 	}
 	for _, tc := range cases {

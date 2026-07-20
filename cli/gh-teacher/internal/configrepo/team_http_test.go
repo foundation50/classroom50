@@ -304,13 +304,78 @@ func TestEnsureStaffTeams(t *testing.T) {
 	if refs.TA == nil || refs.TA.Slug != "classroom50-cs-principles-ta" {
 		t.Errorf("ta ref = %+v, want slug classroom50-cs-principles-ta", refs.TA)
 	}
-	if len(createdNames) != 2 {
-		t.Fatalf("created %d teams, want 2: %v", len(createdNames), createdNames)
+	if refs.HeadTA == nil || refs.HeadTA.Slug != "classroom50-cs-principles-hta" {
+		t.Errorf("hta ref = %+v, want slug classroom50-cs-principles-hta", refs.HeadTA)
 	}
-	for _, slug := range []string{"classroom50-cs-principles-teacher", "classroom50-cs-principles-ta"} {
+	if len(createdNames) != 3 {
+		t.Fatalf("created %d teams, want 3: %v", len(createdNames), createdNames)
+	}
+	// Teacher and head-TA get config-repo write; a plain TA gets read-only.
+	for _, slug := range []string{"classroom50-cs-principles-teacher", "classroom50-cs-principles-hta"} {
 		if grantPerms[slug] != "push" {
 			t.Errorf("staff team %q granted %q on config repo, want push", slug, grantPerms[slug])
 		}
+	}
+	if grantPerms["classroom50-cs-principles-ta"] != "pull" {
+		t.Errorf("ta team granted %q on config repo, want pull", grantPerms["classroom50-cs-principles-ta"])
+	}
+}
+
+// TestGrantTeamConfigRepoAccess covers the permission-aware config-repo grant:
+// it grants the role's permission when absent, is a no-op when already correct,
+// and DOWNGRADES an existing stronger grant (a TA team holding push drops to
+// pull) — the behavior the TA read-only demotion depends on.
+func TestGrantTeamConfigRepoAccess(t *testing.T) {
+	cases := []struct {
+		name       string
+		role       StaffRole
+		current    string // "" = 404 (no access)
+		wantPut    string // "" = no PUT expected
+		wantChange bool
+	}{
+		{"grant push to hta when absent", RoleHeadTA, "", "push", true},
+		{"grant pull to ta when absent", RoleTA, "", "pull", true},
+		{"downgrade ta push to pull", RoleTA, "push", "pull", true},
+		{"no-op when ta already pull", RoleTA, "pull", "", false},
+		{"no-op when teacher already push", RoleTeacher, "push", "", false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var gotPut string
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				switch r.Method {
+				case http.MethodGet:
+					if tc.current == "" {
+						w.WriteHeader(http.StatusNotFound)
+						return
+					}
+					perms := map[string]bool{tc.current: true}
+					_ = json.NewEncoder(w).Encode(map[string]any{"permissions": perms})
+				case http.MethodPut:
+					var body struct {
+						Permission string `json:"permission"`
+					}
+					_ = json.NewDecoder(r.Body).Decode(&body)
+					gotPut = body.Permission
+					w.WriteHeader(http.StatusNoContent)
+				default:
+					t.Errorf("unexpected %s %s", r.Method, r.URL.Path)
+				}
+			}))
+			t.Cleanup(server.Close)
+			client := githubtest.NewTestClient(t, server)
+
+			changed, err := GrantTeamConfigRepoAccess(client, "o", "classroom50-x-"+string(tc.role), tc.role)
+			if err != nil {
+				t.Fatalf("GrantTeamConfigRepoAccess: %v", err)
+			}
+			if changed != tc.wantChange {
+				t.Errorf("changed = %v, want %v", changed, tc.wantChange)
+			}
+			if gotPut != tc.wantPut {
+				t.Errorf("PUT permission = %q, want %q", gotPut, tc.wantPut)
+			}
+		})
 	}
 }
 

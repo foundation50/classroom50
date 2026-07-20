@@ -128,6 +128,7 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
   "team": {"id": 1, "slug": "classroom50-cs-principles"},
   "teams": {
     "instructor": {"id": 2, "slug": "classroom50-cs-principles-instructor"},
+    "hta": {"id": 4, "slug": "classroom50-cs-principles-hta"},
     "ta": {"id": 3, "slug": "classroom50-cs-principles-ta"}
   }
 }`),
@@ -135,6 +136,7 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 		teamGET: map[string]string{
 			"/orgs/classroom50-test/teams/classroom50-cs-principles":            `{"id":1}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-instructor": `{"id":2}`,
+			"/orgs/classroom50-test/teams/classroom50-cs-principles-hta":        `{"id":4}`,
 			"/orgs/classroom50-test/teams/classroom50-cs-principles-ta":         `{"id":3}`,
 		},
 	}
@@ -152,10 +154,11 @@ func TestRunTeardown_SweepsClassroomTeams(t *testing.T) {
 	want := map[string]bool{
 		"classroom50-cs-principles":            true,
 		"classroom50-cs-principles-instructor": true,
+		"classroom50-cs-principles-hta":        true,
 		"classroom50-cs-principles-ta":         true,
 	}
-	if len(teams) != 3 {
-		t.Fatalf("deleted teams = %v, want the 3 classroom teams", teams)
+	if len(teams) != 4 {
+		t.Fatalf("deleted teams = %v, want the 4 classroom teams", teams)
 	}
 	for _, slug := range teams {
 		if !want[slug] {

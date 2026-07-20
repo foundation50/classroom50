@@ -47,11 +47,12 @@
     "teams": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Per-classroom GitHub staff teams (created by the web GUI) backing in-app roles. Each is a `secret` team named `classroom50-<short_name>-<role>` granted write on the config repo. Teacher/owner-only surfaces (org + classroom settings) are hidden from TAs client-side. Omitted on classrooms created before this feature. `instructor` is the legacy name for `teacher`, kept for backward compatibility during the rename migration; readers accept either and writers prefer `teacher`.",
+      "description": "Per-classroom GitHub staff teams (created by the web GUI) backing in-app roles. Each is a `secret` team named `classroom50-<short_name>-<role>`. Teacher and head-TA (`hta`) teams get write on the config repo; the `ta` team gets read-only. Teacher/owner-only surfaces (org + classroom settings) are hidden from TAs and head-TAs client-side. Omitted on classrooms created before this feature. `instructor` is the legacy name for `teacher`, kept for backward compatibility during the rename migration; readers accept either and writers prefer `teacher`.",
       "properties": {
         "teacher": { "$ref": "#/$defs/teamRef", "description": "The teacher staff team (`classroom50-<short_name>-teacher`)." },
         "instructor": { "$ref": "#/$defs/teamRef", "description": "Legacy alias of `teacher` (`classroom50-<short_name>-instructor`). Read for backward compatibility; migrated to `teacher` on touch." },
-        "ta": { "$ref": "#/$defs/teamRef", "description": "The teaching-assistant staff team (`classroom50-<short_name>-ta`)." }
+        "hta": { "$ref": "#/$defs/teamRef", "description": "The head-TA staff team (`classroom50-<short_name>-hta`), granted config-repo write like teacher but never org-owner." },
+        "ta": { "$ref": "#/$defs/teamRef", "description": "The teaching-assistant staff team (`classroom50-<short_name>-ta`), granted config-repo read-only." }
       }
     },
     "secret": {

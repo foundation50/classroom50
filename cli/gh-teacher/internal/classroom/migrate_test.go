@@ -268,12 +268,13 @@ func TestRunMigrate_NonDryRun_HappyPath(t *testing.T) {
 		t.Errorf("teacher team must not be granted template read, got %q", got)
 	}
 
-	// The creator is dropped from the students + TA teams (mixed roles aren't
-	// allowed) but NEVER the teacher team — the owner's only role.
+	// The creator is dropped from the students + non-teacher staff teams (HTA,
+	// TA — mixed roles aren't allowed) but NEVER the teacher team — the owner's
+	// only role.
 	sort.Strings(state.membershipDeleted)
-	wantDropped := []string{"classroom50-classroom50test", "classroom50-classroom50test-ta"}
+	wantDropped := []string{"classroom50-classroom50test", "classroom50-classroom50test-hta", "classroom50-classroom50test-ta"}
 	if !reflect.DeepEqual(state.membershipDeleted, wantDropped) {
-		t.Errorf("membership DELETEs = %v, want %v (students + ta, never teacher)", state.membershipDeleted, wantDropped)
+		t.Errorf("membership DELETEs = %v, want %v (students + hta + ta, never teacher)", state.membershipDeleted, wantDropped)
 	}
 
 	// Final stdout line is parseable; commit SHA appears.

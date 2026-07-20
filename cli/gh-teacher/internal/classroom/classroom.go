@@ -302,20 +302,26 @@ func seedStaffTeams(client githubapi.Client, errOut io.Writer, org, shortName st
 }
 
 // dropCreatorFromNonTeacherTeams removes the acting teacher from the students
-// team and the TA team so the owner's only role is teacher — mixed roles
-// aren't allowed. Unconditional by design: GitHub auto-adds the creator on teams
-// it creates, and an owner already sitting on an adopted students/TA team is the
-// same mixed-role state we clear, so neither case should be preserved.
-// Best-effort and idempotent (RemoveTeamMembership treats 404 as success): a
-// failure warns but leaves the owner on the team, where the roster's per-role
-// badges surface it. A no-op when the login couldn't be resolved.
+// team and the non-teacher staff teams (TA, head-TA) so the owner's only role is
+// teacher — mixed roles aren't allowed. Unconditional by design: GitHub
+// auto-adds the creator on teams it creates, and an owner already sitting on an
+// adopted students/TA/HTA team is the same mixed-role state we clear, so neither
+// case should be preserved. Best-effort and idempotent (RemoveTeamMembership
+// treats 404 as success): a failure warns but leaves the owner on the team,
+// where the roster's per-role badges surface it. A no-op when the login couldn't
+// be resolved.
 func dropCreatorFromNonTeacherTeams(client githubapi.Client, errOut io.Writer, org, login, studentsSlug string, staffTeams *configrepo.StaffTeamsRef) {
 	if login == "" {
 		return
 	}
 	slugs := []string{studentsSlug}
-	if staffTeams != nil && staffTeams.TA != nil {
-		slugs = append(slugs, staffTeams.TA.Slug)
+	if staffTeams != nil {
+		if staffTeams.HeadTA != nil {
+			slugs = append(slugs, staffTeams.HeadTA.Slug)
+		}
+		if staffTeams.TA != nil {
+			slugs = append(slugs, staffTeams.TA.Slug)
+		}
 	}
 	for _, slug := range slugs {
 		if slug == "" {
