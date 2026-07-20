@@ -1,0 +1,51 @@
+name: cli Release Please
+
+# Automates CLI extension releases with googleapis/release-please. Day-to-day
+# work lands on `main` (all PRs merge straight into main). This workflow watches
+# `main` and maintains a *Release PR* that bumps `cli/CHANGELOG.md` from
+# Conventional Commits. Merging that Release PR creates the `cli-vX.Y.Z` tag,
+# which the existing `cli-release.yaml` workflow consumes to build and publish
+# the `gh-teacher` and `gh-student` extensions.
+#
+# Monorepo-scoped to `cli/` via release-please-config.json +
+# .release-please-manifest.json (the `cli` package key IS the path). The
+# `cli-v*` tag scheme is namespaced apart from the web app's `web-v*` tags.
+#
+# Token model: release-please runs with GITHUB_TOKEN. A tag pushed by
+# GITHUB_TOKEN does NOT retrigger other workflows (Actions' recursion guard),
+# so cli-release.yaml is intentionally driven by the `cli-v*` tag push here.
+# NOTE: if a maintainers-only `cli-v*` tag protection rule is in place, the
+# Actions bot (github-actions[bot]) must be allowed to create `cli-v*` tags, or
+# the Release PR will merge without a tag being pushed and no build will fire.
+# (Also requires "Allow GitHub Actions to create and approve pull requests" so
+# the Release PR can be opened.)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+concurrency:
+  group: cli-release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # `cli--*` keys because component is "cli" (see release-please-config).
+      release_created: ${{ steps.release.outputs['cli--release_created'] }}
+      tag_name: ${{ steps.release.outputs['cli--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json

@@ -9,6 +9,14 @@
       "include-component-in-tag": true,
       "include-v-in-tag": true,
       "tag-separator": "-"
+    },
+    "cli": {
+      "release-type": "go",
+      "component": "cli",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": true,
+      "include-v-in-tag": true,
+      "tag-separator": "-"
     }
   }
 }
