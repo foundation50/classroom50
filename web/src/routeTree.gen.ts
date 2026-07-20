@@ -9,42 +9,36 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as ClassesRouteImport } from './routes/classes'
-import { Route as AssignmentsRouteImport } from './routes/assignments'
 import { Route as AuthedRouteImport } from './routes/_authed'
-import { Route as AuthIndexRouteImport } from './routes/auth/index'
+import { Route as AssignmentsRouteImport } from './routes/assignments'
+import { Route as ClassesRouteImport } from './routes/classes'
+import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedOrgRouteRouteImport } from './routes/_authed/$org/route'
+import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AuthedOrgIndexRouteImport } from './routes/_authed/$org/index'
 import { Route as AuthedOrgClassroomRouteRouteImport } from './routes/_authed/$org/$classroom/route'
-import { Route as AuthedOrgSetupIndexRouteImport } from './routes/_authed/$org/setup/index'
-import { Route as AuthedOrgSettingsIndexRouteImport } from './routes/_authed/$org/settings/index'
-import { Route as AuthedOrgPublishedIndexRouteImport } from './routes/_authed/$org/published/index'
-import { Route as AuthedOrgMembersIndexRouteImport } from './routes/_authed/$org/members/index'
-import { Route as AuthedOrgClassesIndexRouteImport } from './routes/_authed/$org/classes/index'
-import { Route as AuthedOrgActivityIndexRouteImport } from './routes/_authed/$org/activity/index'
 import { Route as AuthedOrgClassroomIndexRouteImport } from './routes/_authed/$org/$classroom/index'
-import { Route as AuthedOrgClassesNewIndexRouteImport } from './routes/_authed/$org/classes/new/index'
-import { Route as AuthedOrgClassroomRosterIndexRouteImport } from './routes/_authed/$org/$classroom/roster/index'
-import { Route as AuthedOrgClassroomOnboardIndexRouteImport } from './routes/_authed/$org/$classroom/onboard/index'
-import { Route as AuthedOrgClassroomEditIndexRouteImport } from './routes/_authed/$org/$classroom/edit/index'
+import { Route as AuthedOrgActivityIndexRouteImport } from './routes/_authed/$org/activity/index'
+import { Route as AuthedOrgClassesIndexRouteImport } from './routes/_authed/$org/classes/index'
+import { Route as AuthedOrgMembersIndexRouteImport } from './routes/_authed/$org/members/index'
+import { Route as AuthedOrgPublishedIndexRouteImport } from './routes/_authed/$org/published/index'
+import { Route as AuthedOrgSettingsIndexRouteImport } from './routes/_authed/$org/settings/index'
+import { Route as AuthedOrgSetupIndexRouteImport } from './routes/_authed/$org/setup/index'
 import { Route as AuthedOrgClassroomAssignmentsIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/index'
-import { Route as AuthedOrgClassroomAssignmentsNewIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/new/index'
+import { Route as AuthedOrgClassroomEditIndexRouteImport } from './routes/_authed/$org/$classroom/edit/index'
+import { Route as AuthedOrgClassroomOnboardIndexRouteImport } from './routes/_authed/$org/$classroom/onboard/index'
+import { Route as AuthedOrgClassroomRosterIndexRouteImport } from './routes/_authed/$org/$classroom/roster/index'
+import { Route as AuthedOrgClassesNewIndexRouteImport } from './routes/_authed/$org/classes/new/index'
 import { Route as AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/index'
-import { Route as AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/submissions/index'
-import { Route as AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/submission/index'
-import { Route as AuthedOrgClassroomAssignmentsAssignmentEditIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/edit/index'
+import { Route as AuthedOrgClassroomAssignmentsNewIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/new/index'
 import { Route as AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/accept/index'
+import { Route as AuthedOrgClassroomAssignmentsAssignmentEditIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/edit/index'
+import { Route as AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/submission/index'
+import { Route as AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport } from './routes/_authed/$org/$classroom/assignments/$assignment/submissions/index'
 
-const LoginRoute = LoginRouteImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const ClassesRoute = ClassesRouteImport.update({
-  id: '/classes',
-  path: '/classes',
+const AuthedRoute = AuthedRouteImport.update({
+  id: '/_authed',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AssignmentsRoute = AssignmentsRouteImport.update({
@@ -52,13 +46,14 @@ const AssignmentsRoute = AssignmentsRouteImport.update({
   path: '/assignments',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthedRoute = AuthedRouteImport.update({
-  id: '/_authed',
+const ClassesRoute = ClassesRouteImport.update({
+  id: '/classes',
+  path: '/classes',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthIndexRoute = AuthIndexRouteImport.update({
-  id: '/auth/',
-  path: '/auth/',
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
@@ -71,6 +66,11 @@ const AuthedOrgRouteRoute = AuthedOrgRouteRouteImport.update({
   path: '/$org',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthIndexRoute = AuthIndexRouteImport.update({
+  id: '/auth/',
+  path: '/auth/',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedOrgIndexRoute = AuthedOrgIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -81,24 +81,14 @@ const AuthedOrgClassroomRouteRoute = AuthedOrgClassroomRouteRouteImport.update({
   path: '/$classroom',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
-const AuthedOrgSetupIndexRoute = AuthedOrgSetupIndexRouteImport.update({
-  id: '/setup/',
-  path: '/setup/',
-  getParentRoute: () => AuthedOrgRouteRoute,
+const AuthedOrgClassroomIndexRoute = AuthedOrgClassroomIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedOrgClassroomRouteRoute,
 } as any)
-const AuthedOrgSettingsIndexRoute = AuthedOrgSettingsIndexRouteImport.update({
-  id: '/settings/',
-  path: '/settings/',
-  getParentRoute: () => AuthedOrgRouteRoute,
-} as any)
-const AuthedOrgPublishedIndexRoute = AuthedOrgPublishedIndexRouteImport.update({
-  id: '/published/',
-  path: '/published/',
-  getParentRoute: () => AuthedOrgRouteRoute,
-} as any)
-const AuthedOrgMembersIndexRoute = AuthedOrgMembersIndexRouteImport.update({
-  id: '/members/',
-  path: '/members/',
+const AuthedOrgActivityIndexRoute = AuthedOrgActivityIndexRouteImport.update({
+  id: '/activity/',
+  path: '/activity/',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
 const AuthedOrgClassesIndexRoute = AuthedOrgClassesIndexRouteImport.update({
@@ -106,32 +96,30 @@ const AuthedOrgClassesIndexRoute = AuthedOrgClassesIndexRouteImport.update({
   path: '/classes/',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
-const AuthedOrgActivityIndexRoute = AuthedOrgActivityIndexRouteImport.update({
-  id: '/activity/',
-  path: '/activity/',
+const AuthedOrgMembersIndexRoute = AuthedOrgMembersIndexRouteImport.update({
+  id: '/members/',
+  path: '/members/',
   getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
-const AuthedOrgClassroomIndexRoute = AuthedOrgClassroomIndexRouteImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => AuthedOrgClassroomRouteRoute,
+const AuthedOrgPublishedIndexRoute = AuthedOrgPublishedIndexRouteImport.update({
+  id: '/published/',
+  path: '/published/',
+  getParentRoute: () => AuthedOrgRouteRoute,
 } as any)
-const AuthedOrgClassesNewIndexRoute =
-  AuthedOrgClassesNewIndexRouteImport.update({
-    id: '/classes/new/',
-    path: '/classes/new/',
-    getParentRoute: () => AuthedOrgRouteRoute,
-  } as any)
-const AuthedOrgClassroomRosterIndexRoute =
-  AuthedOrgClassroomRosterIndexRouteImport.update({
-    id: '/roster/',
-    path: '/roster/',
-    getParentRoute: () => AuthedOrgClassroomRouteRoute,
-  } as any)
-const AuthedOrgClassroomOnboardIndexRoute =
-  AuthedOrgClassroomOnboardIndexRouteImport.update({
-    id: '/onboard/',
-    path: '/onboard/',
+const AuthedOrgSettingsIndexRoute = AuthedOrgSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => AuthedOrgRouteRoute,
+} as any)
+const AuthedOrgSetupIndexRoute = AuthedOrgSetupIndexRouteImport.update({
+  id: '/setup/',
+  path: '/setup/',
+  getParentRoute: () => AuthedOrgRouteRoute,
+} as any)
+const AuthedOrgClassroomAssignmentsIndexRoute =
+  AuthedOrgClassroomAssignmentsIndexRouteImport.update({
+    id: '/assignments/',
+    path: '/assignments/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomEditIndexRoute =
@@ -140,10 +128,28 @@ const AuthedOrgClassroomEditIndexRoute =
     path: '/edit/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
-const AuthedOrgClassroomAssignmentsIndexRoute =
-  AuthedOrgClassroomAssignmentsIndexRouteImport.update({
-    id: '/assignments/',
-    path: '/assignments/',
+const AuthedOrgClassroomOnboardIndexRoute =
+  AuthedOrgClassroomOnboardIndexRouteImport.update({
+    id: '/onboard/',
+    path: '/onboard/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
+  } as any)
+const AuthedOrgClassroomRosterIndexRoute =
+  AuthedOrgClassroomRosterIndexRouteImport.update({
+    id: '/roster/',
+    path: '/roster/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
+  } as any)
+const AuthedOrgClassesNewIndexRoute =
+  AuthedOrgClassesNewIndexRouteImport.update({
+    id: '/classes/new/',
+    path: '/classes/new/',
+    getParentRoute: () => AuthedOrgRouteRoute,
+  } as any)
+const AuthedOrgClassroomAssignmentsAssignmentIndexRoute =
+  AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport.update({
+    id: '/assignments/$assignment/',
+    path: '/assignments/$assignment/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsNewIndexRoute =
@@ -152,22 +158,10 @@ const AuthedOrgClassroomAssignmentsNewIndexRoute =
     path: '/assignments/new/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
-const AuthedOrgClassroomAssignmentsAssignmentIndexRoute =
-  AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport.update({
-    id: '/assignments/$assignment/',
-    path: '/assignments/$assignment/',
-    getParentRoute: () => AuthedOrgClassroomRouteRoute,
-  } as any)
-const AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute =
-  AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport.update({
-    id: '/assignments/$assignment/submissions/',
-    path: '/assignments/$assignment/submissions/',
-    getParentRoute: () => AuthedOrgClassroomRouteRoute,
-  } as any)
-const AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute =
-  AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport.update({
-    id: '/assignments/$assignment/submission/',
-    path: '/assignments/$assignment/submission/',
+const AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute =
+  AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport.update({
+    id: '/assignments/$assignment/accept/',
+    path: '/assignments/$assignment/accept/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 const AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute =
@@ -176,10 +170,16 @@ const AuthedOrgClassroomAssignmentsAssignmentEditIndexRoute =
     path: '/assignments/$assignment/edit/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
-const AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRoute =
-  AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport.update({
-    id: '/assignments/$assignment/accept/',
-    path: '/assignments/$assignment/accept/',
+const AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRoute =
+  AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport.update({
+    id: '/assignments/$assignment/submission/',
+    path: '/assignments/$assignment/submission/',
+    getParentRoute: () => AuthedOrgClassroomRouteRoute,
+  } as any)
+const AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRoute =
+  AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport.update({
+    id: '/assignments/$assignment/submissions/',
+    path: '/assignments/$assignment/submissions/',
     getParentRoute: () => AuthedOrgClassroomRouteRoute,
   } as any)
 
@@ -363,18 +363,11 @@ export interface RootRouteChildren {
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/classes': {
-      id: '/classes'
-      path: '/classes'
-      fullPath: '/classes'
-      preLoaderRoute: typeof ClassesRouteImport
+    '/_authed': {
+      id: '/_authed'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthedRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/assignments': {
@@ -384,18 +377,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AssignmentsRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_authed': {
-      id: '/_authed'
-      path: ''
-      fullPath: '/'
-      preLoaderRoute: typeof AuthedRouteImport
+    '/classes': {
+      id: '/classes'
+      path: '/classes'
+      fullPath: '/classes'
+      preLoaderRoute: typeof ClassesRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/auth/': {
-      id: '/auth/'
-      path: '/auth'
-      fullPath: '/auth/'
-      preLoaderRoute: typeof AuthIndexRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_authed/': {
@@ -412,6 +405,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgRouteRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/auth/': {
+      id: '/auth/'
+      path: '/auth'
+      fullPath: '/auth/'
+      preLoaderRoute: typeof AuthIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/$org/': {
       id: '/_authed/$org/'
       path: '/'
@@ -426,32 +426,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassroomRouteRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/setup/': {
-      id: '/_authed/$org/setup/'
-      path: '/setup'
-      fullPath: '/$org/setup/'
-      preLoaderRoute: typeof AuthedOrgSetupIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
+    '/_authed/$org/$classroom/': {
+      id: '/_authed/$org/$classroom/'
+      path: '/'
+      fullPath: '/$org/$classroom/'
+      preLoaderRoute: typeof AuthedOrgClassroomIndexRouteImport
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
-    '/_authed/$org/settings/': {
-      id: '/_authed/$org/settings/'
-      path: '/settings'
-      fullPath: '/$org/settings/'
-      preLoaderRoute: typeof AuthedOrgSettingsIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
-    }
-    '/_authed/$org/published/': {
-      id: '/_authed/$org/published/'
-      path: '/published'
-      fullPath: '/$org/published/'
-      preLoaderRoute: typeof AuthedOrgPublishedIndexRouteImport
-      parentRoute: typeof AuthedOrgRouteRoute
-    }
-    '/_authed/$org/members/': {
-      id: '/_authed/$org/members/'
-      path: '/members'
-      fullPath: '/$org/members/'
-      preLoaderRoute: typeof AuthedOrgMembersIndexRouteImport
+    '/_authed/$org/activity/': {
+      id: '/_authed/$org/activity/'
+      path: '/activity'
+      fullPath: '/$org/activity/'
+      preLoaderRoute: typeof AuthedOrgActivityIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
     '/_authed/$org/classes/': {
@@ -461,39 +447,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassesIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/activity/': {
-      id: '/_authed/$org/activity/'
-      path: '/activity'
-      fullPath: '/$org/activity/'
-      preLoaderRoute: typeof AuthedOrgActivityIndexRouteImport
+    '/_authed/$org/members/': {
+      id: '/_authed/$org/members/'
+      path: '/members'
+      fullPath: '/$org/members/'
+      preLoaderRoute: typeof AuthedOrgMembersIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/$classroom/': {
-      id: '/_authed/$org/$classroom/'
-      path: '/'
-      fullPath: '/$org/$classroom/'
-      preLoaderRoute: typeof AuthedOrgClassroomIndexRouteImport
-      parentRoute: typeof AuthedOrgClassroomRouteRoute
-    }
-    '/_authed/$org/classes/new/': {
-      id: '/_authed/$org/classes/new/'
-      path: '/classes/new'
-      fullPath: '/$org/classes/new/'
-      preLoaderRoute: typeof AuthedOrgClassesNewIndexRouteImport
+    '/_authed/$org/published/': {
+      id: '/_authed/$org/published/'
+      path: '/published'
+      fullPath: '/$org/published/'
+      preLoaderRoute: typeof AuthedOrgPublishedIndexRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/$classroom/roster/': {
-      id: '/_authed/$org/$classroom/roster/'
-      path: '/roster'
-      fullPath: '/$org/$classroom/roster/'
-      preLoaderRoute: typeof AuthedOrgClassroomRosterIndexRouteImport
-      parentRoute: typeof AuthedOrgClassroomRouteRoute
+    '/_authed/$org/settings/': {
+      id: '/_authed/$org/settings/'
+      path: '/settings'
+      fullPath: '/$org/settings/'
+      preLoaderRoute: typeof AuthedOrgSettingsIndexRouteImport
+      parentRoute: typeof AuthedOrgRouteRoute
     }
-    '/_authed/$org/$classroom/onboard/': {
-      id: '/_authed/$org/$classroom/onboard/'
-      path: '/onboard'
-      fullPath: '/$org/$classroom/onboard/'
-      preLoaderRoute: typeof AuthedOrgClassroomOnboardIndexRouteImport
+    '/_authed/$org/setup/': {
+      id: '/_authed/$org/setup/'
+      path: '/setup'
+      fullPath: '/$org/setup/'
+      preLoaderRoute: typeof AuthedOrgSetupIndexRouteImport
+      parentRoute: typeof AuthedOrgRouteRoute
+    }
+    '/_authed/$org/$classroom/assignments/': {
+      id: '/_authed/$org/$classroom/assignments/'
+      path: '/assignments'
+      fullPath: '/$org/$classroom/assignments/'
+      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/edit/': {
@@ -503,11 +489,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassroomEditIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
-    '/_authed/$org/$classroom/assignments/': {
-      id: '/_authed/$org/$classroom/assignments/'
-      path: '/assignments'
-      fullPath: '/$org/$classroom/assignments/'
-      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsIndexRouteImport
+    '/_authed/$org/$classroom/onboard/': {
+      id: '/_authed/$org/$classroom/onboard/'
+      path: '/onboard'
+      fullPath: '/$org/$classroom/onboard/'
+      preLoaderRoute: typeof AuthedOrgClassroomOnboardIndexRouteImport
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
+    }
+    '/_authed/$org/$classroom/roster/': {
+      id: '/_authed/$org/$classroom/roster/'
+      path: '/roster'
+      fullPath: '/$org/$classroom/roster/'
+      preLoaderRoute: typeof AuthedOrgClassroomRosterIndexRouteImport
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
+    }
+    '/_authed/$org/classes/new/': {
+      id: '/_authed/$org/classes/new/'
+      path: '/classes/new'
+      fullPath: '/$org/classes/new/'
+      preLoaderRoute: typeof AuthedOrgClassesNewIndexRouteImport
+      parentRoute: typeof AuthedOrgRouteRoute
+    }
+    '/_authed/$org/$classroom/assignments/$assignment/': {
+      id: '/_authed/$org/$classroom/assignments/$assignment/'
+      path: '/assignments/$assignment'
+      fullPath: '/$org/$classroom/assignments/$assignment/'
+      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/new/': {
@@ -517,25 +524,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsNewIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
-    '/_authed/$org/$classroom/assignments/$assignment/': {
-      id: '/_authed/$org/$classroom/assignments/$assignment/'
-      path: '/assignments/$assignment'
-      fullPath: '/$org/$classroom/assignments/$assignment/'
-      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentIndexRouteImport
-      parentRoute: typeof AuthedOrgClassroomRouteRoute
-    }
-    '/_authed/$org/$classroom/assignments/$assignment/submissions/': {
-      id: '/_authed/$org/$classroom/assignments/$assignment/submissions/'
-      path: '/assignments/$assignment/submissions'
-      fullPath: '/$org/$classroom/assignments/$assignment/submissions/'
-      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport
-      parentRoute: typeof AuthedOrgClassroomRouteRoute
-    }
-    '/_authed/$org/$classroom/assignments/$assignment/submission/': {
-      id: '/_authed/$org/$classroom/assignments/$assignment/submission/'
-      path: '/assignments/$assignment/submission'
-      fullPath: '/$org/$classroom/assignments/$assignment/submission/'
-      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport
+    '/_authed/$org/$classroom/assignments/$assignment/accept/': {
+      id: '/_authed/$org/$classroom/assignments/$assignment/accept/'
+      path: '/assignments/$assignment/accept'
+      fullPath: '/$org/$classroom/assignments/$assignment/accept/'
+      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
     '/_authed/$org/$classroom/assignments/$assignment/edit/': {
@@ -545,11 +538,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentEditIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
-    '/_authed/$org/$classroom/assignments/$assignment/accept/': {
-      id: '/_authed/$org/$classroom/assignments/$assignment/accept/'
-      path: '/assignments/$assignment/accept'
-      fullPath: '/$org/$classroom/assignments/$assignment/accept/'
-      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentAcceptIndexRouteImport
+    '/_authed/$org/$classroom/assignments/$assignment/submission/': {
+      id: '/_authed/$org/$classroom/assignments/$assignment/submission/'
+      path: '/assignments/$assignment/submission'
+      fullPath: '/$org/$classroom/assignments/$assignment/submission/'
+      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionIndexRouteImport
+      parentRoute: typeof AuthedOrgClassroomRouteRoute
+    }
+    '/_authed/$org/$classroom/assignments/$assignment/submissions/': {
+      id: '/_authed/$org/$classroom/assignments/$assignment/submissions/'
+      path: '/assignments/$assignment/submissions'
+      fullPath: '/$org/$classroom/assignments/$assignment/submissions/'
+      preLoaderRoute: typeof AuthedOrgClassroomAssignmentsAssignmentSubmissionsIndexRouteImport
       parentRoute: typeof AuthedOrgClassroomRouteRoute
     }
   }
