@@ -38,9 +38,9 @@ const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
   ta: "classes.staff.roleTaPlural",
 }
 
-// Manage a classroom's staff (teacher / TA), backed by the per-classroom
-// GitHub teams `classroom50-<classroom>-<role>`. The route already gates; the
-// actions assume teacher/owner.
+// Manage a classroom's staff (teacher / head TA / TA), backed by the
+// per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route
+// already gates; the actions assume teacher/owner.
 const ClassroomStaffSection = ({
   org,
   classroom,

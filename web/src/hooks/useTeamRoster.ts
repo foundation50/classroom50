@@ -325,6 +325,7 @@ export function useTeamRoster(
   const isError = Boolean(
     membersError ||
     teacherMembersQuery.isError ||
+    htaMembersQuery.isError ||
     taMembersQuery.isError ||
     (!pendingHidden &&
       (studentInvitesQuery.isError || studentFailedInvitesQuery.isError)),
@@ -338,6 +339,7 @@ export function useTeamRoster(
   const isLoading =
     membersLoading ||
     teacherMembersQuery.isLoading ||
+    htaMembersQuery.isLoading ||
     taMembersQuery.isLoading ||
     (!pendingHidden && studentInvitesQuery.isLoading)
 

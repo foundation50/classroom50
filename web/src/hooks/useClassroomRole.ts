@@ -59,7 +59,8 @@ export function teamMembershipQuery(
 }
 
 // Resolve the viewer's effective CLASSROOM role from live team-membership
-// reads: the teacher, ta, and students teams (teacher > ta > student).
+// reads: the teacher, hta, ta, and students teams (teacher > hta > ta >
+// student).
 // The teacher signal probes BOTH the canonical `-teacher` team and the legacy
 // `-instructor` team (during the rename migration a classroom may still back
 // staff with either), and treats membership in either as teacher.
