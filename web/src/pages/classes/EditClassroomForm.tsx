@@ -62,8 +62,12 @@ export const DeleteClassroomButton = ({
             i18nKey="classes.deleteClassroomBody"
             values={{ classroom, org }}
             components={{
-              classroom: <span className="font-semibold text-base-content" />,
-              org: <span className="font-semibold text-base-content" />,
+              classroom: (
+                <span dir="ltr" className="font-semibold text-base-content" />
+              ),
+              org: (
+                <span dir="ltr" className="font-semibold text-base-content" />
+              ),
             }}
           />
         }
@@ -144,7 +148,9 @@ const ArchiveClassroomButton = ({
             i18nKey={archived ? "classes.unarchiveBody" : "classes.archiveBody"}
             values={{ classroom }}
             components={{
-              classroom: <span className="font-semibold text-base-content" />,
+              classroom: (
+                <span dir="ltr" className="font-semibold text-base-content" />
+              ),
             }}
           />
         }

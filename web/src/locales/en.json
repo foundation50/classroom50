@@ -1702,7 +1702,7 @@
       "aria": "Regrade {{owner}}'s submission",
       "confirmTitle": "Regrade {{name}}'s submission?",
       "confirmBody1": "This re-runs the autograder on <name>{{name}}</name>'s latest commit for this assignment. Their submission time doesn't change.",
-      "confirmBody1WithLogin": "This re-runs the autograder on <name>{{name}}</name> ({{owner}})'s latest commit for this assignment. Their submission time doesn't change.",
+      "confirmBody1WithLogin": "This re-runs the autograder on <name>{{name}}</name> (<owner>{{owner}}</owner>)'s latest commit for this assignment. Their submission time doesn't change.",
       "confirmBody2": "Grading runs in the background and can take a few minutes; use <collectLabel>{{collectLabel}}</collectLabel> afterward to pull the new score.",
       "confirmLabel": "Regrade"
     },

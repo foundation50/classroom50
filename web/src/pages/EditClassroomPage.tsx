@@ -65,7 +65,7 @@ const EditClassroomContent = ({
                 i18nKey="classes.settingsSubtitle"
                 values={{ classroom: cl.name || cl.short_name || classroom }}
                 components={{
-                  classroom: <span className="font-semibold" />,
+                  classroom: <span dir="ltr" className="font-semibold" />,
                 }}
               />
             }

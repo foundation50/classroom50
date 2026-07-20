@@ -247,7 +247,7 @@ const StudentAssignmentsView = ({
           <Trans
             i18nKey="assignments.studentViewAll"
             values={{ classroom }}
-            components={{ classroom: <span className="font-bold" /> }}
+            components={{ classroom: <span dir="ltr" className="font-bold" /> }}
           />
         }
       />

@@ -94,7 +94,9 @@ export const ReuseFromClassroomModal = ({
           i18nKey="components.modals.reuseFromClassroom.description"
           values={{ org, classroom }}
           components={{
-            classroom: <span className="font-semibold text-base-content" />,
+            classroom: (
+              <span dir="ltr" className="font-semibold text-base-content" />
+            ),
           }}
         />
       }

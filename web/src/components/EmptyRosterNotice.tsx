@@ -35,7 +35,7 @@ export const EmptyRosterNotice = ({
                 : "components.notices.emptyRoster.empty"
             }
             values={{ org }}
-            components={{ org: <span className="font-semibold" /> }}
+            components={{ org: <span dir="ltr" className="font-semibold" /> }}
           />
         </span>
       </div>

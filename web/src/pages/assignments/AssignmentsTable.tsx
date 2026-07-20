@@ -69,8 +69,12 @@ const DeleteAssignmentButton = ({
               classroom: `${org}/${classroom}`,
             }}
             components={{
-              assignment: <span className="font-semibold text-base-content" />,
-              classroom: <span className="font-semibold text-base-content" />,
+              assignment: (
+                <span dir="ltr" className="font-semibold text-base-content" />
+              ),
+              classroom: (
+                <span dir="ltr" className="font-semibold text-base-content" />
+              ),
             }}
           />
         }

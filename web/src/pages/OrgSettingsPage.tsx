@@ -130,7 +130,7 @@ export function ServiceTokenInfo() {
               i18nKey="orgSettings.serviceToken.info"
               components={{
                 secret: <MonoLtr className="text-xs" />,
-                repo: <span className="font-semibold" />,
+                repo: <span dir="ltr" className="font-semibold" />,
               }}
             />
           </p>

@@ -173,13 +173,13 @@ export const MembershipError = ({
             <Trans
               i18nKey="membership.ssoRequired.body"
               values={{ org }}
-              components={{ org: <span className="font-bold" /> }}
+              components={{ org: <span dir="ltr" className="font-bold" /> }}
             />
           ) : cause === "notAMember" ? (
             <Trans
               i18nKey="membership.notAMember.body"
               values={{ org }}
-              components={{ org: <span className="font-bold" /> }}
+              components={{ org: <span dir="ltr" className="font-bold" /> }}
             />
           ) : (
             t("membership.generic.body")

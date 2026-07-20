@@ -632,9 +632,17 @@ const RosterMemberModal = ({
                     values={{ label, org, classroom }}
                     components={{
                       label: (
-                        <span className="font-semibold text-base-content" />
+                        <span
+                          dir="ltr"
+                          className="font-semibold text-base-content"
+                        />
                       ),
-                      org: <span className="font-semibold text-base-content" />,
+                      org: (
+                        <span
+                          dir="ltr"
+                          className="font-semibold text-base-content"
+                        />
+                      ),
                     }}
                   />
                 </p>

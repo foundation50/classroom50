@@ -71,7 +71,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
             i18nKey="classes.join.body"
             values={{ org }}
             components={{
-              org: <span className="font-medium text-base-content" />,
+              org: <span dir="ltr" className="font-medium text-base-content" />,
             }}
           />
         </p>

@@ -83,7 +83,9 @@ const NotInvited = ({
               i18nKey="getStarted.notInvited.body"
               values={{ org }}
               components={{
-                org: <span className="font-semibold text-base-content" />,
+                org: (
+                  <span dir="ltr" className="font-semibold text-base-content" />
+                ),
               }}
             />
           </p>
@@ -104,7 +106,10 @@ const NotInvited = ({
                   values={{ classroom }}
                   components={{
                     classroom: (
-                      <span className="font-semibold text-base-content" />
+                      <span
+                        dir="ltr"
+                        className="font-semibold text-base-content"
+                      />
                     ),
                   }}
                 />

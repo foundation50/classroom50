@@ -282,6 +282,7 @@ const RegradeButton = ({
               values={{ name: displayName || owner, owner }}
               components={{
                 name: <span className="font-semibold text-base-content" />,
+                owner: <span dir="ltr" />,
               }}
             />
             <br />

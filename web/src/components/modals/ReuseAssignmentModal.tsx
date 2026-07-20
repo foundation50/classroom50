@@ -75,7 +75,9 @@ export const ReuseAssignmentModal = ({
           i18nKey="components.modals.reuseAssignment.description"
           values={{ assignment: assignment.name || assignment.slug, org }}
           components={{
-            assignment: <span className="font-semibold text-base-content" />,
+            assignment: (
+              <span dir="ltr" className="font-semibold text-base-content" />
+            ),
           }}
         />
       }

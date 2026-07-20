@@ -298,14 +298,16 @@ const MemberDetailModal = ({
                   }}
                   components={{
                     count: <span className="font-semibold" />,
-                    org: <span className="font-semibold" />,
+                    org: <span dir="ltr" className="font-semibold" />,
                   }}
                 />
               ) : (
                 <Trans
                   i18nKey="orgMembers.confirmRemove"
                   values={{ label, org }}
-                  components={{ org: <span className="font-semibold" /> }}
+                  components={{
+                    org: <span dir="ltr" className="font-semibold" />,
+                  }}
                 />
               )}
             </p>
