@@ -179,7 +179,7 @@ export function SubmitUpload({
                       <th className="w-24">
                         {t("submissions.student.upload.colSize")}
                       </th>
-                      <th className="w-10 text-right sr-only">
+                      <th className="w-10 text-end sr-only">
                         {t("submissions.student.upload.colRemove")}
                       </th>
                     </tr>
@@ -195,7 +195,7 @@ export function SubmitUpload({
                         <td className="whitespace-nowrap tabular-nums text-base-content/70">
                           {formatBytes(p.file.size)}
                         </td>
-                        <td className="text-right">
+                        <td className="text-end">
                           <Button
                             variant="ghost"
                             size="sm"

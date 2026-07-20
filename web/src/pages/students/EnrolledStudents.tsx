@@ -8,7 +8,6 @@ import {
   Card,
   Spinner,
   Toolbar,
-  rtlFlip,
 } from "@/components/ui"
 import type { Student } from "@/types/classroom"
 import { useQueryClient } from "@tanstack/react-query"
