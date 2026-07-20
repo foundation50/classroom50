@@ -1,5 +1,5 @@
 // Package staff implements the `gh teacher staff` command: managing the
-// per-classroom staff teams (teacher, ta) that back the web GUI's in-app
+// per-classroom staff teams (teacher, hta, ta) that back the web GUI's in-app
 // roles. Membership lives in the GitHub teams (`classroom50-<classroom>-{...}`),
 // not roster.csv, so staff is identical from CLI or web. Only NewCmd is
 // exported.
@@ -151,7 +151,7 @@ func staffRemoveCmd() *cobra.Command {
 
 // runStaffAdd resolves the staff team from classroom.json and adds the
 // canonical-login user. If the `teams` block is missing/partial, it self-heals
-// (create/adopt the team, grant config-repo write, record the ref).
+// (create/adopt the team, grant the role's config-repo access, record the ref).
 func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom, username string, role configrepo.StaffRole) error {
 	branch, err := configrepo.ResolveConfigRepoBranch(client, org)
 	if err != nil {
@@ -172,9 +172,10 @@ func runStaffAdd(client githubapi.Client, out, errOut io.Writer, org, classroom,
 	}
 	if !ok {
 		// Self-heal a missing/partial `teams` block: ensure the team, grant
-		// config-repo write, persist its ref, then proceed. Makes `staff add`
-		// idempotent for pre-feature classrooms rather than dead-ending at
-		// `classroom add` (which can't repair an existing classroom).
+		// the role's config-repo access, persist its ref, then proceed. Makes
+		// `staff add` idempotent for pre-feature classrooms rather than
+		// dead-ending at `classroom add` (which can't repair an existing
+		// classroom).
 		team, err = ensureStaffTeamRecorded(client, out, org, classroom, branch, role)
 		if err != nil {
 			return err

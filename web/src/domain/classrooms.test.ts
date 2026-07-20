@@ -187,7 +187,7 @@ describe("createClassroomFiles creator team cleanup", () => {
     creator: "prof",
   }
 
-  it("removes the creator from the students and ta teams but never teacher", async () => {
+  it("removes the creator from the students, hta, and ta teams but never teacher", async () => {
     const deleted: string[] = []
     const client = routingClient({ onDelete: (p) => deleted.push(p) })
 
@@ -195,6 +195,9 @@ describe("createClassroomFiles creator team cleanup", () => {
 
     expect(deleted).toContain(
       "/orgs/acme/teams/classroom50-cs101/memberships/prof",
+    )
+    expect(deleted).toContain(
+      "/orgs/acme/teams/classroom50-cs101-hta/memberships/prof",
     )
     expect(deleted).toContain(
       "/orgs/acme/teams/classroom50-cs101-ta/memberships/prof",
@@ -214,8 +217,9 @@ describe("createClassroomFiles creator team cleanup", () => {
     await expect(createClassroomFiles(client, input)).resolves.toMatchObject({
       newCommitSha: "new-commit-sha",
     })
-    // Both drops were attempted even though each threw.
-    expect(deleted).toHaveLength(2)
+    // All three non-teacher drops (students, hta, ta) were attempted even
+    // though each threw.
+    expect(deleted).toHaveLength(3)
   })
 
   it("does not attempt any creator drop when no creator is supplied", async () => {

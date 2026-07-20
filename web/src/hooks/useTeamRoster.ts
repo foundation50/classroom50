@@ -272,12 +272,13 @@ export function useTeamRoster(
     for (const m of [
       ...(members ?? []),
       ...(teacherMembers ?? []),
+      ...(htaMembers ?? []),
       ...(taMembers ?? []),
     ]) {
       if (!byId.has(m.id)) byId.set(m.id, m)
     }
     return [...byId.values()]
-  }, [members, teacherMembers, taMembers])
+  }, [members, teacherMembers, htaMembers, taMembers])
   const csvMissing = useMemo(
     () => teamMembersMissingFromCsv(allTeamMembers, students),
     [allTeamMembers, students],
@@ -299,10 +300,14 @@ export function useTeamRoster(
     () =>
       rowsNeedingBackfill(
         members ?? [],
-        { teacher: teacherMembers ?? [], ta: taMembers ?? [] },
+        {
+          teacher: teacherMembers ?? [],
+          hta: htaMembers ?? [],
+          ta: taMembers ?? [],
+        },
         students,
       ),
-    [members, teacherMembers, taMembers, students],
+    [members, teacherMembers, htaMembers, taMembers, students],
   )
   const backfillNeededCount = backfillNeeded.length
   // Lowercased logins of the stale rows, so the auto-sync trigger can drop a

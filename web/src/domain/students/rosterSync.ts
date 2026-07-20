@@ -34,7 +34,8 @@ export type SyncRosterFromTeamResult = {
 }
 
 // Sync roster.csv from the classroom's GitHub teams: ensure every active member
-// of the student, teacher, and ta teams has an IDENTITY row (username +
+// of the student team plus every staff team (teacher, hta, ta) has an IDENTITY
+// row (username +
 // github_id) carrying their recorded `role`, and refresh the role on rows whose
 // team-derived role has changed — all in ONE commit. The teams are the source
 // of truth for enrollment and role; the CSV holds teacher-supplied metadata

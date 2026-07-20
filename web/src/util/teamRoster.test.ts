@@ -559,6 +559,13 @@ describe("rowsNeedingBackfill", () => {
     expect(needing.map((s) => s.username)).toEqual(["prof"])
   })
 
+  it("flags a stale row for an hta-team member (hta is a first-class staff key)", () => {
+    const needing = rowsNeedingBackfill([], { hta: [member(2, "headta")] }, [
+      csvRow({ github_id: "2", username: "headta", role: "student" }),
+    ])
+    expect(needing.map((s) => s.username)).toEqual(["headta"])
+  })
+
   it("does not flag a complete, in-sync row", () => {
     const needing = rowsNeedingBackfill([member(1, "ada")], {}, [
       csvRow({ github_id: "1", username: "ada", role: "student" }),

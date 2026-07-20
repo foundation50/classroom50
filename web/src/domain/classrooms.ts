@@ -51,8 +51,8 @@ export async function createClassroomFiles(
   })
   // Create (or adopt) the teams BEFORE scaffolding so their { id, slug } land in
   // classroom.json (mirrors the CLI). The students team grants rostered students
-  // read on private org templates; the staff teams (teacher, ta) get
-  // config-repo write and back the in-app roles.
+  // read on private org templates; the staff teams (teacher, hta, ta) back the
+  // in-app roles — teacher/hta get config-repo write, ta is read-only.
   const { created: teamCreated, ...team } = await ensureClassroomTeam(
     client,
     input.org,
@@ -85,17 +85,18 @@ export async function createClassroomFiles(
     }
   }
 
-  // The creator must never hold a student or TA role — mixed roles aren't
-  // allowed, and the team-driven roster would otherwise count the owner as an
-  // enrolled student/TA. GitHub silently adds the creator as a maintainer of
-  // every team the create POST makes, so drop them from the students and TA
-  // teams unconditionally: the drop is deliberately NOT gated on whether we
-  // created vs adopted the team — an owner sitting on an adopted students/TA
-  // team is exactly the mixed-role state we're clearing. Best-effort and
-  // idempotent (404 = already absent); a failure just leaves them on a team,
-  // where the roster's per-role badges surface it for manual cleanup.
+  // The creator must never hold a student, TA, or head-TA role — mixed roles
+  // aren't allowed, and the team-driven roster would otherwise count the owner
+  // as an enrolled student/TA/HTA. GitHub silently adds the creator as a
+  // maintainer of every team the create POST makes, so drop them from the
+  // students, HTA, and TA teams unconditionally: the drop is deliberately NOT
+  // gated on whether we created vs adopted the team — an owner sitting on an
+  // adopted students/HTA/TA team is exactly the mixed-role state we're
+  // clearing. Best-effort and idempotent (404 = already absent); a failure just
+  // leaves them on a team, where the roster's per-role badges surface it for
+  // manual cleanup. Mirrors the CLI's dropCreatorFromNonTeacherTeams.
   if (input.creator) {
-    const dropSlugs = [team.slug, teams.ta?.slug].filter(
+    const dropSlugs = [team.slug, teams.hta?.slug, teams.ta?.slug].filter(
       (slug): slug is string => Boolean(slug),
     )
     for (const teamSlug of dropSlugs) {
