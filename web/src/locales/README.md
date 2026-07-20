@@ -88,7 +88,9 @@ It reports five things:
 - **SPLIT keys** — keys using the retired `_prefix`/`_suffix`/`_1…` fragment
   convention that stitched sentences together in JSX (forces English word
   order on every language and breaks RTL; sentences are single keys with
-  `{{placeholders}}` and `<tag>` markers instead). Always fails the run.
+  `{{placeholders}}` and `<tag>` markers instead). camelCase tails
+  (`fooPrefix`/`fooSuffix`) are the same disease with different casing and are
+  flagged too. Always fails the run.
 - **PHYSICAL directional classes** — Tailwind utilities pinning a physical
   edge (`ml-`/`pr-`/`left-`/`text-left`/…) that don't mirror under
   `dir="rtl"`; the CI backstop behind the eslint rule in

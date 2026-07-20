@@ -96,7 +96,7 @@ export function MetricsModal({
                     </>
                   )}
                   {ungraded > 0
-                    ? t("submissions.stats.ungradedSuffix", { count: ungraded })
+                    ? t("submissions.stats.ungradedNote", { count: ungraded })
                     : ""}
                 </span>
               )

@@ -242,7 +242,7 @@ export const AdvancedSection = ({
                                   }
                                 />
                                 <span className="text-sm text-base-content/70">
-                                  {t("assignments.form.passThresholdSuffix")}
+                                  {t("assignments.form.passThresholdUnit")}
                                 </span>
                               </div>
                               {error ? (

@@ -1,7 +1,7 @@
 import { Mail, UserRound, Users } from "lucide-react"
 import { revalidateLogic, useForm } from "@tanstack/react-form"
 import { useCallback, useEffect, useState } from "react"
-import { useTranslation } from "react-i18next"
+import { Trans, useTranslation } from "react-i18next"
 import GitHub from "@/assets/github.svg?react"
 import { useUpdateStudent } from "@/hooks/mutations/useUpdateStudent"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -10,7 +10,7 @@ import { isValidEmail } from "@/util/orgMembership"
 import { studentKey } from "@/util/roster"
 import type { Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/domain/students"
-import { AnimatedAlert, Button, Input } from "@/components/ui"
+import { AnimatedAlert, Button, Input, MonoLtr } from "@/components/ui"
 
 export type EditStudentFormValues = {
   first_name: string
@@ -246,11 +246,15 @@ const EditStudentForm = ({
           <div className="flex items-center gap-2 rounded-box border border-base-300 bg-base-200/50 px-3 py-2 text-sm text-base-content/70">
             <GitHub aria-hidden="true" className="size-5 opacity-40" />
             <span>
-              {t("students.githubLabel")}{" "}
-              <span className="font-mono">@{student.username}</span>
-              {student.github_id
-                ? t("students.githubIdSuffix", { id: student.github_id })
-                : ""}
+              <Trans
+                i18nKey={
+                  student.github_id
+                    ? "students.githubIdentity"
+                    : "students.githubIdentityNoId"
+                }
+                values={{ username: student.username, id: student.github_id }}
+                components={{ username: <MonoLtr /> }}
+              />
             </span>
           </div>
         ) : null}

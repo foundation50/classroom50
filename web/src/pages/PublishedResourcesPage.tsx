@@ -322,7 +322,7 @@ function ClassroomResources({
           </div>
           <p className="text-xs text-base-content/70">
             {t("published.resourceCount", { count: resources.length })}
-            {secret ? t("published.servedUnlistedSuffix") : ""}
+            {secret ? t("published.servedUnlistedNote") : ""}
           </p>
         </div>
         <ChevronDown

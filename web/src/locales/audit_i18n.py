@@ -112,10 +112,19 @@ USERFACING_CALL_RE = re.compile(
 # literals that look like code/config, not prose worth translating
 CODEISH_RE = re.compile(r"^[a-z0-9]+(?:[-_/][a-z0-9]+)*$")  # ubuntu-latest, foo_bar
 
-# The retired sentence-fragment suffixes (SPLIT check). Match on the literal
-# underscore suffix so camelCase keys like nav.allClassesLink stay legal.
-# _<digits> covers the numbered variants (_1, _2, ...).
-SPLIT_SUFFIX_RE = re.compile(r"_(?:prefix|suffix|middle|from|emphasis|link|\d+)$")
+# The retired sentence-fragment suffixes (SPLIT check). Two shapes:
+#  - underscore tails (_prefix/_suffix/.../_<digits> for numbered variants)
+#  - camelCase tails (fooPrefix/fooSuffix) — the same disease with different
+#    casing; they slipped the original underscore-only gate.
+# camelCase Link/Emphasis tails stay legal (nav.allClassesLink is a whole
+# label, not a fragment), as do plural _one/_other/... via the exact-name
+# alternation. A leading lowercase run before the camel tail is required so a
+# bare "prefix"/"suffix" leaf (e.g. a form label named exactly that) doesn't
+# match — those aren't concat fragments.
+SPLIT_SUFFIX_RE = re.compile(
+    r"_(?:prefix|suffix|middle|from|emphasis|link|\d+)$"
+    r"|[a-z0-9](?:Prefix|Suffix)(?:_(?:zero|one|two|few|many|other))?$"
+)
 
 # Physical directional Tailwind utilities (PHYSICAL check). Keep in sync with
 # directionalClassPattern in web/src/eslint/directionalClassRule.ts -- same

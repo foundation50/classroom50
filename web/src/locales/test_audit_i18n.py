@@ -494,3 +494,77 @@ class TestParityWithVerifyLocale:
         en_file = AUDIT_PATH.parent / "en.json"
         raw = json.loads(en_file.read_text(encoding="utf-8"))
         assert audit.flatten(raw) == verify_locale.flatten(raw)
+
+
+class TestParityWithEslintRule:
+    """PHYSICAL_CLASS_RE and directionalClassPattern (directionalClassRule.ts)
+    must catch the same class tokens. Both suites assert the shared probe
+    fixture (web/src/eslint/directionalClassProbes.json) so extending one
+    pattern without the other fails the other side's tests -- the sync is a
+    tested contract, not a comment. The Python side matters most: it backstops
+    template-literal chunks in .ts class recipes the AST rule can't reach, so
+    a stale copy here silently un-guards those files."""
+
+    PROBES_PATH = (
+        AUDIT_PATH.parent.parent / "eslint" / "directionalClassProbes.json"
+    )
+
+    @pytest.fixture(scope="class")
+    def probes(self):
+        return json.loads(self.PROBES_PATH.read_text(encoding="utf-8"))
+
+    def test_matches_all_fixture_probes(self, probes):
+        misses = [c for c in probes["matches"] if not audit.PHYSICAL_CLASS_RE.search(c)]
+        assert misses == [], f"PHYSICAL_CLASS_RE misses fixture probes: {misses}"
+
+    def test_ignores_all_fixture_non_probes(self, probes):
+        hits = [c for c in probes["nonMatches"] if audit.PHYSICAL_CLASS_RE.search(c)]
+        assert hits == [], f"PHYSICAL_CLASS_RE wrongly matches: {hits}"
+
+    def test_fixture_is_nonempty(self, probes):
+        # An emptied fixture would green both suites while guarding nothing.
+        assert len(probes["matches"]) >= 20
+        assert len(probes["nonMatches"]) >= 15
+
+
+class TestCamelCaseSplitGate:
+    """The SPLIT gate must catch camelCase affix tails (fooSuffix/fooPrefix),
+    not just the underscore convention — rongxin's RTL review found six
+    camelCase fragment keys the underscore-only regex waved through."""
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "orgMembers.idSuffix",
+            "students.githubIdSuffix",
+            "assignments.form.passThresholdSuffix",
+            "published.servedUnlistedSuffix",
+            "classes.toolbar.termPrefix",
+            "classes.toolbar.sortPrefix",
+            # plural variants of a camelCase fragment are still fragments
+            "submissions.stats.ungradedSuffix_one",
+            "submissions.stats.ungradedSuffix_other",
+        ],
+    )
+    def test_camelcase_affix_keys_flagged(self, key):
+        assert audit.SPLIT_SUFFIX_RE.search(key), key
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            # whole labels, not fragments
+            "nav.allClassesLink",
+            "orgMembers.usernameWithId",
+            "assignments.form.passThresholdUnit",
+            "published.servedUnlistedNote",
+            "classes.toolbar.term",
+            "submissions.stats.ungradedNote_one",
+            # a bare prefix/suffix leaf is a label named "prefix", not a fragment
+            "form.prefix",
+            "form.suffix",
+            # plural forms of ordinary keys stay legal
+            "published.resourceCount_other",
+        ],
+    )
+    def test_legal_keys_not_flagged(self, key):
+        assert not audit.SPLIT_SUFFIX_RE.search(key), key

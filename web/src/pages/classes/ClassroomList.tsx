@@ -190,7 +190,7 @@ const ClassroomList = ({
         </div>
 
         {showTermFilter && (
-          <LabeledControl label={t("classes.toolbar.termPrefix")}>
+          <LabeledControl label={t("classes.toolbar.term")}>
             <Select
               selectSize="sm"
               className="join-item w-auto"
@@ -208,7 +208,7 @@ const ClassroomList = ({
           </LabeledControl>
         )}
 
-        <LabeledControl label={t("classes.toolbar.sortPrefix")}>
+        <LabeledControl label={t("classes.toolbar.sort.label")}>
           <Select
             selectSize="sm"
             className="join-item w-auto"

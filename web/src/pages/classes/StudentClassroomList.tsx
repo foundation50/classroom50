@@ -184,7 +184,7 @@ export function StudentClassroomList({
           onChange={(e) => setSearch(e.target.value)}
         />
 
-        <LabeledControl label={t("classes.toolbar.sortPrefix")}>
+        <LabeledControl label={t("classes.toolbar.sort.label")}>
           <Select
             selectSize="sm"
             className="w-auto"
