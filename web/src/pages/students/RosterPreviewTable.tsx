@@ -60,6 +60,7 @@ export const RosterPreviewTable = ({
                   >
                     <option value="student">{t("students.roleStudent")}</option>
                     <option value="ta">{t("students.roleTa")}</option>
+                    <option value="hta">{t("students.roleHeadTa")}</option>
                     <option value="teacher">{t("students.roleTeacher")}</option>
                   </Select>
                 </td>

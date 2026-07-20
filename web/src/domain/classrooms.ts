@@ -480,6 +480,7 @@ export async function deleteClassroom(
     team,
     staffTeams.teacher,
     staffTeams.instructor,
+    staffTeams.hta,
     staffTeams.ta,
   ].filter(isDeletableClassroomTeamRef)
   const failedTeamSlugs: string[] = []

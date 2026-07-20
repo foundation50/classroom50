@@ -99,6 +99,7 @@ type ClassroomFixture = {
   teams?: {
     teacher?: { id: number; slug: string }
     instructor?: { id: number; slug: string }
+    hta?: { id: number; slug: string }
     ta?: { id: number; slug: string }
   }
 }
@@ -135,6 +136,7 @@ function makeClient(opts: Opts) {
             c.team,
             c.teams?.teacher,
             c.teams?.instructor,
+            c.teams?.hta,
             c.teams?.ta,
           ])
           .find((t) => t?.slug === slug)
@@ -501,6 +503,7 @@ describe("executeTeardown", () => {
           teams: {
             teacher: { id: 12, slug: "classroom50-cs101-teacher" },
             instructor: { id: 14, slug: "classroom50-cs101-instructor" },
+            hta: { id: 15, slug: "classroom50-cs101-hta" },
             ta: { id: 13, slug: "classroom50-cs101-ta" },
           },
         },
@@ -510,6 +513,7 @@ describe("executeTeardown", () => {
     const result = await executeTeardown(client, plan)
     expect(teamDeletes.sort()).toEqual([
       "classroom50-cs101",
+      "classroom50-cs101-hta",
       "classroom50-cs101-instructor",
       "classroom50-cs101-ta",
       "classroom50-cs101-teacher",

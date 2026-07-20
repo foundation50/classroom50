@@ -149,6 +149,8 @@ describe("coerceImportRole", () => {
     expect(coerceImportRole("student")).toBe("student")
     expect(coerceImportRole("teacher")).toBe("teacher")
     expect(coerceImportRole("ta")).toBe("ta")
+    expect(coerceImportRole("hta")).toBe("hta")
+    expect(coerceImportRole("HTA")).toBe("hta")
     expect(coerceImportRole("Teacher")).toBe("teacher")
     expect(coerceImportRole("  TA  ")).toBe("ta")
   })

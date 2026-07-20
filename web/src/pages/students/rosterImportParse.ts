@@ -22,7 +22,12 @@ export const coerceImportRole = (
   raw: string | undefined,
 ): ClassroomRole | undefined => {
   const value = raw?.trim().toLowerCase()
-  if (value === "student" || value === "teacher" || value === "ta") {
+  if (
+    value === "student" ||
+    value === "teacher" ||
+    value === "hta" ||
+    value === "ta"
+  ) {
     return value
   }
   // Legacy alias: a roster that still says "instructor" imports as teacher.

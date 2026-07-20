@@ -103,6 +103,7 @@ async function collectClassroomTeams(
         json.team,
         json.teams?.teacher,
         json.teams?.instructor,
+        json.teams?.hta,
         json.teams?.ta,
       ]
       for (const team of candidates) {
