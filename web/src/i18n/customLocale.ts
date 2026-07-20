@@ -55,6 +55,9 @@ export type LanguagePack = {
   // unchanged. Absent for user packs.
   version?: string
   hash?: string
+  // Unknown fields written by a newer release are preserved on read-modify-write
+  // (packSchema is .loose()), so an older release never drops forward-compat data.
+  [extra: string]: unknown
 }
 
 // BCP-47-ish tag: 2-3 letter primary subtag plus optional `-` subtags. Rejects
@@ -78,15 +81,19 @@ const flatBundleSchema = z
     message: `Language pack has too many keys (max ${MAX_PACK_KEYS})`,
   })
 
-const packSchema = z.object({
-  code: langCodeSchema,
-  bundle: flatBundleSchema,
-  // Legacy packs (stored before this field) parse as "user" via the default, so
-  // an existing pack is never mistaken for a registry pack and auto-overwritten.
-  source: z.enum(["registry", "user"]).default("user"),
-  version: z.string().max(200).optional(),
-  hash: z.string().max(200).optional(),
-})
+const packSchema = z
+  .object({
+    code: langCodeSchema,
+    bundle: flatBundleSchema,
+    // Legacy packs (stored before this field) parse as "user" via the default, so
+    // an existing pack is never mistaken for a registry pack and auto-overwritten.
+    source: z.enum(["registry", "user"]).default("user"),
+    version: z.string().max(200).optional(),
+    hash: z.string().max(200).optional(),
+  })
+  // Preserve unknown keys so a field added by a newer release survives an older
+  // release's read-modify-write (installPack/removePack rewrite the whole store).
+  .loose()
 
 const storedPacksSchema = z.record(z.string(), packSchema)
 

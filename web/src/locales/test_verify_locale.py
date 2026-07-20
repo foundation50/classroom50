@@ -159,6 +159,50 @@ class TestMarkupGate:
 
 
 # --------------------------------------------------------------------------
+# attribute_markers(): a pack tag carrying an attribute is rejected, matching
+# the runtime customLocale.ts guard (defense-in-depth for the registry path).
+# --------------------------------------------------------------------------
+
+
+class TestAttributeMarkerGate:
+    BASE = {"pr": {"empty": "No PR for <repo>{{repo}}</repo> yet."}}
+
+    def test_attribute_bearing_tag_fails(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base=self.BASE,
+            trans={"pr": {"empty": 'Für <repo href="https://evil.example">{{repo}}</repo>.'}},
+        )
+        assert code == 1
+
+    def test_slash_separated_attribute_fails(self, monkeypatch, tmp_path):
+        # <repo/ href="…"> bypasses a whitespace-only guard but html-parse-stringify
+        # still reads a clean href, so it must fail here too.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base=self.BASE,
+            trans={"pr": {"empty": 'Für <repo/ href="https://evil.example">{{repo}}.'}},
+        )
+        assert code == 1
+
+    def test_bare_markers_still_pass(self, monkeypatch, tmp_path):
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base=self.BASE,
+            trans={"pr": {"empty": "Für <repo>{{repo}}</repo> gibt es keinen PR."}},
+        )
+        assert code == 0
+
+    def test_attribute_markers_helper(self):
+        assert verify.attribute_markers('x <a href="y">z</a>') == ['<a href="y">']
+        assert verify.attribute_markers("<repo>{{r}}</repo> <br/>") == []
+        assert verify.attribute_markers("<owner>/<repo>") == []
+
+
+# --------------------------------------------------------------------------
 # The pre-existing checks still gate (smoke-level, so a refactor of main()
 # can't silently drop them while the markup tests keep passing)
 # --------------------------------------------------------------------------

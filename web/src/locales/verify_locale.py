@@ -53,6 +53,26 @@ def markup_markers(value):
     return sorted(re.findall(r"</?[a-zA-Z]\w*\s*/?>", value))
 
 
+# A tag is a bare marker iff it is exactly </?name/?> (optional leading slash,
+# optional self-closing slash). Anything else carries attributes.
+_TAG_RE = re.compile(r"<[^>]*>")
+_BARE_MARKER_RE = re.compile(r"^</?[a-zA-Z]\w*\s*/?>$")
+
+
+def attribute_markers(value):
+    """Tags in a string that carry attributes (i.e. are not bare markers).
+
+    Mirrors customLocale.ts's runtime pack-ingest guard: react-i18next's <Trans>
+    merges a marker tag's attributes onto the mapped component (pack side wins),
+    so an attribute-bearing tag like <a href="…"> could repoint a trusted link.
+    The contract is bare markers only; a slash-separated form (<repoLink/ href=…>)
+    that the parser still reads as an attribute is caught here too.
+    """
+    if not isinstance(value, str):
+        return []
+    return sorted(t for t in _TAG_RE.findall(value) if not _BARE_MARKER_RE.match(t))
+
+
 # CLDR plural categories per target language (Intl.PluralRules cardinal set).
 # en.json carries only _one/_other, and i18next does NOT fall back to the
 # pack's own _other when a category-specific key is missing -- it jumps
@@ -135,18 +155,24 @@ def main():
 
     ph_mismatch = []
     mk_mismatch = []
+    attr_markers = []
     for key in sorted(base_keys & trans_keys):
         if placeholders(base[key]) != placeholders(trans[key]):
             ph_mismatch.append((key, placeholders(base[key]), placeholders(trans[key])))
         if markup_markers(base[key]) != markup_markers(trans[key]):
             mk_mismatch.append((key, markup_markers(base[key]), markup_markers(trans[key])))
+        bad = attribute_markers(trans[key])
+        if bad:
+            attr_markers.append((key, bad))
 
     # Advisory only (see PLURAL_CATEGORIES): missing categories render English
     # for the counts they cover, but must not fail long-published packs.
     lang = trans_path.stem
     plural_gaps = missing_plural_categories(lang, base_keys, trans_keys)
 
-    passed = not (missing or extra or bad_type or ph_mismatch or mk_mismatch)
+    passed = not (
+        missing or extra or bad_type or ph_mismatch or mk_mismatch or attr_markers
+    )
 
     print(f"base keys: {len(base_keys)} | translated keys: {len(trans_keys)}")
     print(f"MISSING keys ({len(missing)}): {missing or '(none)'}")
@@ -161,6 +187,11 @@ def main():
     for key, base_mk, trans_mk in mk_mismatch:
         print(f"  {key}: base={base_mk} translated={trans_mk}")
     if not mk_mismatch:
+        print("  (none)")
+    print(f"ATTRIBUTE-BEARING markers ({len(attr_markers)}):")
+    for key, tags in attr_markers:
+        print(f"  {key}: {tags}")
+    if not attr_markers:
         print("  (none)")
     print(f"PLURAL category gaps ({len(plural_gaps)}) — WARNING, not a failure:")
     for key in plural_gaps:

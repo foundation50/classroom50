@@ -15,6 +15,7 @@ import {
   flattenBundle,
   hashBundle,
   inferLangCode,
+  installPack,
   missingKeys,
   normalizeLangCode,
   packSources,
@@ -773,6 +774,26 @@ describe("refreshInstalledPacks", () => {
     expect(
       urls.some((u) => u.startsWith(httpsRegistry) && /\/de\.json$/.test(u)),
     ).toBe(true)
+  })
+
+  it("preserves an unknown pack field across a read-modify-write", async () => {
+    // A field written by a newer release (packSchema is .loose()) must survive
+    // an older release rewriting the store, so forward-compat data isn't lost.
+    const store = stubWindow({
+      [PACKS_STORAGE_KEY]: JSON.stringify({
+        de: {
+          code: "de",
+          source: "user",
+          bundle: { "nav.roleStudent": "Studentin" },
+          futureField: { note: "written by a newer release" },
+        },
+      }),
+    })
+    // installPack does a read-modify-write of the whole store (here via a
+    // no-op install of a second pack), which must not strip de's unknown field.
+    installPack("fr", { "nav.roleStudent": "Étudiante" })
+    const packs = readPacks(store) as Record<string, { futureField?: unknown }>
+    expect(packs.de.futureField).toEqual({ note: "written by a newer release" })
   })
 
   it("leaves a user-sourced pack untouched even when its code is in the registry", async () => {

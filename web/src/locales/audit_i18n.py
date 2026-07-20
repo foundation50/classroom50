@@ -100,9 +100,12 @@ DYNAMIC_PREFIX_RE = re.compile(_T_CALL + r"\s*`([A-Za-z0-9_.]*)\$\{")
 # any dotted string literal in source (catches labelKey/titleKey/what/why consts)
 STRING_LITERAL_RE = re.compile(r'["\']([A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z0-9_]+)+)["\']')
 
-# user-visible attributes whose literal (prose) values bypass i18n
+# user-visible attributes whose literal (prose) values bypass i18n. The value
+# is a single bounded run (no nested `[^"]*` quantifiers) with a letter required
+# via a lookahead, so matching stays linear — the earlier `[^"]*X[^"]*` shape
+# backtracked quadratically on a long unterminated attribute line.
 ATTR_RE = re.compile(
-    r'(?:aria-label|alt|title|placeholder)\s*=\s*"([^"]*[A-Za-z]{2}[^"]*)"'
+    r'(?:aria-label|alt|title|placeholder)\s*=\s*"(?=[^"]*[A-Za-z]{2})([^"]{1,300})"'
 )
 # error/toast style calls taking a raw string first arg the user may see
 USERFACING_CALL_RE = re.compile(
