@@ -39,6 +39,25 @@ def placeholders(value):
     return sorted(re.findall(r"\{\{.*?\}\}", value))
 
 
+def placeholders_ok(key, base_val, trans_val):
+    """Whether a translated string's placeholders are acceptable vs the base.
+
+    Non-plural keys require an exact match. A fixed-count plural category
+    (_zero/_one/_two) may OMIT placeholders the base carries: those categories
+    apply to a specific count, so a fluent translation drops "{{count}}"
+    (Arabic "طالب واحد" = "one student", not "{{count}} students"). The
+    open-ended categories (_few/_many/_other) cover arbitrary counts and must
+    keep the base's placeholders exactly. Adding a placeholder the base never
+    had is always a mismatch (a stray/typo interpolation that renders raw).
+    """
+    base_ph, trans_ph = placeholders(base_val), placeholders(trans_val)
+    if base_ph == trans_ph:
+        return True
+    if any(key.endswith(suffix) for suffix in ("_zero", "_one", "_two")):
+        return set(trans_ph).issubset(set(base_ph))
+    return False
+
+
 def markup_markers(value):
     """Sorted list of <tag>/</tag>/<tag/> markers in a string (empty for non-strings).
 
@@ -157,7 +176,7 @@ def main():
     mk_mismatch = []
     attr_markers = []
     for key in sorted(base_keys & trans_keys):
-        if placeholders(base[key]) != placeholders(trans[key]):
+        if not placeholders_ok(key, base[key], trans[key]):
             ph_mismatch.append((key, placeholders(base[key]), placeholders(trans[key])))
         if markup_markers(base[key]) != markup_markers(trans[key]):
             mk_mismatch.append((key, markup_markers(base[key]), markup_markers(trans[key])))

@@ -231,6 +231,51 @@ class TestExistingGate:
         )
         assert code == 1
 
+    def test_plural_form_may_drop_base_placeholder(self, monkeypatch, tmp_path):
+        # CLDR one/two/zero categories apply to a fixed count, so a fluent
+        # translation legitimately omits {{count}} (Arabic "one student").
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base={"n_one": "{{count}} student", "n_other": "{{count}} students"},
+            trans={"n_one": "طالب واحد", "n_other": "{{count}} طلاب"},
+        )
+        assert code == 0
+
+    def test_plural_form_adding_a_placeholder_still_fails(self, monkeypatch, tmp_path):
+        # Subset only: a plural form may drop, never introduce, a placeholder.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base={"n_one": "{{count}} student", "n_other": "{{count}} students"},
+            trans={"n_one": "{{count}} {{extra}}", "n_other": "{{count}} طلاب"},
+        )
+        assert code == 1
+
+    def test_other_plural_form_must_keep_placeholder(self, monkeypatch, tmp_path):
+        # _other is the open-ended fallback (2+, fractions) and must keep the
+        # count; only fixed-count categories (_zero/_one/_two) may drop it.
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base={"n_one": "{{count}} student", "n_other": "{{count}} students"},
+            trans={"n_one": "طالب واحد", "n_other": "طلاب"},
+        )
+        assert code == 1
+
+    def test_non_plural_key_still_requires_exact_placeholders(
+        self, monkeypatch, tmp_path
+    ):
+        # The subset relaxation is plural-only; a normal key dropping a
+        # placeholder is still a bug (renders a blank where a value belongs).
+        code = _run(
+            monkeypatch,
+            tmp_path,
+            base={"greeting": "Hello {{name}}"},
+            trans={"greeting": "Hallo"},
+        )
+        assert code == 1
+
     def test_extra_plural_variant_allowed(self, monkeypatch, tmp_path):
         code = _run(
             monkeypatch,
