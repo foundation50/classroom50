@@ -187,22 +187,24 @@ const SubmissionBody = ({
         <Alert tone="info">
           <div>{t("submissions.student.noGradedYet")}</div>
         </Alert>
-        <Button
-          as="a"
-          variant="outline"
-          size="sm"
-          href={studentRepo.html_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ExternalLink aria-hidden="true" className="size-4" />
-          {t("submissions.student.openMyRepo")}
-        </Button>
-        <SubmitUpload
-          org={org}
-          repo={studentRepo.name}
-          assignment={assignment}
-        />
+        <div className="flex flex-wrap items-center gap-2">
+          <SubmitUpload
+            org={org}
+            repo={studentRepo.name}
+            assignment={assignment}
+          />
+          <Button
+            as="a"
+            variant="outline"
+            size="sm"
+            href={studentRepo.html_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink aria-hidden="true" className="size-4" />
+            {t("submissions.student.openMyRepo")}
+          </Button>
+        </div>
         <SubmitGuidance repoHtmlUrl={studentRepo.html_url} />
       </EnterDiv>
     )
@@ -214,17 +216,24 @@ const SubmissionBody = ({
         <p className="text-sm text-base-content/70">
           {t("submissions.student.releasesIntro")}
         </p>
-        <Button
-          as="a"
-          variant="outline"
-          size="sm"
-          href={studentRepo.html_url}
-          target="_blank"
-          rel="noreferrer"
-        >
-          <ExternalLink aria-hidden="true" className="size-4" />
-          {t("submissions.student.openMyRepo")}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <SubmitUpload
+            org={org}
+            repo={studentRepo.name}
+            assignment={assignment}
+          />
+          <Button
+            as="a"
+            variant="outline"
+            size="sm"
+            href={studentRepo.html_url}
+            target="_blank"
+            rel="noreferrer"
+          >
+            <ExternalLink aria-hidden="true" className="size-4" />
+            {t("submissions.student.openMyRepo")}
+          </Button>
+        </div>
       </div>
 
       <Card as={EnterDiv} bordered={false} className="border border-base-200">
@@ -234,8 +243,6 @@ const SubmissionBody = ({
           ))}
         </ul>
       </Card>
-
-      <SubmitUpload org={org} repo={studentRepo.name} assignment={assignment} />
     </div>
   )
 }

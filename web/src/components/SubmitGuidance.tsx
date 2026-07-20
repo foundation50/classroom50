@@ -3,11 +3,9 @@ import { useTranslation } from "react-i18next"
 import { CopyableCode } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
 
-// How-to-submit guidance shown when a student has accepted but has no graded
-// release yet. The web app can't submit (that's `gh student submit`, which
-// snapshots the branch and pushes; the autograder then tags submit/* and
-// publishes the release the submission page reads), so this gives the student
-// the two concrete steps: clone the repo, then submit from the CLI.
+// The command-line alternative to the web Upload button: clone the repo, then
+// `gh student submit` (which snapshots the branch and pushes; the autograder
+// then tags submit/* and publishes the release the submission page reads).
 export function SubmitGuidance({ repoHtmlUrl }: { repoHtmlUrl: string }) {
   const { t } = useTranslation()
   const cloneUrl = `${repoHtmlUrl}.git`
@@ -23,11 +21,15 @@ export function SubmitGuidance({ repoHtmlUrl }: { repoHtmlUrl: string }) {
   )
 
   return (
-    <div className="mt-4 space-y-3 rounded-box border border-base-200 p-4">
-      <h3 className="text-sm font-semibold">
+    <details className="group mt-4 rounded-box border border-base-200 p-4">
+      <summary className="flex cursor-pointer items-center gap-2 text-sm font-semibold marker:content-none">
+        <span className="transition-transform group-open:rotate-90">▶</span>
         {t("submissions.student.submitGuide.title")}
-      </h3>
-      <ol className="space-y-3">
+      </summary>
+      <p className="mt-2 text-sm text-base-content/70">
+        {t("submissions.student.submitGuide.intro")}
+      </p>
+      <ol className="mt-3 space-y-3">
         <li className="space-y-1.5">
           <p className="text-sm text-base-content/70">
             {t("submissions.student.submitGuide.step1")}
@@ -51,7 +53,7 @@ export function SubmitGuidance({ repoHtmlUrl }: { repoHtmlUrl: string }) {
           />
         </li>
       </ol>
-    </div>
+    </details>
   )
 }
 

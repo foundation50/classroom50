@@ -1796,10 +1796,11 @@
       "notAccepted_prefix": "You haven't accepted this assignment yet.",
       "notAccepted_link": "Accept it",
       "notAccepted_suffix": "to get your repository, then push your work to be graded.",
-      "noGradedYet": "No graded submission yet. Push a commit to your assignment repository and the autograder will publish your result here.",
+      "noGradedYet": "No graded submission yet. Upload your files above, or push to your assignment repository from the command line — the autograder will publish your result here.",
       "openMyRepo": "Open my repository",
       "submitGuide": {
-        "title": "How to submit",
+        "title": "Prefer the command line?",
+        "intro": "You can also submit from a terminal instead of uploading above.",
         "step1": "Clone your assignment repository (once):",
         "step2": "From inside the repository, submit your work for grading:",
         "copyClone": "Copy clone command",
