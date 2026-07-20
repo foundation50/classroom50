@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.10.0](https://github.com/foundation50/classroom50/compare/web-v1.9.0...web-v1.10.0) (2026-07-20)
+
+
+### Features
+
+* **web:** align user-facing copy and standardize button icons ([#167](https://github.com/foundation50/classroom50/issues/167)) ([#324](https://github.com/foundation50/classroom50/issues/324)) ([f459e81](https://github.com/foundation50/classroom50/commit/f459e8107ca3529587850acc3cf27583313c53c1))
+* **web:** let students upload submissions from the browser ([#329](https://github.com/foundation50/classroom50/issues/329)) ([f462e68](https://github.com/foundation50/classroom50/commit/f462e683a0a535e0aa483c1c70c855cc43d8a1a6))
+* **web:** student classrooms view, assignment discovery, and submit guidance ([#328](https://github.com/foundation50/classroom50/issues/328)) ([4bff93b](https://github.com/foundation50/classroom50/commit/4bff93b748528d35618718bf2ca6a31ad8de127b))
+
+
+### Bug Fixes
+
+* enable notifications on staff teams (teacher/ta) ([#337](https://github.com/foundation50/classroom50/issues/337)) ([28c6e10](https://github.com/foundation50/classroom50/commit/28c6e106c005bab2aabc84b41290a97bcb0bb7d5))
+* **web:** update daisyUI to fix non-expanding details ([#333](https://github.com/foundation50/classroom50/issues/333)) ([95cd252](https://github.com/foundation50/classroom50/commit/95cd2528f6cc40464a9e18b04e187810563ab010))
+
 ## [1.9.0](https://github.com/foundation50/classroom50/compare/web-v1.8.0...web-v1.9.0) (2026-07-17)
 
 
