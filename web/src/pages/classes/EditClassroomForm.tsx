@@ -11,7 +11,7 @@ import { classroomConfigTreeUrl } from "@/util/orgUrl"
 import { useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { isClassroomArchived, type Classroom } from "@/types/classroom"
-import { Button, Card, FormField, Input } from "@/components/ui"
+import { Button, Card, EmphasisLtr, FormField, Input } from "@/components/ui"
 
 export type EditClassroomFormValues = {
   name: string
@@ -62,12 +62,8 @@ export const DeleteClassroomButton = ({
             i18nKey="classes.deleteClassroomBody"
             values={{ classroom, org }}
             components={{
-              classroom: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
-              org: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
+              classroom: <EmphasisLtr className="text-base-content" />,
+              org: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }
@@ -148,9 +144,7 @@ const ArchiveClassroomButton = ({
             i18nKey={archived ? "classes.unarchiveBody" : "classes.archiveBody"}
             values={{ classroom }}
             components={{
-              classroom: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
+              classroom: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }

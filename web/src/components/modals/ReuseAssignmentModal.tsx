@@ -9,7 +9,7 @@ import {
   ReuseModalShell,
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
-import { FormField, Input, Select } from "@/components/ui"
+import { EmphasisLtr, FormField, Input, Select } from "@/components/ui"
 
 // Reuse ("Duplicate") an assignment into any classroom in the same org —
 // our equivalent of GitHub Classroom's "Reuse assignment", including into the
@@ -75,9 +75,7 @@ export const ReuseAssignmentModal = ({
           i18nKey="components.modals.reuseAssignment.description"
           values={{ assignment: assignment.name || assignment.slug, org }}
           components={{
-            assignment: (
-              <span dir="ltr" className="font-semibold text-base-content" />
-            ),
+            assignment: <EmphasisLtr className="text-base-content" />,
           }}
         />
       }

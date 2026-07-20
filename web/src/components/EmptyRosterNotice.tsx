@@ -1,7 +1,7 @@
 import { Info, UserPlus } from "lucide-react"
 import { Trans, useTranslation } from "react-i18next"
 
-import { RouterButton } from "@/components/ui"
+import { EmphasisLtr, RouterButton } from "@/components/ui"
 
 // Empty/unenrolled-roster notice. Owns the daisyUI alert shell + ARIA so the
 // assignments list and create pages can't drift in markup; copy adapts to
@@ -35,7 +35,7 @@ export const EmptyRosterNotice = ({
                 : "components.notices.emptyRoster.empty"
             }
             values={{ org }}
-            components={{ org: <span dir="ltr" className="font-semibold" /> }}
+            components={{ org: <EmphasisLtr /> }}
           />
         </span>
       </div>

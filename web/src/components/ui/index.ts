@@ -56,6 +56,8 @@ export type { LabeledControlProps } from "./LabeledControl"
 export { Markdown } from "./Markdown"
 export type { MarkdownProps } from "./Markdown"
 
+export { EmphasisLtr } from "./EmphasisLtr"
+export type { EmphasisLtrProps } from "./EmphasisLtr"
 export { MonoLtr } from "./MonoLtr"
 export type { MonoLtrProps } from "./MonoLtr"
 

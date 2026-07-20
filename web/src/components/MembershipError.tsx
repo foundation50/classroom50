@@ -4,7 +4,13 @@ import { GitHubAPIError } from "@/github-core/errors"
 import { isDefiniteOutageError } from "@/lib/githubHealth"
 import { GitHubStatusNote } from "@/components/GitHubStatusNote"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import { Card, CopyableDetails, Button, Badge } from "@/components/ui"
+import {
+  Card,
+  CopyableDetails,
+  Button,
+  Badge,
+  EmphasisLtr,
+} from "@/components/ui"
 import type { BadgeTone } from "@/components/ui"
 
 // Distinct membership-failure causes the student flow (onboarding + accept) can
@@ -173,13 +179,13 @@ export const MembershipError = ({
             <Trans
               i18nKey="membership.ssoRequired.body"
               values={{ org }}
-              components={{ org: <span dir="ltr" className="font-bold" /> }}
+              components={{ org: <EmphasisLtr className="font-bold" /> }}
             />
           ) : cause === "notAMember" ? (
             <Trans
               i18nKey="membership.notAMember.body"
               values={{ org }}
-              components={{ org: <span dir="ltr" className="font-bold" /> }}
+              components={{ org: <EmphasisLtr className="font-bold" /> }}
             />
           ) : (
             t("membership.generic.body")

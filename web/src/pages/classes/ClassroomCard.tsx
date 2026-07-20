@@ -1,5 +1,5 @@
 import { ConfirmModal } from "@/components/modals"
-import { Button, Card } from "@/components/ui"
+import { Button, Card, EmphasisLtr } from "@/components/ui"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useArchiveClassroom } from "@/hooks/mutations/useArchiveClassroom"
@@ -312,9 +312,7 @@ function ClassroomMenu({
             i18nKey={archived ? "classes.unarchiveBody" : "classes.archiveBody"}
             values={{ classroom: slug }}
             components={{
-              classroom: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
+              classroom: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }
@@ -363,12 +361,8 @@ function ClassroomMenu({
             i18nKey="classes.deleteClassroomBody"
             values={{ classroom: slug, org }}
             components={{
-              classroom: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
-              org: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
+              classroom: <EmphasisLtr className="text-base-content" />,
+              org: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }

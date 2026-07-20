@@ -12,7 +12,7 @@ import {
   type AssignmentFilters,
   type AssignmentSort,
 } from "@/pages/assignments/assignmentList"
-import { Badge, Button } from "@/components/ui"
+import { Badge, Button, EmphasisLtr } from "@/components/ui"
 import { NoSearchResults } from "@/components/list"
 import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
@@ -247,7 +247,7 @@ const StudentAssignmentsView = ({
           <Trans
             i18nKey="assignments.studentViewAll"
             values={{ classroom }}
-            components={{ classroom: <span dir="ltr" className="font-bold" /> }}
+            components={{ classroom: <EmphasisLtr className="font-bold" /> }}
           />
         }
       />

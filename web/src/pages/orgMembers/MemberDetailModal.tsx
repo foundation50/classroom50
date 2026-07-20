@@ -5,7 +5,7 @@ import { AlertTriangle, ChevronRight, UserPlus, X } from "lucide-react"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
-import { Badge, Button, Modal, rtlFlip } from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, rtlFlip } from "@/components/ui"
 import { removeMemberFromOrg } from "@/domain/orgMembers/removeMemberFromOrg"
 import {
   ClassificationBadge,
@@ -298,7 +298,7 @@ const MemberDetailModal = ({
                   }}
                   components={{
                     count: <span className="font-semibold" />,
-                    org: <span dir="ltr" className="font-semibold" />,
+                    org: <EmphasisLtr />,
                   }}
                 />
               ) : (
@@ -306,7 +306,7 @@ const MemberDetailModal = ({
                   i18nKey="orgMembers.confirmRemove"
                   values={{ label, org }}
                   components={{
-                    org: <span dir="ltr" className="font-semibold" />,
+                    org: <EmphasisLtr />,
                   }}
                 />
               )}

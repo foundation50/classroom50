@@ -33,7 +33,7 @@ import {
   STATE_BADGE_TONE,
   STATE_LABEL_KEY,
 } from "@/util/classroomRoleUI"
-import { Badge, Button, Modal, Select } from "@/components/ui"
+import { Badge, Button, EmphasisLtr, Modal, Select } from "@/components/ui"
 
 // Roster-owned detail modal (single native <dialog>), opened by clicking a
 // roster row. Shares the identity header with the Org Members modal; everything
@@ -631,18 +631,8 @@ const RosterMemberModal = ({
                     i18nKey="students.unenrollBody"
                     values={{ label, org, classroom }}
                     components={{
-                      label: (
-                        <span
-                          dir="ltr"
-                          className="font-semibold text-base-content"
-                        />
-                      ),
-                      org: (
-                        <span
-                          dir="ltr"
-                          className="font-semibold text-base-content"
-                        />
-                      ),
+                      label: <EmphasisLtr className="text-base-content" />,
+                      org: <EmphasisLtr className="text-base-content" />,
                     }}
                   />
                 </p>

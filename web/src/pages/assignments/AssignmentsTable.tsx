@@ -23,7 +23,7 @@ import { useQueryClient } from "@tanstack/react-query"
 import { useDeleteAssignment } from "@/hooks/mutations/useDeleteAssignment"
 import type { Assignment } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
-import { Badge, Button } from "@/components/ui"
+import { Badge, Button, EmphasisLtr } from "@/components/ui"
 
 const DeleteAssignmentButton = ({
   org,
@@ -69,12 +69,8 @@ const DeleteAssignmentButton = ({
               classroom: `${org}/${classroom}`,
             }}
             components={{
-              assignment: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
-              classroom: (
-                <span dir="ltr" className="font-semibold text-base-content" />
-              ),
+              assignment: <EmphasisLtr className="text-base-content" />,
+              classroom: <EmphasisLtr className="text-base-content" />,
             }}
           />
         }

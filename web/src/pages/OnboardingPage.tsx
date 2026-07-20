@@ -7,7 +7,14 @@ import {
   UserPlus,
 } from "lucide-react"
 import { Spinner } from "@/components/Spinner"
-import { Badge, Button, Card, RouterButton, rtlFlip } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  EmphasisLtr,
+  RouterButton,
+  rtlFlip,
+} from "@/components/ui"
 import {
   MembershipError,
   classifyMembershipError,
@@ -83,9 +90,7 @@ const NotInvited = ({
               i18nKey="getStarted.notInvited.body"
               values={{ org }}
               components={{
-                org: (
-                  <span dir="ltr" className="font-semibold text-base-content" />
-                ),
+                org: <EmphasisLtr className="text-base-content" />,
               }}
             />
           </p>
@@ -105,12 +110,7 @@ const NotInvited = ({
                   i18nKey="getStarted.notInvited.waitingBody"
                   values={{ classroom }}
                   components={{
-                    classroom: (
-                      <span
-                        dir="ltr"
-                        className="font-semibold text-base-content"
-                      />
-                    ),
+                    classroom: <EmphasisLtr className="text-base-content" />,
                   }}
                 />
               </p>

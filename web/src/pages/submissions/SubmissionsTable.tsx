@@ -20,7 +20,14 @@ import {
 import { studentRepoName, studentRepoUrl } from "@/util/studentRepo"
 import { safeHttpUrl } from "@/util/url"
 import Avatar from "@/components/avatar"
-import { Badge, Button, Modal, MonoLtr, rtlFlip } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  EmphasisLtr,
+  Modal,
+  MonoLtr,
+  rtlFlip,
+} from "@/components/ui"
 import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
 import {
@@ -282,7 +289,7 @@ const RegradeButton = ({
               values={{ name: displayName || owner, owner }}
               components={{
                 name: <span className="font-semibold text-base-content" />,
-                owner: <span dir="ltr" />,
+                owner: <EmphasisLtr className="font-normal" />,
               }}
             />
             <br />

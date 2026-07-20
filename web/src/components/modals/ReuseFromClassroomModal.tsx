@@ -8,7 +8,7 @@ import {
   ReuseModalShell,
   reuseSlugStatus,
 } from "@/components/modals/ReuseModalShell"
-import { FormField, Input, Select } from "@/components/ui"
+import { EmphasisLtr, FormField, Input, Select } from "@/components/ui"
 
 // Reuse an assignment FROM any classroom INTO the current one — the "pull"
 // counterpart to the per-row "push" reuse on the assignments table. Opened from
@@ -94,9 +94,7 @@ export const ReuseFromClassroomModal = ({
           i18nKey="components.modals.reuseFromClassroom.description"
           values={{ org, classroom }}
           components={{
-            classroom: (
-              <span dir="ltr" className="font-semibold text-base-content" />
-            ),
+            classroom: <EmphasisLtr className="text-base-content" />,
           }}
         />
       }

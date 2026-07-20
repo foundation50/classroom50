@@ -17,7 +17,7 @@ import { useTrackPublishDeploy } from "@/hooks/useTrackPublishDeploy"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import RequireRole from "@/components/RequireRole"
 import { LoadingSwap } from "@/lib/LoadingSwap"
-import { Alert } from "@/components/ui"
+import { Alert, EmphasisLtr } from "@/components/ui"
 
 const EditClassroomContent = ({
   org,
@@ -65,7 +65,7 @@ const EditClassroomContent = ({
                 i18nKey="classes.settingsSubtitle"
                 values={{ classroom: cl.name || cl.short_name || classroom }}
                 components={{
-                  classroom: <span dir="ltr" className="font-semibold" />,
+                  classroom: <EmphasisLtr />,
                 }}
               />
             }

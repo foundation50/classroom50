@@ -7,7 +7,7 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
-import { Alert, Button, Card } from "@/components/ui"
+import { Alert, Button, Card, EmphasisLtr } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import MissingParams from "@/components/MissingParams"
 import { useOrgStaff } from "@/hooks/useOrgStaff"
@@ -71,7 +71,7 @@ const JoinOrgCard = ({ org }: { org: string }) => {
             i18nKey="classes.join.body"
             values={{ org }}
             components={{
-              org: <span dir="ltr" className="font-medium text-base-content" />,
+              org: <EmphasisLtr className="font-medium text-base-content" />,
             }}
           />
         </p>
