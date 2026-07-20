@@ -322,6 +322,19 @@ function setStoredLang(code: string): void {
   getStorage()?.setItem(LANG_STORAGE_KEY, code)
 }
 
+// The language that will actually activate at startup: the stored choice only
+// counts if its pack is still installed (packs can be removed between visits,
+// or rejected on rehydration). Must stay the same predicate as the startup
+// changeLanguage guard in i18n/index.ts — document direction is seeded from
+// this BEFORE that chain runs, and a mismatch would flash or strand the wrong
+// direction.
+export function resolveStartupLang(
+  stored: string,
+  installed: readonly string[],
+): string {
+  return stored !== BASE_LANG && installed.includes(stored) ? stored : BASE_LANG
+}
+
 // ---- Registration -----------------------------------------------------------
 
 // Stable-identity snapshots so useSyncExternalStore doesn't loop: a new array

@@ -23,6 +23,7 @@ import {
   prepareFromUrl,
   refreshInstalledPacks,
   resetRegistryCache,
+  resolveStartupLang,
   shareUrlForLang,
   subscribeToPackUpdates,
 } from "./customLocale"
@@ -1047,5 +1048,25 @@ describe("packSources", () => {
   it("returns an empty map when no packs are stored", () => {
     stubStore({})
     expect(packSources()).toEqual({})
+  })
+})
+
+describe("resolveStartupLang", () => {
+  // Direction seeding at startup (i18n/index.ts) reads this BEFORE the
+  // changeLanguage chain runs; these cases pin the contract that the seed and
+  // the chain agree on which language actually activates.
+  it("returns the stored language when its pack is installed", () => {
+    expect(resolveStartupLang("ar", ["ar", "de"])).toBe("ar")
+  })
+
+  it("falls back to the base language when the stored pack is gone", () => {
+    // Persisted-but-uninstalled: the anti-flash script guessed rtl from the
+    // stale stored code, but the UI will render English — ltr is correct.
+    expect(resolveStartupLang("ar", [])).toBe("en")
+    expect(resolveStartupLang("he", ["de"])).toBe("en")
+  })
+
+  it("returns the base language for a stored base-language choice", () => {
+    expect(resolveStartupLang("en", ["ar"])).toBe("en")
   })
 })
