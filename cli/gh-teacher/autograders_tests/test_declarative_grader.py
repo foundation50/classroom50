@@ -120,12 +120,34 @@ class TestExecuteIO:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert o["passed"]
 
-    def test_fail_includes_expected_and_actual(self, tmp_path):
+    def test_exact_fail_shows_unified_diff(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "printf 'one\\nnope\\n'",
+                "expected": "one\ntwo", "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected" in o["detail"]
+        assert "+++ actual stdout" in o["detail"]
+        assert "-two" in o["detail"] and "+nope" in o["detail"]
+        # The matching line is context, not a change.
+        assert "-one" not in o["detail"] and "+one" not in o["detail"]
+
+    def test_included_fail_keeps_expected_and_actual_blocks(self, tmp_path):
+        # A line diff against a substring expectation is noise; included and
+        # regex failures keep the verbatim expected/actual blocks.
         spec = {"name": "t", "type": "io", "run": "echo nope",
+                "expected": "yes", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected (included) ---" in o["detail"]
+        assert "--- actual stdout ---" in o["detail"]
+        assert "+++" not in o["detail"]
+
+    def test_fail_includes_stderr_block(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
                 "expected": "yes", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "expected" in o["detail"] and "actual stdout" in o["detail"]
+        assert "--- stderr ---" in o["detail"] and "warn" in o["detail"]
 
     def test_invalid_regex_fails_with_message(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo x",

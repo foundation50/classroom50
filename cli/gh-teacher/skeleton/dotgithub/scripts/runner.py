@@ -36,6 +36,7 @@ history is unavailable or baseline == commit).
 from __future__ import annotations
 
 import datetime
+import difflib
 import importlib.util
 import io
 import json
@@ -1185,6 +1186,19 @@ def _clip(text: str | None) -> str:
     return text
 
 
+def _unified_diff(expected: str, actual: str) -> str:
+    """Unified diff of expected vs actual stdout for a failed exact-comparison
+    io test. A diff pinpoints the divergent line; the raw side-by-side blocks
+    it replaces made students eyeball-compare up to 2000 chars each. Inputs
+    are stripped to mirror compare_output's exact semantics, so the diff never
+    flags leading/trailing whitespace the comparison ignores."""
+    lines = difflib.unified_diff(
+        expected.strip().splitlines(), actual.strip().splitlines(),
+        fromfile="expected", tofile="actual stdout", lineterm="",
+    )
+    return _clip("\n".join(lines))
+
+
 def _fence(text: str) -> str:
     """A backtick fence longer than any backtick run inside `text`, so student
     output containing ``` can't break out of the code block and inject Markdown
@@ -1400,8 +1414,14 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
         return _make_outcome(name, points, False, f"invalid regex in expected: {exc}")
     detail = f"exit {rp.returncode}; comparison={comparison}"
     if not passed:
-        detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
-                   f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
+        # A line diff only makes sense against a full expected output;
+        # for included/regex the expectation is a fragment or pattern, so
+        # show it verbatim next to the actual output instead.
+        if comparison == COMPARISON_EXACT:
+            detail += f"\n{_unified_diff(expected, rp.stdout)}"
+        else:
+            detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
+                       f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
         if rp.stderr.strip():
             detail += f"\n--- stderr ---\n{_clip(rp.stderr)}"
     return _make_outcome(name, points, passed, detail)
