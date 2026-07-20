@@ -121,10 +121,11 @@ func TestEnsureClassroomTeam_AdoptSkipsPatchWhenDescriptionMatches(t *testing.T)
 			_, _ = w.Write([]byte(`{"message":"name already taken"}`))
 		case r.URL.Path == "/orgs/o/teams/classroom50-cs101" && r.Method == http.MethodGet:
 			_ = json.NewEncoder(w).Encode(map[string]any{
-				"id": 7, "slug": "classroom50-cs101", "privacy": "secret", "description": desc,
+				"id": 7, "slug": "classroom50-cs101", "privacy": "secret",
+				"notification_setting": "notifications_disabled", "description": desc,
 			})
 		case r.Method == http.MethodPatch:
-			t.Errorf("must not PATCH when privacy and description already match")
+			t.Errorf("must not PATCH when privacy, notification setting, and description already match")
 			w.WriteHeader(http.StatusOK)
 		default:
 			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
@@ -190,12 +191,16 @@ func TestEnsureStaffTeams(t *testing.T) {
 		switch {
 		case r.URL.Path == "/orgs/o/teams" && r.Method == http.MethodPost:
 			var body struct {
-				Name    string `json:"name"`
-				Privacy string `json:"privacy"`
+				Name                string `json:"name"`
+				Privacy             string `json:"privacy"`
+				NotificationSetting string `json:"notification_setting"`
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			if body.Privacy != "secret" {
 				t.Errorf("team %q created with privacy %q, want secret", body.Name, body.Privacy)
+			}
+			if body.NotificationSetting != "notifications_enabled" {
+				t.Errorf("staff team %q created with notification_setting %q, want notifications_enabled (#335)", body.Name, body.NotificationSetting)
 			}
 			createdNames = append(createdNames, body.Name)
 			// slug == name (canonical short-name).

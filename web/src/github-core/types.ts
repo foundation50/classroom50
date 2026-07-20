@@ -141,11 +141,20 @@ export type GitHubFileListing = {
   path: string
 }
 
+// GitHub's team-level notification toggle. Student teams stay
+// `notifications_disabled` (assignment-repo churn would spam the class); staff
+// teams want `notifications_enabled` so @mentions reach the TAs/teachers (#335).
+// Lives here (a leaf module) so GitHubTeam and teamWrites share it without a cycle.
+export type TeamNotificationSetting =
+  "notifications_enabled" | "notifications_disabled"
+
 export type GitHubTeam = {
   id: number
   name: string
   slug: string
   privacy: "secret" | "closed"
+  // Only returned by GET/POST/PATCH .../teams to org members; read defensively.
+  notification_setting?: TeamNotificationSetting
   description: string | null
 }
 

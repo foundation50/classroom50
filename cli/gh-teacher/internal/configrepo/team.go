@@ -57,6 +57,14 @@ const (
 // ResolveClassroomStaffTeam.
 var StaffRoles = []StaffRole{RoleTeacher, RoleTA}
 
+// GitHub team-level notification toggle, set at create and reconciled on adopt.
+// Students stay disabled (assignment-repo churn would spam the class); staff
+// enable it so @mentions reach the TAs/teachers (#335).
+const (
+	notificationsEnabled  = "notifications_enabled"
+	notificationsDisabled = "notifications_disabled"
+)
+
 // StaffTeamRepoPermissions maps a staff role to the repo permission a staff
 // team gets on each student assignment repo and on private in-org templates.
 // The TA-team template read is applied at TWO points: eagerly at assignment
@@ -170,7 +178,7 @@ func EnsureClassroomTeam(client githubapi.Client, org, shortName, description st
 	if !CanonicalTeamSlugShortName(shortName) {
 		return TeamRef{}, fmt.Errorf("classroom short-name %q can't back a GitHub team — remove consecutive or trailing hyphens (GitHub would rewrite the team slug, breaking membership and template grants)", shortName)
 	}
-	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description)
+	return ensureSecretTeamByName(client, org, classroomTeamName(shortName), description, notificationsDisabled)
 }
 
 // EnsureClassroomStaffTeam creates (or adopts) the per-classroom STAFF team for
@@ -182,7 +190,7 @@ func EnsureClassroomStaffTeam(client githubapi.Client, org, shortName string, ro
 	}
 	// Staff teams carry no bootstrap description: staff read the authoritative
 	// classroom.json directly, and the secret belongs only on the student team.
-	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role), "")
+	return ensureSecretTeamByName(client, org, staffTeamName(shortName, role), "", notificationsEnabled)
 }
 
 // EnsureStaffTeams creates (or adopts) both staff teams (teacher, ta) and
@@ -288,10 +296,11 @@ func ReconcileClassroomTeamDescription(client githubapi.Client, org, shortName, 
 //
 // `members_can_create_teams: false` (init's lockdown) doesn't block this — the
 // teacher authenticates as an org owner.
-func ensureSecretTeamByName(client githubapi.Client, org, name, description string) (TeamRef, error) {
+func ensureSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
 	teamBody := map[string]any{
-		"name":    name,
-		"privacy": "secret",
+		"name":                 name,
+		"privacy":              "secret",
+		"notification_setting": notificationSetting,
 	}
 	if description != "" {
 		teamBody["description"] = description
@@ -303,12 +312,11 @@ func ensureSecretTeamByName(client githubapi.Client, org, name, description stri
 	createPath := fmt.Sprintf("orgs/%s/teams", url.PathEscape(org))
 	var created TeamRef
 	if err := client.Post(createPath, bytes.NewReader(body), &created); err != nil {
-		// 422 = a team with this name already exists. Adopt it in place
-		// (read id/slug, ensure privacy `secret`, reconcile description) so a
+		// 422 = a team with this name already exists; adopt it in place so a
 		// re-run reconciles. If the adopt read 404s, the 422 wasn't a name
 		// collision — surface the original create error.
 		if cliutil.IsHTTPStatus(err, http.StatusUnprocessableEntity) {
-			adopted, adoptErr := adoptSecretTeamByName(client, org, name, description)
+			adopted, adoptErr := adoptSecretTeamByName(client, org, name, description, notificationSetting)
 			if adoptErr != nil {
 				if cliutil.IsHTTPStatus(adoptErr, http.StatusNotFound) {
 					return TeamRef{}, fmt.Errorf("POST %s: %w", createPath, err)
@@ -323,29 +331,34 @@ func ensureSecretTeamByName(client githubapi.Client, org, name, description stri
 }
 
 // adoptSecretTeamByName reads an existing team by slug (== name, given the
-// canonical short-name guard) and reconciles its privacy to `secret` (an older
-// or hand-created team might be `closed`) and, when `description` is non-empty
-// and differs, its description. Used on the 422 already-exists path.
-func adoptSecretTeamByName(client githubapi.Client, org, name, description string) (TeamRef, error) {
+// canonical short-name guard) and reconciles drift toward the desired state:
+// privacy `secret`, the notification setting, and (when non-empty and differing)
+// the description. Used on the 422 already-exists path.
+func adoptSecretTeamByName(client githubapi.Client, org, name, description, notificationSetting string) (TeamRef, error) {
 	slug := name
 	getPath := fmt.Sprintf("orgs/%s/teams/%s", url.PathEscape(org), url.PathEscape(slug))
 	var existing struct {
-		ID          int64  `json:"id"`
-		Slug        string `json:"slug"`
-		Privacy     string `json:"privacy"`
-		Description string `json:"description"`
+		ID                  int64  `json:"id"`
+		Slug                string `json:"slug"`
+		Privacy             string `json:"privacy"`
+		NotificationSetting string `json:"notification_setting"`
+		Description         string `json:"description"`
 	}
 	if err := client.Get(getPath, &existing); err != nil {
 		return TeamRef{}, fmt.Errorf("GET %s (adopting existing team): %w", getPath, err)
 	}
-	// Reconcile privacy and (for the student team) the bootstrap description in
-	// one PATCH when either drifts from the desired state.
+	// Batch every drifted field into one PATCH (description only drifts for the
+	// student team, which carries the bootstrap record).
 	needPrivacy := existing.Privacy != "secret"
+	needNotification := existing.NotificationSetting != notificationSetting
 	needDescription := description != "" && existing.Description != description
-	if needPrivacy || needDescription {
+	if needPrivacy || needNotification || needDescription {
 		patch := map[string]any{}
 		if needPrivacy {
 			patch["privacy"] = "secret"
+		}
+		if needNotification {
+			patch["notification_setting"] = notificationSetting
 		}
 		if needDescription {
 			patch["description"] = description
