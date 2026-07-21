@@ -7,6 +7,7 @@ import {
   checkBranchProtection,
   checkConfigRepoDefaultBranch,
   checkOrgActions,
+  checkOrgBudget,
   checkOrgDefaultBranch,
   checkOrgDefaults,
   checkOrgPrCreation,
@@ -31,6 +32,7 @@ export type AuditVerdict = "ok" | "fail"
 export type ConcernId =
   | "orgDefaults"
   | "orgActions"
+  | "orgBudget"
   | "orgPrCreation"
   | "branchProtection"
   | "workflowPermissions"
@@ -95,6 +97,7 @@ export type OrgRecommendation =
 const CONCERN_TITLES: Record<ConcernId, string> = {
   orgDefaults: "Member-privilege lockdown",
   orgActions: "Actions permissions",
+  orgBudget: "Actions spending cap",
   orgPrCreation: "Actions pull request creation",
   branchProtection: "Branch protection",
   workflowPermissions: "Workflow permissions",
@@ -115,6 +118,8 @@ function concernSettingsUrl(id: ConcernId, org: string): string {
     case "orgActions":
     case "orgPrCreation":
       return `${orgBase}/actions`
+    case "orgBudget":
+      return `${orgBase}/billing/budgets`
     case "rulesets":
       return `${orgBase}/rules`
     case "branchProtection":
@@ -148,11 +153,12 @@ export async function buildOrgAuditReport(
   org: string,
   plan: string | undefined,
 ): Promise<OrgAuditReport> {
-  // All eight checks run in parallel — independent reads, none throw (each
+  // All concern checks run in parallel — independent reads, none throw (each
   // swallows its error into a verdict).
   const [
     defaults,
     actions,
+    budget,
     prCreation,
     branchProtection,
     workflowPermissions,
@@ -164,6 +170,7 @@ export async function buildOrgAuditReport(
   ] = await Promise.all([
     checkOrgDefaults(client, org, plan),
     checkOrgActions(client, org),
+    checkOrgBudget(client, org),
     checkOrgPrCreation(client, org),
     checkBranchProtection(client, org),
     checkWorkflowPermissions(client, org),
@@ -190,6 +197,7 @@ export async function buildOrgAuditReport(
     [
       { id: "orgDefaults", verdict: defaults.verdict },
       { id: "orgActions", verdict: actions },
+      { id: "orgBudget", verdict: budget },
       { id: "orgPrCreation", verdict: prCreation },
       { id: "branchProtection", verdict: branchProtection },
       { id: "workflowPermissions", verdict: workflowPermissions },

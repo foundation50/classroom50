@@ -7,6 +7,7 @@
 import type { GitHubClient } from "@/github-core/client"
 import {
   ensureBranchProtection,
+  ensureOrgActionsBudgetCap,
   ensureOrgActionsEnabled,
   ensureOrgCanCreatePullRequests,
   ensurePages,
@@ -24,6 +25,7 @@ import type { ConcernId } from "./audit"
 export const REPAIRABLE_CONCERNS: ReadonlySet<ConcernId> = new Set<ConcernId>([
   "orgDefaults",
   "orgActions",
+  "orgBudget",
   "orgPrCreation",
   "branchProtection",
   "workflowPermissions",
@@ -62,6 +64,20 @@ export async function repairConcern(
     case "orgActions":
       await ensureOrgActionsEnabled(client, org)
       return { unfixableFields: [] }
+    case "orgBudget": {
+      // Create-only reconciliation: creates the $0 cap if missing, never
+      // touches a teacher's budget. A read/permission failure or an
+      // over-threshold teacher budget maps to a cause-neutral unresolved
+      // concern; none of these are retryable-transient.
+      const result = await ensureOrgActionsBudgetCap(client, org)
+      if (result.status === "warning") {
+        return {
+          unfixableFields: [],
+          unresolved: { message: result.message, transient: false },
+        }
+      }
+      return { unfixableFields: [] }
+    }
     case "orgPrCreation":
       await ensureOrgCanCreatePullRequests(client, org)
       return { unfixableFields: [] }

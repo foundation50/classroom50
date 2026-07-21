@@ -1124,6 +1124,7 @@
       "verdictFail": "Org policy incomplete",
       "stateEnforced": "OK",
       "stateUnenforced": "Needs attention",
+      "stateWarn": "Recommended",
       "stateUnreadable": "Unreadable",
       "viewOnGitHub": "View on GitHub",
       "fixIt": "Fix it",
@@ -1210,6 +1211,12 @@
         "why": "Autograding and the published assignment site run as Actions workflows, so they can't run until Actions is enabled.",
         "remediation": "Open the org Actions settings and allow Actions to run (set the policy to allow all actions, or at minimum the workflows Classroom 50 ships)."
       },
+      "orgBudget": {
+        "title": "Actions spending cap",
+        "what": "Creates a $0 GitHub Actions spending cap (only if none exists).",
+        "why": "A $0 hard-stop budget blocks paid Actions minutes, so a runaway autograde workflow can't run up a bill. An existing budget you set is left untouched.",
+        "remediation": "Open the org billing budgets settings and set a $0 GitHub Actions budget with \"prevent further usage\" enabled (needs Organization Administration access)."
+      },
       "orgPrCreation": {
         "title": "Actions pull request creation",
         "what": "Allows GitHub Actions to create and approve pull requests in the organization.",
@@ -1287,6 +1294,12 @@
       "body": "All Classroom 50 workflow files now match the latest bundled version.",
       "dismiss": "Dismiss"
     }
+  },
+  "budgetCreated": {
+    "title": "Actions spending cap set to $0",
+    "body": "Classroom 50 created a $0 GitHub Actions spending budget for this organization, so a runaway autograde workflow can't run up a bill. Raise or remove it any time on GitHub.",
+    "manage": "Manage the budget on GitHub",
+    "dismiss": "Got it"
   },
   "classes": {
     "createTitle": "Create classroom",

@@ -9,6 +9,11 @@ import {
 import { getRepo } from "../repoReads"
 import { getErrorMessage } from "../errorMessage"
 import { checkPages, repairOrgDefaults } from "../orgChecks"
+import {
+  classifyBudget,
+  orgBudgetsUrl,
+  type BudgetsListResponse,
+} from "@/orgPolicy/budget"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "../rulesets"
@@ -1060,6 +1065,111 @@ export async function ensureOrgActionsEnabled(
   }
 }
 
+export type EnsureOrgActionsBudgetCapResult =
+  | {
+      status: "complete"
+      org: string
+      // budgetCreated is true only when this run POSTed the $0 cap (drives the
+      // one-time "we created a budget for you" banner). "present" means a
+      // conforming cap already existed.
+      budgetCreated: boolean
+      settingsUrl: string
+      message: string
+    }
+  | {
+      status: "warning"
+      org: string
+      reason: "over_threshold" | "permission_denied" | "readback_failed"
+      settingsUrl: string
+      message: string
+    }
+
+// Reconcile the org's $0 GitHub Actions spending cap. Create-only: POSTs the
+// desired $0 hard-stop cap only when no conforming Actions budget exists; NEVER
+// modifies or deletes a teacher-set budget (GitHub allows one budget per
+// scope+SKU, and overriding the teacher's choice would surprise them — the
+// audit surfaces the verdict instead). Best-effort: a missing budget scope or a
+// permission error degrades to a warning rather than failing setup.
+export async function ensureOrgActionsBudgetCap(
+  client: GitHubClient,
+  org: string,
+): Promise<EnsureOrgActionsBudgetCapResult> {
+  const settingsUrl = orgBudgetsUrl(org)
+
+  let budgets: BudgetsListResponse
+  try {
+    budgets = await client.request<BudgetsListResponse>(
+      `/organizations/${org}/settings/billing/budgets`,
+    )
+  } catch (err) {
+    return {
+      status: "warning",
+      org,
+      reason: "readback_failed",
+      settingsUrl,
+      message:
+        `${org}: couldn't read org billing budgets (${getErrorMessage(err)}). ` +
+        `Your token may lack Organization Administration: Read, or the plan may not expose budgets. ` +
+        `Set a $0 GitHub Actions budget by hand at ${settingsUrl} to hard-stop paid Actions minutes.`,
+    }
+  }
+
+  const verdict = classifyBudget(budgets.budgets ?? [])
+  if (verdict.tier === "enforced" || verdict.tier === "ok") {
+    return {
+      status: "complete",
+      org,
+      budgetCreated: false,
+      settingsUrl,
+      message: `${org}: Actions budget cap already in place ($${verdict.amount}).`,
+    }
+  }
+  if (verdict.tier === "warn") {
+    return {
+      status: "warning",
+      org,
+      reason: "over_threshold",
+      settingsUrl,
+      message:
+        `${org}: an Actions budget over the recommended threshold ($${verdict.amount}) is set; leaving it untouched. ` +
+        `Lower it to $0 at ${settingsUrl} to hard-stop paid Actions minutes.`,
+    }
+  }
+
+  // Missing (or alert-only): create the $0 hard-stop cap.
+  try {
+    await client.request(`/organizations/${org}/settings/billing/budgets`, {
+      method: "POST",
+      body: {
+        budget_amount: 0,
+        prevent_further_usage: true,
+        budget_scope: "organization",
+        budget_type: "ProductPricing",
+        budget_product_sku: "actions",
+      },
+    })
+  } catch (err) {
+    const permission = err instanceof GitHubAPIError && err.status === 403
+    return {
+      status: "warning",
+      org,
+      reason: permission ? "permission_denied" : "readback_failed",
+      settingsUrl,
+      message: permission
+        ? `${org}: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at ${settingsUrl}.`
+        : `${org}: couldn't create the $0 Actions budget cap (${getErrorMessage(err)}); create it by hand at ${settingsUrl}.`,
+    }
+  }
+
+  return {
+    status: "complete",
+    org,
+    budgetCreated: true,
+    settingsUrl,
+    message: `${org}: created a $0 GitHub Actions budget cap (blocks paid Actions minutes).`,
+  }
+}
+
 export type EnsureOrgCanCreatePullRequestsResult =
   | {
       status: "complete"
@@ -1153,6 +1263,7 @@ export async function ensureOrgCanCreatePullRequests(
 export type InitStepId =
   | "orgDefaults"
   | "orgActions"
+  | "orgBudget"
   | "orgPrCreation"
   | "configRepo"
   | "skeleton"
@@ -1235,6 +1346,12 @@ export async function initClassroom50({
     id: "orgActions",
     onStepUpdate,
     fn: () => ensureOrgActionsEnabled(client, org),
+  })
+
+  results.orgBudget = await tryStep({
+    id: "orgBudget",
+    onStepUpdate,
+    fn: () => ensureOrgActionsBudgetCap(client, org),
   })
 
   results.orgPrCreation = await tryStep({

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { Button } from "@/components/ui"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
+import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import { githubKeys } from "@/github-core/queries"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -88,6 +89,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       // navigate away mid-run. The work isn't cancelable (no AbortSignal), so
       // the mounted guard just stops setState churn.
       if (!mountedRef.current) return
+      recordBudgetNoticeFromStep(org, update.id, update.data)
       setSteps((prev) => applyStepUpdate(prev, update))
     },
     confirmSkeletonOverwrite,

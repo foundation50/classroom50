@@ -76,6 +76,7 @@ const VERDICT_BANNER: Record<
 const CONCERN_STATE_LABEL: Record<CheckState, string> = {
   enforced: "orgSettings.audit.stateEnforced",
   unenforced: "orgSettings.audit.stateUnenforced",
+  warn: "orgSettings.audit.stateWarn",
   unreadable: "orgSettings.audit.stateUnreadable",
 }
 
@@ -85,6 +86,7 @@ const CONCERN_STATE_BADGE: Record<
 > = {
   enforced: { tone: "success" },
   unenforced: { tone: "error" },
+  warn: { tone: "warning" },
   unreadable: { tone: "neutral", ghost: true },
 }
 
