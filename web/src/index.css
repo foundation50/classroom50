@@ -188,6 +188,30 @@ body {
   }
 }
 
+/* Scroll affordance for capped-height lists. `scroll-fade-y` marks the
+   container; a small hook (useScrollFade) sets data-fade-top / data-fade-bottom
+   to the edge(s) that have more content, and the mask softens only that edge.
+   No hook / no support => no attributes => no fade, list still scrolls. */
+@utility scroll-fade-y {
+  overflow-y: auto;
+  --scroll-fade-size: 1.75rem;
+  --scroll-fade-top: 0px;
+  --scroll-fade-bottom: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-top),
+    #000 calc(100% - var(--scroll-fade-bottom)),
+    transparent 100%
+  );
+  &[data-fade-top="true"] {
+    --scroll-fade-top: var(--scroll-fade-size);
+  }
+  &[data-fade-bottom="true"] {
+    --scroll-fade-bottom: var(--scroll-fade-size);
+  }
+}
+
 /* Micro-interaction feedback for every daisyUI button (there is no shared
    Button component; this covers all `.btn` sites at once). A slight press-in on
    :active makes clicks feel tactile. daisyUI already handles hover colors. */

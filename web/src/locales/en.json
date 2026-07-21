@@ -573,11 +573,21 @@
       "button": "Set up new organization",
       "title": "Set up a new Classroom 50 organization",
       "description": "Pick one of your GitHub organizations to configure Classroom 50 in. Don't see the one you want? Create it on GitHub first.",
-      "pickPrompt": "Organizations ready to set up",
+      "pickPrompt_one": "Organization ready to set up ({{count}})",
+      "pickPrompt_other": "Organizations ready to set up ({{count}})",
       "createOnGitHub": "Create an organization on GitHub",
-      "allSetUp": "All of your organizations are already set up.",
+      "allSetUp": "All organizations we can see are already set up.",
       "setUp": "Set up",
-      "freePlanDisabled": "Free plan — Classroom 50 needs a Team or Enterprise organization"
+      "notSupportedBadge": "Not supported",
+      "details": "Details",
+      "freePlanInfo": {
+        "title": "This organization is on the Free plan",
+        "body": "Classroom 50 only works with organizations on the GitHub Team or Enterprise plan.",
+        "educationTitle": "Get GitHub Team for free",
+        "educationBody": "As a verified teacher, you can upgrade any organization you own to GitHub Team at no cost through GitHub Education.",
+        "educationCta": "Learn more at GitHub Education",
+        "dismiss": "Got it"
+      }
     },
     "missingNotice": {
       "title": "Not seeing your organization?",
