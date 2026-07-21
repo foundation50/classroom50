@@ -81,12 +81,6 @@ export function dismissBudgetNotice(org: string): void {
   write(org, { created: current.created, dismissed: true })
 }
 
-// shouldShowBudgetBanner: created this browser session's knowledge AND not
-// dismissed. Pure so the banner's view logic is unit-testable.
-export function shouldShowBudgetBanner(notice: BudgetNotice): boolean {
-  return notice.created && !notice.dismissed
-}
-
 // recordBudgetNoticeFromStep marks the org's banner when an org-setup step
 // update reports the budget cap was created this run. A no-op for any other
 // step or a "budget already present" outcome. Call from an onStepUpdate handler

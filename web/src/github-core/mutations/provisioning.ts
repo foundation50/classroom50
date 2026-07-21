@@ -10,6 +10,9 @@ import { getRepo } from "../repoReads"
 import { getErrorMessage } from "../errorMessage"
 import { checkPages, repairOrgDefaults } from "../orgChecks"
 import {
+  BUDGET_PRODUCT_SKU_ACTIONS,
+  BUDGET_SCOPE_ORG,
+  BUDGET_TYPE_PRODUCT_PRICING,
   classifyBudget,
   orgBudgetsUrl,
   type BudgetsListResponse,
@@ -1079,7 +1082,7 @@ export type EnsureOrgActionsBudgetCapResult =
   | {
       status: "warning"
       org: string
-      reason: "over_threshold" | "permission_denied" | "readback_failed"
+      reason: "over_threshold" | "permission_denied" | "create_failed" | "readback_failed"
       settingsUrl: string
       message: string
     }
@@ -1143,9 +1146,9 @@ export async function ensureOrgActionsBudgetCap(
       body: {
         budget_amount: 0,
         prevent_further_usage: true,
-        budget_scope: "organization",
-        budget_type: "ProductPricing",
-        budget_product_sku: "actions",
+        budget_scope: BUDGET_SCOPE_ORG,
+        budget_type: BUDGET_TYPE_PRODUCT_PRICING,
+        budget_product_sku: BUDGET_PRODUCT_SKU_ACTIONS,
       },
     })
   } catch (err) {
@@ -1153,7 +1156,7 @@ export async function ensureOrgActionsBudgetCap(
     return {
       status: "warning",
       org,
-      reason: permission ? "permission_denied" : "readback_failed",
+      reason: permission ? "permission_denied" : "create_failed",
       settingsUrl,
       message: permission
         ? `${org}: couldn't create the $0 Actions budget cap — add Organization Administration: Read and write to your token, or create it by hand at ${settingsUrl}.`

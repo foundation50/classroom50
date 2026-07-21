@@ -30,8 +30,8 @@ type initSummary struct {
 	// BudgetCap describes the reconciliation outcome for the org's $0 Actions
 	// spending cap: "created" (init made it), "present" (already conforming),
 	// "warn" (teacher set a cap over the warn threshold — left untouched),
-	// "unreadable" (no billing visibility), or "" (not attempted, e.g. dry
-	// run). Informational; it never gates Ready.
+	// "unreadable" (couldn't read budgets), "failed" (create write denied), or
+	// "" (not attempted, e.g. dry run). Informational; it never gates Ready.
 	BudgetCap string `json:"budget_cap"`
 	// ServiceToken describes how the token ended up configured this run, so a
 	// re-run is self-explanatory.
@@ -139,6 +139,8 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 		u.Item("actions budget cap: a budget over $%d is set — left as-is; lower it to $0 to hard-stop paid Actions minutes", orgpolicy.BudgetWarnThreshold)
 	case "unreadable":
 		u.Item("actions budget cap: couldn't verify (token lacks Organization Administration: Read); set a $0 Actions budget by hand")
+	case "failed":
+		u.Item("actions budget cap: couldn't be created (token needs Organization Administration: Read and write); set a $0 Actions budget by hand")
 	}
 
 	// 2b. Informational notes (plan/policy caveats that aren't actions).

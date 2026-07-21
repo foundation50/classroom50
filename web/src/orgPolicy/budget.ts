@@ -53,11 +53,12 @@ function findActionsBudget(budgets: Budget[]): Budget | undefined {
 //   - missing: no org-scoped Actions budget (critical).
 //   - enforced: amount 0 with prevent_further_usage (the desired cap).
 //   - ok: 0 < amount <= BUDGET_WARN_THRESHOLD with prevent_further_usage.
-//   - warn: amount > BUDGET_WARN_THRESHOLD (any hard-stop state).
+//   - warn: amount > BUDGET_WARN_THRESHOLD with prevent_further_usage.
 //
-// An alert-only budget (prevent_further_usage=false) that would otherwise be
-// enforced/ok is treated as missing: it doesn't stop spend, so the guardrail
-// isn't in place. A warn-sized alert-only budget still warns.
+// An alert-only budget (prevent_further_usage=false) is treated as missing at
+// ANY amount: it emails but never stops spend, so the hard-stop guardrail isn't
+// in place — a large alert-only budget must not pass the audit as a mere
+// warning. The hard-stop check therefore precedes the amount tiers.
 export function classifyBudget(budgets: Budget[]): BudgetVerdict {
   const b = findActionsBudget(budgets)
   if (b === undefined) {
@@ -66,11 +67,12 @@ export function classifyBudget(budgets: Budget[]): BudgetVerdict {
   const amount = b.budget_amount ?? 0
   const preventsUsage = b.prevent_further_usage ?? false
   let tier: BudgetTier
-  if (amount > BUDGET_WARN_THRESHOLD) {
-    tier = "warn"
-  } else if (!preventsUsage) {
-    // A small/zero cap that only alerts still lets Actions spend.
+  if (!preventsUsage) {
+    // Alert-only stops no spend regardless of amount: the guardrail isn't
+    // actually in place, so it's missing (not a warning).
     tier = "missing"
+  } else if (amount > BUDGET_WARN_THRESHOLD) {
+    tier = "warn"
   } else if (amount === 0) {
     tier = "enforced"
   } else {

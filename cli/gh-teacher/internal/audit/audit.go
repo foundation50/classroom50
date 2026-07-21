@@ -258,7 +258,7 @@ func readOrgMemberSettings(client githubapi.Client, org string) (map[string]any,
 
 // orgBudgetsSettingsURL is the org billing budgets page for a hand-fix.
 func orgBudgetsSettingsURL(org string) string {
-	return fmt.Sprintf("https://github.com/organizations/%s/settings/billing/budgets", org)
+	return orgpolicy.OrgBudgetsURL(org)
 }
 
 // classifyBudgetCap reads the org's billing budgets and classifies the Actions

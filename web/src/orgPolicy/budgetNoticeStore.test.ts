@@ -5,7 +5,6 @@ import {
   dismissBudgetNotice,
   markBudgetCreated,
   readBudgetNotice,
-  shouldShowBudgetBanner,
 } from "./budgetNoticeStore"
 
 // happy-dom (v15) doesn't back window.localStorage here, so install a minimal
@@ -41,18 +40,18 @@ describe("budgetNoticeStore", () => {
     const n = readBudgetNotice("acme")
     expect(n.created).toBe(false)
     expect(n.dismissed).toBe(false)
-    expect(shouldShowBudgetBanner(n)).toBe(false)
   })
 
   it("shows the banner after a create, hides it after dismiss", () => {
     markBudgetCreated("acme")
-    expect(shouldShowBudgetBanner(readBudgetNotice("acme"))).toBe(true)
+    const created = readBudgetNotice("acme")
+    expect(created.created).toBe(true)
+    expect(created.dismissed).toBe(false)
 
     dismissBudgetNotice("acme")
     const n = readBudgetNotice("acme")
     expect(n.created).toBe(true)
     expect(n.dismissed).toBe(true)
-    expect(shouldShowBudgetBanner(n)).toBe(false)
   })
 
   it("does not resurface after a re-run once dismissed (one-time per org)", () => {
@@ -60,13 +59,13 @@ describe("budgetNoticeStore", () => {
     dismissBudgetNotice("acme")
     // A later setup re-run marks created again; dismissal must persist.
     markBudgetCreated("acme")
-    expect(shouldShowBudgetBanner(readBudgetNotice("acme"))).toBe(false)
+    expect(readBudgetNotice("acme").dismissed).toBe(true)
   })
 
   it("keys per-org", () => {
     markBudgetCreated("acme")
-    expect(shouldShowBudgetBanner(readBudgetNotice("acme"))).toBe(true)
-    expect(shouldShowBudgetBanner(readBudgetNotice("other"))).toBe(false)
+    expect(readBudgetNotice("acme").created).toBe(true)
+    expect(readBudgetNotice("other").created).toBe(false)
   })
 
   it("tolerates corrupt JSON", () => {

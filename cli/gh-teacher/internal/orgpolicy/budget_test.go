@@ -26,7 +26,7 @@ func TestClassifyBudget_Tiers(t *testing.T) {
 		{"$50 hard-stop is ok (boundary)", []Budget{actions(BudgetWarnThreshold, true)}, BudgetOK},
 		{"$50 alert-only is missing", []Budget{actions(BudgetWarnThreshold, false)}, BudgetMissing},
 		{"$51 hard-stop warns (boundary)", []Budget{actions(BudgetWarnThreshold+1, true)}, BudgetWarn},
-		{"$100 alert-only still warns", []Budget{actions(100, false)}, BudgetWarn},
+		{"$100 alert-only is missing (stops no spend)", []Budget{actions(100, false)}, BudgetMissing},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

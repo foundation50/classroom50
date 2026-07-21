@@ -432,6 +432,38 @@ func TestBuildAuditReport_AlertOnlyBudgetIsCritical(t *testing.T) {
 	}
 }
 
+func TestBuildAuditReport_LargeAlertOnlyBudgetIsCritical(t *testing.T) {
+	// A large alert-only budget ($100, prevent_further_usage:false) stops NO
+	// spend — it must be critical drift, not a passing >$50 "warn". Guards the
+	// classifier's hard-stop-before-amount ordering: a regression that checked
+	// the amount first would wrongly let this pass the deploy gate.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"budgets": []map[string]any{{
+				"budget_scope":          orgpolicy.BudgetScopeOrg,
+				"budget_product_sku":    orgpolicy.BudgetProductSKUActions,
+				"budget_amount":         100,
+				"prevent_further_usage": false,
+			}}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if report.LockdownComplete {
+		t.Errorf("a large alert-only budget stops no spend; must be critical drift, not a passing warn")
+	}
+	if report.BudgetCap.Tier != string(orgpolicy.BudgetMissing) {
+		t.Errorf("BudgetCap.Tier = %q, want missing (large alert-only)", report.BudgetCap.Tier)
+	}
+}
+
 func TestAuditReport_RenderHumanShowsAllThreeSections(t *testing.T) {
 	// Plain (forced-no-color) human render must show: the INCOMPLETE
 	// banner, the unenforced checklist item, and the unreadable manual

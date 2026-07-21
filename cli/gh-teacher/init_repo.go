@@ -228,10 +228,10 @@ func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpol
 		org, appliedList, strings.Join(notAttempted, ", "), settingsURL)
 }
 
-// orgBudgetsSettingsURL is the org billing budgets page where a teacher can
+// orgBudgetsSettingsURL is the org billing-budgets page where a teacher can
 // view/adjust spending caps by hand.
 func orgBudgetsSettingsURL(org string) string {
-	return fmt.Sprintf("https://github.com/organizations/%s/settings/billing/budgets", org)
+	return orgpolicy.OrgBudgetsURL(org)
 }
 
 // ensureOrgActionsBudgetCap reconciles the org's $0 GitHub Actions spending
@@ -241,9 +241,10 @@ func orgBudgetsSettingsURL(org string) string {
 // would be surprising — audit surfaces the verdict instead).
 //
 // Returns a status string for the summary: "created", "present", "warn" (a
-// teacher cap over the warn threshold, left as-is), or "unreadable" (no billing
-// visibility / token lacks Organization Administration: Read). Never fatal —
-// the budget cap is a guardrail, not a prerequisite for the classroom to work.
+// teacher cap over the warn threshold, left as-is), "unreadable" (couldn't read
+// budgets — no billing visibility / token lacks Administration: Read), or
+// "failed" (the create write was denied or errored). Never fatal — the budget
+// cap is a guardrail, not a prerequisite for the classroom to work.
 func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, org string) string {
 	settingsURL := orgBudgetsSettingsURL(org)
 
@@ -271,16 +272,16 @@ func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, o
 		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
 			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); add Organization permissions -> Administration: Read and write to your token, or create the $0 GitHub Actions budget by hand at %s.\n",
 				org, err, settingsURL)
-			return "unreadable"
+			return "failed"
 		}
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); create it by hand at %s.\n",
 			org, err, settingsURL)
-		return "unreadable"
+		return "failed"
 	}
 	if status != http.StatusCreated && status != http.StatusOK {
 		_, _ = fmt.Fprintf(errOut, "Warning: %s: creating the $0 Actions budget cap returned HTTP %d; create it by hand at %s.\n",
 			org, status, settingsURL)
-		return "unreadable"
+		return "failed"
 	}
 	_, _ = fmt.Fprintf(out, "%s: created a $0 GitHub Actions budget cap (blocks paid Actions minutes)\n", org)
 	return "created"

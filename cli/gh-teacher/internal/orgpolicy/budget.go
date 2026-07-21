@@ -1,5 +1,7 @@
 package orgpolicy
 
+import "fmt"
+
 // Budget policy: Classroom 50 wants a $0 GitHub Actions spending cap so a
 // runaway autograde workflow can't rack up a bill. Budgets live on a separate
 // REST endpoint (/organizations/{org}/settings/billing/budgets) with a
@@ -60,12 +62,12 @@ type BudgetVerdict struct {
 //   - missing: no org-scoped Actions budget → critical.
 //   - enforced: amount 0 with prevent_further_usage → the desired cap.
 //   - ok: 0 < amount <= BudgetWarnThreshold with prevent_further_usage.
-//   - warn: amount > BudgetWarnThreshold (any hard-stop state).
+//   - warn: amount > BudgetWarnThreshold with prevent_further_usage.
 //
-// An alert-only budget (prevent_further_usage=false) that would otherwise be
-// enforced/ok is treated as missing: it doesn't actually stop spend, so the
-// guardrail isn't in place. A warn-sized alert-only budget still warns (the
-// teacher clearly meant a large budget either way).
+// An alert-only budget (prevent_further_usage=false) is treated as missing at
+// ANY amount: it emails but never stops spend, so the hard-stop guardrail isn't
+// in place — a large alert-only budget must not pass the audit as a mere
+// warning. The hard-stop check therefore precedes the amount tiers.
 func ClassifyBudget(budgets []Budget) BudgetVerdict {
 	b, found := findActionsBudget(budgets)
 	if !found {
@@ -73,18 +75,25 @@ func ClassifyBudget(budgets []Budget) BudgetVerdict {
 	}
 	v := BudgetVerdict{Amount: b.BudgetAmount, PreventsUsage: b.PreventFurtherUsage}
 	switch {
+	case !b.PreventFurtherUsage:
+		// Alert-only stops no spend regardless of amount: the guardrail isn't
+		// actually in place, so it's missing (not a warning).
+		v.Tier = BudgetMissing
 	case b.BudgetAmount > BudgetWarnThreshold:
 		v.Tier = BudgetWarn
-	case !b.PreventFurtherUsage:
-		// A small/zero cap that only alerts still lets Actions spend: the
-		// guardrail isn't actually enforced, so treat it as missing.
-		v.Tier = BudgetMissing
 	case b.BudgetAmount == 0:
 		v.Tier = BudgetEnforced
 	default:
 		v.Tier = BudgetOK
 	}
 	return v
+}
+
+// OrgBudgetsURL is the org billing-budgets settings page where a teacher can
+// view/adjust spending caps by hand. Single-sourced (like the other org URL
+// helpers) so init and audit can't drift.
+func OrgBudgetsURL(org string) string {
+	return fmt.Sprintf("https://github.com/organizations/%s/settings/billing/budgets", org)
 }
 
 // findActionsBudget returns the org-scoped Actions budget, if present. GitHub

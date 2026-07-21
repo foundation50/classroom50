@@ -75,9 +75,9 @@ describe("classifyBudget", () => {
       tier: "warn",
     },
     {
-      name: "$100 alert-only still warns",
+      name: "$100 alert-only is missing (stops no spend)",
       budgets: [actions(100, false)],
-      tier: "warn",
+      tier: "missing",
     },
   ])("$name -> $tier", ({ budgets, tier }) => {
     expect(classifyBudget(budgets).tier).toBe(tier)
