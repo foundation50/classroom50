@@ -11,11 +11,11 @@ export type TeamDescriptionReconcileResult =
   { changed: false } | { changed: true; slug: string }
 
 // Wraps a failure reading the classroom.json source (the FIRST read in the
-// reconcile). The backfill hook latches a team-read 404 as permanent (a wrong
+// reconcile). reconcileClassroom latches a team-read 404 as permanent (a wrong
 // derived slug / deleted team never converges), but a classroom.json read can
 // 404 transiently — a fresh config commit still propagating, a rate-limited
 // contents read — so its failure must NOT latch: a later entry should retry.
-// Rethrowing it as a non-GitHubAPIError keeps it out of the hook's
+// Rethrowing it as a non-GitHubAPIError keeps it out of the caller's
 // `err instanceof GitHubAPIError && err.isNotFound` permanent branch.
 export class ClassroomSourceReadError extends Error {
   readonly cause: unknown
@@ -48,7 +48,7 @@ export async function reconcileStudentTeamDescription(
     current = await getClassroomJson(client, { org, classroom })
   } catch (err) {
     // A classroom.json read miss is treated as transient (see
-    // ClassroomSourceReadError) so the backfill hook retries on a later entry
+    // ClassroomSourceReadError) so reconcileClassroom retries on a later entry
     // rather than latching this classroom off for the whole mount.
     throw new ClassroomSourceReadError(err)
   }
