@@ -61,10 +61,29 @@ vi.mock("@tanstack/react-query", async (importOriginal) => {
   return { ...actual, useQueryClient: () => ({ invalidateQueries: vi.fn() }) }
 })
 // Child surfaces with their own tests + provider needs; stub so the smoke test
-// renders EnrolledStudents' own markup provider-free.
-vi.mock("@/pages/students/RosterMemberModal", () => ({ default: () => null }))
+// renders EnrolledStudents' own markup provider-free. RosterMemberModal's stub
+// captures its canManage prop so the owner-gate wiring test can assert it.
+let capturedCanManage: boolean | undefined
+vi.mock("@/pages/students/RosterMemberModal", () => ({
+  default: (props: { canManage?: boolean }) => {
+    capturedCanManage = props.canManage
+    return null
+  },
+}))
 vi.mock("@/pages/students/RosterBulkActionsBar", () => ({
   default: () => null,
+}))
+
+// Owner-gate: EnrolledStudents forwards canManage={isOwner} to RosterMemberModal
+// (was !pendingHidden). Mock the org-owner verdict so the wiring test can flip it.
+let mockIsOwner = true
+vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
+  useIsOrgOwner: () => ({
+    isOwner: mockIsOwner,
+    isPending: false,
+    isError: false,
+    retry: vi.fn(),
+  }),
 }))
 
 import EnrolledStudents from "./EnrolledStudents"
@@ -108,6 +127,8 @@ afterEach(() => {
   // clearAllMocks resets call records but not implementations; reset the
   // migrate spy so one test's onSettled stub can't leak the gate into the next.
   migrateMutate.mockReset()
+  mockIsOwner = true
+  capturedCanManage = undefined
 })
 
 describe("EnrolledStudents — rendered phase views", () => {
@@ -199,5 +220,41 @@ describe("EnrolledStudents — rendered phase views", () => {
     })
     render(renderView())
     expect(syncMutate).not.toHaveBeenCalled()
+  })
+
+  // Owner-gate wiring: the per-member modal's management actions hit owner-only
+  // org APIs, so canManage must forward the org-owner verdict (isOwner), not the
+  // old !pendingHidden proxy. A non-owner staffer (TA/HTA) never reaches this
+  // component (StudentListPage routes them to CsvRosterContent), but the write
+  // path is the real guard, so pin the wiring both ways.
+  const populatedRoster = {
+    ...emptyRoster,
+    isEmpty: false,
+    counts: { enrolled: 1, pending: 0 },
+    rows: [
+      {
+        key: "alice",
+        username: "alice",
+        email: "",
+        section: "",
+        github_id: "1",
+        roles: ["student"],
+        state: "enrolled",
+      },
+    ],
+  }
+
+  it("forwards canManage=true to the member modal for an org owner", () => {
+    mockIsOwner = true
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+    expect(capturedCanManage).toBe(true)
+  })
+
+  it("forwards canManage=false to the member modal for a non-owner", () => {
+    mockIsOwner = false
+    useTeamRoster.mockReturnValue(populatedRoster)
+    render(renderView())
+    expect(capturedCanManage).toBe(false)
   })
 })
