@@ -111,6 +111,8 @@ const submit = () =>
   fireEvent.click(screen.getByRole("button", { name: "submit" }))
 
 const failWith = (err: unknown) => act(() => lastMutateOptions?.onError?.(err))
+const succeedWith = (result: unknown) =>
+  act(() => lastMutateOptions?.onSuccess?.(result, { slug: "hw1" }))
 
 beforeEach(() => {
   mutateAsync.mockClear()
@@ -178,5 +180,26 @@ describe("CreateAssignmentPage outage save hint", () => {
     failWith(apiError(404))
     expect(screen.queryByText(STATUS_LINK)).toBeNull()
     expect(screen.queryByText("HTTP 404")).not.toBeNull()
+  })
+})
+
+describe("CreateAssignmentPage templateGrantWarning surfacing", () => {
+  const WARNING =
+    "needs the classroom50-cs101 team granted read — an organization owner"
+
+  it("renders the warning and stays on the page (no navigate) when the grant is skipped", () => {
+    render(<CreateAssignmentPage />)
+    submit()
+    succeedWith({ newCommitSha: "sha", templateGrantWarning: WARNING })
+    expect(screen.queryByText(WARNING)).not.toBeNull()
+    expect(navigateMock).not.toHaveBeenCalled()
+  })
+
+  it("navigates and shows no warning on a clean save", () => {
+    render(<CreateAssignmentPage />)
+    submit()
+    succeedWith({ newCommitSha: "sha" })
+    expect(screen.queryByText(WARNING)).toBeNull()
+    expect(navigateMock).toHaveBeenCalled()
   })
 })

@@ -96,8 +96,15 @@ func IsRateLimited(err error) bool {
 		httpErr.StatusCode != http.StatusTooManyRequests {
 		return false
 	}
-	return httpErr.Headers.Get("Retry-After") != "" ||
-		httpErr.Headers.Get("X-RateLimit-Remaining") == "0"
+	if httpErr.Headers.Get("Retry-After") != "" ||
+		httpErr.Headers.Get("X-RateLimit-Remaining") == "0" {
+		return true
+	}
+	// Secondary limits may omit both headers while keeping remaining non-zero;
+	// the only signal is then the body message (go-gh maps it to Message).
+	msg := strings.ToLower(httpErr.Message)
+	return strings.Contains(msg, "secondary rate limit") ||
+		strings.Contains(msg, "abuse")
 }
 
 // BackoffDelay is the exponential backoff for optimistic-retry loops:

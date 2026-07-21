@@ -271,3 +271,38 @@ func TestResolveSettledDefaultBranch(t *testing.T) {
 		}
 	})
 }
+
+// TestIsRateLimited pins the fatal-vs-benign 403 split callers rely on: a plain
+// authz 403 is benign (false), but every rate-limit shape stays fatal (true),
+// including the header-less secondary limit whose only signal is the body
+// message. A miss here silently drops an owner-only grant (see reuse.go).
+func TestIsRateLimited(t *testing.T) {
+	httpErr := func(code int, headers map[string]string, msg string) error {
+		h := http.Header{}
+		for k, v := range headers {
+			h.Set(k, v)
+		}
+		return &api.HTTPError{StatusCode: code, Headers: h, Message: msg}
+	}
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"plain authz 403", httpErr(http.StatusForbidden, nil, "Must have admin rights"), false},
+		{"403 + Retry-After", httpErr(http.StatusForbidden, map[string]string{"Retry-After": "60"}, ""), true},
+		{"403 + x-ratelimit-remaining 0", httpErr(http.StatusForbidden, map[string]string{"X-RateLimit-Remaining": "0"}, ""), true},
+		{"429 + Retry-After", httpErr(http.StatusTooManyRequests, map[string]string{"Retry-After": "60"}, ""), true},
+		{"header-less secondary limit (message only)", httpErr(http.StatusForbidden, nil, "You have exceeded a secondary rate limit"), true},
+		{"legacy abuse-detection message", httpErr(http.StatusForbidden, nil, "You have triggered an abuse detection mechanism"), true},
+		{"404", httpErr(http.StatusNotFound, nil, ""), false},
+		{"non-HTTPError", io.EOF, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := IsRateLimited(tc.err); got != tc.want {
+				t.Errorf("IsRateLimited(%q) = %v, want %v", tc.name, got, tc.want)
+			}
+		})
+	}
+}

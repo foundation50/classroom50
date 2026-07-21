@@ -161,6 +161,54 @@ describe("RequireRole — teacher gate on a classroom", () => {
   })
 })
 
+describe("RequireRole — author gate on a classroom", () => {
+  it("a teacher can author", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(ctx({ role: "teacher" }))
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("child")
+  })
+
+  it("a head TA can author", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(ctx({ role: "hta" }))
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("child")
+  })
+
+  it("a plain TA is 404'd from authoring (read-only tier)", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(ctx({ role: "ta" }))
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("notfound")
+  })
+
+  it("a student is 404'd from authoring", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(ctx({ role: "student" }))
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("notfound")
+  })
+
+  it("holds the spinner while the classroom role is unresolved", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(
+      ctx({ role: "unresolved", roleResolved: false }),
+    )
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("spinner")
+  })
+
+  it("shows a retryable error when the role read settles in error", () => {
+    paramsMock.mockReturnValue({ org: "acme", classroom: "cs101" })
+    classroomCtxMock.mockReturnValue(
+      ctx({ role: "unresolved", roleResolved: false, isError: true }),
+    )
+    render(<RequireRole allow="author">{child}</RequireRole>)
+    expect(shown()).toBe("error")
+  })
+})
+
 describe("RequireRole — owner gate on org-level routes", () => {
   it("an org owner reaches org-wide settings", () => {
     paramsMock.mockReturnValue({ org: "acme" })
