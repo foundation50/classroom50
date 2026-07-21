@@ -11,10 +11,10 @@ import { githubKeys } from "./keys"
 // push publishes a `submit/<timestamp>-<sha>` release whose body GitHub renders
 // as the score + per-test table. We list these and link students straight to
 // the release page rather than reading result.json.
-const SUBMISSION_TAG_PREFIX = "submit/"
+export const SUBMISSION_TAG_PREFIX = "submit/"
 
 // published_at is null for a draft; fall back to created_at so ordering holds.
-function releaseTime(release: GitHubRelease): number {
+export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
 }
 
@@ -48,6 +48,37 @@ export function releasesQuery(
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
+}
+
+// The newest `submit/*` release for a repo (with its assets), or null when the
+// repo has no submission release or doesn't exist (404). Used by the live
+// teacher fan-out: one call per assignment repo yields whether the student has
+// submitted and — once the asset-download path is resolved — the handle to
+// `result.json`. A single `per_page=100` page is sufficient for "newest": the
+// list sorts newest-first and we only want the latest, so unlike the CLI's
+// all_submit_releases full walk we don't paginate. A missing repo (not
+// accepted) 404s and resolves to null rather than throwing, so one absent repo
+// never voids a batch.
+export async function latestSubmitReleaseWithAssets(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<GitHubRelease | null> {
+  return tolerateGitHubError(async () => {
+    const releases = await client.request<GitHubRelease[]>(
+      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+        repo,
+      )}/releases?per_page=100`,
+      { method: "GET", signal },
+    )
+
+    const submits = releases
+      .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+      .sort((a, b) => releaseTime(b) - releaseTime(a))
+
+    return submits[0] ?? null
+  }, null)
 }
 
 type RepositorySecret = {
