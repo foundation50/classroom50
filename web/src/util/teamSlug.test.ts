@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   classroomTeamSlug,
+  resolveClassroomRoleSlug,
   parseClassroomTeamSlug,
   parseStudentClassroomSlug,
   parseBareClassroomSlug,
@@ -114,5 +115,74 @@ describe("parseBareClassroomSlug", () => {
     expect(parseBareClassroomSlug("some-other-team")).toBeNull()
     expect(parseBareClassroomSlug("classroom50")).toBeNull()
     expect(parseBareClassroomSlug("classroom50-")).toBeNull()
+  })
+})
+
+describe("resolveClassroomRoleSlug", () => {
+  const ref = (slug: string) => ({ id: 1, slug })
+
+  it("student prefers classroom.json team.slug, else derives", () => {
+    expect(
+      resolveClassroomRoleSlug("cs101", "student", {
+        team: ref("gh-rewrote-student"),
+      }),
+    ).toBe("gh-rewrote-student")
+    expect(resolveClassroomRoleSlug("cs101", "student", {})).toBe(
+      "classroom50-cs101",
+    )
+  })
+
+  it("teacher prefers teams.teacher, else legacy teams.instructor, else derives", () => {
+    expect(
+      resolveClassroomRoleSlug("cs101", "teacher", {
+        teams: { teacher: ref("gh-teacher") },
+      }),
+    ).toBe("gh-teacher")
+    // Not-yet-migrated classroom: only the legacy instructor ref exists.
+    expect(
+      resolveClassroomRoleSlug("cs101", "teacher", {
+        teams: { instructor: ref("gh-instructor") },
+      }),
+    ).toBe("gh-instructor")
+    // teacher wins over instructor when both are present.
+    expect(
+      resolveClassroomRoleSlug("cs101", "teacher", {
+        teams: { teacher: ref("gh-teacher"), instructor: ref("gh-instructor") },
+      }),
+    ).toBe("gh-teacher")
+    expect(resolveClassroomRoleSlug("cs101", "teacher", {})).toBe(
+      "classroom50-cs101-teacher",
+    )
+  })
+
+  it("generic staff roles prefer teams.<role>.slug, else derive", () => {
+    expect(
+      resolveClassroomRoleSlug("cs101", "ta", {
+        teams: { ta: ref("gh-ta") },
+      }),
+    ).toBe("gh-ta")
+    expect(
+      resolveClassroomRoleSlug("cs101", "hta", {
+        teams: { hta: ref("gh-hta") },
+      }),
+    ).toBe("gh-hta")
+    expect(resolveClassroomRoleSlug("cs101", "ta", {})).toBe(
+      "classroom50-cs101-ta",
+    )
+    expect(resolveClassroomRoleSlug("cs101", "hta", {})).toBe(
+      "classroom50-cs101-hta",
+    )
+  })
+
+  it("falls back to the derived slug for every role when refs is undefined", () => {
+    expect(resolveClassroomRoleSlug("cs101", "student", undefined)).toBe(
+      "classroom50-cs101",
+    )
+    expect(resolveClassroomRoleSlug("cs101", "teacher", undefined)).toBe(
+      "classroom50-cs101-teacher",
+    )
+    expect(resolveClassroomRoleSlug("cs101", "ta", undefined)).toBe(
+      "classroom50-cs101-ta",
+    )
   })
 })

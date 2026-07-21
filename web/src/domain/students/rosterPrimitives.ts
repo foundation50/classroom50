@@ -27,7 +27,7 @@ import {
   type ClassroomRole,
 } from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { classroomTeamSlug, resolveClassroomRoleSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
 import type { StudentCsvRow } from "@/util/rosterCsv"
 import { logger } from "@/lib/logger"
@@ -338,9 +338,9 @@ export type MemberWithRole = {
 
 // Resolve the student-team slug plus the two staff-team slugs from one
 // classroom.json read (slugs are authoritative there; GitHub may rewrite them
-// on name collision). Falls back to the derived name per team when the block
-// is absent — mirroring useTeamRoster's resolution so the sync sees exactly the
-// teams the roster view does.
+// on name collision). The per-role precedence (json ref -> legacy instructor ->
+// derived) is single-sourced in resolveClassroomRoleSlug so this async path and
+// the sync roster/staff UI can't drift on it.
 export async function resolveClassroomTeamSlugs(
   client: GitHubClient,
   org: string,
@@ -356,20 +356,16 @@ export async function resolveClassroomTeamSlugs(
       throw err
     }
   }
+  const refs = json ?? undefined
+  const slug = (role: "student" | StaffRole) =>
+    resolveClassroomRoleSlug(classroom, role, refs)
   return {
-    student: json?.team?.slug || classroomTeamSlug(classroom),
+    student: slug("student"),
     staff: {
-      // Prefer the canonical teacher team; fall back to a not-yet-migrated
-      // classroom's legacy instructor team, then the derived teacher slug.
-      teacher:
-        json?.teams?.teacher?.slug ||
-        json?.teams?.instructor?.slug ||
-        classroomTeamSlug(classroom, "teacher"),
-      instructor:
-        json?.teams?.instructor?.slug ||
-        classroomTeamSlug(classroom, "instructor"),
-      hta: json?.teams?.hta?.slug || classroomTeamSlug(classroom, "hta"),
-      ta: json?.teams?.ta?.slug || classroomTeamSlug(classroom, "ta"),
+      teacher: slug("teacher"),
+      instructor: slug("instructor"),
+      hta: slug("hta"),
+      ta: slug("ta"),
     },
   }
 }

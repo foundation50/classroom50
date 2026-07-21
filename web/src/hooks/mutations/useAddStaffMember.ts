@@ -2,7 +2,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { githubKeys, invalidateClassroomTeam } from "@/github-core/queries"
 import { addClassroomStaffMember, syncRosterFromTeam } from "@/domain/students"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { resolveClassroomRoleSlug } from "@/util/teamSlug"
+import useGetClassroom from "@/hooks/useGetClassroom"
 import { rosterPath } from "@/util/rosterPath"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { logger } from "@/lib/logger"
@@ -47,6 +48,7 @@ export function useAddStaffMember(
 ) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
+  const { data: classroomJson } = useGetClassroom(org, classroom)
 
   return useMutation({
     mutationFn: async (input: { username: string; role: StaffRole }) => {
@@ -61,7 +63,14 @@ export function useAddStaffMember(
       return { trimmed: username, role }
     },
     onSuccess: ({ role: addedRole }) => {
-      const teamSlug = classroomTeamSlug(classroom, addedRole)
+      // Resolve the added role's slug from classroom.json (GitHub can rewrite a
+      // slug on a name collision), matching the read in StaffRoleList so the
+      // invalidation can't miss a team whose stored slug differs from derived.
+      const teamSlug = resolveClassroomRoleSlug(
+        classroom,
+        addedRole,
+        classroomJson,
+      )
       // A non-member add creates a pending invite (not a member), so refresh
       // both lists — invitations alone were previously missed (issue #348).
       invalidateClassroomTeam(queryClient, org, teamSlug)
