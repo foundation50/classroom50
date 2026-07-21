@@ -996,8 +996,10 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
       },
     })
 
-    const { canGrantTemplateAccess: _omit, ...nonOwner } =
-      editInput() as Record<string, unknown>
+    // A non-owner input simply omits canGrantTemplateAccess (the mutation hook
+    // sets it from can("manageOrg")); build one without the flag.
+    const nonOwner = editInput("tmpl-v2") as Record<string, unknown>
+    delete nonOwner.canGrantTemplateAccess
     const result = await editAssignment(
       client,
       nonOwner as unknown as Parameters<typeof editAssignment>[1],
