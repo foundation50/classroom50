@@ -92,7 +92,26 @@ describe("useClassroomReconcile", () => {
       wrapper: wrapper(),
     })
     await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1))
-    expect(reconcile).toHaveBeenCalledWith(expect.anything(), "org", "cs101")
+    expect(reconcile).toHaveBeenCalledWith(
+      expect.anything(),
+      "org",
+      "cs101",
+      undefined,
+    )
+  })
+
+  it("forwards the acting owner as the creator to drop from non-teacher teams", async () => {
+    reconcile.mockResolvedValue(healthy)
+    renderHook(() => useClassroomReconcile("org", "cs101", true, "prof"), {
+      wrapper: wrapper(),
+    })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1))
+    expect(reconcile).toHaveBeenCalledWith(
+      expect.anything(),
+      "org",
+      "cs101",
+      "prof",
+    )
   })
 
   it("does NOT invalidate anything when the classroom was already converged", async () => {

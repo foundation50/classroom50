@@ -25,6 +25,7 @@ export function useClassroomReconcile(
   org: string | undefined,
   classroom: string | undefined,
   enabled: boolean,
+  creator?: string,
 ): void {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -34,7 +35,9 @@ export function useClassroomReconcile(
     org,
     classroom,
     run: ({ org, classroom }) =>
-      withGitConflictRetry(() => reconcileClassroom(client, org, classroom)),
+      withGitConflictRetry(() =>
+        reconcileClassroom(client, org, classroom, creator),
+      ),
     // An archived classroom no-ops (skipped); release its key so a same-mount
     // un-archive re-reconciles rather than staying latched until remount.
     isTransientSuccess: (result) => result.skipped,

@@ -7,6 +7,7 @@ import {
   ensureStaffTeams,
   migrateInstructorTeamToTeacher,
   reconcileStudentTeamDescription,
+  removeUserFromTeam,
   type TeacherMigrationResult,
   type TeamDescriptionReconcileResult,
 } from "@/github-core/mutations"
@@ -53,10 +54,18 @@ const NOOP_RESULT: ClassroomReconcileResult = {
 // Every call is an org-owner op; the caller MUST gate on the teacher role. An
 // archived classroom short-circuits with no writes (returns skipped); a
 // missing/legacy classroom.json reads as active.
+//
+// `creator` (the acting owner) is dropped from the student/hta/ta teams this
+// pass touches, never teacher: the create POST silently adds the owner as a
+// maintainer of every team it makes, and an owner sitting on those teams is the
+// mixed-role state the roster would miscount. The drop is unconditional (not
+// gated on created-vs-adopted) so a pre-existing stray membership self-heals —
+// mirrors createClassroomFiles' dropCreatorFromNonTeacherTeams.
 export async function reconcileClassroom(
   client: GitHubClient,
   org: string,
   classroom: string,
+  creator?: string,
 ): Promise<ClassroomReconcileResult> {
   if (await isArchived(client, org, classroom)) return NOOP_RESULT
 
@@ -65,16 +74,22 @@ export async function reconcileClassroom(
   // the instructor alias after the deprecation window.
   const migration = await migrateInstructorTeamToTeacher(client, org, classroom)
 
-  const { created: studentTeamCreated } = await ensureClassroomTeam(
+  const { slug: studentTeamSlug, created: studentTeamCreated } =
+    await ensureClassroomTeam(client, org, classroom)
+  const { teams: staffTeams, created: staffCreated } = await ensureStaffTeams(
     client,
     org,
     classroom,
   )
-  const { created: staffCreated } = await ensureStaffTeams(
-    client,
-    org,
-    classroom,
-  )
+
+  // Clear the owner off every non-teacher team we just touched. Best-effort and
+  // idempotent (404 = already absent); a failure leaves them on a team where the
+  // roster's per-role badge surfaces it, so it must not abort the heal.
+  await dropCreatorFromNonTeacherTeams(client, org, creator, [
+    studentTeamSlug,
+    staffTeams.hta?.slug,
+    staffTeams.ta?.slug,
+  ])
 
   // A 404 from the student-team read is permanent (a wrong derived slug never
   // converges) UNLESS we just created that team this pass: then it's a
@@ -105,6 +120,31 @@ export async function reconcileClassroom(
   }
 
   return { skipped: false, migration, description, staffCreated }
+}
+
+// Drop the acting owner from the given non-teacher team slugs (never teacher).
+// Skips when no creator is known. Best-effort per team: removeUserFromTeam is
+// idempotent (404 = already absent) and swallows failures, so a hiccup can't
+// abort the classroom heal.
+async function dropCreatorFromNonTeacherTeams(
+  client: GitHubClient,
+  org: string,
+  creator: string | undefined,
+  slugs: ReadonlyArray<string | undefined>,
+): Promise<void> {
+  if (!creator) return
+  for (const teamSlug of slugs) {
+    if (!teamSlug) continue
+    try {
+      await removeUserFromTeam(client, { org, teamSlug, username: creator })
+    } catch {
+      log.warn("classroom reconcile: dropping creator from team failed", {
+        org,
+        creator,
+        teamSlug,
+      })
+    }
+  }
 }
 
 // True only when classroom.json positively records active: false. A missing

@@ -52,8 +52,10 @@ function useClassroomRoleResolution(
 
   // Centralized best-effort self-check on classroom entry. Keyed on actualRole
   // (not the preview-clamped role) so a teacher previewing as a lower role still
-  // triggers the idempotent heal. See reconcileClassroom for the resource set.
-  useClassroomReconcile(org, classroom, isTeacherRole(actualRole))
+  // triggers the idempotent heal. Passes the acting owner so the reconcile can
+  // drop them off any non-teacher team its create POST auto-joined them to. See
+  // reconcileClassroom for the resource set.
+  useClassroomReconcile(org, classroom, isTeacherRole(actualRole), user?.login)
 
   const roleResolved = role !== "unresolved"
 

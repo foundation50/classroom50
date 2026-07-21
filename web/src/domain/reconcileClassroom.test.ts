@@ -5,6 +5,7 @@ const migrate = vi.fn()
 const ensureClassroomTeam = vi.fn()
 const ensureStaffTeams = vi.fn()
 const reconcileDescription = vi.fn()
+const removeUserFromTeam = vi.fn()
 
 vi.mock("@/github-core/configRepoReads", () => ({
   getClassroomJson: (...a: unknown[]) => getClassroomJson(...a),
@@ -15,6 +16,7 @@ vi.mock("@/github-core/mutations", () => ({
   migrateInstructorTeamToTeacher: (...a: unknown[]) => migrate(...a),
   reconcileStudentTeamDescription: (...a: unknown[]) =>
     reconcileDescription(...a),
+  removeUserFromTeam: (...a: unknown[]) => removeUserFromTeam(...a),
 }))
 
 import { reconcileClassroom } from "./reconcileClassroom"
@@ -46,6 +48,7 @@ beforeEach(() => {
   ensureClassroomTeam.mockReset()
   ensureStaffTeams.mockReset()
   reconcileDescription.mockReset()
+  removeUserFromTeam.mockReset()
   // Healthy defaults: active classroom, everything already converged.
   getClassroomJson.mockResolvedValue({ name: "CS101", active: true })
   migrate.mockResolvedValue({ changed: false })
@@ -54,8 +57,16 @@ beforeEach(() => {
     slug: "classroom50-cs101",
     created: false,
   })
-  ensureStaffTeams.mockResolvedValue({ teams: {}, created: [] })
+  ensureStaffTeams.mockResolvedValue({
+    teams: {
+      teacher: { id: 2, slug: "classroom50-cs101-teacher" },
+      hta: { id: 3, slug: "classroom50-cs101-hta" },
+      ta: { id: 4, slug: "classroom50-cs101-ta" },
+    },
+    created: [],
+  })
   reconcileDescription.mockResolvedValue({ changed: false })
+  removeUserFromTeam.mockResolvedValue(undefined)
 })
 
 describe("reconcileClassroom", () => {
@@ -91,6 +102,51 @@ describe("reconcileClassroom", () => {
     const result = await reconcileClassroom(client, "org", "cs101")
     expect(result.staffCreated).toEqual(["hta"])
     expect(result.skipped).toBe(false)
+  })
+
+  it("drops the creator from the student, hta, and ta teams but never teacher", async () => {
+    const dropped: string[] = []
+    removeUserFromTeam.mockImplementation(
+      async (_c: unknown, { teamSlug }: { teamSlug: string }) => {
+        dropped.push(teamSlug)
+      },
+    )
+    await reconcileClassroom(client, "org", "cs101", "prof")
+    expect(dropped).toEqual([
+      "classroom50-cs101",
+      "classroom50-cs101-hta",
+      "classroom50-cs101-ta",
+    ])
+    expect(dropped).not.toContain("classroom50-cs101-teacher")
+    expect(removeUserFromTeam).toHaveBeenCalledWith(client, {
+      org: "org",
+      teamSlug: "classroom50-cs101",
+      username: "prof",
+    })
+  })
+
+  it("drops the creator even from an ADOPTED (not just-created) team", async () => {
+    // Unconditional drop: an owner sitting on a pre-existing hta/ta team is the
+    // mixed-role state the reconcile clears, not just teams it created this pass.
+    ensureClassroomTeam.mockResolvedValue({
+      id: 1,
+      slug: "classroom50-cs101",
+      created: false,
+    })
+    await reconcileClassroom(client, "org", "cs101", "prof")
+    expect(removeUserFromTeam).toHaveBeenCalledTimes(3)
+  })
+
+  it("does NOT attempt any creator drop when no creator is supplied", async () => {
+    await reconcileClassroom(client, "org", "cs101")
+    expect(removeUserFromTeam).not.toHaveBeenCalled()
+  })
+
+  it("completes the heal even when a creator drop fails (best-effort)", async () => {
+    removeUserFromTeam.mockRejectedValue(githubAPIError(500))
+    const result = await reconcileClassroom(client, "org", "cs101", "prof")
+    expect(result.skipped).toBe(false)
+    expect(reconcileDescription).toHaveBeenCalledTimes(1)
   })
 
   it("skips all writes on an archived classroom", async () => {
