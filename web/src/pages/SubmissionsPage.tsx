@@ -109,6 +109,11 @@ const useLiveNow = (referenceMs: number | null) => {
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
+  // Regrade-all is a config-repo-write tier action (teacher|hta); Collect and
+  // per-row regrade stay all-staff (the page already gates entry on
+  // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
+  const { role: classroomRole } = useClassroomRoleContext()
+  const canRegradeAll = can("authorAssignments", { classroomRole })
   const {
     data: scoresData,
     refetch: refetchScores,
@@ -761,6 +766,7 @@ const SubmissionsPageContent = () => {
               collecting={collecting}
               regrading={regrading}
               regradeAllActive={regradeAllActive}
+              canRegradeAll={canRegradeAll}
               emptyRoster={emptyRoster.show}
               emptyRepo={isEmptyRepoAssignment}
               onCollect={() => collectScores.collect()}

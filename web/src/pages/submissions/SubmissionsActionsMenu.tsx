@@ -17,6 +17,7 @@ export function SubmissionsActionsMenu({
   collecting,
   regrading,
   regradeAllActive,
+  canRegradeAll = true,
   emptyRoster,
   emptyRepo = false,
   onCollect,
@@ -29,6 +30,11 @@ export function SubmissionsActionsMenu({
   collecting: boolean
   regrading: boolean
   regradeAllActive: boolean
+  // Whether the viewer may trigger "Regrade all" (teacher|hta). A plain TA can
+  // Collect and regrade individual rows but not batch-regrade; GitHub 403s a
+  // pull-only TA regardless, so this is the UX gate. Defaults true for callers
+  // that don't gate (the item stays visible).
+  canRegradeAll?: boolean
   emptyRoster: boolean
   // empty_repo assignment: never autogrades, so the grading actions (Collect
   // now / Regrade all / View workflow) are hidden — only the CSV export stays.
@@ -104,26 +110,28 @@ export function SubmissionsActionsMenu({
         </li>
         {!emptyRepo && (
           <>
-            <li>
-              <button
-                type="button"
-                disabled={disabledActions}
-                title={regradeTitle}
-                onClick={() => {
-                  closeMenu()
-                  if (disabledActions) return
-                  onRegradeAll()
-                }}
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
-                />
-                {regradeAllActive
-                  ? t("submissions.regradeAll.active")
-                  : t("submissions.regradeAll.label")}
-              </button>
-            </li>
+            {canRegradeAll && (
+              <li>
+                <button
+                  type="button"
+                  disabled={disabledActions}
+                  title={regradeTitle}
+                  onClick={() => {
+                    closeMenu()
+                    if (disabledActions) return
+                    onRegradeAll()
+                  }}
+                >
+                  <RefreshCw
+                    aria-hidden="true"
+                    className={`size-4 ${regradeAllActive ? "animate-spin" : ""}`}
+                  />
+                  {regradeAllActive
+                    ? t("submissions.regradeAll.active")
+                    : t("submissions.regradeAll.label")}
+                </button>
+              </li>
+            )}
             <li>
               <a href={viewHref} target="_blank" rel="noreferrer">
                 <ExternalLink aria-hidden="true" className="size-4" />
