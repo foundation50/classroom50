@@ -36,6 +36,10 @@ export type UseLiveSubmissionsResult = {
   isFetching: boolean
   // True when more owners remain beyond the current page window.
   hasNextPage: boolean
+  // Force a re-read of the current page's live submissions, bypassing the
+  // staleTime — wired to the page's Refresh control so it refreshes live
+  // presence alongside the collected snapshot.
+  refetch: () => void
 }
 
 const submitReleaseTime = (release: GitHubRelease): string =>
@@ -96,7 +100,7 @@ export function useLiveSubmissions({
     Boolean(org && classroom && assignment) &&
     windowOwners.length > 0
 
-  const { data, isFetching } = useQuery({
+  const { data, isFetching, refetch } = useQuery({
     queryKey: [
       ...githubKeys.all,
       "live-submissions",
@@ -154,6 +158,11 @@ export function useLiveSubmissions({
     errorCount: data?.errorCount ?? 0,
     isFetching,
     hasNextPage,
+    // react-query's refetch returns a promise; the caller fires-and-forgets, so
+    // narrow it to void to keep the result type simple.
+    refetch: () => {
+      void refetch()
+    },
   }
 }
 

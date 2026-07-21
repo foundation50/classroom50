@@ -148,4 +148,19 @@ describe("useLiveSubmissions", () => {
     expect(request).not.toHaveBeenCalled()
     expect(result.current.hasNextPage).toBe(false)
   })
+
+  it("refetch() re-reads the current page's repos", async () => {
+    request.mockResolvedValue([
+      submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+    ])
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["a", "b"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(request).toHaveBeenCalledTimes(2)
+
+    result.current.refetch()
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(4))
+  })
 })

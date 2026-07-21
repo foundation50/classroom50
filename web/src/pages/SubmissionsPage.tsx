@@ -274,6 +274,7 @@ const SubmissionsPageContent = () => {
     errorCount: liveErrorCount,
     isFetching: liveFetching,
     hasNextPage: liveHasNextPage,
+    refetch: refetchLive,
   } = useLiveSubmissions({
     org,
     classroom,
@@ -668,15 +669,25 @@ const SubmissionsPageContent = () => {
                 variant="ghost"
                 size="xs"
                 shape="circle"
-                disabled={scoresFetching}
-                onClick={() => refetchScores()}
+                disabled={scoresFetching || liveFetching}
+                onClick={() => {
+                  // Refresh both data sources the page shows: the collected
+                  // snapshot (scores.json) AND the live submission fan-out.
+                  // Refreshing only the snapshot would leave the "Pending" live
+                  // rows — the part that reflects a just-pushed submission —
+                  // stale, which is the opposite of what Refresh implies.
+                  refetchScores()
+                  refetchLive()
+                }}
                 aria-label={t("submissions.refresh")}
                 title={t("submissions.refresh")}
               >
                 <RefreshCw
                   aria-hidden="true"
                   size={12}
-                  className={scoresFetching ? "animate-spin" : ""}
+                  className={
+                    scoresFetching || liveFetching ? "animate-spin" : ""
+                  }
                 />
               </Button>
             </span>
