@@ -149,6 +149,34 @@ describe("useLiveSubmissions", () => {
     expect(result.current.hasNextPage).toBe(false)
   })
 
+  it("retries a rate-limited repo read and counts it as submitted, not an error", async () => {
+    // First call for the repo is a 429 (retry-after 0 = immediate), second (the
+    // retry) succeeds — the shared retryOnRateLimit wrapper should absorb it so
+    // it lands as a submission, not an errorCount.
+    const rateLimited = new GitHubAPIError({
+      status: 429,
+      url: "https://api.github.com/x",
+      message: "rate limited",
+      body: null,
+      rateLimit: { ...noRateLimit, retryAfter: 0 },
+    })
+    let calls = 0
+    request.mockImplementation(() => {
+      calls++
+      if (calls === 1) return Promise.reject(rateLimited)
+      return Promise.resolve([
+        submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+      ])
+    })
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["a"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.isFetching).toBe(false))
+    expect(result.current.submissions.map((s) => s.owner)).toEqual(["a"])
+    expect(result.current.errorCount).toBe(0)
+  })
+
   it("refetch() re-reads the current page's repos", async () => {
     request.mockResolvedValue([
       submitRelease("submit/x", "2026-01-01T00:00:00Z"),

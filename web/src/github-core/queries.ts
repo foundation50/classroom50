@@ -14,6 +14,8 @@ export {
   isFreshRepoLagError,
   withFreshRepoRetry,
   REPO_READ_CONCURRENCY,
+  withGithubReadSlot,
+  retryOnRateLimit,
   type FreshRepoRetryOptions,
 } from "./queries/shared"
 export {

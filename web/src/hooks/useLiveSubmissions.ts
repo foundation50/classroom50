@@ -6,6 +6,8 @@ import {
   REPO_READ_CONCURRENCY,
   githubKeys,
   latestSubmitReleaseWithAssets,
+  retryOnRateLimit,
+  withGithubReadSlot,
 } from "@/github-core/queries"
 import type { GitHubRelease } from "@/github-core/types"
 import { studentRepoName } from "@/util/studentRepo"
@@ -126,11 +128,14 @@ export function useLiveSubmissions({
         async (owner) => {
           const repo = studentRepoName(classroom!, assignment!, owner)
           try {
-            const release = await latestSubmitReleaseWithAssets(
-              client,
-              org!,
-              repo,
-              signal,
+            // Route through the shared read slot so this fan-out and any other
+            // per-repo fan-out on the page (e.g. group-member reads) share one
+            // concurrency budget, and retry once on a rate-limit before giving
+            // up on a repo.
+            const release = await withGithubReadSlot(() =>
+              retryOnRateLimit(() =>
+                latestSubmitReleaseWithAssets(client, org!, repo, signal),
+              ),
             )
             // 404 (repo not accepted) resolves to null inside the query — that
             // is "not submitted", not an error.
@@ -143,8 +148,9 @@ export function useLiveSubmissions({
               })
             }
           } catch {
-            // A non-404 failure (403/5xx/network) for one repo
-            // must not void the whole page — count it and move on.
+            // A non-404 failure (403/5xx/network, or a rate-limit that persisted
+            // past one retry) for one repo must not void the whole page — count
+            // it and move on.
             errorCount++
           }
         },

@@ -2,7 +2,12 @@ import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import {
+  githubKeys,
+  REPO_READ_CONCURRENCY,
+  retryOnRateLimit,
+  withGithubReadSlot,
+} from "@/github-core/queries"
 import type { GitHubUser } from "@/github-core/types"
 import { mapWithConcurrency } from "@/util/concurrency"
 
@@ -47,8 +52,15 @@ export function useGroupRepoMemberLogins(
           try {
             // affiliation=direct excludes org-inherited access (owners/admins),
             // matching useGetRepoCollaborators so both share one cache entry.
-            const collaborators = await client.request<GitHubUser[]>(
-              `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+            // Through the shared read slot (+ rate-limit retry) so this fan-out
+            // and the live-submissions fan-out share one concurrency budget on
+            // the same page load rather than each bursting to REPO_READ_CONCURRENCY.
+            const collaborators = await withGithubReadSlot(() =>
+              retryOnRateLimit(() =>
+                client.request<GitHubUser[]>(
+                  `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+                ),
+              ),
             )
             // Prime the per-repo cache the rows and Members modal read from.
             queryClient.setQueryData(
