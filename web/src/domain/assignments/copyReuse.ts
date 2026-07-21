@@ -24,6 +24,7 @@ import {
 } from "./accessPrimitives"
 import {
   tryGrantTeamTemplateRead,
+  templateGrantOwnerRequiredWarning,
   type CreateAssignmentResult,
 } from "./createEdit"
 
@@ -242,14 +243,20 @@ export async function copyAssignmentToClassroom(
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   let templateGrantWarning: string | undefined
-  if (input.canGrantTemplateAccess && needsTeamGrant && entry.template) {
-    templateGrantWarning = await tryGrantTeamTemplateRead(
-      client,
-      org,
-      targetClassroom,
-      entry.slug,
-      entry.template,
-    )
+  if (needsTeamGrant && entry.template) {
+    templateGrantWarning = input.canGrantTemplateAccess
+      ? await tryGrantTeamTemplateRead(
+          client,
+          org,
+          targetClassroom,
+          entry.slug,
+          entry.template,
+        )
+      : templateGrantOwnerRequiredWarning(
+          targetClassroom,
+          entry.slug,
+          entry.template,
+        )
   }
 
   return {

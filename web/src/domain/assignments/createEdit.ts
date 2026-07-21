@@ -236,23 +236,25 @@ export async function editAssignment(
 
   // Grant the (possibly changed) in-org private template a team read — a
   // non-fatal warning, never thrown (the edit already committed). needsTeamGrant
-  // implies a resolved template, so the guard just narrows the type. Skip the
-  // grant for a non-owner (canGrantTemplateAccess false): addRepositoryToTeam is
-  // owner-only, so a head-TA edit that carries a stored template would otherwise
-  // 403 here even though it never touched the template field.
+  // implies a resolved template, so the guard just narrows the type.
+  // addRepositoryToTeam is org-owner-only, so a non-owner author (head-TA) can't
+  // perform it: attempt it for an owner, else surface an owner-required warning
+  // rather than silently skipping (which would 404 students on accept).
   let templateGrantWarning: string | undefined
-  if (
-    input.canGrantTemplateAccess &&
-    needsTeamGrant &&
-    preservedEntry.template
-  ) {
-    templateGrantWarning = await tryGrantTeamTemplateRead(
-      client,
-      input.org,
-      input.classroom,
-      input.slug,
-      preservedEntry.template,
-    )
+  if (needsTeamGrant && preservedEntry.template) {
+    templateGrantWarning = input.canGrantTemplateAccess
+      ? await tryGrantTeamTemplateRead(
+          client,
+          input.org,
+          input.classroom,
+          input.slug,
+          preservedEntry.template,
+        )
+      : templateGrantOwnerRequiredWarning(
+          input.classroom,
+          input.slug,
+          preservedEntry.template,
+        )
   }
 
   return {
@@ -659,6 +661,27 @@ export async function tryGrantTeamTemplateRead(
   }
 }
 
+// The warning shown when a NON-owner author (e.g. a head-TA) saves an
+// assignment whose private in-org template needs a classroom-team read grant.
+// The grant (addRepositoryToTeam) is org-owner-only at GitHub, so the author
+// can't perform it — but we must NOT return `undefined` (a silent "clean"
+// result) or students would hit a 404 on `gh student accept` with nothing
+// pointing at the cause. Surface an actionable warning instead: an org owner
+// grants the team read (or re-saves), then students can accept. Mirrors the
+// failure-path wording of tryGrantTeamTemplateRead.
+export function templateGrantOwnerRequiredWarning(
+  classroom: string,
+  slug: string,
+  template: NonNullable<Assignment["template"]>,
+): string {
+  return (
+    `Assignment "${slug}" was saved, but its private template ${template.owner}/${template.repo} ` +
+    `needs the ${classroomTeamSlug(classroom)} team granted read — a step only an organization owner can do. ` +
+    `Students can't accept it until an owner opens this classroom (which grants it automatically) or grants ` +
+    `the team read on ${template.owner}/${template.repo} directly in GitHub (Settings -> Collaborators and teams).`
+  )
+}
+
 // Refuse a write into an archived classroom (active: false). The UI hides the
 // affordances, but the write path is the authoritative guard — a stale tab, a
 // direct API call, or a CLI/agent must not mutate an archived classroom. Reads
@@ -734,18 +757,20 @@ export async function createAssignment(
   )
 
   let templateGrantWarning: string | undefined
-  if (
-    input.canGrantTemplateAccess &&
-    needsTeamGrant &&
-    assignmentBody.template
-  ) {
-    templateGrantWarning = await tryGrantTeamTemplateRead(
-      client,
-      input.org,
-      input.classroom,
-      input.slug,
-      assignmentBody.template,
-    )
+  if (needsTeamGrant && assignmentBody.template) {
+    templateGrantWarning = input.canGrantTemplateAccess
+      ? await tryGrantTeamTemplateRead(
+          client,
+          input.org,
+          input.classroom,
+          input.slug,
+          assignmentBody.template,
+        )
+      : templateGrantOwnerRequiredWarning(
+          input.classroom,
+          input.slug,
+          assignmentBody.template,
+        )
   }
 
   return {

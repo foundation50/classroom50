@@ -26,6 +26,8 @@ type reuseFixture struct {
 	grantedRepo string
 	// grantedTATeam records a PUT TA-staff-team repo grant target, if any.
 	grantedTATeam string
+	// grantedHTATeam records a PUT head-TA-staff-team repo grant target, if any.
+	grantedHTATeam string
 }
 
 // reuseServerConfig parameterizes the mock: the source/target classroom
@@ -132,6 +134,20 @@ func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reu
 		}
 	})
 
+	// Head-TA-staff-team grant: GET probe + PUT grant. Fires only when the target
+	// classroom.json records a `teams.hta` block (older classrooms skip it).
+	mux.HandleFunc("/orgs/o/teams/classroom50-dst-hta/repos/o/hello-template", func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			w.WriteHeader(http.StatusNotFound)
+		case http.MethodPut:
+			fix.mu.Lock()
+			fix.grantedHTATeam = "o/hello-template"
+			fix.mu.Unlock()
+			w.WriteHeader(http.StatusNoContent)
+		}
+	})
+
 	// Commit-tree write loop.
 	mux.HandleFunc("/repos/o/classroom50/git/refs/heads/main", func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == http.MethodPatch {
@@ -224,9 +240,9 @@ func targetClassroomBody(active *bool) string {
 	return string(b)
 }
 
-// targetClassroomBodyWithTA is targetClassroomBody plus a recorded TA staff
-// team, so the reuse grant path also grants the TA team read on a private
-// in-org template.
+// targetClassroomBodyWithTA is targetClassroomBody plus recorded head-TA and TA
+// staff teams, so the reuse grant path also grants those non-owner staff teams
+// read on a private in-org template.
 func targetClassroomBodyWithTA() string {
 	doc := map[string]any{
 		"schema":     "classroom50/classroom/v1",
@@ -236,7 +252,8 @@ func targetClassroomBodyWithTA() string {
 		"org":        "o",
 		"team":       map[string]any{"id": 7, "slug": "classroom50-dst"},
 		"teams": map[string]any{
-			"ta": map[string]any{"id": 9, "slug": "classroom50-dst-ta"},
+			"hta": map[string]any{"id": 8, "slug": "classroom50-dst-hta"},
+			"ta":  map[string]any{"id": 9, "slug": "classroom50-dst-ta"},
 		},
 	}
 	b, _ := json.Marshal(doc)
@@ -696,10 +713,13 @@ func TestRunAssignmentReuse_GrantsTATeam(t *testing.T) {
 		t.Fatalf("runAssignmentReuse: %v", err)
 	}
 	fix.mu.Lock()
-	student, ta := fix.grantedRepo, fix.grantedTATeam
+	student, ta, hta := fix.grantedRepo, fix.grantedTATeam, fix.grantedHTATeam
 	fix.mu.Unlock()
 	if student != "o/hello-template" {
 		t.Errorf("student team grant = %q, want o/hello-template", student)
+	}
+	if hta != "o/hello-template" {
+		t.Errorf("head-TA team grant = %q, want o/hello-template", hta)
 	}
 	if ta != "o/hello-template" {
 		t.Errorf("TA team grant = %q, want o/hello-template", ta)
@@ -723,13 +743,16 @@ func TestRunAssignmentReuse_NoTATeamSkips(t *testing.T) {
 		t.Fatalf("runAssignmentReuse: %v", err)
 	}
 	fix.mu.Lock()
-	student, ta := fix.grantedRepo, fix.grantedTATeam
+	student, ta, hta := fix.grantedRepo, fix.grantedTATeam, fix.grantedHTATeam
 	fix.mu.Unlock()
 	if student != "o/hello-template" {
 		t.Errorf("student team grant = %q, want o/hello-template", student)
 	}
 	if ta != "" {
 		t.Errorf("no TA grant expected, got %q", ta)
+	}
+	if hta != "" {
+		t.Errorf("no head-TA grant expected, got %q", hta)
 	}
 }
 

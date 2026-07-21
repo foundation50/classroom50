@@ -990,10 +990,12 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     ])
   })
 
-  it("skips the owner-only grant for a non-owner author (canGrantTemplateAccess absent)", async () => {
+  it("warns (not silently) when a non-owner author skips the owner-only grant", async () => {
     // A head-TA edit carries a stored in-org private template but no owner
     // rights; the write path must not attempt addRepositoryToTeam (it would
-    // 403). The edit still succeeds with no warning.
+    // 403). The edit succeeds, no grant fires — but it must NOT silently return
+    // undefined, or students 404 on accept with no signal. Surface an
+    // owner-required warning instead so a teacher/owner can grant it.
     const { client, grants } = makeGrantClient({
       classroomJson: {
         schema: "classroom50/classroom/v1",
@@ -1012,8 +1014,10 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
       nonOwner as unknown as Parameters<typeof editAssignment>[1],
     )
 
-    expect(result.templateGrantWarning).toBeUndefined()
+    // No owner-only grant fired, but the author is told an owner must act.
     expect(grants()).toEqual([])
+    expect(result.templateGrantWarning).toBeDefined()
+    expect(result.templateGrantWarning).toContain("organization owner")
   })
 
   it("grants only the student team when no staff teams are recorded", async () => {
