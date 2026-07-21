@@ -10,7 +10,7 @@ import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 
 // What a guarded surface requires:
-// - "staff": any classroom staff (teacher/ta) — for classroom CONTENT
+// - "staff": any classroom staff (teacher/hta/ta) — for classroom CONTENT
 //   (roster, authoring, submissions). On an org-level surface (no $classroom,
 //   e.g. Published) this is the org-scoped team-based "staff of any classroom"
 //   signal (useOrgStaff); on a classroom surface it reads the shared context.

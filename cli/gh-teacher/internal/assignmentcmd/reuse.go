@@ -348,7 +348,7 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 // template, so their team needs an explicit read grant; the teacher team is
 // omitted (its members are org owners with repo access via ownership).
 func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, tmplOwner, tmplRepo string) {
-	for _, role := range []configrepo.StaffRole{configrepo.RoleHeadTA, configrepo.RoleTA} {
+	for _, role := range configrepo.TemplateReadStaffRoles {
 		// StaffTeamRepoPermissions is a presence gate: grant read only for a role
 		// mapped to a student-repo/template permission.
 		if _, ok := configrepo.StaffTeamRepoPermissions[role]; !ok {

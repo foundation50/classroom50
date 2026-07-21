@@ -294,12 +294,12 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 		slug string
 	}
 	var staffTargets []staffTarget
-	if staffTeams != nil {
-		if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleHeadTA]; ok && staffTeams.HeadTA != nil {
-			staffTargets = append(staffTargets, staffTarget{configrepo.RoleHeadTA, staffTeams.HeadTA.Slug})
+	for _, role := range configrepo.TemplateReadStaffRoles {
+		if _, ok := configrepo.StaffTeamRepoPermissions[role]; !ok {
+			continue
 		}
-		if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; ok && staffTeams.TA != nil {
-			staffTargets = append(staffTargets, staffTarget{configrepo.RoleTA, staffTeams.TA.Slug})
+		if ref := staffTeams.RefForRole(role); ref != nil {
+			staffTargets = append(staffTargets, staffTarget{role, ref.Slug})
 		}
 	}
 	var grantFailures int

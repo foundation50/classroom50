@@ -1098,6 +1098,73 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     expect(result.templateGrantWarning).toBeUndefined()
     expect(grants()).toEqual([])
   })
+
+  // Reuse path (copyAssignmentToClassroom) shares the same canGrantTemplateAccess
+  // guard as create/edit; exercise both the owner (grants fire) and non-owner
+  // (grants skipped, owner-required warning) branches through the grant client.
+  function reuseSource(): Assignment {
+    return {
+      slug: "hw1",
+      name: "Homework 1",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: true,
+      // In-org private template (served by makeGrantClient's `tmpl` route).
+      template: { owner: ORG, repo: "tmpl", branch: "main" },
+    }
+  }
+
+  it("reuse: owner grants student + HTA + TA teams on a private in-org template", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: {
+          hta: { id: 8, slug: "classroom50-cs50-hta" },
+          ta: { id: 9, slug: "classroom50-cs50-ta" },
+        },
+      },
+    })
+
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: reuseSource(),
+      targetClassroom: CLASSROOM,
+      targetSlug: "hw1-copy",
+      canGrantTemplateAccess: true,
+    })
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual([
+      "classroom50-cs50",
+      "classroom50-cs50-hta",
+      "classroom50-cs50-ta",
+    ])
+  })
+
+  it("reuse: non-owner author warns (no grant) instead of silently skipping", async () => {
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+    })
+
+    const result = await copyAssignmentToClassroom(client, {
+      org: ORG,
+      source: reuseSource(),
+      targetClassroom: CLASSROOM,
+      targetSlug: "hw1-copy",
+      // canGrantTemplateAccess omitted => non-owner (fail-closed).
+    })
+
+    expect(grants()).toEqual([])
+    expect(result.templateGrantWarning).toBeDefined()
+    expect(result.templateGrantWarning).toContain("organization owner")
+  })
 })
 
 describe("copyAssignmentToClassroom (reuse fork guard)", () => {

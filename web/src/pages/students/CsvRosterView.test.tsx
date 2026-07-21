@@ -60,6 +60,26 @@ describe("CsvRosterView", () => {
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
   })
 
+  it("maps each known role cell to its badge (teacher/instructor/ta)", () => {
+    render(
+      <CsvRosterView
+        students={[
+          student({ username: "t", role: "teacher" }),
+          student({ username: "i", role: "instructor" }),
+          student({ username: "a", role: "ta" }),
+        ]}
+      />,
+    )
+    // teacher + its legacy instructor alias share the teacher label.
+    expect(screen.getAllByText("students.roleTeacher")).toHaveLength(2)
+    expect(screen.getByText("students.roleTa")).toBeTruthy()
+  })
+
+  it("maps the role cell case-insensitively", () => {
+    render(<CsvRosterView students={[student({ role: "HTA" })]} />)
+    expect(screen.getByText("students.roleHeadTa")).toBeTruthy()
+  })
+
   it("falls back to the username when no name is recorded", () => {
     render(
       <CsvRosterView
