@@ -14,11 +14,14 @@ import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 //   (roster, authoring, submissions). On an org-level surface (no $classroom,
 //   e.g. Published) this is the org-scoped team-based "staff of any classroom"
 //   signal (useOrgStaff); on a classroom surface it reads the shared context.
+// - "author": can author assignments in THIS classroom (teacher|hta) — the
+//   config-repo write tier. A plain TA sees staff content but can't mutate, so
+//   this excludes ta (and student). Reads the classroom context.
 // - "teacher": teacher of THIS classroom (excludes TAs) — for classroom
 //   SETTINGS. Reads the classroom context. Needs a $classroom route.
 // - "owner": org admin only — for ORG-wide settings/setup. Reads the org-role
 //   context. Independent of any classroom team (KTD-4).
-export type RoleRequirement = "staff" | "teacher" | "owner"
+export type RoleRequirement = "staff" | "author" | "teacher" | "owner"
 
 // Gate page content by role. While the role resolves we show a spinner (never
 // flash a 404 at a real staffer), then children or NotFound. Access is
@@ -33,6 +36,7 @@ const RequireRole = ({
 }) => {
   if (allow === "owner") return <RequireOwner>{children}</RequireOwner>
   if (allow === "teacher") return <RequireTeacher>{children}</RequireTeacher>
+  if (allow === "author") return <RequireAuthor>{children}</RequireAuthor>
   return <RequireStaff>{children}</RequireStaff>
 }
 
@@ -107,6 +111,26 @@ const RequireOrgStaff = ({ children }: { children: ReactNode }) => {
       })}
       errored={isError}
       onRetry={refetch}
+    >
+      {children}
+    </RoleGate>
+  )
+}
+
+// Author gate: can author assignments in this classroom (teacher|hta). A TA
+// sees staff content but can't mutate the config repo, so this is a tier above
+// `staff` and below `teacher` (which is settings-only). Gate on `roleResolved`
+// (the fine role short-circuits on the first confirmed elevation read).
+const RequireAuthor = ({ children }: { children: ReactNode }) => {
+  const { role, roleResolved, isError, retry } = useClassroomRoleContext()
+  return (
+    <RoleGate
+      resolved={roleResolved}
+      permitted={can("authorAssignments", {
+        classroomRole: role,
+      })}
+      errored={isError}
+      onRetry={retry}
     >
       {children}
     </RoleGate>

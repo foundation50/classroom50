@@ -209,6 +209,7 @@ const AssignmentsTable = ({
   studentCount,
   loading = false,
   archived = false,
+  canAuthor = false,
 }: {
   org: string
   classroom: string
@@ -220,11 +221,18 @@ const AssignmentsTable = ({
   // When archived, hide per-row mutating actions (edit/reuse/delete); viewing
   // stays available.
   archived?: boolean
+  // Whether the viewer can author assignments (teacher|hta). A TA sees the list
+  // read-only: the pencil becomes a view icon and reuse/delete are hidden, same
+  // shape as the archived case. GitHub also 403s a TA's config-repo write, so
+  // this is the UX guard, not the enforcer.
+  canAuthor?: boolean
 }) => {
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { data: scoresData } = useGetScores(org, classroom)
   const navigate = useNavigate()
+  // Mutating row actions require both an unarchived classroom and author rights.
+  const canMutate = !archived && canAuthor
 
   return (
     <EnterDiv
@@ -377,23 +385,24 @@ const AssignmentsTable = ({
                       assignment: assignment.slug,
                     }}
                     title={
-                      archived
-                        ? t("assignments.table.viewAssignment")
-                        : t("assignments.table.editAssignment")
+                      canMutate
+                        ? t("assignments.table.editAssignment")
+                        : t("assignments.table.viewAssignment")
                     }
                     onClick={(event) => {
                       event.stopPropagation()
                     }}
                   >
-                    {archived ? (
-                      <Eye aria-hidden="true" className="size-4" />
-                    ) : (
+                    {canMutate ? (
                       <Pencil aria-hidden="true" className="size-4" />
+                    ) : (
+                      <Eye aria-hidden="true" className="size-4" />
                     )}
                   </Link>
-                  {archived ? (
-                    // Archived rows are view-only, but reviewing template access
-                    // (and reaching the source repo) stays available.
+                  {!canMutate ? (
+                    // Read-only rows (archived, or viewer can't author): reviewing
+                    // template access (and reaching the source repo) stays
+                    // available; the modal itself owner-gates the re-grant.
                     assignment.template && (
                       <TemplateAccessButton
                         org={org}

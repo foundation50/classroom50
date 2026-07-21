@@ -67,7 +67,7 @@ const CreateAssignmentPage = () => {
   return (
     <PageShell selected="assignments">
       <Breadcrumb endpoint={t("assignments.createBreadcrumb")} />
-      <RequireRole>
+      <RequireRole allow="author">
         <PageHeader title={t("assignments.createHeading")} />
         {emptyRoster.show ? (
           <EmptyRosterNotice

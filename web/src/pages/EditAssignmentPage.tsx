@@ -174,6 +174,7 @@ const EditAssignmentPage = () => {
   const router = useRouter()
   const { role } = useClassroomRoleContext()
   const isStaff = can("viewClassroomStaffContent", { classroomRole: role })
+  const canAuthor = can("authorAssignments", { classroomRole: role })
   const isStudent = role === "student"
   const { data: assignments } = useGetClassroomAssignments(org, classroom)
   const { data: classroomData } = useGetClassroom(org, classroom)
@@ -221,7 +222,7 @@ const EditAssignmentPage = () => {
           classroom={classroom}
           assignment={assignment}
           defaultData={assignmentData}
-          readOnly={archived}
+          readOnly={archived || !canAuthor}
           onCancel={() => {
             router.history.back()
           }}

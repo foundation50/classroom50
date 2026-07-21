@@ -122,6 +122,9 @@ export const TeacherAssignmentsView = ({
   const myRoleLabelKey = roleLabelKey(myRole)
   const myRoleLabel = myRoleLabelKey ? t(myRoleLabelKey) : null
   const archived = isClassroomArchived(classroomData ?? {})
+  // Author tier (teacher|hta) gates the mutating affordances; a TA sees the
+  // list read-only. GitHub is the real enforcer (config-repo write), this is UX.
+  const canAuthor = can("authorAssignments", { classroomRole: myRole })
   const emptyRoster = useEmptyRosterWarning(org, classroom)
 
   const [query, setQuery] = useState("")
@@ -170,9 +173,9 @@ export const TeacherAssignmentsView = ({
             <Badge tone="neutral" size="md">
               {t("assignments.archived")}
             </Badge>
-          ) : (
+          ) : canAuthor ? (
             <NewAssignmentButton org={org} classroom={classroom} />
-          )
+          ) : null
         }
       />
       {archived ? (
@@ -225,6 +228,7 @@ export const TeacherAssignmentsView = ({
           studentCount={studentCount}
           loading={assignmentsLoading}
           archived={archived}
+          canAuthor={canAuthor}
         />
       )}
     </div>
