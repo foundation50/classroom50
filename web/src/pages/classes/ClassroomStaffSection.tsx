@@ -269,6 +269,12 @@ const StaffRoleList = ({
         <p className="text-xs text-base-content/60">
           {t(ROLE_ACCESS_KEY[role])}
         </p>
+        <GitHubLink
+          href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
+          label={t("classes.staff.viewTeam")}
+          title={t("classes.staff.viewTeamTitle", { role: rolePlural })}
+          className="mt-0.5 text-xs"
+        />
       </div>
       <div className="p-2">
         {isLoading ? (
