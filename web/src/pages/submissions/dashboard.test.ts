@@ -8,7 +8,10 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
-  buildDisplayItems,
+  buildGroupDisplayItems,
+  buildGroupRosterDisplayItems,
+  buildRosterDisplayItems,
+  buildSortedDisplayItems,
   buildScoresCsvRows,
   buildSectionLookup,
   classAverage,
@@ -22,6 +25,7 @@ import {
   mergeLiveRows,
   nonSubmitterStatus,
   pageBounds,
+  pageRepoOwners,
   paginateDisplayItems,
   paginationRange,
   reconcileNonSubmitters,
@@ -967,25 +971,92 @@ describe("pagination helpers", () => {
     repoName: `cs-hw-${owner}`,
   })
 
-  describe("buildDisplayItems", () => {
-    it("concatenates rows, then non-submitters, then group repos in order", () => {
-      const items = buildDisplayItems(
-        [row({ owner: "alice" }), row({ owner: "bob" })],
-        [student({ username: "carol" })],
-        [groupRepo("dave")],
+  describe("buildRosterDisplayItems", () => {
+    it("emits one item per roster student in roster order, interleaving submitters and non-submitters", () => {
+      // Roster order (name-sorted upstream) is the spine; a student with a row
+      // renders as "row", otherwise "nonSubmitter". Bob submitted; Alice/Carol
+      // did not.
+      const roster = [
+        student({ username: "alice" }),
+        student({ username: "bob" }),
+        student({ username: "carol" }),
+      ]
+      const items = buildRosterDisplayItems(
+        roster,
+        [row({ owner: "bob" })],
+        [student({ username: "alice" }), student({ username: "carol" })],
       )
       expect(items.map((i) => i.kind)).toEqual([
-        "row",
+        "nonSubmitter",
         "row",
         "nonSubmitter",
+      ])
+      expect(items.map(displayItemOwner)).toEqual(["alice", "bob", "carol"])
+    })
+
+    it("omits a student who was filtered out of both sets", () => {
+      const roster = [
+        student({ username: "alice" }),
+        student({ username: "bob" }),
+      ]
+      // Only bob passes the filters (row); alice is in neither set.
+      const items = buildRosterDisplayItems(roster, [row({ owner: "bob" })], [])
+      expect(items.map(displayItemOwner)).toEqual(["bob"])
+    })
+
+    it("appends an off-roster submitted row so a real submission is never hidden", () => {
+      const items = buildRosterDisplayItems(
+        [student({ username: "alice" })],
+        [row({ owner: "alice" }), row({ owner: "ghost" })],
+        [],
+      )
+      expect(items.map(displayItemOwner)).toEqual(["alice", "ghost"])
+    })
+  })
+
+  describe("buildGroupDisplayItems", () => {
+    it("lists submitted group rows then unsubmitted group repos", () => {
+      const items = buildGroupDisplayItems(
+        [row({ owner: "team-a" })],
+        [groupRepo("team-b")],
+      )
+      expect(items.map((i) => i.kind)).toEqual(["row", "groupRepo"])
+      expect(items.map(displayItemOwner)).toEqual(["team-a", "team-b"])
+    })
+  })
+
+  describe("buildGroupRosterDisplayItems", () => {
+    it("interleaves submitted and unsubmitted group repos by founder name", () => {
+      // Founders sorted by login here (no roster names): "team-a" < "team-b" <
+      // "team-c". team-b submitted; the others haven't.
+      const items = buildGroupRosterDisplayItems(
+        [row({ owner: "team-b" })],
+        [groupRepo("team-c"), groupRepo("team-a")],
+        [],
+      )
+      expect(items.map(displayItemOwner)).toEqual([
+        "team-a",
+        "team-b",
+        "team-c",
+      ])
+      expect(items.map((i) => i.kind)).toEqual([
+        "groupRepo",
+        "row",
         "groupRepo",
       ])
-      expect(items.map(displayItemOwner)).toEqual([
-        "alice",
-        "bob",
-        "carol",
-        "dave",
-      ])
+    })
+  })
+
+  describe("buildSortedDisplayItems", () => {
+    it("keeps the given (sorted) rows first, then non-submitters", () => {
+      // Rows come pre-sorted by the caller; the builder must preserve that order
+      // rather than reordering by roster name.
+      const items = buildSortedDisplayItems(
+        [row({ owner: "zeta" }), row({ owner: "alpha" })],
+        [student({ username: "mid" })],
+      )
+      expect(items.map((i) => i.kind)).toEqual(["row", "row", "nonSubmitter"])
+      expect(items.map(displayItemOwner)).toEqual(["zeta", "alpha", "mid"])
     })
   })
 
@@ -1024,9 +1095,9 @@ describe("pagination helpers", () => {
   })
 
   describe("paginateDisplayItems", () => {
-    const items = buildDisplayItems(
+    const items = buildRosterDisplayItems(
+      Array.from({ length: 25 }, (_, i) => student({ username: `s${i}` })),
       Array.from({ length: 25 }, (_, i) => row({ owner: `s${i}` })),
-      [],
       [],
     )
 
@@ -1065,6 +1136,110 @@ describe("pagination helpers", () => {
     it("does not insert a gap when pages are adjacent", () => {
       // Near the start, no gap between first and the neighbor cluster.
       expect(paginationRange(1, 20)).toEqual([0, 1, 2, null, 19])
+    })
+  })
+
+  describe("pageRepoOwners", () => {
+    const roster = Array.from({ length: 25 }, (_, i) =>
+      student({ username: `s${String(i).padStart(2, "0")}` }),
+    )
+    const emptySections = new Map<string, string>()
+
+    it("returns only the current page's roster owners (individual)", () => {
+      const p0 = pageRepoOwners({
+        isGroup: false,
+        roster,
+        groupRepos: [],
+        query: "",
+        section: "all",
+        sectionByUsername: emptySections,
+        students: roster,
+        page: 0,
+        pageSize: 10,
+      })
+      expect(p0).toHaveLength(10)
+      expect(p0[0]).toBe("s00")
+      expect(p0[9]).toBe("s09")
+
+      const p2 = pageRepoOwners({
+        isGroup: false,
+        roster,
+        groupRepos: [],
+        query: "",
+        section: "all",
+        sectionByUsername: emptySections,
+        students: roster,
+        page: 2,
+        pageSize: 10,
+      })
+      // Last page holds the remaining 5.
+      expect(p2).toEqual(["s20", "s21", "s22", "s23", "s24"])
+    })
+
+    it("narrows by search before slicing", () => {
+      const owners = pageRepoOwners({
+        isGroup: false,
+        roster,
+        groupRepos: [],
+        query: "s1",
+        section: "all",
+        sectionByUsername: emptySections,
+        students: roster,
+        page: 0,
+        pageSize: 10,
+      })
+      // s10..s19 match "s1"; a full page of 10.
+      expect(owners).toEqual([
+        "s10",
+        "s11",
+        "s12",
+        "s13",
+        "s14",
+        "s15",
+        "s16",
+        "s17",
+        "s18",
+        "s19",
+      ])
+    })
+
+    it("filters by section for individual assignments", () => {
+      const sectionByUsername = new Map<string, string>([
+        ["s00", "A"],
+        ["s01", "B"],
+        ["s02", "A"],
+      ])
+      const owners = pageRepoOwners({
+        isGroup: false,
+        roster: roster.slice(0, 3),
+        groupRepos: [],
+        query: "",
+        section: "A",
+        sectionByUsername,
+        students: roster,
+        page: 0,
+        pageSize: 10,
+      })
+      expect(owners).toEqual(["s00", "s02"])
+    })
+
+    it("pages over group founders for a group assignment", () => {
+      const groupRepos = Array.from({ length: 12 }, (_, i) => ({
+        owner: `team${String(i).padStart(2, "0")}`,
+        repoName: `cs-hw-team${i}`,
+      }))
+      const owners = pageRepoOwners({
+        isGroup: true,
+        roster: [],
+        groupRepos,
+        query: "",
+        section: "all",
+        sectionByUsername: emptySections,
+        students: roster,
+        page: 1,
+        pageSize: 10,
+      })
+      expect(owners).toEqual(["team10", "team11"])
     })
   })
 })

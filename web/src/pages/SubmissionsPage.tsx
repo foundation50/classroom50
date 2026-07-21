@@ -19,7 +19,6 @@ import { MetricsModal } from "@/pages/submissions/MetricsModal"
 import { ConfirmModal } from "@/components/modals"
 import {
   DEFAULT_FILTERS,
-  DEFAULT_SORT,
   DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
@@ -33,6 +32,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   mergeLiveRows,
+  pageRepoOwners,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowInSection,
@@ -49,7 +49,7 @@ import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
 import { rowToStudent } from "@/util/teamRoster"
-import { getName } from "@/util/students"
+import { getName, sortStudentsByName } from "@/util/students"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
@@ -158,9 +158,11 @@ const SubmissionsPageContent = () => {
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
   const students: Student[] = useMemo(
     () =>
-      teamRows
-        .filter((r) => r.state === "enrolled" && hasStudentEnrollment(r))
-        .map(rowToStudent),
+      sortStudentsByName(
+        teamRows
+          .filter((r) => r.state === "enrolled" && hasStudentEnrollment(r))
+          .map(rowToStudent),
+      ),
     [teamRows],
   )
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
@@ -216,6 +218,43 @@ const SubmissionsPageContent = () => {
     return scoresData?.submissions?.[assignment ?? ""] || []
   }, [scoresData, assignment])
 
+  // Dashboard controls — all client-side over already-loaded data. Declared
+  // early because the live fan-out below is coupled to the current table page:
+  // it reads only the repos on the page you're viewing (see livePageOwners), so
+  // the page/size/filters must be known before it runs.
+  const [query, setQuery] = useState("")
+  const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
+  // Default to name order so the live presence view (which requires it) is on by
+  // default; the teacher can re-sort, which drops to the static snapshot.
+  const [sort, setSort] = useState<SubmissionSort>("name-asc")
+  // Client-side table pagination over the name-ordered roster spine. `page` is
+  // 0-based; clamped at render (pageBounds) so a filter that shrinks the list
+  // can't strand the view on an empty page.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  // Reset to the first page whenever the visible set changes (new search,
+  // filter, sort, page size, or a different assignment). Done render-purely via
+  // a stored view signature (setState-during-render, not an effect) so the reset
+  // lands in the same commit as the change — no extra render, and no
+  // setState-in-effect. React bails out of the re-render once the signature
+  // matches.
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
+  const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
+  if (viewSignature !== lastViewSignature) {
+    setLastViewSignature(viewSignature)
+    setPage(0)
+  }
+
+  // Section filtering: distinct sections for the dropdown, plus a username ->
+  // section lookup so submitted rows (which carry only logins) can be matched.
+  // Defined early because the page-scoped live fan-out below filters its owner
+  // slice by section.
+  const sections = useMemo(() => distinctSections(students), [students])
+  const sectionByUsername = useMemo(
+    () => buildSectionLookup(students),
+    [students],
+  )
+
   // Org repo list drives repo-existence signals (individual acceptance below and
   // group-repo enumeration here).
   const { data: orgRepos } = useGetOrgRepos(org ?? "")
@@ -252,20 +291,52 @@ const SubmissionsPageContent = () => {
     [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
   )
 
+  // Live presence is a plain name-ordered view: the fan-out pages the
+  // name-sorted roster, so it's only coherent when the table shows that same
+  // order and set. A Status/Passing filter or a non-name Sort reorders or
+  // narrows the visible rows so they'd no longer line up with the fanned-out
+  // page (the page's students would get no live data, and reads would be
+  // wasted). So live is enabled only in the name-ordered, status-unfiltered
+  // view; any Status/Passing/Sort change drops to the static scores.json
+  // snapshot. Search + section stay allowed — pageRepoOwners applies them and
+  // they don't reorder the spine.
+  const liveEligible =
+    sort === "name-asc" &&
+    filters.submission === "all" &&
+    filters.passing === "all" &&
+    filters.accepted === "all"
+
   // Live submission presence for THIS assignment, read directly from student
   // repos' submit/* releases — so a student who pushed but hasn't been collected
-  // yet still shows as submitted (issue #347). Owners: roster logins for
-  // individual assignments, group-founder logins for group assignments.
-  // Owner-only (see isOwner) and disabled for empty_repo assignments (never
-  // autograded). The whole owner set is read at once (throttled by the shared
-  // read-slot semaphore); the table paginates client-side over the merged rows,
-  // so there's no separate live "window" to advance.
-  const liveRepoOwners = useMemo(
+  // yet still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads
+  // only the repos on the current table page (name-ordered roster slice for
+  // individual assignments, founder slice for groups), so a large class is read
+  // a page at a time instead of all at once. react-query caches each page's
+  // owner-set, so revisiting a page is free. Owner-only (see isOwner) and
+  // disabled for empty_repo assignments (never autograded).
+  const livePageOwners = useMemo(
     () =>
-      isGroupAssignment
-        ? groupRepoList.map((repo) => repo.owner)
-        : students.map((s) => s.username).filter(Boolean),
-    [isGroupAssignment, groupRepoList, students],
+      pageRepoOwners({
+        isGroup: isGroupAssignment,
+        roster: students,
+        groupRepos: groupRepoList,
+        query,
+        section: filters.section,
+        sectionByUsername,
+        students,
+        page,
+        pageSize,
+      }),
+    [
+      isGroupAssignment,
+      students,
+      groupRepoList,
+      query,
+      filters.section,
+      sectionByUsername,
+      page,
+      pageSize,
+    ],
   )
   const {
     submissions: liveSubmissions,
@@ -277,9 +348,10 @@ const SubmissionsPageContent = () => {
     org,
     classroom,
     assignment,
-    repoOwners: liveRepoOwners,
-    // Owner-only (see isOwner above) and never for empty_repo assignments.
-    enabled: isOwner && !isEmptyRepoAssignment,
+    repoOwners: livePageOwners,
+    // Owner-only, name-ordered view only (see liveEligible), never for
+    // empty_repo assignments.
+    enabled: isOwner && liveEligible && !isEmptyRepoAssignment,
   })
 
   // Merge live presence over the snapshot (snapshot wins per owner; live adds a
@@ -348,29 +420,8 @@ const SubmissionsPageContent = () => {
   }, [nonSubmittersReady, scoresInfo, students, groupRepoFounders])
 
   // Dashboard controls — all client-side over already-loaded data.
-  const [query, setQuery] = useState("")
-  const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
   // Drives the "Regrade all" confirmation modal (replaces window.confirm).
   const [regradeConfirmOpen, setRegradeConfirmOpen] = useState(false)
-  const [sort, setSort] = useState<SubmissionSort>(DEFAULT_SORT)
-  // Client-side table pagination over the combined display list (submitters +
-  // non-submitters + group repos). `page` is 0-based; it's clamped to the valid
-  // range at render (pageBounds), so a filter that shrinks the list can't strand
-  // the view on an empty page.
-  const [page, setPage] = useState(0)
-  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
-  // Reset to the first page whenever the visible set changes (new search,
-  // filter, sort, page size, or a different assignment). Done render-purely via
-  // a stored view signature (setState-during-render, not an effect) so the reset
-  // lands in the same commit as the change — no extra render, and no
-  // setState-in-effect. React bails out of the re-render once the signature
-  // matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
-  const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
-  if (viewSignature !== lastViewSignature) {
-    setLastViewSignature(viewSignature)
-    setPage(0)
-  }
 
   // Whether a search/filter is narrowing the set — drives the table's
   // "filters hide everything" vs "nothing collected yet" empty state, and its
@@ -407,14 +458,6 @@ const SubmissionsPageContent = () => {
   const unsubmittedGroupRepos = useMemo(
     () => groupRepoList.filter((repo) => !submittedGroupOwners.has(repo.owner)),
     [groupRepoList, submittedGroupOwners],
-  )
-
-  // Section filtering: distinct sections for the dropdown, plus a username ->
-  // section lookup so submitted rows (which carry only logins) can be matched.
-  const sections = useMemo(() => distinctSections(students), [students])
-  const sectionByUsername = useMemo(
-    () => buildSectionLookup(students),
-    [students],
   )
 
   // With a section filter active, scope roster and rows to it so the stat cards
@@ -758,7 +801,7 @@ const SubmissionsPageContent = () => {
           empty_repo assignments (never autograded). The whole owner set is read
           at once (throttled by the shared read-slot semaphore); the table
           paginates client-side, so there's no live "window" to advance. */}
-      {isOwner && !isEmptyRepoAssignment && (
+      {isOwner && liveEligible && !isEmptyRepoAssignment && (
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70"
           role="status"
@@ -782,11 +825,14 @@ const SubmissionsPageContent = () => {
           get a Pending row and would read as not-submitted. Mark the derived
           counts/lists provisional so a transient failure can't be mistaken for
           an authoritative "not submitted". */}
-      {isOwner && !isEmptyRepoAssignment && liveErrorCount > 0 && (
-        <Alert tone="warning" role="status">
-          {t("submissions.live.incomplete", { count: liveErrorCount })}
-        </Alert>
-      )}
+      {isOwner &&
+        liveEligible &&
+        !isEmptyRepoAssignment &&
+        liveErrorCount > 0 && (
+          <Alert tone="warning" role="status">
+            {t("submissions.live.incomplete", { count: liveErrorCount })}
+          </Alert>
+        )}
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
           neutral line (transient); running/completed/failed/timeout become an
@@ -939,6 +985,7 @@ const SubmissionsPageContent = () => {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
+        sort={sort}
       />
       <ConfirmModal
         open={regradeConfirmOpen}

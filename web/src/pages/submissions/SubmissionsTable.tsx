@@ -32,8 +32,12 @@ import {
 } from "@/components/ui"
 import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
+import type { SubmissionSort } from "@/pages/submissions/dashboard"
 import {
-  buildDisplayItems,
+  buildRosterDisplayItems,
+  buildGroupDisplayItems,
+  buildGroupRosterDisplayItems,
+  buildSortedDisplayItems,
   pageBounds,
   paginateDisplayItems,
   paginationRange,
@@ -426,6 +430,7 @@ const SubmissionsTable = ({
   pageSize = Number.MAX_SAFE_INTEGER,
   onPageChange = () => {},
   onPageSizeChange = () => {},
+  sort = "name-asc",
 }: {
   scores: SubmissionRow[]
   students: Student[]
@@ -472,6 +477,10 @@ const SubmissionsTable = ({
   pageSize?: number
   onPageChange?: (page: number) => void
   onPageSizeChange?: (pageSize: number) => void
+  // The active sort. Individual assignments render one row per roster student in
+  // name order under "name-asc" (the live-eligible view); any other sort renders
+  // the sorted submitted rows then non-submitters (a static snapshot view).
+  sort?: SubmissionSort
 }) => {
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
@@ -501,13 +510,24 @@ const SubmissionsTable = ({
     )
   })()
 
-  // The three sections render as one paginated sequence: submitters, then
-  // roster non-submitters, then unsubmitted group repos. Build the combined
-  // list once, then slice to the current page (clamped).
-  const displayItems = useMemo(
-    () => buildDisplayItems(scores, nonSubmitters, unsubmittedGroupRepos),
-    [scores, nonSubmitters, unsubmittedGroupRepos],
-  )
+  // The display list rendered as one paginated sequence. For a group assignment
+  // it's submitted group rows then unsubmitted group repos. For an individual
+  // assignment in the default name order it's one row per roster student
+  // (submitters and non-submitters interleaved by roster name) — the same
+  // ordering the live fan-out pages over. Under any other sort (a static
+  // snapshot view; live is off then) fall back to sorted submitters first, then
+  // non-submitters, preserving the chosen order.
+  const displayItems = useMemo(() => {
+    if (isGroup) {
+      return sort === "name-asc"
+        ? buildGroupRosterDisplayItems(scores, unsubmittedGroupRepos, students)
+        : buildGroupDisplayItems(scores, unsubmittedGroupRepos)
+    }
+    if (sort === "name-asc") {
+      return buildRosterDisplayItems(students, scores, nonSubmitters)
+    }
+    return buildSortedDisplayItems(scores, nonSubmitters)
+  }, [isGroup, sort, students, scores, nonSubmitters, unsubmittedGroupRepos])
   const bounds = pageBounds(displayItems.length, pageSize, page)
   const pageItems = useMemo(
     () => paginateDisplayItems(displayItems, pageSize, page),
