@@ -259,6 +259,16 @@ const SubmissionsPageContent = () => {
         : students.map((s) => s.username).filter(Boolean),
     [isGroupAssignment, groupRepoList, students],
   )
+  // Clamp the requested page to the last valid page for the CURRENT owner set.
+  // The page component isn't remounted across assignment navigation, so a
+  // leftover offset from a longer assignment would otherwise slice past a
+  // shorter one's owners and show an empty window (#347 review). Clamping in the
+  // derived value (rather than a setState-in-effect) keeps the reset render-pure.
+  const lastLivePage =
+    liveRepoOwners.length > 0
+      ? Math.ceil(liveRepoOwners.length / LIVE_PAGE_SIZE) - 1
+      : 0
+  const effectiveLivePage = Math.min(livePage, lastLivePage)
   const {
     submissions: liveSubmissions,
     errorCount: liveErrorCount,
@@ -269,7 +279,7 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: liveRepoOwners,
-    page: livePage,
+    page: effectiveLivePage,
     pageSize: LIVE_PAGE_SIZE,
     enabled: !isEmptyRepoAssignment,
   })
@@ -739,7 +749,7 @@ const SubmissionsPageContent = () => {
               variant="ghost"
               size="xs"
               disabled={liveFetching}
-              onClick={() => setLivePage((p) => p + 1)}
+              onClick={() => setLivePage(effectiveLivePage + 1)}
             >
               {t("submissions.live.showNext", { count: LIVE_PAGE_SIZE })}
             </Button>

@@ -10,6 +10,7 @@ import {
   applyStatusSelection,
   buildScoresCsvRows,
   buildSectionLookup,
+  classAverage,
   computeStats,
   distinctSections,
   existingGroupRepos,
@@ -861,5 +862,30 @@ describe("mergeLiveRows", () => {
       ],
     )
     expect(merged.map((r) => r.owner)).toEqual(["new", "old"])
+  })
+
+  it("pending rows are excluded from the class average", () => {
+    const rows = [
+      row({ owner: "alice", score: 10, "max-score": 10 }),
+      row({ owner: "bob", score: 0, "max-score": 0, pending: true }),
+    ]
+    // Only alice's 10 counts; bob's placeholder 0 must not drag it to 5.
+    expect(classAverage(rows)).toBe(10)
+  })
+
+  it("pending rows export a blank score/max, not a graded zero", () => {
+    const rows = [
+      row({
+        owner: "bob",
+        usernames: ["bob"],
+        score: 0,
+        "max-score": 0,
+        pending: true,
+      }),
+    ]
+    const [csv] = buildScoresCsvRows(rows, [])
+    expect(csv.score).toBe("")
+    expect(csv.max_score).toBe("")
+    expect(csv.usernames).toBe("bob")
   })
 })

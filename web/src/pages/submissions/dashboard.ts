@@ -165,9 +165,13 @@ export function computeStats(
 
 // Mean of the numeric scores, rounded to 2 decimals, or null when none is finite
 // (rendered "N/A"). Avoids the old `sum/length || 1` bug where an empty/NaN
-// result showed "1" (`/` binds before `||`).
+// result showed "1" (`/` binds before `||`). Pending live rows (a submit/*
+// release the collector hasn't ingested yet) carry a placeholder 0/0 and no
+// real grade, so they're excluded — otherwise every uncollected submitter would
+// drag the average toward 0, the opposite of the intended presence signal.
 export function classAverage(rows: SubmissionRow[]): number | null {
   const numericScores = rows
+    .filter((row) => !row.pending)
     .map((row) => Number(row["score"]))
     .filter((n) => Number.isFinite(n))
   if (numericScores.length === 0) return null
@@ -572,7 +576,7 @@ export function filterNonSubmitters(
 // contract downstream sheets rely on — keep them stable.
 export type ScoresCsvRow = {
   usernames: string
-  score: number
+  score: number | string
   max_score: number | string
   submissions: number
   submitted_at: string
@@ -592,8 +596,11 @@ export function buildScoresCsvRows(
     )
     .map(({ usernames, score, datetime, submissionCount, late, ...rest }) => ({
       usernames: usernames.join(", "),
-      score,
-      max_score: rest["max-score"],
+      // A pending live row (submitted, not yet collected) has no real grade —
+      // export a blank score, not a 0, so importing the CSV can't record a
+      // graded zero for a student who actually submitted.
+      score: rest.pending ? "" : score,
+      max_score: rest.pending ? "" : rest["max-score"],
       submissions: submissionCount,
       submitted_at: new Date(datetime).toISOString(),
       late: late ? "yes" : "no",
