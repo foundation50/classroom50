@@ -42,6 +42,15 @@ const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
   ta: "classes.staff.roleTaPlural",
 }
 
+// Short access hint per role, shown under each section heading so a teacher
+// sees at a glance what the role grants (write vs read-only, org owner or not).
+const ROLE_ACCESS_KEY: Record<StaffRole, string> = {
+  teacher: "classes.staff.accessTeacher",
+  instructor: "classes.staff.accessTeacher",
+  hta: "classes.staff.accessHeadTa",
+  ta: "classes.staff.accessTa",
+}
+
 // Manage a classroom's staff (teacher / head TA / TA), backed by the
 // per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route gates
 // to teachers, but this section also asserts can("editClassroomSettings")
@@ -88,7 +97,7 @@ const ClassroomStaffSection = ({
 
         <AddStaff org={org} classroom={classroom} disabled={actionsDisabled} />
 
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 mt-2">
           {STAFF_ROLES.map((role) => (
             <StaffRoleList
               key={role}
@@ -237,46 +246,65 @@ const StaffRoleList = ({
   const pendingInvites = invitesQuery.data ?? []
 
   const rolePlural = t(ROLE_PLURAL_KEY[role])
+  const isLoading = membersQuery.isLoading
 
   return (
-    <div>
-      <div className="flex items-center gap-2 mb-2">
-        <h4 className="font-bold">{rolePlural}</h4>
-        <Badge ghost>{members.length}</Badge>
-      </div>
-      {membersQuery.isLoading ? (
-        <div className="flex items-center gap-2 text-sm text-base-content/70">
-          <Loader2 aria-hidden="true" className="size-4 animate-spin" />{" "}
-          {t("common.loading")}
+    <div className="flex flex-col rounded-box border border-base-200 bg-base-100">
+      <div className="flex flex-col gap-0.5 border-b border-base-200 px-3 py-2.5">
+        <div className="flex items-center gap-2">
+          <Badge size="sm" tone={ROLE_BADGE_TONE[role]} className="shrink-0">
+            {rolePlural}
+          </Badge>
+          <Badge ghost size="sm">
+            {members.length}
+          </Badge>
+          {pendingInvites.length > 0 ? (
+            <span className="ms-auto text-xs text-warning">
+              {t("classes.staff.pendingCount", {
+                count: pendingInvites.length,
+              })}
+            </span>
+          ) : null}
         </div>
-      ) : members.length === 0 && pendingInvites.length === 0 ? (
-        <p className="text-sm text-base-content/70">
-          {t("classes.staff.noneYet", { role: rolePlural.toLowerCase() })}
+        <p className="text-xs text-base-content/60">
+          {t(ROLE_ACCESS_KEY[role])}
         </p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {members.map((member) => (
-            <StaffMemberRow
-              key={member.id}
-              org={org}
-              classroom={classroom}
-              role={role}
-              member={member}
-              disabled={disabled}
-            />
-          ))}
-          {pendingInvites.map((invite) => (
-            <PendingStaffRow
-              key={`invite-${invite.id}`}
-              org={org}
-              classroom={classroom}
-              role={role}
-              invite={invite}
-              disabled={disabled}
-            />
-          ))}
-        </ul>
-      )}
+      </div>
+      <div className="p-2">
+        {isLoading ? (
+          <div className="flex items-center gap-2 px-1 py-1 text-sm text-base-content/70">
+            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            {t("common.loading")}
+          </div>
+        ) : members.length === 0 && pendingInvites.length === 0 ? (
+          <p className="px-1 py-1 text-sm text-base-content/50">
+            {t("classes.staff.noneYet", { role: rolePlural.toLowerCase() })}
+          </p>
+        ) : (
+          <ul className="flex flex-col gap-1">
+            {members.map((member) => (
+              <StaffMemberRow
+                key={member.id}
+                org={org}
+                classroom={classroom}
+                role={role}
+                member={member}
+                disabled={disabled}
+              />
+            ))}
+            {pendingInvites.map((invite) => (
+              <PendingStaffRow
+                key={`invite-${invite.id}`}
+                org={org}
+                classroom={classroom}
+                role={role}
+                invite={invite}
+                disabled={disabled}
+              />
+            ))}
+          </ul>
+        )}
+      </div>
     </div>
   )
 }
@@ -313,12 +341,12 @@ const StaffMemberRow = ({
   const selfTeacherRemoveBlocked = isSelf && isTeacherRole(role)
 
   return (
-    <li className="flex items-center justify-between gap-2 rounded-md border border-base-200 px-2 py-1.5">
+    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-base-200/60">
       <a
         href={member.html_url}
         target="_blank"
         rel="noreferrer"
-        className="flex items-center gap-2 min-w-0 hover:underline"
+        className="flex min-w-0 grow items-center gap-2 hover:underline"
       >
         <img
           src={member.avatar_url}
@@ -326,33 +354,33 @@ const StaffMemberRow = ({
           className="size-6 rounded-full shrink-0"
         />
         <span className="truncate text-sm">@{member.login}</span>
-        <Badge size="xs" tone={ROLE_BADGE_TONE[role]} className="shrink-0">
-          {roleLabel}
-        </Badge>
       </a>
-      {selfTeacherRemoveBlocked ? (
-        <span
-          className="text-xs text-base-content/50"
-          title={t("classes.staff.removeSelfTeacherBlocked")}
-        >
-          {t("classes.staff.you")}
-        </span>
-      ) : (
-        <Button
-          variant="ghost"
-          size="xs"
-          className="text-error"
-          title={t("classes.staff.removeRole", { role: roleLabel })}
-          disabled={disabled || removeMutation.isPending}
-          onClick={() => setConfirmingRemove(true)}
-        >
-          {removeMutation.isPending ? (
-            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
-          ) : (
-            <X aria-hidden="true" className="size-3.5" />
-          )}
-        </Button>
-      )}
+      <div className="flex shrink-0 items-center">
+        {selfTeacherRemoveBlocked ? (
+          <span
+            className="rounded px-1.5 py-0.5 text-xs text-base-content/50"
+            title={t("classes.staff.removeSelfTeacherBlocked")}
+          >
+            {t("classes.staff.you")}
+          </span>
+        ) : (
+          <Button
+            variant="ghost"
+            size="xs"
+            shape="square"
+            className="text-error"
+            title={t("classes.staff.removeRole", { role: roleLabel })}
+            disabled={disabled || removeMutation.isPending}
+            onClick={() => setConfirmingRemove(true)}
+          >
+            {removeMutation.isPending ? (
+              <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+            ) : (
+              <X aria-hidden="true" className="size-3.5" />
+            )}
+          </Button>
+        )}
+      </div>
       <ConfirmModal
         open={confirmingRemove}
         dangerous
@@ -430,20 +458,24 @@ const PendingStaffRow = ({
   const busy = resendMutation.isPending || cancelMutation.isPending
 
   return (
-    <li className="flex items-center justify-between gap-2 rounded-md border border-dashed border-base-300 px-2 py-1.5">
-      <span className="flex min-w-0 items-center gap-2 text-sm">
+    <li className="flex items-center gap-2 rounded-md px-2 py-1.5 transition-colors hover:bg-base-200/60">
+      <span className="flex min-w-0 grow items-center gap-2 text-sm">
+        <span className="grid size-6 shrink-0 place-items-center rounded-full bg-base-200 text-base-content/50">
+          <Send aria-hidden="true" className="size-3" />
+        </span>
         <span className="truncate">
           {invite.login ? `@${invite.login}` : invite.email}
         </span>
-        <Badge size="xs" ghost className="shrink-0">
+        <Badge size="xs" tone="warning" ghost className="shrink-0">
           {t("classes.staff.pendingBadge")}
         </Badge>
       </span>
-      <div className="flex shrink-0 items-center gap-1">
+      <div className="flex shrink-0 items-center">
         {invite.login ? (
           <Button
             variant="ghost"
             size="xs"
+            shape="square"
             title={t("classes.staff.resend")}
             disabled={disabled || busy}
             onClick={() =>
@@ -487,6 +519,7 @@ const PendingStaffRow = ({
         <Button
           variant="ghost"
           size="xs"
+          shape="square"
           className="text-error"
           title={t("classes.staff.cancelInvite")}
           disabled={disabled || busy}
