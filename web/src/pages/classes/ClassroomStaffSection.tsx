@@ -1,7 +1,15 @@
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
-import { Loader2, Send, ShieldCheck, UserPlus, X, XCircle } from "lucide-react"
+import {
+  ExternalLink,
+  Loader2,
+  Send,
+  ShieldCheck,
+  UserPlus,
+  X,
+  XCircle,
+} from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -252,9 +260,22 @@ const StaffRoleList = ({
     <div className="flex flex-col rounded-box border border-base-200 bg-base-100">
       <div className="flex flex-col gap-0.5 border-b border-base-200 px-3 py-2.5">
         <div className="flex items-center gap-2">
-          <Badge size="sm" tone={ROLE_BADGE_TONE[role]} className="shrink-0">
-            {rolePlural}
-          </Badge>
+          <a
+            href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
+            target="_blank"
+            rel="noreferrer"
+            title={t("classes.staff.viewTeamTitle", { role: rolePlural })}
+            className="shrink-0 rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/50"
+          >
+            <Badge
+              size="sm"
+              tone={ROLE_BADGE_TONE[role]}
+              className="gap-1 hover:brightness-95"
+            >
+              {rolePlural}
+              <ExternalLink aria-hidden="true" className="size-3 opacity-70" />
+            </Badge>
+          </a>
           <Badge ghost size="sm">
             {members.length}
           </Badge>
@@ -269,12 +290,6 @@ const StaffRoleList = ({
         <p className="text-xs text-base-content/60">
           {t(ROLE_ACCESS_KEY[role])}
         </p>
-        <GitHubLink
-          href={`https://github.com/orgs/${org}/teams/${teamSlug}`}
-          label={t("classes.staff.viewTeam")}
-          title={t("classes.staff.viewTeamTitle", { role: rolePlural })}
-          className="mt-0.5 text-xs"
-        />
       </div>
       <div className="p-2">
         {isLoading ? (

@@ -1453,7 +1453,6 @@
       "accessTeacher": "Org owner. Write access to the config repo.",
       "accessHeadTa": "Org member. Write access to the config repo.",
       "accessTa": "Org member. Read-only access to the config repo.",
-      "viewTeam": "View team",
       "viewTeamTitle": "Open the {{role}} team on GitHub",
       "pendingCount_one": "{{count}} pending",
       "pendingCount_other": "{{count}} pending",
