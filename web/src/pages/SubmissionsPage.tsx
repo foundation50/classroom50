@@ -746,11 +746,6 @@ const SubmissionsPageContent = () => {
               {t("submissions.live.pending", { count: livePendingCount })}
             </Badge>
           )}
-          {liveErrorCount > 0 && (
-            <span className="text-warning">
-              {t("submissions.live.errors", { count: liveErrorCount })}
-            </span>
-          )}
           {liveHasNextPage && (
             <Button
               variant="ghost"
@@ -762,6 +757,17 @@ const SubmissionsPageContent = () => {
             </Button>
           )}
         </div>
+      )}
+
+      {/* When some repos couldn't be read, the live presence view is
+          known-incomplete: a student who submitted to an unreadable repo won't
+          get a Pending row and would read as not-submitted. Mark the derived
+          counts/lists provisional so a transient failure can't be mistaken for
+          an authoritative "not submitted". */}
+      {!isEmptyRepoAssignment && liveErrorCount > 0 && (
+        <Alert tone="warning" role="status">
+          {t("submissions.live.incomplete", { count: liveErrorCount })}
+        </Alert>
       )}
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
