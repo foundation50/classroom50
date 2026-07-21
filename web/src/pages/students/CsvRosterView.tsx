@@ -4,26 +4,8 @@ import { Info } from "lucide-react"
 
 import { Alert } from "@/components/ui"
 import { RoleBadges } from "./RoleBadges"
+import { coerceImportRole } from "./rosterImportParse"
 import type { Student } from "@/types/classroom"
-import type { ClassroomRole } from "@/util/teamRoster"
-
-// Map a roster.csv `role` cell to a ClassroomRole for the badge. The column is
-// best-effort metadata (teacher/hta/ta/student, the legacy "instructor", or
-// blank), so an unknown/blank value renders as a plain student.
-function roleFromCsv(role: string): ClassroomRole {
-  switch (role.trim().toLowerCase()) {
-    case "teacher":
-      return "teacher"
-    case "instructor":
-      return "instructor"
-    case "hta":
-      return "hta"
-    case "ta":
-      return "ta"
-    default:
-      return "student"
-  }
-}
 
 function displayName(student: Student): string {
   const full = `${student.first_name} ${student.last_name}`.trim()
@@ -89,7 +71,9 @@ const CsvRosterView = ({ students }: { students: Student[] }) => {
                   </td>
                   <td>{student.section || "—"}</td>
                   <td>
-                    <RoleBadges roles={[roleFromCsv(student.role)]} />
+                    <RoleBadges
+                      roles={[coerceImportRole(student.role) ?? "student"]}
+                    />
                   </td>
                 </tr>
               ))
