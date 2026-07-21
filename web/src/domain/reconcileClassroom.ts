@@ -65,20 +65,30 @@ export async function reconcileClassroom(
   // the instructor alias after the deprecation window.
   const migration = await migrateInstructorTeamToTeacher(client, org, classroom)
 
-  await ensureClassroomTeam(client, org, classroom)
+  const { created: studentTeamCreated } = await ensureClassroomTeam(
+    client,
+    org,
+    classroom,
+  )
   const { created: staffCreated } = await ensureStaffTeams(
     client,
     org,
     classroom,
   )
 
-  // Only the student-team read's 404 is permanent; rewrap it so the caller can
-  // tell it apart from a transient 404 elsewhere in the pass.
+  // A 404 from the student-team read is permanent (a wrong derived slug never
+  // converges) UNLESS we just created that team this pass: then it's a
+  // create->read replication blip, transient, so leave it a plain 404 and let a
+  // later entry retry rather than latching the whole heal off for the mount.
   let description: TeamDescriptionReconcileResult
   try {
     description = await reconcileStudentTeamDescription(client, org, classroom)
   } catch (err) {
-    if (err instanceof GitHubAPIError && err.isNotFound) {
+    if (
+      err instanceof GitHubAPIError &&
+      err.isNotFound &&
+      !studentTeamCreated
+    ) {
       throw new ClassroomReconcilePermanentError(err)
     }
     throw err

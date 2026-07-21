@@ -49,7 +49,11 @@ beforeEach(() => {
   // Healthy defaults: active classroom, everything already converged.
   getClassroomJson.mockResolvedValue({ name: "CS101", active: true })
   migrate.mockResolvedValue({ changed: false })
-  ensureClassroomTeam.mockResolvedValue({ id: 1, slug: "classroom50-cs101" })
+  ensureClassroomTeam.mockResolvedValue({
+    id: 1,
+    slug: "classroom50-cs101",
+    created: false,
+  })
   ensureStaffTeams.mockResolvedValue({ teams: {}, created: [] })
   reconcileDescription.mockResolvedValue({ changed: false })
 })
@@ -136,6 +140,22 @@ describe("reconcileClassroom", () => {
     await expect(
       reconcileClassroom(client, "org", "cs101"),
     ).rejects.toBeInstanceOf(ClassroomReconcilePermanentError)
+  })
+
+  it("does NOT rewrap a description-step 404 when the student team was just created (create->read replication blip is transient)", async () => {
+    // A just-created student team can 404 on the immediate description-step read
+    // (create->read replication lag); that's transient, so it must stay a plain
+    // GitHubAPIError (releasing the latch for a retry) rather than latching the
+    // whole classroom heal off for the mount.
+    ensureClassroomTeam.mockResolvedValue({
+      id: 1,
+      slug: "classroom50-cs101",
+      created: true,
+    })
+    reconcileDescription.mockRejectedValue(githubAPIError(404))
+    const err = await reconcileClassroom(client, "org", "cs101").catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubAPIError)
+    expect(err).not.toBeInstanceOf(ClassroomReconcilePermanentError)
   })
 
   it("does NOT rewrap a non-404 description-step failure", async () => {
