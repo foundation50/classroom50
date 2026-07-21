@@ -90,6 +90,7 @@ export {
 } from "./queries/pagesReads"
 export {
   releasesQuery,
+  latestSubmitReleaseWithAssets,
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,
