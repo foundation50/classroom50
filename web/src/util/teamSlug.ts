@@ -1,5 +1,9 @@
 import { CONFIG_REPO } from "@/util/configRepo"
-import { STAFF_ROLES_WITH_LEGACY, type StaffRole } from "@/types/classroom"
+import {
+  STAFF_ROLES_WITH_LEGACY,
+  type StaffRole,
+  type Classroom,
+} from "@/types/classroom"
 
 // Roles a per-classroom team can back. Broader than StaffRole: also the students
 // team, a real team but not a staff role (no `-<role>` suffix, absent from
@@ -25,6 +29,32 @@ export function classroomTeamSlug(
   return role === "student"
     ? `${CONFIG_REPO}-${classroom}`
     : `${CONFIG_REPO}-${classroom}-${role}`
+}
+
+// The authoritative per-classroom team slug for a role, preferring the slug
+// GitHub actually assigned (stored in classroom.json — GitHub can rewrite a slug
+// on a name collision) and falling back to the derived classroomTeamSlug when
+// the classroom.json ref is absent (a pre-feature classroom, or a teacher who
+// hasn't loaded classroom.json yet). Owner surfaces (roster view + Settings
+// staff section) resolve slugs through here so they can't target different teams
+// for the same role. The `teacher` role also honors the legacy `instructor`
+// ref so a not-yet-migrated classroom still resolves.
+export function resolveClassroomRoleSlug(
+  classroom: string,
+  role: ClassroomTeamRole,
+  refs: Pick<Classroom, "team" | "teams"> | undefined,
+): string {
+  if (role === "student") {
+    return refs?.team?.slug || classroomTeamSlug(classroom, "student")
+  }
+  if (role === "teacher") {
+    return (
+      refs?.teams?.teacher?.slug ||
+      refs?.teams?.instructor?.slug ||
+      classroomTeamSlug(classroom, "teacher")
+    )
+  }
+  return refs?.teams?.[role]?.slug || classroomTeamSlug(classroom, role)
 }
 
 // Inverse of classroomTeamSlug for a STAFF team: parse a team slug back to its

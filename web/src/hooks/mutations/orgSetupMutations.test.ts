@@ -63,8 +63,8 @@ vi.mock("@/context/github/GitHubProvider", () => ({
 
 import { useRenameConfigRepoToMain } from "./useRenameConfigRepoToMain"
 import { useRemoveStaffMember } from "./useRemoveStaffMember"
-import { useCancelStaffInvite } from "./useCancelStaffInvite"
-import { useResendStaffInvite } from "./useResendStaffInvite"
+import { useCancelClassroomInvite } from "./useCancelClassroomInvite"
+import { useResendClassroomInvite } from "./useResendClassroomInvite"
 import { useRepairOrgPolicyConcern } from "./useRepairOrgPolicyConcern"
 import { useRunOrgSetup } from "./useRunOrgSetup"
 
@@ -127,11 +127,11 @@ describe("useRemoveStaffMember", () => {
   })
 })
 
-describe("useCancelStaffInvite", () => {
+describe("useCancelClassroomInvite", () => {
   it("cancels the invite and invalidates the bound team's queries", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
-    const { result } = renderHook(() => useCancelStaffInvite(ORG, TEAM), {
+    const { result } = renderHook(() => useCancelClassroomInvite(ORG, TEAM), {
       wrapper: wrapperWith(queryClient),
     })
     result.current.mutate(99)
@@ -149,14 +149,14 @@ describe("useCancelStaffInvite", () => {
   })
 })
 
-describe("useResendStaffInvite", () => {
+describe("useResendClassroomInvite", () => {
   const ROLE = "ta" as const
 
   it("resolves invitee id + team, resends carrying the team, and invalidates", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
     const { result } = renderHook(
-      () => useResendStaffInvite(ORG, CLASSROOM, ROLE, TEAM),
+      () => useResendClassroomInvite(ORG, CLASSROOM, ROLE, TEAM),
       { wrapper: wrapperWith(queryClient) },
     )
     result.current.mutate({
@@ -188,7 +188,7 @@ describe("useResendStaffInvite", () => {
   it("throws the caller-supplied emailOnlyMessage when login is null (t()-free)", async () => {
     const queryClient = freshClient()
     const { result } = renderHook(
-      () => useResendStaffInvite(ORG, CLASSROOM, ROLE, TEAM),
+      () => useResendClassroomInvite(ORG, CLASSROOM, ROLE, TEAM),
       { wrapper: wrapperWith(queryClient) },
     )
     result.current.mutate({

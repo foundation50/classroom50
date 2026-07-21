@@ -1,6 +1,6 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys } from "@/github-core/queries"
+import { githubKeys, invalidateClassroomTeam } from "@/github-core/queries"
 import { addClassroomStaffMember, syncRosterFromTeam } from "@/domain/students"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { rosterPath } from "@/util/rosterPath"
@@ -64,12 +64,7 @@ export function useAddStaffMember(
       const teamSlug = classroomTeamSlug(classroom, addedRole)
       // A non-member add creates a pending invite (not a member), so refresh
       // both lists — invitations alone were previously missed (issue #348).
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(org, teamSlug),
-      })
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamInvitations(org, teamSlug),
-      })
+      invalidateClassroomTeam(queryClient, org, teamSlug)
       // Record the new staffer's role in roster.csv now (best-effort).
       void syncRosterAfterStaffChange(client, queryClient, org, classroom)
     },

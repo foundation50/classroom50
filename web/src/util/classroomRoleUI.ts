@@ -1,5 +1,6 @@
 import type { BadgeTone } from "@/types/badgeTone"
 import { ROLE_RANK, sortRolesByRank, type ClassroomRole } from "@/authz"
+import type { StaffRole } from "@/types/classroom"
 import type { TeamRosterRow, TeamRosterRowState } from "@/util/teamRoster"
 
 // Single source of truth for how a classroom role is presented and ranked.
@@ -28,6 +29,24 @@ export const ROLE_BADGE_TONE: Record<ClassroomRole, BadgeTone> = {
   hta: "info",
   ta: "secondary",
   student: "neutral",
+}
+
+// Plural label + short access hint per staff role, used by the Settings staff
+// section's per-role columns. Staff-only (no student) — the roster view renders
+// singular chips via ROLE_LABEL_KEY and doesn't need these. Kept here beside the
+// other role-presentation maps so the two surfaces can't drift on role copy.
+export const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
+  teacher: "classes.staff.roleTeacherPlural",
+  instructor: "classes.staff.roleTeacherPlural",
+  hta: "classes.staff.roleHeadTaPlural",
+  ta: "classes.staff.roleTaPlural",
+}
+
+export const ROLE_ACCESS_KEY: Record<StaffRole, string> = {
+  teacher: "classes.staff.accessTeacher",
+  instructor: "classes.staff.accessTeacher",
+  hta: "classes.staff.accessHeadTa",
+  ta: "classes.staff.accessTa",
 }
 
 // Enrollment-state badge tone + i18n label, single-sourced so the roster row

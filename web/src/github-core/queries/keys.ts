@@ -146,6 +146,24 @@ export const githubKeys = {
     [...githubKeys.all, "releases", owner, repo] as const,
 }
 
+// Refresh a single classroom team's members + pending invitations after a
+// staff mutation (add/remove/resend/cancel). A non-member add lands as a
+// pending team INVITATION (not a member), so both lists must refresh in lockstep
+// — invalidating members alone was the #348 miss. Single-sourced so a future
+// fifth staff mutation can't silently reintroduce that drift.
+export function invalidateClassroomTeam(
+  queryClient: QueryClient,
+  org: string,
+  teamSlug: string,
+) {
+  queryClient.invalidateQueries({
+    queryKey: githubKeys.teamMembers(org, teamSlug),
+  })
+  queryClient.invalidateQueries({
+    queryKey: githubKeys.teamInvitations(org, teamSlug),
+  })
+}
+
 // Refresh roster invite-status lists after enroll/resend/unenroll: invites move
 // between pending/failed/members. Team-scoped caches are keyed by slug, so
 // invalidate by the [.., kind, org] prefix to cover every classroom team.

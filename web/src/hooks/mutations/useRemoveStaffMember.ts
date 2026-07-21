@@ -1,5 +1,5 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { githubKeys } from "@/github-core/queries"
+import { invalidateClassroomTeam } from "@/github-core/queries"
 import { removeClassroomStaffMember } from "@/domain/students"
 import { syncRosterAfterStaffChange } from "@/hooks/mutations/useAddStaffMember"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
@@ -23,12 +23,7 @@ export function useRemoveStaffMember(
     mutationFn: (username: string) =>
       removeClassroomStaffMember(client, { org, teamSlug, username, role }),
     onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(org, teamSlug),
-      })
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamInvitations(org, teamSlug),
-      })
+      invalidateClassroomTeam(queryClient, org, teamSlug)
       void syncRosterAfterStaffChange(client, queryClient, org, classroom)
     },
   })

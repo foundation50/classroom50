@@ -55,10 +55,10 @@ vi.mock("@/hooks/mutations/useAddStaffMember", () => ({
 vi.mock("@/hooks/mutations/useRemoveStaffMember", () => ({
   default: () => noopMutation,
 }))
-vi.mock("@/hooks/mutations/useResendStaffInvite", () => ({
+vi.mock("@/hooks/mutations/useResendClassroomInvite", () => ({
   default: () => noopMutation,
 }))
-vi.mock("@/hooks/mutations/useCancelStaffInvite", () => ({
+vi.mock("@/hooks/mutations/useCancelClassroomInvite", () => ({
   default: () => noopMutation,
 }))
 

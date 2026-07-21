@@ -4,7 +4,11 @@
 // invite invalidation live in the leaf ./queries/keys; shared retry/concurrency
 // primitives in ./queries/shared. New reads go in the matching sub-module, not
 // here.
-export { githubKeys, invalidateInviteQueries } from "./queries/keys"
+export {
+  githubKeys,
+  invalidateInviteQueries,
+  invalidateClassroomTeam,
+} from "./queries/keys"
 export {
   sleep,
   isFreshRepoLagError,

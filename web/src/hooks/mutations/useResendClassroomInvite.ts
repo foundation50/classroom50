@@ -1,22 +1,24 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { githubKeys, getUser } from "@/github-core/queries"
+import { getUser, invalidateClassroomTeam } from "@/github-core/queries"
 import { resendClassroomInvite } from "@/domain/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import type { StaffRole } from "@/types/classroom"
+import type { ClassroomRole } from "@/authz"
 
-// Resend a pending staff org invitation. The multi-step data logic — resolve
-// the invitee's immutable id (org invites don't carry it), then delegate to the
-// shared resendClassroomInvite (re-attaches the role team + re-issues the org
-// role). Hook owns the invitations + members invalidation for the bound team;
-// the toasts stay at the call site (see ./README.md).
+// Resend a pending classroom org invitation (staff OR student). The multi-step
+// data logic — resolve the invitee's immutable id (org invites don't carry it),
+// then delegate to the shared resendClassroomInvite (re-attaches the role team +
+// re-issues the org role). Hook owns the bound team's members + invitations
+// invalidation; the toasts stay at the call site (see ./README.md). Shared by
+// the Settings staff section and the roster member modal so the single-shot
+// resend flow is identical across both surfaces.
 //
 // Hooks are t()-free: an email-only invite (no login) can't be resolved to a
 // numeric invitee id, so the caller passes the pre-translated `emailOnlyMessage`
 // the hook throws in that case.
-export function useResendStaffInvite(
+export function useResendClassroomInvite(
   org: string,
   classroom: string,
-  role: StaffRole,
+  role: ClassroomRole,
   teamSlug: string,
 ) {
   const client = useGitHubClient()
@@ -39,15 +41,8 @@ export function useResendStaffInvite(
         role,
       })
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamInvitations(org, teamSlug),
-      })
-      queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(org, teamSlug),
-      })
-    },
+    onSuccess: () => invalidateClassroomTeam(queryClient, org, teamSlug),
   })
 }
 
-export default useResendStaffInvite
+export default useResendClassroomInvite

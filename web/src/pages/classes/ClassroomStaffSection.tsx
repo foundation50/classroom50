@@ -17,47 +17,25 @@ import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRolePr
 import { can, isTeacherRole } from "@/authz"
 import { ConfirmModal } from "@/components/modals"
 import { teamMembersQuery, teamInvitationsQuery } from "@/github-core/queries"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { resolveClassroomRoleSlug } from "@/util/teamSlug"
+import useGetClassroom from "@/hooks/useGetClassroom"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import { isSameGitHubUser } from "@/util/students"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
 import useRemoveStaffMember from "@/hooks/mutations/useRemoveStaffMember"
-import useResendStaffInvite from "@/hooks/mutations/useResendStaffInvite"
-import useCancelStaffInvite from "@/hooks/mutations/useCancelStaffInvite"
+import useResendClassroomInvite from "@/hooks/mutations/useResendClassroomInvite"
+import useCancelClassroomInvite from "@/hooks/mutations/useCancelClassroomInvite"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { GitHubAPIError } from "@/github-core/errors"
 import { STAFF_ROLES, type StaffRole } from "@/types/classroom"
-import { ROLE_BADGE_TONE } from "@/util/classroomRoleUI"
+import {
+  ROLE_LABEL_KEY,
+  ROLE_PLURAL_KEY,
+  ROLE_ACCESS_KEY,
+  ROLE_BADGE_TONE,
+} from "@/util/classroomRoleUI"
 import type { GitHubUser, GitHubOrgInvitation } from "@/github-core/types"
 import { Button, Badge, Card, FormField, Input, Select } from "@/components/ui"
-
-// i18n key for each role's singular label. A map (not inline t()) so it works in
-// module scope; components translate via t(ROLE_LABEL_KEY[role]). `teacher` and
-// its legacy `instructor` alias share the label key.
-const ROLE_LABEL_KEY: Record<StaffRole, string> = {
-  teacher: "classes.staff.roleTeacher",
-  instructor: "classes.staff.roleTeacher",
-  hta: "classes.staff.roleHeadTa",
-  ta: "classes.staff.roleTa",
-}
-
-// i18n key for each role's plural label (section headings). Keyed by role so a
-// new staff role renders correctly rather than defaulting to the TA branch.
-const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
-  teacher: "classes.staff.roleTeacherPlural",
-  instructor: "classes.staff.roleTeacherPlural",
-  hta: "classes.staff.roleHeadTaPlural",
-  ta: "classes.staff.roleTaPlural",
-}
-
-// Short access hint per role, shown under each section heading so a teacher
-// sees at a glance what the role grants (write vs read-only, org owner or not).
-const ROLE_ACCESS_KEY: Record<StaffRole, string> = {
-  teacher: "classes.staff.accessTeacher",
-  instructor: "classes.staff.accessTeacher",
-  hta: "classes.staff.accessHeadTa",
-  ta: "classes.staff.accessTa",
-}
 
 // Manage a classroom's staff (teacher / head TA / TA), backed by the
 // per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route gates
@@ -243,9 +221,13 @@ const StaffRoleList = ({
 }) => {
   const { t } = useTranslation()
   const client = useGitHubClient()
+  // Prefer the slug GitHub actually assigned (classroom.json) over the derived
+  // one, matching the roster view (useTeamRoster) so both owner surfaces target
+  // the same team even after a GitHub slug rewrite.
+  const { data: classroomJson } = useGetClassroom(org, classroom)
   const teamSlug = useMemo(
-    () => classroomTeamSlug(classroom, role),
-    [classroom, role],
+    () => resolveClassroomRoleSlug(classroom, role, classroomJson),
+    [classroom, role, classroomJson],
   )
   const membersQuery = useQuery(teamMembersQuery(client, org, teamSlug))
   const members = membersQuery.data ?? []
@@ -309,6 +291,7 @@ const StaffRoleList = ({
                 org={org}
                 classroom={classroom}
                 role={role}
+                teamSlug={teamSlug}
                 member={member}
                 disabled={disabled}
               />
@@ -319,6 +302,7 @@ const StaffRoleList = ({
                 org={org}
                 classroom={classroom}
                 role={role}
+                teamSlug={teamSlug}
                 invite={invite}
                 disabled={disabled}
               />
@@ -334,12 +318,14 @@ const StaffMemberRow = ({
   org,
   classroom,
   role,
+  teamSlug,
   member,
   disabled,
 }: {
   org: string
   classroom: string
   role: StaffRole
+  teamSlug: string
   member: GitHubUser
   disabled: boolean
 }) => {
@@ -347,7 +333,6 @@ const StaffMemberRow = ({
   const { notify } = useToast()
   const { data: viewer } = useGitHubViewer()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
-  const teamSlug = classroomTeamSlug(classroom, role)
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
   const rolePlural = t(ROLE_PLURAL_KEY[role])
@@ -455,22 +440,28 @@ const PendingStaffRow = ({
   org,
   classroom,
   role,
+  teamSlug,
   invite,
   disabled,
 }: {
   org: string
   classroom: string
   role: StaffRole
+  teamSlug: string
   invite: GitHubOrgInvitation
   disabled: boolean
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
-  const teamSlug = classroomTeamSlug(classroom, role)
   const who = invite.login || invite.email || String(invite.id)
 
-  const resendMutation = useResendStaffInvite(org, classroom, role, teamSlug)
-  const cancelMutation = useCancelStaffInvite(org, teamSlug)
+  const resendMutation = useResendClassroomInvite(
+    org,
+    classroom,
+    role,
+    teamSlug,
+  )
+  const cancelMutation = useCancelClassroomInvite(org, teamSlug)
 
   // One latch per row so a same-tick double-click, or resend racing cancel on
   // the same invite, can't start two overlapping writes before isPending flips.

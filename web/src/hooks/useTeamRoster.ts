@@ -12,7 +12,7 @@ import {
   orgMembersAllQuery,
 } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
-import { classroomTeamSlug } from "@/util/teamSlug"
+import { resolveClassroomRoleSlug } from "@/util/teamSlug"
 import {
   buildTeamRoster,
   countByState,
@@ -111,19 +111,18 @@ export function useTeamRoster(
   const isOwner = can("manageOrg", { githubOrgRole })
 
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
+  const teamSlug = resolveClassroomRoleSlug(classroom, "student", classroomJson)
   // Staff team slugs: prefer the classroom's stored slug, else the derived
   // classroomTeamSlug (same precedence as the student slug above). The teacher
   // slug prefers the canonical `teams.teacher`, falling back to a not-yet-
   // migrated classroom's legacy `teams.instructor`, then the derived slug.
-  const teacherSlug =
-    classroomJson?.teams?.teacher?.slug ||
-    classroomJson?.teams?.instructor?.slug ||
-    classroomTeamSlug(classroom, "teacher")
-  const taSlug =
-    classroomJson?.teams?.ta?.slug || classroomTeamSlug(classroom, "ta")
-  const htaSlug =
-    classroomJson?.teams?.hta?.slug || classroomTeamSlug(classroom, "hta")
+  const teacherSlug = resolveClassroomRoleSlug(
+    classroom,
+    "teacher",
+    classroomJson,
+  )
+  const taSlug = resolveClassroomRoleSlug(classroom, "ta", classroomJson)
+  const htaSlug = resolveClassroomRoleSlug(classroom, "hta", classroomJson)
 
   const {
     data: members,
@@ -401,7 +400,7 @@ export function useInvalidateTeamRoster(
 ): () => void {
   const queryClient = useQueryClient()
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
+  const teamSlug = resolveClassroomRoleSlug(classroom, "student", classroomJson)
 
   return useCallback(() => {
     void queryClient.invalidateQueries({
@@ -429,7 +428,7 @@ export function useSeedTeamMember(
 ): (member: OptimisticMember) => void {
   const queryClient = useQueryClient()
   const { data: classroomJson } = useGetClassroom(org, classroom)
-  const teamSlug = classroomJson?.team?.slug || classroomTeamSlug(classroom)
+  const teamSlug = resolveClassroomRoleSlug(classroom, "student", classroomJson)
 
   return useCallback(
     (member: OptimisticMember) => {
