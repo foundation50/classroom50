@@ -1083,7 +1083,11 @@ export type EnsureOrgActionsBudgetCapResult =
   | {
       status: "warning"
       org: string
-      reason: "over_threshold" | "permission_denied" | "create_failed" | "readback_failed"
+      reason:
+        | "over_threshold"
+        | "permission_denied"
+        | "create_failed"
+        | "readback_failed"
       settingsUrl: string
       message: string
     }
@@ -1102,9 +1106,7 @@ export async function ensureOrgActionsBudgetCap(
 
   let budgets: BudgetsListResponse
   try {
-    budgets = await client.request<BudgetsListResponse>(
-      orgBudgetsApiPath(org),
-    )
+    budgets = await client.request<BudgetsListResponse>(orgBudgetsApiPath(org))
   } catch (err) {
     return {
       status: "warning",

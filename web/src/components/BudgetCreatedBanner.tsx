@@ -54,7 +54,8 @@ export function BudgetCreatedBanner() {
         // Skip the re-render when nothing changed (the common case: most orgs
         // never created a cap, so every event would otherwise re-set an equal
         // {created:false, dismissed:false}).
-        return prev.created === next.created && prev.dismissed === next.dismissed
+        return prev.created === next.created &&
+          prev.dismissed === next.dismissed
           ? prev
           : next
       })
