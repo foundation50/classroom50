@@ -151,7 +151,7 @@ function NewOrgModal({
       </Modal>
 
       <FreePlanInfoModal
-        open={freePlanOrg !== null}
+        open={open && freePlanOrg !== null}
         orgLogin={freePlanOrg}
         onClose={() => setFreePlanOrg(null)}
       />

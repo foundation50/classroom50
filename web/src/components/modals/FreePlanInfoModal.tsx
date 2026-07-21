@@ -42,15 +42,18 @@ function FreePlanInfoModal({
         <p className="mt-1 text-sm leading-6 text-base-content/70">
           {t("orgs.newOrg.freePlanInfo.educationBody")}
         </p>
-        <a
+        <Button
+          as="a"
           href="https://github.com/education"
           target="_blank"
           rel="noreferrer"
-          className="btn btn-info btn-sm mt-3"
+          variant="info"
+          size="sm"
+          className="mt-3"
         >
           {t("orgs.newOrg.freePlanInfo.educationCta")}
           <ExternalLink aria-hidden="true" className="size-4" />
-        </a>
+        </Button>
       </div>
 
       <div className="modal-action">

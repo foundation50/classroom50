@@ -51,15 +51,18 @@ function MissingOrgNotice({
         <p className="text-sm leading-6 text-base-content/70">
           {t("orgs.missingNotice.body")}
         </p>
-        <a
+        <Button
+          as="a"
           href="https://github.com/settings/connections/applications"
           target="_blank"
           rel="noreferrer"
-          className="btn btn-info btn-sm mt-3"
+          variant="info"
+          size="sm"
+          className="mt-3"
         >
           {t("orgs.missingNotice.manageOauth")}
           <ExternalLink aria-hidden="true" className="size-4" />
-        </a>
+        </Button>
       </div>
     </details>
   )

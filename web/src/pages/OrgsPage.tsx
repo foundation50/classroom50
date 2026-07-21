@@ -538,6 +538,16 @@ const OrgsPage = () => {
               <EmptyState
                 title={t("orgs.emptyTitle")}
                 body={t("orgs.emptyBody")}
+                action={
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    {t("orgs.setUpFirst.cta")}
+                  </Button>
+                }
               />
             )}
           </>

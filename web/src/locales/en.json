@@ -598,7 +598,6 @@
     },
     "card": {
       "noAccessBadge": "No <code>classroom50</code> access",
-      "planTitleFree": "Free plan — Classroom 50 needs a Team or Enterprise organization",
       "planTitlePaid": "GitHub plan — Classroom 50 can be set up on Team and Enterprise plans",
       "viewOnGitHub": "View on GitHub",
       "openOnGitHub": "Open {{org}} on GitHub",
