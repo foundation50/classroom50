@@ -617,6 +617,38 @@ func TestRunAssignmentReuse_GrantFailureAfterCommit(t *testing.T) {
 	}
 }
 
+// TestRunAssignmentReuse_GrantForbiddenIsNonFatal: the classroom-team grant PUT
+// is org-owner-only, so a non-owner author (head-TA) gets a 403. Since the copy
+// already committed, the reuse must NOT fail — it warns with owner-required
+// guidance on stderr and returns nil (an owner re-affirms it; collect-scores
+// also does). Distinct from GrantFailureAfterCommit, where a non-403 error stays
+// fatal.
+func TestRunAssignmentReuse_GrantForbiddenIsNonFatal(t *testing.T) {
+	server, fix := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil),
+		templatePrivate:   true,
+		grantStatus:       http.StatusForbidden,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	if err := runAssignmentReuse(client, &out, &errOut, baseReuseParams()); err != nil {
+		t.Fatalf("a 403 on the owner-only grant must not fail the reuse, got %v", err)
+	}
+	if !strings.Contains(errOut.String(), "organization owner") {
+		t.Errorf("expected an owner-required warning on stderr, got %q", errOut.String())
+	}
+	// The copy still landed.
+	fix.mu.Lock()
+	committed := fix.committed
+	fix.mu.Unlock()
+	if committed == nil {
+		t.Errorf("copy should have been committed even when the grant 403s")
+	}
+}
+
 // TestRunAssignmentReuse_JSONOutput: --json emits the resolved copy with the
 // FINAL (auto-suffixed) slug on stdout, the machine-readable contract an
 // agent reads instead of scraping the human summary.

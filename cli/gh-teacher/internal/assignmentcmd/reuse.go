@@ -316,11 +316,16 @@ type grantContext struct {
 // and reuse; the caller decides WHEN and supplies the wording. A classroom with
 // no team yields an actionable error, not a 404 on a guessed slug.
 //
-// After the student grant it best-effort grants the classroom's TA staff team
-// the same read, so a base-permission-`none` TA (an org member on the TA team)
-// can read the private template without waiting for a collect-scores run. That
-// grant is non-blocking: its failure warns to errOut but never fails an
-// operation that already succeeded for students (collect-scores re-affirms it).
+// The student-team grant is org-owner-only. A non-owner author (head-TA) gets a
+// 403; since the commit already landed, that is NOT fatal — it warns with
+// owner-required guidance and returns nil (an owner re-affirms it; collect-scores
+// also re-affirms). Only an unexpected (non-403) grant error is fatal.
+//
+// After the student grant it best-effort grants the classroom's non-owner staff
+// teams (head-TA, TA) the same read, so a base-permission-`none` head-TA/TA (an
+// org member on that team) can read the private template without waiting for a
+// collect-scores run. That grant is non-blocking: its failure warns to errOut
+// but never fails an operation that already succeeded for students.
 func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, slug, tmplOwner, tmplRepo string, ctx grantContext) error {
 	team, ok, err := configrepo.ResolveClassroomTeam(client, org, classroom, branch)
 	if err != nil {
@@ -332,6 +337,19 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 	}
 	granted, err := configrepo.GrantTeamRepoRead(client, org, team.Slug, tmplOwner, tmplRepo)
 	if err != nil {
+		// The grant (PUT team/repo) is org-owner-only. A non-owner author (e.g. a
+		// head-TA, who has config-repo write and can author) can't perform it and
+		// gets a 403 — but the commit already landed, so don't fail the whole
+		// operation. Surface actionable owner-required guidance and return nil,
+		// mirroring the web's templateGrantOwnerRequiredWarning; an owner re-affirms
+		// it (re-run the command, open the classroom in the web app, or grant the
+		// team read directly), and collect-scores re-affirms it too. Reserve the
+		// fatal return for genuinely unexpected errors.
+		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
+			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it — re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators and teams).\n",
+				ctx.verb, ctx.classroomNoun, tmplOwner, tmplRepo, ctx.rerunHint, team.Slug, tmplOwner, tmplRepo)
+			return nil
+		}
 		return fmt.Errorf("assignment %s, but granting the %s team read on the private template %s/%s failed: %w", ctx.verb, ctx.classroomNoun, tmplOwner, tmplRepo, err)
 	}
 	if granted {

@@ -414,11 +414,12 @@ func TestCollectScoresCommitPrefix(t *testing.T) {
 // student-assignment-repo / private-template axis) is the source of truth;
 // collect_scores.py hand-mirrors it as STAFF_TEAM_PERMISSIONS with no
 // compile-time link, so a role added on only one side would otherwise pass CI
-// while the collector silently grants the wrong set. The head-TA (hta) role
-// gets config-repo write (a separate axis, configrepo.ConfigRepoPermission,
-// which the collector does not manage), so it is intentionally absent from this
-// template-repo map. Assert every Go entry appears verbatim as a Python dict
-// literal in the embedded script.
+// while the collector silently grants the wrong set. The non-owner staff roles
+// (head-TA and TA) map to `pull` here; the teacher/instructor roles are absent
+// (owners get repo access via ownership). Note this template-repo axis is
+// SEPARATE from configrepo.ConfigRepoPermission (config-repo write), which the
+// collector does not manage. Assert every Go entry appears verbatim as a Python
+// dict literal in the embedded script.
 func TestStaffPermsParity_GoVsInlinePython(t *testing.T) {
 	files, err := skeletonFiles("main")
 	if err != nil {

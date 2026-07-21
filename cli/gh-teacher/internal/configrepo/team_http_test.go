@@ -226,16 +226,20 @@ func TestStaffTeamName(t *testing.T) {
 	}
 }
 
-// TestStaffTeamRepoPermissions pins the collect-time grant map: the TA team
-// gets read (pull), and the teacher role is intentionally absent (its access
-// is granted at classroom setup, not by the collector). This map is the source
-// of truth the collector's STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
+// TestStaffTeamRepoPermissions pins the collect-time grant map: the non-owner
+// staff teams (head-TA and TA) get read (pull), and the teacher/instructor
+// roles are intentionally absent (owners get repo access via ownership, not the
+// collector). This map is the source of truth the collector's
+// STAFF_TEAM_PERMISSIONS mirror must match in lockstep.
 func TestStaffTeamRepoPermissions(t *testing.T) {
+	if got := StaffTeamRepoPermissions[RoleHeadTA]; got != "pull" {
+		t.Errorf("StaffTeamRepoPermissions[hta] = %q, want %q", got, "pull")
+	}
 	if got := StaffTeamRepoPermissions[RoleTA]; got != "pull" {
 		t.Errorf("StaffTeamRepoPermissions[ta] = %q, want %q", got, "pull")
 	}
 	if _, ok := StaffTeamRepoPermissions[RoleTeacher]; ok {
-		t.Error("teacher must NOT be in StaffTeamRepoPermissions — the collector grants it nothing")
+		t.Error("teacher must NOT be in StaffTeamRepoPermissions — owners get repo access via ownership")
 	}
 	if _, ok := StaffTeamRepoPermissions[RoleInstructor]; ok {
 		t.Error("instructor must NOT be in StaffTeamRepoPermissions — the collector grants it nothing")
