@@ -331,19 +331,13 @@ const SubmissionsPageContent = () => {
   // group's row (#245), so listing them as "no group" too would double-count
   // them. Gated on scores having loaded — until then scoresInfo is empty and
   // would flag the whole roster.
-  // The "not submitted" list is derived last, from every source that can still
-  // reclassify a student: the collected snapshot, the live submit/* fan-out, and
-  // (for groups) the collaborator reconciliation. Gate it on all three settling
-  // so a student never renders as "not submitted" and then jumps to "Pending" /
-  // a group row as a later source resolves (the flash). Until ready, hold the
-  // prior list rather than recomputing an intermediate one.
+  // Hold the "not submitted" list until every source that can still reclassify
+  // a student settles (snapshot, live fan-out, group-member reconciliation) —
+  // else a submitter flashes "not submitted" before resolving to Pending.
   const scoresLoaded = scoresData !== undefined
-  // Core data still arriving on first paint: until the snapshot has loaded (and
-  // the roster resolved), an empty rows/non-submitters set means "not loaded
-  // yet", not "nothing here" — so the table shows a loading state rather than
-  // flashing the "No submissions collected yet" empty message (which then
-  // vanishes once data lands). A background refetch doesn't count (scoresLoaded
-  // stays true), so Refresh never blanks a populated table.
+  // Empty rows before the snapshot+roster land mean "loading", not "empty" —
+  // gate the empty state on this so it doesn't flash on first paint. A
+  // background refetch keeps scoresLoaded true, so Refresh never blanks the table.
   const initialLoading = !scoresLoaded || rosterLoading
   const nonSubmittersReady =
     scoresLoaded && !livePending && !groupMembersPending
@@ -684,11 +678,8 @@ const SubmissionsPageContent = () => {
                 shape="circle"
                 disabled={scoresFetching || liveFetching}
                 onClick={() => {
-                  // Refresh both data sources the page shows: the collected
-                  // snapshot (scores.json) AND the live submission fan-out.
-                  // Refreshing only the snapshot would leave the "Pending" live
-                  // rows — the part that reflects a just-pushed submission —
-                  // stale, which is the opposite of what Refresh implies.
+                  // Refresh both sources the page shows — snapshot alone would
+                  // leave the live "Pending" rows stale.
                   refetchScores()
                   refetchLive()
                 }}

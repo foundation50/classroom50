@@ -178,8 +178,7 @@ export function useLiveSubmissions({
     // it is never pending; otherwise it's pending until the first result lands.
     isPending: active && isLoading,
     hasNextPage,
-    // react-query's refetch returns a promise; the caller fires-and-forgets, so
-    // narrow it to void to keep the result type simple.
+    // Fire-and-forget; narrow react-query's promise to void.
     refetch: () => {
       void refetch()
     },

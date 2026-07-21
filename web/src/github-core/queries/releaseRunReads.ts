@@ -18,6 +18,14 @@ export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
 }
 
+// The `submit/*` releases from a repo's release list, newest first — the shared
+// filter+sort both the full-list query and the latest-only read derive from.
+function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
+  return releases
+    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+    .sort((a, b) => releaseTime(b) - releaseTime(a))
+}
+
 // All graded-submission releases for a student's repo, newest first. A repo
 // with no releases yet (or a first push still grading) returns []. The release
 // page shows the rendered grade, so we only need the metadata.
@@ -40,9 +48,7 @@ export function releasesQuery(
           { method: "GET", signal },
         )
 
-        return releases
-          .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
-          .sort((a, b) => releaseTime(b) - releaseTime(a))
+        return submitReleasesNewestFirst(releases)
       }, []),
     enabled: Boolean(owner && repo),
     staleTime: 5 * 60 * 1000,
@@ -51,14 +57,12 @@ export function releasesQuery(
 }
 
 // The newest `submit/*` release for a repo (with its assets), or null when the
+// The newest `submit/*` release for a repo (with its assets), or null when the
 // repo has no submission release or doesn't exist (404). Used by the live
-// teacher fan-out: one call per assignment repo yields whether the student has
-// submitted and — once the asset-download path is resolved — the handle to
-// `result.json`. A single `per_page=100` page is sufficient for "newest": the
-// list sorts newest-first and we only want the latest, so unlike the CLI's
-// all_submit_releases full walk we don't paginate. A missing repo (not
-// accepted) 404s and resolves to null rather than throwing, so one absent repo
-// never voids a batch.
+// teacher fan-out. A missing repo (not accepted) 404s and resolves to null
+// rather than throwing, so one absent repo never voids a batch. Reads a single
+// page — GitHub returns releases newest-first, so the top submit release is the
+// latest (unlike the CLI's full-history walk).
 export async function latestSubmitReleaseWithAssets(
   client: GitHubClient,
   owner: string,
@@ -73,11 +77,7 @@ export async function latestSubmitReleaseWithAssets(
       { method: "GET", signal },
     )
 
-    const submits = releases
-      .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
-      .sort((a, b) => releaseTime(b) - releaseTime(a))
-
-    return submits[0] ?? null
+    return submitReleasesNewestFirst(releases)[0] ?? null
   }, null)
 }
 
