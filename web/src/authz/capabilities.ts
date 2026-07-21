@@ -13,6 +13,7 @@ export type Capability =
   | "viewOrgStaffContent"
   // Classroom-scoped.
   | "viewClassroomStaffContent" // roster / authoring / submissions (teacher|hta|ta)
+  | "authorAssignments" // config-repo assignment writes (teacher|hta); needs no owner call
   | "editClassroomSettings" // teacher only
   | "previewAsRole" // the "view as" offer — teacher only
   | "claimTeacher" // org owner who currently resolves to student here
@@ -47,6 +48,12 @@ export function can(cap: Capability, input: CapabilityInput): boolean {
         classroomRole === "hta" ||
         classroomRole === "ta"
       )
+    case "authorAssignments":
+      // Config-repo write tier: teacher (+ legacy instructor) and head-TA can
+      // author assignments; a plain TA is read-only (config-repo `pull`), so a
+      // TA save would 403 at GitHub. The template read-grant is owner-only and
+      // gated separately on `manageOrg` (see the module doc / plan KTD-4).
+      return isTeacherRole(classroomRole) || classroomRole === "hta"
     case "editClassroomSettings":
       return isTeacherRole(classroomRole)
     case "previewAsRole":

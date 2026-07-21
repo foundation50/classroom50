@@ -15,6 +15,7 @@ const orgRoles: GitHubOrgRole[] = [
 const classroomRoles: ResolvedRole[] = [
   "teacher",
   "instructor",
+  "hta",
   "ta",
   "student",
   "unresolved",
@@ -65,6 +66,23 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
     )
     // Off a classroom (no classroomRole) — denied.
     expect(can("viewClassroomStaffContent", {})).toBe(false)
+  })
+
+  it("authorAssignments: teacher|hta only (TA read-only, student/unresolved denied)", () => {
+    // Config-repo write tier: teacher (+ legacy instructor alias) and head-TA
+    // can author assignments.
+    expect(can("authorAssignments", { classroomRole: "teacher" })).toBe(true)
+    expect(can("authorAssignments", { classroomRole: "instructor" })).toBe(true)
+    expect(can("authorAssignments", { classroomRole: "hta" })).toBe(true)
+    // A plain TA is read-only on the config repo — denied.
+    expect(can("authorAssignments", { classroomRole: "ta" })).toBe(false)
+    expect(can("authorAssignments", { classroomRole: "student" })).toBe(false)
+    // Fail-closed on the in-flight sentinel.
+    expect(can("authorAssignments", { classroomRole: "unresolved" })).toBe(
+      false,
+    )
+    // Off a classroom (no classroomRole) — denied.
+    expect(can("authorAssignments", {})).toBe(false)
   })
 
   it("editClassroomSettings: teacher only (TA, student, unresolved all denied)", () => {
@@ -157,6 +175,7 @@ describe("deny-by-default coverage across the whole matrix", () => {
     "manageOrg",
     "viewOrgStaffContent",
     "viewClassroomStaffContent",
+    "authorAssignments",
     "editClassroomSettings",
     "previewAsRole",
     "claimTeacher",
