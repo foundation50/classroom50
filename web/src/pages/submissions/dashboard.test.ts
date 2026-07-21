@@ -809,10 +809,11 @@ describe("statusSelectValue / applyStatusSelection", () => {
 })
 
 describe("mergeLiveRows", () => {
-  const live = (owner: string, datetime: string) => ({
+  const live = (owner: string, datetime: string, submissionCount = 1) => ({
     owner,
     datetime,
     release: `https://github.com/o/${owner}/releases/tag/submit`,
+    submissionCount,
   })
 
   it("keeps snapshot rows unchanged", () => {
@@ -835,14 +836,53 @@ describe("mergeLiveRows", () => {
     expect(bob?.usernames).toEqual(["bob"])
   })
 
-  it("does not duplicate an owner already in the snapshot (snapshot wins)", () => {
-    const snapshot = [row({ owner: "alice", score: 9 })]
+  it("carries the live count onto a live-only pending row", () => {
+    const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 3)])
+    const bob = merged.find((r) => r.owner === "bob")
+    expect(bob?.submissionCount).toBe(3)
+    expect(bob?.pending).toBe(true)
+  })
+
+  it("floors a live-only row's count at 1 even if the live count is 0", () => {
+    // Defensive: a presence row exists because a release was seen, so the count
+    // should never render as 0 submissions.
+    const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 0)])
+    expect(merged[0].submissionCount).toBe(1)
+  })
+
+  it("keeps the snapshot grade but raises a snapshot row's count to the live count", () => {
+    const snapshot = [row({ owner: "alice", score: 9, submissionCount: 1 })]
     const merged = mergeLiveRows(snapshot, [
-      live("Alice", "2026-06-25T10:00:00Z"),
+      live("Alice", "2026-06-25T10:00:00Z", 3),
     ])
     expect(merged).toHaveLength(1)
+    // Grade stays from the snapshot (source of record); it is not pending.
     expect(merged[0].score).toBe(9)
     expect(merged[0].pending).toBeUndefined()
+    // Count reflects the newer live release history, flagged stale.
+    expect(merged[0].submissionCount).toBe(3)
+    expect(merged[0].staleCount).toBe(true)
+  })
+
+  it("never lowers a snapshot row's count when live reads fewer (lower bound)", () => {
+    // Live is a single page (a lower bound); the snapshot may legitimately hold
+    // more. The merge must not shrink the count or flag it stale.
+    const snapshot = [row({ owner: "alice", score: 9, submissionCount: 5 })]
+    const merged = mergeLiveRows(snapshot, [
+      live("alice", "2026-06-25T10:00:00Z", 2),
+    ])
+    expect(merged[0].submissionCount).toBe(5)
+    expect(merged[0].staleCount).toBeUndefined()
+  })
+
+  it("leaves the count unflagged when snapshot and live agree", () => {
+    const snapshot = [row({ owner: "alice", submissionCount: 2 })]
+    const merged = mergeLiveRows(snapshot, [
+      live("alice", "2026-06-25T10:00:00Z", 2),
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].submissionCount).toBe(2)
+    expect(merged[0].staleCount).toBeUndefined()
   })
 
   it("matches owners case-insensitively", () => {

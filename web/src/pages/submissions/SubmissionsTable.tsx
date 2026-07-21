@@ -581,7 +581,12 @@ const SubmissionsTable = ({
                   assignment,
                   rest.owner,
                 )
-                const canExpand = submissionCount > 1
+                // Expandability is driven by the COLLECTED history, not the
+                // (possibly live-inflated) count: a `staleCount` row shows more
+                // submissions than scores.json has ingested, so expanding would
+                // reveal fewer entries than the badge claims. Only offer expand
+                // when there is real multi-entry history to show.
+                const canExpand = rest.submissions.length > 1
                 const isOpen = !!expanded[rest.owner]
                 return (
                   <Fragment key={rest.owner}>
@@ -611,33 +616,44 @@ const SubmissionsTable = ({
                         )}
                       </td>
                       <td>
-                        {canExpand ? (
-                          <button
-                            type="button"
-                            className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-                            aria-expanded={isOpen}
-                            title={
-                              isOpen
-                                ? t("submissions.table.hideSubmissions")
-                                : t("submissions.table.showSubmissions")
-                            }
-                            onClick={() => toggle(rest.owner)}
-                          >
-                            <ChevronRight
-                              aria-hidden="true"
-                              className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
-                            />
-                            {t("submissions.table.submissionCount", {
-                              count: submissionCount,
-                            })}
-                          </button>
-                        ) : (
-                          <label className="badge max-xl:text-xs whitespace-nowrap">
-                            {t("submissions.table.submissionCount", {
-                              count: submissionCount,
-                            })}
-                          </label>
-                        )}
+                        <div className="flex items-center gap-1.5">
+                          {canExpand ? (
+                            <button
+                              type="button"
+                              className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
+                              aria-expanded={isOpen}
+                              title={
+                                isOpen
+                                  ? t("submissions.table.hideSubmissions")
+                                  : t("submissions.table.showSubmissions")
+                              }
+                              onClick={() => toggle(rest.owner)}
+                            >
+                              <ChevronRight
+                                aria-hidden="true"
+                                className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
+                              />
+                              {t("submissions.table.submissionCount", {
+                                count: submissionCount,
+                              })}
+                            </button>
+                          ) : (
+                            <label className="badge max-xl:text-xs whitespace-nowrap">
+                              {t("submissions.table.submissionCount", {
+                                count: submissionCount,
+                              })}
+                            </label>
+                          )}
+                          {rest.staleCount && (
+                            <Badge
+                              tone="info"
+                              size="sm"
+                              title={t("submissions.table.staleCountTitle")}
+                            >
+                              {t("submissions.table.staleCount")}
+                            </Badge>
+                          )}
+                        </div>
                       </td>
                       <td>
                         {emptyRepo ? (

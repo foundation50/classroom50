@@ -57,7 +57,6 @@ export function releasesQuery(
 }
 
 // The newest `submit/*` release for a repo (with its assets), or null when the
-// The newest `submit/*` release for a repo (with its assets), or null when the
 // repo has no submission release or doesn't exist (404). Used by the live
 // teacher fan-out. A missing repo (not accepted) 404s and resolves to null
 // rather than throwing, so one absent repo never voids a batch. Reads a single
@@ -69,16 +68,43 @@ export async function latestSubmitReleaseWithAssets(
   repo: string,
   signal?: AbortSignal,
 ): Promise<GitHubRelease | null> {
-  return tolerateGitHubError(async () => {
-    const releases = await client.request<GitHubRelease[]>(
-      `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
-        repo,
-      )}/releases?per_page=100`,
-      { method: "GET", signal },
-    )
+  return (await latestSubmitReleaseAndCount(client, owner, repo, signal)).latest
+}
 
-    return submitReleasesNewestFirst(releases)[0] ?? null
-  }, null)
+// The newest `submit/*` release for a repo AND how many submit/* releases the
+// repo has — the live submission COUNT. Both come from the SAME single
+// `per_page=100` request the presence read already makes, so surfacing the
+// count adds no extra API calls to the teacher fan-out. It lets the dashboard
+// correct a row's count when a student pushed again after the last collection
+// (scores.json is a snapshot). A missing repo (not accepted) 404s and resolves
+// to `{ latest: null, count: 0 }` rather than throwing, so one absent repo
+// never voids a batch.
+//
+// `count` saturates at one page (100): a repo with more than 100 submit
+// releases is far beyond any real assignment, and paging further would defeat
+// the point of a cheap presence read. The dashboard treats the count as a
+// lower bound, so a saturated value only under-reports an already-implausible
+// history.
+export async function latestSubmitReleaseAndCount(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<{ latest: GitHubRelease | null; count: number }> {
+  return tolerateGitHubError(
+    async () => {
+      const releases = await client.request<GitHubRelease[]>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+          repo,
+        )}/releases?per_page=100`,
+        { method: "GET", signal },
+      )
+
+      const submits = submitReleasesNewestFirst(releases)
+      return { latest: submits[0] ?? null, count: submits.length }
+    },
+    { latest: null, count: 0 },
+  )
 }
 
 type RepositorySecret = {

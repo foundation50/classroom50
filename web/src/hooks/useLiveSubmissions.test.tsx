@@ -192,6 +192,24 @@ describe("useLiveSubmissions", () => {
     expect(result.current.errorCount).toBe(0)
   })
 
+  it("threads the submit-release count onto each live submission", async () => {
+    request.mockResolvedValue([
+      submitRelease("submit/2026-03-01T00:00:00Z-c", "2026-03-01T00:00:00Z"),
+      submitRelease("submit/2026-02-01T00:00:00Z-b", "2026-02-01T00:00:00Z"),
+      submitRelease("submit/2026-01-01T00:00:00Z-a", "2026-01-01T00:00:00Z"),
+    ])
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["a"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    await waitFor(() => expect(result.current.submissions.length).toBe(1))
+    expect(result.current.submissions[0].submissionCount).toBe(3)
+    // The newest release drives the presence fields.
+    expect(result.current.submissions[0].tag).toBe(
+      "submit/2026-03-01T00:00:00Z-c",
+    )
+  })
+
   it("refetch() re-reads the current page's repos", async () => {
     request.mockResolvedValue([
       submitRelease("submit/x", "2026-01-01T00:00:00Z"),

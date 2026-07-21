@@ -74,6 +74,12 @@ export type SubmissionRow = {
   // ingested yet, so it carries presence (datetime/release) but no grade.
   // Rendered as "submitted, not yet collected" rather than a 0/0 score.
   pending?: boolean
+  // The row's `submissionCount` was raised above the collected history by live
+  // release data: the student has pushed more `submit/*` releases than
+  // scores.json has ingested, so the newest submission(s) aren't graded yet.
+  // The table hints this so a teacher knows to re-collect. Only set on a
+  // snapshot-backed row (a live-only row is wholly `pending`).
+  staleCount?: boolean
   // Per-attempt history, newest first; the summary fields above mirror submissions[0].
   submissions: SubmissionAttempt[]
 }

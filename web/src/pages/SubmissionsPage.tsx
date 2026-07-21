@@ -293,6 +293,7 @@ const SubmissionsPageContent = () => {
         owner: s.owner,
         datetime: s.submittedAt,
         release: s.releaseUrl,
+        submissionCount: s.submissionCount,
       })),
     )
     return rosterReady ? rosterScopedRows(merged, students) : merged

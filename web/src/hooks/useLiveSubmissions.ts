@@ -5,7 +5,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import {
   REPO_READ_CONCURRENCY,
   githubKeys,
-  latestSubmitReleaseWithAssets,
+  latestSubmitReleaseAndCount,
   retryOnRateLimit,
   withGithubReadSlot,
 } from "@/github-core/queries"
@@ -30,6 +30,12 @@ export type LiveSubmission = {
   submittedAt: string
   releaseUrl: string
   tag: string
+  // How many `submit/*` releases the repo has — the live submission count,
+  // read from the same request as the presence fields (no extra API call). A
+  // lower bound: it saturates at one page (100). The dashboard merges this onto
+  // the collected snapshot row so a student who pushed again after the last
+  // collection shows the up-to-date count.
+  submissionCount: number
 }
 
 export type UseLiveSubmissionsResult = {
@@ -137,9 +143,9 @@ export function useLiveSubmissions({
             // per-repo fan-out on the page (e.g. group-member reads) share one
             // concurrency budget, and retry once on a rate-limit before giving
             // up on a repo.
-            const release = await withGithubReadSlot(() =>
+            const { latest: release, count } = await withGithubReadSlot(() =>
               retryOnRateLimit(() =>
-                latestSubmitReleaseWithAssets(client, org!, repo, signal),
+                latestSubmitReleaseAndCount(client, org!, repo, signal),
               ),
             )
             // 404 (repo not accepted) resolves to null inside the query — that
@@ -150,6 +156,7 @@ export function useLiveSubmissions({
                 submittedAt: submitReleaseTime(release),
                 releaseUrl: release.html_url,
                 tag: release.tag_name,
+                submissionCount: count,
               })
             }
           } catch {

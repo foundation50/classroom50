@@ -93,6 +93,7 @@ export {
 export {
   releasesQuery,
   latestSubmitReleaseWithAssets,
+  latestSubmitReleaseAndCount,
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,

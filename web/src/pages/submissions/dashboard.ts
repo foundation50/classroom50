@@ -40,23 +40,51 @@ export function rosterScopedRows(
 
 // Fold live submission presence (submit/* releases read directly from student
 // repos) into the collected snapshot rows. `scores.json` stays the source of
-// record: a snapshot row always wins for an owner it already covers (it carries
-// the graded score; live presence carries none yet — see the plan's U2 spike).
-// Live adds a row ONLY for an owner absent from the snapshot — a student who
-// pushed but hasn't been collected yet (the #347 lag). Such a row is marked
-// `pending` (no grade) so the table shows "submitted, not yet collected" rather
-// than a fake 0/0. Owner match is case-insensitive; the union preserves snapshot
-// order, then appends live-only rows newest-first.
+// record for GRADES: a snapshot row keeps its graded score, history, and
+// review link. Live data contributes two things on top:
+//
+//   - COUNT: a snapshot row's `submissionCount` is raised to the live count
+//     when the student has pushed more submit/* releases than the last collect
+//     ingested (the #347 lag). The row is flagged `staleCount` so the table can
+//     hint that the newest push isn't graded yet. Live never LOWERS a count
+//     (a live read is one page / a lower bound; the snapshot may legitimately
+//     hold more), so the merged count is max(snapshot, live).
+//   - PRESENCE: live adds a row ONLY for an owner absent from the snapshot — a
+//     student who pushed but hasn't been collected yet. Such a row is `pending`
+//     (no grade) with the live count, so the table shows "submitted, not yet
+//     collected" rather than a fake 0/0.
+//
+// Owner match is case-insensitive; the union preserves snapshot order (with
+// counts updated in place), then appends live-only rows newest-first.
 export type LiveSubmissionPresence = {
   owner: string
   datetime: string
   release: string
+  // Live submit/* release count for the repo (a lower bound; see LiveSubmission).
+  submissionCount: number
 }
 
 export function mergeLiveRows(
   snapshotRows: SubmissionRow[],
   liveRows: LiveSubmissionPresence[],
 ): SubmissionRow[] {
+  const liveByOwner = new Map<string, LiveSubmissionPresence>()
+  for (const live of liveRows) {
+    liveByOwner.set(live.owner.trim().toLowerCase(), live)
+  }
+
+  const merged = snapshotRows.map((row) => {
+    const live = liveByOwner.get(row.owner.trim().toLowerCase())
+    // Live is a lower bound (one page), so it can only reveal MORE submissions
+    // than the snapshot captured, never fewer. Only bump + flag when it does.
+    if (!live || live.submissionCount <= row.submissionCount) return row
+    return {
+      ...row,
+      submissionCount: live.submissionCount,
+      staleCount: true,
+    }
+  })
+
   const snapshotOwners = new Set(
     snapshotRows.map((row) => row.owner.trim().toLowerCase()),
   )
@@ -75,12 +103,13 @@ export function mergeLiveRows(
       review: "",
       score: 0,
       "max-score": 0,
-      submissionCount: 1,
+      // At least 1 (the release we just saw); use the live count when higher.
+      submissionCount: Math.max(1, live.submissionCount),
       pending: true,
       submissions: [],
     }))
 
-  return [...snapshotRows, ...liveOnly]
+  return [...merged, ...liveOnly]
 }
 
 // the assignment sets no threshold — then every row is "ungraded" (as is an

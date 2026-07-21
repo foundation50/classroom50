@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
 import {
   getServiceTokenStatus,
+  latestSubmitReleaseAndCount,
   latestSubmitReleaseWithAssets,
 } from "./releaseRunReads"
 import type { GitHubClient } from "../client"
@@ -139,5 +140,51 @@ describe("latestSubmitReleaseWithAssets", () => {
     ])
     const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
     expect(latest?.assets?.[0]?.name).toBe("result.json")
+  })
+})
+
+describe("latestSubmitReleaseAndCount", () => {
+  it("returns the newest submit/* release and the submit-release count", async () => {
+    const client = clientReturning([
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z"),
+      release("submit/2026-02-01T00:00:00Z-bbbb", "2026-02-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(count).toBe(3)
+  })
+
+  it("counts only submit/* releases, ignoring other tags", async () => {
+    const client = clientReturning([
+      release("v1.0.0", "2026-05-01T00:00:00Z"),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+      release("nightly", "2026-04-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+    expect(count).toBe(1)
+  })
+
+  it("resolves { latest: null, count: 0 } on a 404 (repo not accepted)", async () => {
+    const client = clientThrowing(apiError(404))
+    expect(await latestSubmitReleaseAndCount(client, "o", "r")).toEqual({
+      latest: null,
+      count: 0,
+    })
+  })
+
+  it("rethrows a non-404 error rather than hiding it as no-submission", async () => {
+    await expect(
+      latestSubmitReleaseAndCount(clientThrowing(apiError(403)), "o", "r"),
+    ).rejects.toThrow()
   })
 })

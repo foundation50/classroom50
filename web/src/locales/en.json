@@ -1709,6 +1709,8 @@
       "showSubmissions": "Show all submissions",
       "submissionCount_one": "{{count}} submission",
       "submissionCount_other": "{{count}} submissions",
+      "staleCount": "New",
+      "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Collect now\" to grade and score the newest.",
       "late": "Late",
       "lateRowTitle": "The latest submission was pushed after the deadline.",
       "lateHistoryTitle": "Pushed after the deadline.",
