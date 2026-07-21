@@ -22,11 +22,7 @@ import {
   classifyPrivateFork,
   crossOrgPrivateForkError,
 } from "./accessPrimitives"
-import {
-  tryGrantTeamTemplateRead,
-  templateGrantOwnerRequiredWarning,
-  type CreateAssignmentResult,
-} from "./createEdit"
+import { resolveTemplateGrant, type CreateAssignmentResult } from "./createEdit"
 
 export type CopyAssignmentInput = {
   org: string
@@ -244,19 +240,14 @@ export async function copyAssignmentToClassroom(
 
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && entry.template) {
-    templateGrantWarning = input.canGrantTemplateAccess
-      ? await tryGrantTeamTemplateRead(
-          client,
-          org,
-          targetClassroom,
-          entry.slug,
-          entry.template,
-        )
-      : templateGrantOwnerRequiredWarning(
-          targetClassroom,
-          entry.slug,
-          entry.template,
-        )
+    templateGrantWarning = await resolveTemplateGrant(
+      client,
+      org,
+      targetClassroom,
+      entry.slug,
+      entry.template,
+      input.canGrantTemplateAccess,
+    )
   }
 
   return {

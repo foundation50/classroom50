@@ -19,6 +19,8 @@ export {
   editAssignmentWithConflictRetry,
   preserveUnmanagedAssignmentKeys,
   tryGrantTeamTemplateRead,
+  resolveTemplateGrant,
+  TEMPLATE_READ_STAFF_ROLES,
   type CreateAssignmentResult,
 } from "./assignments/createEdit"
 export {

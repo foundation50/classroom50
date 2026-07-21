@@ -36,9 +36,9 @@ vi.mock("@/domain/assignments", () => ({
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({ request: vi.fn() }),
 }))
-// The assignment mutation hooks inject canGrantTemplateAccess from the org-owner
-// verdict; mock it deterministically (owner) so the forwarded-input assertions
-// are stable.
+// The assignment mutation hooks inject canGrantTemplateAccess from the org-role
+// verdict; mock it deterministically (attemptable) so the forwarded-input
+// assertions are stable.
 vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
   useIsOrgOwner: () => ({
     isOwner: true,
@@ -46,6 +46,7 @@ vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
     isError: false,
     retry: vi.fn(),
   }),
+  useCanAttemptTemplateGrant: () => true,
 }))
 
 import { useCreateClassroom } from "./useCreateClassroom"

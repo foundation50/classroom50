@@ -2,7 +2,7 @@ import { useMemo, useRef, useState } from "react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
+import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
 import { githubKeys } from "@/github-core/queries"
 import { CONFIG_REPO } from "@/util/configRepo"
 import {
@@ -44,8 +44,9 @@ export function useReuseAssignment({
 }: UseReuseAssignmentParams) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  // Skip the owner-only template read-grant for a non-owner author (head-TA).
-  const { isOwner } = useIsOrgOwner()
+  // Attempt the owner-only template read-grant unless the org role is a
+  // CONFIRMED non-owner (see useCanAttemptTemplateGrant).
+  const canGrantTemplateAccess = useCanAttemptTemplateGrant()
 
   const [slugInput, setSlugInput] = useState("")
   const [slugTouched, setSlugTouched] = useState(false)
@@ -122,7 +123,7 @@ export function useReuseAssignment({
       source,
       targetClassroom,
       targetSlug: normalizedSlug,
-      canGrantTemplateAccess: isOwner,
+      canGrantTemplateAccess,
     })
   }
 

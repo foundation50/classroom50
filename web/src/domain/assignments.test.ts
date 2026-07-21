@@ -1,4 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
+import { readFileSync } from "node:fs"
+import path from "node:path"
 
 import {
   addFounderCollaborator,
@@ -13,6 +15,8 @@ import {
   preserveUnmanagedAssignmentKeys,
   resolveAutograderWorkflow,
   resolveTemplate,
+  resolveTemplateGrant,
+  TEMPLATE_READ_STAFF_ROLES,
   verifyTemplateAccess,
 } from "./assignments"
 import type { GitHubClient } from "@/github-core/client"
@@ -848,7 +852,7 @@ describe("editAssignment (preserved-entry integration)", () => {
   })
 })
 
-describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
+describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () => {
   const ORG = "cs50"
   const CLASSROOM = "cs50"
   const SLUG = "hw1"
@@ -1164,6 +1168,142 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     expect(grants()).toEqual([])
     expect(result.templateGrantWarning).toBeDefined()
     expect(result.templateGrantWarning).toContain("organization owner")
+  })
+
+  // resolveTemplateGrant is the single grant-decision recipe shared verbatim by
+  // createAssignment, editAssignment, and copyAssignmentToClassroom. Testing it
+  // directly covers the create entry point's owner/non-owner branch (create
+  // builds a full form input the grant-suite mock above doesn't model) without
+  // duplicating the whole create write path. Nested here to reuse makeGrantClient
+  // and the ORG/CLASSROOM fixtures the mock hardcodes.
+  describe("resolveTemplateGrant (shared create/edit/reuse grant decision)", () => {
+    const template = { owner: ORG, repo: "tmpl", branch: "main" }
+
+    it("owner (canGrant true) attempts the grant: student + HTA + TA", async () => {
+      const { client, grants } = makeGrantClient({
+        classroomJson: {
+          schema: "classroom50/classroom/v1",
+          short_name: CLASSROOM,
+          team: { id: 7, slug: "classroom50-cs50" },
+          teams: {
+            hta: { id: 8, slug: "classroom50-cs50-hta" },
+            ta: { id: 9, slug: "classroom50-cs50-ta" },
+          },
+        },
+      })
+
+      const warning = await resolveTemplateGrant(
+        client,
+        ORG,
+        CLASSROOM,
+        "hw1",
+        template,
+        true,
+      )
+
+      expect(warning).toBeUndefined()
+      expect(grants()).toEqual([
+        "classroom50-cs50",
+        "classroom50-cs50-hta",
+        "classroom50-cs50-ta",
+      ])
+    })
+
+    it("confirmed non-owner (canGrant false) warns and fires no grant", async () => {
+      const { client, grants } = makeGrantClient({
+        classroomJson: {
+          schema: "classroom50/classroom/v1",
+          short_name: CLASSROOM,
+          team: { id: 7, slug: "classroom50-cs50" },
+        },
+      })
+
+      const warning = await resolveTemplateGrant(
+        client,
+        ORG,
+        CLASSROOM,
+        "hw1",
+        template,
+        false,
+      )
+
+      expect(grants()).toEqual([])
+      expect(warning).toBeDefined()
+      expect(warning).toContain("organization owner")
+    })
+
+    it("undefined flag is treated as non-owner (fail-closed): warns, no grant", async () => {
+      const { client, grants } = makeGrantClient({
+        classroomJson: {
+          schema: "classroom50/classroom/v1",
+          short_name: CLASSROOM,
+          team: { id: 7, slug: "classroom50-cs50" },
+        },
+      })
+
+      const warning = await resolveTemplateGrant(
+        client,
+        ORG,
+        CLASSROOM,
+        "hw1",
+        template,
+        undefined,
+      )
+
+      expect(grants()).toEqual([])
+      expect(warning).toContain("organization owner")
+    })
+  })
+})
+
+// The TS non-owner staff-team read set is a hand-mirror of the Go source of
+// truth (configrepo.TemplateReadStaffRoles). Parse the Go literal and assert the
+// two agree, so adding a role on the Go side without updating the TS grant fails
+// here — a visible, required edit rather than a silent drop from the web grant.
+describe("TEMPLATE_READ_STAFF_ROLES parity with Go TemplateReadStaffRoles", () => {
+  // Go role-constant -> wire string (configrepo team.go: RoleHeadTA="hta", etc.).
+  const GO_ROLE_VALUES: Record<string, string> = {
+    RoleTeacher: "teacher",
+    RoleInstructor: "instructor",
+    RoleHeadTA: "hta",
+    RoleTA: "ta",
+  }
+
+  it("matches the Go non-owner staff role set", () => {
+    // web/ is process.cwd() in vitest; the Go source is a sibling under cli/.
+    const teamGo = readFileSync(
+      path.join(
+        process.cwd(),
+        "..",
+        "cli",
+        "gh-teacher",
+        "internal",
+        "configrepo",
+        "team.go",
+      ),
+      "utf8",
+    )
+    const match = teamGo.match(
+      /var TemplateReadStaffRoles = \[\]StaffRole\{([^}]*)\}/,
+    )
+    expect(
+      match,
+      "TemplateReadStaffRoles literal not found in team.go",
+    ).toBeTruthy()
+    const goRoles = match![1]
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .map((constName) => {
+        const value = GO_ROLE_VALUES[constName]
+        expect(
+          value,
+          `unknown Go StaffRole constant ${constName}; add it to GO_ROLE_VALUES`,
+        ).toBeTruthy()
+        return value
+      })
+
+    expect([...TEMPLATE_READ_STAFF_ROLES]).toEqual(goRoles)
   })
 })
 

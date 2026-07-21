@@ -6,7 +6,7 @@ import {
 } from "@/domain/assignments"
 import { GitHubAPIError } from "@/github-core/errors"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
+import { useCanAttemptTemplateGrant } from "@/context/githubOrgRole/useIsOrgOwner"
 
 // Save an assignment's settings. This edit path historically does NOT invalidate
 // the assignments cache (the page relies on its own refetch/staleTime), so the
@@ -24,9 +24,10 @@ export function useEditAssignment(opts?: {
 }) {
   const { onWrite, onMutate } = opts ?? {}
   const client = useGitHubClient()
-  // Skip the owner-only template read-grant for a non-owner author (head-TA):
-  // the grant fires from the stored template on any edit, so gate it here.
-  const { isOwner } = useIsOrgOwner()
+  // Attempt the owner-only template read-grant unless the org role is a
+  // CONFIRMED non-owner (a real owner mid-load still grants; a non-owner's
+  // attempt fails soft into the owner-required warning).
+  const canGrantTemplateAccess = useCanAttemptTemplateGrant()
 
   return useMutation<
     CreateAssignmentResult,
@@ -36,7 +37,7 @@ export function useEditAssignment(opts?: {
     mutationFn: (input) =>
       editAssignmentWithConflictRetry(client, {
         ...input,
-        canGrantTemplateAccess: isOwner,
+        canGrantTemplateAccess,
       }),
     onMutate,
     onSuccess: (result, input) => {

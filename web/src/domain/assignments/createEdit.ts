@@ -242,19 +242,14 @@ export async function editAssignment(
   // rather than silently skipping (which would 404 students on accept).
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && preservedEntry.template) {
-    templateGrantWarning = input.canGrantTemplateAccess
-      ? await tryGrantTeamTemplateRead(
-          client,
-          input.org,
-          input.classroom,
-          input.slug,
-          preservedEntry.template,
-        )
-      : templateGrantOwnerRequiredWarning(
-          input.classroom,
-          input.slug,
-          preservedEntry.template,
-        )
+    templateGrantWarning = await resolveTemplateGrant(
+      client,
+      input.org,
+      input.classroom,
+      input.slug,
+      preservedEntry.template,
+      input.canGrantTemplateAccess,
+    )
   }
 
   return {
@@ -552,6 +547,15 @@ async function buildAssignmentEntry(
   return { entry, needsTeamGrant }
 }
 
+// The NON-OWNER staff roles that get an eager read grant on a private in-org
+// template (head-TA, then TA). Single-sources the slug set below so the web
+// grant can't silently omit a role. Mirror of the Go source of truth
+// configrepo.TemplateReadStaffRoles ([RoleHeadTA, RoleTA]) — the two are
+// hand-synced; a parity test pins this list so a Go-side addition forces a
+// visible TS edit here rather than silently dropping from the web grant. The
+// teacher team is omitted (owners have repo access via ownership).
+export const TEMPLATE_READ_STAFF_ROLES = ["hta", "ta"] as const
+
 // Grant the classroom team read on an in-org private template so rostered
 // students can generate from it (mirrors the CLI's assignment add). The slug
 // comes from classroom.json (authoritative). A genuinely teamless classroom
@@ -575,10 +579,9 @@ async function grantTeamTemplateRead(
     // template repo without their team being granted, so grant both here. The
     // teacher team is intentionally omitted — its members are org owners with
     // repo access via ownership, so a team grant is redundant.
-    staffTeamSlugs = [
-      classroomJson.teams?.hta?.slug,
-      classroomJson.teams?.ta?.slug,
-    ].filter((s): s is string => Boolean(s))
+    staffTeamSlugs = TEMPLATE_READ_STAFF_ROLES.map(
+      (role) => classroomJson.teams?.[role]?.slug,
+    ).filter((s): s is string => Boolean(s))
   } catch (err) {
     // 404 = no classroom.json (pre-feature) is a genuine "no team"; fall
     // through. Anything else is transient and must not be misread as "no team".
@@ -682,6 +685,26 @@ export function templateGrantOwnerRequiredWarning(
   )
 }
 
+// The one grant-decision recipe shared by create / edit / reuse: attempt the
+// owner-only team read-grant when the caller may (canGrantTemplateAccess), else
+// return the owner-required warning instead of silently skipping — a silent skip
+// would 404 students on accept with no signal. Single-sourced so the three write
+// paths can't drift. `canGrantTemplateAccess` is set true unless the caller has
+// CONFIRMED the actor is a non-owner (see useCanAttemptTemplateGrant), so a real
+// owner mid-load still attempts (tryGrantTeamTemplateRead never throws).
+export async function resolveTemplateGrant(
+  client: GitHubClient,
+  org: string,
+  classroom: string,
+  slug: string,
+  template: NonNullable<Assignment["template"]>,
+  canGrantTemplateAccess: boolean | undefined,
+): Promise<string | undefined> {
+  return canGrantTemplateAccess
+    ? tryGrantTeamTemplateRead(client, org, classroom, slug, template)
+    : templateGrantOwnerRequiredWarning(classroom, slug, template)
+}
+
 // Refuse a write into an archived classroom (active: false). The UI hides the
 // affordances, but the write path is the authoritative guard — a stale tab, a
 // direct API call, or a CLI/agent must not mutate an archived classroom. Reads
@@ -758,19 +781,14 @@ export async function createAssignment(
 
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && assignmentBody.template) {
-    templateGrantWarning = input.canGrantTemplateAccess
-      ? await tryGrantTeamTemplateRead(
-          client,
-          input.org,
-          input.classroom,
-          input.slug,
-          assignmentBody.template,
-        )
-      : templateGrantOwnerRequiredWarning(
-          input.classroom,
-          input.slug,
-          assignmentBody.template,
-        )
+    templateGrantWarning = await resolveTemplateGrant(
+      client,
+      input.org,
+      input.classroom,
+      input.slug,
+      assignmentBody.template,
+      input.canGrantTemplateAccess,
+    )
   }
 
   return {
