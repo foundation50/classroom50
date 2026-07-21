@@ -20,6 +20,7 @@ import { ConfirmModal } from "@/components/modals"
 import {
   DEFAULT_FILTERS,
   DEFAULT_SORT,
+  DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
   buildScoresCsvRows,
@@ -42,7 +43,7 @@ import {
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
 import useGetScores from "@/hooks/useGetScores"
-import useLiveSubmissions, { LIVE_PAGE_SIZE } from "@/hooks/useLiveSubmissions"
+import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
@@ -254,10 +255,11 @@ const SubmissionsPageContent = () => {
   // Live submission presence for THIS assignment, read directly from student
   // repos' submit/* releases — so a student who pushed but hasn't been collected
   // yet still shows as submitted (issue #347). Owners: roster logins for
-  // individual assignments, group-founder logins for group assignments. Paginated
-  // (50/page) so a large class doesn't fan out every repo at once; empty_repo
-  // assignments never autograde, so the fan-out is disabled there.
-  const [livePage, setLivePage] = useState(0)
+  // individual assignments, group-founder logins for group assignments.
+  // Owner-only (see isOwner) and disabled for empty_repo assignments (never
+  // autograded). The whole owner set is read at once (throttled by the shared
+  // read-slot semaphore); the table paginates client-side over the merged rows,
+  // so there's no separate live "window" to advance.
   const liveRepoOwners = useMemo(
     () =>
       isGroupAssignment
@@ -265,30 +267,17 @@ const SubmissionsPageContent = () => {
         : students.map((s) => s.username).filter(Boolean),
     [isGroupAssignment, groupRepoList, students],
   )
-  // Clamp the requested page to the last valid page for the CURRENT owner set.
-  // The page component isn't remounted across assignment navigation, so a
-  // leftover offset from a longer assignment would otherwise slice past a
-  // shorter one's owners and show an empty window (#347 review). Clamping in the
-  // derived value (rather than a setState-in-effect) keeps the reset render-pure.
-  const lastLivePage =
-    liveRepoOwners.length > 0
-      ? Math.ceil(liveRepoOwners.length / LIVE_PAGE_SIZE) - 1
-      : 0
-  const effectiveLivePage = Math.min(livePage, lastLivePage)
   const {
     submissions: liveSubmissions,
     errorCount: liveErrorCount,
     isFetching: liveFetching,
     isPending: livePending,
-    hasNextPage: liveHasNextPage,
     refetch: refetchLive,
   } = useLiveSubmissions({
     org,
     classroom,
     assignment,
     repoOwners: liveRepoOwners,
-    page: effectiveLivePage,
-    pageSize: LIVE_PAGE_SIZE,
     // Owner-only (see isOwner above) and never for empty_repo assignments.
     enabled: isOwner && !isEmptyRepoAssignment,
   })
@@ -364,6 +353,24 @@ const SubmissionsPageContent = () => {
   // Drives the "Regrade all" confirmation modal (replaces window.confirm).
   const [regradeConfirmOpen, setRegradeConfirmOpen] = useState(false)
   const [sort, setSort] = useState<SubmissionSort>(DEFAULT_SORT)
+  // Client-side table pagination over the combined display list (submitters +
+  // non-submitters + group repos). `page` is 0-based; it's clamped to the valid
+  // range at render (pageBounds), so a filter that shrinks the list can't strand
+  // the view on an empty page.
+  const [page, setPage] = useState(0)
+  const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
+  // Reset to the first page whenever the visible set changes (new search,
+  // filter, sort, page size, or a different assignment). Done render-purely via
+  // a stored view signature (setState-during-render, not an effect) so the reset
+  // lands in the same commit as the change — no extra render, and no
+  // setState-in-effect. React bails out of the re-render once the signature
+  // matches.
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
+  const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
+  if (viewSignature !== lastViewSignature) {
+    setLastViewSignature(viewSignature)
+    setPage(0)
+  }
 
   // Whether a search/filter is narrowing the set — drives the table's
   // "filters hide everything" vs "nothing collected yet" empty state, and its
@@ -748,8 +755,9 @@ const SubmissionsPageContent = () => {
       {/* Live-submission strip: presence read directly from student repos'
           submit/* releases, so a just-pushed student shows before the next
           collect (issue #347). Owner-only (see isOwner) and hidden for
-          empty_repo assignments (never autograded). "Show next" pages the
-          fan-out in LIVE_PAGE_SIZE windows so a large class isn't read at once. */}
+          empty_repo assignments (never autograded). The whole owner set is read
+          at once (throttled by the shared read-slot semaphore); the table
+          paginates client-side, so there's no live "window" to advance. */}
       {isOwner && !isEmptyRepoAssignment && (
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70"
@@ -765,16 +773,6 @@ const SubmissionsPageContent = () => {
             <Badge tone="info" size="sm">
               {t("submissions.live.pending", { count: livePendingCount })}
             </Badge>
-          )}
-          {liveHasNextPage && (
-            <Button
-              variant="ghost"
-              size="xs"
-              disabled={liveFetching}
-              onClick={() => setLivePage(effectiveLivePage + 1)}
-            >
-              {t("submissions.live.showNext", { count: LIVE_PAGE_SIZE })}
-            </Button>
           )}
         </div>
       )}
@@ -937,6 +935,10 @@ const SubmissionsPageContent = () => {
           students.length > 0 &&
           showsNonSubmitters(effectiveFilters)
         }
+        page={page}
+        pageSize={pageSize}
+        onPageChange={setPage}
+        onPageSizeChange={setPageSize}
       />
       <ConfirmModal
         open={regradeConfirmOpen}

@@ -8,10 +8,12 @@ import {
   acceptedRosterCount,
   acceptedUsernames,
   applyStatusSelection,
+  buildDisplayItems,
   buildScoresCsvRows,
   buildSectionLookup,
   classAverage,
   computeStats,
+  displayItemOwner,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
@@ -19,6 +21,9 @@ import {
   hasAccepted,
   mergeLiveRows,
   nonSubmitterStatus,
+  pageBounds,
+  paginateDisplayItems,
+  paginationRange,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowMatchesQuery,
@@ -953,5 +958,113 @@ describe("mergeLiveRows", () => {
     expect(csv.score).toBe("")
     expect(csv.max_score).toBe("")
     expect(csv.usernames).toBe("bob")
+  })
+})
+
+describe("pagination helpers", () => {
+  const groupRepo = (owner: string) => ({
+    owner,
+    repoName: `cs-hw-${owner}`,
+  })
+
+  describe("buildDisplayItems", () => {
+    it("concatenates rows, then non-submitters, then group repos in order", () => {
+      const items = buildDisplayItems(
+        [row({ owner: "alice" }), row({ owner: "bob" })],
+        [student({ username: "carol" })],
+        [groupRepo("dave")],
+      )
+      expect(items.map((i) => i.kind)).toEqual([
+        "row",
+        "row",
+        "nonSubmitter",
+        "groupRepo",
+      ])
+      expect(items.map(displayItemOwner)).toEqual([
+        "alice",
+        "bob",
+        "carol",
+        "dave",
+      ])
+    })
+  })
+
+  describe("pageBounds", () => {
+    it("reports the 1-based range and clamps the page into view", () => {
+      expect(pageBounds(31, 10, 0)).toMatchObject({
+        page: 0,
+        pageCount: 4,
+        from: 1,
+        to: 10,
+        total: 31,
+      })
+      // Last page is partial.
+      expect(pageBounds(31, 10, 3)).toMatchObject({
+        page: 3,
+        from: 31,
+        to: 31,
+      })
+      // A too-high requested page clamps to the last page.
+      expect(pageBounds(31, 10, 99)).toMatchObject({
+        page: 3,
+        from: 31,
+        to: 31,
+      })
+    })
+
+    it("handles an empty list without a negative or NaN range", () => {
+      expect(pageBounds(0, 10, 0)).toEqual({
+        page: 0,
+        pageCount: 1,
+        from: 0,
+        to: 0,
+        total: 0,
+      })
+    })
+  })
+
+  describe("paginateDisplayItems", () => {
+    const items = buildDisplayItems(
+      Array.from({ length: 25 }, (_, i) => row({ owner: `s${i}` })),
+      [],
+      [],
+    )
+
+    it("slices the requested page", () => {
+      const p0 = paginateDisplayItems(items, 10, 0)
+      expect(p0.map(displayItemOwner)).toEqual(
+        Array.from({ length: 10 }, (_, i) => `s${i}`),
+      )
+      const p2 = paginateDisplayItems(items, 10, 2)
+      // Last page holds the remaining 5.
+      expect(p2.map(displayItemOwner)).toEqual([
+        "s20",
+        "s21",
+        "s22",
+        "s23",
+        "s24",
+      ])
+    })
+
+    it("clamps an out-of-range page to the last page's slice", () => {
+      const slice = paginateDisplayItems(items, 10, 99)
+      expect(slice).toHaveLength(5)
+    })
+  })
+
+  describe("paginationRange", () => {
+    it("lists every page when there are few", () => {
+      expect(paginationRange(0, 3)).toEqual([0, 1, 2])
+    })
+
+    it("collapses the middle with ellipsis gaps for many pages", () => {
+      // page 5 of 20: first, gap, neighbors, gap, last.
+      expect(paginationRange(5, 20)).toEqual([0, null, 4, 5, 6, null, 19])
+    })
+
+    it("does not insert a gap when pages are adjacent", () => {
+      // Near the start, no gap between first and the neighbor cluster.
+      expect(paginationRange(1, 20)).toEqual([0, 1, 2, null, 19])
+    })
   })
 })

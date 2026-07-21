@@ -37,7 +37,16 @@
     "no": "No",
     "skipToMainContent": "Skip to main content",
     "openOrgOnGitHub": "Open {{org}} on GitHub",
-    "dismissNotification": "Dismiss notification"
+    "dismissNotification": "Dismiss notification",
+    "pagination": {
+      "show": "Show",
+      "entries": "entries",
+      "showAria": "Rows per page",
+      "range": "{{from}} to {{to}} of {{total}}",
+      "navAria": "Pagination",
+      "previous": "Previous page",
+      "next": "Next page"
+    }
   },
   "notFound": {
     "title": "Page not found",
@@ -1577,8 +1586,7 @@
       "pending_one": "{{count}} submitted, not yet collected",
       "pending_other": "{{count}} submitted, not yet collected",
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
-      "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
-      "showNext": "Show next {{count}}"
+      "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },
     "menu": {
       "actions": "Actions",

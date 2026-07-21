@@ -62,7 +62,7 @@ beforeEach(() => {
 })
 
 describe("useLiveSubmissions", () => {
-  it("fetches only the first pageSize owners and flags hasNextPage", async () => {
+  it("fetches all owners in one batch", async () => {
     request.mockResolvedValue([
       submitRelease("submit/x", "2026-01-01T00:00:00Z"),
     ])
@@ -73,36 +73,12 @@ describe("useLiveSubmissions", () => {
         useLiveSubmissions({
           ...base,
           repoOwners: owners,
-          page: 0,
-          pageSize: 2,
         }),
       { wrapper: wrapper(makeClient()) },
     )
 
-    await waitFor(() => expect(result.current.submissions.length).toBe(2))
-    expect(request).toHaveBeenCalledTimes(2)
-    expect(result.current.hasNextPage).toBe(true)
-  })
-
-  it("hasNextPage is false on the last page", async () => {
-    request.mockResolvedValue([
-      submitRelease("submit/x", "2026-01-01T00:00:00Z"),
-    ])
-    const owners = ["a", "b", "c"]
-
-    const { result } = renderHook(
-      () =>
-        useLiveSubmissions({
-          ...base,
-          repoOwners: owners,
-          page: 1,
-          pageSize: 2,
-        }),
-      { wrapper: wrapper(makeClient()) },
-    )
-
-    await waitFor(() => expect(result.current.submissions.length).toBe(1))
-    expect(result.current.hasNextPage).toBe(false)
+    await waitFor(() => expect(result.current.submissions.length).toBe(5))
+    expect(request).toHaveBeenCalledTimes(5)
   })
 
   it("treats a repo with no submit release as not-submitted, not an error", async () => {
@@ -161,7 +137,7 @@ describe("useLiveSubmissions", () => {
       { wrapper: wrapper(makeClient()) },
     )
     expect(request).not.toHaveBeenCalled()
-    expect(result.current.hasNextPage).toBe(false)
+    expect(result.current.submissions).toEqual([])
   })
 
   it("retries a rate-limited repo read and counts it as submitted, not an error", async () => {

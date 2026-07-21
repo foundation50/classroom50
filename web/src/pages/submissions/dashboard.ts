@@ -672,3 +672,115 @@ export function selectActiveWorkflowAction(
   if (!regrade.idle) return "regrade"
   return null
 }
+
+// Client-side table pagination over the combined display list. The submissions
+// table renders three consecutive sections in one logical sequence — submitted
+// rows, then roster non-submitters, then unsubmitted group repos — so
+// pagination must span all three as one list, not paginate each independently.
+// A DisplayItem is the tagged union of those three, in render order.
+export type DisplayItem =
+  | { kind: "row"; row: SubmissionRow }
+  | { kind: "nonSubmitter"; student: Student }
+  | { kind: "groupRepo"; repo: GroupRepo }
+
+// The default and offered "Show N entries" page sizes (mirrors the reference
+// gradebook UI). Default is the first entry.
+export const PAGE_SIZE_OPTIONS = [10, 25, 50, 100] as const
+export const DEFAULT_PAGE_SIZE: number = PAGE_SIZE_OPTIONS[0]
+
+// Flatten the three sections into one ordered display list. Single source of
+// order so the table render and the live-owner windowing (which repos to fan
+// out for the current page) agree on exactly what's on each page.
+export function buildDisplayItems(
+  rows: SubmissionRow[],
+  nonSubmitters: Student[],
+  groupRepos: GroupRepo[],
+): DisplayItem[] {
+  return [
+    ...rows.map<DisplayItem>((row) => ({ kind: "row", row })),
+    ...nonSubmitters.map<DisplayItem>((student) => ({
+      kind: "nonSubmitter",
+      student,
+    })),
+    ...groupRepos.map<DisplayItem>((repo) => ({ kind: "groupRepo", repo })),
+  ]
+}
+
+export type PageBounds = {
+  // 0-based page clamped to [0, pageCount-1]; 0 when the list is empty.
+  page: number
+  pageCount: number
+  // 1-based inclusive range of items shown, for the "N to M of T" label; both 0
+  // when the list is empty.
+  from: number
+  to: number
+  total: number
+}
+
+// Clamp a requested page to the valid range for a list of `total` items at
+// `pageSize`. Pure so the page/label math is unit-testable and shared between
+// the footer and the slice.
+export function pageBounds(
+  total: number,
+  pageSize: number,
+  requestedPage: number,
+): PageBounds {
+  const pageCount = Math.max(1, Math.ceil(total / pageSize))
+  const page = Math.min(Math.max(0, requestedPage), pageCount - 1)
+  if (total === 0) {
+    return { page: 0, pageCount, from: 0, to: 0, total: 0 }
+  }
+  const from = page * pageSize + 1
+  const to = Math.min(total, (page + 1) * pageSize)
+  return { page, pageCount, from, to, total }
+}
+
+// The slice of display items for the clamped current page.
+export function paginateDisplayItems(
+  items: DisplayItem[],
+  pageSize: number,
+  requestedPage: number,
+): DisplayItem[] {
+  const { page } = pageBounds(items.length, pageSize, requestedPage)
+  const start = page * pageSize
+  return items.slice(start, start + pageSize)
+}
+
+// The repo-owner login for a display item, so the live fan-out can read exactly
+// the repos on the current page. Submitted/pending rows and group repos are
+// keyed by `owner`; a non-submitter by its roster username. Empty string is
+// filtered by the caller.
+export function displayItemOwner(item: DisplayItem): string {
+  switch (item.kind) {
+    case "row":
+      return item.row.owner
+    case "nonSubmitter":
+      return item.student.username
+    case "groupRepo":
+      return item.repo.owner
+  }
+}
+
+// The compact list of page numbers to render, with `null` marking an ellipsis
+// gap. Always shows first/last, the current page, and one neighbor each side;
+// collapses the rest. Keeps the nav to at most ~7 controls regardless of count.
+export function paginationRange(
+  page: number,
+  pageCount: number,
+): (number | null)[] {
+  if (pageCount <= 7) {
+    return Array.from({ length: pageCount }, (_, i) => i)
+  }
+  const pages = new Set<number>([0, pageCount - 1, page, page - 1, page + 1])
+  const sorted = [...pages]
+    .filter((p) => p >= 0 && p < pageCount)
+    .sort((a, b) => a - b)
+  const out: (number | null)[] = []
+  let prev = -1
+  for (const p of sorted) {
+    if (prev >= 0 && p - prev > 1) out.push(null)
+    out.push(p)
+    prev = p
+  }
+  return out
+}

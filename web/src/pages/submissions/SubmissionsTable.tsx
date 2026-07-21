@@ -7,7 +7,7 @@ import {
   ScrollText,
   SearchX,
 } from "lucide-react"
-import { Fragment, useId, useRef, useState } from "react"
+import { Fragment, useId, useMemo, useRef, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 
 import GitHub from "@/assets/github.svg?react"
@@ -27,10 +27,18 @@ import {
   Modal,
   MonoLtr,
   Spinner,
+  TablePagination,
   rtlFlip,
 } from "@/components/ui"
 import { scoreTone } from "@/pages/submissions/dashboard"
 import type { GroupRepo } from "@/pages/submissions/dashboard"
+import {
+  buildDisplayItems,
+  pageBounds,
+  paginateDisplayItems,
+  paginationRange,
+  PAGE_SIZE_OPTIONS,
+} from "@/pages/submissions/dashboard"
 import {
   ActionIconLink,
   GroupActionControls,
@@ -414,6 +422,10 @@ const SubmissionsTable = ({
   emptyRepo = false,
   initialLoading = false,
   nonSubmittersLoading = false,
+  page = 0,
+  pageSize = Number.MAX_SAFE_INTEGER,
+  onPageChange = () => {},
+  onPageSizeChange = () => {},
 }: {
   scores: SubmissionRow[]
   students: Student[]
@@ -452,6 +464,14 @@ const SubmissionsTable = ({
   // render a resolving affordance instead of prematurely listing students who
   // may reclassify to submitted/pending.
   nonSubmittersLoading?: boolean
+  // Client-side pagination over the combined display list (submitters, then
+  // non-submitters, then group repos). `page` is 0-based; the caller owns the
+  // state and resets it on filter/sort/size change. Optional — omitting them
+  // (e.g. in tests) renders every row on one page with no pager.
+  page?: number
+  pageSize?: number
+  onPageChange?: (page: number) => void
+  onPageSizeChange?: (pageSize: number) => void
 }) => {
   const { t } = useTranslation()
   const passBar = thresholdFraction ?? null
@@ -480,6 +500,237 @@ const SubmissionsTable = ({
       row.usernames.some((u) => u.toLowerCase() === login),
     )
   })()
+
+  // The three sections render as one paginated sequence: submitters, then
+  // roster non-submitters, then unsubmitted group repos. Build the combined
+  // list once, then slice to the current page (clamped).
+  const displayItems = useMemo(
+    () => buildDisplayItems(scores, nonSubmitters, unsubmittedGroupRepos),
+    [scores, nonSubmitters, unsubmittedGroupRepos],
+  )
+  const bounds = pageBounds(displayItems.length, pageSize, page)
+  const pageItems = useMemo(
+    () => paginateDisplayItems(displayItems, pageSize, page),
+    [displayItems, pageSize, page],
+  )
+  // Show the pager only once there's more than a page of rows and we're past the
+  // loading/empty states (which own the whole table body).
+  const showPager =
+    !initialLoading && !nonSubmittersLoading && displayItems.length > pageSize
+
+  // One submitted/pending row. Extracted so the paginated sequence can render
+  // it inline alongside non-submitter and group-repo rows without duplicating
+  // this markup. Keyed by owner by the caller.
+  const renderSubmitterRow = ({
+    usernames,
+    score,
+    datetime,
+    submissionCount,
+    late,
+    ...rest
+  }: SubmissionRow) => {
+    const repo = studentRepoName(classroom, assignment, rest.owner)
+    const repoHref = studentRepoUrl(org, classroom, assignment, rest.owner)
+    // Expandability is driven by the COLLECTED history, not the (possibly
+    // live-inflated) count: a `staleCount` row shows more submissions than
+    // scores.json has ingested, so expanding would reveal fewer entries than the
+    // badge claims. Only offer expand when there is real multi-entry history.
+    const canExpand = rest.submissions.length > 1
+    const isOpen = !!expanded[rest.owner]
+    return (
+      <Fragment key={rest.owner}>
+        <tr>
+          <td>
+            {isGroup ? (
+              <GroupMembers
+                org={org}
+                repoName={repo}
+                usernames={usernames}
+                students={students}
+                repoHref={repoHref}
+                repoLabel={repo}
+              />
+            ) : (
+              <Avatar
+                name={getName(usernames[0], students)}
+                initials={getInitials(usernames[0], students)}
+                github={usernames[0]}
+                subtitle={identitySubtitle(
+                  getName(usernames[0], students),
+                  usernames[0],
+                  getSection(usernames[0], students),
+                )}
+                onClick={() => setProfileUsername(usernames[0])}
+              />
+            )}
+          </td>
+          <td>
+            <div className="flex items-center gap-1.5">
+              {canExpand ? (
+                <button
+                  type="button"
+                  className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
+                  aria-expanded={isOpen}
+                  title={
+                    isOpen
+                      ? t("submissions.table.hideSubmissions")
+                      : t("submissions.table.showSubmissions")
+                  }
+                  onClick={() => toggle(rest.owner)}
+                >
+                  <ChevronRight
+                    aria-hidden="true"
+                    className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
+                  />
+                  {t("submissions.table.submissionCount", {
+                    count: submissionCount,
+                  })}
+                </button>
+              ) : (
+                <label className="badge max-xl:text-xs whitespace-nowrap">
+                  {t("submissions.table.submissionCount", {
+                    count: submissionCount,
+                  })}
+                </label>
+              )}
+              {rest.staleCount && (
+                <Badge
+                  tone="info"
+                  size="sm"
+                  title={t("submissions.table.staleCountTitle")}
+                >
+                  {t("submissions.table.staleCount")}
+                </Badge>
+              )}
+            </div>
+          </td>
+          <td>
+            {emptyRepo ? (
+              <span
+                className="text-base-content/50"
+                title={t("submissions.table.noGradingTitle")}
+              >
+                —
+              </span>
+            ) : rest.pending ? (
+              <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
+                {t("submissions.table.pendingGrade")}
+              </Badge>
+            ) : (
+              <ScoreBadge
+                score={score}
+                max={rest["max-score"]}
+                thresholdFraction={passBar}
+              />
+            )}
+          </td>
+          <td>
+            <div className="flex flex-col gap-0.5">
+              <div className="flex items-center gap-2">
+                <span className="whitespace-nowrap">
+                  {formatDateTime(datetime)}
+                </span>
+                {late ? (
+                  <Badge
+                    tone="error"
+                    title={t("submissions.table.lateRowTitle")}
+                  >
+                    {t("submissions.table.late")}
+                  </Badge>
+                ) : null}
+              </div>
+              {rest.gradedAt && rest.gradedAt !== datetime ? (
+                <span
+                  className="whitespace-nowrap text-xs text-base-content/70"
+                  title={t("submissions.table.gradedAtTitle")}
+                >
+                  {t("submissions.table.gradedAt", {
+                    date: formatDateTime(rest.gradedAt),
+                  })}
+                </span>
+              ) : null}
+              {rest.liveLatestAt ? (
+                <span
+                  className="whitespace-nowrap text-xs text-info"
+                  title={t("submissions.table.liveLatestTitle")}
+                >
+                  {t("submissions.table.liveLatest", {
+                    date: formatDateTime(rest.liveLatestAt),
+                  })}
+                </span>
+              ) : null}
+            </div>
+          </td>
+          <td>
+            <div className="flex items-center gap-1">
+              {isGroup && (
+                <GroupActionControls
+                  repo={repo}
+                  repoHref={repoHref}
+                  onManage={() => setManageOwner(rest.owner)}
+                />
+              )}
+              {!isGroup && (
+                <ActionIconLink
+                  href={repoHref}
+                  icon={GitHub}
+                  label={t("submissions.table.openRepoLabel", { repo })}
+                  title={t("submissions.table.viewRepo")}
+                  emptyLabel={t("submissions.table.openRepoLabel", { repo })}
+                  emptyTitle={t("submissions.table.viewRepo")}
+                />
+              )}
+              <ActionIconLink
+                href={safeHttpUrl(rest.commit)}
+                icon={GitCommitHorizontal}
+                label={t("submissions.table.viewCommit")}
+                title={t("submissions.table.commit")}
+                emptyLabel={t("submissions.table.noCommit")}
+                emptyTitle={t("submissions.table.noCommit")}
+              />
+              {!emptyRepo && (
+                <>
+                  <ReviewButton org={org} repo={repo} />
+                  <ActionIconLink
+                    href={safeHttpUrl(rest.release)}
+                    icon={ScrollText}
+                    label={t("submissions.table.viewDetails")}
+                    title={t("submissions.table.details")}
+                    emptyLabel={t("submissions.table.noDetailsLabel")}
+                    emptyTitle={t("submissions.table.noDetails")}
+                  />
+                  <RegradeButton
+                    org={org}
+                    classroom={classroom}
+                    assignment={assignment}
+                    owner={rest.owner}
+                    displayName={
+                      isGroup
+                        ? undefined
+                        : getName(rest.owner, students) || undefined
+                    }
+                  />
+                </>
+              )}
+            </div>
+          </td>
+        </tr>
+        {canExpand && isOpen && (
+          <tr>
+            <td colSpan={5} className="bg-base-200/40">
+              <SubmissionHistory
+                submissions={rest.submissions}
+                repoHref={repoHref}
+                isGroup={isGroup}
+                students={students}
+                thresholdFraction={passBar}
+              />
+            </td>
+          </tr>
+        )}
+      </Fragment>
+    )
+  }
 
   return (
     <>
@@ -565,258 +816,38 @@ const SubmissionsTable = ({
                   </td>
                 </tr>
               )}
-            {scores.map(
-              ({
-                usernames,
-                score,
-                datetime,
-                submissionCount,
-                late,
-                ...rest
-              }) => {
-                const repo = studentRepoName(classroom, assignment, rest.owner)
-                const repoHref = studentRepoUrl(
-                  org,
-                  classroom,
-                  assignment,
-                  rest.owner,
-                )
-                // Expandability is driven by the COLLECTED history, not the
-                // (possibly live-inflated) count: a `staleCount` row shows more
-                // submissions than scores.json has ingested, so expanding would
-                // reveal fewer entries than the badge claims. Only offer expand
-                // when there is real multi-entry history to show.
-                const canExpand = rest.submissions.length > 1
-                const isOpen = !!expanded[rest.owner]
+            {pageItems.map((item) => {
+              if (item.kind === "row") return renderSubmitterRow(item.row)
+              if (item.kind === "nonSubmitter") {
+                const student = item.student
                 return (
-                  <Fragment key={rest.owner}>
-                    <tr>
-                      <td>
-                        {isGroup ? (
-                          <GroupMembers
-                            org={org}
-                            repoName={repo}
-                            usernames={usernames}
-                            students={students}
-                            repoHref={repoHref}
-                            repoLabel={repo}
-                          />
-                        ) : (
-                          <Avatar
-                            name={getName(usernames[0], students)}
-                            initials={getInitials(usernames[0], students)}
-                            github={usernames[0]}
-                            subtitle={identitySubtitle(
-                              getName(usernames[0], students),
-                              usernames[0],
-                              getSection(usernames[0], students),
-                            )}
-                            onClick={() => setProfileUsername(usernames[0])}
-                          />
-                        )}
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-1.5">
-                          {canExpand ? (
-                            <button
-                              type="button"
-                              className="badge max-xl:text-xs whitespace-nowrap gap-1 hover:badge-neutral cursor-pointer"
-                              aria-expanded={isOpen}
-                              title={
-                                isOpen
-                                  ? t("submissions.table.hideSubmissions")
-                                  : t("submissions.table.showSubmissions")
-                              }
-                              onClick={() => toggle(rest.owner)}
-                            >
-                              <ChevronRight
-                                aria-hidden="true"
-                                className={`size-3.5 transition-transform ${rtlFlip} ${isOpen ? "rotate-90" : ""}`}
-                              />
-                              {t("submissions.table.submissionCount", {
-                                count: submissionCount,
-                              })}
-                            </button>
-                          ) : (
-                            <label className="badge max-xl:text-xs whitespace-nowrap">
-                              {t("submissions.table.submissionCount", {
-                                count: submissionCount,
-                              })}
-                            </label>
-                          )}
-                          {rest.staleCount && (
-                            <Badge
-                              tone="info"
-                              size="sm"
-                              title={t("submissions.table.staleCountTitle")}
-                            >
-                              {t("submissions.table.staleCount")}
-                            </Badge>
-                          )}
-                        </div>
-                      </td>
-                      <td>
-                        {emptyRepo ? (
-                          <span
-                            className="text-base-content/50"
-                            title={t("submissions.table.noGradingTitle")}
-                          >
-                            —
-                          </span>
-                        ) : rest.pending ? (
-                          <Badge
-                            ghost
-                            title={t("submissions.table.pendingGradeTitle")}
-                          >
-                            {t("submissions.table.pendingGrade")}
-                          </Badge>
-                        ) : (
-                          <ScoreBadge
-                            score={score}
-                            max={rest["max-score"]}
-                            thresholdFraction={passBar}
-                          />
-                        )}
-                      </td>
-                      <td>
-                        <div className="flex flex-col gap-0.5">
-                          <div className="flex items-center gap-2">
-                            <span className="whitespace-nowrap">
-                              {formatDateTime(datetime)}
-                            </span>
-                            {late ? (
-                              <Badge
-                                tone="error"
-                                title={t("submissions.table.lateRowTitle")}
-                              >
-                                {t("submissions.table.late")}
-                              </Badge>
-                            ) : null}
-                          </div>
-                          {rest.gradedAt && rest.gradedAt !== datetime ? (
-                            <span
-                              className="whitespace-nowrap text-xs text-base-content/70"
-                              title={t("submissions.table.gradedAtTitle")}
-                            >
-                              {t("submissions.table.gradedAt", {
-                                date: formatDateTime(rest.gradedAt),
-                              })}
-                            </span>
-                          ) : null}
-                          {rest.liveLatestAt ? (
-                            <span
-                              className="whitespace-nowrap text-xs text-info"
-                              title={t("submissions.table.liveLatestTitle")}
-                            >
-                              {t("submissions.table.liveLatest", {
-                                date: formatDateTime(rest.liveLatestAt),
-                              })}
-                            </span>
-                          ) : null}
-                        </div>
-                      </td>
-                      <td>
-                        <div className="flex items-center gap-1">
-                          {isGroup && (
-                            <GroupActionControls
-                              repo={repo}
-                              repoHref={repoHref}
-                              onManage={() => setManageOwner(rest.owner)}
-                            />
-                          )}
-                          {!isGroup && (
-                            <ActionIconLink
-                              href={repoHref}
-                              icon={GitHub}
-                              label={t("submissions.table.openRepoLabel", {
-                                repo,
-                              })}
-                              title={t("submissions.table.viewRepo")}
-                              emptyLabel={t("submissions.table.openRepoLabel", {
-                                repo,
-                              })}
-                              emptyTitle={t("submissions.table.viewRepo")}
-                            />
-                          )}
-                          <ActionIconLink
-                            href={safeHttpUrl(rest.commit)}
-                            icon={GitCommitHorizontal}
-                            label={t("submissions.table.viewCommit")}
-                            title={t("submissions.table.commit")}
-                            emptyLabel={t("submissions.table.noCommit")}
-                            emptyTitle={t("submissions.table.noCommit")}
-                          />
-                          {!emptyRepo && (
-                            <>
-                              <ReviewButton org={org} repo={repo} />
-                              <ActionIconLink
-                                href={safeHttpUrl(rest.release)}
-                                icon={ScrollText}
-                                label={t("submissions.table.viewDetails")}
-                                title={t("submissions.table.details")}
-                                emptyLabel={t(
-                                  "submissions.table.noDetailsLabel",
-                                )}
-                                emptyTitle={t("submissions.table.noDetails")}
-                              />
-                              <RegradeButton
-                                org={org}
-                                classroom={classroom}
-                                assignment={assignment}
-                                owner={rest.owner}
-                                displayName={
-                                  isGroup
-                                    ? undefined
-                                    : getName(rest.owner, students) || undefined
-                                }
-                              />
-                            </>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                    {canExpand && isOpen && (
-                      <tr>
-                        <td colSpan={5} className="bg-base-200/40">
-                          <SubmissionHistory
-                            submissions={rest.submissions}
-                            repoHref={repoHref}
-                            isGroup={isGroup}
-                            students={students}
-                            thresholdFraction={passBar}
-                          />
-                        </td>
-                      </tr>
-                    )}
-                  </Fragment>
+                  <NonSubmitterRow
+                    key={`missing-${student.username || student.email || student.github_id}`}
+                    student={student}
+                    students={students}
+                    isGroup={isGroup}
+                    acceptedUsernames={acceptedUsernames}
+                    org={org}
+                    classroom={classroom}
+                    assignment={assignment}
+                    onProfile={setProfileUsername}
+                  />
                 )
-              },
-            )}
-            {nonSubmitters.map((student) => (
-              <NonSubmitterRow
-                key={`missing-${student.username || student.email || student.github_id}`}
-                student={student}
-                students={students}
-                isGroup={isGroup}
-                acceptedUsernames={acceptedUsernames}
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                onProfile={setProfileUsername}
-              />
-            ))}
-            {unsubmittedGroupRepos.map(({ owner, repoName }) => (
-              <GroupRepoRow
-                key={`group-${repoName}`}
-                org={org}
-                classroom={classroom}
-                assignment={assignment}
-                owner={owner}
-                repoName={repoName}
-                students={students}
-                onManage={() => setManageOwner(owner)}
-              />
-            ))}
+              }
+              const { owner, repoName } = item.repo
+              return (
+                <GroupRepoRow
+                  key={`group-${repoName}`}
+                  org={org}
+                  classroom={classroom}
+                  assignment={assignment}
+                  owner={owner}
+                  repoName={repoName}
+                  students={students}
+                  onManage={() => setManageOwner(owner)}
+                />
+              )
+            })}
             {nonSubmittersLoading && (
               <tr>
                 <td
@@ -832,6 +863,21 @@ const SubmissionsTable = ({
             )}
           </tbody>
         </table>
+        {showPager && (
+          <TablePagination
+            page={bounds.page}
+            pageCount={bounds.pageCount}
+            pageSize={pageSize}
+            pageSizeOptions={PAGE_SIZE_OPTIONS}
+            from={bounds.from}
+            to={bounds.to}
+            total={bounds.total}
+            pages={paginationRange(bounds.page, bounds.pageCount)}
+            onPageChange={onPageChange}
+            onPageSizeChange={onPageSizeChange}
+            className="border-t border-base-content/5"
+          />
+        )}
       </EnterDiv>
 
       {isGroup && manageOwner && (
