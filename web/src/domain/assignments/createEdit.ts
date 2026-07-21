@@ -34,6 +34,7 @@ import {
   validateLanguageVersion,
 } from "@/util/runtime"
 import { parseAllowedFiles, validateAllowedFiles } from "@/util/allowedFiles"
+import { parseReleaseAssets, validateReleaseAssets } from "@/util/releaseAssets"
 import {
   addRepositoryToTeam,
   createGitCommit,
@@ -99,6 +100,7 @@ const ASSIGNMENT_KEY_OWNERSHIP: Record<
   // than round-tripping into a file the CLI would reject.
   runtime: "managed",
   allowed_files: "managed",
+  release_assets: "managed",
   pass_threshold: "managed",
   tests: "managed",
   // Written only by the CLI's `migrate`; the form never manages it, so it must
@@ -332,6 +334,11 @@ async function buildAssignmentEntry(
         "empty_repo: an empty repository can't restrict allowed files — it never autogrades.",
       )
     }
+    if (input.release_assets.trim()) {
+      throw new Error(
+        "empty_repo: an empty repository can't attach submission release files — it never autogrades or publishes a submission Release.",
+      )
+    }
     if (input.pass_threshold !== undefined) {
       throw new Error(
         "empty_repo: an empty repository can't have a passing threshold — it never autogrades.",
@@ -517,6 +524,16 @@ async function buildAssignmentEntry(
       throw new Error(`allowed_files: ${allowedFilesError}`)
     }
     entry.allowed_files = allowedFiles
+  }
+
+  // release_assets: parse the textarea, re-validate, omit when empty.
+  const releaseAssets = parseReleaseAssets(input.release_assets)
+  if (releaseAssets.length > 0) {
+    const releaseAssetsError = validateReleaseAssets(releaseAssets)
+    if (releaseAssetsError) {
+      throw new Error(`release_assets: ${releaseAssetsError.message}`)
+    }
+    entry.release_assets = releaseAssets
   }
 
   if (tests.length > 0) {

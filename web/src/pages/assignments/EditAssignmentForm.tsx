@@ -87,6 +87,7 @@ const EditAssignmentForm = ({
                 runtime_apt: values.runtime_apt,
                 setup_command: values.setup_command,
                 allowed_files: values.allowed_files,
+                release_assets: values.release_assets,
                 pass_threshold: values.pass_threshold_enabled
                   ? values.pass_threshold
                   : undefined,

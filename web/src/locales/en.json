@@ -719,7 +719,7 @@
       "emptyRepoHelp": "Create each student's repository completely empty: no starter files, no autograding, no feedback pull request. For assignments where students build everything from scratch, including their own GitHub Actions. This choice is permanent for the assignment.",
       "emptyRepoLocked": "It can't be changed after creation.",
       "advanced": "Advanced settings",
-      "advancedHelp": "Optional runtime overrides. Blank uses the defaults (ubuntu-latest + Python 3.12).",
+      "advancedHelp": "Optional grading and runtime settings. Blank fields use their documented defaults.",
       "dockerImage": "Docker image",
       "dockerImagePlaceholder": "e.g. gcc:13",
       "dockerImageTip": "Grade inside this public Docker image instead of a GitHub-hosted runner. The image provides the OS and its packages. It must be publicly pullable (for example ubuntu:24.04).",
@@ -731,6 +731,11 @@
       "setupCommandTip": "A command run once before grading, for example to compile. It is added as a leading 0-point autograding step named “setup”. A non-zero exit fails the run.",
       "allowedFiles": "Allowed files",
       "allowedFilesTip": "Ordered {{gitignore}}-style patterns, one per line, defining which files belong to a submission (last match wins, {{bang}} re-includes). E.g. {{star}} then {{example}} allows only {{result}}. Blank allows every file.",
+      "releaseAssets": "Submission release files",
+      "releaseAssetsTip": "One exact workspace-relative file path per line; paths are exact, not glob patterns, and may total at most 8 KiB of UTF-8 text. Files are collected after grading and attached on both passing and failing grades; missing files are skipped. Release filenames may use only ASCII letters, numbers, dots, underscores, and hyphens, and may not begin or end with a dot or contain consecutive periods.",
+      "releaseAssetsPlaceholder": "report.pdf\nplots/chart.png",
+      "releaseAssetCount_one": "{{count}} release file",
+      "releaseAssetCount_other": "{{count}} release files",
       "patternCount_one": "{{count}} pattern",
       "patternCount_other": "{{count}} patterns",
       "passThresholdToggle": "Set a passing threshold",
@@ -776,7 +781,12 @@
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
-        "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}."
+        "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
+        "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
+        "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
+        "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
+        "releaseAssetsInvalidBasename": "{{basename}} is not a safe Release filename or is reserved.",
+        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique."
       }
     },
     "autograder": {

@@ -4,7 +4,7 @@ How Classroom 50 grades student submissions, and how teachers customize.
 
 ## Architecture in one paragraph
 
-Every push to a student's `main` branch triggers the **shim workflow** at `.github/workflows/autograde.yaml` in their assignment repo. The shim is ~20 lines and does one thing: it `uses:` the **autograde-runner** reusable workflow in your config repo (`<org>/classroom50/.github/workflows/autograde-runner.yaml@main`). The runner workflow's `setup` job creates a `submit/<UTC-timestamp>-<short-sha>` tag at the pushed commit, reads `assignments.json` from Pages, and emits the assignment's runtime block as job outputs. The `grade` job runs on the chosen runner (or container), conditionally sets up language toolchains and apt packages, fetches the **runner script** (`runner.py`) from Pages, and executes it. `runner.py` downloads the per-assignment bundle (also from Pages), resolves the **entrypoint** — a bundled per-assignment `autograder.py`, else a bundled `tests.json` ([declarative tests](#declarative-tests-no-autograderpy), graded in-process), else the classroom default at `<classroom>/autograder.py` — and execs it with helper env vars and `cwd` at the student's repo checkout. When none of those exist, the runner synthesizes a vacuous-pass `result.json` so the workflow still publishes the submit-tag release with a clear "no autograder configured" status. The autograder writes `./result.json` (and optionally `./release-body.md` + `status=`/`summary=` to `$GITHUB_OUTPUT`); `runner.py` validates and synthesizes anything missing. The workflow then posts a commit status and publishes a GitHub Release at the submit tag with `result.json` attached. A small follow-up `set-latest` job, serialized via a per-repo concurrency group, flips the "latest" release pointer forward exactly once at a time. The **`collect-scores.yaml`** workflow on the config repo aggregates each release's `result.json` into `<classroom>/scores.json`.
+Every push to a student's `main` branch triggers the small shim at `.github/workflows/autograde.yaml`, which calls the reusable **autograde-runner** in `<org>/classroom50`. The `setup` job detects acceptance commits, creates or reuses the submit tag, validates assignment/runtime configuration, and passes configured release-file paths to `grade`. The `grade` job checks out the graded commit, runs the Pages-fetched `runner.py` and configured autograder, and then copies accepted extra files into a fresh directory under runner temp. The same job posts the commit status, publishes the core Release output before the extras, and maintains the Feedback PR. Extra collection or upload failures warn without changing the grade or suppressing core publication. The serialized `set-latest` job advances the latest pointer only after core Release publication. Grading and publishing share a job and runner, so the workflow does not provide a credential or hostile-workflow isolation boundary between them. `collect-scores.yaml` later aggregates each Release's `result.json` into `<classroom>/scores.json`.
 
 Everything substantive (runner workflow, `runner.py`, classroom-default and per-assignment `autograder.py`, runtime configuration, per-assignment bundle) lives in the config repo and is fetched at workflow runtime, so teacher edits propagate to every existing student repo on the next submission with zero per-student-repo maintenance.
 
@@ -387,6 +387,29 @@ The image must be **publicly pullable**. The grade job runs inside the student r
 | `image` | string | Required. Must be publicly pullable. Validated against an injection-safe character set. |
 | `user` | string | Optional but recommended for non-root images. `^[A-Za-z0-9_][A-Za-z0-9_.-]{0,31}(?::[A-Za-z0-9_][A-Za-z0-9_.-]{0,31})?$`. |
 
+## Attaching generated files to submission Releases
+
+An assignment may attach generated PDFs, plots, logs, or other files to each submission Release. Configure exact paths in the web form's **Submission release files** textarea, one per line, or write the equivalent optional assignment field:
+
+```json
+"release_assets": [
+  "report.pdf",
+  "plots/chart.png"
+]
+```
+
+The runner resolves paths in the submission workspace **after grading**, so an autograder may generate them. Each entry names an exact path, not a glob; `*`, `?`, `[` and `]` remain literal in a parent directory. An absent or empty list disables the feature.
+
+During setup, the workflow validates the ordered paths and passes them to the existing grade job. After grading, `runner.py` copies accepted files into a fresh directory under runner temp and reports only their Release-safe basenames. The existing Release step publishes the core result first, then uploads accepted extras.
+
+GitHub Release uploads flatten each path to its basename. Configure at most 50 path strings totaling at most 8 KiB (8,192 raw UTF-8 bytes), and give every path a unique basename. A basename must contain 1 to 255 ASCII characters using only letters, digits, `.`, `_`, and `-`; it may not begin or end with `.`, contain consecutive periods, or be `result.json` or `release-body.md` (case-insensitive). Paths must be relative, use `/`, contain no empty, `.` or `..` segment, and may not select the root `.git` tree. `.github/report.pdf` is allowed.
+
+The 8 KiB limit applies only to the configured path strings. At runtime, the runner accepts only observed regular files inside the workspace, rejects any symlink in the path, and applies a separate 100 MiB total file-content budget in configuration order. If the next file does not fit, it skips that file and still considers later smaller files. Missing, unsafe, oversized, or failed extra uploads produce warnings but do not change a passing/failing grade, block `result.json`, or stop the latest pointer after core publication.
+
+Classroom 50 submission publishing does not support GitHub Immutable Releases. The first publication creates and publishes the Release with `result.json` before uploading extras, so immutable mode rejects those later uploads. With Immutable Releases disabled, workflow reruns edit the Release and replace `result.json`; each extra is replaced only when its `--clobber` upload succeeds, so reruns also depend on mutable Releases. Removing a configured path, or skipping it before upload because it is missing, unsafe, or over budget, does **not** delete a same-named asset already present on the Release; Classroom 50 cannot safely infer ownership of unknown Release assets.
+
+To roll this out to an existing organization, install or upgrade to the new `gh-teacher` CLI, run `gh teacher init <org>`, approve the skeleton refresh, and wait for the config repo's `Publish Pages` workflow to finish before the next submission or regrade. Student repos need no changes because their existing shims use the refreshed shared workflow and Pages resources.
+
 ## Customization layers
 
 | What you want to change | Where to edit it | Propagation |
@@ -396,10 +419,11 @@ The image must be **publicly pullable**. The grade job runs inside the student r
 | **Grading logic shared across one classroom** | `<classroom>/autograder.py` (set via `gh teacher autograder set-default`; can branch on `ASSIGNMENT` to handle slug differences) | Next submission |
 | **Runtime environment for one assignment** | `runtime:` block in the matching `assignments.json` entry | Next submission |
 | **Runtime environment shared across many assignments** | Repeat the `runtime:` block on each entry, or pick a container image that covers everyone | Next submission |
+| **Generated files attached to submission Releases** | `release_assets:` in `assignments.json`, normally edited through the web form | Next submission or regrade |
 
-All five layers live in the config repo. None require any change in any student repo.
+All customization layers live in the config repo. None require a change in a student repo.
 
-The runner workflow file itself (`autograde-runner.yaml`) is the right place to edit only when you need to add a language toolchain GitHub doesn't ship a setup-X action for, or change the post-grade publish steps. For everything else, `autograder.py` + the `runtime:` block cover the cases.
+Edit `autograde-runner.yaml` only when you need to add a language toolchain GitHub does not provide a setup action for or replace the runner bootstrap. Use `autograder.py`, declarative tests, assignment settings, and `runtime:` for ordinary customization.
 
 ## Feedback Pull Requests
 
@@ -478,33 +502,25 @@ The `--autograder <name>` flag on `gh teacher assignment add` exists for the rar
 
 ## Failure paths
 
-The runner synthesizes a v1-shaped `result.json` on every error path so the workflow's downstream steps always have something to publish. Failure modes:
+Classroom 50 distinguishes an ordinary passing or failing grade from a grading or publication infrastructure error. Passing and failing grades publish the core submission Release; an infrastructure `error` posts an error status and does not update the Release.
 
 | What failed | What surfaces |
 |---|---|
-| Shim's `uses:` fails to resolve (reusable-workflow access disabled, or the runner file 404s) | GitHub marks the run failed at workflow-load time with "This run likely failed because of a workflow file issue"; no jobs execute. Fix at the config-repo side; the student's repo is fine. |
-| `.classroom50.yaml` is missing or corrupt | Runner setup exits with `::error::`; commit status = `error`; **no release published** (debug from Actions UI) |
-| `assignments.json` returns 404 | Same — `::error::` from runner setup with the missing URL |
-| `runtime` block contains a disallowed value | Same — `::error::` naming the offending field |
-| `tests` block fails structural validation (hand-edited `assignments.json`) | Same — `::error::` from runner setup naming the offending test/field |
-| Bundled `tests.json` is malformed at grade time | Runner synthesizes `result.json` with `status=error` and a clear message; **release publishes** |
-| Auto-tag step fails | Setup job fails before grading starts; no commit status, no release |
-| `runner.py` returns 404 | Setup succeeds but the grade job's curl exits non-zero; commit status = `error`; **no release published** |
-| Bundle fetch fails (network, corruption) | Runner synthesizes `result.json` with empty tests + `status=error`; **release publishes** with the failure summary so collect-scores still ingests as "submitted, error" |
-| Bundle has no `autograder.py` AND default `autograder.py` returns 404 | Same — `status=error`; release publishes with diagnostic summary |
-| `autograder.py` exits non-zero | Same — runner captures the rc, synthesizes `status=error` |
-| `autograder.py` exits 0 but doesn't write `result.json` | Same — runner synthesizes `status=error` |
-| `result.json` is malformed (bad schema, identity mismatch, non-list `tests`) | Same — runner rejects with a specific error message |
-| Tests run, some fail | Normal case. Release publishes with per-test breakdown; `status=failure` if any failed. |
-| All tests pass (or `tests: []` in `result.json`) | Normal case. Release publishes with `status=success`. |
+| Invalid hand-edited `release_assets` configuration | Setup exits with a field-specific `::error::` before grading; no Release update |
+| Grading/autograder infrastructure produces `status=error` | Grade posts `status=error`; no Release update |
+| Configured extra is missing, unsafe, a directory/symlink, or over budget | Warning; valid core and other extras continue |
+| Core Release creation or `result.json` upload | Grade job fails; latest does not move; an already-posted grade status is not rewritten |
+| One extra Release upload | Warning; later extras continue; core Release stays published |
+| Tests run and some fail | `status=failure`; core Release and valid extras publish |
+| All tests pass | `status=success`; core Release and valid extras publish |
 
-Workflow-load failures (the early rows above, where the runner workflow itself doesn't even start) do **not** show up in `scores.json`. Collect-scores' per-assignment "X of Y submitted" summary reports the student as not-yet-submitted, and the teacher debugs from the student's Actions tab. The runner-workflow failures show up *in the student's Actions tab* as a nested job — GitHub's reusable-workflow runs are visible to the calling repo's Actions UI.
+Failures that prevent the reusable workflow from loading do not appear in `scores.json`; collect-scores counts the student as not yet submitted. GitHub shows failures from a called reusable workflow as nested jobs in the student's Actions tab.
 
 ## No credentials required
 
 Students never configure any tokens, secrets, or env vars. The full grading flow runs entirely on:
 
-1. **The workflow's auto-provisioned `GITHUB_TOKEN`** — scoped to `contents: write` (publish release, push the auto-tag) and `statuses: write` (post commit status), confined to the student's own repo. The reusable runner inherits the caller's token, so the same scoping applies inside the runner.
+1. **Job-scoped `GITHUB_TOKEN` credentials.** `setup` uses its token to write the submit tag and acceptance status. `grade` checks out with `persist-credentials: false` and runs the autograder; later steps in that same job receive `GH_TOKEN` to post status, publish the Release, and maintain the Feedback PR. Because grading and publishing share one runner, this arrangement is not a credential or hostile-workflow isolation boundary. `set-latest` uses its job token to update the latest pointer.
 2. **Unauthenticated GitHub Pages fetches** — the publish-pages allow-list keeps `assignments.json`, `autograder.py`, `autograders/*.yaml`, and the per-assignment bundles public even when the config repo is private.
 3. **Reusable-workflow access** between the student repo and the `classroom50` config repo — both live in the teacher's org. `gh teacher init` configures this access automatically; teachers in orgs with restrictive Actions policies may need to enable it manually at Settings → Actions → General → Access on the `classroom50` repo.
 
@@ -513,7 +529,7 @@ The only personal access token in the entire system is `CLASSROOM50_SERVICE_TOKE
 ## Operational notes
 
 - **Every push grades, every push gets its own release.** Pushing 5 commits in 10 minutes produces 5 graded runs and 5 releases — `cancel-in-progress: false` on purpose. (See [Submission triggers](#submission-triggers) for the trigger contract.)
-- **"Latest" pointer is chronological.** When concurrent runs land out-of-order, the `set-latest` job (serialized via a per-repo concurrency group) compares the new tag's lexical (UTC-timestamp) order against the current latest release and only flips the `latest` pointer forward, so older completions don't make older submissions look newest.
+- **"Latest" pointer follows commit time.** The serialized `set-latest` job compares the committer timestamps of the new submission commit and the commit tagged by the current `submit/*` latest Release. It moves the pointer only when the new commit is newer. If either timestamp is unavailable, it leaves the pointer unchanged. When no current `submit/*` latest Release exists or GitHub cannot resolve its tag ref, the job marks the new Release latest.
 - **CDN propagation:** GitHub Pages can take up to ~10 minutes to serve updated content after a push. If a student submits during that window, their workflow may fetch the previous version of `runner.py`, the default autograder, or the bundle.
-- **Re-runs:** Re-triggering a failed workflow run from the Actions UI updates the existing submit-tag release in place (`gh release upload --clobber`) rather than failing on "release already exists".
+- **Re-runs:** A workflow rerun grades the commit again. `gh release upload --clobber` replaces `result.json` and each successfully uploaded extra, but the workflow does not delete assets that are no longer configured or are skipped before upload.
 - **Tag immutability:** Submit tags shouldn't be force-pushed or deleted -- in `scores.json` rows are bucketed by assignment slug and keyed within a bucket by the repo `owner`, so `collect-scores.yaml` would re-ingest the same key with new data on the next collect.

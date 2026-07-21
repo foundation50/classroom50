@@ -122,6 +122,7 @@ def _run_validator(
     env.update({
         "SUBMISSION_TAG": submission_tag,
         "REPO_OWNER": "test-org",
+        "GITHUB_REPOSITORY": "test-org/cs-test-hello-student",
         "GITHUB_OUTPUT": str(gh_output),
         "GITHUB_REF_NAME": submission_tag,
     })
@@ -153,8 +154,12 @@ def _classroom_yaml(classroom: str = "cs-test", assignment: str = "hello") -> st
     return f"classroom: {classroom}\nassignment: {assignment}\n"
 
 
+_MISSING = object()
+
+
 def _manifest(*, slug: str = "hello", runtime: dict | None = None,
-              tests: list | None = None) -> dict:
+              tests: list | None = None,
+              release_assets: object = _MISSING) -> dict:
     """Minimum assignments.json with one entry, optional runtime/tests."""
     entry = {
         "slug": slug,
@@ -167,6 +172,8 @@ def _manifest(*, slug: str = "hello", runtime: dict | None = None,
         entry["runtime"] = runtime
     if tests is not None:
         entry["tests"] = tests
+    if release_assets is not _MISSING:
+        entry["release_assets"] = release_assets
     return {
         "schema": "classroom50/assignments/v1",
         "assignments": [entry],
@@ -654,3 +661,69 @@ class TestIdentityInvariants:
         )
         assert rc != 0
         assert "classroom" in stderr
+
+
+class TestReleaseAssetsValidation:
+    @pytest.mark.parametrize(
+        "paths",
+        [
+            [],
+            ["report.pdf", "plots/chart.png", ".github/summary.txt"],
+            ["generated*/report.pdf", "plots[2026]/chart.png"],
+            ["nested/.git/report.pdf", "résumés 2026/summary.txt"],
+            ["😀/report.pdf"],
+            ["archive..old/report.pdf"],
+            ["a" * 251 + ".pdf"],
+            ["a" * 4094 + "/x", "é" * 2047 + "/y"],
+        ],
+    )
+    def test_emits_compact_ordered_json(self, inline_script, tmp_path, paths):
+        rc, _stdout, _stderr, outputs = _run_validator(
+            inline_script,
+            tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(release_assets=paths),
+        )
+        assert rc == 0
+        assert outputs["release-assets"] == json.dumps(
+            paths, separators=(",", ":"), ensure_ascii=False
+        )
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            None, "report.pdf", [1], [f"f{i}.pdf" for i in range(51)],
+            [""], ["  "],
+            ["report.pdf", "report.pdf"],
+            ["a/report.pdf", "b/report.pdf"],
+            ["/tmp/report.pdf"], ["C:/report.pdf"], [r"plots\\chart.png"],
+            ["plots//chart.png"], ["./report.pdf"], ["../report.pdf"],
+            ["plots/../report.pdf"], ["plots/"], ["a\nreport.pdf"],
+            ["a\x7freport.pdf"], ["a\u0085report.pdf"],
+            [".GiT/report.pdf"], [".report.pdf"], ["report.pdf."],
+            ["*.pdf"], ["résumé.pdf"], ["a" * 252 + ".pdf"],
+            ["result.json"], ["nested/Release-Body.MD"],
+            ["report..pdf"],
+            ["a" * 4094 + "/x", "é" * 2047 + "z/y"],
+        ],
+    )
+    def test_rejects_invalid_configuration(self, inline_script, tmp_path, value):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script,
+            tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(release_assets=value),
+        )
+        assert rc != 0
+        assert "release_assets" in stderr
+
+    @pytest.mark.parametrize("path", ["\ud800/report.pdf", "\udc00/report.pdf"])
+    def test_rejects_unpaired_surrogates(self, inline_script, tmp_path, path):
+        rc, _stdout, stderr, _outputs = _run_validator(
+            inline_script,
+            tmp_path,
+            classroom50_yaml=_classroom_yaml(),
+            manifest=_manifest(release_assets=[path]),
+        )
+        assert rc != 0
+        assert "must not contain Unicode surrogates" in stderr

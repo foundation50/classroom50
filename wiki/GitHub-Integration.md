@@ -246,13 +246,13 @@ Read-only. Exercises every scope the token needs so a teacher gets one green/red
 
 ### `autograde-runner.yaml` (reusable workflow, runs in student repos)
 
-These calls happen inside the autograde workflow on every student submission. `GH_TOKEN` is set to `${{ github.token }}` (the student repo's `GITHUB_TOKEN`).
+The workflow has `setup`, `grade`, and `set-latest` jobs. `setup` creates the submit tag without executing submission code, validates assignment configuration, and passes the ordered release-file paths to `grade`. `grade` uses `persist-credentials: false`, runs `runner.py` and the autograder, then posts status, publishes the Release, and maintains the Feedback PR on the same runner. `set-latest` serializes updates to the latest pointer. Grading and publishing in the same job is not a credential or hostile-workflow isolation boundary.
 
 | Method | URL | Purpose |
 |--------|-----|---------|
-| POST | [`https://api.github.com/repos/{owner}/{repo}/statuses/{sha}`](https://docs.github.com/en/rest/commits/statuses#create-a-commit-status) | Post a `classroom50/autograde` commit status (pending → success/failure) |
+| POST | [`https://api.github.com/repos/{owner}/{repo}/statuses/{sha}`](https://docs.github.com/en/rest/commits/statuses#create-a-commit-status) | Post `classroom50/autograde`: `setup` posts acceptance `success`; `grade` posts final `success`, `failure`, or `error` |
 
-The workflow also uses `git tag` + `git push` against the student's repo to create the `submit/<UTC-timestamp>-<short-sha>` tag for branch-triggered runs, and `gh release` subcommands (`view`, `edit`, `upload`, `create`) to publish the `result.json` asset on the submission tag release. The latest-pointer flip lives in a separate `set-latest` job with a per-repo concurrency group so concurrent submissions can't race on the read-modify-write.
+The workflow also uses `git tag` + `git push` against the student's repo to create the `submit/<UTC-timestamp>-<short-sha>` tag for branch-triggered runs, and `gh release` subcommands (`view`, `edit`, `upload`, `create`) to publish `result.json` and configured extras on the submission tag release. The latest-pointer flip lives in a separate `set-latest` job with a per-repo concurrency group so concurrent submissions can't race on the read-modify-write.
 
 The runner setup also fetches from GitHub Pages without authentication (public by design):
 
@@ -262,6 +262,8 @@ The runner setup also fetches from GitHub Pages without authentication (public b
 | GET | `https://{org}.github.io/classroom50/runner.py` | Fetch the runner-side bootstrap (org-level; one per config repo, shared across all classrooms) |
 | GET | `https://{org}.github.io/classroom50/{classroom}/autograder.py` | Fetch the classroom default autograder (only when set via `gh teacher autograder set-default` and the assignment has no per-assignment override). 404 → runner publishes a vacuous-pass result. |
 | GET | `https://{org}.github.io/classroom50/{classroom}/autograders/{slug}.tar.gz` | Download the per-assignment bundle (entrypoint `autograder.py` plus any sibling fixtures; fetched by `runner.py` at runtime) |
+
+After grading, `runner.py` copies accepted extras into a fresh directory under runner temp and emits only their Release-safe basenames. The existing Release step uploads core output first, then the staged extras. Collection and extra-upload failures warn and continue without changing the grade or suppressing core publication. GitHub Releases remain the durable teacher and student surface.
 
 ---
 
@@ -274,7 +276,7 @@ The runner setup also fetches from GitHub Pages without authentication (public b
 | `publish-pages.yaml` | Push to default branch, `workflow_dispatch` | Deploy `assignments.json`, classroom-default `autograder.py` files, autograder workflow shims, the runner-side bootstrap, and per-assignment bundles to GitHub Pages |
 | `collect-scores.yaml` | `workflow_dispatch`, cron `17 4 * * *` UTC | Run `collect_scores.py`, aggregate `result.json` assets into `*/scores.json` |
 | `probe-token.yaml` | `workflow_dispatch` | Run `probe_token.py` — a read-only check that `CLASSROOM50_SERVICE_TOKEN` holds every scope collect and regrade need. Run it after provisioning/rotating, or when a collect/regrade run 401/403s. |
-| `autograde-runner.yaml` (reusable) | Called from each student's `autograde.yaml` | Set up runtime (toolchains, container) per `assignments.json`, fetch `runner.py` from Pages, run it, publish commit status and submit-tag release |
+| `autograde-runner.yaml` (reusable) | Called from each student's `autograde.yaml` | Validated setup, grading and Release publication, then a serialized latest-pointer update |
 
 ---
 
@@ -283,8 +285,8 @@ The runner setup also fetches from GitHub Pages without authentication (public b
 | Variable / Secret | Where set | Used by | Purpose |
 |-------------------|-----------|---------|---------|
 | `CLASSROOM50_SERVICE_TOKEN` | `gh teacher init` (Actions secret on `classroom50`) | `collect-scores.yaml`, `collect_scores.py` | Fine-grained PAT for reading student repo releases |
-| `GITHUB_TOKEN` / `github.token` | Automatically injected by Actions | `autograde-runner.yaml` | Student-repo Actions token (`contents: write`, `statuses: write`) |
-| `GH_TOKEN` | Set from `github.token` in runner steps | `gh api`, `gh release` inside the runner | `gh` CLI auth inside the autograde workflow |
+| `GITHUB_TOKEN` / `github.token` | Automatically injected by Actions | `setup`, `grade`, and `set-latest` jobs | Student-repo token used for tag, status, Release, Feedback PR, and latest-pointer operations |
+| `GH_TOKEN` | Set from `github.token` only on GitHub-calling shell steps | Tag/status, Release, Feedback PR, and latest-pointer commands | `gh` CLI authentication; not set on the autograder step, though grading and publishing remain in the same job |
 | `GH_DEBUG=api` | Developer shell | `go-gh` (teacher & student CLIs) | Log all REST request/response traffic |
 | `GITHUB_REPOSITORY_OWNER` | Actions context | `collect_scores.py` | Org name inside the collect workflow |
 | `GITHUB_API_URL` | Actions context | `collect_scores.py` | API base URL (supports GitHub Enterprise Server) |

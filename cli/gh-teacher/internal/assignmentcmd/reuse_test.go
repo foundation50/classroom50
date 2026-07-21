@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -223,7 +224,8 @@ func sourceAssignmentsBody() string {
       "autograder": "default",
       "feedback_pr": true,
       "allowed_files": ["*", "!hello.py"],
-      "pass_threshold": 70
+      "pass_threshold": 70,
+      "release_assets": ["report.pdf", "plots/chart.png"]
     }
   ]
 }`
@@ -321,6 +323,10 @@ func TestRunAssignmentReuse_CopiesVerbatim(t *testing.T) {
 	}
 	if len(got.AllowedFiles) != 2 {
 		t.Errorf("allowed_files not preserved: %v", got.AllowedFiles)
+	}
+	wantReleaseAssets := []string{"report.pdf", "plots/chart.png"}
+	if !reflect.DeepEqual(got.ReleaseAssets, wantReleaseAssets) {
+		t.Errorf("release_assets = %#v, want %#v", got.ReleaseAssets, wantReleaseAssets)
 	}
 	// Private in-org template => target team gets a read grant.
 	fix.mu.Lock()
@@ -716,6 +722,13 @@ func TestRunAssignmentReuse_JSONOutput(t *testing.T) {
 	}
 	if got.Template == nil || got.Template.Repo != "hello-template" {
 		t.Errorf("json result should carry the template, got %#v", got.Template)
+	}
+}
+
+func TestAssignmentReuseCmd_HelpListsReleaseAssets(t *testing.T) {
+	cmd := assignmentReuseCmd()
+	if !strings.Contains(cmd.Long, "release_assets") {
+		t.Errorf("reuse help omits the typed release_assets field:\n%s", cmd.Long)
 	}
 }
 

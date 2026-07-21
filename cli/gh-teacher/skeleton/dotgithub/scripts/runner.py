@@ -44,6 +44,7 @@ import pathlib
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -63,6 +64,14 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (cli/shared/contract/contract.go); test_runner.py pins these literals.
 RESULT_FILENAME = "result.json"
 RELEASE_BODY_FILENAME = "release-body.md"
+RELEASE_ASSETS_DIRNAME = "classroom50-release-assets"
+RELEASE_ASSETS_MAX_FILES = 50
+RELEASE_ASSETS_MAX_PATH_BYTES = 8_192
+RELEASE_ASSETS_MAX_BYTES = 104_857_600
+RELEASE_ASSET_BASENAME = re.compile(
+    r"^[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9_-])?$",
+    re.ASCII,
+)
 
 # Name of both the per-assignment override and classroom-default entrypoint.
 ENTRYPOINT_FILENAME = "autograder.py"
@@ -696,6 +705,182 @@ def parse_allowed_files(raw: str | None) -> list[str]:
         print("runner: ALLOWED_FILES must be a JSON array of non-empty strings; skipping enforcement", file=sys.stderr)
         return []
     return value
+
+
+def _ascii_fold(value: str) -> str:
+    return value.translate(str.maketrans(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+    ))
+
+
+def validate_release_asset_paths(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("release_assets must be an array")
+    if len(value) > RELEASE_ASSETS_MAX_FILES:
+        raise ValueError(
+            f"release_assets has {len(value)} paths "
+            f"(max {RELEASE_ASSETS_MAX_FILES})"
+        )
+
+    seen_paths: set[str] = set()
+    seen_basenames: set[str] = set()
+    total_path_bytes = 0
+    for index, configured_path in enumerate(value):
+        where = f"release_assets[{index}]"
+        if not isinstance(configured_path, str) or not configured_path.strip():
+            raise ValueError(f"{where} must be a non-empty string")
+        if any(0xD800 <= ord(char) <= 0xDFFF for char in configured_path):
+            raise ValueError(f"{where} must not contain Unicode surrogates")
+        total_path_bytes += len(configured_path.encode("utf-8"))
+        if total_path_bytes > RELEASE_ASSETS_MAX_PATH_BYTES:
+            raise ValueError(
+                f"release_assets paths exceed {RELEASE_ASSETS_MAX_PATH_BYTES} "
+                "UTF-8 bytes"
+            )
+        if configured_path.startswith("/") or re.match(
+            r"^[A-Za-z]:", configured_path, re.ASCII
+        ):
+            raise ValueError(f"{where} must be relative")
+        if "\\" in configured_path:
+            raise ValueError(f"{where} must use '/' separators")
+        if any(ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F
+               for char in configured_path):
+            raise ValueError(f"{where} must not contain control characters")
+
+        segments = configured_path.split("/")
+        if any(segment in ("", ".", "..") for segment in segments):
+            raise ValueError(f"{where} has an invalid path segment")
+        if _ascii_fold(segments[0]) == ".git":
+            raise ValueError(f"{where} must not select the root .git tree")
+
+        basename = segments[-1]
+        folded_basename = _ascii_fold(basename)
+        if not RELEASE_ASSET_BASENAME.fullmatch(basename) or ".." in basename:
+            raise ValueError(f"{where} basename {basename!r} is not Release-safe")
+        if folded_basename in ("result.json", "release-body.md"):
+            raise ValueError(f"{where} basename {basename!r} is reserved")
+        if configured_path in seen_paths:
+            raise ValueError(f"{where} duplicates path {configured_path!r}")
+        if basename in seen_basenames:
+            raise ValueError(f"{where} duplicates basename {basename!r}")
+        seen_paths.add(configured_path)
+        seen_basenames.add(basename)
+    return list(value)
+
+
+def parse_release_assets(raw: str | None) -> list[str]:
+    if raw is None or not raw.strip():
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("RELEASE_ASSETS is not valid JSON") from exc
+    return validate_release_asset_paths(value)
+
+
+def _workflow_warning(message: str) -> None:
+    escaped = "".join(
+        char if 0x20 <= ord(char) < 0x7F else f"\\u{ord(char):04x}"
+        for char in message
+    ).replace("%", "%25")
+    print(f"::warning::{escaped}")
+
+
+def resolve_release_asset_source(
+    workspace: pathlib.Path, configured_path: str
+) -> pathlib.Path:
+    validate_release_asset_paths([configured_path])
+    workspace_real = workspace.resolve(strict=True)
+    current = workspace
+    segments = configured_path.split("/")
+    for index, segment in enumerate(segments):
+        current = current / segment
+        info = current.lstat()
+        if stat.S_ISLNK(info.st_mode):
+            raise ValueError(f"{configured_path!r} contains a symlink")
+        if index < len(segments) - 1 and not stat.S_ISDIR(info.st_mode):
+            raise ValueError(f"{configured_path!r} has a non-directory parent")
+        if index == len(segments) - 1 and not stat.S_ISREG(info.st_mode):
+            raise ValueError(f"{configured_path!r} is not a regular file")
+    resolved = current.resolve(strict=True)
+    if resolved == workspace_real or workspace_real not in resolved.parents:
+        raise ValueError(f"{configured_path!r} resolves outside the workspace")
+    return current
+
+
+def _copy_release_asset(
+    source: pathlib.Path, destination: pathlib.Path, max_bytes: int
+) -> int:
+    copied = 0
+    created = False
+    try:
+        with source.open("rb") as input_file, destination.open("xb") as output_file:
+            created = True
+            while chunk := input_file.read(1024 * 1024):
+                if copied + len(chunk) > max_bytes:
+                    raise ValueError(
+                        f"{source.name!r} exceeds the remaining byte budget"
+                    )
+                output_file.write(chunk)
+                copied += len(chunk)
+    except (OSError, ValueError):
+        if created:
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+    return copied
+
+
+def stage_release_assets(
+    workspace: pathlib.Path,
+    destination: pathlib.Path,
+    configured_paths: list[str],
+) -> list[str]:
+    configured_paths = validate_release_asset_paths(configured_paths)
+    try:
+        existing = destination.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISDIR(existing.st_mode) and not stat.S_ISLNK(existing.st_mode):
+            shutil.rmtree(destination)
+        else:
+            destination.unlink()
+    destination.mkdir(parents=True)
+
+    accepted: list[str] = []
+    total = 0
+    for configured_path in configured_paths:
+        basename = configured_path.split("/")[-1]
+        target = destination / basename
+        copy_attempted = False
+        try:
+            try:
+                target.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                raise FileExistsError(
+                    f"release asset {basename!r} has a runtime destination collision"
+                )
+            source = resolve_release_asset_source(workspace, configured_path)
+            copy_attempted = True
+            copied = _copy_release_asset(
+                source, target, RELEASE_ASSETS_MAX_BYTES - total
+            )
+        except (OSError, ValueError) as exc:
+            if copy_attempted:
+                try:
+                    target.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            _workflow_warning(f"release_assets: {configured_path!r} skipped ({exc})")
+            continue
+        total += copied
+        accepted.append(basename)
+    return accepted
 
 
 def _isolated_git_env() -> dict[str, str]:
@@ -1939,6 +2124,27 @@ def main() -> int:
         rc = _grade()
     finally:
         append_removed_files_note(workspace, removed_files)
+
+    accepted_assets: list[str] = []
+    try:
+        configured_paths = parse_release_assets(os.environ.get("RELEASE_ASSETS"))
+        accepted_assets = stage_release_assets(
+            workspace,
+            pathlib.Path(
+                os.environ.get("RUNNER_TEMP")
+                or tempfile.mkdtemp(prefix="classroom50-")
+            ) / RELEASE_ASSETS_DIRNAME,
+            configured_paths,
+        )
+    except (OSError, ValueError) as exc:
+        _workflow_warning(f"release_assets: staging disabled ({exc})")
+
+    if github_output:
+        try:
+            with open(github_output, "a") as output:
+                output.write(f"release-assets={','.join(accepted_assets)}\n")
+        except OSError as exc:
+            _workflow_warning(f"release_assets: could not emit staged names ({exc})")
     return rc
 
 

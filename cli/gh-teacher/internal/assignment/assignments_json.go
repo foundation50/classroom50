@@ -21,6 +21,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/output"
@@ -83,12 +84,16 @@ type AssignmentsJSON struct {
 // the submission (last match wins, `!` re-includes); empty/absent allows all.
 // The runner enforces it by removing disallowed files before grading.
 //
+// ReleaseAssets is an ordered list of exact workspace-relative files collected
+// after grading and flattened to unique Release-safe basenames. Empty or absent
+// disables the feature, and omitempty keeps writers canonical.
+//
 // EmptyRepo opts into truly bare student repos: accept creates the repo with
 // no initial commit and lands NO control files (no README, no
 // .classroom50.yaml marker, no autograde shim), so autograding and the
 // Feedback PR never run. Mutually exclusive with Template, Tests, FeedbackPR,
-// AllowedFiles, and PassThreshold, and IMMUTABLE once the entry exists —
-// flipping it later would mean retrofitting every already-accepted repo.
+// AllowedFiles, ReleaseAssets, and PassThreshold, and IMMUTABLE once the entry
+// exists — flipping it later would mean retrofitting every already-accepted repo.
 // Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 type AssignmentEntry struct {
 	Slug          string           `json:"slug"`
@@ -105,6 +110,7 @@ type AssignmentEntry struct {
 	FeedbackPR    bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo     bool             `json:"empty_repo,omitempty"`
 	AllowedFiles  []string         `json:"allowed_files,omitempty"`
+	ReleaseAssets []string         `json:"release_assets,omitempty"`
 	PassThreshold *int             `json:"pass_threshold,omitempty"`
 	MigratedFrom  *MigratedFromRef `json:"migrated_from,omitempty"`
 
@@ -120,7 +126,8 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"allowed_files": {}, "pass_threshold": {}, "migrated_from": {},
+	"allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"migrated_from": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -132,6 +139,11 @@ func (e *AssignmentEntry) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
+	}
+	if releaseAssets, ok := raw["release_assets"]; ok {
+		if err := rejectUnpairedReleaseAssetSurrogates(releaseAssets); err != nil {
+			return err
+		}
 	}
 
 	known := make(map[string]json.RawMessage, len(raw))
@@ -161,6 +173,63 @@ func (e *AssignmentEntry) UnmarshalJSON(data []byte) error {
 	*e = AssignmentEntry(typed)
 	e.Extra = extra
 	return nil
+}
+
+func rejectUnpairedReleaseAssetSurrogates(raw json.RawMessage) error {
+	var paths []json.RawMessage
+	if err := json.Unmarshal(raw, &paths); err != nil {
+		return nil // The typed decode below reports malformed release_assets.
+	}
+	for i, path := range paths {
+		if hasUnpairedJSONSurrogate(bytes.TrimSpace(path)) {
+			return fmt.Errorf("release_assets[%d] must not contain unpaired Unicode surrogates", i)
+		}
+	}
+	return nil
+}
+
+func hasUnpairedJSONSurrogate(raw []byte) bool {
+	if len(raw) < 2 || raw[0] != '"' {
+		return false
+	}
+	for i := 1; i < len(raw)-1; i++ {
+		if raw[i] != '\\' {
+			continue
+		}
+		i++
+		if i >= len(raw)-1 || raw[i] != 'u' {
+			continue
+		}
+		value, ok := parseJSONUnicodeEscape(raw, i)
+		if !ok {
+			continue // The JSON decoder reports malformed escapes.
+		}
+		switch {
+		case value >= 0xD800 && value <= 0xDBFF:
+			nextSlash := i + 5
+			if nextSlash >= len(raw)-1 || raw[nextSlash] != '\\' || raw[nextSlash+1] != 'u' {
+				return true
+			}
+			low, ok := parseJSONUnicodeEscape(raw, nextSlash+1)
+			if !ok || low < 0xDC00 || low > 0xDFFF {
+				return true
+			}
+			i = nextSlash + 5
+		case value >= 0xDC00 && value <= 0xDFFF:
+			return true
+		default:
+			i += 4
+		}
+	}
+	return false
+}
+
+func parseJSONUnicodeEscape(raw []byte, u int) (uint64, bool) {
+	if u+5 > len(raw) || raw[u] != 'u' {
+		return 0, false
+	}
+	value, err := strconv.ParseUint(string(raw[u+1:u+5]), 16, 16)
+	return value, err == nil
 }
 
 // MarshalJSON emits the known fields via the alias, then byte-splices any
@@ -257,6 +326,90 @@ func ValidateAllowedFiles(patterns []string) error {
 		if strings.ContainsAny(p, "\x00\n") {
 			return fmt.Errorf("allowed_files[%d] %q must not contain NUL or newline", i, p)
 		}
+	}
+	return nil
+}
+
+const (
+	releaseAssetsCap          = 50
+	releaseAssetsMaxPathBytes = 8 * 1024
+)
+
+var releaseAssetBasenamePattern = regexp.MustCompile(
+	`^[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9_-])?$`,
+)
+
+func equalFoldASCII(value, lowercaseASCII string) bool {
+	if len(value) != len(lowercaseASCII) {
+		return false
+	}
+	for i := range value {
+		char := value[i]
+		if char >= 'A' && char <= 'Z' {
+			char += 'a' - 'A'
+		}
+		if char != lowercaseASCII[i] {
+			return false
+		}
+	}
+	return true
+}
+
+// ValidateReleaseAssets rejects unsafe or ambiguous exact Release-asset
+// paths. A nil or empty list disables the feature.
+func ValidateReleaseAssets(paths []string) error {
+	if len(paths) > releaseAssetsCap {
+		return fmt.Errorf("release_assets has %d paths (max %d)", len(paths), releaseAssetsCap)
+	}
+	totalPathBytes := 0
+	for _, configuredPath := range paths {
+		totalPathBytes += len(configuredPath)
+	}
+	if totalPathBytes > releaseAssetsMaxPathBytes {
+		return fmt.Errorf("release_assets paths total %d bytes (max %d)", totalPathBytes, releaseAssetsMaxPathBytes)
+	}
+	seenPaths := make(map[string]struct{}, len(paths))
+	seenBasenames := make(map[string]struct{}, len(paths))
+	for i, configuredPath := range paths {
+		if strings.TrimSpace(configuredPath) == "" {
+			return fmt.Errorf("release_assets[%d] must not be empty", i)
+		}
+		if strings.HasPrefix(configuredPath, "/") ||
+			(len(configuredPath) >= 2 && configuredPath[1] == ':' &&
+				((configuredPath[0] >= 'A' && configuredPath[0] <= 'Z') ||
+					(configuredPath[0] >= 'a' && configuredPath[0] <= 'z'))) {
+			return fmt.Errorf("release_assets[%d] %q must be relative", i, configuredPath)
+		}
+		if strings.Contains(configuredPath, `\`) {
+			return fmt.Errorf("release_assets[%d] %q must use '/' separators", i, configuredPath)
+		}
+		if strings.IndexFunc(configuredPath, unicode.IsControl) >= 0 {
+			return fmt.Errorf("release_assets[%d] %q must not contain controls", i, configuredPath)
+		}
+		segments := strings.Split(configuredPath, "/")
+		for _, segment := range segments {
+			if segment == "" || segment == "." || segment == ".." {
+				return fmt.Errorf("release_assets[%d] %q has invalid path segment %q", i, configuredPath, segment)
+			}
+		}
+		if equalFoldASCII(segments[0], ".git") {
+			return fmt.Errorf("release_assets[%d] %q must not select the root .git tree", i, configuredPath)
+		}
+		basename := segments[len(segments)-1]
+		if !releaseAssetBasenamePattern.MatchString(basename) || strings.Contains(basename, "..") {
+			return fmt.Errorf("release_assets[%d] basename %q is not Release-safe", i, basename)
+		}
+		if equalFoldASCII(basename, "result.json") || equalFoldASCII(basename, "release-body.md") {
+			return fmt.Errorf("release_assets[%d] basename %q is reserved", i, basename)
+		}
+		if _, exists := seenPaths[configuredPath]; exists {
+			return fmt.Errorf("release_assets[%d] duplicates path %q", i, configuredPath)
+		}
+		if _, exists := seenBasenames[basename]; exists {
+			return fmt.Errorf("release_assets[%d] duplicates basename %q", i, basename)
+		}
+		seenPaths[configuredPath] = struct{}{}
+		seenBasenames[basename] = struct{}{}
 	}
 	return nil
 }
@@ -740,6 +893,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateAllowedFiles(entry.AllowedFiles); err != nil {
 		return err
 	}
+	if err := ValidateReleaseAssets(entry.ReleaseAssets); err != nil {
+		return err
+	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
@@ -767,6 +923,9 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	}
 	if len(entry.AllowedFiles) > 0 {
 		return errors.New("empty_repo is mutually exclusive with allowed_files (--empty-repo vs --allowed-files): a bare repo never autogrades")
+	}
+	if len(entry.ReleaseAssets) > 0 {
+		return errors.New("empty_repo is mutually exclusive with release_assets: a bare repo never autogrades, so no submission release exists to attach assets to")
 	}
 	if entry.PassThreshold != nil {
 		return errors.New("empty_repo is mutually exclusive with pass_threshold (--empty-repo vs --pass-threshold): a bare repo never autogrades")
@@ -856,6 +1015,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		}
 	}
 	if err := ValidateAllowedFiles(entry.AllowedFiles); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateReleaseAssets(entry.ReleaseAssets); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {

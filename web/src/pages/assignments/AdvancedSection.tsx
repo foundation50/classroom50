@@ -2,6 +2,7 @@ import { useTranslation } from "react-i18next"
 import { AlertTriangle } from "lucide-react"
 import { Input, Textarea } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
+import { parseReleaseAssets } from "@/util/releaseAssets"
 import { RUNTIME_LANGUAGES } from "@/util/runtime"
 import {
   FieldLabel,
@@ -189,6 +190,57 @@ export const AdvancedSection = ({
                           <p className="mt-1.5 text-xs text-base-content/70">
                             {t("assignments.form.patternCount", {
                               count: patterns.length,
+                            })}
+                          </p>
+                        )
+                      )}
+                    </div>
+                  )
+                }}
+              </form.Field>
+
+              <form.Field name="release_assets">
+                {(field) => {
+                  const paths = parseReleaseAssets(field.state.value)
+                  const error = field.state.meta.errors[0] as string | undefined
+                  return (
+                    <div className="mt-4">
+                      <FieldLabel
+                        htmlFor={field.name}
+                        label={t("assignments.form.releaseAssets")}
+                        help={t("assignments.form.releaseAssetsTip")}
+                      />
+                      <Textarea
+                        id={field.name}
+                        name={field.name}
+                        className="font-mono"
+                        rows={3}
+                        spellCheck={false}
+                        placeholder={t(
+                          "assignments.form.releaseAssetsPlaceholder",
+                        )}
+                        value={field.state.value}
+                        onBlur={field.handleBlur}
+                        onChange={(event) =>
+                          field.handleChange(event.target.value)
+                        }
+                      />
+                      {error ? (
+                        <p
+                          role="alert"
+                          className="mt-1.5 flex items-center gap-1.5 text-sm text-error"
+                        >
+                          <AlertTriangle
+                            aria-hidden="true"
+                            className="size-4 shrink-0"
+                          />
+                          {error}
+                        </p>
+                      ) : (
+                        paths.length > 0 && (
+                          <p className="mt-1.5 text-xs text-base-content/70">
+                            {t("assignments.form.releaseAssetCount", {
+                              count: paths.length,
                             })}
                           </p>
                         )

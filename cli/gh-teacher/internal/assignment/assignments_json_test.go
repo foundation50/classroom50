@@ -1350,6 +1350,11 @@ func TestValidateAssignmentEntry_EmptyRepoExclusions(t *testing.T) {
 			wantSub: "allowed_files",
 		},
 		{
+			name:    "release_assets",
+			mutate:  func(e *AssignmentEntry) { e.ReleaseAssets = []string{"report.pdf"} },
+			wantSub: "release_assets",
+		},
+		{
 			name:    "pass_threshold",
 			mutate:  func(e *AssignmentEntry) { e.PassThreshold = &threshold },
 			wantSub: "pass_threshold",

@@ -46,9 +46,9 @@ func assignmentReuseCmd() *cobra.Command {
 			"for rebuilding last term's assignments in a new classroom.\n\n" +
 			"The source record is copied verbatim (template, due/due_meta,\n" +
 			"mode, autograder, max_group_size, feedback_pr, runtime,\n" +
-			"allowed_files, pass_threshold, tests, description); only the slug\n" +
-			"and name change. By default the source slug/name are reused; pass\n" +
-			"--slug and/or --name to override.\n\n" +
+			"allowed_files, release_assets, pass_threshold, tests, description);\n" +
+			"only the slug and name change. By default the source slug/name are\n" +
+			"reused; pass --slug and/or --name to override.\n\n" +
 			"In-org only (v1): a private template can only be shared with the\n" +
 			"target classroom's team inside its own org, so cross-org reuse of\n" +
 			"a private template is out of scope. When the copied assignment\n" +

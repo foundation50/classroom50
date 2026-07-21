@@ -210,8 +210,8 @@ export type CreateAssignmentInput = {
   feedback_pr?: boolean
   // Truly bare student repos (no auto-init, no control files, autograding and
   // Feedback PR off). Mutually exclusive with template/tests/feedback_pr/
-  // allowed_files/pass_threshold; immutable after creation (edit rejects a
-  // change). Mirrors the CLI's --empty-repo.
+  // allowed_files/release_assets/pass_threshold; immutable after creation
+  // (edit rejects a change). Mirrors the CLI's --empty-repo.
   empty_repo?: boolean
   runs_on?: string
   container_image?: string
@@ -225,6 +225,7 @@ export type CreateAssignmentInput = {
   runtime_apt?: string
   setup_command?: string
   allowed_files?: string
+  release_assets: string
   pass_threshold?: number
   tests: AssignmentTestDraft[]
   // Whether the write path may attempt the owner-only template read-grant

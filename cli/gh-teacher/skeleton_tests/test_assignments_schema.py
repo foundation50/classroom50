@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import pathlib
+import subprocess
 
 import pytest
 from jsonschema import Draft202012Validator
@@ -343,3 +344,111 @@ class TestEmptyRepo:
 
     def test_empty_repo_rejects_pass_threshold(self):
         assert _errors(_manifest(self._bare_entry(pass_threshold=70))) != []
+
+
+def _release_assets_errors(value):
+    return _errors(_manifest(_entry(release_assets=value)))
+
+
+def _ecmascript_release_assets_pattern_accepts(value):
+    pattern = _SCHEMA["$defs"]["assignment"]["properties"]["release_assets"]["items"]["pattern"]
+    script = (
+        "const [pattern, encoded] = process.argv.slice(1);"
+        "const value = JSON.parse(encoded);"
+        "process.stdout.write(JSON.stringify([new RegExp(pattern).test(value),"
+        "new RegExp(pattern, 'u').test(value)]));"
+    )
+    result = subprocess.run(
+        ["node", "-e", script, pattern, json.dumps(value)],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return json.loads(result.stdout)
+
+
+@pytest.mark.parametrize(
+    "paths",
+    [
+        [],
+        ["report.pdf"],
+        ["plots/chart.png", ".github/report.pdf"],
+        ["generated*/report.pdf", "plots[2026]/chart.png"],
+        ["nested/.git/report.pdf", "résumés 2026/summary.txt"],
+        ["archive..old/report.pdf"],
+        ["a" * 251 + ".pdf"],
+        ["a/report.pdf", "b/Report.pdf"],
+    ],
+)
+def test_release_assets_accepts_exact_paths(paths):
+    assert _release_assets_errors(paths) == []
+
+
+def test_release_assets_accepts_exact_cap():
+    assert _release_assets_errors([f"f{i}.pdf" for i in range(50)]) == []
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        None,
+        [f"f{i}.pdf" for i in range(51)],
+        ["report.pdf", "report.pdf"],
+        [""], ["  "], ["/tmp/report.pdf"], ["C:/report.pdf"],
+        [r"plots\\chart.png"], ["plots//chart.png"], ["./report.pdf"],
+        ["plots/./chart.png"], ["../report.pdf"], ["plots/../report.pdf"],
+        ["plots/"], ["a\nreport.pdf"], ["a\x7freport.pdf"],
+        ["a\u0085report.pdf"],
+        [".git/report.pdf"], [".GiT/report.pdf"],
+        [".report.pdf"], ["report.pdf."], ["*.pdf"], ["résumé.pdf"],
+        ["a/" + "x" * 252 + ".pdf"],
+        ["result.json"], ["nested/RESULT.JSON"],
+        ["release-body.md"], ["nested/Release-Body.MD"],
+        ["report..pdf"],
+    ],
+)
+def test_release_assets_rejects_invalid_shape(value):
+    assert _release_assets_errors(value)
+
+
+@pytest.mark.parametrize("path", ["\ud800/report.pdf", "\udc00/report.pdf"])
+def test_release_assets_ecmascript_rejects_unpaired_surrogates(path):
+    assert _release_assets_errors([path])
+    assert _ecmascript_release_assets_pattern_accepts(path) == [False, False]
+
+
+@pytest.mark.parametrize("separator", ["\u2028", "\u2029"])
+@pytest.mark.parametrize("surrogate", ["\ud800", "\udc00"])
+def test_release_assets_ecmascript_rejects_surrogate_after_line_separator(
+    separator, surrogate
+):
+    path = f"x{separator}{surrogate}/report.pdf"
+    assert _release_assets_errors([path])
+    assert _ecmascript_release_assets_pattern_accepts(path) == [False, False]
+
+
+def test_release_assets_ecmascript_accepts_surrogate_pair():
+    path = "😀/report.pdf"
+    assert _release_assets_errors([path]) == []
+    assert _ecmascript_release_assets_pattern_accepts(path) == [True, True]
+
+
+def test_release_assets_schema_leaves_basename_uniqueness_to_writers():
+    assert _release_assets_errors(["a/report.pdf", "b/report.pdf"]) == []
+
+
+@pytest.mark.parametrize(
+    "path",
+    ["dir\u2028/result.json", "dir\u2029/release-body.md"],
+)
+def test_release_assets_ecmascript_rejects_reserved_basename_after_line_separator(path):
+    assert _release_assets_errors([path])
+    assert _ecmascript_release_assets_pattern_accepts(path) == [False, False]
+
+
+@pytest.mark.parametrize("value", [[], ["report.pdf"]])
+def test_release_assets_property_is_forbidden_on_empty_repo(value):
+    bare = _entry(empty_repo=True, feedback_pr=False)
+    del bare["template"]
+    assert _errors(_manifest(bare)) == []
+    assert _errors(_manifest({**bare, "release_assets": value}))
