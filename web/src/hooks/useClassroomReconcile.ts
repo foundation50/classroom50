@@ -3,6 +3,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { withGitConflictRetry } from "@/domain/classrooms"
 import {
   reconcileClassroom,
+  ClassroomReconcilePermanentError,
   type ClassroomReconcileResult,
 } from "@/domain/reconcileClassroom"
 import { githubKeys } from "@/github-core/queries"
@@ -16,18 +17,10 @@ const log = logger.scope("useClassroomReconcile")
 
 // Fire the centralized classroom self-check once per (org, classroom) a
 // teacher/owner visits, best-effort. Mounted at the $org/$classroom boundary so
-// a classroom created via the GUI, or before a given resource existed, converges
-// on any owner entry rather than only when a role/roster op happens to touch the
-// missing resource. Subsumes the former useTeacherTeamMigration +
-// useTeamDescriptionBackfill (their reconciles are steps of reconcileClassroom)
-// and additionally re-affirms the staff teams + their config-repo grants.
-//
-// `enabled` MUST gate on the resolved teacher role: every step is an org-owner
-// op that would only 403 for a TA/student. It never blocks the page and a
-// failure is logged, not surfaced (a later entry retries per the shared latch).
-//
-// The fire-once guard, transient/permanent latch, and org/classroom-as-variable
-// concurrency invariant live in useBestEffortOwnerReconcile.
+// a classroom converges on any owner entry rather than only when a role/roster
+// op touches the missing resource. Owner-gated via `enabled` (a 403 for anyone
+// else); the fire-once guard, latch, and concurrency invariant live in
+// useBestEffortOwnerReconcile.
 export function useClassroomReconcile(
   org: string | undefined,
   classroom: string | undefined,
@@ -42,6 +35,9 @@ export function useClassroomReconcile(
     classroom,
     run: ({ org, classroom }) =>
       withGitConflictRetry(() => reconcileClassroom(client, org, classroom)),
+    // An archived classroom no-ops (skipped); release its key so a same-mount
+    // un-archive re-reconciles rather than staying latched until remount.
+    isTransientSuccess: (result) => result.skipped,
     // Invalidate only the slices that actually changed, keyed on the RUN's own
     // org/classroom (not the current one) so a late resolve after a fast switch
     // refreshes its own classroom. Union of what the two former hooks did.
@@ -80,14 +76,14 @@ export function useClassroomReconcile(
         void queryClient.invalidateQueries({ queryKey: githubKeys.myTeams() })
       }
     },
-    // Latch as permanent a 403 the viewer can't fix AND a 404 on a TEAM read (a
-    // wrong derived slug / deleted team never converges) — the stricter of the
-    // two former rules. A classroom.json read miss arrives as
-    // ClassroomSourceReadError (not a GitHubAPIError) and so, like a transient
-    // failure, releases its key for a later retry.
+    // Latch as permanent only a 403 the viewer can't fix or the description
+    // step's wrong-slug team 404 (a derived slug that never converges). Every
+    // other 404 in the pass — a propagating config commit, a just-deleted
+    // instructor team — is transient and releases the key for a later retry, so
+    // one blip can't disable the whole classroom heal for the mount.
     isPermanent: (err) =>
-      err instanceof GitHubAPIError &&
-      (err.isNotFound || (err.isForbidden && !err.isRateLimited)),
+      err instanceof ClassroomReconcilePermanentError ||
+      (err instanceof GitHubAPIError && err.isForbidden && !err.isRateLimited),
     logSkip: (err, { org, classroom }) =>
       log.warn("classroom reconcile skipped", { org, classroom, err }),
   })

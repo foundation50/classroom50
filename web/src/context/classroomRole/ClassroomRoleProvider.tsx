@@ -50,13 +50,9 @@ function useClassroomRoleResolution(
     user?.login,
   )
 
-  // Centralized best-effort self-check on classroom entry: verify (and create
-  // any missing) classroom-scoped GitHub resources — the instructor->teacher
-  // team rename, the students + staff teams and their config-repo grants, and
-  // the classroom50/team/v1 student-team description record. Gated on the viewer
-  // being an org owner (the resolved teacher role) since these are owner ops;
-  // keyed on actualRole so a teacher previewing as a lower role still triggers
-  // the (idempotent) heal. See reconcileClassroom for the full resource set.
+  // Centralized best-effort self-check on classroom entry. Keyed on actualRole
+  // (not the preview-clamped role) so a teacher previewing as a lower role still
+  // triggers the idempotent heal. See reconcileClassroom for the resource set.
   useClassroomReconcile(org, classroom, isTeacherRole(actualRole))
 
   const roleResolved = role !== "unresolved"

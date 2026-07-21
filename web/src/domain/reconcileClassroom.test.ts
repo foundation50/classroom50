@@ -18,6 +18,7 @@ vi.mock("@/github-core/mutations", () => ({
 }))
 
 import { reconcileClassroom } from "./reconcileClassroom"
+import { ClassroomReconcilePermanentError } from "./reconcileClassroom"
 import { GitHubAPIError } from "@/github-core/errors"
 
 const client = {} as never
@@ -63,6 +64,7 @@ describe("reconcileClassroom", () => {
       staffCreated: [],
     })
     expect(ensureStaffTeams).toHaveBeenCalledWith(client, "org", "cs101")
+    expect(ensureClassroomTeam).toHaveBeenCalledWith(client, "org", "cs101")
     expect(reconcileDescription).toHaveBeenCalledTimes(1)
   })
 
@@ -113,5 +115,43 @@ describe("reconcileClassroom", () => {
     getClassroomJson.mockRejectedValue(githubAPIError(503))
     await expect(reconcileClassroom(client, "org", "cs101")).rejects.toThrow()
     expect(ensureStaffTeams).not.toHaveBeenCalled()
+  })
+
+  it("aborts and rethrows if the migration fails, without touching staff teams", async () => {
+    migrate.mockRejectedValue(githubAPIError(500))
+    await expect(reconcileClassroom(client, "org", "cs101")).rejects.toThrow()
+    expect(ensureClassroomTeam).not.toHaveBeenCalled()
+    expect(ensureStaffTeams).not.toHaveBeenCalled()
+    expect(reconcileDescription).not.toHaveBeenCalled()
+  })
+
+  it("aborts and rethrows if ensureStaffTeams fails, without touching the description", async () => {
+    ensureStaffTeams.mockRejectedValue(githubAPIError(500))
+    await expect(reconcileClassroom(client, "org", "cs101")).rejects.toThrow()
+    expect(reconcileDescription).not.toHaveBeenCalled()
+  })
+
+  it("rewraps a description-step 404 as a permanent error (wrong slug never converges)", async () => {
+    reconcileDescription.mockRejectedValue(githubAPIError(404))
+    await expect(
+      reconcileClassroom(client, "org", "cs101"),
+    ).rejects.toBeInstanceOf(ClassroomReconcilePermanentError)
+  })
+
+  it("does NOT rewrap a non-404 description-step failure", async () => {
+    reconcileDescription.mockRejectedValue(githubAPIError(500))
+    await expect(
+      reconcileClassroom(client, "org", "cs101"),
+    ).rejects.not.toBeInstanceOf(ClassroomReconcilePermanentError)
+  })
+
+  it("leaves a non-description 404 (e.g. transient team read) as a plain GitHubAPIError", async () => {
+    // A 404 from the migration/staff steps must stay transient (a plain
+    // GitHubAPIError), not get rewrapped as permanent — only the description
+    // step's wrong-slug read is unconvergeable.
+    ensureStaffTeams.mockRejectedValue(githubAPIError(404))
+    const err = await reconcileClassroom(client, "org", "cs101").catch((e) => e)
+    expect(err).toBeInstanceOf(GitHubAPIError)
+    expect(err).not.toBeInstanceOf(ClassroomReconcilePermanentError)
   })
 })

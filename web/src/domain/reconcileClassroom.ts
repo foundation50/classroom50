@@ -14,15 +14,28 @@ import { logger } from "@/lib/logger"
 
 const log = logger.scope("domain:reconcileClassroom")
 
-// The aggregate outcome of one classroom reconcile, so the caller can drive
-// precise cache invalidation off which slices actually changed rather than
-// blindly refetching. `skipped` is the archived-classroom short-circuit.
+// Aggregate outcome so the caller invalidates only the slices that changed;
+// `skipped` marks the archived short-circuit.
 export type ClassroomReconcileResult = {
   skipped: boolean
   migration: TeacherMigrationResult
   description: TeamDescriptionReconcileResult
   // Staff roles this run newly created (existing teams adopt as no-ops).
   staffCreated: StaffRole[]
+}
+
+// A 404 on the student-team read (a derived/wrong slug that never converges) is
+// the one hopeless failure a reconcile can't retry away; every other 404 in the
+// pass (a propagating commit, a just-deleted instructor team) is transient. This
+// distinct type lets the caller latch only the former so a blip doesn't disable
+// the whole classroom heal for the mount.
+export class ClassroomReconcilePermanentError extends Error {
+  readonly cause: unknown
+  constructor(cause: unknown) {
+    super("classroom reconcile hit a permanently unconvergeable state")
+    this.name = "ClassroomReconcilePermanentError"
+    this.cause = cause
+  }
 }
 
 const NOOP_RESULT: ClassroomReconcileResult = {
@@ -33,23 +46,13 @@ const NOOP_RESULT: ClassroomReconcileResult = {
 }
 
 // Verify (and self-heal) every classroom-scoped GitHub resource a teacher/owner
-// depends on, in one idempotent pass. The single home for "what a healthy
-// classroom must have," so write paths (role change, roster sync, assignment
-// create) no longer each re-list their own ensure* calls. Composes the existing
-// idempotent primitives; every step is a no-op when already converged.
+// depends on, in one idempotent pass, composing the existing primitives.
 //
-// Order is load-bearing: the instructor->teacher migration may create/rename the
-// teacher team, so it runs BEFORE ensureStaffTeams re-affirms the staff set and
-// their config-repo grants. The student-team description backfill runs last (it
-// only reads classroom.json + the student team).
-//
-// Every call is an org-owner operation; the caller MUST gate on the viewer's
-// resolved teacher role. An archived classroom short-circuits with no writes
-// (returns skipped) rather than throwing — the UI hides its affordances and a
-// reconcile has nothing to heal on a frozen classroom. A missing/legacy
-// classroom.json reads as active (never blocks). Not wrapped in
-// withGitConflictRetry here — the config-committing steps each own their retry
-// and the caller wraps the whole pass — so this stays a pure composition.
+// Order is load-bearing: the instructor->teacher migration may create the
+// teacher team, so it runs BEFORE ensureStaffTeams re-affirms the staff set.
+// Every call is an org-owner op; the caller MUST gate on the teacher role. An
+// archived classroom short-circuits with no writes (returns skipped); a
+// missing/legacy classroom.json reads as active.
 export async function reconcileClassroom(
   client: GitHubClient,
   org: string,
@@ -66,11 +69,17 @@ export async function reconcileClassroom(
     classroom,
   )
 
-  const description = await reconcileStudentTeamDescription(
-    client,
-    org,
-    classroom,
-  )
+  // Only the student-team read's 404 is permanent; rewrap it so the caller can
+  // tell it apart from a transient 404 elsewhere in the pass.
+  let description: TeamDescriptionReconcileResult
+  try {
+    description = await reconcileStudentTeamDescription(client, org, classroom)
+  } catch (err) {
+    if (err instanceof GitHubAPIError && err.isNotFound) {
+      throw new ClassroomReconcilePermanentError(err)
+    }
+    throw err
+  }
 
   if (migration.changed || description.changed || staffCreated.length > 0) {
     log.info("classroom reconcile: healed drift", {
@@ -87,8 +96,7 @@ export async function reconcileClassroom(
 
 // True only when classroom.json positively records active: false. A missing
 // classroom.json (404, legacy) reads as active; a transient read failure
-// rethrows so the caller's best-effort latch retries on a later entry rather
-// than reconciling against unknown state.
+// rethrows so the caller's latch retries rather than reconciling blind.
 async function isArchived(
   client: GitHubClient,
   org: string,
@@ -103,5 +111,3 @@ async function isArchived(
     throw err
   }
 }
-
-export { NOOP_RESULT as reconcileClassroomNoopResult }

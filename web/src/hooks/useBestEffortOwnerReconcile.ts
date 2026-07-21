@@ -25,6 +25,11 @@ export type BestEffortOwnerReconcileConfig<TResult> = {
   // reconcile doesn't re-fire every entry) vs transient (its key is released so
   // a later render retries). Defaults to "a 403 the viewer can't fix".
   isPermanent?: (err: unknown) => boolean
+  // Classifies a SUCCESSFUL result as one that shouldn't latch — its key is
+  // released so a later render retries (e.g. a run that no-op'd because a
+  // precondition wasn't met yet and may flip within the same mount). Defaults to
+  // "always latch a success".
+  isTransientSuccess?: (result: TResult) => boolean
   // Optional label for the best-effort warning log on failure.
   logSkip?: (err: unknown, vars: ReconcileVars) => void
 }
@@ -45,13 +50,21 @@ export function useBestEffortOwnerReconcile<TResult>({
   run,
   onSettled,
   isPermanent = defaultIsPermanent,
+  isTransientSuccess,
   logSkip,
 }: BestEffortOwnerReconcileConfig<TResult>): void {
   const inFlight = useRef<Set<string>>(new Set())
 
   const reconcile = useMutation<TResult, Error, ReconcileVars>({
     mutationFn: run,
-    onSuccess: (result, vars) => onSettled?.(result, vars),
+    onSuccess: (result, vars) => {
+      // Release the key for a non-latching success so a later render retries
+      // (e.g. an archived-skip that may un-archive within the same mount).
+      if (isTransientSuccess?.(result)) {
+        inFlight.current.delete(`${vars.org}/${vars.classroom}`)
+      }
+      onSettled?.(result, vars)
+    },
     onError: (err, vars) => {
       const key = `${vars.org}/${vars.classroom}`
       if (!isPermanent(err)) inFlight.current.delete(key)

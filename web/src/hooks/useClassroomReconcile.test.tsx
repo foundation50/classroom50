@@ -16,14 +16,31 @@ vi.mock("@/domain/classrooms", () => ({
 }))
 vi.mock("@/domain/reconcileClassroom", () => ({
   reconcileClassroom: (...args: unknown[]) => reconcile(...args),
+  // Real-shaped stand-in so the hook's `instanceof` latch check works.
+  ClassroomReconcilePermanentError: class ClassroomReconcilePermanentError extends Error {
+    readonly cause: unknown
+    constructor(cause: unknown) {
+      super("classroom reconcile hit a permanently unconvergeable state")
+      this.name = "ClassroomReconcilePermanentError"
+      this.cause = cause
+    }
+  },
 }))
 
 import { useClassroomReconcile } from "./useClassroomReconcile"
+import { ClassroomReconcilePermanentError } from "@/domain/reconcileClassroom"
 import { GitHubAPIError } from "@/github-core/errors"
 import type { ClassroomReconcileResult } from "@/domain/reconcileClassroom"
 
 const healthy: ClassroomReconcileResult = {
   skipped: false,
+  migration: { changed: false },
+  description: { changed: false },
+  staffCreated: [],
+}
+
+const archived: ClassroomReconcileResult = {
+  skipped: true,
   migration: { changed: false },
   description: { changed: false },
   staffCreated: [],
@@ -178,8 +195,29 @@ describe("useClassroomReconcile", () => {
     await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3))
   })
 
-  it("does NOT re-fire after a permanent TEAM 404 (wrong slug never converges)", async () => {
+  it("RETRIES on re-entry after a plain 404 (transient — not the wrong-slug case)", async () => {
+    // A bare GitHubAPIError 404 (a propagating commit, a just-deleted instructor
+    // team) is transient now: it releases the key so a later entry retries,
+    // instead of latching the whole classroom heal off for the mount.
     reconcile.mockRejectedValueOnce(githubAPIError(404))
+    reconcile.mockResolvedValue(healthy)
+
+    const { rerender } = renderHook(
+      ({ classroom }: { classroom: string }) =>
+        useClassroomReconcile("org", classroom, true),
+      { wrapper: wrapper(), initialProps: { classroom: "cs101" } },
+    )
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1))
+    rerender({ classroom: "cs202" })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
+    rerender({ classroom: "cs101" })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3))
+  })
+
+  it("does NOT re-fire after a ClassroomReconcilePermanentError (wrong slug never converges)", async () => {
+    reconcile.mockRejectedValueOnce(
+      new ClassroomReconcilePermanentError(githubAPIError(404)),
+    )
     reconcile.mockResolvedValue(healthy)
 
     const { rerender } = renderHook(
@@ -193,6 +231,24 @@ describe("useClassroomReconcile", () => {
     rerender({ classroom: "cs101" })
     await new Promise((r) => setTimeout(r, 50))
     expect(reconcile).toHaveBeenCalledTimes(2)
+  })
+
+  it("RETRIES on re-entry after an archived skip (key released so un-archive re-reconciles)", async () => {
+    // A skipped (archived) run resolves successfully but must NOT latch: if the
+    // classroom is un-archived within the same mount, re-entry re-reconciles.
+    reconcile.mockResolvedValueOnce(archived)
+    reconcile.mockResolvedValue(healthy)
+
+    const { rerender } = renderHook(
+      ({ classroom }: { classroom: string }) =>
+        useClassroomReconcile("org", classroom, true),
+      { wrapper: wrapper(), initialProps: { classroom: "cs101" } },
+    )
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(1))
+    rerender({ classroom: "cs202" })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(2))
+    rerender({ classroom: "cs101" })
+    await waitFor(() => expect(reconcile).toHaveBeenCalledTimes(3))
   })
 
   it("does NOT re-fire after a permanent 403 the viewer can't fix", async () => {
