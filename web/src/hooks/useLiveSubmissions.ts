@@ -11,6 +11,11 @@ import type { GitHubRelease } from "@/github-core/types"
 import { studentRepoName } from "@/util/studentRepo"
 import { mapWithConcurrency } from "@/util/concurrency"
 
+// How many of an assignment's repos the live fan-out reads per page ("Show
+// next N"). One source of truth: the hook defaults `pageSize` to this and the
+// page's control label derives its N from it, so the two can't drift.
+export const LIVE_PAGE_SIZE = 50
+
 // One student/group repo's live submission state, read directly from its
 // `submit/*` releases — independent of the collected scores.json snapshot.
 // `owner` is the repo-name component (the individual student login, or the
@@ -26,8 +31,9 @@ export type LiveSubmission = {
 }
 
 export type UseLiveSubmissionsResult = {
-  // Live submissions found on the current page window, keyed insertion-free by
-  // owner (lowercased) so the merge in the dashboard can union by owner.
+  // Live submissions found on the current page window, in completion order and
+  // original-case owner; the dashboard merge unions these over the snapshot by
+  // owner (case-insensitive).
   submissions: LiveSubmission[]
   // Repo owners on the current page that could not be read (404 is treated as
   // "not submitted", so these are the 403/5xx/network failures). Surfaced so
@@ -72,7 +78,7 @@ export function useLiveSubmissions({
   assignment,
   repoOwners,
   page = 0,
-  pageSize = 50,
+  pageSize = LIVE_PAGE_SIZE,
   enabled = true,
 }: UseLiveSubmissionsArgs): UseLiveSubmissionsResult {
   const client = useGitHubClient()
@@ -137,7 +143,7 @@ export function useLiveSubmissions({
               })
             }
           } catch {
-            // A non-404 failure (403/5xx/network after retries) for one repo
+            // A non-404 failure (403/5xx/network) for one repo
             // must not void the whole page — count it and move on.
             errorCount++
           }

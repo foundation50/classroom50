@@ -42,7 +42,7 @@ import {
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
 import useGetScores from "@/hooks/useGetScores"
-import useLiveSubmissions from "@/hooks/useLiveSubmissions"
+import useLiveSubmissions, { LIVE_PAGE_SIZE } from "@/hooks/useLiveSubmissions"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
@@ -76,10 +76,6 @@ import {
 import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
-
-// Live-submission fan-out page size: how many of the assignment's repos we read
-// per "Show next" click. One source so the control label and the hook agree.
-export const LIVE_PAGE_SIZE = 50
 
 // Re-renders so a relative "updated X ago" label stays live, at a cadence that
 // matches the elapsed magnitude: every second under a minute, every minute
