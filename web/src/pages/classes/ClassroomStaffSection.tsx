@@ -5,6 +5,8 @@ import { Loader2, Send, ShieldCheck, UserPlus, X, XCircle } from "lucide-react"
 import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { can } from "@/authz"
 import { ConfirmModal } from "@/components/modals"
 import { teamMembersQuery, teamInvitationsQuery } from "@/github-core/queries"
 import { classroomTeamSlug } from "@/util/teamSlug"
@@ -39,8 +41,10 @@ const ROLE_PLURAL_KEY: Record<StaffRole, string> = {
 }
 
 // Manage a classroom's staff (teacher / head TA / TA), backed by the
-// per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route
-// already gates; the actions assume teacher/owner.
+// per-classroom GitHub teams `classroom50-<classroom>-<role>`. The route gates
+// to teachers, but this section also asserts can("editClassroomSettings")
+// in-component so it fails closed if ever mounted outside RequireRole (the
+// underlying team/invite ops are owner-only at GitHub — the true enforcer).
 const ClassroomStaffSection = ({
   org,
   classroom,
@@ -52,6 +56,12 @@ const ClassroomStaffSection = ({
   disabled?: boolean
 }) => {
   const { t } = useTranslation()
+  const { role } = useClassroomRoleContext()
+  // Defense-in-depth: only a classroom teacher may mutate staff. Fold into the
+  // read-only `disabled` state so every action (add/remove/role/resend/cancel)
+  // fails closed rather than relying solely on the route guard.
+  const canManageStaff = can("editClassroomSettings", { classroomRole: role })
+  const actionsDisabled = disabled || !canManageStaff
   return (
     <Card bordered={false} className="w-full mt-8">
       <Card.Body>
@@ -74,7 +84,7 @@ const ClassroomStaffSection = ({
           {t("classes.staff.description")}
         </p>
 
-        <AddStaff org={org} classroom={classroom} disabled={disabled} />
+        <AddStaff org={org} classroom={classroom} disabled={actionsDisabled} />
 
         <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 mt-2">
           {STAFF_ROLES.map((role) => (
@@ -83,7 +93,7 @@ const ClassroomStaffSection = ({
               org={org}
               classroom={classroom}
               role={role}
-              disabled={disabled}
+              disabled={actionsDisabled}
             />
           ))}
         </div>

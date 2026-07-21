@@ -16,6 +16,7 @@ import { useDismissFailedInvite } from "@/hooks/mutations/useDismissFailedInvite
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGitHubViewer } from "@/hooks/useGitHubResources"
 import type { GitHubOrgInvitation } from "@/github-core/types"
 import { invalidateInviteQueries as invalidateInviteQueriesForOrg } from "@/github-core/queries"
@@ -94,6 +95,12 @@ const EnrolledStudents = ({
   const { t } = useTranslation()
   const { notify } = useToast()
   const { data: viewer } = useGitHubViewer()
+  // Roster invite / unenroll / role-change all hit owner-only org APIs
+  // (createOrgInvitation, removeOrgMembership, setOrgMembershipRole). Gate the
+  // per-member modal's management actions on an explicit org-owner check rather
+  // than the old `!pendingHidden` proxy — GitHub is the true enforcer, this is
+  // the UX gate.
+  const { isOwner } = useIsOrgOwner()
   const updateRosterCache = useUpdateRosterCache(org, classroom)
   const invalidateTeamRoster = useInvalidateTeamRoster(org, classroom)
 
@@ -732,7 +739,7 @@ const EnrolledStudents = ({
         classroom={classroom}
         teamSlugByRole={teamSlugByRole}
         row={selected}
-        canManage={!pendingHidden}
+        canManage={isOwner}
         isSelf={selected ? isSelf(selected) : false}
         onClose={() => setSelectedKey(null)}
         onSaved={(rowKey, updated) => onRowMetadataSaved(rowKey, updated)}
