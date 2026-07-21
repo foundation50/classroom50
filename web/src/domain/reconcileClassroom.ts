@@ -60,6 +60,9 @@ export async function reconcileClassroom(
 ): Promise<ClassroomReconcileResult> {
   if (await isArchived(client, org, classroom)) return NOOP_RESULT
 
+  // Legacy instructor->teacher team rename. This is the ONLY web call site of
+  // the migration — remove it here (with teacherMigration.ts) when #322 drops
+  // the instructor alias after the deprecation window.
   const migration = await migrateInstructorTeamToTeacher(client, org, classroom)
 
   await ensureClassroomTeam(client, org, classroom)
