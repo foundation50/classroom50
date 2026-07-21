@@ -228,25 +228,17 @@ func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpol
 		org, appliedList, strings.Join(notAttempted, ", "), settingsURL)
 }
 
-// orgBudgetsSettingsURL is the org billing-budgets page where a teacher can
-// view/adjust spending caps by hand.
-func orgBudgetsSettingsURL(org string) string {
-	return orgpolicy.OrgBudgetsURL(org)
-}
-
 // ensureOrgActionsBudgetCap reconciles the org's $0 GitHub Actions spending
 // cap. It's create-only: if no conforming Actions budget exists it POSTs the
 // desired $0 hard-stop cap; it NEVER modifies or deletes a teacher-set budget
 // (GitHub allows one budget per scope+SKU, and overriding the teacher's choice
 // would be surprising — audit surfaces the verdict instead).
 //
-// Returns a status string for the summary: "created", "present", "warn" (a
-// teacher cap over the warn threshold, left as-is), "unreadable" (couldn't read
-// budgets — no billing visibility / token lacks Administration: Read), or
-// "failed" (the create write was denied or errored). Never fatal — the budget
-// cap is a guardrail, not a prerequisite for the classroom to work.
+// Create-only and never fatal: the budget cap is a guardrail, not a
+// prerequisite for the classroom to work. Returns the reconciliation status
+// for the summary (see initSummary.BudgetCap for the values).
 func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, org string) string {
-	settingsURL := orgBudgetsSettingsURL(org)
+	settingsURL := orgpolicy.OrgBudgetsURL(org)
 
 	budgets, err := githubapi.ListOrgBudgets(client, org)
 	if err != nil {

@@ -15,6 +15,7 @@ import {
 import {
   BUDGET_WARN_THRESHOLD,
   classifyBudget,
+  orgBudgetsApiPath,
   type BudgetsListResponse,
 } from "@/orgPolicy/budget"
 import { logger } from "@/lib/logger"
@@ -152,7 +153,7 @@ export async function checkOrgBudget(
 ): Promise<CheckVerdict> {
   try {
     const resp = await client.request<BudgetsListResponse>(
-      `/organizations/${org}/settings/billing/budgets`,
+      orgBudgetsApiPath(org),
     )
     const v = classifyBudget(resp.budgets ?? [])
     switch (v.tier) {

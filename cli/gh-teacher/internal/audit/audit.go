@@ -191,7 +191,7 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 		Unenforced:       []auditSetting{},
 		ManualUnreadable: orgpolicy.ManualHardeningSteps(org),
 		SettingsURL:      settingsURL,
-		BudgetCap:        budgetCapResult{SettingsURL: orgBudgetsSettingsURL(org)},
+		BudgetCap:        budgetCapResult{SettingsURL: orgpolicy.OrgBudgetsURL(org)},
 	}
 
 	live, err := readOrgMemberSettings(client, org)
@@ -256,16 +256,11 @@ func readOrgMemberSettings(client githubapi.Client, org string) (map[string]any,
 	return live, nil
 }
 
-// orgBudgetsSettingsURL is the org billing budgets page for a hand-fix.
-func orgBudgetsSettingsURL(org string) string {
-	return orgpolicy.OrgBudgetsURL(org)
-}
-
 // classifyBudgetCap reads the org's billing budgets and classifies the Actions
 // cap. A read failure yields ReadOK=false (advisory, inconclusive) rather than
 // a false critical — mirroring how the member-default read-back degrades.
 func classifyBudgetCap(client githubapi.Client, org string) budgetCapResult {
-	res := budgetCapResult{SettingsURL: orgBudgetsSettingsURL(org)}
+	res := budgetCapResult{SettingsURL: orgpolicy.OrgBudgetsURL(org)}
 	budgets, err := githubapi.ListOrgBudgets(client, org)
 	if err != nil {
 		return res // ReadOK stays false.

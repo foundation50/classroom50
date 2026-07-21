@@ -47,9 +47,17 @@ export function BudgetCreatedBanner() {
   )
   useEffect(() => {
     const refresh = () =>
-      setNotice(
-        org ? readBudgetNotice(org) : { created: false, dismissed: false },
-      )
+      setNotice((prev) => {
+        const next = org
+          ? readBudgetNotice(org)
+          : { created: false, dismissed: false }
+        // Skip the re-render when nothing changed (the common case: most orgs
+        // never created a cap, so every event would otherwise re-set an equal
+        // {created:false, dismissed:false}).
+        return prev.created === next.created && prev.dismissed === next.dismissed
+          ? prev
+          : next
+      })
     refresh()
     window.addEventListener(BUDGET_NOTICE_EVENT, refresh)
     return () => window.removeEventListener(BUDGET_NOTICE_EVENT, refresh)

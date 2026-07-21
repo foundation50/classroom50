@@ -40,6 +40,12 @@ export function orgBudgetsUrl(org: string): string {
   return `https://github.com/organizations/${org}/settings/billing/budgets`
 }
 
+// The org billing-budgets REST endpoint (list + create). Single-sourced so the
+// audit read and the setup create can't drift (mirrors the CLI's orgBudgetsPath).
+export function orgBudgetsApiPath(org: string): string {
+  return `/organizations/${org}/settings/billing/budgets`
+}
+
 function findActionsBudget(budgets: Budget[]): Budget | undefined {
   // GitHub allows one budget per scope+SKU, so the first match is authoritative.
   return budgets.find(

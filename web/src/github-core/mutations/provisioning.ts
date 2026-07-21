@@ -14,6 +14,7 @@ import {
   BUDGET_SCOPE_ORG,
   BUDGET_TYPE_PRODUCT_PRICING,
   classifyBudget,
+  orgBudgetsApiPath,
   orgBudgetsUrl,
   type BudgetsListResponse,
 } from "@/orgPolicy/budget"
@@ -1102,7 +1103,7 @@ export async function ensureOrgActionsBudgetCap(
   let budgets: BudgetsListResponse
   try {
     budgets = await client.request<BudgetsListResponse>(
-      `/organizations/${org}/settings/billing/budgets`,
+      orgBudgetsApiPath(org),
     )
   } catch (err) {
     return {
@@ -1141,7 +1142,7 @@ export async function ensureOrgActionsBudgetCap(
 
   // Missing (or alert-only): create the $0 hard-stop cap.
   try {
-    await client.request(`/organizations/${org}/settings/billing/budgets`, {
+    await client.request(orgBudgetsApiPath(org), {
       method: "POST",
       body: {
         budget_amount: 0,
