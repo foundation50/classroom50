@@ -138,6 +138,21 @@ describe("useLiveSubmissions", () => {
     )
     expect(request).not.toHaveBeenCalled()
     expect(result.current.submissions).toEqual([])
+    // A disabled fan-out has nothing to wait for, so it must not report pending
+    // (else the page would hold the "not submitted" list forever).
+    expect(result.current.isPending).toBe(false)
+  })
+
+  it("reports isPending until the first fan-out resolves", async () => {
+    request.mockResolvedValue([
+      submitRelease("submit/x", "2026-01-01T00:00:00Z"),
+    ])
+    const { result } = renderHook(
+      () => useLiveSubmissions({ ...base, repoOwners: ["a"] }),
+      { wrapper: wrapper(makeClient()) },
+    )
+    expect(result.current.isPending).toBe(true)
+    await waitFor(() => expect(result.current.isPending).toBe(false))
   })
 
   it("does not fetch when there are no repo owners", () => {

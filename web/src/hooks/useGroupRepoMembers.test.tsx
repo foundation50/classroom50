@@ -46,7 +46,11 @@ describe("useGroupRepoMemberLogins", () => {
       { wrapper: wrapper(makeClient()) },
     )
     await waitFor(() =>
-      expect([...result.current].sort()).toEqual(["alice", "bob", "carol"]),
+      expect([...result.current.logins].sort()).toEqual([
+        "alice",
+        "bob",
+        "carol",
+      ]),
     )
   })
 
@@ -85,7 +89,9 @@ describe("useGroupRepoMemberLogins", () => {
         ]),
       { wrapper: wrapper(makeClient()) },
     )
-    await waitFor(() => expect([...result.current].sort()).toEqual(["carol"]))
+    await waitFor(() =>
+      expect([...result.current.logins].sort()).toEqual(["carol"]),
+    )
   })
 
   it("does not fetch when there are no group repos", () => {
@@ -93,6 +99,22 @@ describe("useGroupRepoMemberLogins", () => {
       wrapper: wrapper(makeClient()),
     })
     expect(request).not.toHaveBeenCalled()
-    expect(result.current.size).toBe(0)
+    expect(result.current.logins.size).toBe(0)
+    // Nothing to reconcile, so never pending — the "no group" list can settle.
+    expect(result.current.isPending).toBe(false)
+  })
+
+  it("reports isPending until the collaborator fetch resolves", async () => {
+    request.mockResolvedValue([user("alice")])
+    const { result } = renderHook(
+      () =>
+        useGroupRepoMemberLogins("acme", [
+          { owner: "alice", repoName: "cs101-hw1-alice" },
+        ]),
+      { wrapper: wrapper(makeClient()) },
+    )
+    expect(result.current.isPending).toBe(true)
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+    expect(result.current.logins.has("alice")).toBe(true)
   })
 })

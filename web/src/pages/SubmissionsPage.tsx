@@ -269,6 +269,7 @@ const SubmissionsPageContent = () => {
     submissions: liveSubmissions,
     errorCount: liveErrorCount,
     isFetching: liveFetching,
+    isPending: livePending,
     hasNextPage: liveHasNextPage,
     refetch: refetchLive,
   } = useLiveSubmissions({
@@ -309,7 +310,8 @@ const SubmissionsPageContent = () => {
   // the repo name) plus each repo's collaborators means a teammate on a
   // formed-but-unsubmitted group isn't also listed as "no group" (#245). The
   // fetch is throttled and shares the collaborators cache with the rows/modal.
-  const groupRepoMembers = useGroupRepoMemberLogins(org ?? "", groupRepoList)
+  const { logins: groupRepoMembers, isPending: groupMembersPending } =
+    useGroupRepoMemberLogins(org ?? "", groupRepoList)
   const groupRepoFounders = useMemo(
     () =>
       new Set([
@@ -329,11 +331,19 @@ const SubmissionsPageContent = () => {
   // group's row (#245), so listing them as "no group" too would double-count
   // them. Gated on scores having loaded — until then scoresInfo is empty and
   // would flag the whole roster.
+  // The "not submitted" list is derived last, from every source that can still
+  // reclassify a student: the collected snapshot, the live submit/* fan-out, and
+  // (for groups) the collaborator reconciliation. Gate it on all three settling
+  // so a student never renders as "not submitted" and then jumps to "Pending" /
+  // a group row as a later source resolves (the flash). Until ready, hold the
+  // prior list rather than recomputing an intermediate one.
   const scoresLoaded = scoresData !== undefined
+  const nonSubmittersReady =
+    scoresLoaded && !livePending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
-    if (!scoresLoaded) return []
+    if (!nonSubmittersReady) return []
     return reconcileNonSubmitters(students, scoresInfo, groupRepoFounders)
-  }, [scoresLoaded, scoresInfo, students, groupRepoFounders])
+  }, [nonSubmittersReady, scoresInfo, students, groupRepoFounders])
 
   // Dashboard controls — all client-side over already-loaded data.
   const [query, setQuery] = useState("")
@@ -911,6 +921,11 @@ const SubmissionsPageContent = () => {
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
         emptyRepo={isEmptyRepoAssignment}
+        nonSubmittersLoading={
+          !nonSubmittersReady &&
+          students.length > 0 &&
+          showsNonSubmitters(effectiveFilters)
+        }
       />
       <ConfirmModal
         open={regradeConfirmOpen}

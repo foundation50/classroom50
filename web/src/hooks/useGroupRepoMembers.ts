@@ -27,7 +27,7 @@ type GroupRepoRef = { owner: string; repoName: string }
 export function useGroupRepoMemberLogins(
   org: string,
   repos: GroupRepoRef[],
-): Set<string> {
+): { logins: Set<string>; isPending: boolean } {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
@@ -36,7 +36,9 @@ export function useGroupRepoMemberLogins(
   // of group repos changes, not on every render.
   const repoKey = [...repoNames].sort().join(",")
 
-  const { data } = useQuery({
+  const enabled = Boolean(org) && repoNames.length > 0
+
+  const { data, isLoading } = useQuery({
     queryKey: [...githubKeys.all, "group-collaborators", org, repoKey] as const,
     queryFn: async () => {
       const logins = new Set<string>()
@@ -76,9 +78,15 @@ export function useGroupRepoMemberLogins(
       return logins
     },
     staleTime: 60 * 1000,
-    enabled: Boolean(org) && repoNames.length > 0,
+    enabled,
   })
 
   const empty = useMemo(() => new Set<string>(), [])
-  return data ?? empty
+  return {
+    logins: data ?? empty,
+    // Pending only while an enabled fetch hasn't resolved yet. A disabled hook
+    // (no group repos) is never pending — there's nothing to reconcile — so the
+    // "no group" list can settle immediately.
+    isPending: enabled && isLoading,
+  }
 }

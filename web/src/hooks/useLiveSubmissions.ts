@@ -42,6 +42,11 @@ export type UseLiveSubmissionsResult = {
   // the UI can say "k repos couldn't be read" rather than silently undercount.
   errorCount: number
   isFetching: boolean
+  // True only while the FIRST fetch for the current inputs is in flight (not a
+  // background refetch). Callers gate flash-prone derived state (e.g. the
+  // "not submitted" list) on this so a row doesn't first render not-submitted
+  // and then jump to Pending once live presence lands.
+  isPending: boolean
   // True when more owners remain beyond the current page window.
   hasNextPage: boolean
   // Force a re-read of the current page's live submissions, bypassing the
@@ -108,7 +113,7 @@ export function useLiveSubmissions({
     Boolean(org && classroom && assignment) &&
     windowOwners.length > 0
 
-  const { data, isFetching, refetch } = useQuery({
+  const { data, isFetching, isLoading, refetch } = useQuery({
     queryKey: [
       ...githubKeys.all,
       "live-submissions",
@@ -169,6 +174,9 @@ export function useLiveSubmissions({
     submissions: data?.submissions ?? empty,
     errorCount: data?.errorCount ?? 0,
     isFetching,
+    // A disabled fan-out (empty_repo, or no owners) has nothing to wait for, so
+    // it is never pending; otherwise it's pending until the first result lands.
+    isPending: active && isLoading,
     hasNextPage,
     // react-query's refetch returns a promise; the caller fires-and-forgets, so
     // narrow it to void to keep the result type simple.
