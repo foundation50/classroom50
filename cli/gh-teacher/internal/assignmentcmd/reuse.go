@@ -318,7 +318,8 @@ type grantContext struct {
 //
 // The student-team grant is org-owner-only. A non-owner author (head-TA) gets a
 // 403; since the commit already landed, that is NOT fatal — it warns with
-// owner-required guidance and returns nil. Only a non-403 grant error is fatal.
+// owner-required guidance and returns nil. A rate-limit/abuse 403 stays fatal
+// (transient, not a permission denial); any other error is fatal too.
 //
 // After the student grant it best-effort grants the classroom's non-owner staff
 // teams (head-TA, TA) the same read, so a base-permission-`none` head-TA/TA can
@@ -336,9 +337,12 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 	}
 	granted, err := configrepo.GrantTeamRepoRead(client, org, team.Slug, tmplOwner, tmplRepo)
 	if err != nil {
-		// A 403 is the expected non-owner-author case (see the doc comment):
-		// warn with owner-required guidance and return nil. Only non-403 is fatal.
-		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
+		// A 403 is the expected non-owner-author case (see the doc comment): warn
+		// with owner-required guidance and return nil. But a rate-limit/abuse 403
+		// (Retry-After / x-ratelimit-remaining) is transient, not a permission
+		// denial — keep it fatal so a throttle stays a loud, non-zero-exit failure
+		// rather than misleading owner guidance. Only a non-rate-limited 403 is benign.
+		if cliutil.IsHTTPStatus(err, http.StatusForbidden) && !cliutil.IsRateLimited(err) {
 			_, _ = fmt.Fprintf(errOut, "Warning: assignment %s, but granting the %s team read on the private template %s/%s needs an organization owner (a non-owner can't grant repo access at GitHub). Students can't `gh student accept` until an owner grants it — re-run this command as an owner%s, open the classroom in the web app (which grants it automatically), or grant the %s team read on %s/%s directly in GitHub (Settings -> Collaborators and teams).\n",
 				ctx.verb, ctx.classroomNoun, tmplOwner, tmplRepo, ctx.rerunHint, team.Slug, tmplOwner, tmplRepo)
 			return nil

@@ -44,6 +44,10 @@ type reuseServerConfig struct {
 	// the default 204 (success). Set to e.g. 500 to exercise the
 	// grant-fails-after-the-copy-landed path.
 	grantStatus int
+	// grantRateLimited, when set, makes the classroom-team grant PUT return a
+	// 403 WITH a Retry-After header — GitHub's secondary-rate-limit shape, which
+	// must stay fatal (distinct from a plain permission 403, which is benign).
+	grantRateLimited bool
 	// templateOwner overrides the template repo owner (default "o", the
 	// org). Set to a different owner to exercise the out-of-org private
 	// template branch (warn, no grant). The source assignments body must
@@ -105,6 +109,11 @@ func newReuseServer(t *testing.T, cfg reuseServerConfig) (*httptest.Server, *reu
 			// 404 => not yet granted, so GrantTeamRepoRead will PUT.
 			w.WriteHeader(http.StatusNotFound)
 		case http.MethodPut:
+			if cfg.grantRateLimited {
+				w.Header().Set("Retry-After", "60")
+				w.WriteHeader(http.StatusForbidden)
+				return
+			}
 			if cfg.grantStatus != 0 {
 				w.WriteHeader(cfg.grantStatus)
 				return
@@ -646,6 +655,33 @@ func TestRunAssignmentReuse_GrantForbiddenIsNonFatal(t *testing.T) {
 	fix.mu.Unlock()
 	if committed == nil {
 		t.Errorf("copy should have been committed even when the grant 403s")
+	}
+}
+
+// TestRunAssignmentReuse_GrantRateLimitedStaysFatal: a 403 carrying a Retry-After
+// header is GitHub's secondary-rate-limit shape, not a permission denial — it must
+// stay FATAL (a transient throttle reported as "needs an organization owner" +
+// exit 0 would hide the real cause). Distinct from GrantForbiddenIsNonFatal.
+func TestRunAssignmentReuse_GrantRateLimitedStaysFatal(t *testing.T) {
+	server, _ := newReuseServer(t, reuseServerConfig{
+		sourceAssignments: sourceAssignmentsBody(),
+		targetAssignments: emptyAssignmentsBody(),
+		targetClassroom:   targetClassroomBody(nil),
+		templatePrivate:   true,
+		grantRateLimited:  true,
+	})
+	client := githubtest.NewTestClient(t, server)
+
+	var out, errOut bytes.Buffer
+	err := runAssignmentReuse(client, &out, &errOut, baseReuseParams())
+	if err == nil {
+		t.Fatalf("a rate-limited (Retry-After) 403 must fail the reuse, got nil error")
+	}
+	if !strings.Contains(err.Error(), "failed") {
+		t.Errorf("expected the fatal grant-failure error, got %v", err)
+	}
+	if strings.Contains(errOut.String(), "organization owner") {
+		t.Errorf("a rate-limit 403 must NOT surface owner-required guidance, got %q", errOut.String())
 	}
 }
 

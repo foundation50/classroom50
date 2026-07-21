@@ -80,6 +80,26 @@ func IsHTTPNotFound(err error) bool {
 	return IsHTTPStatus(err, http.StatusNotFound)
 }
 
+// IsRateLimited reports whether err is a GitHub rate-limit / secondary-limit
+// (abuse) response rather than a genuine permission denial. GitHub signals these
+// with a `Retry-After` header (secondary limit / 429) or `x-ratelimit-remaining:
+// 0` (primary limit), and they surface as 403 or 429 — indistinguishable from a
+// real authz 403 by status code alone. Callers that treat a plain 403 as benign
+// (e.g. "an owner must grant this") must exclude this case so a transient
+// throttle stays a loud, non-zero-exit failure instead of silent guidance.
+func IsRateLimited(err error) bool {
+	httpErr, ok := errors.AsType[*api.HTTPError](err)
+	if !ok {
+		return false
+	}
+	if httpErr.StatusCode != http.StatusForbidden &&
+		httpErr.StatusCode != http.StatusTooManyRequests {
+		return false
+	}
+	return httpErr.Headers.Get("Retry-After") != "" ||
+		httpErr.Headers.Get("X-RateLimit-Remaining") == "0"
+}
+
 // BackoffDelay is the exponential backoff for optimistic-retry loops:
 // 200ms * 2^attempt (attempt is 0-based), i.e. 200ms, 400ms, 800ms, ...
 // Callers gate it (skip the sleep after the final attempt).
