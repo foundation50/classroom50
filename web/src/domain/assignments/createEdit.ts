@@ -236,9 +236,16 @@ export async function editAssignment(
 
   // Grant the (possibly changed) in-org private template a team read — a
   // non-fatal warning, never thrown (the edit already committed). needsTeamGrant
-  // implies a resolved template, so the guard just narrows the type.
+  // implies a resolved template, so the guard just narrows the type. Skip the
+  // grant for a non-owner (canGrantTemplateAccess false): addRepositoryToTeam is
+  // owner-only, so a head-TA edit that carries a stored template would otherwise
+  // 403 here even though it never touched the template field.
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && preservedEntry.template) {
+  if (
+    input.canGrantTemplateAccess &&
+    needsTeamGrant &&
+    preservedEntry.template
+  ) {
     templateGrantWarning = await tryGrantTeamTemplateRead(
       client,
       input.org,
@@ -718,7 +725,11 @@ export async function createAssignment(
   )
 
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && assignmentBody.template) {
+  if (
+    input.canGrantTemplateAccess &&
+    needsTeamGrant &&
+    assignmentBody.template
+  ) {
     templateGrantWarning = await tryGrantTeamTemplateRead(
       client,
       input.org,

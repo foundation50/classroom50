@@ -38,6 +38,10 @@ export type CopyAssignmentInput = {
   // Default to the source slug/name; the slug must be unique in the target.
   targetSlug?: string
   targetName?: string
+  // Whether the acting user may perform the owner-only template read-grant
+  // (addRepositoryToTeam). Set from can("manageOrg") at the call site;
+  // fail-closed when absent so a non-owner reuse skips the owner-only grant.
+  canGrantTemplateAccess?: boolean
 }
 
 // First slug not in `taken`, suffixing `-2`, `-3`, … A base ending in `-<n>`
@@ -238,7 +242,7 @@ export async function copyAssignmentToClassroom(
   const updatedRef = await updateRef(client, org, newCommit.sha, configBranch)
 
   let templateGrantWarning: string | undefined
-  if (needsTeamGrant && entry.template) {
+  if (input.canGrantTemplateAccess && needsTeamGrant && entry.template) {
     templateGrantWarning = await tryGrantTeamTemplateRead(
       client,
       org,

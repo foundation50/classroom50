@@ -12,6 +12,7 @@ import {
 } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
 import { useOptionalGitHubClient } from "@/context/github/GitHubProvider"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import {
   verifyTemplateAccess,
@@ -51,6 +52,11 @@ export const TemplateField = ({
 }) => {
   const { t } = useTranslation()
   const client = useOptionalGitHubClient()
+  // The "Fix template access" recovery grants a team read on the template repo
+  // (addRepositoryToTeam) — an org-owner-only GitHub call. Only offer it to an
+  // owner; a non-owner (e.g. a head-TA authoring) would 403. Org owner and
+  // classroom teacher are independent axes (KTD-4), so gate on manageOrg.
+  const { isOwner } = useIsOrgOwner()
   const { user, isLoadingUser } = useGithubAuth()
   const viewerLogin = user?.login
   const rawValue = field.state.value
@@ -160,7 +166,7 @@ export const TemplateField = ({
         org={org}
         teamHasAccess={teamHasAccess}
         reconcile={
-          slug && org && classroom && inOrgPrivateTemplate ? (
+          isOwner && slug && org && classroom && inOrgPrivateTemplate ? (
             <ReconcileTemplateAccessInline
               org={org}
               classroom={classroom}

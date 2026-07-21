@@ -29,6 +29,18 @@ vi.mock("@/github-core/queries", () => ({
 vi.mock("@/context/github/GitHubProvider", () => ({
   useOptionalGitHubClient: () => ({ request: vi.fn() }),
 }))
+// The "Fix template access" recovery is owner-only (addRepositoryToTeam). Default
+// the viewer to an org owner so the inline-Fix tests exercise the offered path;
+// a non-owner case is covered by the dedicated test below.
+let mockIsOwner = true
+vi.mock("@/context/githubOrgRole/useIsOrgOwner", () => ({
+  useIsOrgOwner: () => ({
+    isOwner: mockIsOwner,
+    isPending: false,
+    isError: false,
+    retry: vi.fn(),
+  }),
+}))
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "teacher" }, isLoadingUser: false }),
 }))
@@ -94,6 +106,7 @@ beforeEach(() => {
   teamHasRepoAccess.mockReset()
   reconcileMutate.mockReset()
   reconcilePending = false
+  mockIsOwner = true
   __resetGitHubHealthForTest()
 })
 
@@ -150,6 +163,20 @@ describe("TemplateField — inline Fix template access", () => {
     verifyTemplateAccess.mockResolvedValue(okInOrgPrivate)
     teamHasRepoAccess.mockResolvedValue(false)
     renderField({ slug: undefined })
+    await screen.findByText("assignments.template.privateWillGrant", {
+      exact: false,
+    })
+    expect(screen.queryByText(ACTION_KEY)).toBeNull()
+  })
+
+  it("hides the Fix button for a non-owner (the grant is owner-only)", async () => {
+    // A head-TA authoring can set a template but can't grant team read
+    // (addRepositoryToTeam is org-owner-only), so the recovery must not show.
+    mockIsOwner = false
+    verifyTemplateAccess.mockResolvedValue(okInOrgPrivate)
+    teamHasRepoAccess.mockResolvedValue(false)
+    renderField()
+    // Wait for verification to settle, then assert the fix action is absent.
     await screen.findByText("assignments.template.privateWillGrant", {
       exact: false,
     })

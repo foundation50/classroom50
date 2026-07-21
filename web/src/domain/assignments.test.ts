@@ -961,6 +961,9 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
       mode: "individual",
       max_group_size: 0,
       tests: [],
+      // These tests exercise the owner-only template read-grant, which the
+      // write path now performs only when the caller holds manageOrg.
+      canGrantTemplateAccess: true,
     } as unknown as Parameters<typeof editAssignment>[1]
   }
 
@@ -978,6 +981,30 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
 
     expect(result.templateGrantWarning).toBeUndefined()
     expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+  })
+
+  it("skips the owner-only grant for a non-owner author (canGrantTemplateAccess absent)", async () => {
+    // A head-TA edit carries a stored in-org private template but no owner
+    // rights; the write path must not attempt addRepositoryToTeam (it would
+    // 403). The edit still succeeds with no warning.
+    const { client, grants } = makeGrantClient({
+      classroomJson: {
+        schema: "classroom50/classroom/v1",
+        short_name: CLASSROOM,
+        team: { id: 7, slug: "classroom50-cs50" },
+        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+      },
+    })
+
+    const { canGrantTemplateAccess: _omit, ...nonOwner } =
+      editInput() as Record<string, unknown>
+    const result = await editAssignment(
+      client,
+      nonOwner as unknown as Parameters<typeof editAssignment>[1],
+    )
+
+    expect(result.templateGrantWarning).toBeUndefined()
+    expect(grants()).toEqual([])
   })
 
   it("grants only the student team when no TA team is recorded", async () => {
