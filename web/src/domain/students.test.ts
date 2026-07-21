@@ -8,8 +8,10 @@ import {
   unenrollStudent,
   bulkUnenrollStudents,
   resolveClassroomPendingInvite,
+  resendClassroomInvite,
   bulkEnrollStudentsInClassroom,
   assignRosterMemberRole,
+  addClassroomStaffMember,
   applyClassroomRoleChange,
   inviteRosterStudents,
   syncRosterFromTeam,
@@ -4032,5 +4034,272 @@ describe("resolveTeamIdForRoleRead — read-only team id per role", () => {
     expect(
       await resolveTeamIdForRoleRead(client, "acme", "cs101", "ta"),
     ).toBeUndefined()
+  })
+})
+
+describe("resendClassroomInvite — re-attach role team + preserve org role", () => {
+  // Route the reads resendClassroomInvite drives: classroom.json (for the
+  // team id), the invitee's org membership (pending -> recreate), and the
+  // invite POST/DELETE. Records the POSTed invite body so we can assert the
+  // re-attached team + org role.
+  const makeClient = (json: Record<string, unknown>) => {
+    const posted: Array<{
+      invitee_id?: number
+      team_ids?: number[]
+      role?: string
+    }> = []
+    const deleted: number[] = []
+    let membershipReads = 0
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("classroom.json"))
+        return Promise.resolve(JSON.stringify(json))
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { method?: string }) => {
+        // First read = still pending (resendOrgInvitation cancels + recreates);
+        // after the cancel the invitee reads as not-a-member so the recreate
+        // POSTs a fresh invite carrying the team + role.
+        if (path.includes("/memberships/") && !path.includes("/teams/")) {
+          membershipReads += 1
+          if (membershipReads === 1)
+            return Promise.resolve({ state: "pending" })
+          return Promise.reject(new Error("404 not a member"))
+        }
+        if (path.endsWith("/invitations") && options?.method === "POST") {
+          posted.push(
+            (options as { body?: (typeof posted)[number] }).body ?? {},
+          )
+          return Promise.resolve({})
+        }
+        if (/\/invitations\/\d+$/.test(path) && options?.method === "DELETE") {
+          deleted.push(Number(path.split("/invitations/")[1]))
+          return Promise.resolve({})
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    return {
+      client: { request, requestRaw } as unknown as GitHubClient,
+      posted,
+    }
+  }
+
+  it("attaches the role's team and re-issues teacher as org OWNER", async () => {
+    const { client, posted } = makeClient({ teams: { teacher: { id: 77 } } })
+    await resendClassroomInvite(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+      inviteeId: 4242,
+      invitationId: 12,
+      role: "teacher",
+    })
+    expect(posted[0]).toMatchObject({
+      invitee_id: 4242,
+      team_ids: [77],
+      role: "admin",
+    })
+  })
+
+  it("re-issues a TA as a direct member (not org owner)", async () => {
+    const { client, posted } = makeClient({ teams: { ta: { id: 9 } } })
+    await resendClassroomInvite(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "carol",
+      inviteeId: 5,
+      invitationId: 3,
+      role: "ta",
+    })
+    expect(posted[0]).toMatchObject({
+      invitee_id: 5,
+      team_ids: [9],
+      role: "direct_member",
+    })
+  })
+
+  it("sends team-less when the role has no resolvable team", async () => {
+    const { client, posted } = makeClient({
+      team: { slug: "classroom50-cs101" },
+    })
+    await resendClassroomInvite(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "dave",
+      inviteeId: 8,
+      invitationId: 1,
+      role: "student",
+    })
+    expect(posted[0].team_ids).toBeUndefined()
+  })
+})
+
+describe("addClassroomStaffMember — staff team-add (invites non-members)", () => {
+  // Routes the calls addClassroomStaffMember drives: classroom.json (archive
+  // guard, requestRaw), GET /users/{login} (account exists), team ensure
+  // (POST /teams -> created, or 422 -> GET adopt), config-repo grant PUT,
+  // GET /user (actor for the creator-strip), and team membership PUT/DELETE.
+  // Records team adds/removes so we can assert the creator-strip + target add.
+  const conflict = (path: string) =>
+    new GitHubAPIError({
+      status: 422,
+      url: path,
+      message: "Team already exists",
+      body: null,
+      rateLimit: {
+        limit: null,
+        remaining: null,
+        used: null,
+        reset: null,
+        resource: null,
+        retryAfter: null,
+      },
+    })
+
+  const makeClient = (opts: {
+    // Known accounts (GET /users/{login}); absent -> 404 "no such user".
+    users: Record<string, { id: number }>
+    // Authenticated actor login (GET /user) — the team creator GitHub auto-adds.
+    actorLogin: string
+    // When true, POST /teams 422s so the team is ADOPTED (created: false) and
+    // the creator-strip must NOT run.
+    teamExists?: boolean
+  }) => {
+    const teamAdds: string[] = []
+    const teamRemoves: string[] = []
+    const requestRaw = vi.fn().mockImplementation((path: string) => {
+      if (path.includes("classroom.json")) {
+        // Non-archived classroom for the archive guard.
+        return Promise.resolve(JSON.stringify({ short_name: "cs101" }))
+      }
+      return Promise.reject(new Error(`unexpected requestRaw: ${path}`))
+    })
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { method?: string }) => {
+        if (path.startsWith("/users/")) {
+          const login = decodeURIComponent(path.slice("/users/".length))
+          const u = opts.users[login]
+          if (!u) return Promise.reject(new Error(`404 no such user: ${login}`))
+          return Promise.resolve({ login, id: u.id })
+        }
+        if (path === "/user") {
+          return Promise.resolve({ login: opts.actorLogin })
+        }
+        // Team ensure: create, or adopt an existing team on 422.
+        if (path.endsWith("/teams") && options?.method === "POST") {
+          if (opts.teamExists) return Promise.reject(conflict(path))
+          const name = (options as { body?: { name?: string } }).body?.name
+          return Promise.resolve({ id: 500, slug: name, privacy: "secret" })
+        }
+        if (/\/orgs\/[^/]+\/teams\/[^/]+$/.test(path) && !options?.method) {
+          // Adopt read (GET team by name) — already secret so no PATCH follows.
+          const slug = path.split("/teams/")[1]
+          return Promise.resolve({ id: 500, slug, privacy: "secret" })
+        }
+        // Config-repo grant: PUT .../teams/{slug}/repos/{owner}/{repo}.
+        if (path.includes("/teams/") && path.includes("/repos/")) {
+          return Promise.resolve({})
+        }
+        // Team membership add (PUT) / creator-strip (DELETE).
+        if (path.includes("/teams/") && path.includes("/memberships/")) {
+          const login = decodeURIComponent(path.split("/memberships/")[1])
+          if (options?.method === "DELETE") {
+            teamRemoves.push(login)
+            return Promise.resolve()
+          }
+          teamAdds.push(login)
+          return Promise.resolve({ state: "pending" })
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    return {
+      client: { request, requestRaw } as unknown as GitHubClient,
+      teamAdds,
+      teamRemoves,
+    }
+  }
+
+  it("creates the team, strips the auto-added creator, and adds the target", async () => {
+    const { client, teamAdds, teamRemoves } = makeClient({
+      users: { bob: { id: 7 } },
+      actorLogin: "teacher-tina",
+    })
+    const result = await addClassroomStaffMember(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+      role: "ta",
+    })
+    expect(result).toEqual({ username: "bob", role: "ta" })
+    expect(teamAdds).toEqual(["bob"])
+    // Fresh team: GitHub auto-added the creator (tina); she's stripped since
+    // she isn't the target.
+    expect(teamRemoves).toEqual(["teacher-tina"])
+  })
+
+  it("does not strip the creator when the team already existed (adopted)", async () => {
+    const { client, teamAdds, teamRemoves } = makeClient({
+      users: { bob: { id: 7 } },
+      actorLogin: "teacher-tina",
+      teamExists: true,
+    })
+    await addClassroomStaffMember(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "bob",
+      role: "ta",
+    })
+    expect(teamAdds).toEqual(["bob"])
+    expect(teamRemoves).toEqual([])
+  })
+
+  it("does not strip when the actor IS the target (adding yourself)", async () => {
+    const { client, teamAdds, teamRemoves } = makeClient({
+      users: { "teacher-tina": { id: 1 } },
+      actorLogin: "teacher-tina",
+    })
+    await addClassroomStaffMember(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "teacher-tina",
+      role: "teacher",
+    })
+    expect(teamAdds).toEqual(["teacher-tina"])
+    expect(teamRemoves).toEqual([])
+  })
+
+  it("adds a non-member too (GitHub turns the team-add into an invite)", async () => {
+    // No membership read gates the add — a stranger the org doesn't know still
+    // gets team-added (the pending-staff path the section renders).
+    const { client, teamAdds } = makeClient({
+      users: { stranger: { id: 99 } },
+      actorLogin: "teacher-tina",
+    })
+    await addClassroomStaffMember(client, {
+      org: "acme",
+      classroom: "cs101",
+      username: "@stranger",
+      role: "hta",
+    })
+    // Leading @ is normalized off.
+    expect(teamAdds).toEqual(["stranger"])
+  })
+
+  it("throws a clear error for a non-existent account (no team-add)", async () => {
+    const { client, teamAdds } = makeClient({
+      users: {},
+      actorLogin: "teacher-tina",
+    })
+    await expect(
+      addClassroomStaffMember(client, {
+        org: "acme",
+        classroom: "cs101",
+        username: "ghost",
+        role: "ta",
+      }),
+    ).rejects.toThrow(/no such user/)
+    expect(teamAdds).toEqual([])
   })
 })

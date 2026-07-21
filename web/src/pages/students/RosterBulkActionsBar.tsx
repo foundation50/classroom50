@@ -6,18 +6,15 @@ import type { GitHubClient } from "@/github-core/client"
 import { ConfirmModal } from "@/components/modals"
 import { Alert, Button, Modal, Toolbar } from "@/components/ui"
 import { GitHubAPIError } from "@/github-core/errors"
-import {
-  resendOrgInvitation,
-  cancelOrgInvitation,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   bulkUnenrollRoster,
   type BulkUnenrollRosterResult,
 } from "@/domain/roster/bulkUnenrollRoster"
-import { resolveTeamIdForRoleRead } from "@/domain/students"
+import { resendClassroomInvite } from "@/domain/students"
 import { parseGitHubId } from "@/util/students"
-import { githubOrgRoleForRole, sortRolesByRank } from "@/util/teamRoster"
+import { sortRolesByRank } from "@/util/teamRoster"
 import {
   BulkResultSection,
   type BulkPhase,
@@ -256,20 +253,13 @@ const RosterBulkActionsBar = ({
       }
       try {
         const role = sortRolesByRank(row.roles)[0] ?? "student"
-        const teamId = await resolveTeamIdForRoleRead(
-          client,
+        const outcome = await resendClassroomInvite(client, {
           org,
           classroom,
-          role,
-        )
-        const outcome = await resendOrgInvitation(client, {
-          org,
           username: row.username,
           inviteeId,
           invitationId: row.invitation_id,
-          teamIds: teamId ? [teamId] : undefined,
-          // Preserve the original invite's org role (teacher -> org OWNER).
-          role: githubOrgRoleForRole(role),
+          role,
         })
         if (outcome.state === "invited") invited.push({ key: row.key, label })
         else skipped.push({ key: row.key, label })

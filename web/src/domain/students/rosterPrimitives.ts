@@ -4,6 +4,7 @@ import {
   cancelOrgInvitation,
   ensureClassroomRoleTeam,
   grantTeamConfigRepoAccess,
+  resendOrgInvitation,
   type GitTreeEntry,
 } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
@@ -20,7 +21,11 @@ import {
   tolerateGitHubError,
 } from "@/github-core/errors"
 import { rosterPath, legacyRosterPath } from "@/util/rosterPath"
-import { ROLE_RANK, type ClassroomRole } from "@/util/teamRoster"
+import {
+  ROLE_RANK,
+  githubOrgRoleForRole,
+  type ClassroomRole,
+} from "@/util/teamRoster"
 import { isTeacherRole } from "@/authz"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { STAFF_ROLES, type StaffRole, type Student } from "@/types/classroom"
@@ -213,6 +218,36 @@ export async function resolveTeamIdForRoleRead(
     const classroomJson = await getClassroomJson(client, { org, classroom })
     return classroomJson.teams?.[role]?.id
   }, undefined)
+}
+
+// Re-send a pending classroom/staff org invitation, re-attaching the invitee's
+// role team so accepting lands them on it (a team-less resend orphans them) and
+// re-issuing the role's org role (teacher -> org OWNER) so a resend never
+// downgrades a pending teacher. The single source for the resend recipe shared
+// by the staff-settings hook, the roster member modal, and the roster bulk bar
+// — each resolves the invitee id its own way (login lookup vs. the row's
+// github_id) and passes it in.
+export async function resendClassroomInvite(
+  client: GitHubClient,
+  input: {
+    org: string
+    classroom: string
+    username: string
+    inviteeId: number
+    invitationId?: number
+    role: ClassroomRole
+  },
+): Promise<Awaited<ReturnType<typeof resendOrgInvitation>>> {
+  const { org, classroom, username, inviteeId, invitationId, role } = input
+  const teamId = await resolveTeamIdForRoleRead(client, org, classroom, role)
+  return resendOrgInvitation(client, {
+    org,
+    username,
+    inviteeId,
+    invitationId,
+    teamIds: teamId ? [teamId] : undefined,
+    role: githubOrgRoleForRole(role),
+  })
 }
 
 // Resolve the classroom team, retrying only TRANSIENT read failures (5xx / 429 /

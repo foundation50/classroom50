@@ -11,13 +11,10 @@ import {
   assignRosterMemberRole,
   applyClassroomRoleChange,
   inviteRosterStudents,
-  resolveTeamIdForRoleRead,
+  resendClassroomInvite,
   type StudentCsvRow,
 } from "@/domain/students"
-import {
-  resendOrgInvitation,
-  cancelOrgInvitation,
-} from "@/github-core/mutations"
+import { cancelOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { nameFromParts, parseGitHubId } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
@@ -328,21 +325,13 @@ const RosterMemberModal = ({
       // Re-attach the row's team so the re-sent invite lands the invitee on the
       // right team on acceptance (a team-less resend would orphan them).
       const role = sortRolesByRank(row.roles)[0] ?? "student"
-      const teamId = await resolveTeamIdForRoleRead(
-        client,
+      await resendClassroomInvite(client, {
         org,
         classroom,
-        role,
-      )
-      await resendOrgInvitation(client, {
-        org,
         username: row.username,
         inviteeId,
         invitationId: row.invitation_id,
-        teamIds: teamId ? [teamId] : undefined,
-        // Re-issue with the same org role as the original invite, so a resend
-        // never downgrades a pending teacher from org OWNER.
-        role: githubOrgRoleForRole(role),
+        role,
       })
       onResent(row.key)
       onClose()

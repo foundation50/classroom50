@@ -1,16 +1,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
-import { resendOrgInvitation } from "@/github-core/mutations"
 import { githubKeys, getUser } from "@/github-core/queries"
-import { resolveTeamIdForRoleRead } from "@/domain/students"
-import { githubOrgRoleForRole } from "@/util/teamRoster"
+import { resendClassroomInvite } from "@/domain/students"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import type { StaffRole } from "@/types/classroom"
 
 // Resend a pending staff org invitation. The multi-step data logic — resolve
-// the invitee's immutable id (org invites don't carry it) and the role's team,
-// then re-send the invite carrying that team — lives in the mutationFn. Hook
-// owns the invitations + members invalidation for the bound team; the toasts
-// stay at the call site (see ./README.md).
+// the invitee's immutable id (org invites don't carry it), then delegate to the
+// shared resendClassroomInvite (re-attaches the role team + re-issues the org
+// role). Hook owns the invitations + members invalidation for the bound team;
+// the toasts stay at the call site (see ./README.md).
 //
 // Hooks are t()-free: an email-only invite (no login) can't be resolved to a
 // numeric invitee id, so the caller passes the pre-translated `emailOnlyMessage`
@@ -32,20 +30,13 @@ export function useResendStaffInvite(
     }) => {
       if (!input.login) throw new Error(input.emailOnlyMessage)
       const inviteeId = (await getUser(client, input.login)).id
-      const teamId = await resolveTeamIdForRoleRead(
-        client,
+      await resendClassroomInvite(client, {
         org,
         classroom,
-        role,
-      )
-      await resendOrgInvitation(client, {
-        org,
         username: input.login,
         inviteeId,
         invitationId: input.invitationId,
-        teamIds: teamId ? [teamId] : undefined,
-        // Preserve the original org role: a teacher invite is org OWNER.
-        role: githubOrgRoleForRole(role),
+        role,
       })
     },
     onSuccess: () => {

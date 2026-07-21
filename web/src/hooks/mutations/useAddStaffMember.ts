@@ -1,15 +1,7 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useGithubAuth } from "@/auth/useGithubAuth"
-import { githubKeys, getUserQuery } from "@/github-core/queries"
-import {
-  addUserToTeam,
-  ensureClassroomRoleTeam,
-  grantTeamConfigRepoAccess,
-  removeUserFromTeam,
-} from "@/github-core/mutations"
-import { syncRosterFromTeam } from "@/domain/students"
-import { normalizeGithubUsername } from "@/domain/students"
+import { githubKeys } from "@/github-core/queries"
+import { addClassroomStaffMember, syncRosterFromTeam } from "@/domain/students"
 import { classroomTeamSlug } from "@/util/teamSlug"
 import { rosterPath } from "@/util/rosterPath"
 import { CONFIG_REPO } from "@/util/configRepo"
@@ -43,11 +35,11 @@ export async function syncRosterAfterStaffChange(
 }
 
 // Add a staff member (teacher/ta) to a classroom's role team. The multi-step
-// chain — verify the account exists, ensure-and-grant the role team, strip the
-// auto-added creator on a fresh team, add the target — lives here behind one
-// named mutation. Hook invalidates team-members + best-effort roster sync; the
-// empty-the-field/toast/error-map effects stay at the call site (see
-// ./README.md).
+// GitHub chain lives in the shared domain function addClassroomStaffMember (the
+// same @/domain/students layer the roster view uses); this hook is the thin
+// wrapper that self-invalidates the bound team's members + invitations and runs
+// the best-effort roster sync. The empty-the-field/toast/error-map effects stay
+// at the call site (see ./README.md).
 export function useAddStaffMember(
   org: string,
   classroom: string,
@@ -55,54 +47,28 @@ export function useAddStaffMember(
 ) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  const { user } = useGithubAuth()
 
   return useMutation({
     mutationFn: async (input: { username: string; role: StaffRole }) => {
-      const trimmed = normalizeGithubUsername(input.username)
-      if (!trimmed) throw new Error(messages.enterUsername)
-      // Verify the account exists for a clear error (vs. a confusing team 422).
-      await queryClient.ensureQueryData(getUserQuery(client, trimmed))
-      // Ensure-as-preflight: create the team if missing + (re)grant config write.
-      const team = await ensureClassroomRoleTeam(
-        client,
+      if (!input.username.trim()) throw new Error(messages.enterUsername)
+      const { username, role } = await addClassroomStaffMember(client, {
         org,
         classroom,
-        input.role,
-      )
-      await grantTeamConfigRepoAccess(client, org, team.slug, input.role)
-      // GitHub auto-adds the team CREATOR as maintainer. If this action just
-      // created the team, remove the acting user unless they're the target — so
-      // adding a TA doesn't also make the teacher a TA.
-      if (
-        team.created &&
-        user?.login &&
-        user.login.toLowerCase() !== trimmed.toLowerCase()
-      ) {
-        try {
-          await removeUserFromTeam(client, {
-            org,
-            teamSlug: team.slug,
-            username: user.login,
-          })
-        } catch {
-          // Best-effort; the actor can remove themselves via this same UI.
-        }
-      }
-      await addUserToTeam(client, {
-        org,
-        teamSlug: team.slug,
-        username: trimmed,
-        role: "member",
+        username: input.username,
+        role: input.role,
       })
-      return { trimmed, role: input.role }
+      // Call site expects `trimmed` for its success toast.
+      return { trimmed: username, role }
     },
     onSuccess: ({ role: addedRole }) => {
+      const teamSlug = classroomTeamSlug(classroom, addedRole)
+      // A non-member add creates a pending invite (not a member), so refresh
+      // both lists — invitations alone were previously missed (issue #348).
       queryClient.invalidateQueries({
-        queryKey: githubKeys.teamMembers(
-          org,
-          classroomTeamSlug(classroom, addedRole),
-        ),
+        queryKey: githubKeys.teamMembers(org, teamSlug),
+      })
+      queryClient.invalidateQueries({
+        queryKey: githubKeys.teamInvitations(org, teamSlug),
       })
       // Record the new staffer's role in roster.csv now (best-effort).
       void syncRosterAfterStaffChange(client, queryClient, org, classroom)
