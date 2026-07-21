@@ -1588,6 +1588,14 @@
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
       "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },
+    "view": {
+      "live": "Live",
+      "static": "Static",
+      "toggleAria": "Submissions view mode",
+      "liveHint": "Live view reads each student's latest submission directly from GitHub (fresh, but sorting and status filters are off).",
+      "staticHint": "Static view uses the last collected scores.json — full sorting and status filters, but only as fresh as the last collection.",
+      "lockedHint": "Switch to Static view to sort or filter by status."
+    },
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",

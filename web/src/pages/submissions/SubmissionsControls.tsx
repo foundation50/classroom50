@@ -30,6 +30,9 @@ const SubmissionsControls = ({
   acceptedAvailable = false,
   passingAvailable = false,
   sections = [],
+  liveCapable = false,
+  viewMode = "static",
+  onViewModeChange,
   trailing,
 }: {
   query: string
@@ -42,9 +45,23 @@ const SubmissionsControls = ({
   acceptedAvailable?: boolean
   passingAvailable?: boolean
   sections?: string[]
+  // Whether a live view is possible (org owner, autograded assignment). When
+  // false the Live/Static toggle is hidden — the viewer only has the static
+  // snapshot.
+  liveCapable?: boolean
+  // The active view. In "live" the Sort and Status/Passing controls are disabled
+  // (live is a fixed name-ordered, unfiltered presence view); "static" unlocks
+  // them over the collected snapshot.
+  viewMode?: "live" | "static"
+  onViewModeChange?: (mode: "live" | "static") => void
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
+  // Live mode is a fixed name-ordered, unfiltered view (the page-scoped fan-out
+  // can only align to that), so sort + status/passing filtering are disabled and
+  // point the teacher at Static view.
+  const liveLocked = liveCapable && viewMode === "live"
+  const lockedHint = liveLocked ? t("submissions.view.lockedHint") : undefined
   const hasActiveFilter =
     filters.submission !== "all" ||
     filters.passing !== "all" ||
@@ -68,6 +85,32 @@ const SubmissionsControls = ({
 
   return (
     <Toolbar>
+      {liveCapable && onViewModeChange && (
+        <div
+          className="join"
+          role="group"
+          aria-label={t("submissions.view.toggleAria")}
+        >
+          <button
+            type="button"
+            className={`btn btn-sm join-item ${viewMode === "live" ? "btn-active btn-primary" : "btn-ghost"}`}
+            aria-pressed={viewMode === "live"}
+            onClick={() => onViewModeChange("live")}
+            title={t("submissions.view.liveHint")}
+          >
+            {t("submissions.view.live")}
+          </button>
+          <button
+            type="button"
+            className={`btn btn-sm join-item ${viewMode === "static" ? "btn-active" : "btn-ghost"}`}
+            aria-pressed={viewMode === "static"}
+            onClick={() => onViewModeChange("static")}
+            title={t("submissions.view.staticHint")}
+          >
+            {t("submissions.view.static")}
+          </button>
+        </div>
+      )}
       <Toolbar.Search
         placeholder={
           isGroup
@@ -103,6 +146,8 @@ const SubmissionsControls = ({
         value={statusValue}
         onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
         aria-label={t("submissions.filters.submissionAria")}
+        disabled={liveLocked}
+        title={lockedHint}
       >
         <option value="all">{t("submissions.filters.allStatuses")}</option>
         <option value="submitted">{t("submissions.filters.submitted")}</option>
@@ -133,8 +178,10 @@ const SubmissionsControls = ({
           label={t("submissions.filters.passingLabel")}
           value={filters.passing}
           // Disabled when filtering to non-submitters: they have no grade, so a
-          // passing/failing filter would always yield an empty table.
-          disabled={filters.submission === "not-submitted"}
+          // passing/failing filter would always yield an empty table. Also
+          // disabled in live mode (which is unfiltered).
+          disabled={liveLocked || filters.submission === "not-submitted"}
+          title={lockedHint}
           onChange={(e) =>
             onFiltersChange({
               ...filters,
@@ -161,6 +208,8 @@ const SubmissionsControls = ({
           value={sort}
           onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
           aria-label={t("submissions.filters.sortAria")}
+          disabled={liveLocked}
+          title={lockedHint}
         >
           <option value="recent">{t("submissions.filters.sortRecent")}</option>
           <option value="oldest">{t("submissions.filters.sortOldest")}</option>

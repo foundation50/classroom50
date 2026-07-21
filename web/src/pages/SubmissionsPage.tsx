@@ -224,9 +224,15 @@ const SubmissionsPageContent = () => {
   // the page/size/filters must be known before it runs.
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
-  // Default to name order so the live presence view (which requires it) is on by
-  // default; the teacher can re-sort, which drops to the static snapshot.
   const [sort, setSort] = useState<SubmissionSort>("name-asc")
+  // Live vs static view. Live reads submit/* releases directly (fresh presence,
+  // owner-only) but only in the plain name-ordered, unfiltered view the
+  // page-scoped fan-out can align to; static reads the collected scores.json
+  // snapshot and supports full sort + status/passing filtering. The toggle makes
+  // this explicit (the controls disable sort/status in live mode). Default to
+  // live for owners; forced static for anyone who can't fan out (see
+  // liveCapable) so a TA/HTA never sees a live toggle that can't work.
+  const [viewMode, setViewMode] = useState<"live" | "static">("live")
   // Client-side table pagination over the name-ordered roster spine. `page` is
   // 0-based; clamped at render (pageBounds) so a filter that shrinks the list
   // can't strand the view on an empty page.
@@ -238,7 +244,7 @@ const SubmissionsPageContent = () => {
   // lands in the same commit as the change — no extra render, and no
   // setState-in-effect. React bails out of the re-render once the signature
   // matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${viewMode}|${assignment ?? ""}`
   const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
   if (viewSignature !== lastViewSignature) {
     setLastViewSignature(viewSignature)
@@ -291,20 +297,30 @@ const SubmissionsPageContent = () => {
     [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
   )
 
-  // Live presence is a plain name-ordered view: the fan-out pages the
-  // name-sorted roster, so it's only coherent when the table shows that same
-  // order and set. A Status/Passing filter or a non-name Sort reorders or
-  // narrows the visible rows so they'd no longer line up with the fanned-out
-  // page (the page's students would get no live data, and reads would be
-  // wasted). So live is enabled only in the name-ordered, status-unfiltered
-  // view; any Status/Passing/Sort change drops to the static scores.json
-  // snapshot. Search + section stay allowed — pageRepoOwners applies them and
-  // they don't reorder the spine.
-  const liveEligible =
-    sort === "name-asc" &&
-    filters.submission === "all" &&
-    filters.passing === "all" &&
-    filters.accepted === "all"
+  // Whether a live view is even possible here: owner-only (personal token can
+  // read the repos) and not an empty_repo assignment (never autograded). A
+  // non-owner is locked to static — the toggle is hidden for them.
+  const liveCapable = isOwner && !isEmptyRepoAssignment
+  // The active view. `viewMode` is the user's choice, but a non-capable viewer
+  // is always static regardless. In live mode the sort/status controls are
+  // disabled, so the effective order/filters are pinned to the plain
+  // name-ordered, unfiltered view the page-scoped fan-out aligns to — even if
+  // stale state lingers from a prior static session.
+  const liveActive = liveCapable && viewMode === "live"
+  // In live mode the sort/status controls are disabled, so pin the order and
+  // status/passing/accepted axes to the plain name-ordered, unfiltered view the
+  // page-scoped fan-out aligns to — even if stale state lingers from a prior
+  // static session. Search + section stay honored (they don't reorder the
+  // spine). `effectiveFilters` below layers the acceptance-availability
+  // neutralization on top of this base.
+  const effectiveSort: SubmissionSort = liveActive ? "name-asc" : sort
+  const liveScopedFilters: SubmissionFilters = useMemo(
+    () =>
+      liveActive
+        ? { ...filters, submission: "all", passing: "all", accepted: "all" }
+        : filters,
+    [liveActive, filters],
+  )
 
   // Live submission presence for THIS assignment, read directly from student
   // repos' submit/* releases — so a student who pushed but hasn't been collected
@@ -349,9 +365,9 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: livePageOwners,
-    // Owner-only, name-ordered view only (see liveEligible), never for
-    // empty_repo assignments.
-    enabled: isOwner && liveEligible && !isEmptyRepoAssignment,
+    // Runs only in the active live view (owner + live mode + not empty_repo);
+    // see liveActive.
+    enabled: liveActive,
   })
 
   // Merge live presence over the snapshot (snapshot wins per owner; live adds a
@@ -529,17 +545,21 @@ const SubmissionsPageContent = () => {
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
   // accepted axis so a transient empty repo list can't flip the visible set.
+  // Built on liveScopedFilters so live mode's forced-off status/passing/accepted
+  // axes are already applied.
   const effectiveFilters = useMemo(
     () =>
-      acceptedAvailable ? filters : { ...filters, accepted: "all" as const },
-    [acceptedAvailable, filters],
+      acceptedAvailable
+        ? liveScopedFilters
+        : { ...liveScopedFilters, accepted: "all" as const },
+    [acceptedAvailable, liveScopedFilters],
   )
   const visibleRows = useMemo(
     () =>
       filterAndSortRows(scoresInfo, {
         query,
         filters: effectiveFilters,
-        sort,
+        sort: effectiveSort,
         students,
         sectionByUsername,
         thresholdFraction,
@@ -548,7 +568,7 @@ const SubmissionsPageContent = () => {
       scoresInfo,
       query,
       effectiveFilters,
-      sort,
+      effectiveSort,
       students,
       sectionByUsername,
       thresholdFraction,
@@ -797,11 +817,9 @@ const SubmissionsPageContent = () => {
 
       {/* Live-submission strip: presence read directly from student repos'
           submit/* releases, so a just-pushed student shows before the next
-          collect (issue #347). Owner-only (see isOwner) and hidden for
-          empty_repo assignments (never autograded). The whole owner set is read
-          at once (throttled by the shared read-slot semaphore); the table
-          paginates client-side, so there's no live "window" to advance. */}
-      {isOwner && liveEligible && !isEmptyRepoAssignment && (
+          collect (issue #347). Shown only in the active live view (liveActive);
+          the fan-out reads a page at a time so there's no window to advance. */}
+      {liveActive && (
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70"
           role="status"
@@ -825,14 +843,11 @@ const SubmissionsPageContent = () => {
           get a Pending row and would read as not-submitted. Mark the derived
           counts/lists provisional so a transient failure can't be mistaken for
           an authoritative "not submitted". */}
-      {isOwner &&
-        liveEligible &&
-        !isEmptyRepoAssignment &&
-        liveErrorCount > 0 && (
-          <Alert tone="warning" role="status">
-            {t("submissions.live.incomplete", { count: liveErrorCount })}
-          </Alert>
-        )}
+      {liveActive && liveErrorCount > 0 && (
+        <Alert tone="warning" role="status">
+          {t("submissions.live.incomplete", { count: liveErrorCount })}
+        </Alert>
+      )}
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
           neutral line (transient); running/completed/failed/timeout become an
@@ -924,6 +939,9 @@ const SubmissionsPageContent = () => {
         acceptedAvailable={acceptedAvailable}
         passingAvailable={passingEnabled}
         sections={sections}
+        liveCapable={liveCapable}
+        viewMode={liveActive ? "live" : "static"}
+        onViewModeChange={setViewMode}
         trailing={
           <>
             <Button
@@ -985,7 +1003,7 @@ const SubmissionsPageContent = () => {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        sort={sort}
+        sort={effectiveSort}
       />
       <ConfirmModal
         open={regradeConfirmOpen}
