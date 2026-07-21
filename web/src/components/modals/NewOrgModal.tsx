@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PlanBadge from "@/components/PlanBadge"
 import MissingOrgNotice from "@/components/MissingOrgNotice"
 import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
-import { Badge, Button, Modal } from "@/components/ui"
+import { Badge, Button, Modal, Spinner } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import useScrollFade from "@/hooks/useScrollFade"
@@ -38,7 +38,9 @@ function NewOrgModal({
   const [freePlanOrg, setFreePlanOrg] = useState<string | null>(null)
 
   const logins = needsSetupOrgs.map((summary) => summary.org.login)
-  const plans = useNeedsSetupPlans(open ? logins : [])
+  const { byLogin: plans, pending: pendingPlans } = useNeedsSetupPlans(
+    open ? logins : [],
+  )
 
   const handleSelect = (login: string) => {
     onClose()
@@ -79,17 +81,19 @@ function NewOrgModal({
               {needsSetupOrgs.map((summary) => {
                 const { org } = summary
                 const planName = plans[org.login]
+                const planLoading = pendingPlans.has(org.login)
                 const isFree = classifyPlan(planName) === "free"
                 return (
                   <li key={org.id}>
                     <button
                       type="button"
+                      disabled={planLoading}
                       onClick={() =>
                         isFree
                           ? setFreePlanOrg(org.login)
                           : handleSelect(org.login)
                       }
-                      className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200"
+                      className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
                     >
                       <img
                         src={org.avatar_url}
@@ -113,7 +117,9 @@ function NewOrgModal({
                           className="shrink-0"
                         />
                       )}
-                      {isFree ? (
+                      {planLoading ? (
+                        <Spinner size="sm" className="shrink-0" />
+                      ) : isFree ? (
                         <>
                           <Badge tone="warning" size="sm" className="shrink-0">
                             {t("orgs.newOrg.notSupportedBadge")}
