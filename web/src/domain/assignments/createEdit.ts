@@ -564,11 +564,19 @@ async function grantTeamTemplateRead(
   template: NonNullable<Assignment["template"]>,
 ) {
   let teamSlug: string | undefined
-  let taTeamSlug: string | undefined
+  let staffTeamSlugs: string[] = []
   try {
     const classroomJson = await getClassroomJson(client, { org, classroom })
     teamSlug = classroomJson.team?.slug
-    taTeamSlug = classroomJson.teams?.ta?.slug
+    // Non-owner staff teams that need explicit read on a private template: HTA
+    // and TA. A base-permission-`none` head-TA/TA can't read a private in-org
+    // template repo without their team being granted, so grant both here. The
+    // teacher team is intentionally omitted — its members are org owners with
+    // repo access via ownership, so a team grant is redundant.
+    staffTeamSlugs = [
+      classroomJson.teams?.hta?.slug,
+      classroomJson.teams?.ta?.slug,
+    ].filter((s): s is string => Boolean(s))
   } catch (err) {
     // 404 = no classroom.json (pre-feature) is a genuine "no team"; fall
     // through. Anything else is transient and must not be misread as "no team".
@@ -595,25 +603,26 @@ async function grantTeamTemplateRead(
     permission: "pull",
   })
 
-  // Best-effort: grant the TA staff team the same read so a base-permission-
-  // `none` TA can read the private template without waiting for collect-scores
-  // (mirrors the CLI). Non-blocking — the student grant above is what gates
-  // `student accept`; a TA-grant failure only warns and collect-scores
-  // re-affirms it. A classroom with no recorded TA team is a clean skip.
-  if (taTeamSlug) {
+  // Best-effort: grant the non-owner staff teams (HTA, TA) the same read so a
+  // base-permission-`none` head-TA/TA can read the private template without
+  // waiting for collect-scores (mirrors the CLI). Non-blocking — the student
+  // grant above is what gates `student accept`; a staff-grant failure only warns
+  // and collect-scores re-affirms it. A classroom with no recorded staff team is
+  // a clean skip (the list is already filtered to present slugs).
+  for (const staffTeamSlug of staffTeamSlugs) {
     try {
       await addRepositoryToTeam(client, {
         org,
-        teamSlug: taTeamSlug,
+        teamSlug: staffTeamSlug,
         owner: template.owner,
         repo: template.repo,
         permission: "pull",
       })
     } catch (err) {
-      log.warn("granting TA staff team template read failed (non-fatal)", {
+      log.warn("granting staff team template read failed (non-fatal)", {
         org,
         classroom,
-        taTeamSlug,
+        staffTeamSlug,
         template: `${template.owner}/${template.repo}`,
         err,
       })

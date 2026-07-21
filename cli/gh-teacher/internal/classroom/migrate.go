@@ -281,17 +281,26 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// repo's visibility, use the team's authoritative slug, and track failures
 	// so the exit code reflects a template students can't yet accept.
 	//
-	// The TA staff team gets the same read (best-effort) so a base-permission-
-	// `none` TA can read the template without waiting for collect-scores. The
-	// TA slug comes from the just-created staffTeams (classroom.json isn't
-	// committed until CommitTree above, so it can't be re-resolved here).
-	// StaffTeamRepoPermissions is a presence gate: grant the TA team read only
-	// when the role is mapped. A TA-grant failure only warns — it's not a
-	// student blocker, so it never adds to grantFailures or changes the exit
-	// code.
-	taSlug := ""
-	if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; ok && staffTeams != nil && staffTeams.TA != nil {
-		taSlug = staffTeams.TA.Slug
+	// The non-owner staff teams (head-TA, TA) get the same read (best-effort) so a
+	// base-permission-`none` head-TA/TA can read the template without waiting for
+	// collect-scores. The slugs come from the just-created staffTeams
+	// (classroom.json isn't committed until CommitTree above, so it can't be
+	// re-resolved here). StaffTeamRepoPermissions is a presence gate: grant a
+	// staff team read only when its role is mapped. A staff-grant failure only
+	// warns — it's not a student blocker, so it never adds to grantFailures or
+	// changes the exit code.
+	type staffTarget struct {
+		role configrepo.StaffRole
+		slug string
+	}
+	var staffTargets []staffTarget
+	if staffTeams != nil {
+		if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleHeadTA]; ok && staffTeams.HeadTA != nil {
+			staffTargets = append(staffTargets, staffTarget{configrepo.RoleHeadTA, staffTeams.HeadTA.Slug})
+		}
+		if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; ok && staffTeams.TA != nil {
+			staffTargets = append(staffTargets, staffTarget{configrepo.RoleTA, staffTeams.TA.Slug})
+		}
 	}
 	var grantFailures int
 	for i := range resolved {
@@ -310,18 +319,20 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 			_, _ = fmt.Fprintf(out, "%s: granted classroom team %s read on private template %s/%s\n",
 				plan.TargetOrg, team.Slug, rt.Template.Owner, rt.Template.Repo)
 		}
-		if taSlug == "" {
-			continue
-		}
-		taGranted, taErr := configrepo.GrantTeamRepoRead(client, plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo)
-		if taErr != nil {
-			_, _ = fmt.Fprintf(errOut, "Warning: %s: could not grant TA staff team %s read on private template %s/%s (%v); TAs get read at the next collect-scores run.\n",
-				plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo, taErr)
-			continue
-		}
-		if taGranted {
-			_, _ = fmt.Fprintf(out, "%s: granted TA staff team %s read on private template %s/%s\n",
-				plan.TargetOrg, taSlug, rt.Template.Owner, rt.Template.Repo)
+		for _, st := range staffTargets {
+			if st.slug == "" {
+				continue
+			}
+			staffGranted, staffErr := configrepo.GrantTeamRepoRead(client, plan.TargetOrg, st.slug, rt.Template.Owner, rt.Template.Repo)
+			if staffErr != nil {
+				_, _ = fmt.Fprintf(errOut, "Warning: %s: could not grant %s staff team %s read on private template %s/%s (%v); staff get read at the next collect-scores run.\n",
+					plan.TargetOrg, st.role, st.slug, rt.Template.Owner, rt.Template.Repo, staffErr)
+				continue
+			}
+			if staffGranted {
+				_, _ = fmt.Fprintf(out, "%s: granted %s staff team %s read on private template %s/%s\n",
+					plan.TargetOrg, st.role, st.slug, rt.Template.Owner, rt.Template.Repo)
+			}
 		}
 	}
 

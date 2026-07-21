@@ -2296,6 +2296,11 @@ class TestStaffTeamPermissions:
     def test_ta_maps_to_pull(self):
         assert cs.STAFF_TEAM_PERMISSIONS["ta"] == "pull"
 
+    def test_hta_maps_to_pull(self):
+        # The head-TA team, like the TA team, is a non-owner staff team that needs
+        # explicit read on private in-org templates/student repos.
+        assert cs.STAFF_TEAM_PERMISSIONS["hta"] == "pull"
+
     def test_instructor_not_granted_at_collect_time(self):
         # The instructor team gets its access at classroom setup; the collector
         # must not grant it (parity with Go StaffTeamRepoPermissions).

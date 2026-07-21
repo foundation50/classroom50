@@ -967,20 +967,27 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     } as unknown as Parameters<typeof editAssignment>[1]
   }
 
-  it("grants both the student team and the TA staff team on a private in-org template", async () => {
+  it("grants the student team plus the HTA and TA staff teams on a private in-org template", async () => {
     const { client, grants } = makeGrantClient({
       classroomJson: {
         schema: "classroom50/classroom/v1",
         short_name: CLASSROOM,
         team: { id: 7, slug: "classroom50-cs50" },
-        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+        teams: {
+          hta: { id: 8, slug: "classroom50-cs50-hta" },
+          ta: { id: 9, slug: "classroom50-cs50-ta" },
+        },
       },
     })
 
     const result = await editAssignment(client, editInput())
 
     expect(result.templateGrantWarning).toBeUndefined()
-    expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+    expect(grants()).toEqual([
+      "classroom50-cs50",
+      "classroom50-cs50-hta",
+      "classroom50-cs50-ta",
+    ])
   })
 
   it("skips the owner-only grant for a non-owner author (canGrantTemplateAccess absent)", async () => {
@@ -1009,7 +1016,7 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     expect(grants()).toEqual([])
   })
 
-  it("grants only the student team when no TA team is recorded", async () => {
+  it("grants only the student team when no staff teams are recorded", async () => {
     const { client, grants } = makeGrantClient({
       classroomJson: {
         schema: "classroom50/classroom/v1",
@@ -1024,22 +1031,26 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
     expect(grants()).toEqual(["classroom50-cs50"])
   })
 
-  it("keeps the edit successful when the TA grant fails (non-blocking)", async () => {
+  it("keeps the edit successful when a staff grant fails (non-blocking)", async () => {
     const { client, grants } = makeGrantClient({
       classroomJson: {
         schema: "classroom50/classroom/v1",
         short_name: CLASSROOM,
         team: { id: 7, slug: "classroom50-cs50" },
-        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+        teams: {
+          hta: { id: 8, slug: "classroom50-cs50-hta" },
+          ta: { id: 9, slug: "classroom50-cs50-ta" },
+        },
       },
       taGrantThrows: true,
     })
 
     const result = await editAssignment(client, editInput())
 
-    // Student grant landed; TA failure did not surface as a save warning.
+    // Student + HTA grants landed; the TA failure did not surface as a save
+    // warning and did not abort the loop.
     expect(result.templateGrantWarning).toBeUndefined()
-    expect(grants()).toEqual(["classroom50-cs50"])
+    expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-hta"])
   })
 
   it("re-affirms the grant on an UNCHANGED in-org private template ref", async () => {
@@ -1048,16 +1059,23 @@ describe("grantTeamTemplateRead (TA staff team eager grant)", () => {
         schema: "classroom50/classroom/v1",
         short_name: CLASSROOM,
         team: { id: 7, slug: "classroom50-cs50" },
-        teams: { ta: { id: 9, slug: "classroom50-cs50-ta" } },
+        teams: {
+          hta: { id: 8, slug: "classroom50-cs50-hta" },
+          ta: { id: 9, slug: "classroom50-cs50-ta" },
+        },
       },
     })
 
     // Same owner/repo/branch as the stored template (tmpl) — the unchanged-ref
-    // branch. It must still re-affirm both teams so a dropped grant is repaired.
+    // branch. It must still re-affirm every team so a dropped grant is repaired.
     const result = await editAssignment(client, editInput("tmpl"))
 
     expect(result.templateGrantWarning).toBeUndefined()
-    expect(grants()).toEqual(["classroom50-cs50", "classroom50-cs50-ta"])
+    expect(grants()).toEqual([
+      "classroom50-cs50",
+      "classroom50-cs50-hta",
+      "classroom50-cs50-ta",
+    ])
   })
 
   it("does not grant on an unchanged PUBLIC template ref", async () => {

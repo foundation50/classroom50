@@ -756,7 +756,7 @@ func TestRunAssignmentReuse_TAGrantFailureIsNonFatal(t *testing.T) {
 	if student != "o/hello-template" {
 		t.Errorf("student team grant = %q, want o/hello-template", student)
 	}
-	if !strings.Contains(errOut.String(), "TA staff team") {
+	if !strings.Contains(errOut.String(), "could not grant ta staff team") {
 		t.Errorf("expected a TA-grant warning on stderr, got %q", errOut.String())
 	}
 }

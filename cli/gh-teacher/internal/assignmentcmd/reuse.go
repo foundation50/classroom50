@@ -341,29 +341,35 @@ func grantClassroomTeamTemplateRead(client githubapi.Client, out, errOut io.Writ
 	return nil
 }
 
-// grantStaffTeamTemplateRead best-effort grants the classroom's TA staff team
-// read on a private, org-owned template (see grantClassroomTeamTemplateRead for
-// the non-blocking rationale). StaffTeamRepoPermissions is a presence gate here:
-// grant the TA team read only when the role is mapped.
+// grantStaffTeamTemplateRead best-effort grants the classroom's non-owner staff
+// teams (head-TA and TA) read on a private, org-owned template (see
+// grantClassroomTeamTemplateRead for the non-blocking rationale). A head-TA/TA
+// is a plain org member with base permission `none` on a private in-org
+// template, so their team needs an explicit read grant; the teacher team is
+// omitted (its members are org owners with repo access via ownership).
 func grantStaffTeamTemplateRead(client githubapi.Client, out, errOut io.Writer, org, classroom, branch, tmplOwner, tmplRepo string) {
-	if _, ok := configrepo.StaffTeamRepoPermissions[configrepo.RoleTA]; !ok {
-		return
-	}
-	taTeam, ok, err := configrepo.ResolveClassroomStaffTeam(client, org, classroom, branch, configrepo.RoleTA)
-	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: could not read the TA staff team to grant read on private template %s/%s (%v); TAs get read at the next collect-scores run.\n", tmplOwner, tmplRepo, err)
-		return
-	}
-	if !ok {
-		return // no TA team recorded (older classroom) — clean skip
-	}
-	granted, err := configrepo.GrantTeamRepoRead(client, org, taTeam.Slug, tmplOwner, tmplRepo)
-	if err != nil {
-		_, _ = fmt.Fprintf(errOut, "Warning: could not grant TA staff team %s read on private template %s/%s (%v); TAs get read at the next collect-scores run.\n", taTeam.Slug, tmplOwner, tmplRepo, err)
-		return
-	}
-	if granted {
-		_, _ = fmt.Fprintf(out, "%s: granted TA staff team %s read on private template %s/%s\n", org, taTeam.Slug, tmplOwner, tmplRepo)
+	for _, role := range []configrepo.StaffRole{configrepo.RoleHeadTA, configrepo.RoleTA} {
+		// StaffTeamRepoPermissions is a presence gate: grant read only for a role
+		// mapped to a student-repo/template permission.
+		if _, ok := configrepo.StaffTeamRepoPermissions[role]; !ok {
+			continue
+		}
+		team, ok, err := configrepo.ResolveClassroomStaffTeam(client, org, classroom, branch, role)
+		if err != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: could not read the %s staff team to grant read on private template %s/%s (%v); staff get read at the next collect-scores run.\n", role, tmplOwner, tmplRepo, err)
+			continue
+		}
+		if !ok {
+			continue // no team recorded (older classroom) — clean skip
+		}
+		granted, err := configrepo.GrantTeamRepoRead(client, org, team.Slug, tmplOwner, tmplRepo)
+		if err != nil {
+			_, _ = fmt.Fprintf(errOut, "Warning: could not grant %s staff team %s read on private template %s/%s (%v); staff get read at the next collect-scores run.\n", role, team.Slug, tmplOwner, tmplRepo, err)
+			continue
+		}
+		if granted {
+			_, _ = fmt.Fprintf(out, "%s: granted %s staff team %s read on private template %s/%s\n", org, role, team.Slug, tmplOwner, tmplRepo)
+		}
 	}
 }
 

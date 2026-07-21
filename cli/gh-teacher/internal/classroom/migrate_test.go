@@ -312,7 +312,7 @@ func TestRunMigrate_NonDryRun_TAGrantFailureIsNonFatal(t *testing.T) {
 	if state.commitsCreated != 1 {
 		t.Errorf("commits created = %d, want 1 (migration still completes)", state.commitsCreated)
 	}
-	if !strings.Contains(stderr.String(), "could not grant TA staff team") {
+	if !strings.Contains(stderr.String(), "could not grant ta staff team") {
 		t.Errorf("expected a TA-grant warning on stderr, got:\n%s", stderr.String())
 	}
 }
