@@ -1671,6 +1671,29 @@ class TestFinalizeResult:
         assert result["datetime"] == "2026-06-01T14:33:11Z"
         assert result["graded_at"] == "2027-09-09T09:09:09Z"
 
+    def test_mirrors_autograder_body_to_step_summary(self, tmp_path, monkeypatch):
+        # The custom-autograder path mirrors release-body.md to the run's
+        # Summary page (the wiki's "custom autograders get this too").
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
+        (tmp_path / ag.RELEASE_BODY_FILENAME).write_text("### custom body\n")
+        f = self._finalizer(tmp_path)
+        assert ag.finalize_result(f, is_group=False) == 0
+        assert summary.read_text() == "### custom body\n"
+
+    def test_non_utf8_body_does_not_crash_summary_mirror(self, tmp_path, monkeypatch):
+        # A custom autograder may write arbitrary bytes (e.g. raw student
+        # output) into release-body.md; the summary mirror must degrade
+        # (replacement chars), never crash a successfully graded run.
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
+        (tmp_path / ag.RELEASE_BODY_FILENAME).write_bytes(b"### body \xff\xfe raw\n")
+        f = self._finalizer(tmp_path)
+        assert ag.finalize_result(f, is_group=False) == 0
+        assert "### body" in summary.read_text()
+
     def test_drops_forged_submitted_by_when_actor_unknown(self, tmp_path):
         # submitted_by is stamped unconditionally: when the runner couldn't
         # resolve the actor (None), a result.json's self-asserted submitted_by
@@ -1970,4 +1993,23 @@ class TestRemovedFilesReporting:
         body.write_text("body\n")
         ag.append_removed_files_note(tmp_path, [])
         assert body.read_text() == "body\n"
+
+    def test_note_also_mirrored_to_step_summary(self, tmp_path, monkeypatch):
+        # The note lands in main()'s finally, AFTER the body was mirrored to
+        # the summary — so it must be appended to both surfaces to keep the
+        # summary a faithful mirror of the release body.
+        summary = tmp_path / "summary.md"
+        summary.write_text("mirrored body\n")
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        body = tmp_path / ag.RELEASE_BODY_FILENAME
+        body.write_text("mirrored body\n")
+        ag.append_removed_files_note(tmp_path, ["scratch.py"])
+        assert summary.read_text() == body.read_text()
+        assert "Removed 1 file(s)" in summary.read_text()
+
+    def test_empty_removed_list_writes_no_summary(self, tmp_path, monkeypatch):
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        ag.append_removed_files_note(tmp_path, [])
+        assert not summary.exists()
 

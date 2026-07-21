@@ -497,7 +497,7 @@ The runner synthesizes a v1-shaped `result.json` on every error path so the work
 | `autograder.py` exits non-zero | Same — runner captures the rc, synthesizes `status=error` |
 | `autograder.py` exits 0 but doesn't write `result.json` | Same — runner synthesizes `status=error` |
 | `result.json` is malformed (bad schema, identity mismatch, non-list `tests`) | Same — runner rejects with a specific error message |
-| Tests run, some fail | Normal case. Release publishes with per-test breakdown; `status=failure` if any failed. Failure details also appear in the grade job's log ("Grade details" step) and on the run's Summary page — no need to open the release. |
+| Tests run, some fail | Normal case. Release publishes with per-test breakdown; `status=failure` if any failed. Failure details also appear on the run's Summary page and — for declarative tests — as a per-test report in the grade job's log ("Grade details" step), so there's no need to open the release. |
 | All tests pass (or `tests: []` in `result.json`) | Normal case. Release publishes with `status=success`. |
 
 Workflow-load failures (the early rows above, where the runner workflow itself doesn't even start) do **not** show up in `scores.json`. Collect-scores' per-assignment "X of Y submitted" summary reports the student as not-yet-submitted, and the teacher debugs from the student's Actions tab. The runner-workflow failures show up *in the student's Actions tab* as a nested job — GitHub's reusable-workflow runs are visible to the calling repo's Actions UI.

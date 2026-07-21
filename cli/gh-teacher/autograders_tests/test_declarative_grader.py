@@ -142,6 +142,17 @@ class TestExecuteIO:
         assert "--- actual stdout ---" in o["detail"]
         assert "+++" not in o["detail"]
 
+    def test_exact_fail_with_empty_diff_falls_back_to_blocks(self, tmp_path):
+        # Separator characters splitlines() folds away (here \x0c) fail the
+        # exact comparison but produce an empty unified diff; the detail must
+        # fall back to the verbatim blocks, never show FAIL with nothing.
+        spec = {"name": "t", "type": "io", "run": "printf 'one\\ftwo'",
+                "expected": "one\ntwo", "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected (exact) ---" in o["detail"]
+        assert "--- actual stdout ---" in o["detail"]
+
     def test_fail_includes_stderr_block(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
                 "expected": "yes", "comparison": "exact", "points": 1}
@@ -428,6 +439,22 @@ class TestRenderLogReport:
 
 
 # ---------------------------------------------------------------------------
+# append_step_summary
+# ---------------------------------------------------------------------------
+
+
+class TestAppendStepSummary:
+    def test_write_failure_is_swallowed(self, tmp_path, monkeypatch):
+        # The docstring contract: a write failure must never affect grading.
+        monkeypatch.setenv(
+            "GITHUB_STEP_SUMMARY", str(tmp_path / "no-such-dir" / "summary.md"))
+        ag.append_step_summary("# hi")  # must not raise
+
+    def test_unset_var_is_a_no_op(self):
+        ag.append_step_summary("# hi")  # conftest delenv'd the var; must not raise
+
+
+# ---------------------------------------------------------------------------
 # run_declarative (end-to-end)
 # ---------------------------------------------------------------------------
 
@@ -491,6 +518,27 @@ class TestRunDeclarative:
 
         out = gho.read_text()
         assert "status=failure" in out  # not all tests passed
+
+    def test_color_gate_turns_on_under_actions(self, tmp_path, monkeypatch, capsys):
+        # The conftest fixture deletes GITHUB_ACTIONS; opt back in to pin the
+        # positive half of the gate (ANSI in the log under Actions).
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        fin, _ = _finalizer(tmp_path)
+        p = self._write_tests(tmp_path, [
+            {"name": "bad", "type": "run", "run": "false", "points": 1},
+        ])
+        ag.run_declarative(p, fin, tmp_path)
+        assert f"{ag.ANSI_BOLD}{ag.ANSI_RED}FAIL{ag.ANSI_RESET}" in capsys.readouterr().out
+
+    def test_no_color_opts_out_under_actions(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setenv("NO_COLOR", "1")
+        fin, _ = _finalizer(tmp_path)
+        p = self._write_tests(tmp_path, [
+            {"name": "bad", "type": "run", "run": "false", "points": 1},
+        ])
+        ag.run_declarative(p, fin, tmp_path)
+        assert "\x1b[" not in capsys.readouterr().out
 
     def test_all_pass_reports_success(self, tmp_path):
         fin, gho = _finalizer(tmp_path)

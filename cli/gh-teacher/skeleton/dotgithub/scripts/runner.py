@@ -851,16 +851,21 @@ def render_removed_files_note(removed: list[str]) -> str:
 
 
 def append_removed_files_note(workspace: pathlib.Path, removed: list[str]) -> None:
-    """Append the removed-files note to release-body.md. Best-effort: a
-    missing body or write error must not fail the grade."""
+    """Append the removed-files note to release-body.md and to the run's
+    Summary page. This runs in main()'s finally, AFTER the body was mirrored
+    to the summary, so the note must be appended to both surfaces or the
+    summary silently drops the "files removed before grading" warning.
+    Best-effort: a missing body or write error must not fail the grade."""
     if not removed:
         return
+    note = render_removed_files_note(removed)
     body_path = workspace / RELEASE_BODY_FILENAME
     try:
         existing = body_path.read_text() if body_path.exists() else ""
-        body_path.write_text(existing + render_removed_files_note(removed))
+        body_path.write_text(existing + note)
     except OSError as exc:
         print(f"runner: could not append removed-files note to {RELEASE_BODY_FILENAME}: {exc}", file=sys.stderr)
+    append_step_summary(note)
 
 
 def no_baseline_warning(source: str = SOURCE_NONE) -> str:
@@ -1427,7 +1432,16 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
         # for included/regex the expectation is a fragment or pattern, so
         # show it verbatim next to the actual output instead.
         if comparison == COMPARISON_EXACT:
-            detail += f"\n{_unified_diff(expected, rp.stdout)}"
+            # The comparison sees separator characters splitlines() folds
+            # away (\x0c, \x85, \u2028, a literal \r in an inline expected),
+            # so a failing test can produce an empty diff; fall back to the
+            # verbatim blocks rather than show FAIL with no explanation.
+            diff = _unified_diff(expected, rp.stdout)
+            if diff:
+                detail += f"\n{diff}"
+            else:
+                detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
+                           f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
         else:
             detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
                        f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
@@ -1561,11 +1575,11 @@ def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
             continue
         lines.append(f"::group::FAIL: {o['test-name']}")
         for dl in (o.get("detail") or "").rstrip().splitlines():
-            if color and dl.startswith("+"):
+            if dl.startswith("+"):
                 dl = _colorize(dl, ANSI_GREEN, color=color)
-            elif color and dl.startswith("-"):
+            elif dl.startswith("-"):
                 dl = _colorize(dl, ANSI_RED, color=color)
-            elif color and dl.startswith("@@"):
+            elif dl.startswith("@@"):
                 dl = _colorize(dl, ANSI_CYAN, color=color)
             lines.append(f"  {dl}")
         lines.append("::endgroup::")
@@ -1859,8 +1873,10 @@ def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
     if not body_path.is_file():
         _, fallback = derive_status_and_summary(result)
         body_path.write_text(render_release_body(result, fallback))
+    # errors="replace": the body may be autograder-written with arbitrary
+    # bytes; a decode error here must not crash a successfully graded run.
     try:
-        append_step_summary(body_path.read_text())
+        append_step_summary(body_path.read_text(encoding="utf-8", errors="replace"))
     except OSError:
         pass
 
