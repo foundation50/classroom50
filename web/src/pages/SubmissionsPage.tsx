@@ -61,6 +61,7 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
+import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
@@ -116,6 +117,15 @@ const SubmissionsPageContent = () => {
   // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
   const { role: classroomRole } = useClassroomRoleContext()
   const canRegradeAll = can("authorAssignments", { classroomRole })
+  // Live reads (submit/* releases, org repo list) hit student repos with the
+  // VIEWER's personal token. Only an org owner is admin on every repo and can
+  // list them; a TA/HTA is granted read on individual repos at collect time but
+  // can't enumerate the org, so their live fan-out would 404 across the board.
+  // So the live presence layer is owner-only — non-owners render purely from the
+  // collected scores.json snapshot (which they refresh via Collect). `isOwner`
+  // is fail-closed: false until the org role is CONFIRMED owner, so the page
+  // shows the snapshot without a live flash while the role resolves.
+  const { isOwner } = useIsOrgOwner()
   const {
     data: scoresData,
     refetch: refetchScores,
@@ -279,7 +289,8 @@ const SubmissionsPageContent = () => {
     repoOwners: liveRepoOwners,
     page: effectiveLivePage,
     pageSize: LIVE_PAGE_SIZE,
-    enabled: !isEmptyRepoAssignment,
+    // Owner-only (see isOwner above) and never for empty_repo assignments.
+    enabled: isOwner && !isEmptyRepoAssignment,
   })
 
   // Merge live presence over the snapshot (snapshot wins per owner; live adds a
@@ -736,10 +747,10 @@ const SubmissionsPageContent = () => {
 
       {/* Live-submission strip: presence read directly from student repos'
           submit/* releases, so a just-pushed student shows before the next
-          collect (issue #347). Hidden for empty_repo assignments (never
-          autograded). "Show next" pages the fan-out in LIVE_PAGE_SIZE windows so
-          a large class isn't read all at once. */}
-      {!isEmptyRepoAssignment && (
+          collect (issue #347). Owner-only (see isOwner) and hidden for
+          empty_repo assignments (never autograded). "Show next" pages the
+          fan-out in LIVE_PAGE_SIZE windows so a large class isn't read at once. */}
+      {isOwner && !isEmptyRepoAssignment && (
         <div
           className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70"
           role="status"
@@ -773,7 +784,7 @@ const SubmissionsPageContent = () => {
           get a Pending row and would read as not-submitted. Mark the derived
           counts/lists provisional so a transient failure can't be mistaken for
           an authoritative "not submitted". */}
-      {!isEmptyRepoAssignment && liveErrorCount > 0 && (
+      {isOwner && !isEmptyRepoAssignment && liveErrorCount > 0 && (
         <Alert tone="warning" role="status">
           {t("submissions.live.incomplete", { count: liveErrorCount })}
         </Alert>

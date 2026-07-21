@@ -864,6 +864,32 @@ describe("mergeLiveRows", () => {
     expect(merged[0].staleCount).toBe(true)
   })
 
+  it("carries the live push time onto a stale row without moving the graded datetime", () => {
+    const snapshot = [
+      row({
+        owner: "alice",
+        score: 9,
+        submissionCount: 1,
+        datetime: "2026-06-20T10:00:00Z",
+      }),
+    ]
+    const merged = mergeLiveRows(snapshot, [
+      live("alice", "2026-06-25T10:00:00Z", 2),
+    ])
+    // The graded submission time is unchanged; the live push time is exposed
+    // separately so the table can show "latest push … not yet graded".
+    expect(merged[0].datetime).toBe("2026-06-20T10:00:00Z")
+    expect(merged[0].liveLatestAt).toBe("2026-06-25T10:00:00Z")
+  })
+
+  it("does not set liveLatestAt when the count is not stale", () => {
+    const snapshot = [row({ owner: "alice", submissionCount: 2 })]
+    const merged = mergeLiveRows(snapshot, [
+      live("alice", "2026-06-25T10:00:00Z", 2),
+    ])
+    expect(merged[0].liveLatestAt).toBeUndefined()
+  })
+
   it("never lowers a snapshot row's count when live reads fewer (lower bound)", () => {
     // Live is a single page (a lower bound); the snapshot may legitimately hold
     // more. The merge must not shrink the count or flag it stale.

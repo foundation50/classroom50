@@ -76,12 +76,15 @@ export function mergeLiveRows(
   const merged = snapshotRows.map((row) => {
     const live = liveByOwner.get(row.owner.trim().toLowerCase())
     // Live is a lower bound (one page), so it can only reveal MORE submissions
-    // than the snapshot captured, never fewer. Only bump + flag when it does.
+    // than the snapshot captured, never fewer. Only bump + flag when it does,
+    // and carry the live push time so the table can show the true latest push
+    // (later than the graded datetime) without moving the graded submission.
     if (!live || live.submissionCount <= row.submissionCount) return row
     return {
       ...row,
       submissionCount: live.submissionCount,
       staleCount: true,
+      liveLatestAt: live.datetime,
     }
   })
 

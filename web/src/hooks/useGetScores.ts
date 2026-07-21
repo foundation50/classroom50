@@ -80,6 +80,11 @@ export type SubmissionRow = {
   // The table hints this so a teacher knows to re-collect. Only set on a
   // snapshot-backed row (a live-only row is wholly `pending`).
   staleCount?: boolean
+  // When `staleCount`, the publish time of the newest live `submit/*` release —
+  // the true latest push, later than the graded `datetime`. Lets the table show
+  // "latest push <time>, not yet graded" without moving the graded submission
+  // time. Owner-only (only the owner's live fan-out runs).
+  liveLatestAt?: string
   // Per-attempt history, newest first; the summary fields above mirror submissions[0].
   submissions: SubmissionAttempt[]
 }

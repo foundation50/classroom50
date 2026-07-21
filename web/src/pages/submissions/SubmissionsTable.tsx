@@ -703,6 +703,16 @@ const SubmissionsTable = ({
                               })}
                             </span>
                           ) : null}
+                          {rest.liveLatestAt ? (
+                            <span
+                              className="whitespace-nowrap text-xs text-info"
+                              title={t("submissions.table.liveLatestTitle")}
+                            >
+                              {t("submissions.table.liveLatest", {
+                                date: formatDateTime(rest.liveLatestAt),
+                              })}
+                            </span>
+                          ) : null}
                         </div>
                       </td>
                       <td>

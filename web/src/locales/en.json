@@ -1716,6 +1716,8 @@
       "lateHistoryTitle": "Pushed after the deadline.",
       "gradedAt": "Graded {{date}}",
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
+      "liveLatest": "Latest push {{date}} · not yet graded",
+      "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Collect now\" to grade and score it.",
       "membersAria": "View and manage group members",
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
