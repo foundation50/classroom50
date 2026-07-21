@@ -25,8 +25,7 @@ export function useEditAssignment(opts?: {
   const { onWrite, onMutate } = opts ?? {}
   const client = useGitHubClient()
   // Attempt the owner-only template read-grant unless the org role is a
-  // CONFIRMED non-owner (a real owner mid-load still grants; a non-owner's
-  // attempt fails soft into the owner-required warning).
+  // confirmed non-owner (see useCanAttemptTemplateGrant).
   const canGrantTemplateAccess = useCanAttemptTemplateGrant()
 
   return useMutation<

@@ -281,14 +281,12 @@ func performMigration(client githubapi.Client, out, errOut io.Writer, plan migra
 	// repo's visibility, use the team's authoritative slug, and track failures
 	// so the exit code reflects a template students can't yet accept.
 	//
-	// The non-owner staff teams (head-TA, TA) get the same read (best-effort) so a
-	// base-permission-`none` head-TA/TA can read the template without waiting for
-	// collect-scores. The slugs come from the just-created staffTeams
-	// (classroom.json isn't committed until CommitTree above, so it can't be
-	// re-resolved here). StaffTeamRepoPermissions is a presence gate: grant a
-	// staff team read only when its role is mapped. A staff-grant failure only
-	// warns — it's not a student blocker, so it never adds to grantFailures or
-	// changes the exit code.
+	// The non-owner staff teams (TemplateReadStaffRoles: head-TA, TA) get the same
+	// read, best-effort — but their slugs come from the just-created staffTeams
+	// here, since classroom.json isn't committed until CommitTree above and can't
+	// be re-resolved. Presence-gated on StaffTeamRepoPermissions; a staff-grant
+	// failure only warns (not a student blocker) so it never touches grantFailures
+	// or the exit code.
 	type staffTarget struct {
 		role configrepo.StaffRole
 		slug string

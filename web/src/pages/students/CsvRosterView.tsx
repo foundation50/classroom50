@@ -12,15 +12,11 @@ function displayName(student: Student): string {
   return full || student.username
 }
 
-// The read-only "CSV roster" — a non-owner staffer's (TA / head TA) view of the
-// class, sourced from the config repo's roster.csv rather than GitHub team
-// membership (the "team-driven roster" the owner sees via EnrolledStudents). A
-// TA/HTA is a plain org member who is NOT on the classroom's secret student
-// team, so the team-members API (GET /orgs/{org}/teams/{slug}/members) 403s for
-// them — they genuinely can't read the authoritative enrollment. roster.csv
-// (which they can read via config-repo access) is a good-enough stand-in:
-// teacher-maintained, not live, and carrying no pending invites or management
-// actions (all owner-only).
+// The read-only "CSV roster" for a non-owner staffer (TA / head TA), sourced
+// from the config repo's roster.csv rather than GitHub team membership. A TA/HTA
+// isn't on the classroom's secret student team, so the team-members API 403s for
+// them — roster.csv (readable via config-repo access) is the stand-in:
+// teacher-maintained, not live, no invites or management actions.
 const CsvRosterView = ({ students }: { students: Student[] }) => {
   const { t } = useTranslation()
 

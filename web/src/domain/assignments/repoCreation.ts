@@ -227,12 +227,12 @@ export type CreateAssignmentInput = {
   allowed_files?: string
   pass_threshold?: number
   tests: AssignmentTestDraft[]
-  // Whether the acting user may perform the owner-only template read-grant
-  // (addRepositoryToTeam). Set from can("manageOrg") at the call site. When
-  // false/absent, the save skips the grant (fail-closed) so a non-owner author
-  // — e.g. a head-TA — never fires the owner-only call and never 403s; the
-  // grant was always best-effort, and an owner re-affirms it later. GitHub is
-  // the real enforcer regardless.
+  // Whether the write path may attempt the owner-only template read-grant
+  // (addRepositoryToTeam). Set from useCanAttemptTemplateGrant at the call site
+  // (true unless the org role is a confirmed non-owner). When false the save
+  // skips the grant and returns an owner-required warning instead of firing the
+  // owner-only call — the grant is best-effort and an owner re-affirms it later.
+  // GitHub is the real enforcer regardless.
   canGrantTemplateAccess?: boolean
 }
 export async function createAssignmentWithConflictRetry(

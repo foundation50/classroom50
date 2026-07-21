@@ -87,13 +87,12 @@ var StaffTeamRepoPermissions = map[StaffRole]string{
 	RoleTA:     "pull",
 }
 
-// TemplateReadStaffRoles is the ordered set of NON-OWNER staff roles that get an
-// eager read grant on a private in-org template (head-TA, then TA). The teacher
-// team is omitted — its members are org owners with repo access via ownership.
-// Single-sources the loop in grantStaffTeamTemplateRead (reuse.go) and the
-// per-role grant in migrate.go so adding a future non-owner staff role is one
-// line here. Each role is still presence-gated against StaffTeamRepoPermissions
-// at the call site.
+// TemplateReadStaffRoles is the ordered set of non-owner staff roles that get an
+// eager read grant on a private in-org template (head-TA, then TA; teacher
+// omitted per StaffTeamRepoPermissions above). Single-sources the loops in
+// grantStaffTeamTemplateRead (reuse.go) and migrate.go so a future non-owner
+// staff role is one line here. Still presence-gated against
+// StaffTeamRepoPermissions at each call site.
 var TemplateReadStaffRoles = []StaffRole{RoleHeadTA, RoleTA}
 
 // ConfigRepoPermission is the permission a staff role's team gets on the org's

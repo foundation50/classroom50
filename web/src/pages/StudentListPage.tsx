@@ -209,10 +209,8 @@ const TeamRosterContent = ({
   )
 }
 
-// The CSV roster: a read-only view for a non-owner staffer (TA / head TA),
-// sourced from roster.csv (which they can read via config-repo access) because
-// the student team is secret and its member list is unreadable to anyone not on
-// it or an org owner. Fires no team-membership or invite reads, so nothing 403s.
+// The CSV roster wrapper for a non-owner staffer — fires no team-membership or
+// invite reads (so nothing 403s). See CsvRosterView for the roster.csv rationale.
 const CsvRosterContent = ({
   org,
   classroom,

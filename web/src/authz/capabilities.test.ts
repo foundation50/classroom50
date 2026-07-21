@@ -69,12 +69,9 @@ describe("can — classroom capabilities (fail-closed on unresolved)", () => {
   })
 
   it("authorAssignments: teacher|hta only (TA read-only, student/unresolved denied)", () => {
-    // Config-repo write tier: teacher (+ legacy instructor alias) and head-TA
-    // can author assignments.
     expect(can("authorAssignments", { classroomRole: "teacher" })).toBe(true)
     expect(can("authorAssignments", { classroomRole: "instructor" })).toBe(true)
     expect(can("authorAssignments", { classroomRole: "hta" })).toBe(true)
-    // A plain TA is read-only on the config repo — denied.
     expect(can("authorAssignments", { classroomRole: "ta" })).toBe(false)
     expect(can("authorAssignments", { classroomRole: "student" })).toBe(false)
     // Fail-closed on the in-flight sentinel.

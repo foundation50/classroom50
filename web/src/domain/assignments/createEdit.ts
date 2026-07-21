@@ -237,9 +237,6 @@ export async function editAssignment(
   // Grant the (possibly changed) in-org private template a team read — a
   // non-fatal warning, never thrown (the edit already committed). needsTeamGrant
   // implies a resolved template, so the guard just narrows the type.
-  // addRepositoryToTeam is org-owner-only, so a non-owner author (head-TA) can't
-  // perform it: attempt it for an owner, else surface an owner-required warning
-  // rather than silently skipping (which would 404 students on accept).
   let templateGrantWarning: string | undefined
   if (needsTeamGrant && preservedEntry.template) {
     templateGrantWarning = await resolveTemplateGrant(
@@ -574,11 +571,9 @@ async function grantTeamTemplateRead(
   try {
     const classroomJson = await getClassroomJson(client, { org, classroom })
     teamSlug = classroomJson.team?.slug
-    // Non-owner staff teams that need explicit read on a private template: HTA
-    // and TA. A base-permission-`none` head-TA/TA can't read a private in-org
-    // template repo without their team being granted, so grant both here. The
-    // teacher team is intentionally omitted — its members are org owners with
-    // repo access via ownership, so a team grant is redundant.
+    // Non-owner staff teams (TEMPLATE_READ_STAFF_ROLES) need an explicit read on
+    // a private template; the teacher team is omitted (owners have it via
+    // ownership).
     staffTeamSlugs = TEMPLATE_READ_STAFF_ROLES.map(
       (role) => classroomJson.teams?.[role]?.slug,
     ).filter((s): s is string => Boolean(s))
@@ -608,12 +603,9 @@ async function grantTeamTemplateRead(
     permission: "pull",
   })
 
-  // Best-effort: grant the non-owner staff teams (HTA, TA) the same read so a
-  // base-permission-`none` head-TA/TA can read the private template without
-  // waiting for collect-scores (mirrors the CLI). Non-blocking — the student
-  // grant above is what gates `student accept`; a staff-grant failure only warns
-  // and collect-scores re-affirms it. A classroom with no recorded staff team is
-  // a clean skip (the list is already filtered to present slugs).
+  // Best-effort staff-team grants (mirrors the CLI): non-blocking, since the
+  // student grant above is what gates `student accept` and collect-scores
+  // re-affirms these. The list is already filtered to present slugs.
   for (const staffTeamSlug of staffTeamSlugs) {
     try {
       await addRepositoryToTeam(client, {
@@ -664,14 +656,10 @@ export async function tryGrantTeamTemplateRead(
   }
 }
 
-// The warning shown when a NON-owner author (e.g. a head-TA) saves an
-// assignment whose private in-org template needs a classroom-team read grant.
-// The grant (addRepositoryToTeam) is org-owner-only at GitHub, so the author
-// can't perform it — but we must NOT return `undefined` (a silent "clean"
-// result) or students would hit a 404 on `gh student accept` with nothing
-// pointing at the cause. Surface an actionable warning instead: an org owner
-// grants the team read (or re-saves), then students can accept. Mirrors the
-// failure-path wording of tryGrantTeamTemplateRead.
+// The warning returned (not undefined) when a non-owner author saves an
+// assignment whose private in-org template needs the owner-only team read-grant.
+// Returning undefined would read as "clean" and 404 students on accept with no
+// signal; this points them at an owner instead.
 export function templateGrantOwnerRequiredWarning(
   classroom: string,
   slug: string,
@@ -686,12 +674,10 @@ export function templateGrantOwnerRequiredWarning(
 }
 
 // The one grant-decision recipe shared by create / edit / reuse: attempt the
-// owner-only team read-grant when the caller may (canGrantTemplateAccess), else
-// return the owner-required warning instead of silently skipping — a silent skip
-// would 404 students on accept with no signal. Single-sourced so the three write
-// paths can't drift. `canGrantTemplateAccess` is set true unless the caller has
-// CONFIRMED the actor is a non-owner (see useCanAttemptTemplateGrant), so a real
-// owner mid-load still attempts (tryGrantTeamTemplateRead never throws).
+// owner-only team read-grant when canGrantTemplateAccess is set, else return the
+// owner-required warning rather than silently skipping (a silent skip would 404
+// students on accept). Single-sourced so the three write paths can't drift; the
+// flag's tri-state derivation lives in useCanAttemptTemplateGrant.
 export async function resolveTemplateGrant(
   client: GitHubClient,
   org: string,

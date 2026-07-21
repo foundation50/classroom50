@@ -35,9 +35,7 @@ export type CopyAssignmentInput = {
   // Default to the source slug/name; the slug must be unique in the target.
   targetSlug?: string
   targetName?: string
-  // Whether the acting user may perform the owner-only template read-grant
-  // (addRepositoryToTeam). Set from can("manageOrg") at the call site;
-  // fail-closed when absent so a non-owner reuse skips the owner-only grant.
+  // See CreateAssignmentInput.canGrantTemplateAccess — same owner-only grant gate.
   canGrantTemplateAccess?: boolean
 }
 

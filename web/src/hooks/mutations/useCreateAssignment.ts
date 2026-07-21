@@ -26,10 +26,8 @@ export function useCreateAssignment(
 ) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
-  // The owner-only template read-grant is attempted in the write path when this
-  // flag is set. Attempt unless the org role is a CONFIRMED non-owner, so a real
-  // owner whose org read hasn't settled still grants (a non-owner's attempt
-  // fails soft into the owner-required warning). See useCanAttemptTemplateGrant.
+  // Attempt the owner-only template read-grant unless the org role is a
+  // confirmed non-owner (see useCanAttemptTemplateGrant).
   const canGrantTemplateAccess = useCanAttemptTemplateGrant()
 
   return useMutation<
