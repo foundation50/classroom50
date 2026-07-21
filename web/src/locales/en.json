@@ -1583,8 +1583,6 @@
     "refresh": "Refresh submissions",
     "live": {
       "checking": "Checking submissions live…",
-      "pending_one": "{{count}} submitted, not yet collected",
-      "pending_other": "{{count}} submitted, not yet collected",
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
       "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },

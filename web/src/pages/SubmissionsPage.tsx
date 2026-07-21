@@ -391,9 +391,6 @@ const SubmissionsPageContent = () => {
   // upstream (collect_scores.py) from push time, not grade time.
   const lateCount = scoresInfo.filter((row) => row.late).length
 
-  // Live-only rows: submitted (submit/* release exists) but not yet in the
-  // collected snapshot — the #347 lag the live view closes.
-  const livePendingCount = scoresInfo.filter((row) => row.pending).length
   // Members of every existing group repo, fetched (bounded) and reconciled so
   // the "no group" list is accurate on load: the union of founders (known from
   // the repo name) plus each repo's collaborators means a teammate on a
@@ -829,11 +826,6 @@ const SubmissionsPageContent = () => {
               <Spinner size="xs" />
               {t("submissions.live.checking")}
             </span>
-          )}
-          {livePendingCount > 0 && (
-            <Badge tone="info" size="sm">
-              {t("submissions.live.pending", { count: livePendingCount })}
-            </Badge>
           )}
         </div>
       )}
