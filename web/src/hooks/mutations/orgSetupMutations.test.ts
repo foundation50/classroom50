@@ -11,9 +11,6 @@ import type { ConcernId } from "@/orgPolicy/audit"
 const renameConfigRepoToMain = vi.fn<(...args: unknown[]) => Promise<void>>(
   () => Promise.resolve(),
 )
-const removeUserFromTeam = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
-  Promise.resolve(),
-)
 const cancelOrgInvitation = vi.fn<(...args: unknown[]) => Promise<void>>(() =>
   Promise.resolve(),
 )
@@ -30,12 +27,13 @@ const getUser = vi.fn<(...args: unknown[]) => Promise<unknown>>(() =>
 const resendClassroomInvite = vi.fn<(...args: unknown[]) => Promise<unknown>>(
   () => Promise.resolve({ state: "invited" }),
 )
+const removeClassroomStaffMember = vi.fn<
+  (...args: unknown[]) => Promise<unknown>
+>(() => Promise.resolve())
 
 vi.mock("@/github-core/mutations", () => ({
   renameConfigRepoToMain: (client: unknown, org: unknown) =>
     renameConfigRepoToMain(client, org),
-  removeUserFromTeam: (client: unknown, input: unknown) =>
-    removeUserFromTeam(client, input),
   cancelOrgInvitation: (client: unknown, input: unknown) =>
     cancelOrgInvitation(client, input),
   initClassroom50: (params: unknown) => initClassroom50(params),
@@ -48,6 +46,8 @@ vi.mock("@/github-core/queries", async (importOriginal) => ({
 }))
 vi.mock("@/domain/students", () => ({
   resendClassroomInvite: (...a: unknown[]) => resendClassroomInvite(...a),
+  removeClassroomStaffMember: (...a: unknown[]) =>
+    removeClassroomStaffMember(...a),
 }))
 vi.mock("@/orgPolicy/repair", () => ({
   repairConcern: (client: unknown, org: unknown, id: unknown, plan: unknown) =>
@@ -102,19 +102,20 @@ describe("useRenameConfigRepoToMain", () => {
 })
 
 describe("useRemoveStaffMember", () => {
-  it("removes the user, invalidates team members + invitations, and syncs the roster", async () => {
+  it("delegates to removeClassroomStaffMember, invalidates members + invitations, and syncs the roster", async () => {
     const queryClient = freshClient()
     const invalidate = vi.spyOn(queryClient, "invalidateQueries")
     const { result } = renderHook(
-      () => useRemoveStaffMember(ORG, CLASSROOM, TEAM),
+      () => useRemoveStaffMember(ORG, CLASSROOM, TEAM, "ta"),
       { wrapper: wrapperWith(queryClient) },
     )
     result.current.mutate("alice")
     await waitFor(() => expect(result.current.isSuccess).toBe(true))
-    expect(removeUserFromTeam).toHaveBeenCalledWith(expect.anything(), {
+    expect(removeClassroomStaffMember).toHaveBeenCalledWith(expect.anything(), {
       org: ORG,
       teamSlug: TEAM,
       username: "alice",
+      role: "ta",
     })
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: githubKeys.teamMembers(ORG, TEAM),

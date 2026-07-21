@@ -6,10 +6,12 @@ import { GitHubLink } from "@/components/GitHubLink"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { can } from "@/authz"
+import { can, isTeacherRole } from "@/authz"
 import { ConfirmModal } from "@/components/modals"
 import { teamMembersQuery, teamInvitationsQuery } from "@/github-core/queries"
 import { classroomTeamSlug } from "@/util/teamSlug"
+import { useGitHubViewer } from "@/hooks/useGitHubResources"
+import { isSameGitHubUser } from "@/util/students"
 import { useAddStaffMember } from "@/hooks/mutations/useAddStaffMember"
 import useRemoveStaffMember from "@/hooks/mutations/useRemoveStaffMember"
 import useResendStaffInvite from "@/hooks/mutations/useResendStaffInvite"
@@ -294,13 +296,21 @@ const StaffMemberRow = ({
 }) => {
   const { t } = useTranslation()
   const { notify } = useToast()
+  const { data: viewer } = useGitHubViewer()
   const [confirmingRemove, setConfirmingRemove] = useState(false)
   const teamSlug = classroomTeamSlug(classroom, role)
 
   const roleLabel = t(ROLE_LABEL_KEY[role])
   const rolePlural = t(ROLE_PLURAL_KEY[role])
 
-  const removeMutation = useRemoveStaffMember(org, classroom, teamSlug)
+  const removeMutation = useRemoveStaffMember(org, classroom, teamSlug, role)
+
+  // A teacher can't remove THEMSELVES from the teacher team — it would revoke
+  // their own owner-level access to the classroom (the mutation refuses it too;
+  // this hides the action so there's no dead button). Mirrors the roster's
+  // self-demote block and the org Members self-remove guard.
+  const isSelf = isSameGitHubUser(viewer ?? null, { username: member.login })
+  const selfTeacherRemoveBlocked = isSelf && isTeacherRole(role)
 
   return (
     <li className="flex items-center justify-between gap-2 rounded-md border border-base-200 px-2 py-1.5">
@@ -320,20 +330,29 @@ const StaffMemberRow = ({
           {roleLabel}
         </Badge>
       </a>
-      <Button
-        variant="ghost"
-        size="xs"
-        className="text-error"
-        title={t("classes.staff.removeRole", { role: roleLabel })}
-        disabled={disabled || removeMutation.isPending}
-        onClick={() => setConfirmingRemove(true)}
-      >
-        {removeMutation.isPending ? (
-          <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
-        ) : (
-          <X aria-hidden="true" className="size-3.5" />
-        )}
-      </Button>
+      {selfTeacherRemoveBlocked ? (
+        <span
+          className="text-xs text-base-content/50"
+          title={t("classes.staff.removeSelfTeacherBlocked")}
+        >
+          {t("classes.staff.you")}
+        </span>
+      ) : (
+        <Button
+          variant="ghost"
+          size="xs"
+          className="text-error"
+          title={t("classes.staff.removeRole", { role: roleLabel })}
+          disabled={disabled || removeMutation.isPending}
+          onClick={() => setConfirmingRemove(true)}
+        >
+          {removeMutation.isPending ? (
+            <Loader2 aria-hidden="true" className="size-3.5 animate-spin" />
+          ) : (
+            <X aria-hidden="true" className="size-3.5" />
+          )}
+        </Button>
+      )}
       <ConfirmModal
         open={confirmingRemove}
         dangerous

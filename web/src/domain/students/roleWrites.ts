@@ -489,3 +489,36 @@ export async function addClassroomStaffMember(
   })
   return { username, role }
 }
+
+export type RemoveClassroomStaffMemberInput = {
+  org: string
+  teamSlug: string
+  username: string
+  // The role the team represents, so a self-removal from the TEACHER team can be
+  // refused (it revokes the acting owner's own owner-level classroom access).
+  role: StaffRole
+}
+
+// Remove a staff member from a classroom's role team. Refuses a teacher removing
+// THEMSELVES from the teacher team: like the roster's self-demote guard, that
+// would revoke the acting owner's own owner-level access to the classroom — an
+// unrecoverable-in-place action they must have another owner perform. Other
+// removals (a different member, or self off a non-teacher team) pass through to
+// the idempotent team-drop.
+export async function removeClassroomStaffMember(
+  client: GitHubClient,
+  input: RemoveClassroomStaffMemberInput,
+): Promise<void> {
+  const { org, teamSlug, username, role } = input
+  if (isTeacherRole(role)) {
+    const viewer = await getAuthenticatedUser(client)
+    if (isSameGitHubUser(viewer, { username })) {
+      throw new Error(
+        `You can't remove yourself from the teacher team — it would revoke ` +
+          `your own owner-level access to this classroom. Ask another ` +
+          `organization owner to remove you.`,
+      )
+    }
+  }
+  await removeUserFromTeam(client, { org, teamSlug, username })
+}

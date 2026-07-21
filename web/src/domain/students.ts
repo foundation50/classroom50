@@ -44,6 +44,7 @@ export {
   applyClassroomRoleChange,
   assignRosterMemberRole,
   addClassroomStaffMember,
+  removeClassroomStaffMember,
   resolveRosterUploadPreflight,
   type WriteClassroomRolesInput,
   type ApplyClassroomRoleChangeInput,
@@ -51,6 +52,7 @@ export {
   type AssignRosterMemberRoleInput,
   type AssignRosterMemberRoleResult,
   type AddClassroomStaffMemberInput,
+  type RemoveClassroomStaffMemberInput,
   type ResolveRosterUploadPreflightInput,
 } from "./students/roleWrites"
 export {

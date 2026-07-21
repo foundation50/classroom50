@@ -12,6 +12,7 @@ import {
   bulkEnrollStudentsInClassroom,
   assignRosterMemberRole,
   addClassroomStaffMember,
+  removeClassroomStaffMember,
   applyClassroomRoleChange,
   inviteRosterStudents,
   syncRosterFromTeam,
@@ -4301,5 +4302,63 @@ describe("addClassroomStaffMember — staff team-add (invites non-members)", () 
       }),
     ).rejects.toThrow(/no such user/)
     expect(teamAdds).toEqual([])
+  })
+})
+
+describe("removeClassroomStaffMember — refuses a teacher removing themselves", () => {
+  // Routes GET /user (viewer, for the self-check) + the team-drop DELETE.
+  const makeClient = (viewerLogin: string) => {
+    const teamRemoves: string[] = []
+    const request = vi
+      .fn()
+      .mockImplementation((path: string, options?: { method?: string }) => {
+        if (path === "/user")
+          return Promise.resolve({ id: 1, login: viewerLogin })
+        if (path.includes("/teams/") && path.includes("/memberships/")) {
+          if (options?.method === "DELETE") {
+            teamRemoves.push(decodeURIComponent(path.split("/memberships/")[1]))
+            return Promise.resolve()
+          }
+        }
+        return Promise.reject(new Error(`unexpected request: ${path}`))
+      })
+    return { client: { request } as unknown as GitHubClient, teamRemoves }
+  }
+
+  it("throws (no team-drop) when the acting owner is the teacher being removed", async () => {
+    const { client, teamRemoves } = makeClient("teacher-tina")
+    await expect(
+      removeClassroomStaffMember(client, {
+        org: "acme",
+        teamSlug: "classroom50-cs101-teacher",
+        username: "teacher-tina",
+        role: "teacher",
+      }),
+    ).rejects.toThrow(/can't remove yourself from the teacher team/)
+    expect(teamRemoves).toEqual([])
+  })
+
+  it("allows removing a DIFFERENT teacher", async () => {
+    const { client, teamRemoves } = makeClient("teacher-tina")
+    await removeClassroomStaffMember(client, {
+      org: "acme",
+      teamSlug: "classroom50-cs101-teacher",
+      username: "other-teacher",
+      role: "teacher",
+    })
+    expect(teamRemoves).toEqual(["other-teacher"])
+  })
+
+  it("allows a TA to remove themselves (non-teacher team, no self-guard)", async () => {
+    // No GET /user needed — the guard only runs for a teacher role. The client
+    // still routes it defensively.
+    const { client, teamRemoves } = makeClient("carol")
+    await removeClassroomStaffMember(client, {
+      org: "acme",
+      teamSlug: "classroom50-cs101-ta",
+      username: "carol",
+      role: "ta",
+    })
+    expect(teamRemoves).toEqual(["carol"])
   })
 })
