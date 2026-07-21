@@ -10,7 +10,7 @@ vi.mock("react-i18next", async (importOriginal) => {
   }
 })
 
-import RosterApproxView from "./RosterApproxView"
+import CsvRosterView from "./CsvRosterView"
 import type { Student } from "@/types/classroom"
 
 const student = (overrides: Partial<Student> = {}): Student => ({
@@ -28,15 +28,15 @@ afterEach(() => {
   cleanup()
 })
 
-describe("RosterApproxView", () => {
-  it("shows the approximate-source notice", () => {
-    render(<RosterApproxView students={[student()]} />)
-    expect(screen.getByText("students.approx.notice")).toBeTruthy()
+describe("CsvRosterView", () => {
+  it("shows the CSV-source notice", () => {
+    render(<CsvRosterView students={[student()]} />)
+    expect(screen.getByText("students.csvRoster.notice")).toBeTruthy()
   })
 
   it("renders a row per roster.csv entry with name, section, and role", () => {
     render(
-      <RosterApproxView
+      <CsvRosterView
         students={[
           student({ username: "alice", first_name: "Alice", last_name: "Ng" }),
           student({
@@ -56,13 +56,13 @@ describe("RosterApproxView", () => {
   })
 
   it("maps a blank/unknown role cell to the student badge", () => {
-    render(<RosterApproxView students={[student({ role: "" })]} />)
+    render(<CsvRosterView students={[student({ role: "" })]} />)
     expect(screen.getByText("students.roleStudent")).toBeTruthy()
   })
 
   it("falls back to the username when no name is recorded", () => {
     render(
-      <RosterApproxView
+      <CsvRosterView
         students={[
           student({ username: "carol", first_name: "", last_name: "" }),
         ]}
@@ -73,12 +73,12 @@ describe("RosterApproxView", () => {
   })
 
   it("renders an empty-state row when roster.csv has no entries", () => {
-    render(<RosterApproxView students={[]} />)
-    expect(screen.getByText("students.approx.empty")).toBeTruthy()
+    render(<CsvRosterView students={[]} />)
+    expect(screen.getByText("students.csvRoster.empty")).toBeTruthy()
   })
 
   it("renders no mutating controls (read-only)", () => {
-    const { container } = render(<RosterApproxView students={[student()]} />)
+    const { container } = render(<CsvRosterView students={[student()]} />)
     expect(container.querySelectorAll("button")).toHaveLength(0)
   })
 })

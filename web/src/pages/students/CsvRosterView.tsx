@@ -30,15 +30,16 @@ function displayName(student: Student): string {
   return full || student.username
 }
 
-// Read-only roster for a non-owner staffer (TA / head TA), sourced from the
-// config repo's roster.csv rather than GitHub team membership. A TA/HTA is a
-// plain org member who is NOT on the classroom's secret student team, so the
-// team-members API (GET /orgs/{org}/teams/{slug}/members) 403s for them — they
-// genuinely can't read the authoritative enrollment. roster.csv (which they can
-// read via config-repo access) is a good-enough approximation: teacher-
-// maintained, not live, and carrying no pending invites or management actions
-// (all owner-only). Owners get the live team-driven EnrolledStudents view.
-const RosterApproxView = ({ students }: { students: Student[] }) => {
+// The read-only "CSV roster" — a non-owner staffer's (TA / head TA) view of the
+// class, sourced from the config repo's roster.csv rather than GitHub team
+// membership (the "team-driven roster" the owner sees via EnrolledStudents). A
+// TA/HTA is a plain org member who is NOT on the classroom's secret student
+// team, so the team-members API (GET /orgs/{org}/teams/{slug}/members) 403s for
+// them — they genuinely can't read the authoritative enrollment. roster.csv
+// (which they can read via config-repo access) is a good-enough stand-in:
+// teacher-maintained, not live, and carrying no pending invites or management
+// actions (all owner-only).
+const CsvRosterView = ({ students }: { students: Student[] }) => {
   const { t } = useTranslation()
 
   const rows = useMemo(
@@ -53,24 +54,26 @@ const RosterApproxView = ({ students }: { students: Student[] }) => {
     <div className="flex flex-col gap-4">
       <Alert tone="info">
         <Info aria-hidden="true" className="size-5" />
-        <span>{t("students.approx.notice")}</span>
+        <span>{t("students.csvRoster.notice")}</span>
       </Alert>
 
       <div className="overflow-x-auto rounded-box border border-base-content/5 bg-base-100">
         <table className="table">
-          <caption className="sr-only">{t("students.approx.caption")}</caption>
+          <caption className="sr-only">
+            {t("students.csvRoster.caption")}
+          </caption>
           <thead>
             <tr>
-              <th scope="col">{t("students.approx.colName")}</th>
-              <th scope="col">{t("students.approx.colSection")}</th>
-              <th scope="col">{t("students.approx.colRole")}</th>
+              <th scope="col">{t("students.csvRoster.colName")}</th>
+              <th scope="col">{t("students.csvRoster.colSection")}</th>
+              <th scope="col">{t("students.csvRoster.colRole")}</th>
             </tr>
           </thead>
           <tbody>
             {rows.length === 0 ? (
               <tr>
                 <td colSpan={3} className="text-center">
-                  {t("students.approx.empty")}
+                  {t("students.csvRoster.empty")}
                 </td>
               </tr>
             ) : (
@@ -98,4 +101,4 @@ const RosterApproxView = ({ students }: { students: Student[] }) => {
   )
 }
 
-export default RosterApproxView
+export default CsvRosterView

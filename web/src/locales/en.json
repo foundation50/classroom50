@@ -246,9 +246,9 @@
     "statusNeedsAttentionInOrg": "Assign a role",
     "statusNeedsAttentionNotInOrg": "Not in org",
     "viewCsvOnGitHub": "View roster.csv",
-    "approx": {
-      "notice": "Approximate roster from roster.csv (teacher-maintained). The authoritative live enrollment and invite management are available to teachers.",
-      "caption": "Roster from roster.csv",
+    "csvRoster": {
+      "notice": "CSV roster from roster.csv (teacher-maintained). The authoritative team-driven roster and invite management are available to teachers.",
+      "caption": "CSV roster from roster.csv",
       "colName": "Name",
       "colSection": "Section",
       "colRole": "Role",

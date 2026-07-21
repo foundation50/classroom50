@@ -6,7 +6,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import EnrolledStudents from "@/pages/students/EnrolledStudents"
-import RosterApproxView from "@/pages/students/RosterApproxView"
+import CsvRosterView from "@/pages/students/CsvRosterView"
 import UploadRoster from "@/pages/students/UploadRoster"
 import InviteLinksModal from "@/pages/students/InviteLinksModal"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -27,10 +27,10 @@ import { Badge } from "@/components/ui"
 import { ROLE_BADGE_TONE } from "@/util/classroomRoleUI"
 import { useTranslation } from "react-i18next"
 
-// The full team-driven roster: live GitHub membership, pending/failed invites,
-// and every management action. Owner-only — it calls useTeamRoster (whose
+// The team-driven roster: live GitHub membership, pending/failed invites, and
+// every management action. Owner-only — it calls useTeamRoster (whose
 // student-team read 403s for a non-owner) and the owner-only invite reads.
-const OwnerRosterContent = ({
+const TeamRosterContent = ({
   org,
   classroom,
 }: {
@@ -209,11 +209,11 @@ const OwnerRosterContent = ({
   )
 }
 
-// The read-only roster for a non-owner staffer (TA / head TA). Sourced from
-// roster.csv (which they can read via config-repo access) because the student
-// team is secret and its member list is unreadable to anyone not on it or an
-// org owner. Fires no team-membership or invite reads, so nothing 403s.
-const StaffRosterContent = ({
+// The CSV roster: a read-only view for a non-owner staffer (TA / head TA),
+// sourced from roster.csv (which they can read via config-repo access) because
+// the student team is secret and its member list is unreadable to anyone not on
+// it or an org owner. Fires no team-membership or invite reads, so nothing 403s.
+const CsvRosterContent = ({
   org,
   classroom,
 }: {
@@ -237,15 +237,15 @@ const StaffRosterContent = ({
           </span>
         }
       />
-      <RosterApproxView students={students} />
+      <CsvRosterView students={students} />
     </>
   )
 }
 
 // Branch the roster experience on org ownership: a teacher (org owner) gets the
-// live team-driven view with management; a TA/head TA gets the read-only
-// roster.csv approximation. Split so the owner-only useTeamRoster reads only run
-// for an owner (a non-owner can't render OwnerRosterContent without 403s).
+// team-driven roster with management; a TA/head TA gets the read-only CSV
+// roster. Split so the owner-only useTeamRoster reads only run for an owner (a
+// non-owner can't render TeamRosterContent without 403s).
 const StudentListContent = ({
   org,
   classroom,
@@ -256,9 +256,9 @@ const StudentListContent = ({
   const { isOwner, isPending } = useIsOrgOwner()
   if (isPending) return <RoleResolvingFallback />
   return isOwner ? (
-    <OwnerRosterContent org={org} classroom={classroom} />
+    <TeamRosterContent org={org} classroom={classroom} />
   ) : (
-    <StaffRosterContent org={org} classroom={classroom} />
+    <CsvRosterContent org={org} classroom={classroom} />
   )
 }
 
