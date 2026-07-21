@@ -1705,6 +1705,7 @@
       "noDetails": "No details yet",
       "noGradingTitle": "Autograding is disabled for this assignment",
       "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
+      "loading": "Loading submissions…",
       "pendingGrade": "Pending",
       "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Collect now\" or wait for the nightly collection.",
       "notSubmitted": "Not submitted",

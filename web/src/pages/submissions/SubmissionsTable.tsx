@@ -412,6 +412,7 @@ const SubmissionsTable = ({
   filtered = false,
   onClearFilters,
   emptyRepo = false,
+  initialLoading = false,
   nonSubmittersLoading = false,
 }: {
   scores: SubmissionRow[]
@@ -443,6 +444,10 @@ const SubmissionsTable = ({
   // empty_repo assignment: never autogrades, so score badges and the
   // Feedback-PR/regrade actions are hidden (repos + accept state stay useful).
   emptyRepo?: boolean
+  // Core data (snapshot + roster) is still loading on first paint; render a
+  // loading state rather than the "no submissions" empty state, which would
+  // otherwise flash before data arrives.
+  initialLoading?: boolean
   // The "not submitted" list is still resolving from the live/group fan-outs;
   // render a resolving affordance instead of prematurely listing students who
   // may reclassify to submitted/pending.
@@ -499,7 +504,20 @@ const SubmissionsTable = ({
             </tr>
           </thead>
           <tbody>
-            {!scores?.length &&
+            {initialLoading && (
+              <tr>
+                <td colSpan={5} className="py-10 text-center">
+                  <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+                    <Spinner size="md" />
+                    <p className="text-sm text-base-content/70">
+                      {t("submissions.table.loading")}
+                    </p>
+                  </div>
+                </td>
+              </tr>
+            )}
+            {!initialLoading &&
+              !scores?.length &&
               !nonSubmitters.length &&
               !unsubmittedGroupRepos.length &&
               !nonSubmittersLoading && (

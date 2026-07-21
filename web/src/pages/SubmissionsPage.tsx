@@ -338,6 +338,13 @@ const SubmissionsPageContent = () => {
   // a group row as a later source resolves (the flash). Until ready, hold the
   // prior list rather than recomputing an intermediate one.
   const scoresLoaded = scoresData !== undefined
+  // Core data still arriving on first paint: until the snapshot has loaded (and
+  // the roster resolved), an empty rows/non-submitters set means "not loaded
+  // yet", not "nothing here" — so the table shows a loading state rather than
+  // flashing the "No submissions collected yet" empty message (which then
+  // vanishes once data lands). A background refetch doesn't count (scoresLoaded
+  // stays true), so Refresh never blanks a populated table.
+  const initialLoading = !scoresLoaded || rosterLoading
   const nonSubmittersReady =
     scoresLoaded && !livePending && !groupMembersPending
   const nonSubmitters = useMemo(() => {
@@ -921,6 +928,7 @@ const SubmissionsPageContent = () => {
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
         emptyRepo={isEmptyRepoAssignment}
+        initialLoading={initialLoading}
         nonSubmittersLoading={
           !nonSubmittersReady &&
           students.length > 0 &&
