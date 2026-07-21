@@ -16,6 +16,7 @@ import {
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
+  mergeLiveRows,
   nonSubmitterStatus,
   reconcileNonSubmitters,
   rosterScopedRows,
@@ -803,5 +804,62 @@ describe("statusSelectValue / applyStatusSelection", () => {
     )
     expect(out.section).toBe("P3")
     expect(out.passing).toBe("failing")
+  })
+})
+
+describe("mergeLiveRows", () => {
+  const live = (owner: string, datetime: string) => ({
+    owner,
+    datetime,
+    release: `https://github.com/o/${owner}/releases/tag/submit`,
+  })
+
+  it("keeps snapshot rows unchanged", () => {
+    const snapshot = [row({ owner: "alice", score: 8 })]
+    const merged = mergeLiveRows(snapshot, [])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(8)
+    expect(merged[0].pending).toBeUndefined()
+  })
+
+  it("adds a pending row for a live-only owner absent from the snapshot", () => {
+    const snapshot = [row({ owner: "alice" })]
+    const merged = mergeLiveRows(snapshot, [
+      live("bob", "2026-06-21T10:00:00Z"),
+    ])
+    const bob = merged.find((r) => r.owner === "bob")
+    expect(bob).toBeDefined()
+    expect(bob?.pending).toBe(true)
+    expect(bob?.["max-score"]).toBe(0)
+    expect(bob?.usernames).toEqual(["bob"])
+  })
+
+  it("does not duplicate an owner already in the snapshot (snapshot wins)", () => {
+    const snapshot = [row({ owner: "alice", score: 9 })]
+    const merged = mergeLiveRows(snapshot, [
+      live("Alice", "2026-06-25T10:00:00Z"),
+    ])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(9)
+    expect(merged[0].pending).toBeUndefined()
+  })
+
+  it("matches owners case-insensitively", () => {
+    const snapshot = [row({ owner: "Alice" })]
+    const merged = mergeLiveRows(snapshot, [
+      live("alice", "2026-06-25T10:00:00Z"),
+    ])
+    expect(merged).toHaveLength(1)
+  })
+
+  it("orders live-only rows newest-first", () => {
+    const merged = mergeLiveRows(
+      [],
+      [
+        live("old", "2026-01-01T00:00:00Z"),
+        live("new", "2026-09-01T00:00:00Z"),
+      ],
+    )
+    expect(merged.map((r) => r.owner)).toEqual(["new", "old"])
   })
 })

@@ -622,6 +622,13 @@ const SubmissionsTable = ({
                           >
                             —
                           </span>
+                        ) : rest.pending ? (
+                          <Badge
+                            ghost
+                            title={t("submissions.table.pendingGradeTitle")}
+                          >
+                            {t("submissions.table.pendingGrade")}
+                          </Badge>
                         ) : (
                           <ScoreBadge
                             score={score}

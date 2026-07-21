@@ -70,6 +70,10 @@ export type SubmissionRow = {
   late?: boolean
   // Last (re-)graded instant of the latest submission (mirrors submissions[0]).
   gradedAt?: string
+  // A live-only row: the student has a submit/* release the collector hasn't
+  // ingested yet, so it carries presence (datetime/release) but no grade.
+  // Rendered as "submitted, not yet collected" rather than a 0/0 score.
+  pending?: boolean
   // Per-attempt history, newest first; the summary fields above mirror submissions[0].
   submissions: SubmissionAttempt[]
 }

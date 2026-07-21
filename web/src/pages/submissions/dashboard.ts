@@ -38,7 +38,51 @@ export function rosterScopedRows(
   return rows.filter((row) => rowOnRoster(row, rosterLogins))
 }
 
-// `thresholdFraction` is the passing bar as a fraction of max, or `null` when
+// Fold live submission presence (submit/* releases read directly from student
+// repos) into the collected snapshot rows. `scores.json` stays the source of
+// record: a snapshot row always wins for an owner it already covers (it carries
+// the graded score; live presence carries none yet — see the plan's U2 spike).
+// Live adds a row ONLY for an owner absent from the snapshot — a student who
+// pushed but hasn't been collected yet (the #347 lag). Such a row is marked
+// `pending` (no grade) so the table shows "submitted, not yet collected" rather
+// than a fake 0/0. Owner match is case-insensitive; the union preserves snapshot
+// order, then appends live-only rows newest-first.
+export type LiveSubmissionPresence = {
+  owner: string
+  datetime: string
+  release: string
+}
+
+export function mergeLiveRows(
+  snapshotRows: SubmissionRow[],
+  liveRows: LiveSubmissionPresence[],
+): SubmissionRow[] {
+  const snapshotOwners = new Set(
+    snapshotRows.map((row) => row.owner.trim().toLowerCase()),
+  )
+
+  const liveOnly = liveRows
+    .filter((live) => !snapshotOwners.has(live.owner.trim().toLowerCase()))
+    .sort(
+      (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
+    )
+    .map<SubmissionRow>((live) => ({
+      usernames: [live.owner],
+      owner: live.owner,
+      datetime: live.datetime,
+      commit: "",
+      release: live.release,
+      review: "",
+      score: 0,
+      "max-score": 0,
+      submissionCount: 1,
+      pending: true,
+      submissions: [],
+    }))
+
+  return [...snapshotRows, ...liveOnly]
+}
+
 // the assignment sets no threshold — then every row is "ungraded" (as is an
 // ungraded/zero-max row).
 export type PassState = "passing" | "failing" | "ungraded"

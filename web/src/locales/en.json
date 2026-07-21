@@ -1550,6 +1550,14 @@
     "updated": "Updated {{when}}",
     "justNow": "just now",
     "refresh": "Refresh submissions",
+    "live": {
+      "checking": "Checking submissions live…",
+      "pending_one": "{{count}} submitted, not yet collected",
+      "pending_other": "{{count}} submitted, not yet collected",
+      "errors_one": "{{count}} repo couldn't be read",
+      "errors_other": "{{count}} repos couldn't be read",
+      "showNext": "Show next {{count}}"
+    },
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",
@@ -1696,6 +1704,8 @@
       "noDetailsLabel": "No autograder details yet",
       "noDetails": "No details yet",
       "noGradingTitle": "Autograding is disabled for this assignment",
+      "pendingGrade": "Pending",
+      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Collect now\" or wait for the nightly collection.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",
