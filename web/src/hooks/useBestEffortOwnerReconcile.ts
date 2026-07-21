@@ -33,8 +33,8 @@ const defaultIsPermanent = (err: unknown): boolean =>
   err instanceof GitHubAPIError && err.isForbidden && !err.isRateLimited
 
 // Fire a best-effort, owner-only reconcile once per (org, classroom) the viewer
-// visits. Extracted from the near-identical useTeacherTeamMigration and
-// useTeamDescriptionBackfill so the subtle concurrency invariant lives in one
+// visits. Extracted from the near-identical per-resource reconciles (now unified
+// under useClassroomReconcile) so the subtle concurrency invariant lives in one
 // place. The `inFlight` Set (not a single slot) is load-bearing: it makes
 // StrictMode's paired effect invocation a no-op AND stops a superseded run's
 // late onError from clearing a newer same-key run's guard.

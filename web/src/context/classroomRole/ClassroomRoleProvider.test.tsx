@@ -16,18 +16,13 @@ vi.mock("@/hooks/useClassroomRole", async (importOriginal) => {
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "prof" } }),
 }))
-// The provider mounts the best-effort teacher-team self-heal migration; it
-// needs the GitHub client + query client and is orthogonal to role resolution,
-// so stub it out here (its own behavior is covered in
-// useTeacherTeamMigration.test.tsx).
-vi.mock("@/hooks/useTeacherTeamMigration", () => ({
-  useTeacherTeamMigration: () => {},
-}))
-// Same rationale: the provider also mounts the best-effort student-team
-// description backfill; its own behavior is covered in
-// useTeamDescriptionBackfill.test.tsx, so stub it here.
-vi.mock("@/hooks/useTeamDescriptionBackfill", () => ({
-  useTeamDescriptionBackfill: () => {},
+// The provider mounts the centralized best-effort classroom reconcile
+// (teacher-team self-heal, staff-team ensure, student-team description
+// backfill); it needs the GitHub client + query client and is orthogonal to
+// role resolution, so stub it out here (its own behavior is covered in
+// useClassroomReconcile.test.tsx).
+vi.mock("@/hooks/useClassroomReconcile", () => ({
+  useClassroomReconcile: () => {},
 }))
 
 import {
