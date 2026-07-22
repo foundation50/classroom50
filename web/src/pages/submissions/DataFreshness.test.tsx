@@ -50,28 +50,35 @@ describe("DataFreshness", () => {
     ).not.toBeNull()
   })
 
-  it("shows the stale hint only when an assignment repo was pushed since collect", () => {
+  it("shows the warning 'Sync submissions now' button when out of sync, else 'Refresh'", () => {
     const { rerender } = render(<DataFreshness {...base} stale={false} />)
-    expect(screen.queryByText(/submissions\.freshness\.stale/)).toBeNull()
+    expect(screen.getByText("submissions.freshness.refresh")).not.toBeNull()
+    expect(screen.queryByText("submissions.freshness.sync")).toBeNull()
     rerender(<DataFreshness {...base} stale />)
-    expect(screen.getByText(/submissions\.freshness\.stale/)).not.toBeNull()
+    expect(screen.getByText("submissions.freshness.sync")).not.toBeNull()
+    expect(screen.queryByText("submissions.freshness.refresh")).toBeNull()
   })
 
-  it("renders a Refresh submissions button that triggers collect", async () => {
+  it("triggers collect when the button is clicked (in sync or out of sync)", async () => {
     const onRefresh = vi.fn()
-    render(<DataFreshness {...base} onRefresh={onRefresh} />)
+    const { rerender } = render(
+      <DataFreshness {...base} onRefresh={onRefresh} />,
+    )
     await userEvent.click(screen.getByText("submissions.freshness.refresh"))
-    expect(onRefresh).toHaveBeenCalledOnce()
+    rerender(<DataFreshness {...base} stale onRefresh={onRefresh} />)
+    await userEvent.click(screen.getByText("submissions.freshness.sync"))
+    expect(onRefresh).toHaveBeenCalledTimes(2)
   })
 
   it("disables the button and shows 'Collecting…' while a collect is in flight", () => {
-    render(<DataFreshness {...base} collecting />)
+    render(<DataFreshness {...base} stale collecting />)
     const btn = screen.getByText("submissions.freshness.refreshing")
     expect((btn.closest("button") as HTMLButtonElement).disabled).toBe(true)
   })
 
   it("omits the button entirely when no onRefresh is provided", () => {
-    render(<DataFreshness {...base} onRefresh={undefined} />)
+    render(<DataFreshness {...base} stale onRefresh={undefined} />)
+    expect(screen.queryByText("submissions.freshness.sync")).toBeNull()
     expect(screen.queryByText("submissions.freshness.refresh")).toBeNull()
     expect(screen.queryByText("submissions.freshness.refreshing")).toBeNull()
   })

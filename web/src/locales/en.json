@@ -1577,10 +1577,10 @@
     "viewSourceRepo": "View source repository",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
     "freshness": {
-      "collected": "Collected {{when}}",
-      "neverCollected": "Never collected",
-      "stale": "new pushes since",
-      "help": "Scores come from the last collection (scores.json). If any assignment repo was pushed after that, the snapshot is out of date — collect again to grade the newest work.",
+      "collected": "Submission data updated {{when}}",
+      "neverCollected": "Submission data not collected yet",
+      "sync": "Sync submissions now",
+      "syncHelp": "New pushes to assignment repos since the last collection. Run Collect Scores to rebuild scores.json and grade the newest work.",
       "refresh": "Refresh submissions",
       "refreshing": "Collecting…",
       "refreshHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"

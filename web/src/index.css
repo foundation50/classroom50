@@ -40,7 +40,12 @@
   --color-success: #3f7d54;
   --color-success-content: #fafafa;
   --color-warning: #a4741d;
-  --color-warning-content: #1b1b1d;
+  /* Light content so a SOLID warning fill (btn-warning / non-soft badge) reads
+     as white-on-gold like every other semantic fill here — the dark #1b1b1d
+     content it shipped with gave dark-on-gold, failing contrast. Soft badges are
+     unaffected (they use --color-warning as foreground, not the content token).
+     The fill itself is darkened for text use in the AA-override block below. */
+  --color-warning-content: #fafafa;
   --color-error: #b0392f;
   --color-error-content: #fafafa;
 
