@@ -1585,6 +1585,10 @@
       "refreshing": "Collecting…",
       "refreshHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
     },
+    "live": {
+      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\".",
+      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\"."
+    },
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",
@@ -1711,11 +1715,15 @@
       "showSubmissions": "Show all submissions",
       "submissionCount_one": "{{count}} submission",
       "submissionCount_other": "{{count}} submissions",
+      "staleCount": "New",
+      "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Sync submissions now\" to grade and score the newest.",
       "late": "Late",
       "lateRowTitle": "The latest submission was pushed after the deadline.",
       "lateHistoryTitle": "Pushed after the deadline.",
       "gradedAt": "Graded {{date}}",
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
+      "liveLatest": "Latest push {{date}} · not yet graded",
+      "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Sync submissions now\" to grade and score it.",
       "membersAria": "View and manage group members",
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
@@ -1730,6 +1738,8 @@
       "noGradingTitle": "Autograding is disabled for this assignment",
       "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
       "loading": "Loading submissions…",
+      "pendingGrade": "Pending",
+      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",

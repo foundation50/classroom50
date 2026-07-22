@@ -82,4 +82,11 @@ describe("DataFreshness", () => {
     expect(screen.queryByText("submissions.freshness.refresh")).toBeNull()
     expect(screen.queryByText("submissions.freshness.refreshing")).toBeNull()
   })
+
+  it("shows a degraded-read warning when some repos couldn't be read", () => {
+    const { rerender } = render(<DataFreshness {...base} errorCount={0} />)
+    expect(screen.queryByText(/submissions\.live\.incomplete/)).toBeNull()
+    rerender(<DataFreshness {...base} errorCount={3} />)
+    expect(screen.getByText(/submissions\.live\.incomplete/)).not.toBeNull()
+  })
 })

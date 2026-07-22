@@ -38,6 +38,83 @@ export function rosterScopedRows(
   return rows.filter((row) => rowOnRoster(row, rosterLogins))
 }
 
+// Fold live submission presence (submit/* releases read directly from student
+// repos) into the collected snapshot rows. `scores.json` stays the source of
+// record for GRADES: a snapshot row keeps its graded score, history, and
+// review link. Live data contributes two things on top:
+//
+//   - COUNT: a snapshot row's `submissionCount` is raised to the live count
+//     when the student has pushed more submit/* releases than the last collect
+//     ingested (the #347 lag). The row is flagged `staleCount` so the table can
+//     hint that the newest push isn't graded yet. Live never LOWERS a count
+//     (a live read is one page / a lower bound; the snapshot may legitimately
+//     hold more), so the merged count is max(snapshot, live).
+//   - PRESENCE: live adds a row ONLY for an owner absent from the snapshot — a
+//     student who pushed but hasn't been collected yet. Such a row is `pending`
+//     (no grade) with the live count, so the table shows "submitted, not yet
+//     collected" rather than a fake 0/0.
+//
+// Owner match is case-insensitive; the union preserves snapshot order (with
+// counts updated in place), then appends live-only rows newest-first.
+export type LiveSubmissionPresence = {
+  owner: string
+  datetime: string
+  release: string
+  // Live submit/* release count for the repo (a lower bound; see LiveSubmission).
+  submissionCount: number
+}
+
+export function mergeLiveRows(
+  snapshotRows: SubmissionRow[],
+  liveRows: LiveSubmissionPresence[],
+): SubmissionRow[] {
+  const liveByOwner = new Map<string, LiveSubmissionPresence>()
+  for (const live of liveRows) {
+    liveByOwner.set(live.owner.trim().toLowerCase(), live)
+  }
+
+  const merged = snapshotRows.map((row) => {
+    const live = liveByOwner.get(row.owner.trim().toLowerCase())
+    // Live is a lower bound (one page), so it can only reveal MORE submissions
+    // than the snapshot captured, never fewer. Only bump + flag when it does,
+    // and carry the live push time so the table can show the true latest push
+    // (later than the graded datetime) without moving the graded submission.
+    if (!live || live.submissionCount <= row.submissionCount) return row
+    return {
+      ...row,
+      submissionCount: live.submissionCount,
+      staleCount: true,
+      liveLatestAt: live.datetime,
+    }
+  })
+
+  const snapshotOwners = new Set(
+    snapshotRows.map((row) => row.owner.trim().toLowerCase()),
+  )
+
+  const liveOnly = liveRows
+    .filter((live) => !snapshotOwners.has(live.owner.trim().toLowerCase()))
+    .sort(
+      (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
+    )
+    .map<SubmissionRow>((live) => ({
+      usernames: [live.owner],
+      owner: live.owner,
+      datetime: live.datetime,
+      commit: "",
+      release: live.release,
+      review: "",
+      score: 0,
+      "max-score": 0,
+      // At least 1 (the release we just saw); use the live count when higher.
+      submissionCount: Math.max(1, live.submissionCount),
+      pending: true,
+      submissions: [],
+    }))
+
+  return [...merged, ...liveOnly]
+}
+
 // The most recent push time across this assignment's repos, or null when none
 // have been pushed / none exist. Used as a cheap staleness heuristic for the
 // collected snapshot: if any assignment repo was pushed AFTER the last collect
@@ -858,6 +935,61 @@ export function buildNameKeyLookup(students: Student[]): Map<string, string> {
 // (Mirrors the prior `getName(owner) || owner`.)
 function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
+}
+
+// Count of rows on a page whose live presence is newer than the collected
+// snapshot: pushed-again rows (staleCount) plus as-yet-uncollected submitters
+// (pending). Drives the freshness "N new on this page" signal (page-scoped).
+export function countNewSincePage(rows: SubmissionRow[]): number {
+  return rows.filter((row) => row.staleCount || row.pending).length
+}
+
+// The repo owners on the CURRENTLY RENDERED page, in the table's own display
+// order under the active sort — so the live fan-out reads exactly the repos the
+// user is looking at, whatever sort produced them. Built from the SNAPSHOT
+// display list using the same builders SubmissionsTable uses, so the fanned page
+// and the rendered page line up. It must NOT be fed the live-merged rows: a
+// live-only pending row exists only after the fan-out, so using it here would
+// feed the fan-out's own output back into its input and loop.
+// `nonSubmitter`/`groupRepo` items resolve to their owner login so an
+// as-yet-uncollected or accepted-not-submitted repo is still read.
+export function displayPageOwners({
+  isGroup,
+  sort,
+  students,
+  rows,
+  nonSubmitters,
+  groupRepos,
+  page,
+  pageSize,
+}: {
+  isGroup: boolean
+  sort: SubmissionSort
+  students: Student[]
+  rows: SubmissionRow[]
+  nonSubmitters: Student[]
+  groupRepos: GroupRepo[]
+  page: number
+  pageSize: number
+}): string[] {
+  const items = isGroup
+    ? sort === "name-asc"
+      ? buildGroupRosterDisplayItems(rows, groupRepos, students)
+      : buildGroupDisplayItems(rows, groupRepos)
+    : sort === "name-asc"
+      ? buildRosterDisplayItems(students, rows, nonSubmitters)
+      : buildSortedDisplayItems(rows, nonSubmitters)
+  const seen = new Set<string>()
+  const owners: string[] = []
+  for (const item of paginateDisplayItems(items, pageSize, page)) {
+    const owner = displayItemOwner(item).trim()
+    if (!owner) continue
+    const key = owner.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    owners.push(owner)
+  }
+  return owners
 }
 
 // The compact list of page numbers to render, with `null` marking an ellipsis

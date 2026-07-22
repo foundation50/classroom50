@@ -1,7 +1,7 @@
 import { Info, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Button, cx } from "@/components/ui"
+import { Alert, Button, cx } from "@/components/ui"
 
 // One passive freshness surface for the submissions dashboard. The table always
 // shows the collected scores.json snapshot; this line states when the submission
@@ -24,6 +24,9 @@ export type DataFreshnessProps = {
   // Trigger a Collect Scores run to rebuild scores.json. Omitted when the
   // viewer can't collect (e.g. empty roster) — then no button renders.
   onRefresh?: () => void
+  // Repos the live fan-out couldn't read (owner only); > 0 shows a warning so
+  // an incomplete live status doesn't look authoritative.
+  errorCount?: number
   // empty_repo assignments never autograde; show that instead of freshness.
   emptyRepo?: boolean
 }
@@ -33,6 +36,7 @@ export function DataFreshness({
   stale,
   collecting,
   onRefresh,
+  errorCount = 0,
   emptyRepo = false,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
@@ -51,38 +55,50 @@ export function DataFreshness({
     : t("submissions.freshness.neverCollected")
 
   return (
-    <div
-      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70"
-      role="status"
-    >
-      <span>{collectedLine}</span>
+    <div className="flex flex-col items-start gap-1">
+      <div
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70"
+        role="status"
+      >
+        <span>{collectedLine}</span>
 
-      {onRefresh && (
-        // Stale: a warning-colored "Sync submissions now" flags the out-of-date
-        // snapshot and re-collects on click. In sync: a quiet ghost "Refresh".
-        <Button
-          variant={stale ? "warning" : "ghost"}
-          size="xs"
-          disabled={collecting}
-          onClick={onRefresh}
-          aria-live="polite"
-          title={
-            stale
-              ? t("submissions.freshness.syncHelp")
-              : t("submissions.freshness.refreshHelp")
-          }
-        >
-          <RefreshCw
-            aria-hidden="true"
-            size={12}
-            className={cx("mr-1", collecting && "animate-spin")}
-          />
-          {collecting
-            ? t("submissions.freshness.refreshing")
-            : stale
-              ? t("submissions.freshness.sync")
-              : t("submissions.freshness.refresh")}
-        </Button>
+        {onRefresh && (
+          // Stale: a warning-colored "Sync submissions now" flags the
+          // out-of-date snapshot and re-collects on click. In sync: a quiet
+          // ghost "Refresh".
+          <Button
+            variant={stale ? "warning" : "ghost"}
+            size="xs"
+            disabled={collecting}
+            onClick={onRefresh}
+            aria-live="polite"
+            title={
+              stale
+                ? t("submissions.freshness.syncHelp")
+                : t("submissions.freshness.refreshHelp")
+            }
+          >
+            <RefreshCw
+              aria-hidden="true"
+              size={12}
+              className={cx("mr-1", collecting && "animate-spin")}
+            />
+            {collecting
+              ? t("submissions.freshness.refreshing")
+              : stale
+                ? t("submissions.freshness.sync")
+                : t("submissions.freshness.refresh")}
+          </Button>
+        )}
+      </div>
+
+      {/* Degraded live read: some repos couldn't be read, so live status is
+          provisional. Say so rather than showing an incomplete view as
+          authoritative. */}
+      {errorCount > 0 && (
+        <Alert tone="warning" role="status">
+          {t("submissions.live.incomplete", { count: errorCount })}
+        </Alert>
       )}
     </div>
   )

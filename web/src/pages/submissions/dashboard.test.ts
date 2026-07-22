@@ -16,13 +16,16 @@ import {
   buildSectionLookup,
   classAverage,
   computeStats,
+  countNewSincePage,
   displayItemOwner,
+  displayPageOwners,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
   latestAssignmentPush,
+  mergeLiveRows,
   nonSubmitterStatus,
   pageBounds,
   paginateDisplayItems,
@@ -920,6 +923,152 @@ describe("latestAssignmentPush / snapshotIsStale", () => {
   it("is never stale when there is no push", () => {
     expect(snapshotIsStale(null, null)).toBe(false)
     expect(snapshotIsStale(null, "2026-06-20T10:00:00Z")).toBe(false)
+  })
+})
+
+describe("mergeLiveRows", () => {
+  const live = (owner: string, datetime: string, submissionCount = 1) => ({
+    owner,
+    datetime,
+    release: `https://github.com/o/${owner}/releases/tag/submit`,
+    submissionCount,
+  })
+
+  it("keeps snapshot rows unchanged when live adds nothing", () => {
+    const snapshot = [row({ owner: "alice", score: 8 })]
+    const merged = mergeLiveRows(snapshot, [])
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(8)
+    expect(merged[0].pending).toBeUndefined()
+  })
+
+  it("adds a pending row for a live-only owner absent from the snapshot", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice" })],
+      [live("bob", "2026-06-21T10:00:00Z", 3)],
+    )
+    const bob = merged.find((r) => r.owner === "bob")
+    expect(bob?.pending).toBe(true)
+    expect(bob?.submissionCount).toBe(3)
+    expect(bob?.["max-score"]).toBe(0)
+  })
+
+  it("floors a live-only row's count at 1 even if the live count is 0", () => {
+    const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 0)])
+    expect(merged[0].submissionCount).toBe(1)
+  })
+
+  it("raises a snapshot row's count to the live count and flags it stale", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", score: 9, submissionCount: 1 })],
+      [live("Alice", "2026-06-25T10:00:00Z", 3)],
+    )
+    expect(merged).toHaveLength(1)
+    expect(merged[0].score).toBe(9) // grade stays from the snapshot
+    expect(merged[0].pending).toBeUndefined()
+    expect(merged[0].submissionCount).toBe(3)
+    expect(merged[0].staleCount).toBe(true)
+    expect(merged[0].liveLatestAt).toBe("2026-06-25T10:00:00Z")
+  })
+
+  it("never lowers a snapshot row's count when live reads fewer (lower bound)", () => {
+    const merged = mergeLiveRows(
+      [row({ owner: "alice", score: 9, submissionCount: 5 })],
+      [live("alice", "2026-06-25T10:00:00Z", 2)],
+    )
+    expect(merged[0].submissionCount).toBe(5)
+    expect(merged[0].staleCount).toBeUndefined()
+    expect(merged[0].liveLatestAt).toBeUndefined()
+  })
+
+  it("orders live-only rows newest-first", () => {
+    const merged = mergeLiveRows(
+      [],
+      [
+        live("old", "2026-01-01T00:00:00Z"),
+        live("new", "2026-09-01T00:00:00Z"),
+      ],
+    )
+    expect(merged.map((r) => r.owner)).toEqual(["new", "old"])
+  })
+})
+
+describe("countNewSincePage", () => {
+  it("counts pushed-again (staleCount) and uncollected (pending) rows", () => {
+    const rows = [
+      row({ score: 9, "max-score": 10 }), // collected, current
+      row({ owner: "bob", staleCount: true }), // pushed again after collect
+      row({ owner: "cara", pending: true }), // submitted, not yet collected
+    ]
+    expect(countNewSincePage(rows)).toBe(2)
+  })
+
+  it("is zero when nothing on the page is newer than the snapshot", () => {
+    expect(countNewSincePage([row({ score: 5, "max-score": 10 })])).toBe(0)
+    expect(countNewSincePage([])).toBe(0)
+  })
+})
+
+describe("displayPageOwners", () => {
+  const students = [
+    student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
+    student({ username: "bob", first_name: "Bob", last_name: "Brown" }),
+    student({ username: "cara", first_name: "Cara", last_name: "Cole" }),
+  ]
+
+  it("returns the current page's owners in name order (name-asc)", () => {
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-asc",
+      students,
+      rows,
+      nonSubmitters: students, // alice + cara have no row
+      groupRepos: [],
+      page: 0,
+      pageSize: 2,
+    })
+    // Name order: alice (non-sub), bob (row) — page of 2.
+    expect(owners).toEqual(["alice", "bob"])
+  })
+
+  it("follows a non-name sort so the fanned page matches the rendered page", () => {
+    // Under a non-name sort the caller passes rows already in sort order;
+    // buildSortedDisplayItems preserves that order, so page 0 is the first
+    // sorted row's owner — not the alphabetically-first owner.
+    const rows = [
+      row({ owner: "cara", usernames: ["cara"], datetime: "2026-06-20" }),
+      row({ owner: "alice", usernames: ["alice"], datetime: "2026-06-01" }),
+    ]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "recent",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [],
+      page: 0,
+      pageSize: 1,
+    })
+    expect(owners).toEqual(["cara"])
+  })
+
+  it("de-duplicates owners (case-insensitively) so a login isn't read twice", () => {
+    const rows = [
+      row({ owner: "alice", usernames: ["alice"] }),
+      row({ owner: "Alice", usernames: ["Alice"] }),
+    ]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "recent", // preserve caller row order; both are the same login
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [],
+      page: 0,
+      pageSize: 10,
+    })
+    expect(owners).toEqual(["alice"])
   })
 })
 
