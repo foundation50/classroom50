@@ -16,9 +16,10 @@ import {
 // Search + sort + filter controls for the assignment overview dashboard.
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The
 // not-submitted filter is hidden for group assignments; passing/accepted selects
-// appear only when available. `trailing` hosts the page's toolbar actions
-// (updated/refresh, Metrics, Invite, Actions menu) so they share one bar with
-// search + filters — keeping the roster high on the page.
+// appear only when available. `leading` hosts the left-aligned DataFreshness
+// widget (mode toggle + recency + refresh); `trailing` hosts the Actions menu
+// (Share, Metrics, Collect, Regrade, CSV) — so freshness, search + filters, and
+// actions share one bar, keeping the roster high on the page.
 const SubmissionsControls = ({
   query,
   onQueryChange,

@@ -739,8 +739,8 @@ export function buildRosterDisplayItems(
 // one item per group founder, name-sorted, resolved to the founder's submitted
 // row when one exists (owner match) else an unsubmitted group-repo row. This is
 // the group analog of buildRosterDisplayItems and pages in the SAME order as
-// pageRepoOwners' group branch, so the live fan-out and the rendered page line
-// up. `rows` are the (filtered) submitted group rows; `groupRepos` the
+// pageRepoOwnerSpine's group branch, so the live fan-out and the rendered page
+// line up. `rows` are the (filtered) submitted group rows; `groupRepos` the
 // unsubmitted group repos.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
@@ -845,15 +845,15 @@ export function displayItemOwner(item: DisplayItem): string {
   }
 }
 
-// The repo owners the live fan-out should read for the current page — a
-// deterministic, name-ordered, page-scoped slice so a large class is read a
-// page at a time (each page's owner-set is cached by react-query), not all at
-// once. Filtered by search + section only (NOT submitted/passing status): those
-// status axes depend on live presence, and using them here would make the owner
-// set depend on the very data we're fetching. Search/section are
-// live-independent, so the page's owners are stable across the live merge and
-// the fan-out doesn't loop. For groups the unit is the founder/repo owner.
-export function pageRepoOwners({
+// The full, deterministic, name-ordered owner list the live fan-out pages over
+// — filtered by search + section ONLY (NOT submitted/passing status). Those
+// status axes depend on live presence, so using them here would make the owner
+// set depend on the very data we're fetching; search/section are live-
+// independent, so the spine is stable across the live merge and the fan-out
+// doesn't loop. For groups the unit is the founder/repo owner. This is the
+// single source both the fan-out slice (pageRepoOwners) and the page-count
+// clamp read, so the fanned-out page can't drift from a page the user can see.
+export function pageRepoOwnerSpine({
   isGroup,
   roster,
   groupRepos,
@@ -861,8 +861,6 @@ export function pageRepoOwners({
   section,
   sectionByUsername,
   students,
-  page,
-  pageSize,
 }: {
   isGroup: boolean
   roster: Student[]
@@ -871,16 +869,13 @@ export function pageRepoOwners({
   section: string
   sectionByUsername: Map<string, string>
   students: Student[]
-  page: number
-  pageSize: number
 }): string[] {
   const q = query.trim().toLowerCase()
-  let owners: string[]
   if (isGroup) {
     // Page the group founders in the SAME order the table renders them: by
     // founder display name (the name-asc live view). Match search against the
     // founder login or roster display name. Section isn't a group concept.
-    owners = [...groupRepos]
+    return [...groupRepos]
       .sort((a, b) =>
         (getName(a.owner, students) || a.owner)
           .toLowerCase()
@@ -893,28 +888,43 @@ export function pageRepoOwners({
         return name.length > 0 && name.includes(q)
       })
       .map((repo) => repo.owner)
-  } else {
-    owners = roster
-      .filter((student) => {
-        if (
-          section !== "all" &&
-          sectionByUsername.get(student.username.trim().toLowerCase()) !==
-            section
-        ) {
-          return false
-        }
-        if (!q) return true
-        const login = student.username.toLowerCase()
-        if (login.includes(q)) return true
-        const name = getName(student.username, students).toLowerCase()
-        return name.length > 0 && name.includes(q)
-      })
-      .map((student) => student.username)
-      .filter(Boolean)
   }
-  const { page: clamped } = pageBounds(owners.length, pageSize, page)
-  const start = clamped * pageSize
-  return owners.slice(start, start + pageSize)
+  return roster
+    .filter((student) => {
+      if (
+        section !== "all" &&
+        sectionByUsername.get(student.username.trim().toLowerCase()) !== section
+      ) {
+        return false
+      }
+      if (!q) return true
+      const login = student.username.toLowerCase()
+      if (login.includes(q)) return true
+      const name = getName(student.username, students).toLowerCase()
+      return name.length > 0 && name.includes(q)
+    })
+    .map((student) => student.username)
+    .filter(Boolean)
+}
+
+// The repo owners the live fan-out should read for the current page — a
+// page-scoped slice of pageRepoOwnerSpine so a large class is read a page at a
+// time (each page's owner-set is cached by react-query), not all at once.
+export function pageRepoOwners(args: {
+  isGroup: boolean
+  roster: Student[]
+  groupRepos: GroupRepo[]
+  query: string
+  section: string
+  sectionByUsername: Map<string, string>
+  students: Student[]
+  page: number
+  pageSize: number
+}): string[] {
+  const owners = pageRepoOwnerSpine(args)
+  const { page: clamped } = pageBounds(owners.length, args.pageSize, args.page)
+  const start = clamped * args.pageSize
+  return owners.slice(start, start + args.pageSize)
 }
 
 // The compact list of page numbers to render, with `null` marking an ellipsis

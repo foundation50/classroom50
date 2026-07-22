@@ -32,7 +32,8 @@ import {
   filterNonSubmitters,
   hasAccepted,
   mergeLiveRows,
-  pageRepoOwners,
+  pageBounds,
+  pageRepoOwnerSpine,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowInSection,
@@ -182,7 +183,7 @@ const SubmissionsPageContent = () => {
   // owner-only) but only in the plain name-ordered, unfiltered view the
   // page-scoped fan-out can align to; static reads the collected scores.json
   // snapshot and supports full sort + status/passing filtering. The toggle makes
-  // this explicit (the controls disable sort/status in live mode). Default to
+  // this explicit (the controls hide sort/status in live mode). Default to
   // live for owners; forced static for anyone who can't fan out (see
   // liveCapable) so a TA/HTA never sees a live toggle that can't work.
   const [viewMode, setViewMode] = useState<"live" | "static">("live")
@@ -283,9 +284,9 @@ const SubmissionsPageContent = () => {
   // a page at a time instead of all at once. react-query caches each page's
   // owner-set, so revisiting a page is free. Owner-only (see isOwner) and
   // disabled for empty_repo assignments (never autograded).
-  const livePageOwners = useMemo(
+  const liveOwnerSpine = useMemo(
     () =>
-      pageRepoOwners({
+      pageRepoOwnerSpine({
         isGroup: isGroupAssignment,
         roster: students,
         groupRepos: groupRepoList,
@@ -293,8 +294,6 @@ const SubmissionsPageContent = () => {
         section: filters.section,
         sectionByUsername,
         students,
-        page,
-        pageSize,
       }),
     [
       isGroupAssignment,
@@ -303,10 +302,29 @@ const SubmissionsPageContent = () => {
       query,
       filters.section,
       sectionByUsername,
-      page,
-      pageSize,
     ],
   )
+  const livePageOwners = useMemo(() => {
+    const { page: clamped } = pageBounds(liveOwnerSpine.length, pageSize, page)
+    const start = clamped * pageSize
+    return liveOwnerSpine.slice(start, start + pageSize)
+  }, [liveOwnerSpine, page, pageSize])
+  // In live mode the fan-out pages over liveOwnerSpine, but the rendered table's
+  // display list transiently shrinks during a page's first fetch (nonSubmitters
+  // is held empty until the fan-out lands), which would clamp the visible page
+  // below `page` while the fan-out still reads the higher, invisible page. Pull
+  // `page` back to the spine's clamp render-purely (same pattern as the view
+  // reset above) so the fanned-out page and the page the user can reach stay in
+  // lockstep. Only in live mode: static pages over the full snapshot, whose
+  // length is readiness-independent, so the table's own clamp already suffices.
+  if (liveActive) {
+    const { page: clampedLive } = pageBounds(
+      liveOwnerSpine.length,
+      pageSize,
+      page,
+    )
+    if (clampedLive !== page) setPage(clampedLive)
+  }
   const {
     submissions: liveSubmissions,
     errorCount: liveErrorCount,
@@ -345,6 +363,19 @@ const SubmissionsPageContent = () => {
       : snapshotRows
     return rosterReady ? rosterScopedRows(merged, students) : merged
   }, [liveActive, snapshotRows, liveSubmissions, rosterReady, students])
+
+  // The roster-scoped snapshot WITHOUT the live merge — the authoritative,
+  // page-independent gradebook. `scoresInfo` bumps counts and adds pending rows
+  // only for the current page's fanned-out owners, so anything that must be
+  // consistent regardless of the table page (the CSV export) reads this instead:
+  // the downloaded file's counts always match scores.json, never the last-viewed
+  // page. In static view the two are identical (no merge), so this only diverges
+  // in live view — exactly where the export must stay snapshot-backed.
+  const snapshotScoped = useMemo(
+    () =>
+      rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
+    [snapshotRows, rosterReady, students],
+  )
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
@@ -619,7 +650,11 @@ const SubmissionsPageContent = () => {
     // pre-#174 export). Individual non-submitters (accepted-no-push or
     // never-accepted) are still legitimately 0 and stay in the export.
     const csvNonSubmitters = isGroupAssignment ? [] : nonSubmitters
-    const rows = buildScoresCsvRows(scoresInfo, csvNonSubmitters)
+    // Export the authoritative snapshot, not the live-merged view: `scoresInfo`
+    // carries live count bumps only for the current page's owners, which would
+    // make the file's counts depend on the last-viewed page. The gradebook file
+    // must match scores.json regardless of paging, so read snapshotScoped.
+    const rows = buildScoresCsvRows(snapshotScoped, csvNonSubmitters)
 
     const csv = Papa.unparse(rows, {
       header: true,
