@@ -1,8 +1,9 @@
 - [Home](Home)
-- **Web Interface**
+- [Glossary](Glossary)
+- **Web app**
   - [Web Teacher Guide](Web-Teacher-Guide)
   - [Web Student Guide](Web-Student-Guide)
-- **Command-Line Interface**
+- **Command line**
   - [Installation](Installation)
   - [CLI Teacher Guide](CLI-Teacher-Guide)
   - [CLI Student Guide](CLI-Student-Guide)
