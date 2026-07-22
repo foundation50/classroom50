@@ -1,12 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import {
-  Activity,
-  ExternalLink,
-  PauseCircle,
-  PiggyBank,
-  PlayCircle,
-} from "lucide-react"
+import { ExternalLink } from "lucide-react"
 
 import { Badge, MonoLtr, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
@@ -42,7 +36,13 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
   const pct =
     included && included > 0 ? Math.min(100, (used / included) * 100) : 0
   const overQuota = included !== null && used > included
-  const nearQuota = pct >= 80
+  // Blue by default; yellow past 50%; red past 75%.
+  const barTone =
+    pct >= 75
+      ? "progress-error"
+      : pct >= 50
+        ? "progress-warning"
+        : "progress-primary"
 
   if (!usage && !budget) return null
 
@@ -51,8 +51,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
       {usage && (
         <div className="space-y-1.5">
           <div className="flex items-center justify-between gap-2 text-sm">
-            <span className="flex items-center gap-1.5 font-medium">
-              <Activity className="size-4 shrink-0" aria-hidden="true" />
+            <span className="font-medium">
               {t("orgSettings.actions.usageTitle")}
             </span>
             <span className="text-base-content/70">
@@ -69,14 +68,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
 
           {included !== null && (
             <progress
-              className={
-                "progress w-full " +
-                (overQuota
-                  ? "progress-error"
-                  : nearQuota
-                    ? "progress-warning"
-                    : "progress-success")
-              }
+              className={"progress w-full " + barTone}
               value={pct}
               max={100}
               aria-label={t("orgSettings.actions.usageTitle")}
@@ -99,7 +91,6 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
 
       {budget && (
         <p className="flex flex-wrap items-center gap-1.5 border-t border-base-300 pt-2 text-xs text-base-content/70">
-          <PiggyBank className="size-4 shrink-0" aria-hidden="true" />
           <span>
             {budget.tier === "missing"
               ? t("orgSettings.actions.budgetNone")
@@ -254,22 +245,14 @@ const OrgActionsSection = ({ org }: { org: string }) => {
           )}
 
           {paused && !mutation.isPending && (
-            <CalloutDiv className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-base-content/80">
-              <PauseCircle
-                className="mt-0.5 size-4 shrink-0 text-warning"
-                aria-hidden="true"
-              />
-              <span>{t("orgSettings.actions.pausedNotice")}</span>
+            <CalloutDiv className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-base-content/80">
+              {t("orgSettings.actions.pausedNotice")}
             </CalloutDiv>
           )}
 
           {!paused && !disabled && !unknown && !mutation.isPending && (
-            <div className="flex items-start gap-2 text-sm text-base-content/60">
-              <PlayCircle
-                className="mt-0.5 size-4 shrink-0 text-success"
-                aria-hidden="true"
-              />
-              <span>{t("orgSettings.actions.activeNotice")}</span>
+            <div className="text-sm text-base-content/60">
+              {t("orgSettings.actions.activeNotice")}
             </div>
           )}
 
