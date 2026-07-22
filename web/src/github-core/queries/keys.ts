@@ -154,6 +154,10 @@ export const githubKeys = {
   // usage-summary endpoint.
   orgActionsUsage: (owner: string) =>
     [...githubKeys.all, "orgActionsUsage", owner] as const,
+
+  // The org's Actions spending budget classification (hard-stop cap set?).
+  orgActionsBudget: (owner: string) =>
+    [...githubKeys.all, "orgActionsBudget", owner] as const,
 }
 
 // Refresh a single classroom team's members + pending invitations after a

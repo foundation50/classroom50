@@ -1,6 +1,12 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { Activity, ExternalLink, PauseCircle, PlayCircle } from "lucide-react"
+import {
+  Activity,
+  ExternalLink,
+  PauseCircle,
+  PiggyBank,
+  PlayCircle,
+} from "lucide-react"
 
 import { Badge, MonoLtr, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
@@ -9,30 +15,111 @@ import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
+import { orgBudgetsUrl } from "@/orgPolicy/budget"
+import { includedActionsMinutes } from "@/github-core/queries"
 import useGetOrgActionsMode from "@/hooks/useGetOrgActionsMode"
 import useGetOrgActionsUsage from "@/hooks/useGetOrgActionsUsage"
+import useGetOrgActionsBudget from "@/hooks/useGetOrgActionsBudget"
+import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
 
-// This-month Actions usage (minutes + $), shown when billing is readable. A
-// small advisory row, not a gate — renders nothing when usage is unavailable.
-const ActionsUsageRow = ({ org }: { org: string }) => {
+// This-month Actions usage visualized against the plan's included-minutes quota,
+// plus the org's spending-budget status. All advisory: each piece renders only
+// when its data is readable (billing/plan are owner-only and enhanced-billing
+// gated), so a billing-blind org still shows the kill switch with nothing here.
+const ActionsUsagePanel = ({ org }: { org: string }) => {
   const { t } = useTranslation()
-  const { data: usage, isLoading } = useGetOrgActionsUsage(org)
+  const { data: usage } = useGetOrgActionsUsage(org)
+  const { data: budget } = useGetOrgActionsBudget(org)
+  const { data: orgDetails } = useGetOrgPlanDetails(org)
 
-  if (isLoading || !usage) return null
+  const included = includedActionsMinutes(orgDetails?.plan?.name)
+  const used = usage?.minutes ?? 0
+  // Clamp the bar at 100% but keep the real numbers in the label.
+  const pct =
+    included && included > 0 ? Math.min(100, (used / included) * 100) : 0
+  const overQuota = included !== null && used > included
+  const nearQuota = pct >= 80
+
+  if (!usage && !budget) return null
 
   return (
-    <div className="flex items-start gap-2 text-sm text-base-content/70">
-      <Activity className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
-      <span>
-        {t("orgSettings.actions.usageThisMonth", {
-          minutes: usage.minutes.toLocaleString(),
-          amount: usage.netAmountUsd.toFixed(2),
-        })}
-      </span>
+    <div className="space-y-3 rounded-lg border border-base-300 bg-base-200/40 p-3">
+      {usage && (
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between gap-2 text-sm">
+            <span className="flex items-center gap-1.5 font-medium">
+              <Activity className="size-4 shrink-0" aria-hidden="true" />
+              {t("orgSettings.actions.usageTitle")}
+            </span>
+            <span className="text-base-content/70">
+              {included !== null
+                ? t("orgSettings.actions.usageOfIncluded", {
+                    used: used.toLocaleString(),
+                    included: included.toLocaleString(),
+                  })
+                : t("orgSettings.actions.usageMinutes", {
+                    minutes: used.toLocaleString(),
+                  })}
+            </span>
+          </div>
+
+          {included !== null && (
+            <progress
+              className={
+                "progress w-full " +
+                (overQuota
+                  ? "progress-error"
+                  : nearQuota
+                    ? "progress-warning"
+                    : "progress-success")
+              }
+              value={pct}
+              max={100}
+              aria-label={t("orgSettings.actions.usageTitle")}
+            />
+          )}
+
+          <p className="text-xs text-base-content/60">
+            {t("orgSettings.actions.usageCost", {
+              amount: usage.netAmountUsd.toFixed(2),
+            })}
+            {overQuota
+              ? " " +
+                t("orgSettings.actions.usageOverQuota", {
+                  over: (used - (included ?? 0)).toLocaleString(),
+                })
+              : ""}
+          </p>
+        </div>
+      )}
+
+      {budget && (
+        <p className="flex flex-wrap items-center gap-1.5 border-t border-base-300 pt-2 text-xs text-base-content/70">
+          <PiggyBank className="size-4 shrink-0" aria-hidden="true" />
+          <span>
+            {budget.tier === "missing"
+              ? t("orgSettings.actions.budgetNone")
+              : budget.amount === 0
+                ? t("orgSettings.actions.budgetHardStop")
+                : t("orgSettings.actions.budgetAmount", {
+                    amount: budget.amount,
+                  })}
+          </span>
+          <a
+            href={orgBudgetsUrl(org)}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-0.5 text-base-content/60 hover:text-primary"
+          >
+            {t("orgSettings.actions.budgetManage")}
+            <ExternalLink aria-hidden="true" className="size-3" />
+          </a>
+        </p>
+      )}
     </div>
   )
 }
@@ -113,7 +200,7 @@ const OrgActionsSection = ({ org }: { org: string }) => {
         </div>
       ) : (
         <div className="space-y-4">
-          <ActionsUsageRow org={org} />
+          <ActionsUsagePanel org={org} />
 
           <label
             htmlFor="autograde-pause-toggle"
