@@ -63,11 +63,10 @@ export function DataFreshness({
         <span>{collectedLine}</span>
 
         {onRefresh && (
-          // Stale: a warning-colored "Sync submissions now" flags the
-          // out-of-date snapshot and re-collects on click. In sync: a quiet
-          // ghost "Refresh".
+          // Stale: a red "Sync now" flags the out-of-date snapshot and
+          // re-collects on click. In sync: a quiet ghost "Refresh".
           <Button
-            variant={stale ? "warning" : "ghost"}
+            variant={stale ? "error" : "ghost"}
             size="xs"
             disabled={collecting}
             onClick={onRefresh}
