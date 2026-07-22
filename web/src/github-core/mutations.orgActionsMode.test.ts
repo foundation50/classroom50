@@ -138,7 +138,9 @@ describe("setOrgActionsMode", () => {
 
     const writes = calls.filter((c) => c.method === "PUT")
     expect(writes[0].path).toBe(`/orgs/${org}/actions/permissions`)
-    expect(writes[0].body).toMatchObject({ enabled_repositories: "selected" })
+    expect(writes[0].body).toEqual({ enabled_repositories: "selected" })
+    // Must NOT clobber a teacher's allowed_actions posture on pause.
+    expect(writes[0].body).not.toHaveProperty("allowed_actions")
     expect(writes[1].path).toBe(`/orgs/${org}/actions/permissions/repositories`)
     expect(writes[1].body).toEqual({ selected_repository_ids: [42] })
   })
@@ -180,6 +182,18 @@ describe("setOrgActionsMode", () => {
     })
     const result = await setOrgActionsMode(client, org, "active")
     expect(result).toMatchObject({ status: "complete", mode: "active" })
+    expect(calls.some((c) => c.method === "PUT")).toBe(false)
+  })
+
+  it("resume warns (not success) when the policy is unreadable", async () => {
+    // An unreadable policy must surface as a warning, not a green success toast
+    // that hides the failure while the toggle stays put.
+    const { client, calls } = makeClient({ perms: apiError(403) })
+    const result = await setOrgActionsMode(client, org, "active")
+    expect(result).toMatchObject({
+      status: "warning",
+      reason: "readback_failed",
+    })
     expect(calls.some((c) => c.method === "PUT")).toBe(false)
   })
 
@@ -286,6 +300,66 @@ describe("ensureOrgActionsEnabled respects an active pause", () => {
       calls.push({ method, path, body: options?.body })
       if (path === `/orgs/${org}/actions/permissions` && method === "GET")
         return { enabled_repositories: "none" }
+      return {}
+    }
+    const client = { request } as unknown as GitHubClient
+    const result = await ensureOrgActionsEnabled(client, org)
+    expect(result.status).toBe("complete")
+    expect(
+      calls.some(
+        (c) =>
+          c.method === "PUT" &&
+          (c.body as { enabled_repositories?: string })
+            ?.enabled_repositories === "all",
+      ),
+    ).toBe(true)
+  })
+
+  it("fails closed (warns, no 'all' write) when it can't confirm a 'selected' policy is our pause", async () => {
+    // Perms read says "selected", but the inclusion check throws (transient).
+    // Must NOT fall through and force "all" — that would resume student spend.
+    const calls: Call[] = []
+    const request = async (
+      path: string,
+      options?: { method?: string; body?: unknown },
+    ) => {
+      const method = options?.method ?? "GET"
+      calls.push({ method, path, body: options?.body })
+      if (path === `/orgs/${org}/actions/permissions` && method === "GET")
+        return { enabled_repositories: "selected" }
+      if (path.startsWith(`/orgs/${org}/actions/permissions/repositories`))
+        throw apiError(500)
+      return {}
+    }
+    const client = { request } as unknown as GitHubClient
+    const result = await ensureOrgActionsEnabled(client, org)
+    expect(result).toMatchObject({
+      status: "warning",
+      reason: "readback_failed",
+      enabledRepositories: "selected",
+    })
+    expect(
+      calls.some(
+        (c) =>
+          c.method === "PUT" &&
+          (c.body as { enabled_repositories?: string })
+            ?.enabled_repositories === "all",
+      ),
+    ).toBe(false)
+  })
+
+  it("still enables when a 'selected' policy is a teacher's list (not our config repo)", async () => {
+    const calls: Call[] = []
+    const request = async (
+      path: string,
+      options?: { method?: string; body?: unknown },
+    ) => {
+      const method = options?.method ?? "GET"
+      calls.push({ method, path, body: options?.body })
+      if (path === `/orgs/${org}/actions/permissions` && method === "GET")
+        return { enabled_repositories: "selected" }
+      if (path.startsWith(`/orgs/${org}/actions/permissions/repositories`))
+        return { total_count: 1, repositories: [{ id: 7, name: "some-repo" }] }
       return {}
     }
     const client = { request } as unknown as GitHubClient

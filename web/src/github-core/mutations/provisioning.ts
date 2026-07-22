@@ -19,6 +19,7 @@ import {
   type BudgetsListResponse,
 } from "@/orgPolicy/budget"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
+import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import { prefixCommit } from "@/util/commit"
 import { repairRulesets } from "../rulesets"
 import { buildSkeletonFiles, type SkeletonFile } from "@/skeleton/skeleton"
@@ -951,10 +952,6 @@ export type EnsureOrgActionsEnabledResult =
       settingsUrl: string
     }
 
-function orgActionsSettingsUrl(org: string): string {
-  return `https://github.com/organizations/${org}/settings/actions`
-}
-
 async function getOrgActionsPermissions(
   client: GitHubClient,
   org: string,
@@ -981,24 +978,52 @@ export async function ensureOrgActionsEnabled(
   client: GitHubClient,
   org: string,
 ): Promise<EnsureOrgActionsEnabledResult> {
-  const settingsUrl = orgActionsSettingsUrl(org)
+  const settingsUrl = githubOrgActionsSettingsUrl(org)
 
   // Don't clobber an intentional autograding pause. If the teacher paused
   // autograding (org Actions restricted to "selected", with the config repo
   // among the selected repos — see setOrgActionsMode), re-running setup must
   // NOT silently flip it back to "all" and resume student-repo spend. Leave it
   // and warn so the re-run board surfaces the paused state instead.
+  let currentPerms: OrgActionsPermissions | null
   try {
-    const current = await getOrgActionsPermissions(client, org)
-    if (
-      current.enabled_repositories === "selected" &&
-      (await orgActionsSelectionIncludesConfigRepo(client, org))
-    ) {
+    currentPerms = await getOrgActionsPermissions(client, org)
+  } catch {
+    // Couldn't read the current policy — fall through and attempt the normal
+    // enable below (we have no evidence of a pause to preserve).
+    currentPerms = null
+  }
+
+  if (currentPerms?.enabled_repositories === "selected") {
+    // The org is restricted to selected repos. Determine whether it's OUR pause.
+    // Fail CLOSED on a read error here: a transient failure of the inclusion
+    // check must not fall through and force "all", which would resume
+    // student-repo spend during a re-run while a pause is actually in effect.
+    let includesConfigRepo: boolean
+    try {
+      includesConfigRepo = await orgActionsSelectionIncludesConfigRepo(
+        client,
+        org,
+      )
+    } catch {
       return {
         status: "warning",
         org,
         enabledRepositories: "selected",
-        allowedActions: current.allowed_actions ?? "unknown",
+        allowedActions: currentPerms.allowed_actions ?? "unknown",
+        reason: "readback_failed",
+        settingsUrl,
+        message:
+          `${org}: GitHub Actions is restricted to selected repositories, but we couldn't confirm whether autograding is paused. ` +
+          `Left as-is so a transient read error doesn't resume student-repo Actions spend. Retry, or review ${settingsUrl}.`,
+      }
+    }
+    if (includesConfigRepo) {
+      return {
+        status: "warning",
+        org,
+        enabledRepositories: "selected",
+        allowedActions: currentPerms.allowed_actions ?? "unknown",
         reason: "autograding_paused",
         settingsUrl,
         message:
@@ -1007,8 +1032,8 @@ export async function ensureOrgActionsEnabled(
           `Resume from the GitHub Actions section in Org Settings, or at ${settingsUrl}.`,
       }
     }
-  } catch {
-    // Readback failed — fall through and attempt the normal enable below.
+    // "selected" but not our config repo: a teacher-authored allow-list. Fall
+    // through to the normal enable (the pre-existing behavior).
   }
 
   try {
@@ -1171,6 +1196,7 @@ export type SetOrgActionsModeResult =
         | "enterprise_policy"
         | "validation_failed"
         | "config_repo_missing"
+        | "readback_failed"
         | "failed"
       settingsUrl: string
       message: string
@@ -1180,7 +1206,7 @@ function setOrgActionsModeWarning(
   org: string,
   err: unknown,
 ): SetOrgActionsModeResult {
-  const settingsUrl = orgActionsSettingsUrl(org)
+  const settingsUrl = githubOrgActionsSettingsUrl(org)
   const message = getErrorMessage(err)
   if (err instanceof GitHubAPIError) {
     if (err.status === 403)
@@ -1225,7 +1251,7 @@ export async function setOrgActionsMode(
   org: string,
   mode: "paused" | "active",
 ): Promise<SetOrgActionsModeResult> {
-  const settingsUrl = orgActionsSettingsUrl(org)
+  const settingsUrl = githubOrgActionsSettingsUrl(org)
 
   if (mode === "active") {
     // Only resume from a pause WE authored. If the org is on a "selected"
@@ -1234,15 +1260,24 @@ export async function setOrgActionsMode(
     // what the owner set. getOrgActionsMode already reports those as "active",
     // so mirror that on the write side: no-op instead of clobbering.
     const current = await getOrgActionsMode(client, org)
+    // An unreadable policy is NOT a successful no-op: surface it as a warning so
+    // the UI doesn't announce success (green toast) while the toggle silently
+    // stays put.
+    if (current === "unknown") {
+      return {
+        status: "warning",
+        org,
+        reason: "readback_failed",
+        settingsUrl,
+        message: `${org}: couldn't read GitHub Actions permissions to resume — your token may lack owner rights, or an enterprise policy controls them. Review ${settingsUrl}.`,
+      }
+    }
     if (current !== "paused") {
       return {
         status: "complete",
         org,
         mode: current,
-        message:
-          current === "unknown"
-            ? `${org}: couldn't read GitHub Actions permissions to resume; review ${settingsUrl}.`
-            : `${org}: autograding already on — left the organization's GitHub Actions policy unchanged.`,
+        message: `${org}: autograding already on — left the organization's GitHub Actions policy unchanged.`,
       }
     }
     try {
@@ -1271,12 +1306,14 @@ export async function setOrgActionsMode(
   }
 
   try {
-    // Order matters: switch the policy to "selected" first, then set the
-    // allow-list to just the config repo. Doing it the other way (setting the
-    // list while still "all") would 409.
+    // Switch the policy to "selected" first, then set the allow-list to just
+    // the config repo. Doing it the other way (setting the list while still
+    // "all") would 409. Send only enabled_repositories so we don't clobber a
+    // teacher's existing allowed_actions (local_only/selected) — pausing is
+    // about WHICH repos run Actions, not which actions are allowed.
     await client.request(`/orgs/${org}/actions/permissions`, {
       method: "PUT",
-      body: { enabled_repositories: "selected", allowed_actions: "all" },
+      body: { enabled_repositories: "selected" },
     })
     try {
       await client.request(`/orgs/${org}/actions/permissions/repositories`, {
@@ -1449,7 +1486,7 @@ export async function ensureOrgCanCreatePullRequests(
   client: GitHubClient,
   org: string,
 ): Promise<EnsureOrgCanCreatePullRequestsResult> {
-  const settingsUrl = orgActionsSettingsUrl(org)
+  const settingsUrl = githubOrgActionsSettingsUrl(org)
   const path = `/orgs/${org}/actions/permissions/workflow`
 
   let current: OrgWorkflowPermissions

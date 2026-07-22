@@ -11,6 +11,9 @@ export const githubOrgPeopleUrl = (org: string): string =>
 export const githubOrgSettingsUrl = (org: string): string =>
   `https://github.com/organizations/${org}/settings/profile`
 
+export const githubOrgActionsSettingsUrl = (org: string): string =>
+  `https://github.com/organizations/${org}/settings/actions`
+
 // The private config repo's directory for a classroom slug.
 export const classroomConfigTreeUrl = (org: string, slug: string): string =>
   `https://github.com/${org}/${CONFIG_REPO}/tree/${DEFAULT_BRANCH}/${slug}`

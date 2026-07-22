@@ -7,14 +7,13 @@ import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
+import { CONFIG_REPO } from "@/util/configRepo"
+import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import useGetOrgActionsMode from "@/hooks/useGetOrgActionsMode"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
-
-const orgActionsSettingsUrl = (org: string) =>
-  `https://github.com/organizations/${org}/settings/actions`
 
 // GitHub Actions kill switch. Pausing restricts org Actions to the config repo
 // only, which blocks every student repo's autograde shim from running (and the
@@ -67,7 +66,7 @@ const OrgActionsSection = ({ org }: { org: string }) => {
       }
       action={
         <a
-          href={orgActionsSettingsUrl(org)}
+          href={githubOrgActionsSettingsUrl(org)}
           target="_blank"
           rel="noreferrer"
           className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
@@ -120,7 +119,7 @@ const OrgActionsSection = ({ org }: { org: string }) => {
               <span>{t("orgSettings.actions.appliedLabel")}</span>
               <MonoLtr className="rounded bg-base-200 px-1.5 py-0.5 text-[11px]">
                 {paused
-                  ? "enabled_repositories = selected (classroom50)"
+                  ? `enabled_repositories = selected (${CONFIG_REPO})`
                   : "enabled_repositories = all"}
               </MonoLtr>
             </p>
