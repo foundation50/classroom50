@@ -210,7 +210,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	setupOutputs, _ := nested(doc, "jobs", "setup", "outputs")
 	outputsMap, _ := setupOutputs.(map[string]any)
 	for _, out := range []string{
-		"submission-tag", "runs-on", "container",
+		"submission-tag", "runs-on", "self-hosted", "container",
 		"python", "node", "java", "go", "rust", "apt",
 		"base-url", "classroom", "assignment",
 		// is-acceptance gates the whole skip-the-acceptance-commit path;
@@ -330,18 +330,21 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		}
 	}
 
-	// Toolchain steps gated on matching setup outputs.
+	// Toolchain steps gated on matching setup outputs AND on !self-hosted:
+	// a self-hosted runner owns its prebuilt toolchains, so setup-* / apt
+	// must skip for it (issue #369) or they shadow the runner's environment.
 	for _, want := range []string{
-		"if: needs.setup.outputs.python != ''",
+		"if: needs.setup.outputs.python != '' && needs.setup.outputs.self-hosted != 'true'",
 		"actions/setup-python@v6",
-		"if: needs.setup.outputs.node != ''",
+		"if: needs.setup.outputs.node != '' && needs.setup.outputs.self-hosted != 'true'",
 		"actions/setup-node@v6",
-		"if: needs.setup.outputs.java != ''",
+		"if: needs.setup.outputs.java != '' && needs.setup.outputs.self-hosted != 'true'",
 		"actions/setup-java@v5",
-		"if: needs.setup.outputs.go != ''",
+		"if: needs.setup.outputs.go != '' && needs.setup.outputs.self-hosted != 'true'",
 		"actions/setup-go@v6",
-		"if: needs.setup.outputs.rust != ''",
+		"if: needs.setup.outputs.rust != '' && needs.setup.outputs.self-hosted != 'true'",
 		"dtolnay/rust-toolchain@master",
+		"if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && needs.setup.outputs.self-hosted != 'true'",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)
@@ -531,6 +534,66 @@ printf '%s\n' "$*" >> "$GH_LOG"
 	}
 	if !strings.Contains(body, `gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true`) {
 		t.Errorf("set-latest job missing forward-only latest pointer flip")
+	}
+}
+
+// TestAutogradeRunnerSelfHostedSkipsToolchains pins the issue #369 fix: on a
+// self-hosted runner the grade job must skip the managed toolchain/apt setup
+// (setup-python etc. would shadow the runner's prebuilt environment, breaking
+// autograders that import preinstalled deps). Every managed setup step's `if:`
+// must carry the `self-hosted != 'true'` guard; the setup job must emit the
+// self-hosted output, computed from the `self-hosted` label in runs-on.
+func TestAutogradeRunnerSelfHostedSkipsToolchains(t *testing.T) {
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	body, ok := files[".github/workflows/autograde-runner.yaml"]
+	if !ok {
+		t.Fatal("autograde-runner.yaml missing from skeleton")
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("parse autograde-runner.yaml: %v", err)
+	}
+
+	if got, ok := nested(doc, "jobs", "setup", "outputs", "self-hosted"); !ok || got != "${{ steps.read.outputs.self-hosted }}" {
+		t.Errorf("setup.outputs.self-hosted = %#v, want the read-step output", got)
+	}
+
+	// Every managed setup step (each keyed off a version field or apt) must
+	// also gate on self-hosted != 'true'. Identify them by their `uses:` /
+	// apt-install `run:` and assert the guard is present in the `if:`.
+	const guard = "needs.setup.outputs.self-hosted != 'true'"
+	grade, ok := nested(doc, "jobs", "grade")
+	if !ok {
+		t.Fatal("grade job missing")
+	}
+	managed := 0
+	for _, step := range workflowSteps(grade) {
+		uses, _ := step["uses"].(string)
+		run, _ := step["run"].(string)
+		isSetupAction := strings.HasPrefix(uses, "actions/setup-") ||
+			strings.HasPrefix(uses, "dtolnay/rust-toolchain")
+		isApt := strings.Contains(run, "apt-get install")
+		if !isSetupAction && !isApt {
+			continue
+		}
+		managed++
+		cond, _ := step["if"].(string)
+		if !strings.Contains(cond, guard) {
+			label := uses
+			if label == "" {
+				label = "apt-install"
+			}
+			t.Errorf("grade managed setup step %q if: %q is missing the self-hosted skip guard %q (issue #369)", label, cond, guard)
+		}
+	}
+	// python/node/java/go/rust/apt — regression guard against a step that
+	// stops being recognized (and thus silently skips the guard check).
+	if managed != 6 {
+		t.Errorf("recognized %d managed setup steps in grade, want 6 (python/node/java/go/rust/apt)", managed)
 	}
 }
 

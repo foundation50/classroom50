@@ -42,6 +42,11 @@ jobs:
       is-acceptance:  ${{ steps.acceptance.outputs.is-acceptance }}
       submission-tag: ${{ steps.read.outputs.submission-tag }}
       runs-on:        ${{ steps.read.outputs.runs-on }}
+      # 'true' when runs-on carries the self-hosted label. The grade job
+      # skips the managed toolchain/apt setup for it — a self-hosted
+      # runner supplies its own prebuilt environment (Python, deps, etc.),
+      # and setup-* would shadow it, breaking imports of preinstalled packages.
+      self-hosted:    ${{ steps.read.outputs.self-hosted }}
       container:      ${{ steps.read.outputs.container }}
       python:         ${{ steps.read.outputs.python }}
       node:           ${{ steps.read.outputs.node }}
@@ -459,6 +464,16 @@ jobs:
           # self-hosted target share one code path.
           runs_on_json = json.dumps(runs_on_labels)
 
+          # A self-hosted runner carries the implicit `self-hosted` label
+          # (GitHub adds it to every self-hosted runner). When present, the
+          # grade job skips the managed toolchain/apt setup: the runner owns
+          # its own prebuilt environment, and layering setup-python (etc.)
+          # on top shadows it — the fresh interpreter lacks the preinstalled
+          # dependencies, so tests fail on import. Emitted as "true"/"" so
+          # the grade job's `if:` gates read it the same way as the version
+          # fields (empty = falsey).
+          self_hosted = "true" if "self-hosted" in runs_on_labels else ""
+
           for label, value in [("python", python), ("node", node), ("java", java), ("go", go), ("rust", rust)]:
               if value and (not isinstance(value, str) or not _LANG.match(value)):
                   fail(f"runtime.{label} {value!r} must match {_LANG.pattern}")
@@ -560,6 +575,7 @@ jobs:
 
           emit("submission-tag", submission_tag)
           emit("runs-on", runs_on_json)
+          emit("self-hosted", self_hosted)
           emit("container", container_json)
           emit("python", python)
           emit("node", node)
@@ -622,23 +638,27 @@ jobs:
           persist-credentials: false
 
       # === Language toolchains (driven by `runtime:` in assignments.json) ===
-      - if: needs.setup.outputs.python != ''
+      # All gated on `!self-hosted`: a self-hosted runner supplies its own
+      # prebuilt toolchains (and their dependencies), so layering setup-*
+      # / apt on top would shadow the runner's environment and break
+      # autograders that import preinstalled packages (see issue #369).
+      - if: needs.setup.outputs.python != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: ${{ needs.setup.outputs.python }}
 
-      - if: needs.setup.outputs.node != ''
+      - if: needs.setup.outputs.node != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.setup.outputs.node }}
 
-      - if: needs.setup.outputs.java != ''
+      - if: needs.setup.outputs.java != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ needs.setup.outputs.java }}
 
-      - if: needs.setup.outputs.go != ''
+      - if: needs.setup.outputs.go != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-go@v6
         with:
           go-version: ${{ needs.setup.outputs.go }}
@@ -646,12 +666,12 @@ jobs:
       # No first-party setup-rust; dtolnay/rust-toolchain is the de-facto
       # standard. Pinned to @master with an explicit `toolchain:` input
       # (its @rev-derived default can't read a version from a SHA pin).
-      - if: needs.setup.outputs.rust != ''
+      - if: needs.setup.outputs.rust != '' && needs.setup.outputs.self-hosted != 'true'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.setup.outputs.rust }}
 
-      - if: needs.setup.outputs.apt != '' && runner.os == 'Linux'
+      - if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && needs.setup.outputs.self-hosted != 'true'
         run: |
           set -euo pipefail
           sudo apt-get update -qq

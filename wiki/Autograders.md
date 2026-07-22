@@ -341,14 +341,14 @@ gh teacher assignment add cs50-fall-2026 cs-principles greet \
     --runtime ./runtime-greet.json
 ```
 
-When `runtime` is omitted, the workflow defaults to `ubuntu-latest` with Python 3.12 set up via `actions/setup-python` so most autograders work without any per-assignment runtime config. No other toolchains are set up and no apt install runs. Inside a custom `container`, the image owns the toolchain — `python` is left alone unless explicitly set.
+When `runtime` is omitted, the workflow defaults to `ubuntu-latest` with Python 3.12 set up via `actions/setup-python` so most autograders work without any per-assignment runtime config. No other toolchains are set up and no apt install runs. Inside a custom `container`, the image owns the toolchain — `python` is left alone unless explicitly set. On a **self-hosted** runner (any `runs-on` carrying the `self-hosted` label) the workflow skips *all* managed toolchain/apt setup and uses the runner's own prebuilt environment — see [Custom / self-hosted runners](#custom--self-hosted-runners).
 
 ### Fields
 
 | Field | Type | Notes |
 |---|---|---|
 | `runs-on` | string \| `[string]` | Runner selection, exactly like GitHub Actions' own `runs-on`: a single label (`"ubuntu-latest"`) or an array of labels (`["self-hosted", "gpu"]`) for a custom / self-hosted runner. No value allow-list — you own getting the label right; each label is only anti-injection-checked (1–10 labels). Omit for `ubuntu-latest`. |
-| `python` / `node` / `java` / `go` | string | Version strings passed to `actions/setup-python` / `setup-node` / `setup-java` (with `distribution: temurin`) / `setup-go`. `node`, `java`, `go` steps are skipped when their field is unset. `python` defaults to `3.12` on the host path; inside a `container` the image owns Python unless `python` is set explicitly. |
+| `python` / `node` / `java` / `go` | string | Version strings passed to `actions/setup-python` / `setup-node` / `setup-java` (with `distribution: temurin`) / `setup-go`. `node`, `java`, `go` steps are skipped when their field is unset. `python` defaults to `3.12` on the host path; inside a `container` the image owns Python unless `python` is set explicitly. On a **self-hosted** runner these steps are skipped entirely (the runner supplies its own toolchains and dependencies). |
 | `rust` | string | Rustup toolchain specifier (`stable`, `nightly`, `1.79`, `nightly-2025-01-01`) passed to `dtolnay/rust-toolchain` (no first-party setup action exists). Skipped when unset. |
 | `apt` | `[string]` | Each package name must match `^[a-z0-9][a-z0-9.+-]{0,63}$` (Debian/Ubuntu source-package grammar, length-capped). Linux runners only. |
 | `container` | object | Escape hatch — see below. Mutually exclusive with `apt`. |
@@ -358,10 +358,12 @@ When `runtime` is omitted, the workflow defaults to `ubuntu-latest` with Python 
 `runs-on` works exactly as it does in any GitHub Actions workflow. For a GitHub-hosted runner, give a single label; for CPU/memory-heavy assignments on your own infrastructure, give your self-hosted label(s):
 
 ```json
-{ "runs-on": ["self-hosted", "gpu"], "python": "3.12" }
+{ "runs-on": ["self-hosted", "gpu"] }
 ```
 
 Multiple labels are AND-ed by Actions (a runner must carry all of them). There is no allow-list of valid labels — a misspelled label simply won't match a runner (the job queues until one does), the same behavior as a hand-written workflow, so double-check custom labels. Each label is validated against `^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$` purely so it can't inject into the workflow YAML. A `container` can be combined with a self-hosted Linux `runs-on`; matching the runner OS to the image is your responsibility (a recognized `macos-*`/`windows-*` label with a container is rejected, since Actions only runs containers on Linux).
+
+**Self-hosted runners keep their own toolchains.** When `runs-on` includes the `self-hosted` label, the grade job skips *all* managed toolchain/apt setup (`setup-python`, `setup-node`, `setup-java`, `setup-go`, `rust-toolchain`, and the `apt install` step) — even the default Python 3.12. The autograder runs against the interpreter and dependencies your runner image already ships. This is deliberate: layering a fresh `setup-python` on top would prepend an interpreter that lacks your preinstalled packages (e.g. `numpy`, `torch`), so imports would fail. Bake the toolchains and dependencies your assignments need into the runner image; `runner.py` still installs `pytest` / `pytest-json-report` into that interpreter on demand if they're missing. `runtime.python` (etc.) and `runtime.apt` are therefore ignored on a self-hosted runner — provision those in the image instead.
 
 > **Security note.** The autograde runner re-validates `assignments.json` on every student submission, but the `runs-on` value comes from your config repo (teacher-authored), never from student input — so a permissive `runs-on` doesn't widen what an untrusted student repo can request.
 
