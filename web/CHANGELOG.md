@@ -17,6 +17,21 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.13.0](https://github.com/foundation50/classroom50/compare/web-v1.12.0...web-v1.13.0) (2026-07-22)
+
+
+### Features
+
+* add submission release assets ([#363](https://github.com/foundation50/classroom50/issues/363)) ([3a69695](https://github.com/foundation50/classroom50/commit/3a69695ab407cb204ff6e7170aa943b272ae7838))
+* **web:** add GitHub Actions autograding kill switch to org settings ([#365](https://github.com/foundation50/classroom50/issues/365)) ([ce033a5](https://github.com/foundation50/classroom50/commit/ce033a560495210e73fd26b2493ae25ece132b7a))
+* **web:** show live submission count on the teacher dashboard ([#359](https://github.com/foundation50/classroom50/issues/359)) ([172257a](https://github.com/foundation50/classroom50/commit/172257a009f4713bd704f111dc3e46b2048334a5))
+* **web:** submission freshness sync button + lazy per-page live overlay ([#364](https://github.com/foundation50/classroom50/issues/364)) ([d15d880](https://github.com/foundation50/classroom50/commit/d15d88030b0bfc565e99dd50ac2547937047cb33))
+
+
+### Bug Fixes
+
+* **web:** harden Actions usage panel — refresh on toggle, resilient billing reads, fail-closed pause verify ([#366](https://github.com/foundation50/classroom50/issues/366)) ([1a544b2](https://github.com/foundation50/classroom50/commit/1a544b2ebf486f7860b7dc0085f0883c0d30fc10))
+
 ## [1.12.0](https://github.com/foundation50/classroom50/compare/web-v1.11.0...web-v1.12.0) (2026-07-21)
 
 
