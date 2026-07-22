@@ -193,10 +193,11 @@ const useGetScores = (
       `${classroom ?? ""}/scores.json`,
     ),
     select: normalizeScores,
-    // Submissions land continuously, so refetch on tab refocus (overriding the
-    // global refetchOnWindowFocus:false) rather than serving a stale count.
-    refetchOnWindowFocus: true,
-    staleTime: 20 * 1000,
+    // Freshness is surfaced explicitly (the DataFreshness widget + manual
+    // Refresh), so we don't refetch on every tab refocus — that fired a
+    // scores.json re-read on each focus. A 60s staleTime still serves cache
+    // across normal navigation and refetches when genuinely stale.
+    staleTime: 60 * 1000,
   })
 }
 

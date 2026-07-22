@@ -1575,17 +1575,17 @@
     "lateBadge_other": "{{count}} late",
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View source repository",
-    "collectionNote": "Submissions are collected automatically, but new ones can take up to 24 hours to appear.",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
-    "lastCollected": "Last collected (org-wide) {{when}}.",
-    "updated": "Updated {{when}}",
     "justNow": "just now",
     "refresh": "Refresh submissions",
+    "freshness": {
+      "liveChip": "Live",
+      "staticChip": "Static",
+      "liveScores": "Reading submissions from GitHub now · scores from the last collection {{when}}.",
+      "liveNoScores": "Reading submissions from GitHub now · not collected yet.",
+      "staticUpdated": "Collected snapshot · updated {{when}}."
+    },
     "live": {
-      "checking": "Checking submissions live…",
-      "indicator": "Live · reading GitHub directly",
-      "note": "Submissions update live, read directly from each student's repository.",
-      "gradesFrom": "Scores are from the last collection {{when}}.",
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
       "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },

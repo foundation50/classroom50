@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
-import { Info, RefreshCw } from "lucide-react"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -16,6 +15,7 @@ import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
 import { SubmissionsActionsMenu } from "@/pages/submissions/SubmissionsActionsMenu"
 import { AcceptLinkModal } from "@/pages/submissions/AcceptLinkModal"
 import { MetricsModal } from "@/pages/submissions/MetricsModal"
+import { DataFreshness } from "@/pages/submissions/DataFreshness"
 import { ConfirmModal } from "@/components/modals"
 import {
   DEFAULT_FILTERS,
@@ -755,33 +755,6 @@ const SubmissionsPageContent = () => {
                 {t("submissions.lateBadge", { count: lateCount })}
               </Badge>
             )}
-            <span className="inline-flex items-center gap-1 text-base-content/70">
-              {liveActive
-                ? t("submissions.live.indicator")
-                : t("submissions.updated", { when: scoresLastUpdated })}
-              <Button
-                variant="ghost"
-                size="xs"
-                shape="circle"
-                disabled={scoresFetching || liveFetching}
-                onClick={() => {
-                  // Refresh both sources the page shows — snapshot alone would
-                  // leave the live "Pending" rows stale.
-                  refetchScores()
-                  refetchLive()
-                }}
-                aria-label={t("submissions.refresh")}
-                title={t("submissions.refresh")}
-              >
-                <RefreshCw
-                  aria-hidden="true"
-                  size={12}
-                  className={
-                    scoresFetching || liveFetching ? "animate-spin" : ""
-                  }
-                />
-              </Button>
-            </span>
             {assignmentInfo?.template && (
               <GitHubLink
                 href={githubTemplateRepoUrl(
@@ -796,69 +769,23 @@ const SubmissionsPageContent = () => {
           </div>
         }
       />
-      {/* Thin collection note with last-collected recency. Actions moved into
-          the toolbar menu below so the roster surfaces near the top. An
-          empty_repo assignment never autogrades, so the note explains that
-          instead of promising score collection. */}
-      <div className="flex items-start gap-2 text-sm text-base-content/70">
-        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <p>
-          {isEmptyRepoAssignment ? (
-            t("submissions.emptyRepoNote")
-          ) : liveActive ? (
-            <>
-              {t("submissions.live.note")}{" "}
-              {lastCollectedLabel && (
-                <span>
-                  {t("submissions.live.gradesFrom", {
-                    when: lastCollectedLabel,
-                  })}
-                </span>
-              )}
-            </>
-          ) : (
-            <>
-              {t("submissions.collectionNote")}{" "}
-              {lastCollectedLabel && (
-                <span>
-                  {t("submissions.lastCollected", {
-                    when: lastCollectedLabel,
-                  })}
-                </span>
-              )}
-            </>
-          )}
-        </p>
-      </div>
-
-      {/* Live-submission strip: presence read directly from student repos'
-          submit/* releases, so a just-pushed student shows before the next
-          collect (issue #347). Shown only in the active live view (liveActive);
-          the fan-out reads a page at a time so there's no window to advance. */}
-      {liveActive && (
-        <div
-          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-base-content/70"
-          role="status"
-        >
-          {liveFetching && (
-            <span className="inline-flex items-center gap-1.5">
-              <Spinner size="xs" />
-              {t("submissions.live.checking")}
-            </span>
-          )}
-        </div>
-      )}
-
-      {/* When some repos couldn't be read, the live presence view is
-          known-incomplete: a student who submitted to an unreadable repo won't
-          get a Pending row and would read as not-submitted. Mark the derived
-          counts/lists provisional so a transient failure can't be mistaken for
-          an authoritative "not submitted". */}
-      {liveActive && liveErrorCount > 0 && (
-        <Alert tone="warning" role="status">
-          {t("submissions.live.incomplete", { count: liveErrorCount })}
-        </Alert>
-      )}
+      {/* One honest freshness surface (mode chip + provenance line + refresh +
+          degraded-read warning), replacing the old separate collection note,
+          "Updated X ago" span, and live strip. */}
+      <DataFreshness
+        mode={liveActive ? "live" : "static"}
+        updatedLabel={scoresLastUpdated}
+        lastCollectedLabel={lastCollectedLabel}
+        fetching={scoresFetching || liveFetching}
+        errorCount={liveErrorCount}
+        emptyRepo={isEmptyRepoAssignment}
+        onRefresh={() => {
+          // Refresh both sources the page shows — snapshot alone would leave the
+          // live "Pending" rows stale.
+          refetchScores()
+          refetchLive()
+        }}
+      />
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
           neutral line (transient); running/completed/failed/timeout become an
