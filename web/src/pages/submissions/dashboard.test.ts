@@ -16,6 +16,7 @@ import {
   buildSectionLookup,
   classAverage,
   computeStats,
+  countNewSincePage,
   displayItemOwner,
   distinctSections,
   existingGroupRepos,
@@ -185,6 +186,35 @@ describe("computeStats", () => {
       ungraded: 0,
       late: 0,
     })
+  })
+
+  it("excludes pending live-only rows from every graded tally (matching classAverage)", () => {
+    const rows = [
+      row({ score: 9, "max-score": 10 }), // graded, passing at 0.7
+      row({ owner: "bob", score: 0, "max-score": 0, pending: true }), // uncollected
+    ]
+    const stats = computeStats(rows, 2, 0.7)
+    // The pending submitter is neither counted as submitted nor as ungraded — it
+    // has no grade to summarize yet.
+    expect(stats.submitted).toBe(1)
+    expect(stats.ungraded).toBe(0)
+    expect(stats.passing).toBe(1)
+  })
+})
+
+describe("countNewSincePage", () => {
+  it("counts pushed-again (staleCount) and uncollected (pending) rows", () => {
+    const rows = [
+      row({ score: 9, "max-score": 10 }), // collected, current
+      row({ owner: "bob", staleCount: true }), // pushed again after collect
+      row({ owner: "cara", pending: true }), // submitted, not yet collected
+    ]
+    expect(countNewSincePage(rows)).toBe(2)
+  })
+
+  it("is zero when nothing on the page is newer than the snapshot", () => {
+    expect(countNewSincePage([row({ score: 5, "max-score": 10 })])).toBe(0)
+    expect(countNewSincePage([])).toBe(0)
   })
 })
 

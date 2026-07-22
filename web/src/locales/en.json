@@ -1577,18 +1577,18 @@
     "viewSourceRepo": "View source repository",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
     "freshness": {
-      "liveChip": "Live",
-      "staticChip": "Static",
-      "liveScores": "Scores from last collection {{when}}",
-      "liveNoScores": "Not collected yet",
-      "staticCollected": "Collected {{when}}",
-      "staticNeverCollected": "Never collected",
-      "liveHelp": "Submissions are read directly from each student's GitHub repository right now, so new pushes appear immediately. Scores still come from the last collection — run \"Collect now\" to grade the newest.",
-      "staticHelp": "Everything shown is from the last collection (scores.json), including scores. The time is when the scores were produced org-wide, not when this page loaded. Turn on Live View to read submissions from GitHub in real time.",
-      "refreshLive": "Refresh live data",
-      "refreshStatic": "Refresh snapshot"
+      "collected": "Collected {{when}}",
+      "neverCollected": "Never collected",
+      "checking": "checking for new submissions…",
+      "upToDate": "up to date",
+      "help": "Scores come from the last collection (scores.json). Submissions are also read from GitHub right now, so a push made after the last collection shows as \"New\" until you collect again.",
+      "refresh": "Refresh",
+      "refreshAria": "Refresh submissions"
     },
     "live": {
+      "newOnPage_one": "{{count}} new on this page",
+      "newOnPage_other": "{{count}} new on this page",
+      "collectToGrade": "Collect to grade",
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
       "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },

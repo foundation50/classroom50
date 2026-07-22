@@ -22,10 +22,15 @@ import {
   DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
+  buildGroupDisplayItems,
+  buildGroupRosterDisplayItems,
+  buildRosterDisplayItems,
   buildScoresCsvRows,
   buildSectionLookup,
+  buildSortedDisplayItems,
   classAverage,
   computeStats,
+  countNewSincePage,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
@@ -33,6 +38,7 @@ import {
   hasAccepted,
   mergeLiveRows,
   pageBounds,
+  paginateDisplayItems,
   pageRepoOwnerSpine,
   pageRepoOwners,
   reconcileNonSubmitters,
@@ -93,10 +99,10 @@ const SubmissionsPageContent = () => {
   // VIEWER's personal token. Only an org owner is admin on every repo and can
   // list them; a TA/HTA is granted read on individual repos at collect time but
   // can't enumerate the org, so their live fan-out would 404 across the board.
-  // So the live presence layer is owner-only — non-owners render purely from the
-  // collected scores.json snapshot (which they refresh via Collect). `isOwner`
-  // is fail-closed: false until the org role is CONFIRMED owner, so the page
-  // shows the snapshot without a live flash while the role resolves.
+  // So the live presence OVERLAY is owner-only — non-owners render purely from
+  // the collected scores.json snapshot (which they refresh via Collect).
+  // `isOwner` is fail-closed: false until the org role is CONFIRMED owner, so
+  // the page shows the snapshot without a live flash while the role resolves.
   const { isOwner } = useIsOrgOwner()
   const {
     data: scoresData,
@@ -180,17 +186,9 @@ const SubmissionsPageContent = () => {
   const [query, setQuery] = useState("")
   const [filters, setFilters] = useState<SubmissionFilters>(DEFAULT_FILTERS)
   const [sort, setSort] = useState<SubmissionSort>("name-asc")
-  // Live vs static view. Live reads submit/* releases directly (fresh presence,
-  // owner-only) but only in the plain name-ordered, unfiltered view the
-  // page-scoped fan-out can align to; static reads the collected scores.json
-  // snapshot and supports full sort + status/passing filtering. The toggle makes
-  // this explicit (the controls hide sort/status in live mode). Default to
-  // live for owners; forced static for anyone who can't fan out (see
-  // liveCapable) so a TA/HTA never sees a live toggle that can't work.
-  const [viewMode, setViewMode] = useState<"live" | "static">("live")
-  // Client-side table pagination over the name-ordered roster spine. `page` is
-  // 0-based; clamped at render (pageBounds) so a filter that shrinks the list
-  // can't strand the view on an empty page.
+  // Client-side table pagination over the display list. `page` is 0-based;
+  // clamped at render (pageBounds) so a filter that shrinks the list can't
+  // strand the view on an empty page.
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   // Reset to the first page whenever the visible set changes (new search,
@@ -199,7 +197,7 @@ const SubmissionsPageContent = () => {
   // lands in the same commit as the change — no extra render, and no
   // setState-in-effect. React bails out of the re-render once the signature
   // matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${viewMode}|${assignment ?? ""}`
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
   const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
   if (viewSignature !== lastViewSignature) {
     setLastViewSignature(viewSignature)
@@ -252,39 +250,21 @@ const SubmissionsPageContent = () => {
     [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
   )
 
-  // Whether a live view is even possible here: owner-only (personal token can
-  // read the repos) and not an empty_repo assignment (never autograded). A
-  // non-owner is locked to static — the toggle is hidden for them.
+  // Whether the live presence overlay applies here: owner-only (personal token
+  // can read the repos) and not an empty_repo assignment (never autograded). A
+  // non-owner renders purely from the collected snapshot.
   const liveCapable = isOwner && !isEmptyRepoAssignment
-  // The active view. `viewMode` is the user's choice, but a non-capable viewer
-  // is always static regardless. In live mode the sort/status controls are
-  // disabled, so the effective order/filters are pinned to the plain
-  // name-ordered, unfiltered view the page-scoped fan-out aligns to — even if
-  // stale state lingers from a prior static session.
-  const liveActive = liveCapable && viewMode === "live"
-  // In live mode the sort/status controls are hidden, so pin the order and the
-  // status/passing/accepted axes to the plain name-ordered, unfiltered view the
-  // page-scoped fan-out aligns to — even if stale state lingers from a prior
-  // static session. Search + section stay honored (they don't reorder the
-  // spine). `effectiveFilters` below layers the acceptance-availability
-  // neutralization on top of this base.
-  const effectiveSort: SubmissionSort = liveActive ? "name-asc" : sort
-  const liveScopedFilters: SubmissionFilters = useMemo(
-    () =>
-      liveActive
-        ? { ...filters, submission: "all", passing: "all", accepted: "all" }
-        : filters,
-    [liveActive, filters],
-  )
 
   // Live submission presence for THIS assignment, read directly from student
   // repos' submit/* releases — so a student who pushed but hasn't been collected
   // yet still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads
-  // only the repos on the current table page (name-ordered roster slice for
-  // individual assignments, founder slice for groups), so a large class is read
-  // a page at a time instead of all at once. react-query caches each page's
-  // owner-set, so revisiting a page is free. Owner-only (see isOwner) and
-  // disabled for empty_repo assignments (never autograded).
+  // only a page's worth of repos (a name-ordered roster slice for individual
+  // assignments, a founder slice for groups), so a large class is read a page at
+  // a time instead of all at once (#359's burst mitigation). The fanned owner
+  // set is derived from the SNAPSHOT spine (search+section only), independent of
+  // the active sort and of the live results themselves, so it never loops; the
+  // overlay merges by owner wherever those rows render. Owner-only and disabled
+  // for empty_repo assignments.
   const liveOwnerArgs = useMemo(
     () => ({
       isGroup: isGroupAssignment,
@@ -312,15 +292,11 @@ const SubmissionsPageContent = () => {
     () => pageRepoOwners({ ...liveOwnerArgs, page, pageSize }),
     [liveOwnerArgs, page, pageSize],
   )
-  // In live mode the fan-out pages over liveOwnerSpine, but the rendered table's
-  // display list transiently shrinks during a page's first fetch (nonSubmitters
-  // is held empty until the fan-out lands), which would clamp the visible page
-  // below `page` while the fan-out still reads the higher, invisible page. Pull
-  // `page` back to the spine's clamp render-purely (same pattern as the view
-  // reset above) so the fanned-out page and the page the user can reach stay in
-  // lockstep. Only in live mode: static pages over the full snapshot, whose
-  // length is readiness-independent, so the table's own clamp already suffices.
-  if (liveActive) {
+  // Keep `page` within the spine's bounds render-purely (same pattern as the
+  // view reset above) so the fan-out never reads a page beyond the search/
+  // section-filtered owner list. The table's own clamp handles the live-merged
+  // display length; this only guards the fan-out's page-scoped slice.
+  if (liveCapable) {
     const { page: clampedLive } = pageBounds(
       liveOwnerSpine.length,
       pageSize,
@@ -339,21 +315,18 @@ const SubmissionsPageContent = () => {
     classroom,
     assignment,
     repoOwners: livePageOwners,
-    // Runs only in the active live view (owner + live mode + not empty_repo);
-    // see liveActive.
-    enabled: liveActive,
+    // Owner-only, not empty_repo — see liveCapable.
+    enabled: liveCapable,
   })
 
-  // In the live view, merge live presence over the snapshot (snapshot wins per
-  // owner; live adds a pending row for an as-yet-uncollected submitter and bumps
-  // stale counts). In the static view, use the collected snapshot ALONE — the
-  // live query keeps its last cached data after being disabled, so merging
-  // unconditionally would leak stale live badges (staleCount / liveLatest) into
-  // the snapshot-only view the toggle promises. Then roster-scope as before,
+  // Always overlay live presence over the snapshot for a live-capable viewer
+  // (snapshot wins per owner for GRADES; live adds a pending row for an
+  // as-yet-uncollected submitter and bumps stale counts). A non-capable viewer
+  // (TA/HTA) uses the collected snapshot ALONE. Then roster-scope as before,
   // gated on a resolved roster so a transient failure falls back to unscoped
   // rows rather than blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
-    const merged = liveActive
+    const merged = liveCapable
       ? mergeLiveRows(
           snapshotRows,
           liveSubmissions.map((s) => ({
@@ -365,7 +338,7 @@ const SubmissionsPageContent = () => {
         )
       : snapshotRows
     return rosterReady ? rosterScopedRows(merged, students) : merged
-  }, [liveActive, snapshotRows, liveSubmissions, rosterReady, students])
+  }, [liveCapable, snapshotRows, liveSubmissions, rosterReady, students])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
@@ -522,21 +495,17 @@ const SubmissionsPageContent = () => {
 
   // Rows actually rendered. When acceptance data isn't loaded, neutralize the
   // accepted axis so a transient empty repo list can't flip the visible set.
-  // Built on liveScopedFilters so live mode's forced-off status/passing/accepted
-  // axes are already applied.
   const effectiveFilters = useMemo(
     () =>
-      acceptedAvailable
-        ? liveScopedFilters
-        : { ...liveScopedFilters, accepted: "all" as const },
-    [acceptedAvailable, liveScopedFilters],
+      acceptedAvailable ? filters : { ...filters, accepted: "all" as const },
+    [acceptedAvailable, filters],
   )
   const visibleRows = useMemo(
     () =>
       filterAndSortRows(scoresInfo, {
         query,
         filters: effectiveFilters,
-        sort: effectiveSort,
+        sort,
         students,
         sectionByUsername,
         thresholdFraction,
@@ -545,7 +514,7 @@ const SubmissionsPageContent = () => {
       scoresInfo,
       query,
       effectiveFilters,
-      effectiveSort,
+      sort,
       students,
       sectionByUsername,
       thresholdFraction,
@@ -578,6 +547,40 @@ const SubmissionsPageContent = () => {
       return name.length > 0 && name.includes(q)
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
+
+  // "N new on this page" for the freshness nudge: count the rows on the CURRENT
+  // page whose live presence outran the snapshot (pushed-again `staleCount` or
+  // as-yet-uncollected `pending`). Page-scoped because the fan-out only reads
+  // the current page's repos — the nudge says "on this page", not class-wide.
+  // Built from the same display list SubmissionsTable renders so the count
+  // matches what the user sees; only live-capable viewers get a non-zero count.
+  const newOnPageCount = useMemo(() => {
+    if (!liveCapable) return 0
+    const items = isGroupAssignment
+      ? sort === "name-asc"
+        ? buildGroupRosterDisplayItems(visibleRows, visibleGroupRepos, students)
+        : buildGroupDisplayItems(visibleRows, visibleGroupRepos)
+      : sort === "name-asc"
+        ? buildRosterDisplayItems(students, visibleRows, visibleNonSubmitters)
+        : buildSortedDisplayItems(visibleRows, visibleNonSubmitters)
+    const pageRows = paginateDisplayItems(items, pageSize, page)
+      .filter((item) => item.kind === "row")
+      .map(
+        (item) =>
+          (item as { kind: "row"; row: (typeof visibleRows)[number] }).row,
+      )
+    return countNewSincePage(pageRows)
+  }, [
+    liveCapable,
+    isGroupAssignment,
+    sort,
+    students,
+    visibleRows,
+    visibleNonSubmitters,
+    visibleGroupRepos,
+    pageSize,
+    page,
+  ])
 
   const collectScores = useTriggerScoreCollection(org)
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
@@ -842,23 +845,25 @@ const SubmissionsPageContent = () => {
         acceptedAvailable={acceptedAvailable}
         passingAvailable={passingEnabled}
         sections={sections}
-        liveCapable={liveCapable}
-        viewMode={liveActive ? "live" : "static"}
         leading={
           <DataFreshness
-            mode={liveActive ? "live" : "static"}
             lastCollectedLabel={lastCollectedLabel}
             fetching={scoresFetching || liveFetching}
             errorCount={liveErrorCount}
             emptyRepo={isEmptyRepoAssignment}
             liveCapable={liveCapable}
-            onViewModeChange={setViewMode}
+            checking={liveFetching}
+            newCount={newOnPageCount}
+            onCollect={
+              collecting || emptyRoster.show
+                ? undefined
+                : () => collectScores.collect()
+            }
             onRefresh={() => {
-              // Always refresh the snapshot (grades live there in both modes).
-              // Only re-run the live fan-out in live mode — the live query is
-              // disabled in static, so refetching it there is an inert no-op.
+              // Always refresh the snapshot (grades live there). Re-run the live
+              // fan-out too for a live-capable viewer; it's a no-op otherwise.
               refetchScores()
-              if (liveActive) refetchLive()
+              if (liveCapable) refetchLive()
             }}
           />
         }
@@ -871,8 +876,7 @@ const SubmissionsPageContent = () => {
             emptyRoster={emptyRoster.show}
             emptyRepo={isEmptyRepoAssignment}
             onShare={() => setAcceptOpen(true)}
-            // Metrics summarizes the graded snapshot; hide it in live view.
-            onMetrics={liveActive ? undefined : () => setMetricsOpen(true)}
+            onMetrics={() => setMetricsOpen(true)}
             onCollect={() => collectScores.collect()}
             onRegradeAll={() => setRegradeConfirmOpen(true)}
             viewHref={viewRun?.html_url || viewWorkflowUrl}
@@ -908,7 +912,7 @@ const SubmissionsPageContent = () => {
         pageSize={pageSize}
         onPageChange={setPage}
         onPageSizeChange={setPageSize}
-        sort={effectiveSort}
+        sort={sort}
       />
       <ConfirmModal
         open={regradeConfirmOpen}
@@ -940,7 +944,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setRegradeConfirmOpen(false)}
       />
       <MetricsModal
-        open={metricsOpen && !liveActive}
+        open={metricsOpen}
         onClose={() => setMetricsOpen(false)}
         isGroup={isGroupAssignment}
         submitted={stats.submitted}

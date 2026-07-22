@@ -168,11 +168,18 @@ export function computeStats(
   rosteredCount: number,
   thresholdFraction: number | null,
 ): SubmissionStats {
+  let submitted = 0
   let passing = 0
   let failing = 0
   let ungraded = 0
   let late = 0
   for (const row of rows) {
+    // A pending live row (a submit/* release the collector hasn't ingested yet)
+    // carries a placeholder 0/0 and no real grade — exclude it from every graded
+    // tally (matching classAverage), so an uncollected submitter doesn't inflate
+    // `submitted`/`ungraded` in the Metrics summary of the collected snapshot.
+    if (row.pending) continue
+    submitted++
     switch (rowPassState(row, thresholdFraction)) {
       case "passing":
         passing++
@@ -186,7 +193,7 @@ export function computeStats(
     if (row.late) late++
   }
   return {
-    submitted: rows.length,
+    submitted,
     rostered: rosteredCount,
     passing,
     failing,
@@ -963,6 +970,13 @@ export function pageRepoOwners(args: {
   const { page: clamped } = pageBounds(owners.length, args.pageSize, args.page)
   const start = clamped * args.pageSize
   return owners.slice(start, start + args.pageSize)
+}
+
+// Count of rows on a page whose live presence is newer than the collected
+// snapshot: pushed-again rows (staleCount) plus as-yet-uncollected submitters
+// (pending). Drives the freshness line's "N new on this page — Collect" nudge.
+export function countNewSincePage(rows: SubmissionRow[]): number {
+  return rows.filter((row) => row.staleCount || row.pending).length
 }
 
 // The compact list of page numbers to render, with `null` marking an ellipsis
