@@ -718,21 +718,16 @@ jobs:
           STAGED_RELEASE_DIR: ${{ steps.autograde.outputs.release-assets-dir }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "Submission $TAG" \
-              --notes-file release-body.md \
-              --latest=false
-            gh release upload "$TAG" result.json \
-              --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$TAG" result.json \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Submission $TAG" \
-              --notes-file release-body.md \
-              --latest=false
-          fi
           ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"
+
+          # Collect the valid staged extras FIRST, so they're attached in the
+          # same `gh release create` as result.json. Immutable releases (an org
+          # ruleset can enforce them) reject a later `gh release upload`/`edit`
+          # with HTTP 422, so assets must be baked in at creation time — a
+          # post-create upload can never succeed there. Re-validate each staged
+          # basename (defense in depth: these came from runner.py's strict
+          # validator, but the workflow re-checks before anything reaches gh).
+          EXTRA_ASSETS=()
           if [[ -n "${STAGED_RELEASE_BASENAMES:-}" ]]; then
             IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"
             for NAME in "${ASSET_NAMES[@]}"; do
@@ -752,11 +747,22 @@ jobs:
                 echo "::warning::release_assets: staged $NAME is missing or unsafe (skipped)"
                 continue
               fi
-              gh release upload "$TAG" "$ASSET" \
-                --repo "$GITHUB_REPOSITORY" --clobber </dev/null \
-                || echo "::warning::release_assets: failed to upload $NAME (skipped)"
+              EXTRA_ASSETS+=("$ASSET")
             done
           fi
+
+          # Recreate on re-run: an immutable release can't have result.json
+          # clobbered or new assets uploaded, so a re-run must delete and
+          # recreate to attach the current result + extras atomically. Keep the
+          # git tag (--cleanup-tag omitted) so the submission ref is unchanged.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+          fi
+          gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"} \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Submission $TAG" \
+            --notes-file release-body.md \
+            --latest=false
 
       # === Ensure the Feedback PR ===
       # Opt-in per assignment (feedback-pr). One long-lived PR per repo:

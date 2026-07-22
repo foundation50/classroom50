@@ -398,24 +398,21 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 			`IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"`,
 			`[[ ! "$NAME" =~ ^[A-Za-z0-9._-]{1,255}$ || "$NAME" == .* || "$NAME" == *. || "$NAME" == *..* ]]`,
 			`[[ ! -f "$ASSET" || -L "$ASSET" ]]`,
-			`gh release upload "$TAG" "$ASSET"`,
-			`--repo "$GITHUB_REPOSITORY" --clobber </dev/null`,
-			`|| echo "::warning::release_assets: failed to upload $NAME (skipped)"`,
+			`EXTRA_ASSETS+=("$ASSET")`,
+			`gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes`,
+			`gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"}`,
 		} {
 			if !strings.Contains(releaseRun, want) {
 				t.Errorf("Release shell is missing %q", want)
 			}
 		}
-		extrasAt := strings.Index(releaseRun, `ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"`)
-		for _, core := range []string{
-			`gh release edit "$TAG"`,
-			`gh release upload "$TAG" result.json`,
-			`gh release create "$TAG" result.json`,
-		} {
-			coreAt := strings.Index(releaseRun, core)
-			if coreAt < 0 || extrasAt < 0 || coreAt >= extrasAt {
-				t.Errorf("Release shell must publish core command %q before extras (core=%d extras=%d)", core, coreAt, extrasAt)
-			}
+		// Immutable releases reject a post-create upload/edit, so assets must be
+		// collected BEFORE the release is created (extras attached in the same
+		// `gh release create`). Assert the collection loop precedes creation.
+		collectAt := strings.Index(releaseRun, `EXTRA_ASSETS+=("$ASSET")`)
+		createAt := strings.Index(releaseRun, `gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"}`)
+		if collectAt < 0 || createAt < 0 || collectAt >= createAt {
+			t.Errorf("Release shell must collect extras before `gh release create` (collect=%d create=%d)", collectAt, createAt)
 		}
 
 		t.Run("ReleaseShellAllowsEmptyAssetList", func(t *testing.T) {
@@ -447,18 +444,16 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 			}
 		})
 
-		t.Run("ReleaseShellContinuesAfterExtraUploadFailure", func(t *testing.T) {
+		t.Run("ReleaseShellFiltersInvalidAndCreatesWithExtras", func(t *testing.T) {
 			tmp := t.TempDir()
 			binDir := filepath.Join(tmp, "bin")
 			if err := os.MkdirAll(binDir, 0o700); err != nil {
 				t.Fatal(err)
 			}
 			ghLog := filepath.Join(tmp, "gh.log")
+			// `release view` succeeds so the exists/delete-then-recreate path runs.
 			fakeGH := []byte(`#!/bin/sh
 printf '%s\n' "$*" >> "$GH_LOG"
-if [ "$1" = "release" ] && [ "$2" = "upload" ] && [ "${4##*/}" = "first.pdf" ]; then
-  exit 1
-fi
 `)
 			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
 				t.Fatal(err)
@@ -504,25 +499,22 @@ fi
 			if strings.Contains(string(log), "result..json") {
 				t.Errorf("invalid staged basename reached gh:\n%s", log)
 			}
+			// Immutable-safe: view -> delete (exists) -> create with result.json
+			// plus the two valid extras attached atomically. No post-create upload.
 			gotCalls := strings.Split(strings.TrimSpace(string(log)), "\n")
 			wantCalls := []string{
 				"release view submit/test --repo example/classroom-assignment-student",
-				"release edit submit/test --repo example/classroom-assignment-student --title Submission submit/test --notes-file release-body.md --latest=false",
-				"release upload submit/test result.json --repo example/classroom-assignment-student --clobber",
-				"release upload submit/test " + filepath.Join(assetsDir, "first.pdf") + " --repo example/classroom-assignment-student --clobber",
-				"release upload submit/test " + filepath.Join(assetsDir, "second.pdf") + " --repo example/classroom-assignment-student --clobber",
+				"release delete submit/test --repo example/classroom-assignment-student --yes",
+				"release create submit/test result.json " +
+					filepath.Join(assetsDir, "first.pdf") + " " +
+					filepath.Join(assetsDir, "second.pdf") +
+					" --repo example/classroom-assignment-student --title Submission submit/test --notes-file release-body.md --latest=false",
 			}
 			if !reflect.DeepEqual(gotCalls, wantCalls) {
 				t.Errorf("gh calls = %#v, want %#v", gotCalls, wantCalls)
 			}
-
-			for _, warning := range []string{
-				"::warning::release_assets: invalid staged basename (skipped)",
-				"::warning::release_assets: failed to upload first.pdf (skipped)",
-			} {
-				if !strings.Contains(string(output), warning) {
-					t.Errorf("Release shell output missing %q:\n%s", warning, output)
-				}
+			if !strings.Contains(string(output), "::warning::release_assets: invalid staged basename (skipped)") {
+				t.Errorf("Release shell output missing invalid-basename warning:\n%s", output)
 			}
 		})
 	}
@@ -618,10 +610,10 @@ func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInse
 				t.Fatal(err)
 			}
 			if strings.Contains(string(log), stagedPath) {
-				t.Errorf("reserved staged asset reached gh release upload:\n%s", log)
+				t.Errorf("reserved staged asset reached gh release create:\n%s", log)
 			}
-			if !strings.Contains(string(log), "release upload submit/test result.json") {
-				t.Errorf("core result.json upload did not run:\n%s", log)
+			if !strings.Contains(string(log), "release create submit/test result.json") {
+				t.Errorf("core result.json release create did not run:\n%s", log)
 			}
 			wantWarning := "::warning::release_assets: reserved staged basename " + name + " (skipped)"
 			if !strings.Contains(string(output), wantWarning) {
