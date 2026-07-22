@@ -1,5 +1,7 @@
 - [Home](Home)
+- [How Classroom 50 Works](How-Classroom-50-Works)
 - [Glossary](Glossary)
+- [FAQ](FAQ)
 - **Web app**
   - [Web Teacher Guide](Web-Teacher-Guide)
   - [Web Student Guide](Web-Student-Guide)

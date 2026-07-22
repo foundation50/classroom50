@@ -37,7 +37,9 @@ repositories, and all grading runs in GitHub Actions.
 2. Teachers: [CLI Teacher Guide](CLI-Teacher-Guide).
 3. Students: [CLI Student Guide](CLI-Student-Guide).
 
-New to the terminology? See the [Glossary](Glossary).
+New to the terminology? See the [Glossary](Glossary). Curious how it all fits
+together? Read [How Classroom 50 Works](How-Classroom-50-Works). Have a question?
+Check the [FAQ](FAQ).
 
 ## Training sessions
 
