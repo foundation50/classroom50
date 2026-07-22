@@ -102,6 +102,13 @@ describe("getOrgActionsMode", () => {
     expect(await getOrgActionsMode(client, org)).toBe("active")
   })
 
+  it("returns 'disabled' when Actions are off for every repo (none)", async () => {
+    const { client } = makeClient({
+      perms: { enabled_repositories: "none" },
+    })
+    expect(await getOrgActionsMode(client, org)).toBe("disabled")
+  })
+
   it("returns 'unknown' when the policy read fails", async () => {
     const { client } = makeClient({ perms: apiError(403) })
     expect(await getOrgActionsMode(client, org)).toBe("unknown")
@@ -132,7 +139,14 @@ describe("getOrgActionsMode", () => {
 
 describe("setOrgActionsMode", () => {
   it("pause switches to 'selected' first, then sets the allow-list to the config repo", async () => {
-    const { client, calls } = makeClient({ repo: { id: 42 } })
+    const { client, calls } = makeClient({
+      repo: { id: 42 },
+      // Read-back after the writes confirms the config repo landed.
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 42, name: "classroom50" }],
+      },
+    })
     const result = await setOrgActionsMode(client, org, "paused")
     expect(result.status).toBe("complete")
 
@@ -143,6 +157,28 @@ describe("setOrgActionsMode", () => {
     expect(writes[0].body).not.toHaveProperty("allowed_actions")
     expect(writes[1].path).toBe(`/orgs/${org}/actions/permissions/repositories`)
     expect(writes[1].body).toEqual({ selected_repository_ids: [42] })
+  })
+
+  it("pause warns when the read-back shows the config repo isn't allow-listed", async () => {
+    const { client } = makeClient({
+      repo: { id: 42 },
+      // Writes 2xx, but the effective selection doesn't include the config repo.
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 99, name: "other" }],
+      },
+    })
+    const result = await setOrgActionsMode(client, org, "paused")
+    expect(result).toMatchObject({ status: "warning", reason: "failed" })
+  })
+
+  it("pause maps a non-404 getRepo failure to a structured warning", async () => {
+    const { client } = makeClient({ repo: apiError(403) })
+    const result = await setOrgActionsMode(client, org, "paused")
+    expect(result).toMatchObject({
+      status: "warning",
+      reason: "permission_denied",
+    })
   })
 
   it("pause warns (no writes) when the config repo is missing", async () => {
@@ -195,6 +231,16 @@ describe("setOrgActionsMode", () => {
       reason: "readback_failed",
     })
     expect(calls.some((c) => c.method === "PUT")).toBe(false)
+  })
+
+  it("resume enables 'all' from a fully-disabled org", async () => {
+    const { client, calls } = makeClient({
+      perms: { enabled_repositories: "none" },
+    })
+    const result = await setOrgActionsMode(client, org, "active")
+    expect(result).toMatchObject({ status: "complete", mode: "active" })
+    const write = calls.find((c) => c.method === "PUT")
+    expect(write?.body).toMatchObject({ enabled_repositories: "all" })
   })
 
   it("maps a 403 on resume to a permission_denied warning", async () => {

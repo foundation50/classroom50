@@ -101,6 +101,11 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgAuditPrefix(org),
       })
+      // Re-run can flip the Actions policy (or intentionally leave a pause), so
+      // refresh the kill-switch toggle's derived mode too.
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgActionsMode(org),
+      })
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
     },
   })

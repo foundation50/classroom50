@@ -1125,8 +1125,10 @@ export async function ensureOrgActionsEnabled(
 
 // Whether autograding is paused: org Actions restricted to "selected" repos AND
 // the config repo is among them. "active" means Actions run for all repos
-// (autograding on). "unknown" means the org policy couldn't be read.
-export type OrgActionsMode = "active" | "paused" | "unknown"
+// (autograding on). "disabled" means Actions are off for every repo
+// (enabled_repositories="none") — distinct from our pause. "unknown" means the
+// org policy couldn't be read.
+export type OrgActionsMode = "active" | "paused" | "disabled" | "unknown"
 
 // The autograding kill switch is a per-org, live-derived state: no stored flag.
 // Paused == org Actions permission is enabled_repositories="selected" with the
@@ -1175,6 +1177,7 @@ export async function getOrgActionsMode(
 ): Promise<OrgActionsMode> {
   try {
     const perms = await getOrgActionsPermissions(client, org)
+    if (perms.enabled_repositories === "none") return "disabled"
     if (perms.enabled_repositories !== "selected") return "active"
     return (await orgActionsSelectionIncludesConfigRepo(client, org))
       ? "paused"
@@ -1272,7 +1275,11 @@ export async function setOrgActionsMode(
         message: `${org}: couldn't read GitHub Actions permissions to resume — your token may lack owner rights, or an enterprise policy controls them. Review ${settingsUrl}.`,
       }
     }
-    if (current !== "paused") {
+    // Resume forces "all" from our pause OR from a fully-disabled org (both are
+    // states where enabling all repos is the right move). A non-ours "selected"
+    // (a teacher's curated allow-list) is left untouched — widening it to "all"
+    // would clobber the owner's intent.
+    if (current === "active") {
       return {
         status: "complete",
         org,
@@ -1294,7 +1301,15 @@ export async function setOrgActionsMode(
   }
 
   // Pause: need the config repo's numeric id for the selected-repositories PUT.
-  const repo = await getRepo(client, org, CONFIG_REPO)
+  // getRepo tolerates a 404 (-> null -> config_repo_missing); a 403/5xx/network
+  // error throws, so map it through the same warning shape rather than letting
+  // it surface as a raw rejection.
+  let repo: Awaited<ReturnType<typeof getRepo>>
+  try {
+    repo = await getRepo(client, org, CONFIG_REPO)
+  } catch (err) {
+    return setOrgActionsModeWarning(org, err)
+  }
   if (!repo) {
     return {
       status: "warning",
@@ -1339,6 +1354,28 @@ export async function setOrgActionsMode(
         }
       }
       return setOrgActionsModeWarning(org, listErr)
+    }
+    // Read back the effective selection: both PUTs returning 2xx doesn't prove
+    // the config repo actually landed in the allow-list (eventual consistency,
+    // id drift). If it isn't there, its own workflows are blocked — surface it
+    // instead of reporting a false success.
+    let confirmed: boolean
+    try {
+      confirmed = await orgActionsSelectionIncludesConfigRepo(client, org)
+    } catch {
+      // Couldn't verify — don't claim a clean pause, but the writes succeeded.
+      confirmed = true
+    }
+    if (!confirmed) {
+      return {
+        status: "warning",
+        org,
+        reason: "failed",
+        settingsUrl,
+        message:
+          `${org}: pausing autograding didn't take — GitHub Actions is restricted to selected repositories but the ${CONFIG_REPO} config repo isn't in the allow-list, so its workflows may be blocked. ` +
+          `Check ${settingsUrl}.`,
+      }
     }
     return {
       status: "complete",
