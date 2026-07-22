@@ -69,11 +69,11 @@ export type UseLiveSubmissionsArgs = {
 }
 
 // Reads live submissions for an assignment's repos, one bounded-concurrency
-// fan-out of `latestSubmitReleaseAndCount` per owner. Assignment-scoped (never
-// the whole org). Every owner is read at once, throttled by the shared
-// read-slot semaphore (REPO_READ_CONCURRENCY) so a large class is bounded, not
-// bursty; the submissions table paginates client-side over the merged rows, so
-// this no longer windows. A single repo's non-404 failure is caught per-repo
+// fan-out of `latestSubmitReleaseAndCount` per owner in `repoOwners`.
+// Assignment-scoped (never the whole org) and PAGE-SCOPED by the caller: the
+// dashboard passes only the current table page's owners, so a large class is
+// read a page at a time, throttled by the shared read-slot semaphore
+// (REPO_READ_CONCURRENCY). A single repo's non-404 failure is caught per-repo
 // (like useGroupRepoMemberLogins) so it can't void the whole batch.
 export function useLiveSubmissions({
   org,

@@ -31,16 +31,14 @@ import {
   classAverage,
   computeStats,
   countNewSincePage,
+  displayPageOwners,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
   mergeLiveRows,
-  pageBounds,
   paginateDisplayItems,
-  pageRepoOwnerSpine,
-  pageRepoOwners,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowInSection,
@@ -258,52 +256,64 @@ const SubmissionsPageContent = () => {
   // Live submission presence for THIS assignment, read directly from student
   // repos' submit/* releases — so a student who pushed but hasn't been collected
   // yet still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads
-  // only a page's worth of repos (a name-ordered roster slice for individual
-  // assignments, a founder slice for groups), so a large class is read a page at
-  // a time instead of all at once (#359's burst mitigation). The fanned owner
-  // set is derived from the SNAPSHOT spine (search+section only), independent of
-  // the active sort and of the live results themselves, so it never loops; the
-  // overlay merges by owner wherever those rows render. Owner-only and disabled
-  // for empty_repo assignments.
+  // only the repos on the CURRENT table page (#359's burst mitigation), so a
+  // large class is read a page at a time. The fanned owner set follows the
+  // rendered page under the ACTIVE sort — derived from the SNAPSHOT display list
+  // (not the live-merged one), so it stays independent of the live results it
+  // produces (no fetch loop) while lining the fanned page up with the visible
+  // page under any sort, not just name-asc. Owner-only, off for empty_repo.
+  //
+  // Uses snapshot-scoped rows filtered+sorted the same way the table renders,
+  // and the whole (search/section-scoped) roster as the non-submitter pool: the
+  // page slice may then name a few owners the rendered page won't show (a
+  // non-submitter that a live-only pending row will outrank), but the fan-out
+  // OVER-reading is harmless — it only ever adds live data for a repo, never
+  // hides a visible row. What matters is that every owner the page WILL show is
+  // covered, which the shared display builders guarantee.
+  const snapshotScoped = useMemo(
+    () =>
+      rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
+    [rosterReady, snapshotRows, students],
+  )
+  // Neutralize the `accepted` and `passing` axes for the fan-out slice:
+  // acceptance/grade data may lag, and this set only needs to COVER the page's
+  // owners (over-reading is harmless), so never let a not-yet-loaded filter drop
+  // an owner the rendered page will show.
+  const liveFilters: SubmissionFilters = useMemo(
+    () => ({ ...filters, accepted: "all" as const, passing: "all" as const }),
+    [filters],
+  )
   const liveOwnerArgs = useMemo(
     () => ({
       isGroup: isGroupAssignment,
-      roster: students,
-      groupRepos: groupRepoList,
-      query,
-      section: filters.section,
-      sectionByUsername,
+      sort,
       students,
+      rows: filterAndSortRows(snapshotScoped, {
+        query,
+        filters: liveFilters,
+        sort,
+        students,
+        sectionByUsername,
+        thresholdFraction: null,
+      }),
+      nonSubmitters: showsNonSubmitters(liveFilters) ? students : [],
+      groupRepos: showsNonSubmitters(liveFilters) ? groupRepoList : [],
     }),
     [
       isGroupAssignment,
+      sort,
       students,
-      groupRepoList,
+      snapshotScoped,
       query,
-      filters.section,
+      liveFilters,
       sectionByUsername,
+      groupRepoList,
     ],
   )
-  const liveOwnerSpine = useMemo(
-    () => pageRepoOwnerSpine(liveOwnerArgs),
-    [liveOwnerArgs],
-  )
   const livePageOwners = useMemo(
-    () => pageRepoOwners({ ...liveOwnerArgs, page, pageSize }),
+    () => displayPageOwners({ ...liveOwnerArgs, page, pageSize }),
     [liveOwnerArgs, page, pageSize],
   )
-  // Keep `page` within the spine's bounds render-purely (same pattern as the
-  // view reset above) so the fan-out never reads a page beyond the search/
-  // section-filtered owner list. The table's own clamp handles the live-merged
-  // display length; this only guards the fan-out's page-scoped slice.
-  if (liveCapable) {
-    const { page: clampedLive } = pageBounds(
-      liveOwnerSpine.length,
-      pageSize,
-      page,
-    )
-    if (clampedLive !== page) setPage(clampedLive)
-  }
   const {
     submissions: liveSubmissions,
     errorCount: liveErrorCount,

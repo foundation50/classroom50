@@ -770,9 +770,11 @@ export function buildGroupRosterDisplayItems(
   )
 }
 
-// Build the ordered display list for a GROUP assignment under a non-name sort (a
-// static snapshot view): submitted group rows first (in the caller's sort
-// order), then unsubmitted group repos.
+// Build the ordered display list for a GROUP assignment under a non-name sort:
+// submitted group rows first (in the caller's sort order), then unsubmitted
+// group repos. Live presence still overlays these rows by owner — the name-
+// order spine coupling only applies to the name-asc branch, so under any other
+// sort the fan-out reads this page's owners directly (see displayPageOwners).
 export function buildGroupDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
@@ -783,11 +785,12 @@ export function buildGroupDisplayItems(
   ]
 }
 
-// Build the display list for an INDIVIDUAL assignment under a non-name sort (a
-// static snapshot view — live is off then, so there's no roster-spine coupling
-// to preserve): the already-sorted submitted rows first, then non-submitters.
-// Preserves the caller's chosen sort for the submitted rows rather than forcing
-// the roster's name order.
+// Build the display list for an INDIVIDUAL assignment under a non-name sort:
+// the already-sorted submitted rows first, then non-submitters. Preserves the
+// caller's chosen sort for the submitted rows rather than forcing the roster's
+// name order. Live presence still overlays by owner — the roster-spine coupling
+// is specific to the name-asc branch (see displayPageOwners), so under any
+// other sort the fan-out targets this page's owners directly.
 export function buildSortedDisplayItems(
   rows: SubmissionRow[],
   nonSubmitters: Student[],
@@ -889,14 +892,10 @@ function ownerSearchName(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) ?? ""
 }
 
-// The full, deterministic, name-ordered owner list the live fan-out pages over
-// — filtered by search + section ONLY (NOT submitted/passing status). Those
-// status axes depend on live presence, so using them here would make the owner
-// set depend on the very data we're fetching; search/section are live-
-// independent, so the spine is stable across the live merge and the fan-out
-// doesn't loop. For groups the unit is the founder/repo owner. This is the
-// single source both the fan-out slice (pageRepoOwners) and the page-count
-// clamp read, so the fanned-out page can't drift from a page the user can see.
+// A name-ordered, search+section-filtered owner list (individual roster or
+// group founders). Retained as a tested helper; the live fan-out now derives
+// its page owners from the rendered display list under the active sort (see
+// displayPageOwners), so this name-only spine is no longer the fan-out source.
 export function pageRepoOwnerSpine({
   isGroup,
   roster,
@@ -977,6 +976,54 @@ export function pageRepoOwners(args: {
 // (pending). Drives the freshness line's "N new on this page — Collect" nudge.
 export function countNewSincePage(rows: SubmissionRow[]): number {
   return rows.filter((row) => row.staleCount || row.pending).length
+}
+
+// The repo owners on the CURRENTLY RENDERED page, in the table's own display
+// order under the active sort — so the live fan-out reads exactly the repos the
+// user is looking at, whatever sort produced them (not just name-asc). Built
+// from the SNAPSHOT display list using the same builders SubmissionsTable uses,
+// so the fanned page and the rendered page line up. It must NOT be fed the
+// live-merged rows: a live-only pending row exists only after the fan-out, so
+// using it here would feed the fan-out's own output back into its input and
+// loop. `nonSubmitter`/`groupRepo` items resolve to their owner login so an
+// as-yet-uncollected or accepted-not-submitted repo is still read.
+export function displayPageOwners({
+  isGroup,
+  sort,
+  students,
+  rows,
+  nonSubmitters,
+  groupRepos,
+  page,
+  pageSize,
+}: {
+  isGroup: boolean
+  sort: SubmissionSort
+  students: Student[]
+  rows: SubmissionRow[]
+  nonSubmitters: Student[]
+  groupRepos: GroupRepo[]
+  page: number
+  pageSize: number
+}): string[] {
+  const items = isGroup
+    ? sort === "name-asc"
+      ? buildGroupRosterDisplayItems(rows, groupRepos, students)
+      : buildGroupDisplayItems(rows, groupRepos)
+    : sort === "name-asc"
+      ? buildRosterDisplayItems(students, rows, nonSubmitters)
+      : buildSortedDisplayItems(rows, nonSubmitters)
+  const seen = new Set<string>()
+  const owners: string[] = []
+  for (const item of paginateDisplayItems(items, pageSize, page)) {
+    const owner = displayItemOwner(item).trim()
+    if (!owner) continue
+    const key = owner.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    owners.push(owner)
+  }
+  return owners
 }
 
 // The compact list of page numbers to render, with `null` marking an ellipsis

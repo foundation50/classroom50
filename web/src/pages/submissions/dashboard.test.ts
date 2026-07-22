@@ -17,6 +17,7 @@ import {
   classAverage,
   computeStats,
   countNewSincePage,
+  displayPageOwners,
   displayItemOwner,
   distinctSections,
   existingGroupRepos,
@@ -215,6 +216,69 @@ describe("countNewSincePage", () => {
   it("is zero when nothing on the page is newer than the snapshot", () => {
     expect(countNewSincePage([row({ score: 5, "max-score": 10 })])).toBe(0)
     expect(countNewSincePage([])).toBe(0)
+  })
+})
+
+describe("displayPageOwners", () => {
+  const students = [
+    student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
+    student({ username: "bob", first_name: "Bob", last_name: "Brown" }),
+    student({ username: "cara", first_name: "Cara", last_name: "Cole" }),
+  ]
+
+  it("returns the current page's owners in name order (name-asc)", () => {
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-asc",
+      students,
+      rows,
+      nonSubmitters: students, // alice + cara have no row
+      groupRepos: [],
+      page: 0,
+      pageSize: 2,
+    })
+    // Name order: alice (non-sub), bob (row) — page of 2.
+    expect(owners).toEqual(["alice", "bob"])
+  })
+
+  it("follows a non-name sort so the fanned page matches the rendered page", () => {
+    // Under a non-name sort the caller passes rows already in sort order;
+    // buildSortedDisplayItems preserves that order, so page 0 is the first
+    // sorted row's owner — not the alphabetically-first owner.
+    const rows = [
+      row({ owner: "cara", usernames: ["cara"], datetime: "2026-06-20" }),
+      row({ owner: "alice", usernames: ["alice"], datetime: "2026-06-01" }),
+    ]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "recent",
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [],
+      page: 0,
+      pageSize: 1,
+    })
+    expect(owners).toEqual(["cara"])
+  })
+
+  it("de-duplicates owners (case-insensitively) so a login isn't read twice", () => {
+    const rows = [
+      row({ owner: "alice", usernames: ["alice"] }),
+      row({ owner: "Alice", usernames: ["Alice"] }),
+    ]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "recent", // preserve caller row order; both are the same login
+      students,
+      rows,
+      nonSubmitters: [],
+      groupRepos: [],
+      page: 0,
+      pageSize: 10,
+    })
+    expect(owners).toEqual(["alice"])
   })
 })
 
