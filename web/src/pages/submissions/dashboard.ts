@@ -6,7 +6,7 @@ import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
-import { getName } from "@/util/students"
+import { getName, nameFromParts } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 
 // Whether a row's grade still belongs to a current roster member. A row is
@@ -752,10 +752,14 @@ export function buildGroupRosterDisplayItems(
     kind: "groupRepo",
     repo,
   }))
-  const nameKey = (owner: string) =>
-    (getName(owner, students) || owner).toLowerCase()
+  // Precompute the name map once so the comparator is O(1) per compare (getName
+  // would re-scan the roster each call). ownerSortKey matches pageRepoOwnerSpine's
+  // group ordering, keeping the rendered page and the fan-out spine aligned.
+  const names = buildNameKeyLookup(students)
   return [...submitted, ...unsubmitted].sort((a, b) =>
-    nameKey(displayItemOwner(a)).localeCompare(nameKey(displayItemOwner(b))),
+    ownerSortKey(displayItemOwner(a), names).localeCompare(
+      ownerSortKey(displayItemOwner(b), names),
+    ),
   )
 }
 
@@ -845,6 +849,39 @@ export function displayItemOwner(item: DisplayItem): string {
   }
 }
 
+// A `login (lowercased) -> display name (lowercased)` map for the roster, built
+// once so the group name-ordering and search don't call getName (an O(n) roster
+// scan) inside a comparator or filter — which turns an O(n log n) sort into
+// O(n^2). The value mirrors getName exactly: the display name, or "" when the
+// login isn't on the roster or the row has no name. Shared by the fan-out spine
+// and the group display-item builder so their orderings can't drift.
+export function buildNameKeyLookup(students: Student[]): Map<string, string> {
+  const map = new Map<string, string>()
+  for (const student of students) {
+    const login = student.username.trim().toLowerCase()
+    if (!login) continue
+    map.set(
+      login,
+      nameFromParts(student.first_name, student.last_name).toLowerCase(),
+    )
+  }
+  return map
+}
+
+// A single owner's group SORT key from the precomputed name map: display name
+// when the founder is on the roster with a name, else the login — lowercased.
+// (Mirrors the prior `getName(owner) || owner`.)
+function ownerSortKey(owner: string, names: Map<string, string>): string {
+  return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
+}
+
+// An owner's display name for SEARCH matching (name only, "" when off-roster or
+// nameless) — mirrors the prior `getName(owner).toLowerCase()`, so the login is
+// matched separately by the caller, not folded in here.
+function ownerSearchName(owner: string, names: Map<string, string>): string {
+  return names.get(owner.trim().toLowerCase()) ?? ""
+}
+
 // The full, deterministic, name-ordered owner list the live fan-out pages over
 // — filtered by search + section ONLY (NOT submitted/passing status). Those
 // status axes depend on live presence, so using them here would make the owner
@@ -871,20 +908,21 @@ export function pageRepoOwnerSpine({
   students: Student[]
 }): string[] {
   const q = query.trim().toLowerCase()
+  const names = buildNameKeyLookup(students)
   if (isGroup) {
     // Page the group founders in the SAME order the table renders them: by
     // founder display name (the name-asc live view). Match search against the
     // founder login or roster display name. Section isn't a group concept.
     return [...groupRepos]
       .sort((a, b) =>
-        (getName(a.owner, students) || a.owner)
-          .toLowerCase()
-          .localeCompare((getName(b.owner, students) || b.owner).toLowerCase()),
+        ownerSortKey(a.owner, names).localeCompare(
+          ownerSortKey(b.owner, names),
+        ),
       )
       .filter((repo) => {
         if (!q) return true
         if (repo.owner.toLowerCase().includes(q)) return true
-        const name = getName(repo.owner, students).toLowerCase()
+        const name = ownerSearchName(repo.owner, names)
         return name.length > 0 && name.includes(q)
       })
       .map((repo) => repo.owner)
@@ -900,7 +938,7 @@ export function pageRepoOwnerSpine({
       if (!q) return true
       const login = student.username.toLowerCase()
       if (login.includes(q)) return true
-      const name = getName(student.username, students).toLowerCase()
+      const name = ownerSearchName(student.username, names)
       return name.length > 0 && name.includes(q)
     })
     .map((student) => student.username)
