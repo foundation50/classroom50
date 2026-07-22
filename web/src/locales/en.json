@@ -1167,7 +1167,7 @@
       "statusPaused": "Autograding paused",
       "statusDisabled": "Actions off",
       "usageTitle": "Actions minutes this month",
-      "usageOfIncluded": "{{used}} / {{included}} min included",
+      "usageOfIncluded": "{{used}} min used / {{included}} min included",
       "usageMinutes": "{{minutes}} min used",
       "usageCost": "${{amount}} billed this month.",
       "usageOverQuota": "{{over}} minutes over the included quota.",
