@@ -70,21 +70,10 @@ export type SubmissionRow = {
   late?: boolean
   // Last (re-)graded instant of the latest submission (mirrors submissions[0]).
   gradedAt?: string
-  // A live-only row: the student has a submit/* release the collector hasn't
-  // ingested yet, so it carries presence (datetime/release) but no grade.
-  // Rendered as "submitted, not yet collected" rather than a 0/0 score.
+  // A row with a submission the collector recorded as present but not graded
+  // (no score yet) — rendered as "submitted, not yet collected" rather than a
+  // 0/0 score. Excluded from graded stats/average and the CSV score column.
   pending?: boolean
-  // The row's `submissionCount` was raised above the collected history by live
-  // release data: the student has pushed more `submit/*` releases than
-  // scores.json has ingested, so the newest submission(s) aren't graded yet.
-  // The table hints this so a teacher knows to re-collect. Only set on a
-  // snapshot-backed row (a live-only row is wholly `pending`).
-  staleCount?: boolean
-  // When `staleCount`, the publish time of the newest live `submit/*` release —
-  // the true latest push, later than the graded `datetime`. Lets the table show
-  // "latest push <time>, not yet graded" without moving the graded submission
-  // time. Owner-only (only the owner's live fan-out runs).
-  liveLatestAt?: string
   // Per-attempt history, newest first; the summary fields above mirror submissions[0].
   submissions: SubmissionAttempt[]
 }

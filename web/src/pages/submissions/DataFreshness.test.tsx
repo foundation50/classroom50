@@ -3,19 +3,15 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
-// t returns the key (plus the interpolated `when`/`count` when present) so
-// assertions can distinguish the provenance/nudge lines without the full pack.
+// t returns the key (plus the interpolated `when` when present) so assertions
+// can distinguish the provenance lines without the full pack.
 vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
   return {
     ...actual,
     useTranslation: () => ({
-      t: (key: string, opts?: { when?: string; count?: number }) =>
-        opts?.when
-          ? `${key}:${opts.when}`
-          : opts?.count !== undefined
-            ? `${key}:${opts.count}`
-            : key,
+      t: (key: string, opts?: { when?: string }) =>
+        opts?.when ? `${key}:${opts.when}` : key,
     }),
   }
 })
@@ -26,8 +22,8 @@ afterEach(cleanup)
 
 const base = {
   lastCollectedLabel: "18 hours ago",
-  fetching: false,
-  errorCount: 0,
+  stale: false,
+  collecting: false,
   onRefresh: () => {},
 }
 
@@ -40,7 +36,7 @@ describe("DataFreshness", () => {
     ).toBeNull()
   })
 
-  it("always leads with 'Collected {when}' (the true data age, not the fetch time)", () => {
+  it("leads with 'Collected {when}' (the true data age, not the fetch time)", () => {
     render(<DataFreshness {...base} />)
     expect(
       screen.getByText("submissions.freshness.collected:18 hours ago"),
@@ -54,59 +50,29 @@ describe("DataFreshness", () => {
     ).not.toBeNull()
   })
 
-  it("TA (not live-capable): only the collected line, no nudge or checking hint", () => {
-    render(
-      <DataFreshness {...base} liveCapable={false} newCount={3} checking />,
-    )
-    expect(
-      screen.getByText("submissions.freshness.collected:18 hours ago"),
-    ).not.toBeNull()
-    expect(screen.queryByText(/submissions\.live\.newOnPage/)).toBeNull()
-    expect(screen.queryByText(/submissions\.freshness\.checking/)).toBeNull()
+  it("shows the stale hint only when an assignment repo was pushed since collect", () => {
+    const { rerender } = render(<DataFreshness {...base} stale={false} />)
+    expect(screen.queryByText(/submissions\.freshness\.stale/)).toBeNull()
+    rerender(<DataFreshness {...base} stale />)
+    expect(screen.getByText(/submissions\.freshness\.stale/)).not.toBeNull()
   })
 
-  it("owner, fan-out in flight: 'checking…' hint, no count and no Collect", () => {
-    render(<DataFreshness {...base} liveCapable checking newCount={0} />)
-    expect(screen.getByText(/submissions\.freshness\.checking/)).not.toBeNull()
-    expect(screen.queryByText(/submissions\.live\.newOnPage/)).toBeNull()
-    expect(screen.queryByText("submissions.live.collectToGrade")).toBeNull()
+  it("renders a Refresh submissions button that triggers collect", async () => {
+    const onRefresh = vi.fn()
+    render(<DataFreshness {...base} onRefresh={onRefresh} />)
+    await userEvent.click(screen.getByText("submissions.freshness.refresh"))
+    expect(onRefresh).toHaveBeenCalledOnce()
   })
 
-  it("owner, settled, N new on page: shows the count and a Collect affordance", async () => {
-    const onCollect = vi.fn()
-    render(
-      <DataFreshness
-        {...base}
-        liveCapable
-        newCount={3}
-        onCollect={onCollect}
-      />,
-    )
-    expect(screen.getByText(/submissions\.live\.newOnPage:3/)).not.toBeNull()
-    await userEvent.click(screen.getByText("submissions.live.collectToGrade"))
-    expect(onCollect).toHaveBeenCalledOnce()
+  it("disables the button and shows 'Collecting…' while a collect is in flight", () => {
+    render(<DataFreshness {...base} collecting />)
+    const btn = screen.getByText("submissions.freshness.refreshing")
+    expect((btn.closest("button") as HTMLButtonElement).disabled).toBe(true)
   })
 
-  it("owner, settled, 0 new: shows 'up to date', no count and no Collect", () => {
-    render(<DataFreshness {...base} liveCapable newCount={0} />)
-    expect(screen.getByText(/submissions\.freshness\.upToDate/)).not.toBeNull()
-    expect(screen.queryByText(/submissions\.live\.newOnPage/)).toBeNull()
-    expect(screen.queryByText("submissions.live.collectToGrade")).toBeNull()
-  })
-
-  it("surfaces the degraded-read warning only for a live-capable viewer", () => {
-    const { rerender } = render(
-      <DataFreshness {...base} liveCapable errorCount={3} />,
-    )
-    expect(screen.getByText("submissions.live.incomplete:3")).not.toBeNull()
-    // A non-capable viewer never sees the live incomplete warning.
-    rerender(<DataFreshness {...base} liveCapable={false} errorCount={3} />)
-    expect(screen.queryByText("submissions.live.incomplete:3")).toBeNull()
-  })
-
-  it("disables refresh while fetching", () => {
-    render(<DataFreshness {...base} fetching />)
-    const btn = screen.getByLabelText("submissions.freshness.refreshAria")
-    expect((btn as HTMLButtonElement).disabled).toBe(true)
+  it("omits the button entirely when no onRefresh is provided", () => {
+    render(<DataFreshness {...base} onRefresh={undefined} />)
+    expect(screen.queryByText("submissions.freshness.refresh")).toBeNull()
+    expect(screen.queryByText("submissions.freshness.refreshing")).toBeNull()
   })
 })

@@ -22,34 +22,27 @@ import {
   DEFAULT_PAGE_SIZE,
   acceptedRosterCount,
   acceptedUsernames,
-  buildGroupDisplayItems,
-  buildGroupRosterDisplayItems,
-  buildRosterDisplayItems,
   buildScoresCsvRows,
   buildSectionLookup,
-  buildSortedDisplayItems,
   classAverage,
   computeStats,
-  countNewSincePage,
-  displayPageOwners,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
-  mergeLiveRows,
-  paginateDisplayItems,
+  latestAssignmentPush,
   reconcileNonSubmitters,
   rosterScopedRows,
   rowInSection,
   selectActiveWorkflowAction,
   showsNonSubmitters,
+  snapshotIsStale,
   studentInSection,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
 import useGetScores from "@/hooks/useGetScores"
-import useLiveSubmissions from "@/hooks/useLiveSubmissions"
 import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
@@ -68,7 +61,6 @@ import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import { RegradeCoordinatorProvider } from "@/context/regrade/RegradeCoordinator"
 import useGetLastCollectScoresRun from "@/hooks/useGetLastCollectScoresRun"
 import { useClassroomRoleContext } from "@/context/classroomRole/ClassroomRoleProvider"
-import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import { can } from "@/authz"
 import RoleResolvingFallback from "@/components/RoleResolvingFallback"
 import {
@@ -93,19 +85,9 @@ const SubmissionsPageContent = () => {
   // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
   const { role: classroomRole } = useClassroomRoleContext()
   const canRegradeAll = can("authorAssignments", { classroomRole })
-  // Live reads (submit/* releases, org repo list) hit student repos with the
-  // VIEWER's personal token. Only an org owner is admin on every repo and can
-  // list them; a TA/HTA is granted read on individual repos at collect time but
-  // can't enumerate the org, so their live fan-out would 404 across the board.
-  // So the live presence OVERLAY is owner-only — non-owners render purely from
-  // the collected scores.json snapshot (which they refresh via Collect).
-  // `isOwner` is fail-closed: false until the org role is CONFIRMED owner, so
-  // the page shows the snapshot without a live flash while the role resolves.
-  const { isOwner } = useIsOrgOwner()
   const {
     data: scoresData,
     refetch: refetchScores,
-    isFetching: scoresFetching,
     isError: scoresError,
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
@@ -250,105 +232,17 @@ const SubmissionsPageContent = () => {
 
   // Whether the live presence overlay applies here: owner-only (personal token
   // can read the repos) and not an empty_repo assignment (never autograded). A
-  // non-owner renders purely from the collected snapshot.
-  const liveCapable = isOwner && !isEmptyRepoAssignment
-
-  // Live submission presence for THIS assignment, read directly from student
-  // repos' submit/* releases — so a student who pushed but hasn't been collected
-  // yet still shows as submitted (issue #347). PAGE-SCOPED: the fan-out reads
-  // only the repos on the CURRENT table page (#359's burst mitigation), so a
-  // large class is read a page at a time. The fanned owner set follows the
-  // rendered page under the ACTIVE sort — derived from the SNAPSHOT display list
-  // (not the live-merged one), so it stays independent of the live results it
-  // produces (no fetch loop) while lining the fanned page up with the visible
-  // page under any sort, not just name-asc. Owner-only, off for empty_repo.
-  //
-  // Uses snapshot-scoped rows filtered+sorted the same way the table renders,
-  // and the whole (search/section-scoped) roster as the non-submitter pool: the
-  // page slice may then name a few owners the rendered page won't show (a
-  // non-submitter that a live-only pending row will outrank), but the fan-out
-  // OVER-reading is harmless — it only ever adds live data for a repo, never
-  // hides a visible row. What matters is that every owner the page WILL show is
-  // covered, which the shared display builders guarantee.
-  const snapshotScoped = useMemo(
+  // The collected scores.json snapshot, roster-scoped (see rosterScopedRows),
+  // gated on a resolved roster so a transient failure falls back to unscoped
+  // rows rather than blanking a populated gradebook. Grades, presence, and
+  // counts all come from the last collection; freshness is signalled separately
+  // via the DataFreshness line (staleness heuristic below), not by reading each
+  // repo's releases live.
+  const scoresInfo = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
   )
-  // Neutralize the `accepted` and `passing` axes for the fan-out slice:
-  // acceptance/grade data may lag, and this set only needs to COVER the page's
-  // owners (over-reading is harmless), so never let a not-yet-loaded filter drop
-  // an owner the rendered page will show.
-  const liveFilters: SubmissionFilters = useMemo(
-    () => ({ ...filters, accepted: "all" as const, passing: "all" as const }),
-    [filters],
-  )
-  const liveOwnerArgs = useMemo(
-    () => ({
-      isGroup: isGroupAssignment,
-      sort,
-      students,
-      rows: filterAndSortRows(snapshotScoped, {
-        query,
-        filters: liveFilters,
-        sort,
-        students,
-        sectionByUsername,
-        thresholdFraction: null,
-      }),
-      nonSubmitters: showsNonSubmitters(liveFilters) ? students : [],
-      groupRepos: showsNonSubmitters(liveFilters) ? groupRepoList : [],
-    }),
-    [
-      isGroupAssignment,
-      sort,
-      students,
-      snapshotScoped,
-      query,
-      liveFilters,
-      sectionByUsername,
-      groupRepoList,
-    ],
-  )
-  const livePageOwners = useMemo(
-    () => displayPageOwners({ ...liveOwnerArgs, page, pageSize }),
-    [liveOwnerArgs, page, pageSize],
-  )
-  const {
-    submissions: liveSubmissions,
-    errorCount: liveErrorCount,
-    isFetching: liveFetching,
-    isPending: livePending,
-    refetch: refetchLive,
-  } = useLiveSubmissions({
-    org,
-    classroom,
-    assignment,
-    repoOwners: livePageOwners,
-    // Owner-only, not empty_repo — see liveCapable.
-    enabled: liveCapable,
-  })
-
-  // Always overlay live presence over the snapshot for a live-capable viewer
-  // (snapshot wins per owner for GRADES; live adds a pending row for an
-  // as-yet-uncollected submitter and bumps stale counts). A non-capable viewer
-  // (TA/HTA) uses the collected snapshot ALONE. Then roster-scope as before,
-  // gated on a resolved roster so a transient failure falls back to unscoped
-  // rows rather than blanking a populated gradebook.
-  const scoresInfo = useMemo(() => {
-    const merged = liveCapable
-      ? mergeLiveRows(
-          snapshotRows,
-          liveSubmissions.map((s) => ({
-            owner: s.owner,
-            datetime: s.submittedAt,
-            release: s.releaseUrl,
-            submissionCount: s.submissionCount,
-          })),
-        )
-      : snapshotRows
-    return rosterReady ? rosterScopedRows(merged, students) : merged
-  }, [liveCapable, snapshotRows, liveSubmissions, rosterReady, students])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
@@ -381,15 +275,14 @@ const SubmissionsPageContent = () => {
   // them. Gated on scores having loaded — until then scoresInfo is empty and
   // would flag the whole roster.
   // Hold the "not submitted" list until every source that can still reclassify
-  // a student settles (snapshot, live fan-out, group-member reconciliation) —
-  // else a submitter flashes "not submitted" before resolving to Pending.
+  // a student settles (snapshot, group-member reconciliation) — else a submitter
+  // flashes "not submitted" before its row resolves.
   const scoresLoaded = scoresData !== undefined
   // Empty rows before the snapshot+roster land mean "loading", not "empty" —
   // gate the empty state on this so it doesn't flash on first paint. A
   // background refetch keeps scoresLoaded true, so Refresh never blanks the table.
   const initialLoading = !scoresLoaded || rosterLoading
-  const nonSubmittersReady =
-    scoresLoaded && !livePending && !groupMembersPending
+  const nonSubmittersReady = scoresLoaded && !groupMembersPending
   const nonSubmitters = useMemo(() => {
     if (!nonSubmittersReady) return []
     return reconcileNonSubmitters(students, scoresInfo, groupRepoFounders)
@@ -558,40 +451,6 @@ const SubmissionsPageContent = () => {
     })
   }, [effectiveFilters, query, unsubmittedGroupRepos, students])
 
-  // "N new on this page" for the freshness nudge: count the rows on the CURRENT
-  // page whose live presence outran the snapshot (pushed-again `staleCount` or
-  // as-yet-uncollected `pending`). Page-scoped because the fan-out only reads
-  // the current page's repos — the nudge says "on this page", not class-wide.
-  // Built from the same display list SubmissionsTable renders so the count
-  // matches what the user sees; only live-capable viewers get a non-zero count.
-  const newOnPageCount = useMemo(() => {
-    if (!liveCapable) return 0
-    const items = isGroupAssignment
-      ? sort === "name-asc"
-        ? buildGroupRosterDisplayItems(visibleRows, visibleGroupRepos, students)
-        : buildGroupDisplayItems(visibleRows, visibleGroupRepos)
-      : sort === "name-asc"
-        ? buildRosterDisplayItems(students, visibleRows, visibleNonSubmitters)
-        : buildSortedDisplayItems(visibleRows, visibleNonSubmitters)
-    const pageRows = paginateDisplayItems(items, pageSize, page)
-      .filter((item) => item.kind === "row")
-      .map(
-        (item) =>
-          (item as { kind: "row"; row: (typeof visibleRows)[number] }).row,
-      )
-    return countNewSincePage(pageRows)
-  }, [
-    liveCapable,
-    isGroupAssignment,
-    sort,
-    students,
-    visibleRows,
-    visibleNonSubmitters,
-    visibleGroupRepos,
-    pageSize,
-    page,
-  ])
-
   const collectScores = useTriggerScoreCollection(org)
   const regradeAll = useTriggerRegrade({ org, classroom, assignment })
   // `anyRegrading` covers the whole-assignment regrade AND every per-row
@@ -635,6 +494,27 @@ const SubmissionsPageContent = () => {
     lastRun?.status === "completed" && lastRun.created_at
       ? formatRelativeToNow(new Date(lastRun.created_at))
       : null
+
+  // Staleness heuristic (no extra API call): the most recent push across this
+  // assignment's repos, read from the already-loaded org repo list's pushed_at.
+  // If it's newer than the last completed collect run, scores.json probably
+  // misses the newest work, so DataFreshness flags it and offers a re-collect.
+  const latestPush = useMemo(
+    () =>
+      latestAssignmentPush(
+        orgRepos,
+        classroom ?? "",
+        assignment ?? "",
+        siblingSlugs,
+      ),
+    [orgRepos, classroom, assignment, siblingSlugs],
+  )
+  const snapshotStale =
+    !isEmptyRepoAssignment &&
+    snapshotIsStale(
+      latestPush,
+      lastRun?.status === "completed" ? lastRun.created_at : null,
+    )
 
   // Refresh scores + last-run timestamp once a manual collection finishes.
   useEffect(() => {
@@ -858,23 +738,14 @@ const SubmissionsPageContent = () => {
         leading={
           <DataFreshness
             lastCollectedLabel={lastCollectedLabel}
-            fetching={scoresFetching || liveFetching}
-            errorCount={liveErrorCount}
+            stale={snapshotStale}
+            collecting={collecting}
             emptyRepo={isEmptyRepoAssignment}
-            liveCapable={liveCapable}
-            checking={liveFetching}
-            newCount={newOnPageCount}
-            onCollect={
+            onRefresh={
               collecting || emptyRoster.show
                 ? undefined
                 : () => collectScores.collect()
             }
-            onRefresh={() => {
-              // Always refresh the snapshot (grades live there). Re-run the live
-              // fan-out too for a live-capable viewer; it's a no-op otherwise.
-              refetchScores()
-              if (liveCapable) refetchLive()
-            }}
           />
         }
         trailing={

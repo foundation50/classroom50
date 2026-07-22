@@ -1,51 +1,37 @@
 import { Info, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, HelpTooltip } from "@/components/ui"
+import { Button, HelpTooltip, cx } from "@/components/ui"
 
-// One passive freshness surface for the submissions dashboard. There is no
-// live/static mode to pick: the table always shows the collected scores.json
-// snapshot (grades, sort, filters) and, for an owner, silently overlays live
-// submission presence read from GitHub. Following data-freshness UX guidance,
-// each value self-describes its freshness — the line states when scores were
-// collected and, when the live overlay finds pushes newer than the last
-// collection, nudges the owner to collect again. A degraded live read is
-// surfaced rather than letting an undercount look authoritative.
+// One passive freshness surface for the submissions dashboard. The table always
+// shows the collected scores.json snapshot; this line states when scores were
+// collected and, when an assignment repo has been pushed since that collect,
+// flags the snapshot as (probably) out of date and offers a one-click re-collect
+// ("Refresh submissions"). The staleness signal is derived from the org repo
+// list's `pushed_at` (no extra fetch), so it works for every viewer, not just
+// owners. Following data-freshness UX guidance: never let stale data look
+// authoritative, and give the user a direct way to refresh it.
 export type DataFreshnessProps = {
   // Relative "x ago" of the last completed collect run — when scores were
   // produced org-wide, the meaningful data age. Null when never collected.
   lastCollectedLabel: string | null
-  // A fetch (snapshot or live fan-out) is in flight — spins the refresh icon.
-  fetching: boolean
-  // Repos the live fan-out couldn't read (owner only); > 0 shows a warning.
-  errorCount: number
-  onRefresh: () => void
-  // Whether the viewer gets the live overlay (org owner, autograded assignment).
-  // A non-capable viewer (TA/HTA) sees only the collected line — no count, no
-  // Collect affordance.
-  liveCapable?: boolean
-  // The live fan-out for the current page is still in flight; show a neutral
-  // "checking…" hint instead of a count so it never flickers up from a false 0.
-  checking?: boolean
-  // Count of rows on the CURRENT page whose live presence is newer than the
-  // collected snapshot (pushed-again + as-yet-uncollected submitters). Page-
-  // scoped because the fan-out reads only the rendered page's repos.
-  newCount?: number
-  // Kick off a collection to grade the new pushes; reuses the page's Collect.
-  onCollect?: () => void
+  // An assignment repo was pushed after the last collect, so the snapshot is
+  // (probably) out of date. Shows the stale hint + the Refresh CTA.
+  stale: boolean
+  // A collect is in flight (dispatching/running) — disables the CTA and spins.
+  collecting: boolean
+  // Trigger a Collect Scores run to rebuild scores.json. Omitted when the
+  // viewer can't collect (e.g. empty roster) — then no CTA renders.
+  onRefresh?: () => void
   // empty_repo assignments never autograde; show that instead of freshness.
   emptyRepo?: boolean
 }
 
 export function DataFreshness({
   lastCollectedLabel,
-  fetching,
-  errorCount,
+  stale,
+  collecting,
   onRefresh,
-  liveCapable = false,
-  checking = false,
-  newCount = 0,
-  onCollect,
   emptyRepo = false,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
@@ -63,77 +49,42 @@ export function DataFreshness({
     ? t("submissions.freshness.collected", { when: lastCollectedLabel })
     : t("submissions.freshness.neverCollected")
 
-  // Owner-only nudge, page-scoped. While the fan-out is in flight we show a
-  // neutral "checking…" hint (no count) so a false 0 can't flash; once settled,
-  // a positive count offers Collect, and 0 reads as "up to date".
-  const showChecking = liveCapable && checking
-  const showNudge = liveCapable && !checking && newCount > 0
-  const showUpToDate = liveCapable && !checking && newCount === 0
-
   return (
-    <div className="flex flex-col items-start gap-1 text-sm text-base-content/70">
-      <div
-        className="flex flex-wrap items-center gap-x-2 gap-y-1"
-        role="status"
-      >
-        <span>{collectedLine}</span>
+    <div
+      className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-base-content/70"
+      role="status"
+    >
+      <span>{collectedLine}</span>
 
-        {showChecking && (
-          <span className="text-base-content/50">
-            {"· "}
-            {t("submissions.freshness.checking")}
-          </span>
-        )}
+      {/* Stale hint: an assignment repo was pushed after the last collect, so
+          scores.json probably misses the newest work. Announce once so the
+          teacher notices without the count noise the old nudge carried. */}
+      {stale && (
+        <span className="text-warning" aria-live="polite">
+          {"· "}
+          {t("submissions.freshness.stale")}
+        </span>
+      )}
 
-        {/* The settled overlay result. Announce it once (aria-live polite) — the
-            transient "checking…" state above is not announced. */}
-        {showNudge && (
-          <span className="inline-flex items-center gap-2" aria-live="polite">
-            <span className="text-info">
-              {"· "}
-              {t("submissions.live.newOnPage", { count: newCount })}
-            </span>
-            {onCollect && (
-              <Button variant="ghost" size="xs" onClick={onCollect}>
-                {t("submissions.live.collectToGrade")}
-              </Button>
-            )}
-          </span>
-        )}
+      <HelpTooltip help={t("submissions.freshness.help")} />
 
-        {showUpToDate && (
-          <span className="text-base-content/50" aria-live="polite">
-            {"· "}
-            {t("submissions.freshness.upToDate")}
-          </span>
-        )}
-
-        <HelpTooltip help={t("submissions.freshness.help")} />
-
+      {onRefresh && (
         <Button
-          variant="ghost"
+          variant={stale ? "primary" : "ghost"}
           size="xs"
-          shape="circle"
-          disabled={fetching}
+          disabled={collecting}
           onClick={onRefresh}
-          aria-label={t("submissions.freshness.refreshAria")}
-          title={t("submissions.freshness.refresh")}
+          title={t("submissions.freshness.refreshHelp")}
         >
           <RefreshCw
             aria-hidden="true"
             size={12}
-            className={fetching ? "animate-spin" : ""}
+            className={cx("mr-1", collecting && "animate-spin")}
           />
+          {collecting
+            ? t("submissions.freshness.refreshing")
+            : t("submissions.freshness.refresh")}
         </Button>
-      </div>
-
-      {/* Degraded live read: some repos couldn't be read, so counts / the "not
-          submitted" list are provisional. Say so rather than showing stale data
-          as authoritative. */}
-      {liveCapable && errorCount > 0 && (
-        <Alert tone="warning" role="status">
-          {t("submissions.live.incomplete", { count: errorCount })}
-        </Alert>
       )}
     </div>
   )

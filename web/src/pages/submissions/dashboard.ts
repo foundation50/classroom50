@@ -38,81 +38,66 @@ export function rosterScopedRows(
   return rows.filter((row) => rowOnRoster(row, rosterLogins))
 }
 
-// Fold live submission presence (submit/* releases read directly from student
-// repos) into the collected snapshot rows. `scores.json` stays the source of
-// record for GRADES: a snapshot row keeps its graded score, history, and
-// review link. Live data contributes two things on top:
+// The most recent push time across this assignment's repos, or null when none
+// have been pushed / none exist. Used as a cheap staleness heuristic for the
+// collected snapshot: if any assignment repo was pushed AFTER the last collect
+// run, scores.json is (probably) out of date and the teacher should re-collect.
 //
-//   - COUNT: a snapshot row's `submissionCount` is raised to the live count
-//     when the student has pushed more submit/* releases than the last collect
-//     ingested (the #347 lag). The row is flagged `staleCount` so the table can
-//     hint that the newest push isn't graded yet. Live never LOWERS a count
-//     (a live read is one page / a lower bound; the snapshot may legitimately
-//     hold more), so the merged count is max(snapshot, live).
-//   - PRESENCE: live adds a row ONLY for an owner absent from the snapshot — a
-//     student who pushed but hasn't been collected yet. Such a row is `pending`
-//     (no grade) with the live count, so the table shows "submitted, not yet
-//     collected" rather than a fake 0/0.
-//
-// Owner match is case-insensitive; the union preserves snapshot order (with
-// counts updated in place), then appends live-only rows newest-first.
-export type LiveSubmissionPresence = {
-  owner: string
-  datetime: string
-  release: string
-  // Live submit/* release count for the repo (a lower bound; see LiveSubmission).
-  submissionCount: number
+// Reads the already-loaded org repo list (each `GitHubRepo` carries `pushed_at`
+// from `GET /orgs/{org}/repos`), so it costs NO extra API call. Individual repos
+// (`<classroom>-<assignment>-<user>`) and group repos
+// (`<classroom>-<assignment>-<founder>`) share one prefix, so a single prefix
+// match covers both. Sibling assignments whose slug extends this one
+// (`hw1-bonus` under `hw1`) are excluded the same way existingGroupRepos guards
+// them, and the org config repo (`classroom50`) never matches the prefix so it's
+// naturally excluded. Returns an ISO timestamp string (the repo's `pushed_at`).
+export function latestAssignmentPush(
+  repos: GitHubRepo[] | null | undefined,
+  classroom: string,
+  assignment: string,
+  siblingSlugs: string[] = [],
+): string | null {
+  if (!repos) return null
+  const prefix = `${classroom}-${assignment}-`.toLowerCase()
+  const overlapPrefixes = siblingSlugs
+    .map((slug) => slug.toLowerCase())
+    .filter((slug) => slug !== assignment.toLowerCase())
+    .map((slug) => `${classroom}-${slug}-`.toLowerCase())
+    .filter((siblingPrefix) => siblingPrefix.startsWith(prefix))
+
+  let latest: number | null = null
+  let latestIso: string | null = null
+  for (const repo of repos) {
+    const name = repo.name.toLowerCase()
+    if (!name.startsWith(prefix)) continue
+    if (overlapPrefixes.some((sibling) => name.startsWith(sibling))) continue
+    if (name.slice(prefix.length).length === 0) continue // bare prefix, no owner
+    const pushed = repo.pushed_at
+    if (!pushed) continue
+    const ms = new Date(pushed).getTime()
+    if (!Number.isFinite(ms)) continue
+    if (latest === null || ms > latest) {
+      latest = ms
+      latestIso = pushed
+    }
+  }
+  return latestIso
 }
 
-export function mergeLiveRows(
-  snapshotRows: SubmissionRow[],
-  liveRows: LiveSubmissionPresence[],
-): SubmissionRow[] {
-  const liveByOwner = new Map<string, LiveSubmissionPresence>()
-  for (const live of liveRows) {
-    liveByOwner.set(live.owner.trim().toLowerCase(), live)
-  }
-
-  const merged = snapshotRows.map((row) => {
-    const live = liveByOwner.get(row.owner.trim().toLowerCase())
-    // Live is a lower bound (one page), so it can only reveal MORE submissions
-    // than the snapshot captured, never fewer. Only bump + flag when it does,
-    // and carry the live push time so the table can show the true latest push
-    // (later than the graded datetime) without moving the graded submission.
-    if (!live || live.submissionCount <= row.submissionCount) return row
-    return {
-      ...row,
-      submissionCount: live.submissionCount,
-      staleCount: true,
-      liveLatestAt: live.datetime,
-    }
-  })
-
-  const snapshotOwners = new Set(
-    snapshotRows.map((row) => row.owner.trim().toLowerCase()),
-  )
-
-  const liveOnly = liveRows
-    .filter((live) => !snapshotOwners.has(live.owner.trim().toLowerCase()))
-    .sort(
-      (a, b) => new Date(b.datetime).getTime() - new Date(a.datetime).getTime(),
-    )
-    .map<SubmissionRow>((live) => ({
-      usernames: [live.owner],
-      owner: live.owner,
-      datetime: live.datetime,
-      commit: "",
-      release: live.release,
-      review: "",
-      score: 0,
-      "max-score": 0,
-      // At least 1 (the release we just saw); use the live count when higher.
-      submissionCount: Math.max(1, live.submissionCount),
-      pending: true,
-      submissions: [],
-    }))
-
-  return [...merged, ...liveOnly]
+// Whether the collected snapshot is (probably) stale: an assignment repo was
+// pushed after the last completed collect run. Both inputs are ISO strings;
+// null `lastCollectedAt` (never collected) with any push counts as stale, and a
+// null `latestPush` (no pushes) is never stale.
+export function snapshotIsStale(
+  latestPush: string | null,
+  lastCollectedAt: string | null | undefined,
+): boolean {
+  if (!latestPush) return false
+  if (!lastCollectedAt) return true
+  const pushMs = new Date(latestPush).getTime()
+  const collectMs = new Date(lastCollectedAt).getTime()
+  if (!Number.isFinite(pushMs) || !Number.isFinite(collectMs)) return false
+  return pushMs > collectMs
 }
 
 // the assignment sets no threshold — then every row is "ungraded" (as is an
@@ -685,8 +670,7 @@ export function selectActiveWorkflowAction(
 // non-submitters interleave by name rather than grouping. For a GROUP
 // assignment the unit is the repo, not the student, so submitted group rows
 // come first (name-ordered) then unsubmitted group repos. Pagination spans the
-// whole list as one sequence, and the current page's owners drive the live
-// fan-out (so it reads only the repos on the page you're viewing).
+// whole list as one sequence.
 export type DisplayItem =
   | { kind: "row"; row: SubmissionRow }
   | { kind: "nonSubmitter"; student: Student }
@@ -742,13 +726,11 @@ export function buildRosterDisplayItems(
   return items
 }
 
-// Build the display list for a GROUP assignment in the name-ordered live view:
-// one item per group founder, name-sorted, resolved to the founder's submitted
-// row when one exists (owner match) else an unsubmitted group-repo row. This is
-// the group analog of buildRosterDisplayItems and pages in the SAME order as
-// pageRepoOwnerSpine's group branch, so the live fan-out and the rendered page
-// line up. `rows` are the (filtered) submitted group rows; `groupRepos` the
-// unsubmitted group repos.
+// Build the display list for a GROUP assignment in the default name order: one
+// item per group founder, name-sorted, resolved to the founder's submitted row
+// when one exists (owner match) else an unsubmitted group-repo row. The group
+// analog of buildRosterDisplayItems. `rows` are the (filtered) submitted group
+// rows; `groupRepos` the unsubmitted group repos.
 export function buildGroupRosterDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
@@ -760,8 +742,7 @@ export function buildGroupRosterDisplayItems(
     repo,
   }))
   // Precompute the name map once so the comparator is O(1) per compare (getName
-  // would re-scan the roster each call). ownerSortKey matches pageRepoOwnerSpine's
-  // group ordering, keeping the rendered page and the fan-out spine aligned.
+  // would re-scan the roster each call).
   const names = buildNameKeyLookup(students)
   return [...submitted, ...unsubmitted].sort((a, b) =>
     ownerSortKey(displayItemOwner(a), names).localeCompare(
@@ -772,9 +753,7 @@ export function buildGroupRosterDisplayItems(
 
 // Build the ordered display list for a GROUP assignment under a non-name sort:
 // submitted group rows first (in the caller's sort order), then unsubmitted
-// group repos. Live presence still overlays these rows by owner — the name-
-// order spine coupling only applies to the name-asc branch, so under any other
-// sort the fan-out reads this page's owners directly (see displayPageOwners).
+// group repos.
 export function buildGroupDisplayItems(
   rows: SubmissionRow[],
   groupRepos: GroupRepo[],
@@ -788,9 +767,7 @@ export function buildGroupDisplayItems(
 // Build the display list for an INDIVIDUAL assignment under a non-name sort:
 // the already-sorted submitted rows first, then non-submitters. Preserves the
 // caller's chosen sort for the submitted rows rather than forcing the roster's
-// name order. Live presence still overlays by owner — the roster-spine coupling
-// is specific to the name-asc branch (see displayPageOwners), so under any
-// other sort the fan-out targets this page's owners directly.
+// name order.
 export function buildSortedDisplayItems(
   rows: SubmissionRow[],
   nonSubmitters: Student[],
@@ -844,8 +821,7 @@ export function paginateDisplayItems(
   return items.slice(start, start + pageSize)
 }
 
-// The repo-owner login for a display item, so the live fan-out can read exactly
-// the repos on the current page. Submitted/pending rows and group repos are
+// The repo-owner login for a display item. Submitted rows and group repos are
 // keyed by `owner`; a non-submitter by its roster username. Empty string is
 // filtered by the caller.
 export function displayItemOwner(item: DisplayItem): string {
@@ -860,11 +836,10 @@ export function displayItemOwner(item: DisplayItem): string {
 }
 
 // A `login (lowercased) -> display name (lowercased)` map for the roster, built
-// once so the group name-ordering and search don't call getName (an O(n) roster
-// scan) inside a comparator or filter — which turns an O(n log n) sort into
-// O(n^2). The value mirrors getName exactly: the display name, or "" when the
-// login isn't on the roster or the row has no name. Shared by the fan-out spine
-// and the group display-item builder so their orderings can't drift.
+// once so the group name-ordering doesn't call getName (an O(n) roster scan)
+// inside a comparator — which turns an O(n log n) sort into O(n^2). The value
+// mirrors getName exactly: the display name, or "" when the login isn't on the
+// roster or the row has no name.
 export function buildNameKeyLookup(students: Student[]): Map<string, string> {
   const map = new Map<string, string>()
   for (const student of students) {
@@ -883,147 +858,6 @@ export function buildNameKeyLookup(students: Student[]): Map<string, string> {
 // (Mirrors the prior `getName(owner) || owner`.)
 function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
-}
-
-// An owner's display name for SEARCH matching (name only, "" when off-roster or
-// nameless) — mirrors the prior `getName(owner).toLowerCase()`, so the login is
-// matched separately by the caller, not folded in here.
-function ownerSearchName(owner: string, names: Map<string, string>): string {
-  return names.get(owner.trim().toLowerCase()) ?? ""
-}
-
-// A name-ordered, search+section-filtered owner list (individual roster or
-// group founders). Retained as a tested helper; the live fan-out now derives
-// its page owners from the rendered display list under the active sort (see
-// displayPageOwners), so this name-only spine is no longer the fan-out source.
-export function pageRepoOwnerSpine({
-  isGroup,
-  roster,
-  groupRepos,
-  query,
-  section,
-  sectionByUsername,
-  students,
-}: {
-  isGroup: boolean
-  roster: Student[]
-  groupRepos: GroupRepo[]
-  query: string
-  section: string
-  sectionByUsername: Map<string, string>
-  students: Student[]
-}): string[] {
-  const q = query.trim().toLowerCase()
-  const names = buildNameKeyLookup(students)
-  if (isGroup) {
-    // Page the group founders in the SAME order the table renders them: by
-    // founder display name (the name-asc live view). Match search against the
-    // founder login or roster display name. Section isn't a group concept.
-    return [...groupRepos]
-      .sort((a, b) =>
-        ownerSortKey(a.owner, names).localeCompare(
-          ownerSortKey(b.owner, names),
-        ),
-      )
-      .filter((repo) => {
-        if (!q) return true
-        if (repo.owner.toLowerCase().includes(q)) return true
-        const name = ownerSearchName(repo.owner, names)
-        return name.length > 0 && name.includes(q)
-      })
-      .map((repo) => repo.owner)
-  }
-  return roster
-    .filter((student) => {
-      if (
-        section !== "all" &&
-        sectionByUsername.get(student.username.trim().toLowerCase()) !== section
-      ) {
-        return false
-      }
-      if (!q) return true
-      const login = student.username.toLowerCase()
-      if (login.includes(q)) return true
-      const name = ownerSearchName(student.username, names)
-      return name.length > 0 && name.includes(q)
-    })
-    .map((student) => student.username)
-    .filter(Boolean)
-}
-
-// The repo owners the live fan-out should read for the current page — a
-// page-scoped slice of pageRepoOwnerSpine so a large class is read a page at a
-// time (each page's owner-set is cached by react-query), not all at once.
-export function pageRepoOwners(args: {
-  isGroup: boolean
-  roster: Student[]
-  groupRepos: GroupRepo[]
-  query: string
-  section: string
-  sectionByUsername: Map<string, string>
-  students: Student[]
-  page: number
-  pageSize: number
-}): string[] {
-  const owners = pageRepoOwnerSpine(args)
-  const { page: clamped } = pageBounds(owners.length, args.pageSize, args.page)
-  const start = clamped * args.pageSize
-  return owners.slice(start, start + args.pageSize)
-}
-
-// Count of rows on a page whose live presence is newer than the collected
-// snapshot: pushed-again rows (staleCount) plus as-yet-uncollected submitters
-// (pending). Drives the freshness line's "N new on this page — Collect" nudge.
-export function countNewSincePage(rows: SubmissionRow[]): number {
-  return rows.filter((row) => row.staleCount || row.pending).length
-}
-
-// The repo owners on the CURRENTLY RENDERED page, in the table's own display
-// order under the active sort — so the live fan-out reads exactly the repos the
-// user is looking at, whatever sort produced them (not just name-asc). Built
-// from the SNAPSHOT display list using the same builders SubmissionsTable uses,
-// so the fanned page and the rendered page line up. It must NOT be fed the
-// live-merged rows: a live-only pending row exists only after the fan-out, so
-// using it here would feed the fan-out's own output back into its input and
-// loop. `nonSubmitter`/`groupRepo` items resolve to their owner login so an
-// as-yet-uncollected or accepted-not-submitted repo is still read.
-export function displayPageOwners({
-  isGroup,
-  sort,
-  students,
-  rows,
-  nonSubmitters,
-  groupRepos,
-  page,
-  pageSize,
-}: {
-  isGroup: boolean
-  sort: SubmissionSort
-  students: Student[]
-  rows: SubmissionRow[]
-  nonSubmitters: Student[]
-  groupRepos: GroupRepo[]
-  page: number
-  pageSize: number
-}): string[] {
-  const items = isGroup
-    ? sort === "name-asc"
-      ? buildGroupRosterDisplayItems(rows, groupRepos, students)
-      : buildGroupDisplayItems(rows, groupRepos)
-    : sort === "name-asc"
-      ? buildRosterDisplayItems(students, rows, nonSubmitters)
-      : buildSortedDisplayItems(rows, nonSubmitters)
-  const seen = new Set<string>()
-  const owners: string[] = []
-  for (const item of paginateDisplayItems(items, pageSize, page)) {
-    const owner = displayItemOwner(item).trim()
-    if (!owner) continue
-    const key = owner.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    owners.push(owner)
-  }
-  return owners
 }
 
 // The compact list of page numbers to render, with `null` marking an ellipsis

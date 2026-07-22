@@ -551,10 +551,7 @@ const SubmissionsTable = ({
   }: SubmissionRow) => {
     const repo = studentRepoName(classroom, assignment, rest.owner)
     const repoHref = studentRepoUrl(org, classroom, assignment, rest.owner)
-    // Expandability is driven by the COLLECTED history, not the (possibly
-    // live-inflated) count: a `staleCount` row shows more submissions than
-    // scores.json has ingested, so expanding would reveal fewer entries than the
-    // badge claims. Only offer expand when there is real multi-entry history.
+    // Expand only when there is real multi-entry history to reveal.
     const canExpand = rest.submissions.length > 1
     const isOpen = !!expanded[rest.owner]
     return (
@@ -613,15 +610,6 @@ const SubmissionsTable = ({
                   })}
                 </label>
               )}
-              {rest.staleCount && (
-                <Badge
-                  tone="info"
-                  size="sm"
-                  title={t("submissions.table.staleCountTitle")}
-                >
-                  {t("submissions.table.staleCount")}
-                </Badge>
-              )}
             </div>
           </td>
           <td>
@@ -632,10 +620,6 @@ const SubmissionsTable = ({
               >
                 —
               </span>
-            ) : rest.pending ? (
-              <Badge ghost title={t("submissions.table.pendingGradeTitle")}>
-                {t("submissions.table.pendingGrade")}
-              </Badge>
             ) : (
               <ScoreBadge
                 score={score}
@@ -666,16 +650,6 @@ const SubmissionsTable = ({
                 >
                   {t("submissions.table.gradedAt", {
                     date: formatDateTime(rest.gradedAt),
-                  })}
-                </span>
-              ) : null}
-              {rest.liveLatestAt ? (
-                <span
-                  className="whitespace-nowrap text-xs text-info"
-                  title={t("submissions.table.liveLatestTitle")}
-                >
-                  {t("submissions.table.liveLatest", {
-                    date: formatDateTime(rest.liveLatestAt),
                   })}
                 </span>
               ) : null}

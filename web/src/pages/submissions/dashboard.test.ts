@@ -16,18 +16,15 @@ import {
   buildSectionLookup,
   classAverage,
   computeStats,
-  countNewSincePage,
-  displayPageOwners,
   displayItemOwner,
   distinctSections,
   existingGroupRepos,
   filterAndSortRows,
   filterNonSubmitters,
   hasAccepted,
-  mergeLiveRows,
+  latestAssignmentPush,
   nonSubmitterStatus,
   pageBounds,
-  pageRepoOwners,
   paginateDisplayItems,
   paginationRange,
   reconcileNonSubmitters,
@@ -38,6 +35,7 @@ import {
   scoreTone,
   selectActiveWorkflowAction,
   showsNonSubmitters,
+  snapshotIsStale,
   statusSelectValue,
   type SubmissionFilters,
 } from "./dashboard"
@@ -200,85 +198,6 @@ describe("computeStats", () => {
     expect(stats.submitted).toBe(1)
     expect(stats.ungraded).toBe(0)
     expect(stats.passing).toBe(1)
-  })
-})
-
-describe("countNewSincePage", () => {
-  it("counts pushed-again (staleCount) and uncollected (pending) rows", () => {
-    const rows = [
-      row({ score: 9, "max-score": 10 }), // collected, current
-      row({ owner: "bob", staleCount: true }), // pushed again after collect
-      row({ owner: "cara", pending: true }), // submitted, not yet collected
-    ]
-    expect(countNewSincePage(rows)).toBe(2)
-  })
-
-  it("is zero when nothing on the page is newer than the snapshot", () => {
-    expect(countNewSincePage([row({ score: 5, "max-score": 10 })])).toBe(0)
-    expect(countNewSincePage([])).toBe(0)
-  })
-})
-
-describe("displayPageOwners", () => {
-  const students = [
-    student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
-    student({ username: "bob", first_name: "Bob", last_name: "Brown" }),
-    student({ username: "cara", first_name: "Cara", last_name: "Cole" }),
-  ]
-
-  it("returns the current page's owners in name order (name-asc)", () => {
-    const rows = [row({ owner: "bob", usernames: ["bob"] })]
-    const owners = displayPageOwners({
-      isGroup: false,
-      sort: "name-asc",
-      students,
-      rows,
-      nonSubmitters: students, // alice + cara have no row
-      groupRepos: [],
-      page: 0,
-      pageSize: 2,
-    })
-    // Name order: alice (non-sub), bob (row) — page of 2.
-    expect(owners).toEqual(["alice", "bob"])
-  })
-
-  it("follows a non-name sort so the fanned page matches the rendered page", () => {
-    // Under a non-name sort the caller passes rows already in sort order;
-    // buildSortedDisplayItems preserves that order, so page 0 is the first
-    // sorted row's owner — not the alphabetically-first owner.
-    const rows = [
-      row({ owner: "cara", usernames: ["cara"], datetime: "2026-06-20" }),
-      row({ owner: "alice", usernames: ["alice"], datetime: "2026-06-01" }),
-    ]
-    const owners = displayPageOwners({
-      isGroup: false,
-      sort: "recent",
-      students,
-      rows,
-      nonSubmitters: [],
-      groupRepos: [],
-      page: 0,
-      pageSize: 1,
-    })
-    expect(owners).toEqual(["cara"])
-  })
-
-  it("de-duplicates owners (case-insensitively) so a login isn't read twice", () => {
-    const rows = [
-      row({ owner: "alice", usernames: ["alice"] }),
-      row({ owner: "Alice", usernames: ["Alice"] }),
-    ]
-    const owners = displayPageOwners({
-      isGroup: false,
-      sort: "recent", // preserve caller row order; both are the same login
-      students,
-      rows,
-      nonSubmitters: [],
-      groupRepos: [],
-      page: 0,
-      pageSize: 10,
-    })
-    expect(owners).toEqual(["alice"])
   })
 })
 
@@ -911,128 +830,7 @@ describe("statusSelectValue / applyStatusSelection", () => {
   })
 })
 
-describe("mergeLiveRows", () => {
-  const live = (owner: string, datetime: string, submissionCount = 1) => ({
-    owner,
-    datetime,
-    release: `https://github.com/o/${owner}/releases/tag/submit`,
-    submissionCount,
-  })
-
-  it("keeps snapshot rows unchanged", () => {
-    const snapshot = [row({ owner: "alice", score: 8 })]
-    const merged = mergeLiveRows(snapshot, [])
-    expect(merged).toHaveLength(1)
-    expect(merged[0].score).toBe(8)
-    expect(merged[0].pending).toBeUndefined()
-  })
-
-  it("adds a pending row for a live-only owner absent from the snapshot", () => {
-    const snapshot = [row({ owner: "alice" })]
-    const merged = mergeLiveRows(snapshot, [
-      live("bob", "2026-06-21T10:00:00Z"),
-    ])
-    const bob = merged.find((r) => r.owner === "bob")
-    expect(bob).toBeDefined()
-    expect(bob?.pending).toBe(true)
-    expect(bob?.["max-score"]).toBe(0)
-    expect(bob?.usernames).toEqual(["bob"])
-  })
-
-  it("carries the live count onto a live-only pending row", () => {
-    const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 3)])
-    const bob = merged.find((r) => r.owner === "bob")
-    expect(bob?.submissionCount).toBe(3)
-    expect(bob?.pending).toBe(true)
-  })
-
-  it("floors a live-only row's count at 1 even if the live count is 0", () => {
-    // Defensive: a presence row exists because a release was seen, so the count
-    // should never render as 0 submissions.
-    const merged = mergeLiveRows([], [live("bob", "2026-06-21T10:00:00Z", 0)])
-    expect(merged[0].submissionCount).toBe(1)
-  })
-
-  it("keeps the snapshot grade but raises a snapshot row's count to the live count", () => {
-    const snapshot = [row({ owner: "alice", score: 9, submissionCount: 1 })]
-    const merged = mergeLiveRows(snapshot, [
-      live("Alice", "2026-06-25T10:00:00Z", 3),
-    ])
-    expect(merged).toHaveLength(1)
-    // Grade stays from the snapshot (source of record); it is not pending.
-    expect(merged[0].score).toBe(9)
-    expect(merged[0].pending).toBeUndefined()
-    // Count reflects the newer live release history, flagged stale.
-    expect(merged[0].submissionCount).toBe(3)
-    expect(merged[0].staleCount).toBe(true)
-  })
-
-  it("carries the live push time onto a stale row without moving the graded datetime", () => {
-    const snapshot = [
-      row({
-        owner: "alice",
-        score: 9,
-        submissionCount: 1,
-        datetime: "2026-06-20T10:00:00Z",
-      }),
-    ]
-    const merged = mergeLiveRows(snapshot, [
-      live("alice", "2026-06-25T10:00:00Z", 2),
-    ])
-    // The graded submission time is unchanged; the live push time is exposed
-    // separately so the table can show "latest push … not yet graded".
-    expect(merged[0].datetime).toBe("2026-06-20T10:00:00Z")
-    expect(merged[0].liveLatestAt).toBe("2026-06-25T10:00:00Z")
-  })
-
-  it("does not set liveLatestAt when the count is not stale", () => {
-    const snapshot = [row({ owner: "alice", submissionCount: 2 })]
-    const merged = mergeLiveRows(snapshot, [
-      live("alice", "2026-06-25T10:00:00Z", 2),
-    ])
-    expect(merged[0].liveLatestAt).toBeUndefined()
-  })
-
-  it("never lowers a snapshot row's count when live reads fewer (lower bound)", () => {
-    // Live is a single page (a lower bound); the snapshot may legitimately hold
-    // more. The merge must not shrink the count or flag it stale.
-    const snapshot = [row({ owner: "alice", score: 9, submissionCount: 5 })]
-    const merged = mergeLiveRows(snapshot, [
-      live("alice", "2026-06-25T10:00:00Z", 2),
-    ])
-    expect(merged[0].submissionCount).toBe(5)
-    expect(merged[0].staleCount).toBeUndefined()
-  })
-
-  it("leaves the count unflagged when snapshot and live agree", () => {
-    const snapshot = [row({ owner: "alice", submissionCount: 2 })]
-    const merged = mergeLiveRows(snapshot, [
-      live("alice", "2026-06-25T10:00:00Z", 2),
-    ])
-    expect(merged).toHaveLength(1)
-    expect(merged[0].submissionCount).toBe(2)
-    expect(merged[0].staleCount).toBeUndefined()
-  })
-
-  it("matches owners case-insensitively", () => {
-    const snapshot = [row({ owner: "Alice" })]
-    const merged = mergeLiveRows(snapshot, [
-      live("alice", "2026-06-25T10:00:00Z"),
-    ])
-    expect(merged).toHaveLength(1)
-  })
-
-  it("orders live-only rows newest-first", () => {
-    const merged = mergeLiveRows(
-      [],
-      [
-        live("old", "2026-01-01T00:00:00Z"),
-        live("new", "2026-09-01T00:00:00Z"),
-      ],
-    )
-    expect(merged.map((r) => r.owner)).toEqual(["new", "old"])
-  })
-
+describe("pending rows (collector-emitted, not graded)", () => {
   it("pending rows are excluded from the class average", () => {
     const rows = [
       row({ owner: "alice", score: 10, "max-score": 10 }),
@@ -1056,6 +854,72 @@ describe("mergeLiveRows", () => {
     expect(csv.score).toBe("")
     expect(csv.max_score).toBe("")
     expect(csv.usernames).toBe("bob")
+  })
+})
+
+describe("latestAssignmentPush / snapshotIsStale", () => {
+  const repo = (name: string, pushed_at?: string): GitHubRepo =>
+    ({ name, pushed_at }) as GitHubRepo
+
+  it("returns the newest pushed_at across this assignment's repos", () => {
+    const repos = [
+      repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+      repo("cs101-hw1-bob", "2026-06-25T10:00:00Z"),
+      repo("cs101-hw1-cara", "2026-06-22T10:00:00Z"),
+    ]
+    expect(latestAssignmentPush(repos, "cs101", "hw1")).toBe(
+      "2026-06-25T10:00:00Z",
+    )
+  })
+
+  it("ignores repos of other assignments and the config repo", () => {
+    const repos = [
+      repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+      repo("cs101-hw2-bob", "2026-09-01T10:00:00Z"), // different assignment
+      repo("classroom50", "2026-09-02T10:00:00Z"), // config repo
+    ]
+    expect(latestAssignmentPush(repos, "cs101", "hw1")).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+  })
+
+  it("excludes a sibling assignment whose slug extends this one", () => {
+    const repos = [
+      repo("cs101-hw1-alice", "2026-06-20T10:00:00Z"),
+      repo("cs101-hw1-bonus-bob", "2026-09-01T10:00:00Z"), // sibling hw1-bonus
+    ]
+    expect(
+      latestAssignmentPush(repos, "cs101", "hw1", ["hw1", "hw1-bonus"]),
+    ).toBe("2026-06-20T10:00:00Z")
+  })
+
+  it("returns null when no assignment repo exists or none were pushed", () => {
+    expect(latestAssignmentPush([], "cs101", "hw1")).toBeNull()
+    expect(latestAssignmentPush(null, "cs101", "hw1")).toBeNull()
+    expect(
+      latestAssignmentPush([repo("cs101-hw1-alice")], "cs101", "hw1"),
+    ).toBeNull()
+  })
+
+  it("is stale when a push is newer than the last collect", () => {
+    expect(
+      snapshotIsStale("2026-06-25T10:00:00Z", "2026-06-20T10:00:00Z"),
+    ).toBe(true)
+  })
+
+  it("is not stale when the last collect is newer than every push", () => {
+    expect(
+      snapshotIsStale("2026-06-20T10:00:00Z", "2026-06-25T10:00:00Z"),
+    ).toBe(false)
+  })
+
+  it("is stale when there is a push but nothing was ever collected", () => {
+    expect(snapshotIsStale("2026-06-20T10:00:00Z", null)).toBe(true)
+  })
+
+  it("is never stale when there is no push", () => {
+    expect(snapshotIsStale(null, null)).toBe(false)
+    expect(snapshotIsStale(null, "2026-06-20T10:00:00Z")).toBe(false)
   })
 })
 
@@ -1230,110 +1094,6 @@ describe("pagination helpers", () => {
     it("does not insert a gap when pages are adjacent", () => {
       // Near the start, no gap between first and the neighbor cluster.
       expect(paginationRange(1, 20)).toEqual([0, 1, 2, null, 19])
-    })
-  })
-
-  describe("pageRepoOwners", () => {
-    const roster = Array.from({ length: 25 }, (_, i) =>
-      student({ username: `s${String(i).padStart(2, "0")}` }),
-    )
-    const emptySections = new Map<string, string>()
-
-    it("returns only the current page's roster owners (individual)", () => {
-      const p0 = pageRepoOwners({
-        isGroup: false,
-        roster,
-        groupRepos: [],
-        query: "",
-        section: "all",
-        sectionByUsername: emptySections,
-        students: roster,
-        page: 0,
-        pageSize: 10,
-      })
-      expect(p0).toHaveLength(10)
-      expect(p0[0]).toBe("s00")
-      expect(p0[9]).toBe("s09")
-
-      const p2 = pageRepoOwners({
-        isGroup: false,
-        roster,
-        groupRepos: [],
-        query: "",
-        section: "all",
-        sectionByUsername: emptySections,
-        students: roster,
-        page: 2,
-        pageSize: 10,
-      })
-      // Last page holds the remaining 5.
-      expect(p2).toEqual(["s20", "s21", "s22", "s23", "s24"])
-    })
-
-    it("narrows by search before slicing", () => {
-      const owners = pageRepoOwners({
-        isGroup: false,
-        roster,
-        groupRepos: [],
-        query: "s1",
-        section: "all",
-        sectionByUsername: emptySections,
-        students: roster,
-        page: 0,
-        pageSize: 10,
-      })
-      // s10..s19 match "s1"; a full page of 10.
-      expect(owners).toEqual([
-        "s10",
-        "s11",
-        "s12",
-        "s13",
-        "s14",
-        "s15",
-        "s16",
-        "s17",
-        "s18",
-        "s19",
-      ])
-    })
-
-    it("filters by section for individual assignments", () => {
-      const sectionByUsername = new Map<string, string>([
-        ["s00", "A"],
-        ["s01", "B"],
-        ["s02", "A"],
-      ])
-      const owners = pageRepoOwners({
-        isGroup: false,
-        roster: roster.slice(0, 3),
-        groupRepos: [],
-        query: "",
-        section: "A",
-        sectionByUsername,
-        students: roster,
-        page: 0,
-        pageSize: 10,
-      })
-      expect(owners).toEqual(["s00", "s02"])
-    })
-
-    it("pages over group founders for a group assignment", () => {
-      const groupRepos = Array.from({ length: 12 }, (_, i) => ({
-        owner: `team${String(i).padStart(2, "0")}`,
-        repoName: `cs-hw-team${i}`,
-      }))
-      const owners = pageRepoOwners({
-        isGroup: true,
-        roster: [],
-        groupRepos,
-        query: "",
-        section: "all",
-        sectionByUsername: emptySections,
-        students: roster,
-        page: 1,
-        pageSize: 10,
-      })
-      expect(owners).toEqual(["team10", "team11"])
     })
   })
 })
