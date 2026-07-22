@@ -330,12 +330,8 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		}
 	}
 
-	// Toolchain steps gated on matching setup outputs AND on a hosted
-	// runner: a self-hosted runner owns its prebuilt toolchains, so setup-* /
-	// apt must skip for it (issue #369) or they shadow the runner's
-	// environment. Keyed on `runner.environment` (resolved on the actual
-	// runner), not the runs-on label — covers --no-default-labels / runner
-	// groups too.
+	// Toolchain steps gated on matching setup outputs AND a hosted runner
+	// (`runner.environment != 'self-hosted'`); see the workflow comment / #369.
 	for _, want := range []string{
 		"if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'",
 		"actions/setup-python@v6",
@@ -540,12 +536,10 @@ printf '%s\n' "$*" >> "$GH_LOG"
 	}
 }
 
-// TestAutogradeRunnerSelfHostedSkipsToolchains pins the issue #369 fix: on a
-// self-hosted runner the grade job skips the managed toolchain/apt setup
-// (setup-python etc. would shadow the runner's prebuilt env). Every managed
-// setup step's `if:` must gate on `runner.environment != 'self-hosted'` —
-// resolved on the actual runner, so it covers --no-default-labels and
-// runner-group targeting, not just a literal `self-hosted` runs-on label.
+// TestAutogradeRunnerSelfHostedSkipsToolchains pins the issue #369 fix (see
+// the workflow's grade-step block comment for the why): every managed setup
+// step must gate on `runner.environment != 'self-hosted'`, and the fragile
+// label-string detection / `self-hosted` output must stay gone.
 func TestAutogradeRunnerSelfHostedSkipsToolchains(t *testing.T) {
 	files, err := skeletonFiles("main")
 	if err != nil {

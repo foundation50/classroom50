@@ -21,6 +21,7 @@ import { prefixCommit } from "@/util/commit"
 import {
   parseRunnerLabels,
   isRunnerLabelShapeValid,
+  isSelfHostedRunnerValue,
   MAX_RUNNER_LABELS,
 } from "@/util/runners"
 import {
@@ -481,6 +482,13 @@ async function buildAssignmentEntry(
   }
   // Language toolchains (setup-X versions) and apt packages, validated against
   // the same patterns the CLI enforces so a bad value can't reach the file.
+  // Skip both on a self-hosted runner: the grade job ignores managed setup
+  // there (runner.environment != 'self-hosted', issue #369), so writing them
+  // would persist values the runtime discards. Mirrors the workflow, and keeps
+  // the file honest about what will actually run. The UI also disables these
+  // fields for self-hosted; this is the authoritative backstop for every
+  // writer (CLI, hand-edited form state).
+  const selfHosted = isSelfHostedRunnerValue(input.runs_on ?? "")
   const languageInputs: Record<RuntimeLanguage, string | undefined> = {
     python: input.runtime_python,
     node: input.runtime_node,
@@ -488,16 +496,20 @@ async function buildAssignmentEntry(
     go: input.runtime_go,
     rust: input.runtime_rust,
   }
-  for (const language of RUNTIME_LANGUAGES) {
-    const version = languageInputs[language]?.trim()
-    if (!version) continue
-    const error = validateLanguageVersion(version)
-    if (error) {
-      throw new Error(`runtime.${language}: ${error}`)
+  if (!selfHosted) {
+    for (const language of RUNTIME_LANGUAGES) {
+      const version = languageInputs[language]?.trim()
+      if (!version) continue
+      const error = validateLanguageVersion(version)
+      if (error) {
+        throw new Error(`runtime.${language}: ${error}`)
+      }
+      runtime[language] = version
     }
-    runtime[language] = version
   }
-  const aptPackages = parseAptPackages(input.runtime_apt ?? "")
+  const aptPackages = selfHosted
+    ? []
+    : parseAptPackages(input.runtime_apt ?? "")
   if (aptPackages.length > 0) {
     // The image owns its packages, so the schema/CLI forbid apt with a
     // container — reject here rather than write a file the CLI won't parse.

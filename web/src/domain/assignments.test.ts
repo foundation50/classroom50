@@ -653,6 +653,57 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect("rust" in (edited.runtime ?? {})).toBe(false)
   })
 
+  it("drops language + apt runtime on a self-hosted runner (matches the workflow's runner.environment skip, #369)", async () => {
+    const { client, committedContent } = makeClient()
+
+    // A self-hosted runner skips managed toolchain/apt setup at grade time, so
+    // persisting python/apt would write values the runtime discards. runs-on is
+    // kept; only the ignored toolchain sub-keys are stripped.
+    await editAssignment(
+      client,
+      editInput({
+        runs_on: "self-hosted, linux, x64",
+        runtime_python: "3.12",
+        runtime_node: "20",
+        runtime_apt: "cmake",
+      }),
+    )
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.runtime).toEqual({
+      "runs-on": ["self-hosted", "linux", "x64"],
+    })
+    for (const key of ["python", "node", "java", "go", "rust", "apt"]) {
+      expect(key in (edited.runtime ?? {})).toBe(false)
+    }
+  })
+
+  it("keeps language + apt runtime on a hosted runner", async () => {
+    const { client, committedContent } = makeClient()
+
+    await editAssignment(
+      client,
+      editInput({
+        runs_on: "ubuntu-latest",
+        runtime_python: "3.12",
+        runtime_apt: "cmake",
+      }),
+    )
+
+    const written = JSON.parse(committedContent()) as {
+      assignments: Assignment[]
+    }
+    const edited = written.assignments.find((a) => a.slug === SLUG)!
+    expect(edited.runtime).toEqual({
+      "runs-on": "ubuntu-latest",
+      python: "3.12",
+      apt: ["cmake"],
+    })
+  })
+
   it("rejects apt packages combined with a container image", async () => {
     const { client } = makeClient()
     await expect(
