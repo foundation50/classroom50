@@ -210,7 +210,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	setupOutputs, _ := nested(doc, "jobs", "setup", "outputs")
 	outputsMap, _ := setupOutputs.(map[string]any)
 	for _, out := range []string{
-		"submission-tag", "runs-on", "self-hosted", "container",
+		"submission-tag", "runs-on", "container",
 		"python", "node", "java", "go", "rust", "apt",
 		"base-url", "classroom", "assignment",
 		// is-acceptance gates the whole skip-the-acceptance-commit path;
@@ -330,21 +330,24 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		}
 	}
 
-	// Toolchain steps gated on matching setup outputs AND on !self-hosted:
-	// a self-hosted runner owns its prebuilt toolchains, so setup-* / apt
-	// must skip for it (issue #369) or they shadow the runner's environment.
+	// Toolchain steps gated on matching setup outputs AND on a hosted
+	// runner: a self-hosted runner owns its prebuilt toolchains, so setup-* /
+	// apt must skip for it (issue #369) or they shadow the runner's
+	// environment. Keyed on `runner.environment` (resolved on the actual
+	// runner), not the runs-on label — covers --no-default-labels / runner
+	// groups too.
 	for _, want := range []string{
-		"if: needs.setup.outputs.python != '' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.python != '' && runner.environment != 'self-hosted'",
 		"actions/setup-python@v6",
-		"if: needs.setup.outputs.node != '' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.node != '' && runner.environment != 'self-hosted'",
 		"actions/setup-node@v6",
-		"if: needs.setup.outputs.java != '' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.java != '' && runner.environment != 'self-hosted'",
 		"actions/setup-java@v5",
-		"if: needs.setup.outputs.go != '' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.go != '' && runner.environment != 'self-hosted'",
 		"actions/setup-go@v6",
-		"if: needs.setup.outputs.rust != '' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.rust != '' && runner.environment != 'self-hosted'",
 		"dtolnay/rust-toolchain@master",
-		"if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && needs.setup.outputs.self-hosted != 'true'",
+		"if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && runner.environment != 'self-hosted'",
 	} {
 		if !strings.Contains(body, want) {
 			t.Errorf("autograde-runner.yaml missing toolchain dispatch %q", want)
@@ -538,11 +541,11 @@ printf '%s\n' "$*" >> "$GH_LOG"
 }
 
 // TestAutogradeRunnerSelfHostedSkipsToolchains pins the issue #369 fix: on a
-// self-hosted runner the grade job must skip the managed toolchain/apt setup
-// (setup-python etc. would shadow the runner's prebuilt environment, breaking
-// autograders that import preinstalled deps). Every managed setup step's `if:`
-// must carry the `self-hosted != 'true'` guard; the setup job must emit the
-// self-hosted output, computed from the `self-hosted` label in runs-on.
+// self-hosted runner the grade job skips the managed toolchain/apt setup
+// (setup-python etc. would shadow the runner's prebuilt env). Every managed
+// setup step's `if:` must gate on `runner.environment != 'self-hosted'` —
+// resolved on the actual runner, so it covers --no-default-labels and
+// runner-group targeting, not just a literal `self-hosted` runs-on label.
 func TestAutogradeRunnerSelfHostedSkipsToolchains(t *testing.T) {
 	files, err := skeletonFiles("main")
 	if err != nil {
@@ -558,14 +561,18 @@ func TestAutogradeRunnerSelfHostedSkipsToolchains(t *testing.T) {
 		t.Fatalf("parse autograde-runner.yaml: %v", err)
 	}
 
-	if got, ok := nested(doc, "jobs", "setup", "outputs", "self-hosted"); !ok || got != "${{ steps.read.outputs.self-hosted }}" {
-		t.Errorf("setup.outputs.self-hosted = %#v, want the read-step output", got)
+	// Detection must NOT be a setup-time label heuristic: a self-hosted
+	// runner isn't guaranteed to carry the `self-hosted` label (registered
+	// with --no-default-labels, or selected by a runner group / custom
+	// label). Assert the fragile output and label-string detection are gone.
+	if _, ok := nested(doc, "jobs", "setup", "outputs", "self-hosted"); ok {
+		t.Error("setup.outputs.self-hosted must be removed: detection moved to runner.environment on the grade runner (issue #369)")
+	}
+	if strings.Contains(body, `"self-hosted" in runs_on_labels`) {
+		t.Error("inline label-string self-hosted detection must be removed in favor of runner.environment (misses --no-default-labels / runner-group targeting)")
 	}
 
-	// Every managed setup step (each keyed off a version field or apt) must
-	// also gate on self-hosted != 'true'. Identify them by their `uses:` /
-	// apt-install `run:` and assert the guard is present in the `if:`.
-	const guard = "needs.setup.outputs.self-hosted != 'true'"
+	const guard = "runner.environment != 'self-hosted'"
 	grade, ok := nested(doc, "jobs", "grade")
 	if !ok {
 		t.Fatal("grade job missing")
