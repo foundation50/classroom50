@@ -491,8 +491,8 @@ const OrgSettingsPage = () => {
         />
         <div className="mt-8 space-y-8">
           <OrgSettingsPane />
-          {org && <OrgPolicyAuditPane key={org} org={org} />}
           {org && <OrgActionsSection key={`actions-${org}`} org={org} />}
+          {org && <OrgPolicyAuditPane key={org} org={org} />}
           {org && <RerunOrgSetup org={org} />}
           {org && <TeardownSection org={org} />}
         </div>

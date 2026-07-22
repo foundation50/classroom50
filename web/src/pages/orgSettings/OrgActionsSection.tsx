@@ -1,8 +1,8 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { PauseCircle, PlayCircle } from "lucide-react"
+import { ExternalLink, PauseCircle, PlayCircle } from "lucide-react"
 
-import { Badge, Spinner } from "@/components/ui"
+import { Badge, MonoLtr, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
@@ -12,6 +12,9 @@ import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
+
+const orgActionsSettingsUrl = (org: string) =>
+  `https://github.com/organizations/${org}/settings/actions`
 
 // GitHub Actions kill switch. Pausing restricts org Actions to the config repo
 // only, which blocks every student repo's autograde shim from running (and the
@@ -62,6 +65,17 @@ const OrgActionsSection = ({ org }: { org: string }) => {
           </Badge>
         )
       }
+      action={
+        <a
+          href={orgActionsSettingsUrl(org)}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex items-center gap-1 text-xs text-base-content/70 hover:text-primary"
+        >
+          {t("orgSettings.actions.openSettings")}
+          <ExternalLink aria-hidden="true" className="size-3" />
+        </a>
+      }
     >
       {isLoading ? (
         <div className="flex items-center gap-2 text-sm text-base-content/70">
@@ -99,6 +113,18 @@ const OrgActionsSection = ({ org }: { org: string }) => {
               </span>
             </span>
           </label>
+
+          {/* Make the exact org setting we apply legible, not implied. */}
+          {!unknown && (
+            <p className="flex flex-wrap items-center gap-1.5 text-xs text-base-content/60">
+              <span>{t("orgSettings.actions.appliedLabel")}</span>
+              <MonoLtr className="rounded bg-base-200 px-1.5 py-0.5 text-[11px]">
+                {paused
+                  ? "enabled_repositories = selected (classroom50)"
+                  : "enabled_repositories = all"}
+              </MonoLtr>
+            </p>
+          )}
 
           {mutation.isPending && (
             <div className="flex items-center gap-2 text-sm text-base-content/70">
