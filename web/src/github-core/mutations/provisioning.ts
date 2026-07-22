@@ -945,6 +945,7 @@ export type EnsureOrgActionsEnabledResult =
         | "enterprise_policy"
         | "validation_failed"
         | "readback_failed"
+        | "autograding_paused"
         | "unknown"
       message: string
       settingsUrl: string
@@ -981,6 +982,34 @@ export async function ensureOrgActionsEnabled(
   org: string,
 ): Promise<EnsureOrgActionsEnabledResult> {
   const settingsUrl = orgActionsSettingsUrl(org)
+
+  // Don't clobber an intentional autograding pause. If the teacher paused
+  // autograding (org Actions restricted to "selected", with the config repo
+  // among the selected repos — see setOrgActionsMode), re-running setup must
+  // NOT silently flip it back to "all" and resume student-repo spend. Leave it
+  // and warn so the re-run board surfaces the paused state instead.
+  try {
+    const current = await getOrgActionsPermissions(client, org)
+    if (
+      current.enabled_repositories === "selected" &&
+      (await orgActionsSelectionIncludesConfigRepo(client, org))
+    ) {
+      return {
+        status: "warning",
+        org,
+        enabledRepositories: "selected",
+        allowedActions: current.allowed_actions ?? "unknown",
+        reason: "autograding_paused",
+        settingsUrl,
+        message:
+          `${org}: autograding is paused (GitHub Actions restricted to the ${CONFIG_REPO} config repo). ` +
+          `Left as-is so re-running setup doesn't resume student-repo Actions spend. ` +
+          `Resume from the GitHub Actions section in Org Settings, or at ${settingsUrl}.`,
+      }
+    }
+  } catch {
+    // Readback failed — fall through and attempt the normal enable below.
+  }
 
   try {
     await setOrgActionsPermissions(client, org)
@@ -1066,6 +1095,174 @@ export async function ensureOrgActionsEnabled(
         `Current setting: enabled_repositories="${enabledRepositories}", allowed_actions="${allowedActions}". ` +
         `Review ${settingsUrl}. Original error: ${message}`,
     }
+  }
+}
+
+// Whether autograding is paused: org Actions restricted to "selected" repos AND
+// the config repo is among them. "active" means Actions run for all repos
+// (autograding on). "unknown" means the org policy couldn't be read.
+export type OrgActionsMode = "active" | "paused" | "unknown"
+
+// The autograding kill switch is a per-org, live-derived state: no stored flag.
+// Paused == org Actions permission is enabled_repositories="selected" with the
+// config repo selected, so every student repo's autograde shim is blocked while
+// the config repo's own workflows (Pages, score collection, regrade) keep
+// running. Resume == enabled_repositories="all".
+type OrgSelectedRepositories = {
+  total_count: number
+  repositories: { id: number; name: string }[]
+}
+
+async function listOrgActionsSelectedRepositories(
+  client: GitHubClient,
+  org: string,
+): Promise<OrgSelectedRepositories> {
+  return client.request<OrgSelectedRepositories>(
+    `/orgs/${org}/actions/permissions/repositories?per_page=100`,
+  )
+}
+
+// True when the config repo is currently in the org's "selected" Actions
+// allow-list — the marker that distinguishes our intentional pause from an
+// unrelated teacher-set "selected" policy that happens to exclude it.
+async function orgActionsSelectionIncludesConfigRepo(
+  client: GitHubClient,
+  org: string,
+): Promise<boolean> {
+  const selection = await listOrgActionsSelectedRepositories(client, org)
+  return selection.repositories.some((r) => r.name === CONFIG_REPO)
+}
+
+// Read the live autograding mode from org Actions permissions.
+export async function getOrgActionsMode(
+  client: GitHubClient,
+  org: string,
+): Promise<OrgActionsMode> {
+  try {
+    const perms = await getOrgActionsPermissions(client, org)
+    if (perms.enabled_repositories !== "selected") return "active"
+    return (await orgActionsSelectionIncludesConfigRepo(client, org))
+      ? "paused"
+      : // "selected" but not our config repo: a teacher-set policy we didn't
+        // author. Treat as active so we never claim a pause we can't honor.
+        "active"
+  } catch {
+    return "unknown"
+  }
+}
+
+export type SetOrgActionsModeResult =
+  | { status: "complete"; org: string; mode: OrgActionsMode; message: string }
+  | {
+      status: "warning"
+      org: string
+      reason:
+        | "permission_denied"
+        | "enterprise_policy"
+        | "validation_failed"
+        | "config_repo_missing"
+        | "failed"
+      settingsUrl: string
+      message: string
+    }
+
+function setOrgActionsModeWarning(
+  org: string,
+  err: unknown,
+): SetOrgActionsModeResult {
+  const settingsUrl = orgActionsSettingsUrl(org)
+  const message = getErrorMessage(err)
+  if (err instanceof GitHubAPIError) {
+    if (err.status === 403)
+      return {
+        status: "warning",
+        org,
+        reason: "permission_denied",
+        settingsUrl,
+        message: `${org}: couldn't change GitHub Actions permissions — the token may lack org-owner rights. Review ${settingsUrl}.`,
+      }
+    if (err.status === 409)
+      return {
+        status: "warning",
+        org,
+        reason: "enterprise_policy",
+        settingsUrl,
+        message: `${org}: GitHub Actions permissions appear controlled by an org or enterprise policy. Review ${settingsUrl}.`,
+      }
+    if (err.status === 422)
+      return {
+        status: "warning",
+        org,
+        reason: "validation_failed",
+        settingsUrl,
+        message: `${org}: GitHub rejected the Actions permissions update (${message}). Review ${settingsUrl}.`,
+      }
+  }
+  return {
+    status: "warning",
+    org,
+    reason: "failed",
+    settingsUrl,
+    message: `${org}: couldn't change GitHub Actions permissions (${message}). Review ${settingsUrl}.`,
+  }
+}
+
+// Pause or resume autograding org-wide by flipping the org Actions policy.
+// Pausing restricts Actions to the config repo only (blocking every student
+// repo's autograde shim); resuming re-enables Actions for all repos.
+export async function setOrgActionsMode(
+  client: GitHubClient,
+  org: string,
+  mode: "paused" | "active",
+): Promise<SetOrgActionsModeResult> {
+  const settingsUrl = orgActionsSettingsUrl(org)
+
+  if (mode === "active") {
+    try {
+      await setOrgActionsPermissions(client, org)
+      return {
+        status: "complete",
+        org,
+        mode: "active",
+        message: `${org}: autograding resumed — GitHub Actions enabled for all repositories.`,
+      }
+    } catch (err) {
+      return setOrgActionsModeWarning(org, err)
+    }
+  }
+
+  // Pause: need the config repo's numeric id for the selected-repositories PUT.
+  const repo = await getRepo(client, org, CONFIG_REPO)
+  if (!repo) {
+    return {
+      status: "warning",
+      org,
+      reason: "config_repo_missing",
+      settingsUrl,
+      message: `${org}: can't pause autograding — the ${CONFIG_REPO} config repo wasn't found. Run org setup first.`,
+    }
+  }
+
+  try {
+    // Order matters: switch the policy to "selected" first, then set the
+    // allow-list to just the config repo. Doing it the other way (setting the
+    // list while still "all") would 409.
+    await client.request(`/orgs/${org}/actions/permissions`, {
+      method: "PUT",
+      body: { enabled_repositories: "selected", allowed_actions: "all" },
+    })
+    await client.request(`/orgs/${org}/actions/permissions/repositories`, {
+      method: "PUT",
+      body: { selected_repository_ids: [repo.id] },
+    })
+    return {
+      status: "complete",
+      org,
+      mode: "paused",
+      message: `${org}: autograding paused — GitHub Actions restricted to the ${CONFIG_REPO} config repo.`,
+    }
+  } catch (err) {
+    return setOrgActionsModeWarning(org, err)
   }
 }
 

@@ -1159,6 +1159,23 @@
       "memberPermsToggle": "Member permissions we configure",
       "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Drifted ones are called out above."
     },
+    "actions": {
+      "title": "GitHub Actions",
+      "description": "Pause autograding across the whole organization when you need to stop Actions spend fast. Course management keeps working.",
+      "statusActive": "Autograding on",
+      "statusPaused": "Autograding paused",
+      "loading": "Checking GitHub Actions status…",
+      "applying": "Updating GitHub Actions permissions…",
+      "toggleLabel": "Pause autograding for all student repositories",
+      "toggleHint": "Restricts GitHub Actions to the classroom50 config repo, so no student push triggers a graded run (and no paid minutes). Turn off to resume.",
+      "pausedNotice": "Autograding is paused: student pushes won't be graded and won't consume Actions minutes. The classroom50 config repo's own workflows (Pages, score collection, regrade) keep running. Re-running org setup won't resume grading until you turn this off.",
+      "activeNotice": "Autograding is on: every push to a student repo's default branch is graded.",
+      "unknownNotice": "Couldn't read this organization's GitHub Actions permissions — your token may lack owner rights, or an enterprise policy controls them. Set them on GitHub.",
+      "confirmTitle": "Pause autograding for the whole organization?",
+      "confirmBody": "This stops every student repository from running GitHub Actions, so submissions won't be graded until you resume. The classroom50 config repo keeps working. You can turn it back on any time.",
+      "confirmButton": "Pause autograding",
+      "toggleFailed": "Couldn't update GitHub Actions permissions: {{message}}"
+    },
     "rerun": {
       "title": "Re-run setup",
       "description": "Re-apply every Classroom 50 organization setting. Safe to run any time — it only changes settings that have drifted.",

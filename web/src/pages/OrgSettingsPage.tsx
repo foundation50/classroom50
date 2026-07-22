@@ -10,6 +10,7 @@ import { useSaveServiceToken } from "@/hooks/mutations/useSaveServiceToken"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import RequireRole from "@/components/RequireRole"
 import OrgPolicyAuditPane from "@/pages/orgSettings/OrgPolicyAuditPane"
+import OrgActionsSection from "@/pages/orgSettings/OrgActionsSection"
 import RerunOrgSetup from "@/pages/orgSettings/RerunOrgSetup"
 import TeardownSection from "@/pages/orgSettings/TeardownSection"
 import SettingsSection from "@/pages/orgSettings/SettingsSection"
@@ -491,6 +492,7 @@ const OrgSettingsPage = () => {
         <div className="mt-8 space-y-8">
           <OrgSettingsPane />
           {org && <OrgPolicyAuditPane key={org} org={org} />}
+          {org && <OrgActionsSection key={`actions-${org}`} org={org} />}
           {org && <RerunOrgSetup org={org} />}
           {org && <TeardownSection org={org} />}
         </div>

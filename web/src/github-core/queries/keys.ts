@@ -144,6 +144,11 @@ export const githubKeys = {
 
   releases: (owner: string, repo: string) =>
     [...githubKeys.all, "releases", owner, repo] as const,
+
+  // Autograding kill-switch mode (active/paused), derived live from org Actions
+  // permissions. Invalidated after a pause/resume toggle.
+  orgActionsMode: (owner: string) =>
+    [...githubKeys.all, "orgActionsMode", owner] as const,
 }
 
 // Refresh a single classroom team's members + pending invitations after a
