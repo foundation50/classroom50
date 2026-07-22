@@ -6,6 +6,7 @@ export type ReleaseAssetsValidationError =
   | { kind: "too-large"; message: string; bytes: number; max: number }
   | { kind: "invalid-path"; message: string; path: string }
   | { kind: "invalid-basename"; message: string; basename: string }
+  | { kind: "duplicate-path"; message: string; path: string }
   | { kind: "duplicate-basename"; message: string; basename: string }
 
 // eslint-disable-next-line no-control-regex
@@ -59,6 +60,7 @@ export function validateReleaseAssets(
     }
   }
 
+  const seenPaths = new Set<string>()
   const basenames = new Set<string>()
   for (const configuredPath of paths) {
     const segments = configuredPath.split("/")
@@ -95,6 +97,14 @@ export function validateReleaseAssets(
         basename,
       }
     }
+    // Dual path + basename dedup, mirroring the Go/Python/workflow validators.
+    if (seenPaths.has(configuredPath)) {
+      return {
+        kind: "duplicate-path",
+        message: `Release file path is configured more than once: ${JSON.stringify(configuredPath)}.`,
+        path: configuredPath,
+      }
+    }
     if (basenames.has(basename)) {
       return {
         kind: "duplicate-basename",
@@ -102,6 +112,7 @@ export function validateReleaseAssets(
         basename,
       }
     }
+    seenPaths.add(configuredPath)
     basenames.add(basename)
   }
   return undefined

@@ -385,14 +385,17 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		t.Errorf("grade Release step count = %d, want exactly one", len(releaseSteps))
 	} else {
 		releaseStep := releaseSteps[0]
-		if got, ok := nested(releaseStep, "env", "RELEASE_ASSETS"); !ok || got != "${{ steps.autograde.outputs.release-assets }}" {
-			t.Errorf("Release step RELEASE_ASSETS = %#v", got)
+		if got, ok := nested(releaseStep, "env", "STAGED_RELEASE_BASENAMES"); !ok || got != "${{ steps.autograde.outputs.release-assets }}" {
+			t.Errorf("Release step STAGED_RELEASE_BASENAMES = %#v", got)
+		}
+		if got, ok := nested(releaseStep, "env", "STAGED_RELEASE_DIR"); !ok || got != "${{ steps.autograde.outputs.release-assets-dir }}" {
+			t.Errorf("Release step STAGED_RELEASE_DIR = %#v", got)
 		}
 		releaseRun, _ := releaseStep["run"].(string)
 		for _, want := range []string{
-			`ASSETS_DIR="${RUNNER_TEMP:-/tmp}/classroom50-release-assets"`,
-			`if [[ -n "${RELEASE_ASSETS:-}" ]]; then`,
-			`IFS=',' read -r -a ASSET_NAMES <<< "${RELEASE_ASSETS:-}"`,
+			`ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"`,
+			`if [[ -n "${STAGED_RELEASE_BASENAMES:-}" ]]; then`,
+			`IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"`,
 			`[[ ! "$NAME" =~ ^[A-Za-z0-9._-]{1,255}$ || "$NAME" == .* || "$NAME" == *. || "$NAME" == *..* ]]`,
 			`[[ ! -f "$ASSET" || -L "$ASSET" ]]`,
 			`gh release upload "$TAG" "$ASSET"`,
@@ -403,7 +406,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 				t.Errorf("Release shell is missing %q", want)
 			}
 		}
-		extrasAt := strings.Index(releaseRun, `ASSETS_DIR="${RUNNER_TEMP:-/tmp}/classroom50-release-assets"`)
+		extrasAt := strings.Index(releaseRun, `ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"`)
 		for _, core := range []string{
 			`gh release edit "$TAG"`,
 			`gh release upload "$TAG" result.json`,
@@ -436,7 +439,7 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"GH_TOKEN=test-token",
 				"GITHUB_REPOSITORY=example/classroom-assignment-student",
-				"RELEASE_ASSETS=",
+				"STAGED_RELEASE_BASENAMES=",
 				"TAG=submit/test",
 			)
 			if output, err := cmd.CombinedOutput(); err != nil {
@@ -484,7 +487,8 @@ fi
 				"GH_LOG="+ghLog,
 				"GH_TOKEN=test-token",
 				"GITHUB_REPOSITORY=example/classroom-assignment-student",
-				"RELEASE_ASSETS=result..json,first.pdf,second.pdf",
+				"STAGED_RELEASE_BASENAMES=result..json,first.pdf,second.pdf",
+				"STAGED_RELEASE_DIR="+assetsDir,
 				"RUNNER_TEMP="+runnerTemp,
 				"TAG=submit/test",
 			)
@@ -600,7 +604,8 @@ func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInse
 				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
 				"GH_LOG="+ghLog,
 				"GITHUB_REPOSITORY=example/classroom-assignment-student",
-				"RELEASE_ASSETS="+name,
+				"STAGED_RELEASE_BASENAMES="+name,
+				"STAGED_RELEASE_DIR="+assetsDir,
 				"RUNNER_TEMP="+runnerTemp,
 				"TAG=submit/test",
 			)

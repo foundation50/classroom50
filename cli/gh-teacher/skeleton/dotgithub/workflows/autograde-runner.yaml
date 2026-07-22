@@ -707,7 +707,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ env.SUBMISSION_TAG }}
-          RELEASE_ASSETS: ${{ steps.autograde.outputs.release-assets }}
+          # Distinct name from the job-level RELEASE_ASSETS (a JSON array fed to
+          # runner.py): this is the comma-joined list of accepted basenames the
+          # runner emits post-staging. Different wire shape, different name, so a
+          # future edit can't feed the JSON array into the IFS=',' read below.
+          STAGED_RELEASE_BASENAMES: ${{ steps.autograde.outputs.release-assets }}
+          # Absolute dir runner.py actually staged into, so this step reads from
+          # exactly where the runner wrote instead of re-deriving it from
+          # RUNNER_TEMP (the two fallbacks diverged when RUNNER_TEMP was unset).
+          STAGED_RELEASE_DIR: ${{ steps.autograde.outputs.release-assets-dir }}
         run: |
           set -euo pipefail
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
@@ -724,9 +732,9 @@ jobs:
               --notes-file release-body.md \
               --latest=false
           fi
-          ASSETS_DIR="${RUNNER_TEMP:-/tmp}/classroom50-release-assets"
-          if [[ -n "${RELEASE_ASSETS:-}" ]]; then
-            IFS=',' read -r -a ASSET_NAMES <<< "${RELEASE_ASSETS:-}"
+          ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"
+          if [[ -n "${STAGED_RELEASE_BASENAMES:-}" ]]; then
+            IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"
             for NAME in "${ASSET_NAMES[@]}"; do
               [[ -n "$NAME" ]] || continue
               if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]{1,255}$ || "$NAME" == .* || "$NAME" == *. || "$NAME" == *..* ]]; then

@@ -110,4 +110,15 @@ describe("validateReleaseAssets", () => {
       validateReleaseAssets(["a/report.pdf", "b/Report.pdf"]),
     ).toBeUndefined()
   })
+
+  it("flags an exact duplicate path before the basename check", () => {
+    // Mirrors the Go/Python/workflow validators' dual path+basename dedup: an
+    // identical repeated path reports duplicate-path (not duplicate-basename).
+    expect(
+      validateReleaseAssets(["a/report.pdf", "a/report.pdf"]),
+    ).toMatchObject({
+      kind: "duplicate-path",
+      path: "a/report.pdf",
+    })
+  })
 })

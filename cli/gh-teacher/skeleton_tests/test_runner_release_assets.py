@@ -116,8 +116,12 @@ def test_copy_release_asset_cleanup_failure_preserves_copy_error(
 
     monkeypatch.setattr(pathlib.Path, "unlink", fail_destination_unlink)
 
-    with pytest.raises(ValueError, match="exceeds the remaining byte budget"):
-        runner._copy_release_asset(source, destination, max_bytes=1)
+    source_fd = os.open(source, os.O_RDONLY)
+    try:
+        with pytest.raises(ValueError, match="exceeds the remaining byte budget"):
+            runner._copy_release_asset(source_fd, destination, max_bytes=1)
+    finally:
+        os.close(source_fd)
 
 
 def test_stage_release_assets_recreates_destination_and_preserves_order(tmp_path):
@@ -212,7 +216,7 @@ def test_stage_release_assets_cleanup_failure_still_permits_later_asset(
 
 
 @pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks unsupported")
-def test_resolve_release_asset_source_rejects_parent_and_leaf_symlinks(tmp_path):
+def test_open_release_asset_source_rejects_parent_and_leaf_symlinks(tmp_path):
     workspace = _workspace(tmp_path)
     outside = tmp_path / "outside"
     outside.mkdir()
@@ -222,25 +226,51 @@ def test_resolve_release_asset_source_rejects_parent_and_leaf_symlinks(tmp_path)
 
     for configured_path in ("linked/report.pdf", "report.pdf"):
         with pytest.raises(ValueError, match="contains a symlink"):
-            runner.resolve_release_asset_source(workspace, configured_path)
+            runner.open_release_asset_source(workspace, configured_path)
 
 
-def test_resolve_release_asset_source_rejects_workspace_escape(
-    tmp_path, monkeypatch
-):
+def test_open_release_asset_source_returns_regular_file_fd(tmp_path):
     workspace = _workspace(tmp_path)
-    source = _write_file(workspace, "report.pdf", b"report")
-    outside = _write_file(tmp_path, "outside.pdf", b"outside")
-    real_resolve = pathlib.Path.resolve
+    _write_file(workspace, "reports/report.pdf", b"report")
+    source_fd = runner.open_release_asset_source(workspace, "reports/report.pdf")
+    try:
+        assert os.read(source_fd, 1024) == b"report"
+    finally:
+        os.close(source_fd)
 
-    def resolve(path, strict=False):
-        if path == source:
-            return real_resolve(outside, strict=True)
-        return real_resolve(path, strict=strict)
 
-    monkeypatch.setattr(pathlib.Path, "resolve", resolve)
-    with pytest.raises(ValueError, match="resolves outside the workspace"):
-        runner.resolve_release_asset_source(workspace, "report.pdf")
+def test_open_release_asset_source_rejects_non_regular_leaf(tmp_path):
+    workspace = _workspace(tmp_path)
+    (workspace / "adir").mkdir()
+    with pytest.raises(ValueError, match="is not a regular file"):
+        runner.open_release_asset_source(workspace, "adir")
+
+
+@pytest.mark.skipif(not hasattr(os, "symlink"), reason="symlinks unsupported")
+def test_open_release_asset_source_rejects_toctou_symlink_swap(tmp_path):
+    # The leaf is a real file at validation time; a swap to an out-of-workspace
+    # symlink between validation and open must be rejected by O_NOFOLLOW rather
+    # than silently followed (the validate-then-reopen TOCTOU).
+    workspace = _workspace(tmp_path)
+    outside = _write_file(tmp_path, "secret.txt", b"secret")
+    leaf = _write_file(workspace, "report.pdf", b"report")
+
+    real_validate = runner.validate_release_asset_paths
+
+    def swap_then_validate(value):
+        result = real_validate(value)
+        leaf.unlink()
+        leaf.symlink_to(outside)
+        return result
+
+    # Swap right after the in-function validate call, before the segment opens.
+    import unittest.mock as mock
+
+    with mock.patch.object(
+        runner, "validate_release_asset_paths", side_effect=swap_then_validate
+    ):
+        with pytest.raises(ValueError, match="contains a symlink"):
+            runner.open_release_asset_source(workspace, "report.pdf")
 
 
 def test_stage_release_assets_case_folded_collision_keeps_first_file(
@@ -288,3 +318,111 @@ def test_stage_release_assets_later_small_file_fits_remaining_budget(
         "later.bin",
     ]
     assert "too-large.bin" in capsys.readouterr().out
+
+
+def _run_release_asset_staging(
+    tmp_path, monkeypatch, *, configured, runner_temp, prestage=None
+):
+    """Drive main()'s post-grade release-asset staging block in isolation.
+
+    main()'s full grading path needs network fetches, so we stub _grade to a
+    no-op and run only the staging + $GITHUB_OUTPUT emission that follows it,
+    exercising the same code the workflow's upload step depends on. Returns
+    (returncode, parsed GITHUB_OUTPUT dict).
+    """
+    workspace = _workspace(tmp_path)
+    if prestage:
+        for rel, data in prestage.items():
+            _write_file(workspace, rel, data)
+
+    gh_output = tmp_path / "gh_output.txt"
+    env = {
+        "PAGES_BASE_URL": "https://example.invalid/pages",
+        "CLASSROOM": "cs",
+        "ASSIGNMENT": "hello",
+        "SUBMISSION_TAG": "submit/1",
+        "GITHUB_REPOSITORY": "test-org/cs-hello-student",
+        "GITHUB_OUTPUT": str(gh_output),
+        "RELEASE_ASSETS": json.dumps(configured),
+    }
+    if runner_temp is not None:
+        env["RUNNER_TEMP"] = str(runner_temp)
+    else:
+        env.pop("RUNNER_TEMP", None)
+    for key, value in env.items():
+        monkeypatch.setenv(key, value)
+    if runner_temp is None:
+        monkeypatch.delenv("RUNNER_TEMP", raising=False)
+
+    monkeypatch.chdir(workspace)
+    rc = runner._stage_release_assets_and_emit(
+        workspace, os.environ.get("GITHUB_OUTPUT"), rc=0
+    )
+
+    outputs = {}
+    for line in gh_output.read_text().splitlines():
+        key, _, value = line.partition("=")
+        outputs[key] = value
+    return rc, outputs
+
+
+def test_main_staging_emits_dir_matching_workflow_and_names(
+    tmp_path, monkeypatch
+):
+    runner_temp = tmp_path / "runner_temp"
+    runner_temp.mkdir()
+    rc, outputs = _run_release_asset_staging(
+        tmp_path,
+        monkeypatch,
+        configured=["report.pdf", "plots/chart.png"],
+        runner_temp=runner_temp,
+        prestage={"report.pdf": b"r", "plots/chart.png": b"c"},
+    )
+
+    assert rc == 0
+    # The emitted dir MUST equal ${RUNNER_TEMP}/classroom50-release-assets — the
+    # exact path the workflow upload step reads from (release-assets-dir output).
+    expected_dir = runner_temp / runner.RELEASE_ASSETS_DIRNAME
+    assert outputs["release-assets-dir"] == str(expected_dir)
+    assert outputs["release-assets"] == "report.pdf,chart.png"
+    assert outputs["release-assets-skipped"] == "0"
+    assert (expected_dir / "report.pdf").read_bytes() == b"r"
+    assert (expected_dir / "chart.png").read_bytes() == b"c"
+
+
+def test_main_staging_dir_output_is_where_files_land_when_runner_temp_unset(
+    tmp_path, monkeypatch
+):
+    # With RUNNER_TEMP unset the dir is a random mkdtemp path, but the emitted
+    # release-assets-dir output must point at exactly that same dir so the
+    # workflow reads from where the runner wrote (no fallback divergence).
+    rc, outputs = _run_release_asset_staging(
+        tmp_path,
+        monkeypatch,
+        configured=["report.pdf"],
+        runner_temp=None,
+        prestage={"report.pdf": b"r"},
+    )
+
+    assert rc == 0
+    staged_dir = pathlib.Path(outputs["release-assets-dir"])
+    assert staged_dir.name == runner.RELEASE_ASSETS_DIRNAME
+    assert (staged_dir / "report.pdf").read_bytes() == b"r"
+    assert outputs["release-assets"] == "report.pdf"
+
+
+def test_main_staging_emits_skipped_count_and_notice(tmp_path, monkeypatch, capsys):
+    runner_temp = tmp_path / "runner_temp"
+    runner_temp.mkdir()
+    rc, outputs = _run_release_asset_staging(
+        tmp_path,
+        monkeypatch,
+        configured=["present.pdf", "missing.pdf"],
+        runner_temp=runner_temp,
+        prestage={"present.pdf": b"p"},
+    )
+
+    assert rc == 0
+    assert outputs["release-assets"] == "present.pdf"
+    assert outputs["release-assets-skipped"] == "1"
+    assert "::notice::release_assets: attached 1 of 2" in capsys.readouterr().out

@@ -36,6 +36,7 @@ history is unavailable or baseline == commit).
 from __future__ import annotations
 
 import datetime
+import errno
 import importlib.util
 import io
 import json
@@ -786,40 +787,85 @@ def _workflow_warning(message: str) -> None:
     print(f"::warning::{escaped}")
 
 
-def resolve_release_asset_source(
+def open_release_asset_source(
     workspace: pathlib.Path, configured_path: str
-) -> pathlib.Path:
+) -> int:
+    """Open the configured leaf for reading WITHOUT following any symlink, and
+    return the pinned file descriptor. Every segment is opened with
+    O_NOFOLLOW/O_DIRECTORY so a symlink swapped onto a parent or the leaf after
+    validation (a student process double-forked during grading survives into
+    post-grade staging) is rejected at open time — closing the validate-then-
+    reopen TOCTOU. The returned fd is what _copy_release_asset reads from, so
+    the copy can never re-resolve the path against a mutated tree. Caller owns
+    closing the fd."""
     validate_release_asset_paths([configured_path])
-    workspace_real = workspace.resolve(strict=True)
-    current = workspace
     segments = configured_path.split("/")
-    for index, segment in enumerate(segments):
-        current = current / segment
-        info = current.lstat()
-        if stat.S_ISLNK(info.st_mode):
-            raise ValueError(f"{configured_path!r} contains a symlink")
-        if index < len(segments) - 1 and not stat.S_ISDIR(info.st_mode):
-            raise ValueError(f"{configured_path!r} has a non-directory parent")
-        if index == len(segments) - 1 and not stat.S_ISREG(info.st_mode):
-            raise ValueError(f"{configured_path!r} is not a regular file")
-    resolved = current.resolve(strict=True)
-    if resolved == workspace_real or workspace_real not in resolved.parents:
-        raise ValueError(f"{configured_path!r} resolves outside the workspace")
-    return current
+    dir_fd = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    leaf_fd = -1
+    try:
+        for index, segment in enumerate(segments):
+            is_leaf = index == len(segments) - 1
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+            if not is_leaf:
+                flags |= os.O_DIRECTORY
+            try:
+                next_fd = os.open(segment, flags, dir_fd=dir_fd)
+            except OSError as exc:
+                # O_NOFOLLOW rejects a symlink with ELOOP; O_DIRECTORY on a
+                # symlink-to-dir can surface as ENOTDIR first. lstat the segment
+                # (relative to the current dir fd, no follow) to report a
+                # symlinked segment precisely rather than as a plain non-dir.
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    try:
+                        seg_info = os.lstat(segment, dir_fd=dir_fd)
+                    except OSError:
+                        seg_info = None
+                    if seg_info is not None and stat.S_ISLNK(seg_info.st_mode):
+                        raise ValueError(
+                            f"{configured_path!r} contains a symlink"
+                        ) from exc
+                    if not is_leaf and exc.errno == errno.ENOTDIR:
+                        raise ValueError(
+                            f"{configured_path!r} has a non-directory parent"
+                        ) from exc
+                raise
+            if is_leaf:
+                info = os.fstat(next_fd)
+                if not stat.S_ISREG(info.st_mode):
+                    os.close(next_fd)
+                    raise ValueError(
+                        f"{configured_path!r} is not a regular file"
+                    )
+                leaf_fd = next_fd
+            else:
+                os.close(dir_fd)
+                dir_fd = next_fd
+        return leaf_fd
+    except BaseException:
+        if leaf_fd >= 0:
+            os.close(leaf_fd)
+        raise
+    finally:
+        os.close(dir_fd)
 
 
 def _copy_release_asset(
-    source: pathlib.Path, destination: pathlib.Path, max_bytes: int
+    source_fd: int, destination: pathlib.Path, max_bytes: int
 ) -> int:
+    """Copy from an already-open, symlink-free source fd (see
+    open_release_asset_source) to `destination`, capped at max_bytes. Reading
+    the pinned fd — never re-opening by path — is what makes this copy immune to
+    a symlink swapped in after validation."""
     copied = 0
     created = False
     try:
-        with source.open("rb") as input_file, destination.open("xb") as output_file:
+        with os.fdopen(source_fd, "rb", closefd=False) as input_file, \
+                destination.open("xb") as output_file:
             created = True
             while chunk := input_file.read(1024 * 1024):
                 if copied + len(chunk) > max_bytes:
                     raise ValueError(
-                        f"{source.name!r} exceeds the remaining byte budget"
+                        f"{destination.name!r} exceeds the remaining byte budget"
                     )
                 output_file.write(chunk)
                 copied += len(chunk)
@@ -865,11 +911,14 @@ def stage_release_assets(
                 raise FileExistsError(
                     f"release asset {basename!r} has a runtime destination collision"
                 )
-            source = resolve_release_asset_source(workspace, configured_path)
+            source_fd = open_release_asset_source(workspace, configured_path)
             copy_attempted = True
-            copied = _copy_release_asset(
-                source, target, RELEASE_ASSETS_MAX_BYTES - total
-            )
+            try:
+                copied = _copy_release_asset(
+                    source_fd, target, RELEASE_ASSETS_MAX_BYTES - total
+                )
+            finally:
+                os.close(source_fd)
         except (OSError, ValueError) as exc:
             if copy_attempted:
                 try:
@@ -881,6 +930,56 @@ def stage_release_assets(
         total += copied
         accepted.append(basename)
     return accepted
+
+
+def _stage_release_assets_and_emit(
+    workspace: pathlib.Path, github_output: str | None, rc: int
+) -> int:
+    """Stage the configured release assets after grading and emit the staged
+    dir + accepted basenames + skipped count to $GITHUB_OUTPUT. Fail-open: any
+    staging error only warns and never changes `rc` (the grade result). Split
+    out of main() so the staging/output contract the workflow upload step
+    depends on is unit-testable without the full grading pipeline."""
+    accepted_assets: list[str] = []
+    configured_asset_count = 0
+    staging_dir = (
+        pathlib.Path(
+            os.environ.get("RUNNER_TEMP")
+            or tempfile.mkdtemp(prefix="classroom50-")
+        )
+        / RELEASE_ASSETS_DIRNAME
+    )
+    try:
+        configured_paths = parse_release_assets(os.environ.get("RELEASE_ASSETS"))
+        configured_asset_count = len(configured_paths)
+        accepted_assets = stage_release_assets(
+            workspace, staging_dir, configured_paths
+        )
+    except (OSError, ValueError) as exc:
+        _workflow_warning(f"release_assets: staging disabled ({exc})")
+
+    skipped = configured_asset_count - len(accepted_assets)
+    if skipped > 0:
+        # Machine-readable signal so a teacher can tell a fully-published
+        # Release from a partial one without scraping ::warning:: annotations.
+        print(
+            f"::notice::release_assets: attached {len(accepted_assets)} of "
+            f"{configured_asset_count} configured file(s); {skipped} skipped"
+        )
+
+    if github_output:
+        try:
+            with open(github_output, "a") as output:
+                # Emit the absolute staged dir so the workflow upload step reads
+                # from exactly where runner.py wrote, instead of re-deriving it
+                # from RUNNER_TEMP (the two fallbacks diverged when RUNNER_TEMP
+                # was unset, silently dropping every asset).
+                output.write(f"release-assets={','.join(accepted_assets)}\n")
+                output.write(f"release-assets-dir={staging_dir}\n")
+                output.write(f"release-assets-skipped={skipped}\n")
+        except OSError as exc:
+            _workflow_warning(f"release_assets: could not emit staged names ({exc})")
+    return rc
 
 
 def _isolated_git_env() -> dict[str, str]:
@@ -2125,27 +2224,7 @@ def main() -> int:
     finally:
         append_removed_files_note(workspace, removed_files)
 
-    accepted_assets: list[str] = []
-    try:
-        configured_paths = parse_release_assets(os.environ.get("RELEASE_ASSETS"))
-        accepted_assets = stage_release_assets(
-            workspace,
-            pathlib.Path(
-                os.environ.get("RUNNER_TEMP")
-                or tempfile.mkdtemp(prefix="classroom50-")
-            ) / RELEASE_ASSETS_DIRNAME,
-            configured_paths,
-        )
-    except (OSError, ValueError) as exc:
-        _workflow_warning(f"release_assets: staging disabled ({exc})")
-
-    if github_output:
-        try:
-            with open(github_output, "a") as output:
-                output.write(f"release-assets={','.join(accepted_assets)}\n")
-        except OSError as exc:
-            _workflow_warning(f"release_assets: could not emit staged names ({exc})")
-    return rc
+    return _stage_release_assets_and_emit(workspace, github_output, rc)
 
 
 if __name__ == "__main__":
