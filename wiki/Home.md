@@ -7,6 +7,25 @@ supported by the [Fifty Foundation](https://fifty.foundation).
 Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 `gh teacher` and `gh student` command-line tools.
 
+## The one idea to start with
+
+Classroom 50 has **no server and no database of its own.** The web app is a
+static site hosted on GitHub Pages, and the CLI runs on your machine — neither
+stores anything. **GitHub *is* the backend.** Your classrooms, roster,
+assignments, and grades aren't kept in a Classroom 50 account; they're stored
+*as* GitHub itself — organization membership, team membership, repositories,
+commit history, permissions, and a few config files in your organization.
+
+One consequence matters from day one: because there's no always-on server,
+**some things only happen when a teacher (an organization owner) is signed in
+and acting.** Signing in and doing things — creating a classroom, adding a
+student, saving an assignment — is what triggers the automation and records the
+state. So teachers stay more hands-on than with a hosted service: you're not
+just using the tool, you're the part of it that runs.
+
+If you read nothing else first, read [How Classroom 50 Works](How-Classroom-50-Works)
+— it makes this mental model concrete before you start clicking.
+
 ## What you can do
 
 - Create individual and group assignments, with or without starter code.
@@ -14,8 +33,8 @@ Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 - Leave inline feedback on student work.
 - Manage rosters, track submissions, and collect scores.
 
-Classroom 50 has **no servers of its own**: all data lives in your GitHub
-repositories, and all grading runs in GitHub Actions.
+Auto-grading and background tasks run in **GitHub Actions**; published data is
+served from **GitHub Pages** — all inside your own organization.
 
 ## What you need
 
