@@ -767,6 +767,7 @@
         "envContainerHelp": "Grades inside a public Docker image (it owns the OS packages).",
         "languagesHeading": "Language versions",
         "languagesTip": "Pick a version to install that toolchain (for example Node 26, Java 25), or type a custom one. A blank field skips it. Python defaults to 3.12 when blank on the hosted runner. You can enable as many toolchains as you need.",
+        "selfHostedDisabled": "Ignored on a self-hosted runner — it uses its own prebuilt toolchains and packages. Provision these in the runner image instead.",
         "versionPlaceholder": "e.g. {{version}}",
         "versionTip": "The {{language}} version to install (via the setup-{{language}} action). Leave blank to skip it. You can type any version the setup action accepts.",
         "versionMenu": "Choose a {{language}} version",

@@ -258,3 +258,41 @@ describe("submission release files visibility", () => {
     expect(container.querySelector("#release_assets")).toBeNull()
   })
 })
+
+// Built-in runtime options (language versions + apt) are disabled when the
+// runner targets self-hosted: the grade job skips managed setup there
+// (runner.environment != 'self-hosted'), so those options wouldn't apply.
+describe("self-hosted disables built-in runtime options", () => {
+  const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={defaultValues}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+  const pythonInput = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("#runtime_python")!
+  const aptInput = (container: HTMLElement) =>
+    container.querySelector<HTMLInputElement>("#runtime_apt")!
+
+  it("hosted runner keeps language + apt fields enabled", () => {
+    const { container } = renderForm({ runs_on: "ubuntu-latest" })
+    expect(pythonInput(container).disabled).toBe(false)
+    expect(aptInput(container).disabled).toBe(false)
+    expect(
+      screen.queryByText("assignments.form.runtime.selfHostedDisabled"),
+    ).toBeNull()
+  })
+
+  it("self-hosted runner disables language + apt fields and shows the note", () => {
+    const { container } = renderForm({ runs_on: "self-hosted, linux, x64" })
+    expect(pythonInput(container).disabled).toBe(true)
+    expect(aptInput(container).disabled).toBe(true)
+    expect(
+      screen.getByText("assignments.form.runtime.selfHostedDisabled"),
+    ).not.toBeNull()
+  })
+})

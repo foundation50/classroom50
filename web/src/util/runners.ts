@@ -164,3 +164,20 @@ export function verifyRunnerLabels(
 
   return { kind: "unknown", labels }
 }
+
+// Whether the typed runner value targets a self-hosted runner, matching the
+// RunnerField's "self-hosted" verdict (verifyRunnerLabels(...).kind). The form
+// gates the built-in toolchain options (language versions, apt) on this: on a
+// self-hosted runner the grade job skips managed setup
+// (`runner.environment != 'self-hosted'`), so those options wouldn't apply.
+// Uses the no-org-access verification path so the decision is synchronous
+// (no runner API call) and stays in lockstep with the field's own note —
+// a standard self-hosted label (`self-hosted`, `linux`, `x64`, …) reads as
+// self-hosted; a lone custom label reads as unknown, not self-hosted, so the
+// options stay enabled rather than disabling on an ambiguous value.
+export function isSelfHostedRunnerValue(raw: string): boolean {
+  return (
+    verifyRunnerLabels(raw, { available: false, reason: "no-access" }).kind ===
+    "self-hosted"
+  )
+}

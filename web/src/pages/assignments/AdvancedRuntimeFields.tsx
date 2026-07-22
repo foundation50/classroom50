@@ -105,9 +105,11 @@ export const ToggleRow = ({
 export const LanguageVersionField = ({
   form,
   language,
+  disabled = false,
 }: {
   form: AssignmentForm
   language: RuntimeLanguage
+  disabled?: boolean
 }) => {
   const { t } = useTranslation()
   const fieldName = `runtime_${language}` as const
@@ -133,6 +135,7 @@ export const LanguageVersionField = ({
                   name={field.name}
                   autoComplete="off"
                   spellCheck={false}
+                  disabled={disabled}
                   className="join-item w-full"
                   placeholder={t(
                     "assignments.form.runtime.versionPlaceholder",
@@ -145,6 +148,7 @@ export const LanguageVersionField = ({
                 <Button
                   shape="square"
                   tabIndex={0}
+                  disabled={disabled}
                   className="join-item border-base-content/20"
                   aria-label={t("assignments.form.runtime.versionMenu", {
                     language: meta.label,
@@ -153,37 +157,41 @@ export const LanguageVersionField = ({
                   <ChevronDown aria-hidden="true" className="size-4" />
                 </Button>
               </div>
-              <ul
-                tabIndex={0}
-                className="dropdown-content menu z-10 mt-1 w-full rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
-              >
-                {meta.versions.map((version) => (
-                  <li key={version}>
-                    <button
-                      type="button"
-                      className={
-                        version === current ? "active font-semibold" : undefined
-                      }
-                      onClick={(e) => {
-                        field.handleChange(version)
-                        // Close the focus-driven dropdown by blurring the
-                        // clicked item (the focus holder that keeps a DaisyUI
-                        // dropdown open) — scoped to this control so it can't
-                        // steal focus from an unrelated element.
-                        e.currentTarget.blur()
-                      }}
-                    >
-                      <Check
-                        aria-hidden="true"
-                        className={`size-4 ${
-                          version === current ? "" : "invisible"
-                        }`}
-                      />
-                      {version}
-                    </button>
-                  </li>
-                ))}
-              </ul>
+              {!disabled && (
+                <ul
+                  tabIndex={0}
+                  className="dropdown-content menu z-10 mt-1 w-full rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+                >
+                  {meta.versions.map((version) => (
+                    <li key={version}>
+                      <button
+                        type="button"
+                        className={
+                          version === current
+                            ? "active font-semibold"
+                            : undefined
+                        }
+                        onClick={(e) => {
+                          field.handleChange(version)
+                          // Close the focus-driven dropdown by blurring the
+                          // clicked item (the focus holder that keeps a DaisyUI
+                          // dropdown open) — scoped to this control so it can't
+                          // steal focus from an unrelated element.
+                          e.currentTarget.blur()
+                        }}
+                      >
+                        <Check
+                          aria-hidden="true"
+                          className={`size-4 ${
+                            version === current ? "" : "invisible"
+                          }`}
+                        />
+                        {version}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             {error ? (
               <p
@@ -336,7 +344,13 @@ export const ContainerFields = ({ form }: { form: AssignmentForm }) => {
 
 // Extra apt packages input. Rendered only in hosted mode (a container image
 // owns its own packages), so apt-with-container can't be expressed.
-export const AptField = ({ form }: { form: AssignmentForm }) => {
+export const AptField = ({
+  form,
+  disabled = false,
+}: {
+  form: AssignmentForm
+  disabled?: boolean
+}) => {
   const { t } = useTranslation()
   return (
     <form.Field name="runtime_apt">
@@ -355,6 +369,7 @@ export const AptField = ({ form }: { form: AssignmentForm }) => {
               name={field.name}
               autoComplete="off"
               spellCheck={false}
+              disabled={disabled}
               placeholder={t("assignments.form.runtime.aptPlaceholder")}
               value={field.state.value}
               onBlur={normalizeOnBlur(field, (value) =>
