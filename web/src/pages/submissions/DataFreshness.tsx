@@ -15,10 +15,9 @@ import { Alert, Button, HelpTooltip, cx } from "@/components/ui"
 // collected snapshot") lives in a help tooltip so the header stays lean.
 export type DataFreshnessProps = {
   mode: "live" | "static"
-  // Relative "x ago" of the last scores.json fetch (static view's freshness).
-  updatedLabel: string
-  // Relative "x ago" of the last completed collect run (grade freshness); null
-  // when never collected.
+  // Relative "x ago" of the last completed collect run — when the scores were
+  // actually produced (org-wide), the meaningful data age in BOTH modes. Null
+  // when the assignment has never been collected.
   lastCollectedLabel: string | null
   // A fetch (snapshot or live fan-out) is in flight — spins the refresh icon.
   fetching: boolean
@@ -31,7 +30,6 @@ export type DataFreshnessProps = {
 
 export function DataFreshness({
   mode,
-  updatedLabel,
   lastCollectedLabel,
   fetching,
   errorCount,
@@ -79,7 +77,9 @@ export function DataFreshness({
             : t("submissions.freshness.staticChip")}
         </span>
 
-        {/* Terse recency line; the full provenance is in the help tooltip. */}
+        {/* Terse recency line; the full provenance is in the help tooltip. Both
+            modes lead with the true data age — when scores were collected — not
+            the browser fetch time (which is meaningless to a teacher). */}
         <span>
           {isLive
             ? lastCollectedLabel
@@ -87,7 +87,11 @@ export function DataFreshness({
                   when: lastCollectedLabel,
                 })
               : t("submissions.freshness.liveNoScores")
-            : t("submissions.freshness.staticUpdated", { when: updatedLabel })}
+            : lastCollectedLabel
+              ? t("submissions.freshness.staticCollected", {
+                  when: lastCollectedLabel,
+                })
+              : t("submissions.freshness.staticNeverCollected")}
         </span>
 
         <HelpTooltip

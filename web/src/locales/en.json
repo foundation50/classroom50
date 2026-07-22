@@ -1576,15 +1576,15 @@
     "downloadCsv": "Download scores (CSV)",
     "viewSourceRepo": "View source repository",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
-    "justNow": "just now",
     "freshness": {
       "liveChip": "Live",
       "staticChip": "Static",
       "liveScores": "Scores from last collection {{when}}",
       "liveNoScores": "Not collected yet",
-      "staticUpdated": "Updated {{when}}",
+      "staticCollected": "Collected {{when}}",
+      "staticNeverCollected": "Never collected",
       "liveHelp": "Submissions are read directly from each student's GitHub repository right now, so new pushes appear immediately. Scores still come from the last collection — run \"Collect now\" to grade the newest.",
-      "staticHelp": "Everything shown is from the last collected snapshot (scores.json), including scores. Turn on Live View to read submissions from GitHub in real time.",
+      "staticHelp": "Everything shown is from the last collection (scores.json), including scores. The time is when the scores were produced org-wide, not when this page loaded. Turn on Live View to read submissions from GitHub in real time.",
       "refreshLive": "Refresh live data",
       "refreshStatic": "Refresh snapshot"
     },
@@ -1604,9 +1604,6 @@
     },
     "metrics": {
       "title": "Submission metrics"
-    },
-    "dashboard": {
-      "never": "never"
     },
     "errors": {
       "gradebookLoad": "Couldn't load the gradebook.",

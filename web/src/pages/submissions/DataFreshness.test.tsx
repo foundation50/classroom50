@@ -24,7 +24,6 @@ import { DataFreshness } from "./DataFreshness"
 afterEach(cleanup)
 
 const base = {
-  updatedLabel: "2 minutes ago",
   lastCollectedLabel: "18 hours ago",
   fetching: false,
   errorCount: 0,
@@ -38,11 +37,18 @@ describe("DataFreshness", () => {
     expect(screen.queryByText("submissions.freshness.staticChip")).toBeNull()
   })
 
-  it("static mode: static chip + snapshot updated line", () => {
+  it("static mode: static chip + 'Collected {when}' (the true data age, not the fetch time)", () => {
     render(<DataFreshness mode="static" {...base} />)
     expect(screen.getByText("submissions.freshness.staticChip")).not.toBeNull()
     expect(
-      screen.getByText("submissions.freshness.staticUpdated:2 minutes ago"),
+      screen.getByText("submissions.freshness.staticCollected:18 hours ago"),
+    ).not.toBeNull()
+  })
+
+  it("static mode with no collection yet: never-collected line", () => {
+    render(<DataFreshness mode="static" {...base} lastCollectedLabel={null} />)
+    expect(
+      screen.getByText("submissions.freshness.staticNeverCollected"),
     ).not.toBeNull()
   })
 

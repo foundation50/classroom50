@@ -79,37 +79,6 @@ import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
 
-// Re-renders so a relative "updated X ago" label stays live, at a cadence that
-// matches the elapsed magnitude: every second under a minute, every minute
-// under an hour, every hour beyond. Purely a UI refresh — no data fetching; it
-// returns the tick time so callers derive recency from it rather than calling
-// Date.now() during render (which the React Compiler flags as impure).
-export const cadenceForElapsed = (elapsedMs: number): number => {
-  if (elapsedMs < 60_000) return 1_000
-  if (elapsedMs < 3_600_000) return 60_000
-  return 3_600_000
-}
-
-const useLiveNow = (referenceMs: number | null) => {
-  const [now, setNow] = useState(() => Date.now())
-
-  useEffect(() => {
-    // No reference yet (data not loaded) — a slow 1-min heartbeat is enough to
-    // keep any other relative labels fresh without a per-second loop.
-    const intervalMs =
-      referenceMs && referenceMs > 0
-        ? cadenceForElapsed(Date.now() - referenceMs)
-        : 60_000
-    const id = window.setInterval(() => setNow(Date.now()), intervalMs)
-    return () => window.clearInterval(id)
-    // Re-arm when the reference changes (a refetch resets it to ~now, dropping
-    // back to the 1s cadence) and when `now` crosses a threshold (the elapsed
-    // magnitude — and thus the cadence — steps up).
-  }, [referenceMs, now])
-
-  return now
-}
-
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
@@ -133,11 +102,7 @@ const SubmissionsPageContent = () => {
     isFetching: scoresFetching,
     isError: scoresError,
     error: scoresErrorObj,
-    dataUpdatedAt: scoresUpdatedAt,
   } = useGetScores(org, classroom)
-  // Live clock for the "Updated …" label, ticking faster the more recent the
-  // last fetch (1s < 1min < 1hr). UI-only; the fetch cadence is unchanged.
-  const now = useLiveNow(scoresUpdatedAt || null)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
   // Team-driven usernames: the classroom GitHub team is authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
@@ -174,18 +139,6 @@ const SubmissionsPageContent = () => {
   // must carry the key as `?k=<secret>`, else students hit "not found".
   const { data: classroomMeta } = useGetClassroom(org, classroom)
   const secret = classroomMeta?.secret
-  // "Updated" recency label. A just-settled fetch is ~0s old, and
-  // formatRelativeToNow would render that as the awkward "0 seconds ago" that
-  // then lingers between ticks — show "just now" under a short threshold
-  // instead. The periodic rerender (below) advances it as time passes.
-  const scoresUpdatedSecondsAgo =
-    scoresUpdatedAt > 0 ? (now - scoresUpdatedAt) / 1000 : null
-  const scoresLastUpdated =
-    scoresUpdatedSecondsAgo === null
-      ? t("submissions.dashboard.never")
-      : scoresUpdatedSecondsAgo < 10
-        ? t("submissions.justNow")
-        : formatRelativeToNow(scoresUpdatedAt)
 
   const assignmentSubmitUrl =
     `${window.location.origin}/${org}/${classroom}/assignments/${assignment}/accept` +
@@ -774,7 +727,6 @@ const SubmissionsPageContent = () => {
           "Updated X ago" span, and live strip. */}
       <DataFreshness
         mode={liveActive ? "live" : "static"}
-        updatedLabel={scoresLastUpdated}
         lastCollectedLabel={lastCollectedLabel}
         fetching={scoresFetching || liveFetching}
         errorCount={liveErrorCount}
