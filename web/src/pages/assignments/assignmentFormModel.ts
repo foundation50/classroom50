@@ -180,12 +180,23 @@ export function validateAssignmentForm(
             { basename: releaseAssetsError.basename },
           )
           break
+        case "duplicate-path":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsDuplicatePath",
+            { path: releaseAssetsError.path },
+          )
+          break
         case "duplicate-basename":
           errors.release_assets = t(
             "assignments.form.validation.releaseAssetsDuplicateBasename",
             { basename: releaseAssetsError.basename },
           )
           break
+        default:
+          // Exhaustiveness guard: a new ReleaseAssetsValidationError kind must
+          // add a case here or this fails to compile (the drop that let
+          // duplicate-path slip through silently).
+          releaseAssetsError satisfies never
       }
     }
   }

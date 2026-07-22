@@ -8,6 +8,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/foundation50/classroom50-cli-shared/contract"
 )
 
 // This file holds the release_assets validator and its supporting helpers,
@@ -87,7 +89,7 @@ func ValidateReleaseAssets(paths []string) error {
 		if !releaseAssetBasenamePattern.MatchString(basename) || strings.Contains(basename, "..") {
 			return fmt.Errorf("release_assets[%d] basename %q is not Release-safe", i, basename)
 		}
-		if equalFoldASCII(basename, "result.json") || equalFoldASCII(basename, "release-body.md") {
+		if equalFoldASCII(basename, contract.ResultFilename) || equalFoldASCII(basename, contract.ReleaseBodyFilename) {
 			return fmt.Errorf("release_assets[%d] basename %q is reserved", i, basename)
 		}
 		if _, exists := seenPaths[configuredPath]; exists {

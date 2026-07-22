@@ -303,6 +303,10 @@ describe("release_assets", () => {
       "a/report.pdf\nb/report.pdf",
       "assignments.form.validation.releaseAssetsDuplicateBasename",
     ],
+    [
+      "a/report.pdf\na/report.pdf",
+      "assignments.form.validation.releaseAssetsDuplicatePath",
+    ],
   ])("uses a stable locale key for %s", (raw, key) => {
     expect(
       validateAssignmentForm({ ...base, release_assets: raw }, t)

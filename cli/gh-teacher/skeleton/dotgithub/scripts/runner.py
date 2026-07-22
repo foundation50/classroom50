@@ -970,10 +970,8 @@ def _stage_release_assets_and_emit(
     if github_output:
         try:
             with open(github_output, "a") as output:
-                # Emit the absolute staged dir so the workflow upload step reads
-                # from exactly where runner.py wrote, instead of re-deriving it
-                # from RUNNER_TEMP (the two fallbacks diverged when RUNNER_TEMP
-                # was unset, silently dropping every asset).
+                # release-assets-dir is the absolute staged dir the workflow
+                # upload step reads (see STAGED_RELEASE_DIR in the workflow).
                 output.write(f"release-assets={','.join(accepted_assets)}\n")
                 output.write(f"release-assets-dir={staging_dir}\n")
                 output.write(f"release-assets-skipped={skipped}\n")

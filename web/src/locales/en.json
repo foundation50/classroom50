@@ -786,6 +786,7 @@
         "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
         "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
         "releaseAssetsInvalidBasename": "{{basename}} is not a safe Release filename or is reserved.",
+        "releaseAssetsDuplicatePath": "{{path}} is listed more than once; each release file path must be unique.",
         "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique."
       }
     },
