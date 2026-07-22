@@ -24,8 +24,12 @@ type BillingUsageItem = {
   product: string
   sku: string
   unitType: string
+  // grossQuantity is total usage (e.g. all Actions minutes run); netQuantity is
+  // only the BILLABLE remainder after the plan's included quota, so it reads 0
+  // while you're still within quota. We want total usage, so sum grossQuantity.
+  grossQuantity: number
+  // netAmount is post-quota, post-discount USD actually billed (0 within quota).
   netAmount: number
-  netQuantity: number
 }
 
 type BillingUsageSummary = {
@@ -33,9 +37,10 @@ type BillingUsageSummary = {
 }
 
 export type OrgActionsUsage = {
-  // Whole Actions minutes consumed this month across all runner SKUs.
+  // Total Actions minutes consumed this month across all runner SKUs (includes
+  // minutes covered by the plan's included quota).
   minutes: number
-  // Net (post-discount) USD billed for Actions this month.
+  // Net (post-quota, post-discount) USD billed for Actions this month.
   netAmountUsd: number
 }
 
@@ -59,7 +64,7 @@ export async function getOrgActionsUsage(
     )
     const minutes = items
       .filter((i) => i.unitType?.toLowerCase() === USAGE_UNIT_MINUTES)
-      .reduce((sum, i) => sum + (i.netQuantity ?? 0), 0)
+      .reduce((sum, i) => sum + (i.grossQuantity ?? 0), 0)
     const netAmountUsd = items.reduce((sum, i) => sum + (i.netAmount ?? 0), 0)
     return { minutes: Math.round(minutes), netAmountUsd }
   } catch (err) {

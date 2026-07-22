@@ -29,36 +29,65 @@ const apiError = (status: number) =>
   })
 
 describe("getOrgActionsUsage", () => {
-  it("sums Actions minutes and net cost across SKUs, ignoring other products", async () => {
+  it("sums total Actions minutes (grossQuantity) across SKUs, ignoring other products", async () => {
     const request = async () => ({
       usageItems: [
         {
           product: "Actions",
-          sku: "Actions Linux",
-          unitType: "Minutes",
+          sku: "actions_linux",
+          unitType: "minutes",
+          grossQuantity: 200,
           netAmount: 1.5,
-          netQuantity: 200,
         },
         {
           product: "actions",
-          sku: "Actions macOS",
+          sku: "actions_macos",
           unitType: "minutes",
+          grossQuantity: 50,
           netAmount: 4.0,
-          netQuantity: 50,
+        },
+        {
+          product: "Actions",
+          sku: "actions_storage",
+          unitType: "gigabyte-hours",
+          grossQuantity: 0.5,
+          netAmount: 0.1,
         },
         {
           product: "Codespaces",
           sku: "Compute",
           unitType: "Hours",
+          grossQuantity: 3,
           netAmount: 9.0,
-          netQuantity: 3,
         },
       ],
     })
     const client = { request } as unknown as GitHubClient
     expect(await getOrgActionsUsage(client, org)).toEqual({
       minutes: 250,
-      netAmountUsd: 5.5,
+      netAmountUsd: 5.6,
+    })
+  })
+
+  it("counts minutes used within the included quota (netQuantity 0, netAmount 0)", async () => {
+    // Mirrors the real API for an org still within its plan quota: 466 minutes
+    // run, fully discounted — grossQuantity is the true usage, net* are 0.
+    const request = async () => ({
+      usageItems: [
+        {
+          product: "Actions",
+          sku: "actions_linux",
+          unitType: "minutes",
+          grossQuantity: 466,
+          netQuantity: 0,
+          netAmount: 0,
+        },
+      ],
+    })
+    const client = { request } as unknown as GitHubClient
+    expect(await getOrgActionsUsage(client, org)).toEqual({
+      minutes: 466,
+      netAmountUsd: 0,
     })
   })
 
