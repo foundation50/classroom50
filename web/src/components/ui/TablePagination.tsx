@@ -3,6 +3,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react"
 
 import { cx } from "./cx"
 import { rtlFlip } from "./icons"
+import { Select } from "./Select"
 
 // A conventional table pager: a "Show N entries" size selector, a "N to M of T"
 // range label, and Prev / numbered / Next controls. Pure presentation — the
@@ -49,8 +50,9 @@ export function TablePagination({
     >
       <label className="inline-flex items-center gap-2 text-base-content/70">
         {t("common.pagination.show")}
-        <select
-          className="select select-bordered select-xs"
+        <Select
+          selectSize="xs"
+          className="w-auto"
           value={pageSize}
           onChange={(e) => onPageSizeChange(Number(e.target.value))}
           aria-label={t("common.pagination.showAria")}
@@ -60,7 +62,7 @@ export function TablePagination({
               {size}
             </option>
           ))}
-        </select>
+        </Select>
         {t("common.pagination.entries")}
       </label>
 

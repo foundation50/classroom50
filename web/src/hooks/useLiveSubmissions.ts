@@ -137,7 +137,14 @@ export function useLiveSubmissions({
                 submissionCount: count,
               })
             }
-          } catch {
+          } catch (err) {
+            // An abort (key change / unmount) rejects the whole run: swallowing
+            // it here would let the queryFn resolve with a partial result that
+            // react-query then caches fresh under the now-inactive owners key, so
+            // revisiting that page within staleTime reads an inflated errorCount
+            // and missing rows. Rethrow so the cancelled run is discarded.
+            if (signal.aborted || (err as Error)?.name === "AbortError")
+              throw err
             // A non-404 failure (403/5xx/network, or a rate-limit that persisted
             // past one retry) for one repo must not void the whole batch — count
             // it and move on.

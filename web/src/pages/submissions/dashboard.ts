@@ -269,8 +269,6 @@ export function studentInSection(student: Student, section: string): boolean {
 
 export type SubmissionSort = "recent" | "oldest" | "name-asc" | "name-desc"
 
-export const DEFAULT_SORT: SubmissionSort = "recent"
-
 // Who has accepted an INDIVIDUAL assignment, derived from the org repo list: a
 // student accepted iff `<classroom>-<assignment>-<username>` exists. Independent
 // of submission — a repo can exist without a graded push.
