@@ -52,12 +52,27 @@ describe("DataFreshness", () => {
     expect(
       screen.getByText("submissions.freshness.liveScores:18 hours ago"),
     ).not.toBeNull()
+    // Full provenance lives in the help tooltip, not inline.
+    expect(
+      screen.getByLabelText("submissions.freshness.liveHelp"),
+    ).not.toBeNull()
   })
 
   it("live mode with no collection yet: not-collected line", () => {
     render(<DataFreshness mode="live" {...base} lastCollectedLabel={null} />)
     expect(
       screen.getByText("submissions.freshness.liveNoScores"),
+    ).not.toBeNull()
+  })
+
+  it("labels the refresh button by mode (live data vs snapshot)", () => {
+    const { rerender } = render(<DataFreshness mode="live" {...base} />)
+    expect(
+      screen.getByLabelText("submissions.freshness.refreshLive"),
+    ).not.toBeNull()
+    rerender(<DataFreshness mode="static" {...base} />)
+    expect(
+      screen.getByLabelText("submissions.freshness.refreshStatic"),
     ).not.toBeNull()
   })
 
@@ -73,7 +88,7 @@ describe("DataFreshness", () => {
 
   it("disables refresh while fetching", () => {
     render(<DataFreshness mode="static" {...base} fetching />)
-    const btn = screen.getByLabelText("submissions.refresh")
+    const btn = screen.getByLabelText("submissions.freshness.refreshStatic")
     expect((btn as HTMLButtonElement).disabled).toBe(true)
   })
 })

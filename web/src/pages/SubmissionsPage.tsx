@@ -780,10 +780,11 @@ const SubmissionsPageContent = () => {
         errorCount={liveErrorCount}
         emptyRepo={isEmptyRepoAssignment}
         onRefresh={() => {
-          // Refresh both sources the page shows — snapshot alone would leave the
-          // live "Pending" rows stale.
+          // Always refresh the snapshot (grades live there in both modes). Only
+          // re-run the live fan-out in live mode — the live query is disabled in
+          // static, so refetching it there is an inert no-op.
           refetchScores()
-          refetchLive()
+          if (liveActive) refetchLive()
         }}
       />
 

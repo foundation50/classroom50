@@ -1,7 +1,7 @@
 import { Info, RefreshCw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
-import { Alert, Button, cx } from "@/components/ui"
+import { Alert, Button, HelpTooltip, cx } from "@/components/ui"
 
 // One honest freshness surface for the submissions dashboard, replacing the
 // scattered "Updated X ago" span, the collection note, and the live strip.
@@ -10,11 +10,9 @@ import { Alert, Button, cx } from "@/components/ui"
 // and a manual refresh — and when a source is degraded we say so rather than
 // letting stale data look authoritative.
 //
-// Provenance is hybrid and stated plainly:
-//   - Live: submission presence is read from GitHub right now, but SCORES still
-//     come from the last collection (result.json can't be read cross-origin), so
-//     the line names both.
-//   - Static: everything is the collected scores.json snapshot; show its age.
+// The visible line is terse (chip + short recency); the full hybrid provenance
+// ("submissions read from GitHub now, scores from the last collection" vs "the
+// collected snapshot") lives in a help tooltip so the header stays lean.
 export type DataFreshnessProps = {
   mode: "live" | "static"
   // Relative "x ago" of the last scores.json fetch (static view's freshness).
@@ -81,8 +79,7 @@ export function DataFreshness({
             : t("submissions.freshness.staticChip")}
         </span>
 
-        {/* Honest provenance line. Live states both sources (presence now,
-            scores from the last collection); static states the snapshot age. */}
+        {/* Terse recency line; the full provenance is in the help tooltip. */}
         <span>
           {isLive
             ? lastCollectedLabel
@@ -93,14 +90,30 @@ export function DataFreshness({
             : t("submissions.freshness.staticUpdated", { when: updatedLabel })}
         </span>
 
+        <HelpTooltip
+          help={
+            isLive
+              ? t("submissions.freshness.liveHelp")
+              : t("submissions.freshness.staticHelp")
+          }
+        />
+
         <Button
           variant="ghost"
           size="xs"
           shape="circle"
           disabled={fetching}
           onClick={onRefresh}
-          aria-label={t("submissions.refresh")}
-          title={t("submissions.refresh")}
+          aria-label={
+            isLive
+              ? t("submissions.freshness.refreshLive")
+              : t("submissions.freshness.refreshStatic")
+          }
+          title={
+            isLive
+              ? t("submissions.freshness.refreshLive")
+              : t("submissions.freshness.refreshStatic")
+          }
         >
           <RefreshCw
             aria-hidden="true"

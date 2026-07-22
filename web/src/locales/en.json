@@ -1577,13 +1577,16 @@
     "viewSourceRepo": "View source repository",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
     "justNow": "just now",
-    "refresh": "Refresh submissions",
     "freshness": {
       "liveChip": "Live",
       "staticChip": "Static",
-      "liveScores": "Reading submissions from GitHub now · scores from the last collection {{when}}.",
-      "liveNoScores": "Reading submissions from GitHub now · not collected yet.",
-      "staticUpdated": "Collected snapshot · updated {{when}}."
+      "liveScores": "Scores from last collection {{when}}",
+      "liveNoScores": "Not collected yet",
+      "staticUpdated": "Updated {{when}}",
+      "liveHelp": "Submissions are read directly from each student's GitHub repository right now, so new pushes appear immediately. Scores still come from the last collection — run \"Collect now\" to grade the newest.",
+      "staticHelp": "Everything shown is from the last collected snapshot (scores.json), including scores. Turn on Live View to read submissions from GitHub in real time.",
+      "refreshLive": "Refresh live data",
+      "refreshStatic": "Refresh snapshot"
     },
     "live": {
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
