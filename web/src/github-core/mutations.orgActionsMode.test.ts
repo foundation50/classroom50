@@ -30,7 +30,9 @@ const apiError = (status: number, message = `http ${status}`) =>
 
 type Handlers = {
   perms?: { enabled_repositories: string; allowed_actions?: string } | Error
-  repositories?: { repositories: { id: number; name: string }[] } | Error
+  repositories?:
+    | { total_count: number; repositories: { id: number; name: string }[] }
+    | Error
   repo?: { id: number } | null | Error
 }
 
@@ -81,7 +83,10 @@ describe("getOrgActionsMode", () => {
   it("returns 'paused' when restricted to selected repos including classroom50", async () => {
     const { client } = makeClient({
       perms: { enabled_repositories: "selected" },
-      repositories: { repositories: [{ id: 1, name: "classroom50" }] },
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 1, name: "classroom50" }],
+      },
     })
     expect(await getOrgActionsMode(client, org)).toBe("paused")
   })
@@ -89,7 +94,10 @@ describe("getOrgActionsMode", () => {
   it("returns 'active' for a 'selected' policy that excludes classroom50 (not ours)", async () => {
     const { client } = makeClient({
       perms: { enabled_repositories: "selected" },
-      repositories: { repositories: [{ id: 2, name: "some-other-repo" }] },
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 2, name: "some-other-repo" }],
+      },
     })
     expect(await getOrgActionsMode(client, org)).toBe("active")
   })
@@ -97,6 +105,28 @@ describe("getOrgActionsMode", () => {
   it("returns 'unknown' when the policy read fails", async () => {
     const { client } = makeClient({ perms: apiError(403) })
     expect(await getOrgActionsMode(client, org)).toBe("unknown")
+  })
+
+  it("paginates the selection list; finds classroom50 on a later page", async () => {
+    const page1 = Array.from({ length: 100 }, (_, i) => ({
+      id: 1000 + i,
+      name: `repo-${i}`,
+    }))
+    const request = async (path: string) => {
+      if (path === `/orgs/${org}/actions/permissions`)
+        return { enabled_repositories: "selected" }
+      if (path.includes("/repositories")) {
+        const page = Number(
+          new URL(`https://x${path}`).searchParams.get("page"),
+        )
+        return page === 1
+          ? { total_count: 101, repositories: page1 }
+          : { total_count: 101, repositories: [{ id: 9, name: "classroom50" }] }
+      }
+      return {}
+    }
+    const client = { request } as unknown as GitHubClient
+    expect(await getOrgActionsMode(client, org)).toBe("paused")
   })
 })
 
@@ -123,8 +153,14 @@ describe("setOrgActionsMode", () => {
     expect(calls.some((c) => c.method === "PUT")).toBe(false)
   })
 
-  it("resume re-enables Actions for all repositories", async () => {
-    const { client, calls } = makeClient({})
+  it("resume re-enables Actions for all repositories when currently paused", async () => {
+    const { client, calls } = makeClient({
+      perms: { enabled_repositories: "selected" },
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 1, name: "classroom50" }],
+      },
+    })
     const result = await setOrgActionsMode(client, org, "active")
     expect(result).toMatchObject({ status: "complete", mode: "active" })
     const write = calls.find((c) => c.method === "PUT")
@@ -132,9 +168,36 @@ describe("setOrgActionsMode", () => {
     expect(write?.body).toMatchObject({ enabled_repositories: "all" })
   })
 
+  it("resume is a no-op (no writes) when the org isn't on our pause", async () => {
+    // A teacher's own "selected" allow-list that excludes classroom50: resuming
+    // must NOT force "all" and widen it.
+    const { client, calls } = makeClient({
+      perms: { enabled_repositories: "selected" },
+      repositories: {
+        total_count: 1,
+        repositories: [{ id: 9, name: "some-repo" }],
+      },
+    })
+    const result = await setOrgActionsMode(client, org, "active")
+    expect(result).toMatchObject({ status: "complete", mode: "active" })
+    expect(calls.some((c) => c.method === "PUT")).toBe(false)
+  })
+
   it("maps a 403 on resume to a permission_denied warning", async () => {
-    const request = async (_path: string, options?: { method?: string }) => {
-      if (options?.method === "PUT") throw apiError(403)
+    const request = async (path: string, options?: { method?: string }) => {
+      const method = options?.method ?? "GET"
+      // Report a paused state so resume proceeds to the PUT (which 403s).
+      if (path === `/orgs/${org}/actions/permissions` && method === "GET")
+        return { enabled_repositories: "selected" }
+      if (
+        path.startsWith(`/orgs/${org}/actions/permissions/repositories`) &&
+        method === "GET"
+      )
+        return {
+          total_count: 1,
+          repositories: [{ id: 1, name: "classroom50" }],
+        }
+      if (method === "PUT") throw apiError(403)
       return {}
     }
     const client = { request } as unknown as GitHubClient
@@ -143,6 +206,36 @@ describe("setOrgActionsMode", () => {
       status: "warning",
       reason: "permission_denied",
     })
+  })
+
+  it("rolls back to 'all' and warns when the allow-list write fails mid-pause", async () => {
+    const calls: Call[] = []
+    const request = async (
+      path: string,
+      options?: { method?: string; body?: unknown },
+    ) => {
+      const method = options?.method ?? "GET"
+      calls.push({ method, path, body: options?.body })
+      if (path === `/repos/${org}/classroom50`) return { id: 42 }
+      if (
+        path === `/orgs/${org}/actions/permissions/repositories` &&
+        method === "PUT"
+      )
+        throw apiError(422)
+      return {}
+    }
+    const client = { request } as unknown as GitHubClient
+    const result = await setOrgActionsMode(client, org, "paused")
+    expect(result.status).toBe("warning")
+    // Rolled back: the last permissions PUT restores "all".
+    const permWrites = calls.filter(
+      (c) =>
+        c.method === "PUT" && c.path === `/orgs/${org}/actions/permissions`,
+    )
+    expect(
+      (permWrites.at(-1)?.body as { enabled_repositories?: string })
+        ?.enabled_repositories,
+    ).toBe("all")
   })
 })
 
@@ -158,7 +251,10 @@ describe("ensureOrgActionsEnabled respects an active pause", () => {
       if (path === `/orgs/${org}/actions/permissions` && method === "GET")
         return { enabled_repositories: "selected", allowed_actions: "all" }
       if (path.startsWith(`/orgs/${org}/actions/permissions/repositories`))
-        return { repositories: [{ id: 1, name: "classroom50" }] }
+        return {
+          total_count: 1,
+          repositories: [{ id: 1, name: "classroom50" }],
+        }
       return {}
     }
     const client = { request } as unknown as GitHubClient

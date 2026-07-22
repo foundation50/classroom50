@@ -1116,21 +1116,31 @@ type OrgSelectedRepositories = {
 async function listOrgActionsSelectedRepositories(
   client: GitHubClient,
   org: string,
+  page: number,
 ): Promise<OrgSelectedRepositories> {
   return client.request<OrgSelectedRepositories>(
-    `/orgs/${org}/actions/permissions/repositories?per_page=100`,
+    `/orgs/${org}/actions/permissions/repositories?per_page=100&page=${page}`,
   )
 }
 
 // True when the config repo is currently in the org's "selected" Actions
 // allow-list — the marker that distinguishes our intentional pause from an
-// unrelated teacher-set "selected" policy that happens to exclude it.
+// unrelated teacher-set "selected" policy that happens to exclude it. Paginates
+// to exhaustion: a teacher's own allow-list can exceed 100 repos, and reading
+// only page 1 could misclassify a policy we didn't author (and then wrongly
+// widen it to "all" via the setup guard).
 async function orgActionsSelectionIncludesConfigRepo(
   client: GitHubClient,
   org: string,
 ): Promise<boolean> {
-  const selection = await listOrgActionsSelectedRepositories(client, org)
-  return selection.repositories.some((r) => r.name === CONFIG_REPO)
+  let seen = 0
+  for (let page = 1; ; page++) {
+    const { total_count, repositories } =
+      await listOrgActionsSelectedRepositories(client, org, page)
+    if (repositories.some((r) => r.name === CONFIG_REPO)) return true
+    seen += repositories.length
+    if (repositories.length === 0 || seen >= total_count) return false
+  }
 }
 
 // Read the live autograding mode from org Actions permissions.
@@ -1218,6 +1228,23 @@ export async function setOrgActionsMode(
   const settingsUrl = orgActionsSettingsUrl(org)
 
   if (mode === "active") {
+    // Only resume from a pause WE authored. If the org is on a "selected"
+    // policy that isn't ours (a teacher's own curated allow-list) — or already
+    // "all" — forcing "all" here would widen the org's Actions posture beyond
+    // what the owner set. getOrgActionsMode already reports those as "active",
+    // so mirror that on the write side: no-op instead of clobbering.
+    const current = await getOrgActionsMode(client, org)
+    if (current !== "paused") {
+      return {
+        status: "complete",
+        org,
+        mode: current,
+        message:
+          current === "unknown"
+            ? `${org}: couldn't read GitHub Actions permissions to resume; review ${settingsUrl}.`
+            : `${org}: autograding already on — left the organization's GitHub Actions policy unchanged.`,
+      }
+    }
     try {
       await setOrgActionsPermissions(client, org)
       return {
@@ -1251,10 +1278,31 @@ export async function setOrgActionsMode(
       method: "PUT",
       body: { enabled_repositories: "selected", allowed_actions: "all" },
     })
-    await client.request(`/orgs/${org}/actions/permissions/repositories`, {
-      method: "PUT",
-      body: { selected_repository_ids: [repo.id] },
-    })
+    try {
+      await client.request(`/orgs/${org}/actions/permissions/repositories`, {
+        method: "PUT",
+        body: { selected_repository_ids: [repo.id] },
+      })
+    } catch (listErr) {
+      // The policy is now "selected" but the allow-list write failed, so even
+      // the config repo may be blocked. Best-effort roll back to "all" so we
+      // don't strand the org with Actions off; if the rollback also fails, warn
+      // explicitly that the org may be in a partial state.
+      try {
+        await setOrgActionsPermissions(client, org)
+      } catch {
+        return {
+          status: "warning",
+          org,
+          reason: "failed",
+          settingsUrl,
+          message:
+            `${org}: pausing autograding half-applied — GitHub Actions is restricted to selected repositories but the ${CONFIG_REPO} config repo may not be allow-listed, so its workflows could be blocked. ` +
+            `Fix this by hand at ${settingsUrl}.`,
+        }
+      }
+      return setOrgActionsModeWarning(org, listErr)
+    }
     return {
       status: "complete",
       org,
