@@ -80,7 +80,7 @@ export function DataFreshness({
             <RefreshCw
               aria-hidden="true"
               size={12}
-              className={cx("mr-1", collecting && "animate-spin")}
+              className={cx("me-1", collecting && "animate-spin")}
             />
             {collecting
               ? t("submissions.freshness.refreshing")
