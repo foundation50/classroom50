@@ -8,9 +8,9 @@ import { Alert, Button, cx } from "@/components/ui"
 // data was last collected and offers a single re-collect button. When an
 // assignment repo has been pushed since the last collect (staleness derived from
 // the org repo list's `pushed_at` — no extra fetch, so it works for every
-// viewer, not just owners), the button turns warning-colored and reads "Sync
-// submissions now" to flag that the snapshot is out of date; otherwise it's a
-// quiet "Refresh submissions". Following data-freshness UX guidance: never let
+// viewer, not just owners), the button turns red (error) and reads "Sync now"
+// to flag that the snapshot is out of date; otherwise it's a quiet "Refresh
+// submissions". Following data-freshness UX guidance: never let
 // stale data look authoritative, and give the user a direct way to refresh it.
 export type DataFreshnessProps = {
   // Relative "x ago" of the last completed collect run — when the submission

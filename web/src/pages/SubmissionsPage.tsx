@@ -81,6 +81,11 @@ import { githubTemplateRepoUrl } from "@/util/orgUrl"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { GitHubLink } from "@/components/GitHubLink"
 
+// Stable empty set for the live non-submitter filter (accepted axis is "all"
+// when live, so no accepted-set membership is consulted). Module-level so its
+// identity is stable across renders and doesn't churn the memo.
+const EMPTY_SET: Set<string> = new Set()
+
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
@@ -184,12 +189,13 @@ const SubmissionsPageContent = () => {
   const [page, setPage] = useState(0)
   const [pageSize, setPageSize] = useState(DEFAULT_PAGE_SIZE)
   // Reset to the first page whenever the visible set changes (new search,
-  // filter, sort, page size, or a different assignment). Done render-purely via
-  // a stored view signature (setState-during-render, not an effect) so the reset
-  // lands in the same commit as the change — no extra render, and no
-  // setState-in-effect. React bails out of the re-render once the signature
-  // matches.
-  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}`
+  // filter, sort, page size, a different assignment, or live-capability
+  // resolving — which re-pins the effective sort/status and reshapes the rows).
+  // Done render-purely via a stored view signature (setState-during-render, not
+  // an effect) so the reset lands in the same commit as the change — no extra
+  // render, and no setState-in-effect. React bails out of the re-render once the
+  // signature matches.
+  const viewSignature = `${query}|${JSON.stringify(filters)}|${sort}|${pageSize}|${assignment ?? ""}|${isOwner && !isEmptyRepoAssignment}`
   const [lastViewSignature, setLastViewSignature] = useState(viewSignature)
   if (viewSignature !== lastViewSignature) {
     setLastViewSignature(viewSignature)
@@ -206,9 +212,11 @@ const SubmissionsPageContent = () => {
     [students],
   )
 
-  // Org repo list drives repo-existence signals (individual acceptance below and
-  // group-repo enumeration here).
-  const { data: orgRepos } = useGetOrgRepos(org ?? "")
+  // Org repo list drives repo-existence signals (individual acceptance below,
+  // group-repo enumeration, and the pushed_at staleness heuristic). `refetch` is
+  // wired to Sync + collect-completion so `latestPush` isn't frozen at page load
+  // (else a push after load never flips the freshness line to "out of sync").
+  const { data: orgRepos, refetch: refetchOrgRepos } = useGetOrgRepos(org ?? "")
 
   // Due-date presentation: absolute date + a relative countdown ("in 3 days" /
   // "2 hours ago"). Past due flips the badge to error and the label to overdue.
@@ -268,12 +276,23 @@ const SubmissionsPageContent = () => {
   // large class is read a page at a time. The fanned owner set is the rendered
   // page under the (pinned name-asc) live order, derived from the SNAPSHOT
   // display list so it never loops on its own live results. Owner-only, off for
-  // empty_repo. The whole roster is the non-submitter pool: the slice may name a
-  // few owners the page won't show, but the fan-out OVER-reading is harmless.
+  // empty_repo.
   const snapshotScoped = useMemo(
     () =>
       rosterReady ? rosterScopedRows(snapshotRows, students) : snapshotRows,
     [rosterReady, snapshotRows, students],
+  )
+  // Non-submitter pool for the fan-out's display list, filtered by the SAME
+  // query + section the rendered table applies (status/passing are neutralized
+  // when live, and accept-availability doesn't gate the fan-out) — so the fanned
+  // page lines up with the visible page under an active search, not just an
+  // empty one. Snapshot-independent (no acceptedSet), so it can't loop on live
+  // results. `filterNonSubmitters` with an empty accepted set + accepted:"all"
+  // matches only on query + section.
+  const liveNonSubmitterPool = useMemo(
+    () =>
+      filterNonSubmitters(students, query, effectiveStatusFilters, EMPTY_SET),
+    [students, query, effectiveStatusFilters],
   )
   const liveOwnerArgs = useMemo(
     () => ({
@@ -288,7 +307,7 @@ const SubmissionsPageContent = () => {
         sectionByUsername,
         thresholdFraction: null,
       }),
-      nonSubmitters: students,
+      nonSubmitters: liveNonSubmitterPool,
       groupRepos: groupRepoList,
     }),
     [
@@ -300,6 +319,7 @@ const SubmissionsPageContent = () => {
       effectiveStatusFilters,
       sectionByUsername,
       groupRepoList,
+      liveNonSubmitterPool,
     ],
   )
   const livePageOwners = useMemo(
@@ -618,13 +638,16 @@ const SubmissionsPageContent = () => {
       lastRun?.status === "completed" ? lastRun.created_at : null,
     )
 
-  // Refresh scores + last-run timestamp once a manual collection finishes.
+  // Refresh scores + last-run timestamp + org repo list once a manual collection
+  // finishes, so the freshness line re-derives (the collect just consumed the
+  // pushes latestPush was flagging).
   useEffect(() => {
     if (collectScores.phase === "completed") {
       refetchScores()
       refetchLastRun()
+      refetchOrgRepos()
     }
-  }, [collectScores.phase, refetchScores, refetchLastRun])
+  }, [collectScores.phase, refetchScores, refetchLastRun, refetchOrgRepos])
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
@@ -849,10 +872,14 @@ const SubmissionsPageContent = () => {
               collecting || emptyRoster.show
                 ? undefined
                 : () => {
-                    // Sync = re-collect (rebuild scores.json). Also re-run the
-                    // live fan-out for a live-capable viewer so presence
-                    // refreshes immediately alongside the dispatched collect.
+                    // Sync = re-collect (rebuild scores.json). Re-read the org
+                    // repo list too so the staleness line re-derives against the
+                    // newest pushes (latestPush would otherwise stay frozen at
+                    // page load), and re-run the live fan-out for a live-capable
+                    // viewer so presence refreshes alongside the dispatched
+                    // collect.
                     collectScores.collect()
+                    refetchOrgRepos()
                     if (liveCapable) refetchLive()
                   }
             }

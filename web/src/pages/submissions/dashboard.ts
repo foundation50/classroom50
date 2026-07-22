@@ -937,13 +937,6 @@ function ownerSortKey(owner: string, names: Map<string, string>): string {
   return names.get(owner.trim().toLowerCase()) || owner.toLowerCase()
 }
 
-// Count of rows on a page whose live presence is newer than the collected
-// snapshot: pushed-again rows (staleCount) plus as-yet-uncollected submitters
-// (pending). Drives the freshness "N new on this page" signal (page-scoped).
-export function countNewSincePage(rows: SubmissionRow[]): number {
-  return rows.filter((row) => row.staleCount || row.pending).length
-}
-
 // The repo owners on the CURRENTLY RENDERED page, in the table's own display
 // order under the active sort — so the live fan-out reads exactly the repos the
 // user is looking at, whatever sort produced them. Built from the SNAPSHOT

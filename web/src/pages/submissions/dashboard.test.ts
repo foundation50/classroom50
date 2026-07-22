@@ -16,7 +16,6 @@ import {
   buildSectionLookup,
   classAverage,
   computeStats,
-  countNewSincePage,
   displayItemOwner,
   displayPageOwners,
   distinctSections,
@@ -993,22 +992,6 @@ describe("mergeLiveRows", () => {
   })
 })
 
-describe("countNewSincePage", () => {
-  it("counts pushed-again (staleCount) and uncollected (pending) rows", () => {
-    const rows = [
-      row({ score: 9, "max-score": 10 }), // collected, current
-      row({ owner: "bob", staleCount: true }), // pushed again after collect
-      row({ owner: "cara", pending: true }), // submitted, not yet collected
-    ]
-    expect(countNewSincePage(rows)).toBe(2)
-  })
-
-  it("is zero when nothing on the page is newer than the snapshot", () => {
-    expect(countNewSincePage([row({ score: 5, "max-score": 10 })])).toBe(0)
-    expect(countNewSincePage([])).toBe(0)
-  })
-})
-
 describe("displayPageOwners", () => {
   const students = [
     student({ username: "alice", first_name: "Alice", last_name: "Adams" }),
@@ -1030,6 +1013,27 @@ describe("displayPageOwners", () => {
     })
     // Name order: alice (non-sub), bob (row) — page of 2.
     expect(owners).toEqual(["alice", "bob"])
+  })
+
+  it("only names owners from the (pre-filtered) non-submitter pool it is given", () => {
+    // The caller passes a query-filtered non-submitter pool; displayPageOwners
+    // must page over exactly that pool (interleaved with rows), never the whole
+    // roster — so the fanned page matches the rendered page under a search.
+    const rows = [row({ owner: "bob", usernames: ["bob"] })]
+    const owners = displayPageOwners({
+      isGroup: false,
+      sort: "name-asc",
+      students,
+      rows,
+      // Search narrowed non-submitters to just "cara" (alice filtered out).
+      nonSubmitters: [students[2]],
+      groupRepos: [],
+      page: 0,
+      pageSize: 10,
+    })
+    // bob (row) + cara (filtered non-sub); alice is NOT fanned out.
+    expect(owners).toEqual(["bob", "cara"])
+    expect(owners).not.toContain("alice")
   })
 
   it("follows a non-name sort so the fanned page matches the rendered page", () => {

@@ -18,9 +18,10 @@ import {
 // Controlled by SubmissionsPage; emits filter/sort/query changes. The
 // not-submitted filter is hidden for group assignments; passing/accepted selects
 // appear only when available. `leading` hosts the left-aligned DataFreshness
-// widget (freshness line + Collect nudge + refresh); `trailing` hosts the
-// Actions menu (Share, Metrics, Collect, Regrade, CSV) — so freshness, search +
-// filters, and actions share one bar, keeping the roster high on the page.
+// widget (freshness line + Sync/Refresh button); a standalone Share button sits
+// by the search bar; `trailing` hosts the Actions menu (Metrics, Collect,
+// Regrade, CSV) — so freshness, search + filters, and actions share one bar,
+// keeping the roster high on the page.
 const SubmissionsControls = ({
   query,
   onQueryChange,
