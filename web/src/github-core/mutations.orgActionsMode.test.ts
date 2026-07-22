@@ -172,6 +172,20 @@ describe("setOrgActionsMode", () => {
     expect(result).toMatchObject({ status: "warning", reason: "failed" })
   })
 
+  it("pause warns (readback_failed) when the verify read itself throws", async () => {
+    // Writes succeed but the confirmation read fails — fail closed rather than
+    // report a clean pause we couldn't verify.
+    const { client } = makeClient({
+      repo: { id: 42 },
+      repositories: apiError(500),
+    })
+    const result = await setOrgActionsMode(client, org, "paused")
+    expect(result).toMatchObject({
+      status: "warning",
+      reason: "readback_failed",
+    })
+  })
+
   it("pause maps a non-404 getRepo failure to a structured warning", async () => {
     const { client } = makeClient({ repo: apiError(403) })
     const result = await setOrgActionsMode(client, org, "paused")

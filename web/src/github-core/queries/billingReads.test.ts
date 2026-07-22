@@ -91,9 +91,40 @@ describe("getOrgActionsUsage", () => {
     })
   })
 
-  it("returns null when billing isn't readable (403)", async () => {
+  it("matches a display-name product value ('GitHub Actions'), not just 'actions'", async () => {
+    const request = async () => ({
+      usageItems: [
+        {
+          product: "GitHub Actions",
+          sku: "actions_linux",
+          unitType: "minutes",
+          grossQuantity: 300,
+          netAmount: 0,
+        },
+      ],
+    })
+    const client = { request } as unknown as GitHubClient
+    expect(await getOrgActionsUsage(client, org)).toEqual({
+      minutes: 300,
+      netAmountUsd: 0,
+    })
+  })
+
+  it("returns null when a non-empty report sums to all-zero (likely preview drift)", async () => {
+    // Renamed preview fields read as absent -> every item contributes 0. Don't
+    // confidently show "0 min / $0" — treat as unavailable.
+    const request = async () => ({
+      usageItems: [
+        { product: "Actions", sku: "actions_linux", unitType: "minutes" },
+      ],
+    })
+    const client = { request } as unknown as GitHubClient
+    expect(await getOrgActionsUsage(client, org)).toBeNull()
+  })
+
+  it("returns null (and doesn't throw) on a non-API error", async () => {
     const request = async () => {
-      throw apiError(403)
+      throw new TypeError("boom")
     }
     const client = { request } as unknown as GitHubClient
     expect(await getOrgActionsUsage(client, org)).toBeNull()

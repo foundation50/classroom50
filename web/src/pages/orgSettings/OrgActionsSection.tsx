@@ -96,7 +96,7 @@ const ActionsUsagePanel = ({ org }: { org: string }) => {
               : budget.amount === 0
                 ? t("orgSettings.actions.budgetHardStop")
                 : t("orgSettings.actions.budgetAmount", {
-                    amount: budget.amount,
+                    amount: budget.amount.toFixed(2),
                   })}
           </span>
           <a

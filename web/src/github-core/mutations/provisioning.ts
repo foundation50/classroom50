@@ -1184,7 +1184,12 @@ export async function getOrgActionsMode(
       : // "selected" but not our config repo: a teacher-set policy we didn't
         // author. Treat as active so we never claim a pause we can't honor.
         "active"
-  } catch {
+  } catch (err) {
+    // Swallow to "unknown" — the UI's fail-safe (shows unknownNotice, disables
+    // the toggle) and setOrgActionsMode re-reads and fail-closes on write. Log
+    // the underlying error so a transient 5xx is diagnosable and not silently
+    // conflated with a genuine permission/enterprise-policy lockout.
+    logSetup.warn("couldn't read org Actions mode", { org, err })
     return "unknown"
   }
 }
@@ -1358,13 +1363,22 @@ export async function setOrgActionsMode(
     // Read back the effective selection: both PUTs returning 2xx doesn't prove
     // the config repo actually landed in the allow-list (eventual consistency,
     // id drift). If it isn't there, its own workflows are blocked — surface it
-    // instead of reporting a false success.
+    // instead of reporting a false success. Fail closed to match
+    // ensureOrgActionsEnabled: if the verify read itself throws, warn rather
+    // than claim a clean pause we couldn't confirm.
     let confirmed: boolean
     try {
       confirmed = await orgActionsSelectionIncludesConfigRepo(client, org)
     } catch {
-      // Couldn't verify — don't claim a clean pause, but the writes succeeded.
-      confirmed = true
+      return {
+        status: "warning",
+        org,
+        reason: "readback_failed",
+        settingsUrl,
+        message:
+          `${org}: autograding paused, but we couldn't confirm the ${CONFIG_REPO} config repo is allow-listed (the verification read failed). ` +
+          `If its workflows stop, check ${settingsUrl}.`,
+      }
     }
     if (!confirmed) {
       return {
