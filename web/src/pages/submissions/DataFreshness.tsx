@@ -24,6 +24,11 @@ export type DataFreshnessProps = {
   // Repos the live fan-out couldn't read (live only); > 0 shows a warning.
   errorCount: number
   onRefresh: () => void
+  // Whether the viewer can use live at all (org owner, autograded assignment).
+  // When true the mode is a switch; when false it's a non-interactive Static
+  // chip (a TA/HTA can't fan out, so there's nothing to toggle).
+  liveCapable?: boolean
+  onViewModeChange?: (mode: "live" | "static") => void
   // empty_repo assignments never autograde; show that instead of freshness.
   emptyRepo?: boolean
 }
@@ -34,6 +39,8 @@ export function DataFreshness({
   fetching,
   errorCount,
   onRefresh,
+  liveCapable = false,
+  onViewModeChange,
   emptyRepo = false,
 }: DataFreshnessProps) {
   const { t } = useTranslation()
@@ -55,27 +62,42 @@ export function DataFreshness({
         className="flex flex-wrap items-center gap-x-2 gap-y-1"
         role="status"
       >
-        {/* Mode chip: a filled dot for live (reading now), a hollow one for the
-            static snapshot. */}
-        <span
-          className={cx(
-            "inline-flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs font-medium",
-            isLive
-              ? "bg-success/10 text-success"
-              : "bg-base-content/10 text-base-content/70",
-          )}
-        >
-          <span
-            className={cx(
-              "size-1.5 rounded-full",
-              isLive ? "bg-success" : "bg-base-content/40",
-            )}
-            aria-hidden="true"
-          />
-          {isLive
-            ? t("submissions.freshness.liveChip")
-            : t("submissions.freshness.staticChip")}
-        </span>
+        {/* Mode control on the left: an interactive switch (label = the live/
+            static word, green when live) when the viewer can go live, else a
+            non-interactive Static chip. Merges the old separate "Live View"
+            toggle and the mode chip into one control. */}
+        {liveCapable && onViewModeChange ? (
+          <label
+            className="flex cursor-pointer items-center gap-2 font-medium"
+            title={
+              isLive
+                ? t("submissions.freshness.liveHelp")
+                : t("submissions.freshness.staticHelp")
+            }
+          >
+            <input
+              type="checkbox"
+              className="toggle toggle-sm toggle-success"
+              checked={isLive}
+              onChange={(e) =>
+                onViewModeChange(e.target.checked ? "live" : "static")
+              }
+            />
+            <span className={cx(isLive && "text-success")}>
+              {isLive
+                ? t("submissions.freshness.liveChip")
+                : t("submissions.freshness.staticChip")}
+            </span>
+          </label>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-base-content/10 px-2 py-0.5 text-xs font-medium text-base-content/70">
+            <span
+              className="size-1.5 rounded-full bg-base-content/40"
+              aria-hidden="true"
+            />
+            {t("submissions.freshness.staticChip")}
+          </span>
+        )}
 
         {/* Terse recency line; the full provenance is in the help tooltip. Both
             modes lead with the true data age — when scores were collected — not

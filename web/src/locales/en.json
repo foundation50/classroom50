@@ -1592,11 +1592,6 @@
       "incomplete_one": "{{count}} repo couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\".",
       "incomplete_other": "{{count}} repos couldn't be read, so submission counts and the \"not submitted\" list may be incomplete. Retry with Refresh, or run \"Collect now\"."
     },
-    "view": {
-      "liveLabel": "Live View",
-      "liveHint": "On: submissions are read live from GitHub (name-ordered). Off: the static snapshot with full sorting and status filters.",
-      "staticHint": "Static view uses the last collected scores.json — full sorting and status filters, but only as fresh as the last collection."
-    },
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",

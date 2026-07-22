@@ -32,7 +32,6 @@ const SubmissionsControls = ({
   sections = [],
   liveCapable = false,
   viewMode = "static",
-  onViewModeChange,
   trailing,
 }: {
   query: string
@@ -45,15 +44,12 @@ const SubmissionsControls = ({
   acceptedAvailable?: boolean
   passingAvailable?: boolean
   sections?: string[]
-  // Whether a live view is possible (org owner, autograded assignment). When
-  // false the Live/Static toggle is hidden — the viewer only has the static
-  // snapshot.
+  // Whether a live view is active. In live mode the snapshot-only controls
+  // (Sort, Status/Passing) are hidden, since live is a fixed name-ordered,
+  // unfiltered view. The Live/Static toggle itself now lives in the header's
+  // DataFreshness widget, not here.
   liveCapable?: boolean
-  // The active view. In "live" the Sort and Status/Passing controls are disabled
-  // (live is a fixed name-ordered, unfiltered presence view); "static" unlocks
-  // them over the collected snapshot.
   viewMode?: "live" | "static"
-  onViewModeChange?: (mode: "live" | "static") => void
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
@@ -93,26 +89,6 @@ const SubmissionsControls = ({
 
   return (
     <Toolbar>
-      {liveCapable && onViewModeChange && (
-        <label
-          className="flex cursor-pointer items-center gap-2 text-sm font-medium"
-          title={
-            liveOn
-              ? t("submissions.view.liveHint")
-              : t("submissions.view.staticHint")
-          }
-        >
-          <input
-            type="checkbox"
-            className="toggle toggle-sm toggle-primary"
-            checked={liveOn}
-            onChange={(e) =>
-              onViewModeChange(e.target.checked ? "live" : "static")
-            }
-          />
-          {t("submissions.view.liveLabel")}
-        </label>
-      )}
       <Toolbar.Search
         placeholder={
           isGroup

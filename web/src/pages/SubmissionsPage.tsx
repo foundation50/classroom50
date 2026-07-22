@@ -731,6 +731,8 @@ const SubmissionsPageContent = () => {
         fetching={scoresFetching || liveFetching}
         errorCount={liveErrorCount}
         emptyRepo={isEmptyRepoAssignment}
+        liveCapable={liveCapable}
+        onViewModeChange={setViewMode}
         onRefresh={() => {
           // Always refresh the snapshot (grades live there in both modes). Only
           // re-run the live fan-out in live mode — the live query is disabled in
@@ -832,7 +834,6 @@ const SubmissionsPageContent = () => {
         sections={sections}
         liveCapable={liveCapable}
         viewMode={liveActive ? "live" : "static"}
-        onViewModeChange={setViewMode}
         trailing={
           <>
             {!liveActive && (

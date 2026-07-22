@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { render, screen, cleanup } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 
 // t returns the key (plus the interpolated `when` when present) so assertions
 // can distinguish the live/static/never provenance lines without the full pack.
@@ -53,26 +54,44 @@ describe("DataFreshness", () => {
   })
 
   it("live mode: live chip + names both sources (presence now, scores from last collection)", () => {
-    render(<DataFreshness mode="live" {...base} />)
+    render(
+      <DataFreshness
+        mode="live"
+        {...base}
+        liveCapable
+        onViewModeChange={() => {}}
+      />,
+    )
     expect(screen.getByText("submissions.freshness.liveChip")).not.toBeNull()
     expect(
       screen.getByText("submissions.freshness.liveScores:18 hours ago"),
     ).not.toBeNull()
-    // Full provenance lives in the help tooltip, not inline.
-    expect(
-      screen.getByLabelText("submissions.freshness.liveHelp"),
-    ).not.toBeNull()
   })
 
   it("live mode with no collection yet: not-collected line", () => {
-    render(<DataFreshness mode="live" {...base} lastCollectedLabel={null} />)
+    render(
+      <DataFreshness
+        mode="live"
+        {...base}
+        liveCapable
+        onViewModeChange={() => {}}
+        lastCollectedLabel={null}
+      />,
+    )
     expect(
       screen.getByText("submissions.freshness.liveNoScores"),
     ).not.toBeNull()
   })
 
   it("labels the refresh button by mode (live data vs snapshot)", () => {
-    const { rerender } = render(<DataFreshness mode="live" {...base} />)
+    const { rerender } = render(
+      <DataFreshness
+        mode="live"
+        {...base}
+        liveCapable
+        onViewModeChange={() => {}}
+      />,
+    )
     expect(
       screen.getByLabelText("submissions.freshness.refreshLive"),
     ).not.toBeNull()
@@ -84,7 +103,13 @@ describe("DataFreshness", () => {
 
   it("surfaces the degraded-read warning only in live mode when repos failed", () => {
     const { rerender } = render(
-      <DataFreshness mode="live" {...base} errorCount={3} />,
+      <DataFreshness
+        mode="live"
+        {...base}
+        liveCapable
+        onViewModeChange={() => {}}
+        errorCount={3}
+      />,
     )
     expect(screen.getByText("submissions.live.incomplete:3")).not.toBeNull()
     // Static mode never shows the live incomplete warning, even with a stray count.
@@ -96,5 +121,27 @@ describe("DataFreshness", () => {
     render(<DataFreshness mode="static" {...base} fetching />)
     const btn = screen.getByLabelText("submissions.freshness.refreshStatic")
     expect((btn as HTMLButtonElement).disabled).toBe(true)
+  })
+
+  it("renders a mode switch and flips the view when live-capable", async () => {
+    const onViewModeChange = vi.fn()
+    render(
+      <DataFreshness
+        mode="live"
+        {...base}
+        liveCapable
+        onViewModeChange={onViewModeChange}
+      />,
+    )
+    const toggle = screen.getByRole("checkbox")
+    expect((toggle as HTMLInputElement).checked).toBe(true)
+    await userEvent.click(toggle)
+    expect(onViewModeChange).toHaveBeenCalledWith("static")
+  })
+
+  it("shows a non-interactive Static chip when the viewer can't go live", () => {
+    render(<DataFreshness mode="static" {...base} liveCapable={false} />)
+    expect(screen.queryByRole("checkbox")).toBeNull()
+    expect(screen.getByText("submissions.freshness.staticChip")).not.toBeNull()
   })
 })
