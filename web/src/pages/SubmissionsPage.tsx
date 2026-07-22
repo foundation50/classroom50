@@ -721,25 +721,27 @@ const SubmissionsPageContent = () => {
             )}
           </div>
         }
-      />
-      {/* One honest freshness surface (mode chip + provenance line + refresh +
-          degraded-read warning), replacing the old separate collection note,
-          "Updated X ago" span, and live strip. */}
-      <DataFreshness
-        mode={liveActive ? "live" : "static"}
-        lastCollectedLabel={lastCollectedLabel}
-        fetching={scoresFetching || liveFetching}
-        errorCount={liveErrorCount}
-        emptyRepo={isEmptyRepoAssignment}
-        liveCapable={liveCapable}
-        onViewModeChange={setViewMode}
-        onRefresh={() => {
-          // Always refresh the snapshot (grades live there in both modes). Only
-          // re-run the live fan-out in live mode — the live query is disabled in
-          // static, so refetching it there is an inert no-op.
-          refetchScores()
-          if (liveActive) refetchLive()
-        }}
+        // One honest freshness surface (mode toggle + provenance line + refresh +
+        // degraded-read warning), right-aligned in the header opposite the title
+        // so it fills the space instead of taking its own full-width row.
+        action={
+          <DataFreshness
+            mode={liveActive ? "live" : "static"}
+            lastCollectedLabel={lastCollectedLabel}
+            fetching={scoresFetching || liveFetching}
+            errorCount={liveErrorCount}
+            emptyRepo={isEmptyRepoAssignment}
+            liveCapable={liveCapable}
+            onViewModeChange={setViewMode}
+            onRefresh={() => {
+              // Always refresh the snapshot (grades live there in both modes).
+              // Only re-run the live fan-out in live mode — the live query is
+              // disabled in static, so refetching it there is an inert no-op.
+              refetchScores()
+              if (liveActive) refetchLive()
+            }}
+          />
+        }
       />
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet

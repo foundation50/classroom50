@@ -57,9 +57,9 @@ export function DataFreshness({
   const isLive = mode === "live"
 
   return (
-    <div className="flex flex-col gap-1 text-sm text-base-content/70">
+    <div className="flex flex-col items-start gap-1 text-sm text-base-content/70 sm:items-end">
       <div
-        className="flex flex-wrap items-center gap-x-2 gap-y-1"
+        className="flex flex-wrap items-center gap-x-2 gap-y-1 sm:justify-end"
         role="status"
       >
         {/* Mode control on the left: an interactive switch (label = the live/
