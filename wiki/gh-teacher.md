@@ -29,7 +29,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | `roster remove <org> <classroom> <username>` | Remove a roster row (not org membership). |
 | `roster import <org> <classroom> <csv>` | Bulk upsert from a CSV. |
 | `roster migrate <org> <classroom>` | Rename legacy `students.csv` to `roster.csv`. |
-| `staff add` / `remove <org> <classroom> <username>` | Manage staff teams (`--role teacher\|ta`). |
+| `staff add` / `remove <org> <classroom> <username>` | Manage staff teams (`--role teacher\|hta\|ta`). |
 | `assignment add <org> <classroom> <slug>` | Register/upsert an assignment. |
 | `assignment reuse <org> <slug> --from <src> --to <dst>` | Copy an assignment into another classroom. |
 | `assignment remove <org> <classroom> <slug>` | Remove an assignment entry. |
@@ -154,7 +154,7 @@ student repo names (`<short-name>-<assignment>-<username>`).
 
 Scaffolds four files in one commit — `classroom.json`, `assignments.json`,
 `roster.csv`, `scores.json` — and creates the `classroom50-<short-name>` GitHub
-team (plus `-teacher` and `-ta` staff teams). Refuses to overwrite an existing
+team (plus `-teacher`, `-hta`, and `-ta` staff teams). Refuses to overwrite an existing
 classroom.
 
 <details>
@@ -334,14 +334,15 @@ rebase failures → `lost the rebase race`, retry.
 
 ## `staff`
 
-Manage a classroom's **staff teams** — `classroom50-<classroom>-teacher` and
-`-ta`, each granted write on the config repo. Membership lives entirely in these
-teams (there's no `role` column in `roster.csv`), so a classroom's staff is the
-same from the CLI or the web app. (`instructor` is a legacy alias of `teacher`.)
+Manage a classroom's **staff teams** — `classroom50-<classroom>-{teacher,hta,ta}`.
+The `teacher` and `hta` (head TA) teams get write on the config repo; `ta` gets
+read-only. Membership lives entirely in these teams (there's no `role` column in
+`roster.csv`), so a classroom's staff is the same from the CLI or the web app.
+(`instructor` is a legacy alias of `teacher`.)
 
 ```sh
-gh teacher staff add <org> <classroom> <username> [--role teacher|ta]
-gh teacher staff remove <org> <classroom> <username> [--role teacher|ta]
+gh teacher staff add <org> <classroom> <username> [--role teacher|hta|ta]
+gh teacher staff remove <org> <classroom> <username> [--role teacher|hta|ta]
 ```
 
 `--role` defaults to `teacher`. `add` self-heals a classroom that predates staff

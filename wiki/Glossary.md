@@ -39,6 +39,9 @@ access to the config repo.
 
 **Student** — A member of the classroom who accepts and submits assignments.
 
+**Founder** — For a group assignment, the student who accepts first: they create
+the shared repository and invite the other teammates as collaborators.
+
 ## Assignments and grading
 
 **Template repository** — A GitHub repository, flagged as a template, that

@@ -11,7 +11,7 @@ with a non-zero exit code. Pass `--verbose` / `-v` for per-step detail.
 | Command | Description |
 | --- | --- |
 | `whoami` | Print the authenticated GitHub user. |
-| `login` | Log in with the scopes needed to accept assignments (`read:org`, `repo`, `workflow`). |
+| `login` | Log in with the unified Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`) — the same set `gh teacher login` requests, so one sign-in covers both. A student only exercises `read:org`, `repo`, and `workflow`. |
 | `logout` | Log out via `gh auth logout`. |
 | `accept <org> <classroom> <assignment>` | Accept an assignment: auto-accept the org invite, create your private repo, and set up autograding. |
 | `invite <org>/<repo> <username>` | Invite a classmate or TA to your repo with `push` permission. |
@@ -115,8 +115,8 @@ override the default identity.
 ## `whoami` / `login` / `logout`
 
 - `whoami` — prints the authenticated GitHub user.
-- `login` — runs `gh auth login -s read:org -s repo -s workflow`; add scopes with
-  `-s`.
+- `login` — runs `gh auth login -s admin:org -s read:org -s repo -s workflow`
+  (the unified scope set, shared with `gh teacher login`); add scopes with `-s`.
 - `logout` — runs `gh auth logout`.
 
 ## Contributing
