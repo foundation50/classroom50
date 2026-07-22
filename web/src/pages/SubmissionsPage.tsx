@@ -370,22 +370,28 @@ const SubmissionsPageContent = () => {
     enabled: liveActive,
   })
 
-  // Merge live presence over the snapshot (snapshot wins per owner; live adds a
-  // pending row for an as-yet-uncollected submitter), then roster-scope as
-  // before. Gate roster-scoping on a resolved roster so a transient failure
-  // falls back to unscoped rows rather than blanking a populated gradebook.
+  // In the live view, merge live presence over the snapshot (snapshot wins per
+  // owner; live adds a pending row for an as-yet-uncollected submitter and bumps
+  // stale counts). In the static view, use the collected snapshot ALONE — the
+  // live query keeps its last cached data after being disabled, so merging
+  // unconditionally would leak stale live badges (staleCount / liveLatest) into
+  // the snapshot-only view the toggle promises. Then roster-scope as before,
+  // gated on a resolved roster so a transient failure falls back to unscoped
+  // rows rather than blanking a populated gradebook.
   const scoresInfo = useMemo(() => {
-    const merged = mergeLiveRows(
-      snapshotRows,
-      liveSubmissions.map((s) => ({
-        owner: s.owner,
-        datetime: s.submittedAt,
-        release: s.releaseUrl,
-        submissionCount: s.submissionCount,
-      })),
-    )
+    const merged = liveActive
+      ? mergeLiveRows(
+          snapshotRows,
+          liveSubmissions.map((s) => ({
+            owner: s.owner,
+            datetime: s.submittedAt,
+            release: s.releaseUrl,
+            submissionCount: s.submissionCount,
+          })),
+        )
+      : snapshotRows
     return rosterReady ? rosterScopedRows(merged, students) : merged
-  }, [snapshotRows, liveSubmissions, rosterReady, students])
+  }, [liveActive, snapshotRows, liveSubmissions, rosterReady, students])
 
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
@@ -750,7 +756,9 @@ const SubmissionsPageContent = () => {
               </Badge>
             )}
             <span className="inline-flex items-center gap-1 text-base-content/70">
-              {t("submissions.updated", { when: scoresLastUpdated })}
+              {liveActive
+                ? t("submissions.live.indicator")
+                : t("submissions.updated", { when: scoresLastUpdated })}
               <Button
                 variant="ghost"
                 size="xs"
@@ -797,6 +805,17 @@ const SubmissionsPageContent = () => {
         <p>
           {isEmptyRepoAssignment ? (
             t("submissions.emptyRepoNote")
+          ) : liveActive ? (
+            <>
+              {t("submissions.live.note")}{" "}
+              {lastCollectedLabel && (
+                <span>
+                  {t("submissions.live.gradesFrom", {
+                    when: lastCollectedLabel,
+                  })}
+                </span>
+              )}
+            </>
           ) : (
             <>
               {t("submissions.collectionNote")}{" "}
@@ -936,14 +955,16 @@ const SubmissionsPageContent = () => {
         onViewModeChange={setViewMode}
         trailing={
           <>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setMetricsOpen(true)}
-              title={t("submissions.metrics.title")}
-            >
-              {t("submissions.menu.metrics")}
-            </Button>
+            {!liveActive && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setMetricsOpen(true)}
+                title={t("submissions.metrics.title")}
+              >
+                {t("submissions.menu.metrics")}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="sm"
@@ -1027,7 +1048,7 @@ const SubmissionsPageContent = () => {
         onClose={() => setRegradeConfirmOpen(false)}
       />
       <MetricsModal
-        open={metricsOpen}
+        open={metricsOpen && !liveActive}
         onClose={() => setMetricsOpen(false)}
         isGroup={isGroupAssignment}
         submitted={stats.submitted}

@@ -57,21 +57,29 @@ const SubmissionsControls = ({
   trailing?: ReactNode
 }) => {
   const { t } = useTranslation()
-  // Live mode is a fixed name-ordered, unfiltered view (the page-scoped fan-out
-  // can only align to that), so sort + status/passing filtering are disabled and
-  // point the teacher at Static view.
-  const liveLocked = liveCapable && viewMode === "live"
-  const lockedHint = liveLocked ? t("submissions.view.lockedHint") : undefined
-  const hasActiveFilter =
-    filters.submission !== "all" ||
-    filters.passing !== "all" ||
-    filters.accepted !== "all" ||
-    filters.section !== "all" ||
-    query.trim() !== ""
+  // Live view is a fixed name-ordered, unfiltered presence view (the
+  // page-scoped fan-out can only align to that), so the snapshot-only controls
+  // (Sort, Status/Passing) are HIDDEN in live mode — not just disabled — to keep
+  // the toolbar uncluttered. They return in static view.
+  const liveOn = liveCapable && viewMode === "live"
+  // In live view only search + section apply (status/passing are hidden and
+  // neutralized), so the Clear affordance must ignore the latent status/passing
+  // values a prior static session may have left set.
+  const hasActiveFilter = liveOn
+    ? filters.section !== "all" || query.trim() !== ""
+    : filters.submission !== "all" ||
+      filters.passing !== "all" ||
+      filters.accepted !== "all" ||
+      filters.section !== "all" ||
+      query.trim() !== ""
 
   const clearAll = () => {
     onQueryChange("")
-    onFiltersChange({ ...DEFAULT_FILTERS })
+    // Preserve the current status/passing/accepted axes in live mode (they're
+    // hidden, not user-editable here); clear only what live exposes.
+    onFiltersChange(
+      liveOn ? { ...filters, section: "all" } : { ...DEFAULT_FILTERS },
+    )
   }
 
   // The Status select folds the submission axis and the acceptance axis into one
@@ -86,30 +94,24 @@ const SubmissionsControls = ({
   return (
     <Toolbar>
       {liveCapable && onViewModeChange && (
-        <div
-          className="join"
-          role="group"
-          aria-label={t("submissions.view.toggleAria")}
+        <label
+          className="flex cursor-pointer items-center gap-2 text-sm font-medium"
+          title={
+            liveOn
+              ? t("submissions.view.liveHint")
+              : t("submissions.view.staticHint")
+          }
         >
-          <button
-            type="button"
-            className={`btn btn-sm join-item ${viewMode === "live" ? "btn-active btn-primary" : "btn-ghost"}`}
-            aria-pressed={viewMode === "live"}
-            onClick={() => onViewModeChange("live")}
-            title={t("submissions.view.liveHint")}
-          >
-            {t("submissions.view.live")}
-          </button>
-          <button
-            type="button"
-            className={`btn btn-sm join-item ${viewMode === "static" ? "btn-active" : "btn-ghost"}`}
-            aria-pressed={viewMode === "static"}
-            onClick={() => onViewModeChange("static")}
-            title={t("submissions.view.staticHint")}
-          >
-            {t("submissions.view.static")}
-          </button>
-        </div>
+          <input
+            type="checkbox"
+            className="toggle toggle-sm toggle-primary"
+            checked={liveOn}
+            onChange={(e) =>
+              onViewModeChange(e.target.checked ? "live" : "static")
+            }
+          />
+          {t("submissions.view.liveLabel")}
+        </label>
       )}
       <Toolbar.Search
         placeholder={
@@ -141,47 +143,47 @@ const SubmissionsControls = ({
         </Toolbar.FilterSelect>
       )}
 
-      <Toolbar.FilterSelect
-        label={t("submissions.filters.submissionLabel")}
-        value={statusValue}
-        onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
-        aria-label={t("submissions.filters.submissionAria")}
-        disabled={liveLocked}
-        title={lockedHint}
-      >
-        <option value="all">{t("submissions.filters.allStatuses")}</option>
-        <option value="submitted">{t("submissions.filters.submitted")}</option>
-        <option value="on-time">{t("submissions.filters.onTime")}</option>
-        <option value="late">{t("submissions.filters.late")}</option>
-        {!isGroup && (
-          // A grade requires a submission, so "Not submitted" is mutually
-          // exclusive with a passing/failing filter — disable it then.
-          <option value="not-submitted" disabled={filters.passing !== "all"}>
-            {t("submissions.filters.notSubmitted")}
+      {!liveOn && (
+        <Toolbar.FilterSelect
+          label={t("submissions.filters.submissionLabel")}
+          value={statusValue}
+          onChange={(e) => onStatusChange(e.target.value as StatusSelectValue)}
+          aria-label={t("submissions.filters.submissionAria")}
+        >
+          <option value="all">{t("submissions.filters.allStatuses")}</option>
+          <option value="submitted">
+            {t("submissions.filters.submitted")}
           </option>
-        )}
-        {acceptedAvailable && (
-          <>
-            <option disabled>────────</option>
-            <option value="accepted">
-              {t("submissions.filters.accepted")}
+          <option value="on-time">{t("submissions.filters.onTime")}</option>
+          <option value="late">{t("submissions.filters.late")}</option>
+          {!isGroup && (
+            // A grade requires a submission, so "Not submitted" is mutually
+            // exclusive with a passing/failing filter — disable it then.
+            <option value="not-submitted" disabled={filters.passing !== "all"}>
+              {t("submissions.filters.notSubmitted")}
             </option>
-            <option value="not-accepted">
-              {t("submissions.filters.notAccepted")}
-            </option>
-          </>
-        )}
-      </Toolbar.FilterSelect>
+          )}
+          {acceptedAvailable && (
+            <>
+              <option disabled>────────</option>
+              <option value="accepted">
+                {t("submissions.filters.accepted")}
+              </option>
+              <option value="not-accepted">
+                {t("submissions.filters.notAccepted")}
+              </option>
+            </>
+          )}
+        </Toolbar.FilterSelect>
+      )}
 
-      {passingAvailable && (
+      {!liveOn && passingAvailable && (
         <Toolbar.FilterSelect
           label={t("submissions.filters.passingLabel")}
           value={filters.passing}
           // Disabled when filtering to non-submitters: they have no grade, so a
-          // passing/failing filter would always yield an empty table. Also
-          // disabled in live mode (which is unfiltered).
-          disabled={liveLocked || filters.submission === "not-submitted"}
-          title={lockedHint}
+          // passing/failing filter would always yield an empty table.
+          disabled={filters.submission === "not-submitted"}
           onChange={(e) =>
             onFiltersChange({
               ...filters,
@@ -203,23 +205,27 @@ const SubmissionsControls = ({
       )}
 
       <Toolbar.Trailing>
-        <Toolbar.FilterSelect
-          label={t("submissions.filters.sortLabel")}
-          value={sort}
-          onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
-          aria-label={t("submissions.filters.sortAria")}
-          disabled={liveLocked}
-          title={lockedHint}
-        >
-          <option value="recent">{t("submissions.filters.sortRecent")}</option>
-          <option value="oldest">{t("submissions.filters.sortOldest")}</option>
-          <option value="name-asc">
-            {t("submissions.filters.sortNameAsc")}
-          </option>
-          <option value="name-desc">
-            {t("submissions.filters.sortNameDesc")}
-          </option>
-        </Toolbar.FilterSelect>
+        {!liveOn && (
+          <Toolbar.FilterSelect
+            label={t("submissions.filters.sortLabel")}
+            value={sort}
+            onChange={(e) => onSortChange(e.target.value as SubmissionSort)}
+            aria-label={t("submissions.filters.sortAria")}
+          >
+            <option value="recent">
+              {t("submissions.filters.sortRecent")}
+            </option>
+            <option value="oldest">
+              {t("submissions.filters.sortOldest")}
+            </option>
+            <option value="name-asc">
+              {t("submissions.filters.sortNameAsc")}
+            </option>
+            <option value="name-desc">
+              {t("submissions.filters.sortNameDesc")}
+            </option>
+          </Toolbar.FilterSelect>
+        )}
         {trailing}
       </Toolbar.Trailing>
     </Toolbar>
