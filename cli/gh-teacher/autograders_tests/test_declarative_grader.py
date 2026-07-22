@@ -130,6 +130,10 @@ class TestExecuteIO:
         assert "-two" in o["detail"] and "+nope" in o["detail"]
         # The matching line is context, not a change.
         assert "-one" not in o["detail"] and "+one" not in o["detail"]
+        # A non-empty diff replaces the verbatim blocks — never both (a
+        # both-emitted regression would otherwise pass).
+        assert "--- expected (exact) ---" not in o["detail"]
+        assert "--- actual stdout ---" not in o["detail"]
 
     def test_included_fail_keeps_expected_and_actual_blocks(self, tmp_path):
         # A line diff against a substring expectation is noise; included and
@@ -324,6 +328,17 @@ class TestLoadTests:
         with pytest.raises(ag.TestsConfigError, match="timeout"):
             ag.load_tests(p)
 
+    def test_control_char_in_name_rejected(self, tmp_path):
+        # Mirrors tests.go / tests-v1.schema.json: a name is echoed into the
+        # release body and a column-0 `::group::FAIL: {name}` log line, where a
+        # newline could inject a workflow command. A hand-edited tests.json
+        # bypasses the CLI validators, so the grader must reject it too.
+        p = self._write(tmp_path, {"schema": "classroom50/tests/v1", "tests": [
+            {"name": "t\n::error::pwned", "type": "run", "run": "true", "points": 1},
+        ]})
+        with pytest.raises(ag.TestsConfigError, match="control characters"):
+            ag.load_tests(p)
+
     @pytest.mark.parametrize("bad_field", [
         {"name": "a", "type": "run", "run": "true", "points": 1, "exit-code": "abc"},
         {"name": "a", "type": "run", "run": "true", "points": 1, "exit-code": []},
@@ -432,6 +447,19 @@ class TestRenderLogReport:
             if line.startswith("::"):
                 assert line in ("::group::FAIL: t", "::endgroup::")
 
+    def test_test_name_cannot_inject_workflow_commands(self):
+        # test-name is interpolated into the column-0 `::group::FAIL: {name}`
+        # header. Stripping control chars (incl. newlines) guarantees no
+        # student/hand-edited name can start a NEW line with a workflow
+        # command — the only `::`-prefixed lines are the group open/close.
+        outcomes = [{"test-name": "t\n::error::pwned", "passed": False,
+                     "score": 0, "max-score": 1, "detail": "d"}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "\n::error::" not in report
+        for line in report.splitlines():
+            if line.startswith("::"):
+                assert line.startswith("::group::FAIL: ") or line == "::endgroup::"
+
     def test_missing_detail_renders_empty_group(self):
         outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1}]
         report = ag.render_log_report(outcomes, color=False)
@@ -506,7 +534,9 @@ class TestRunDeclarative:
         assert "classroom50 autograde: 3/4" in body
         assert "Failure details" in body  # `bad` failed
 
-        # The release body is mirrored to the run's Summary page.
+        # run_declarative writes the body; main()'s finally mirrors the final
+        # body to the Summary page. Drive that mirror to pin the parity.
+        ag.mirror_body_to_step_summary(tmp_path)
         assert step_summary.read_text() == body
 
         # The per-test report reaches stdout (the workflow log). Plain text
