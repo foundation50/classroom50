@@ -1,69 +1,66 @@
 # How Classroom 50 Works
 
-Start here if you're new. This page builds the mental model behind Classroom 50
-— what it is, where your data actually lives, and why teachers stay hands-on —
-before you touch any buttons. It also answers the "why did that happen?"
-questions (why is my student an admin? why didn't unenrolling delete their
-repo?) that only make sense once the model clicks.
+This page describes the model behind Classroom 50 — what it is, where its data
+is stored, and why teachers remain involved in administration. It also explains
+behavior that is otherwise surprising, such as why a student is an admin of
+their repository, or why unenrolling a student does not delete their repository.
 
 ## The mental model: GitHub is the backend
 
-Most tools you've used have a server and a database: you log in to *their*
-account, and *their* computers remember your data. **Classroom 50 has neither.**
+Many web tools have a server and a database: you sign in to their account, and
+their systems store your data. Classroom 50 does not work this way.
 
 - The **web app** ([classroom50.org](https://classroom50.org)) is a static site
-  hosted on GitHub Pages. It runs entirely in your browser.
+  hosted on GitHub Pages. It runs in your browser.
 - The **CLI** (`gh teacher` / `gh student`) runs on your own machine.
 
-Neither stores anything. There is no "Classroom 50 database." Instead, **GitHub
-itself is the backend**, and your classroom's state is stored *as* ordinary
-GitHub things:
+Neither keeps a database of classroom data. The web app stores only a small
+amount of local state in your browser — your GitHub access token and interface
+preferences such as theme and language — and the CLI reuses the GitHub CLI's
+stored credentials. Everything else is stored in GitHub, and your classroom's
+state is represented by ordinary GitHub data:
 
-| What you think of as… | Is actually stored as… |
+| What you think of as… | Is stored as… |
 | --- | --- |
 | Your classrooms, assignments, scores | Config files in a private `classroom50` repo in your org |
-| Who's enrolled | GitHub **organization + team membership** |
-| Who's staff (teacher/TA) | Membership in `secret` GitHub **teams** |
-| A student's submissions | **Commit history** and Releases in their repo |
-| Who can do what | GitHub **permissions** |
+| Who's enrolled | GitHub organization and team membership |
+| Who's staff (teacher/TA) | Membership in `secret` GitHub teams |
+| A student's submissions | Commit history and Releases in their repo |
+| Who can do what | GitHub permissions |
 
-So Classroom 50 doesn't *have* your data — it **reads and writes GitHub on your
-behalf**, and then reads GitHub back to show you the current picture. Almost
-every behavior in the rest of this page follows from that one fact.
+Classroom 50 reads and writes this GitHub data on your behalf, then reads it
+back to show the current state. Most of the behavior described below follows
+from this.
 
-## Why teachers stay hands-on
+## Why teachers stay involved
 
-Because there is no always-on server, **nothing happens on its own while you're
-logged out.** The app can't quietly reconcile state in the background the way a
-hosted service would. Instead:
+Because there is no always-on server, the app does not change state on its own
+while you are signed out. It cannot reconcile state in the background the way a
+hosted service can. As a result:
 
-- **You are the engine for interactive work.** Creating a classroom, adding a
-  student, saving an assignment, inviting a TA — these run *as you*, in the
-  moment you do them, using your signed-in GitHub token. If you don't do them,
-  they don't happen.
-- **Signing in can itself trigger work.** Opening a classroom lets the app
-  reconcile things that drifted (for example, migrating an old team name or
-  re-checking org settings). Some upkeep only occurs *because* an owner signed
-  in and loaded the page.
-- **Background jobs still need to be set up by you.** Score collection and
-  regrading run as GitHub Actions on a schedule, but only after you've
-  provisioned the [service token](#the-service-token) that lets them act when
-  you're offline.
+- **Interactive work runs as you.** Creating a classroom, adding a student,
+  saving an assignment, or inviting a TA runs at the moment you do it, using
+  your signed-in GitHub token. These changes happen only when you make them.
+- **Signing in can trigger reconciliation.** Opening a classroom lets the app
+  correct things that have drifted — for example, migrating an old team name or
+  re-checking organization settings. Some upkeep occurs only after an owner
+  signs in and loads the page.
+- **Background jobs require setup.** Score collection and regrading run as
+  GitHub Actions on a schedule, but only after you provision the
+  [service token](#the-service-token) that lets them act while you are offline.
 
-**What this means for you:** plan to stay more actively involved than with a
-hosted product. Treat Classroom 50 as *administering your own GitHub org* with
-help, not as a service that runs itself. When something looks out of date,
-signing in and revisiting the page is often what brings it up to date.
+For teachers, this means administering Classroom 50 is closer to administering
+your own GitHub organization than to using a hosted service. If a view looks out
+of date, signing in and reopening the page often updates it.
 
-## Interactive vs. background: your token vs. Actions
+## Interactive vs. background work
 
-Zooming in on the split above — work happens in exactly two ways, and knowing
-which is which explains most "why did/didn't this happen?" questions:
+Work happens in one of two ways. Knowing which applies explains most questions
+about why a change did or did not take effect:
 
-1. **Interactive actions** run **as you**, with your signed-in GitHub token, the
-   instant you take them (create a classroom, add a student, accept an
-   assignment). They're limited by *your* GitHub permissions and require you to
-   be present.
+1. **Interactive actions** run as you, with your signed-in GitHub token, at the
+   time you take them (create a classroom, add a student, accept an assignment).
+   They are limited by your GitHub permissions and require you to be present.
 2. **Asynchronous actions** run in **GitHub Actions workflows** in your config
    repo (publishing to Pages, collecting scores, regrading). They run in the
    background, can take a minute or more, and depend on the
@@ -72,13 +69,13 @@ which is which explains most "why did/didn't this happen?" questions:
 So when a change "hasn't shown up yet," it's usually a background workflow still
 running (or GitHub Pages still deploying) — not a lost action.
 
-## The web app and CLI are the same thing
+## The web app and CLI are equivalent
 
-The web app and the `gh teacher` / `gh student` CLIs are **two front ends over
-the same GitHub operations** — not a primary system and a secondary one. A
-classroom created in the web app is fully manageable from the CLI and vice
-versa, because both read and write the same files and teams in your
-organization. Use whichever you prefer, or mix them.
+The web app and the `gh teacher` / `gh student` CLIs are two front ends over the
+same GitHub operations; neither is primary. A classroom created in the web app
+is fully manageable from the CLI and vice versa, because both read and write the
+same files and teams in your organization. Use whichever you prefer, or mix
+them.
 
 ## Roles are GitHub organization roles and teams
 

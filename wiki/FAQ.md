@@ -18,11 +18,11 @@ Free/personal organizations can't host a classroom.
 
 The teaching model is familiar — you create assignments (optionally with
 starter code), students accept to get their own repository, and submissions are
-auto-graded — but Classroom 50 has **no servers of its own**. Everything lives
-in your GitHub organization: classroom settings, roster, assignments, and scores
-sit in a private `classroom50` config repo, and grading runs in GitHub Actions.
-See [How Classroom 50 Works](How-Classroom-50-Works) for the full model, or the
-[Glossary](Glossary) for the core concepts.
+auto-graded — but Classroom 50 has no server or database of its own. Your
+classroom settings, roster, assignments, and scores are stored in a private
+`classroom50` config repo in your organization, and grading runs in GitHub
+Actions. See [How Classroom 50 Works](How-Classroom-50-Works) for the full
+model, or the [Glossary](Glossary) for the core concepts.
 
 ### Is there a web app, or is it CLI-only?
 

@@ -7,24 +7,24 @@ supported by the [Fifty Foundation](https://fifty.foundation).
 Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 `gh teacher` and `gh student` command-line tools.
 
-## The one idea to start with
+## How it works, in brief
 
-Classroom 50 has **no server and no database of its own.** The web app is a
-static site hosted on GitHub Pages, and the CLI runs on your machine — neither
-stores anything. **GitHub *is* the backend.** Your classrooms, roster,
-assignments, and grades aren't kept in a Classroom 50 account; they're stored
-*as* GitHub itself — organization membership, team membership, repositories,
-commit history, permissions, and a few config files in your organization.
+Classroom 50 has no server or database of its own. The web app is a static site
+hosted on GitHub Pages and the CLI runs on your machine; the app keeps only a
+small amount of local state in your browser (your GitHub access token and
+interface preferences). Your classrooms, roster, assignments, and grades are not
+kept in a Classroom 50 account — they are stored in GitHub, as organization and
+team membership, repositories, commit history, permissions, and a few config
+files in your organization.
 
-One consequence matters from day one: because there's no always-on server,
-**some things only happen when a teacher (an organization owner) is signed in
-and acting.** Signing in and doing things — creating a classroom, adding a
-student, saving an assignment — is what triggers the automation and records the
-state. So teachers stay more hands-on than with a hosted service: you're not
-just using the tool, you're the part of it that runs.
+One consequence is worth noting early: because there is no always-on server,
+some operations happen only when a teacher (an organization owner) is signed in
+and acting. Actions such as creating a classroom, adding a student, or saving an
+assignment run at the time you perform them and record the resulting state.
+Teachers therefore stay more involved in administration than they would with a
+hosted service.
 
-If you read nothing else first, read [How Classroom 50 Works](How-Classroom-50-Works)
-— it makes this mental model concrete before you start clicking.
+For the full model, see [How Classroom 50 Works](How-Classroom-50-Works).
 
 ## What you can do
 
