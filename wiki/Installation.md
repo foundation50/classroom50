@@ -76,7 +76,7 @@ cd classroom50
 (cd cli/gh-student && go build . && gh extension install .)
 ```
 
-After pulling new commits, just rebuild — you don't need to reinstall:
+After pulling new commits, rebuild — you don't need to reinstall:
 
 ```sh
 (cd cli/gh-teacher && go build .)

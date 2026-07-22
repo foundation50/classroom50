@@ -1,6 +1,6 @@
 # GitHub Integration
 
-Every place Classroom 50 touches GitHub — what you do manually, what the CLI
+Every place Classroom 50 touches GitHub: what you do manually, what the CLI
 handles, and the complete list of REST API calls the tooling makes.
 
 ## Manual steps
@@ -159,7 +159,7 @@ read-only probe:
 gh workflow run probe-token.yaml --repo <org>/classroom50
 ```
 
-A green run confirms every scope; a red run's log names the missing one.
+A green run confirms every scope; a red run's log names the missing scope(s).
 Side-effect free.
 
 ---

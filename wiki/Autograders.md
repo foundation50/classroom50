@@ -16,8 +16,8 @@ workflow in `<org>/classroom50`. On each submission the runner:
 Later, `collect-scores.yaml` aggregates each Release's `result.json` into
 `<classroom>/scores.json`.
 
-Everything substantive — the runner workflow, `runner.py`, autograders, runtime
-config — lives in the config repo and is fetched at run time, so teacher edits
+Everything substantive (the runner workflow, `runner.py`, autograders, runtime
+config) lives in the config repo and is fetched at run time, so teacher edits
 reach every existing student repo on the next submission with no per-repo
 maintenance.
 
@@ -75,7 +75,7 @@ reads `result.json` from the workspace after the autograder exits.
 | Field | Type | Notes |
 |---|---|---|
 | `schema` | string | Exactly `classroom50/result/v1`. |
-| `classroom` / `assignment` | string | Must match the repo name. |
+| `classroom` / `assignment` | string | Must match the source repo's identity (checked in code alongside `owner`). |
 | `assignment_type` | string | `individual` or `group`, stamped by the runner. |
 | `owner` | string | The repo owner login — the identity anchor. |
 | `submission` | string | The submit-tag name. |
@@ -83,11 +83,11 @@ reads `result.json` from the workspace after the autograder exits.
 | `datetime` | string | UTC ISO 8601. |
 | `score` / `max-score` | int | Sum of test scores / max-scores. |
 | `tests` | array | Per-test breakdown (`[]` is valid for a vacuous pass). |
-| `submitted_by` | object | Optional. Who pushed: `{"username", "id"}`. |
+| `submitted_by` | object | Optional. Who pushed: `username`, and `id` (which may be null or absent). |
 
 `collect-scores` validates this before merging into `scores.json`. A payload
 whose identity (classroom/assignment/`owner`) doesn't match the source repo is
-rejected, and a mismatched `assignment_type` is warned-and-skipped — so a hostile
+rejected, and a mismatched `assignment_type` is warned-and-skipped, so a hostile
 payload can't land in another student's gradebook.
 
 <details>
@@ -581,7 +581,7 @@ configured by `init`). The only PAT in the system is the teacher-side
 
 ## Custom runner workflow (rare)
 
-The `--autograder <name>` flag calls a fundamentally different *reusable
+The `--autograder <name>` flag calls a different *reusable
 workflow*, not just a different `autograder.py`. Drop a shim at
 `<classroom>/autograders/<name>.yaml` (its `uses:` points at your workflow) and
 register it with `gh teacher assignment add ... --autograder <name>`. Most

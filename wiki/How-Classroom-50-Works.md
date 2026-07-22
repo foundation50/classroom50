@@ -67,7 +67,7 @@ about why a change did or did not take effect:
    [service token](#the-service-token) rather than on you being online.
 
 So when a change "hasn't shown up yet," it's usually a background workflow still
-running (or GitHub Pages still deploying) — not a lost action.
+running (or GitHub Pages still deploying), not a lost action.
 
 ## The web app and CLI are equivalent
 
@@ -104,10 +104,10 @@ member capabilities (repo deletion, transfer, visibility changes, and more).
 This org-wide lockdown is the safety boundary.
 
 Against that backdrop, each student's access to *their own* assignment
-repository is deliberately generous:
+repository is deliberately broad:
 
 - **Individual assignments:** the student is created as an admin of their repo,
-  then downgraded to **write** — enough to push work, not enough to do damage.
+  then downgraded to **write**, enough to push work but not enough to do damage.
 - **Group assignments:** the first student to accept (the **founder**) keeps
   **admin** on the shared repo, because they need it to invite teammates as
   collaborators. Classroom 50 has no separate "create a team" step — students
@@ -120,13 +120,13 @@ per-repo access and the strict org policy work together.
 
 > [!NOTE]
 > TAs and head TAs get read access to student repositories through the
-> score-collection workflow, not at accept time — so a newly accepted repo has
-> no staff team attached to it, which is expected.
+> score-collection workflow, not at accept time. A newly accepted repo
+> therefore has no staff team attached to it, which is expected.
 
 ## Why org policies sometimes "drift"
 
 If you run both Classroom 50 and GitHub Classroom in the same organization, they
-can disagree on a setting and flip it back and forth — most notably private-repo
+can disagree on a setting and flip it back and forth, most notably private-repo
 forking. That tug-of-war shows up as "policy drift" in the setup/audit check.
 Classroom 50 no longer enforces the forking setting for this reason; private
 templates work either way. If you see a setting you fixed revert later, another
@@ -198,7 +198,7 @@ organization. See [the service-token setup](CLI-Teacher-Guide#create-the-service
 
 | | GitHub Classroom | Classroom 50 |
 | --- | --- | --- |
-| Backend | Hosted service | None — GitHub repos + Actions |
+| Backend | Hosted service | None (GitHub repos + Actions) |
 | Classroom ↔ org | One classroom per org | Many classrooms per org |
 | Grading | Hosted autograder | GitHub Actions in each repo |
 | Feedback PR | Opened at accept | Opened on first submission |

@@ -40,12 +40,12 @@ a `git clone` command.
 4. Creates the repo — from the template, an empty `auto_init` repo, or (for an
    `empty_repo` assignment) a truly bare repo with steps 3 and 7 skipped.
 5. Disables issues, projects, and wiki.
-6. Keeps you as an `admin` collaborator (so a group founder can invite
-   teammates; the org lockdown removes the org-wide danger of repo-admin).
+6. Sets your repo role: `push` for an individual assignment, or `admin` for a
+   group assignment (so a group founder can invite teammates).
 7. Commits `.classroom50.yaml` and `.github/workflows/autograde.yaml` in one
    commit. The metadata records the classroom, assignment, and (when present)
-   the template repo, which `gh student submit` re-fetches `.gitignore` and
-   `.github/` from.
+   the template repo. `gh student submit` re-fetches `.gitignore` and `.github/`
+   from that template.
 8. Prints the `git clone` command.
 
 </details>
@@ -80,7 +80,8 @@ Run from inside a cloned assignment repo:
 gh student submit
 ```
 
-Snapshots your current working tree and pushes it as a new commit on the repo's
+Snapshots your submittable files (tracked, plus untracked files that aren't
+ignored) and pushes them as a new commit on the repo's
 default branch. The autograde workflow then tags the commit
 `submit/<UTC-timestamp>-<short-sha>`, grades it, and publishes a scored Release a
 minute or two later.
@@ -108,7 +109,7 @@ override the default identity.
 
 > [!NOTE]
 > **Feedback PR timing.** If your teacher enabled feedback, one long-lived
-> Feedback pull request appears on your **first submission that adds work** — not
+> Feedback pull request appears on your **first submission that adds work**, not
 > at accept time (GitHub can't open a PR with no changes). The one PR is reused
 > for every later submission.
 

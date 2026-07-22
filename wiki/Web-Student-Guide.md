@@ -31,7 +31,7 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
 - **Sign in with GitHub** — the standard browser flow.
-- **Use a device code** — a manual fallback: paste a code into a GitHub page,
+- **Use a device code** — a manual fallback. Paste a code into a GitHub page,
   and Classroom 50 detects when you've authorized it.
 
 ![Classroom 50 login flow](images/web_login_flow_student.png)

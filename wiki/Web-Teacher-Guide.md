@@ -14,7 +14,7 @@ collect submissions.
 
 ## Before you start: GitHub setup
 
-Classroom 50 stores everything in GitHub — there are no Classroom 50 servers.
+Classroom 50 stores its state in GitHub; there are no Classroom 50 servers.
 Your classroom data lives in a [GitHub organization](https://docs.github.com/en/organizations/collaborating-with-groups-in-organizations/about-organizations),
 and rosters and submissions live in a repository inside it.
 
@@ -36,7 +36,7 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 [OAuth 2](https://oauth.net/2/). Two options:
 
 - **Sign in with GitHub** — the standard browser flow.
-- **Use a device code** — a manual fallback: paste a code into a GitHub page,
+- **Use a device code** — a manual fallback. Paste a code into a GitHub page,
   and Classroom 50 detects when you've authorized it.
 
 When authorizing, grant access to any organization you'll use with Classroom 50.
@@ -53,9 +53,9 @@ After signing in, you'll see the organizations you can use. Each shows a status:
 
 | Status | Meaning |
 | --- | --- |
-| **Ready** | Set up and ready — click **Open**. |
-| **Needs service token** | Set up, but needs a service token before score collection works — click **Complete Setup**. |
-| **Uninitialized** | Not set up yet — appears under "Set up new organization". |
+| **Ready** | Set up and ready. Use **Open**. |
+| **Needs service token** | Set up, but a service token is still required before score collection works. |
+| **Uninitialized** | Not set up yet. Appears under "Set up new organization". |
 
 Don't see your organization? Grant it access in Classroom 50's
 [OAuth settings](https://github.com/settings/connections/applications).
@@ -64,7 +64,7 @@ Don't see your organization? Grant it access in Classroom 50's
 
 ![Setup steps](images/web_setup.png)
 
-Click **Setup** on an uninitialized organization, then **Run setup**. This
+Click **Set up** on an uninitialized organization, then **Run setup**. This
 configures your organization's settings and creates a `classroom50` config
 repository to hold Classroom 50's state.
 
@@ -105,8 +105,9 @@ On **My classrooms**, click **Create classroom**:
 
 ![Unlisted links toggle](images/web_create_classroom_hash.png)
 
-**Unlisted links** (optional) publish this classroom's assignment data at an
-unguessable URL instead of a predictable one based on the slug.
+**Use an unlisted link for this classroom** (optional) publishes this
+classroom's assignment data at an unguessable URL instead of a predictable one
+based on the slug.
 
 > [!WARNING]
 > Unlisted links are obscurity, not access control. The files are still public;
@@ -133,8 +134,8 @@ On the classroom page, click **+ Assignment**. Fill in:
   used as each student's starting point. Enter `<owner>/<repo>`, or just
   `<repo>` if it's in this organization. Leave blank for an empty starter repo.
 - **Due date** (optional) — a date and time in your local timezone.
-- **Assignment type** — **Individual** (one repository per student) or **Group**
-  (students share a repository and submit together).
+- **Assignment type** — **Individual** (one repository per student) or **Group
+  project** (students share a repository and submit together).
 - **Feedback pull request** — automatically opens a pull request per student so
   you can review changes and leave inline feedback.
 - **Empty repository** — creates each student's repository completely empty: no
@@ -171,7 +172,7 @@ Optional settings for customizing the autograding environment:
 
 ### Autograding tests
 
-Autograding tests run every time a student pushes. Click **+ Add Test** to add
+Autograding tests run every time a student pushes. Click **Add test** to add
 one.
 
 ![Autograding tests](images/web_create_assignment_tests.png)
@@ -207,7 +208,7 @@ fields.
 
 ![Python pytest test](images/web_create_assignment_tests_python_pytest.png)
 
-When you're done, click **Create Assignment**.
+When you're done, click **Create assignment**.
 
 ![Classroom with one assignment](images/web_classroom_with_assignment.png)
 
@@ -225,7 +226,7 @@ GitHub organization.
 > Students must accept the organization invitation before they can work on
 > assignments.
 
-**Add a student** — add one student by GitHub username (name and email
+**Add member** — add one student by GitHub username (name and email
 optional). You can enter an email instead of a username; that student then
 completes a separate onboarding process (see below).
 
@@ -284,7 +285,7 @@ CSV for a spreadsheet or external tool.
 
 ## Edit assignments and classrooms
 
-- **Edit an assignment** — open the assignment, then **Assignment Settings**.
+- **Edit an assignment** — open the assignment, then **Assignment settings**.
   Same form as creating one, pre-filled.
 - **Edit a classroom** — open the classroom, then **Settings**. Same form as
   creating one, pre-filled.

@@ -53,8 +53,8 @@ an empty repo if it's template-less), then prints a `git clone` command.
 2. Looks up the assignment in the classroom's published manifest.
 3. Resolves the autograder workflow.
 4. Creates your private repository (a template copy, or an empty repo).
-5. Keeps you as an `admin` collaborator (so a group founder can invite
-   teammates).
+5. Sets your repo role: `push` for an individual assignment, or `admin` for a
+   group assignment (so a group founder can invite teammates).
 6. Commits the setup files (`.classroom50.yaml` and the autograde workflow).
 7. Prints the `git clone` command.
 
@@ -99,8 +99,10 @@ If your teacher registered the assignment with `--mode group`, teammates share
    ```
 
 Each teammate is added with `push` permission and gets a GitHub invitation. Only
-the founder can add collaborators. Keep the group within the size your teacher
-set — the CLI doesn't enforce the cap, so coordinate within your group.
+the founder can add collaborators. When run from inside the group repo,
+`gh student invite` refuses to add past the size your teacher set, but this cap
+is advisory: it can be bypassed (for example, via the GitHub UI), and the
+authoritative crediting happens at grading time.
 
 The whole group works in the one repository and submits from it. At grading
 time, everyone on the roster who is a collaborator gets the same score.

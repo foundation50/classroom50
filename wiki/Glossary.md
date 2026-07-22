@@ -46,7 +46,8 @@ the shared repository and invite the other teammates as collaborators.
 
 **Template repository** — A GitHub repository, flagged as a template, that
 supplies an assignment's **starter code**. Each student who accepts gets a copy.
-Assignments can also be template-less (an empty starter repo).
+Assignments can also be template-less, in which case a student's repository
+contains only the autograder setup.
 
 **Deadline (due date)** — An optional date and time for an assignment.
 Submissions after it are marked *late*; nothing is blocked.
@@ -82,7 +83,7 @@ the template.
 
 **Unlisted classroom** — A classroom whose published files live at an
 unguessable URL instead of a predictable one. This is obscurity, not access
-control — anyone with the link can read the files.
+control: anyone with the link can read the files.
 
 ## Repository naming
 

@@ -26,7 +26,7 @@ model, or the [Glossary](Glossary) for the core concepts.
 
 ### Is there a web app, or is it CLI-only?
 
-Both, and they're **alternatives** — not a supplement. Teachers can do
+Both, and they're **alternatives**, not supplements. Teachers can do
 everything from [classroom50.org](https://classroom50.org) or from the
 `gh teacher` CLI; students can accept and submit from either. Use whichever you
 prefer. See the [Web Teacher Guide](Web-Teacher-Guide) or
@@ -34,7 +34,7 @@ prefer. See the [Web Teacher Guide](Web-Teacher-Guide) or
 
 ### Can I self-host Classroom 50?
 
-There's no server to host — Classroom 50 runs entirely on GitHub's
+There's no server to host. Classroom 50 runs entirely on GitHub's
 infrastructure and public APIs. The web app is a static, open-source site, so
 you're welcome to host your own copy. It only integrates with GitHub, not with
 self-hosted Git platforms.
@@ -44,7 +44,7 @@ self-hosted Git platforms.
 ### Can one organization hold multiple classrooms?
 
 Yes. A **classroom** is a directory in your organization's `classroom50` config
-repo, and an organization can hold as many as you like — for example, one per
+repo, and an organization can hold as many as you like, for example one per
 course, section, or term. Add each with **Create classroom** in the web app or
 `gh teacher classroom add`.
 
@@ -149,7 +149,7 @@ they open their repository. See [Assignment Templates](Assignment-Templates).
 
 ### Can I grade without writing test code?
 
-Yes — use **declarative tests** (input/output, run-command, or pytest checks)
+Yes. Use **declarative tests** (input/output, run-command, or pytest checks)
 defined right on the assignment. No grading script needed. For more control,
 write an `autograder.py`. See [Autograders](Autograders).
 
@@ -208,16 +208,19 @@ Collection leaves overridden entries untouched on future runs. See
 
 ### How do I export grades?
 
-Download all submissions as a CSV from the submissions page
-(**Download Scores (CSV)**), or with `gh teacher download`. The raw score data
-also lives in `scores.json` in your config repo, so you can build your own
-automations against it.
+Download scores as a CSV from the submissions page
+(**Download scores (CSV)**). The `gh teacher download` command clones every
+submission repo and also writes a `scores.csv` summary at the destination root.
+The raw score data also lives in `scores.json` in your config repo, so you can
+build your own automations against it.
 
 ### As a teacher, can I test an assignment as a student?
 
-Organization owners can't accept their own assignments (GitHub treats owners
-differently from members). To test the full student flow, use a separate GitHub
-account that you add to the classroom as a student.
+You can accept your own assignment, but as an organization owner you'll keep
+`admin` on the repository (GitHub won't let an owner reduce their own access to
+`write`), so it won't match a real student's setup. To test the exact student
+experience, use a separate GitHub account that you add to the classroom as a
+student.
 
 ## Migrating from GitHub Classroom
 

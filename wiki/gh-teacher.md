@@ -57,7 +57,7 @@ gh teacher init <org> --json       # machine-readable summary
 gh teacher init <org> --yes        # skip the skeleton-refresh prompt
 ```
 
-Idempotent — re-running resumes where a prior run stopped and offers to refresh
+Idempotent: re-running resumes where a prior run stopped and offers to refresh
 stale skeleton files (after a confirmation prompt).
 
 <details>
@@ -154,15 +154,17 @@ student repo names (`<short-name>-<assignment>-<username>`).
 
 Scaffolds four files in one commit — `classroom.json`, `assignments.json`,
 `roster.csv`, `scores.json` — and creates the `classroom50-<short-name>` GitHub
-team (plus `-teacher`, `-hta`, and `-ta` staff teams). Refuses to overwrite an existing
+team (plus the `classroom50-<short-name>-{teacher,hta,ta}` staff teams). Refuses to overwrite an existing
 classroom.
 
 <details>
 <summary>What the scaffold does and doesn't include</summary>
 
 The `roster.csv` header is
-`username,first_name,last_name,email,section,github_id`; `github_id` is
-CLI-managed — don't hand-edit it.
+`username,first_name,last_name,email,section,github_id,role`. `github_id` is
+CLI-managed (don't hand-edit it), and `role` is best-effort metadata refreshed
+from the classroom's GitHub teams (the teams, not this column, remain the role
+authority).
 
 Not included: the shared runner bootstrap (landed once by `init`), any
 autograder (classrooms grade as a vacuous pass until you add one), and the
@@ -378,7 +380,7 @@ The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date; timezone required. Stored verbatim. |
 | `--mode individual\|group` | `individual` (default) or `group` (requires `--max-group-size`). |
-| `--max-group-size <N>` | Max group collaborators (`>= 2`). Advisory. |
+| `--max-group-size <N>` | Max group collaborators (2–100). Advisory. |
 | `--runtime <path>` | JSON runtime (`runs-on`, toolchains, `apt`, `container`). See [Autograders](Autograders). |
 | `--tests <path>` | JSON array of declarative tests. Mutually exclusive with a per-assignment `autograder.py`. |
 | `--autograder <name>` | Swap the reusable workflow (rare). Default `default`. |
@@ -533,8 +535,8 @@ gh teacher download -d <dir> <org> <classroom> <assignment>     # literal dir
 probes the expected `<classroom>-<assignment>-<username>` repo, clones it (or
 reports `Missing: <username>`), and refreshes `result.json` (latest) and
 `results.json` (all submissions) from its releases. Then writes a `scores.csv`
-at the destination root — one line per submission, with a blank-score line for
-non-submitters.
+at the destination root, one line per submission (a student with several pushes
+contributes several lines), plus a blank-score line for each non-submitter.
 
 Each run creates a fresh timestamped folder unless you pass `-d`. Existing target
 dirs are skipped on clone but still get `result.json` refreshed.

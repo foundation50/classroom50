@@ -150,7 +150,7 @@ returns 401/403):
 gh workflow run probe-token.yaml --repo <org>/classroom50
 ```
 
-A green run confirms every scope; a red run's log names the missing one. It's
+A green run confirms every scope; a red run's log names the missing scope(s). It's
 side-effect free.
 
 </details>
@@ -310,9 +310,10 @@ address.
 gh teacher roster import <org> <classroom> <path-to-csv>
 ```
 
-Accepts a header of `username,first_name,last_name,email,section` (or the same
-plus `github_id`). Every username is resolved up front — one typo aborts the
-whole import before any commit. New students are invited.
+Accepts a header of `username,first_name,last_name,email,section` (a trailing
+`github_id` column is accepted but ignored, since the CLI re-resolves each ID
+from GitHub). Every username is resolved up front; one typo aborts the whole
+import before any commit. New students are invited.
 
 **View the roster:**
 
@@ -359,7 +360,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | `--description <text>` | Short description. |
 | `--due <ISO-8601>` | Due date, e.g. `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
-| `--max-group-size <N>` | Max collaborators on a group repo (`>= 2`). Advisory, not hard-enforced. |
+| `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.12. See [Autograders](Autograders). |
 | `--autograder <name>` | Reserved for swapping the whole reusable workflow (rare). Use `--runtime` for language toolchains. |
 
@@ -471,8 +472,9 @@ for each one probes for the expected repo, clones it (or reports `Missing:
 <username>`), and refreshes `result.json` (latest submission) and `results.json`
 (all submissions) from the repo's releases.
 
-It then writes a `scores.csv` at the destination root — **one line per
-submission** — with a blank-score line for non-submitters, so you can sort by
+It then writes a `scores.csv` at the destination root, **one line per
+submission** (a student with several pushes contributes several lines), plus a
+blank-score line for each non-submitter, so you can sort by
 score to see who hasn't submitted.
 
 Each run creates a fresh timestamped folder. Override the destination with `-d`:
