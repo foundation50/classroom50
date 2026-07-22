@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next"
-import { AlertTriangle, ServerCog } from "lucide-react"
+import { AlertTriangle } from "lucide-react"
 import { Input, Textarea } from "@/components/ui"
 import { parseAllowedFiles } from "@/util/allowedFiles"
 import { parseReleaseAssets } from "@/util/releaseAssets"
@@ -107,11 +107,7 @@ export const AdvancedSection = ({
                   help={t("assignments.form.runtime.languagesTip")}
                 />
                 {selfHosted && (
-                  <p className="mb-3 flex items-start gap-1.5 text-sm text-base-content/70">
-                    <ServerCog
-                      aria-hidden="true"
-                      className="mt-0.5 size-4 shrink-0"
-                    />
+                  <p className="mb-3 text-sm text-warning">
                     {t("assignments.form.runtime.selfHostedDisabled")}
                   </p>
                 )}
