@@ -12,6 +12,11 @@ import {
   allowedFilesToText,
   validateAllowedFiles,
 } from "@/util/allowedFiles"
+import {
+  parseReleaseAssets,
+  releaseAssetsToText,
+  validateReleaseAssets,
+} from "@/util/releaseAssets"
 import { parseRunnerLabels } from "@/util/runners"
 import {
   RUNTIME_LANGUAGES,
@@ -77,6 +82,8 @@ export type CreateAssignmentFormValues = {
   setup_command: string
   // Raw textarea text; parsed to string[] on save, joined back on read.
   allowed_files: string
+  // Raw textarea text (exact workspace-relative paths, one per line).
+  release_assets: string
   // Opt-in passing threshold (off by default). When enabled, pass_threshold is
   // an integer percentage 0–100; when disabled, no passing concept is written.
   pass_threshold_enabled: boolean
@@ -141,6 +148,57 @@ export function validateAssignmentForm(
   )
   if (allowedFilesError) {
     errors.allowed_files = allowedFilesError
+  }
+
+  if (!value.empty_repo) {
+    const releaseAssetsError = validateReleaseAssets(
+      parseReleaseAssets(value.release_assets),
+    )
+    if (releaseAssetsError) {
+      switch (releaseAssetsError.kind) {
+        case "too-many":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsTooMany",
+            { count: releaseAssetsError.count, max: releaseAssetsError.max },
+          )
+          break
+        case "too-large":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsTooLarge",
+            { bytes: releaseAssetsError.bytes, max: releaseAssetsError.max },
+          )
+          break
+        case "invalid-path":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsInvalidPath",
+            { path: releaseAssetsError.path },
+          )
+          break
+        case "invalid-basename":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsInvalidBasename",
+            { basename: releaseAssetsError.basename },
+          )
+          break
+        case "duplicate-path":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsDuplicatePath",
+            { path: releaseAssetsError.path },
+          )
+          break
+        case "duplicate-basename":
+          errors.release_assets = t(
+            "assignments.form.validation.releaseAssetsDuplicateBasename",
+            { basename: releaseAssetsError.basename },
+          )
+          break
+        default:
+          // Exhaustiveness guard: a new ReleaseAssetsValidationError kind must
+          // add a case here or this fails to compile (the drop that let
+          // duplicate-path slip through silently).
+          releaseAssetsError satisfies never
+      }
+    }
   }
 
   // Only validated when the teacher enabled it. Integer percentage in [0, 100]
@@ -254,6 +312,7 @@ export function toSubmitValues(
     runtime_apt: isContainer ? "" : value.runtime_apt.trim(),
     setup_command: isEmptyRepo ? "" : value.setup_command.trim(),
     allowed_files: isEmptyRepo ? "" : value.allowed_files,
+    release_assets: isEmptyRepo ? "" : value.release_assets,
     pass_threshold_enabled: isEmptyRepo ? false : value.pass_threshold_enabled,
     pass_threshold: Number(value.pass_threshold),
     tests: isEmptyRepo ? [] : value.tests,
@@ -289,6 +348,7 @@ export const useAssignmentForm = (
       runtime_apt: defaultValues?.runtime_apt || "",
       setup_command: defaultValues?.setup_command || "",
       allowed_files: defaultValues?.allowed_files || "",
+      release_assets: defaultValues?.release_assets || "",
       pass_threshold_enabled: defaultValues?.pass_threshold_enabled ?? false,
       pass_threshold: defaultValues?.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
       tests: defaultValues?.tests || [],
@@ -360,6 +420,7 @@ export const assignmentToFormValues = (
     pass_threshold_enabled: typeof assignment.pass_threshold === "number",
     pass_threshold: assignment.pass_threshold ?? DEFAULT_PASS_THRESHOLD,
     allowed_files: allowedFilesToText(assignment.allowed_files),
+    release_assets: releaseAssetsToText(assignment.release_assets),
     tests,
   }
 }

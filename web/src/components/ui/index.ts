@@ -50,6 +50,9 @@ export type { FileDropzoneProps, PickedFile } from "./FileDropzone"
 export { StatCard } from "./StatCard"
 export type { StatCardProps } from "./StatCard"
 
+export { TablePagination } from "./TablePagination"
+export type { TablePaginationProps } from "./TablePagination"
+
 export { LabeledControl } from "./LabeledControl"
 export type { LabeledControlProps } from "./LabeledControl"
 

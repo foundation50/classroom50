@@ -42,3 +42,17 @@ describe("SubmissionsActionsMenu — canRegradeAll gate", () => {
     expect(screen.queryByText("submissions.regradeAll.label")).not.toBeNull()
   })
 })
+
+describe("SubmissionsActionsMenu — Metrics item", () => {
+  it("does not include Share (moved next to the search bar)", () => {
+    render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.menu.share")).toBeNull()
+  })
+
+  it("shows Metrics only when onMetrics is provided (hidden in live view)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.menu.metrics")).toBeNull()
+    rerender(<SubmissionsActionsMenu {...baseProps} onMetrics={() => {}} />)
+    expect(screen.queryByText("submissions.menu.metrics")).not.toBeNull()
+  })
+})

@@ -56,6 +56,7 @@ jobs:
       feedback-pr:    ${{ steps.read.outputs.feedback-pr }}
       mode:           ${{ steps.read.outputs.mode }}
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
+      release-assets: ${{ steps.read.outputs.release-assets }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -69,6 +70,7 @@ jobs:
           python-version: "3.12"
       - name: Install PyYAML
         run: python3 -m pip install --quiet --user pyyaml
+        working-directory: ${{ runner.temp }}
 
       # === Skip the acceptance commit ===
       # The accept commit (adds .classroom50.yaml + the shim, student-
@@ -502,6 +504,60 @@ jobs:
                   fail(f"entry {assignment!r}: allowed_files[{i}] {pat!r} must not contain NUL or newline")
           allowed_files_json = json.dumps(allowed_files)
 
+          # === Release assets ===
+          # Re-validate the hand-editable exact release asset paths and emit
+          # compact ordered JSON. Mirrors ValidateReleaseAssets (Go).
+          release_assets = entry.get("release_assets", [])
+          if not isinstance(release_assets, list):
+              fail(f"entry {assignment!r}: release_assets must be an array")
+          if len(release_assets) > 50:
+              fail(f"entry {assignment!r}: release_assets has {len(release_assets)} paths (max 50)")
+          _RELEASE_BASENAME = re.compile(
+              r"^[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9_-])?$",
+              re.ASCII,
+          )
+          _ASCII_UPPER = "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+          _ASCII_LOWER = "abcdefghijklmnopqrstuvwxyz"
+          _ASCII_FOLD = str.maketrans(_ASCII_UPPER, _ASCII_LOWER)
+          seen_paths = set()
+          seen_basenames = set()
+          release_assets_path_bytes = 0
+          for i, configured_path in enumerate(release_assets):
+              where = f"entry {assignment!r}: release_assets[{i}]"
+              if not isinstance(configured_path, str) or not configured_path.strip():
+                  fail(f"{where} must be a non-empty string")
+              if any(0xD800 <= ord(char) <= 0xDFFF for char in configured_path):
+                  fail(f"{where} must not contain Unicode surrogates")
+              release_assets_path_bytes += len(configured_path.encode("utf-8"))
+              if release_assets_path_bytes > 8192:
+                  fail(f"entry {assignment!r}: release_assets paths exceed 8192 UTF-8 bytes")
+              if configured_path.startswith("/") or re.match(r"^[A-Za-z]:", configured_path, re.ASCII):
+                  fail(f"{where} must be relative")
+              if "\\" in configured_path:
+                  fail(f"{where} must use '/' separators")
+              if any(ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F for char in configured_path):
+                  fail(f"{where} must not contain control characters")
+              segments = configured_path.split("/")
+              if any(segment in ("", ".", "..") for segment in segments):
+                  fail(f"{where} has an invalid path segment")
+              if segments[0].translate(_ASCII_FOLD) == ".git":
+                  fail(f"{where} must not select the root .git tree")
+              basename = segments[-1]
+              folded_basename = basename.translate(_ASCII_FOLD)
+              if not _RELEASE_BASENAME.fullmatch(basename) or ".." in basename:
+                  fail(f"{where} basename {basename!r} is not Release-safe")
+              if folded_basename in ("result.json", "release-body.md"):
+                  fail(f"{where} basename {basename!r} is reserved")
+              if configured_path in seen_paths:
+                  fail(f"{where} duplicates path {configured_path!r}")
+              if basename in seen_basenames:
+                  fail(f"{where} duplicates basename {basename!r}")
+              seen_paths.add(configured_path)
+              seen_basenames.add(basename)
+          release_assets_json = json.dumps(
+              release_assets, separators=(",", ":"), ensure_ascii=False
+          )
+
           submission_tag = os.environ.get("SUBMISSION_TAG", "").strip()
           if not submission_tag:
               submission_tag = os.environ.get("GITHUB_REF_NAME", "")
@@ -524,6 +580,7 @@ jobs:
           emit("feedback-pr", "true" if feedback_pr else "false")
           emit("mode", mode)
           emit("allowed-files", allowed_files_json)
+          emit("release-assets", release_assets_json)
 
   grade:
     needs: setup
@@ -557,14 +614,19 @@ jobs:
       # allowed_files patterns (JSON array) from assignments.json;
       # runner.py removes disallowed files before grading. "[]" = allow all.
       ALLOWED_FILES:  ${{ needs.setup.outputs.allowed-files }}
+      # release_assets paths (JSON array) from assignments.json; runner.py
+      # stages the exact regular files post-grading for the Release step below.
+      # "[]" = none.
+      RELEASE_ASSETS: ${{ needs.setup.outputs.release-assets }}
     steps:
       - name: Check out submission
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.setup.outputs.submission-tag }}
+          ref: ${{ github.sha }}
           # Full history -- runner.py needs the student's baseline
           # commit for the full-diff review link.
           fetch-depth: 0
+          persist-credentials: false
 
       # === Language toolchains (driven by `runtime:` in assignments.json) ===
       - name: Set up Python
@@ -661,22 +723,62 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ env.SUBMISSION_TAG }}
+          # Distinct name from the job-level RELEASE_ASSETS (a JSON array fed to
+          # runner.py): this is the comma-joined list of accepted basenames the
+          # runner emits post-staging. Different wire shape, different name, so a
+          # future edit can't feed the JSON array into the IFS=',' read below.
+          STAGED_RELEASE_BASENAMES: ${{ steps.autograde.outputs.release-assets }}
+          # Absolute dir runner.py actually staged into, so this step reads from
+          # exactly where the runner wrote instead of re-deriving it from
+          # RUNNER_TEMP (the two fallbacks diverged when RUNNER_TEMP was unset).
+          STAGED_RELEASE_DIR: ${{ steps.autograde.outputs.release-assets-dir }}
         run: |
           set -euo pipefail
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" \
-              --title "Submission $TAG" \
-              --notes-file release-body.md \
-              --latest=false
-            gh release upload "$TAG" result.json \
-              --repo "$GITHUB_REPOSITORY" --clobber
-          else
-            gh release create "$TAG" result.json \
-              --repo "$GITHUB_REPOSITORY" \
-              --title "Submission $TAG" \
-              --notes-file release-body.md \
-              --latest=false
+          ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"
+
+          # Collect the valid staged extras FIRST, so they're attached in the
+          # same `gh release create` as result.json. Immutable releases (an org
+          # ruleset can enforce them) reject a later `gh release upload`/`edit`
+          # with HTTP 422, so assets must be baked in at creation time — a
+          # post-create upload can never succeed there. Re-validate each staged
+          # basename (defense in depth: these came from runner.py's strict
+          # validator, but the workflow re-checks before anything reaches gh).
+          EXTRA_ASSETS=()
+          if [[ -n "${STAGED_RELEASE_BASENAMES:-}" ]]; then
+            IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"
+            for NAME in "${ASSET_NAMES[@]}"; do
+              [[ -n "$NAME" ]] || continue
+              if [[ ! "$NAME" =~ ^[A-Za-z0-9._-]{1,255}$ || "$NAME" == .* || "$NAME" == *. || "$NAME" == *..* ]]; then
+                echo "::warning::release_assets: invalid staged basename (skipped)"
+                continue
+              fi
+              case "$(printf '%s' "$NAME" | LC_ALL=C tr '[:upper:]' '[:lower:]')" in
+                result.json|release-body.md)
+                  echo "::warning::release_assets: reserved staged basename $NAME (skipped)"
+                  continue
+                  ;;
+              esac
+              ASSET="$ASSETS_DIR/$NAME"
+              if [[ ! -f "$ASSET" || -L "$ASSET" ]]; then
+                echo "::warning::release_assets: staged $NAME is missing or unsafe (skipped)"
+                continue
+              fi
+              EXTRA_ASSETS+=("$ASSET")
+            done
           fi
+
+          # Recreate on re-run: an immutable release can't have result.json
+          # clobbered or new assets uploaded, so a re-run must delete and
+          # recreate to attach the current result + extras atomically. Keep the
+          # git tag (--cleanup-tag omitted) so the submission ref is unchanged.
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes
+          fi
+          gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"} \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "Submission $TAG" \
+            --notes-file release-body.md \
+            --latest=false
 
       # === Ensure the Feedback PR ===
       # Opt-in per assignment (feedback-pr). One long-lived PR per repo:

@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/foundation50/classroom50/main/schemas/assignments-v1.schema.json",
   "title": "classroom50/assignments/v1",
-  "description": "Machine-readable schema for <classroom>/assignments.json, mirroring the authoritative Go validators in cli/gh-teacher (assignments_json.go, tests.go, runtime.go). Intended for non-CLI clients (e.g. the GUI) to validate before writing. Two rules JSON Schema cannot express: (1) test names must be UNIQUE within an assignment, and (2) name length is capped at 100 BYTES (UTF-8), not characters — enforce both client-side. One normalization the CLI's parser applies that this schema rejects: a missing or empty `autograder` (normalized to \"default\") — clients should always write the normalized form, as the CLI does.",
+  "description": "Machine-readable schema for <classroom>/assignments.json, mirroring the authoritative Go validators in cli/gh-teacher (assignments_json.go, tests.go, runtime.go). Intended for non-CLI clients (e.g. the GUI) to validate before writing. Four rules JSON Schema cannot express: (1) test names must be UNIQUE within an assignment, (2) name length is capped at 100 BYTES (UTF-8), not characters, (3) release_assets basenames must be UNIQUE within an assignment, and (4) configured release_assets path strings are capped at 8,192 raw UTF-8 bytes in aggregate — enforce all four client-side. Parser normalizations this schema intentionally rejects include a missing or empty `autograder` (normalized to \"default\") and `release_assets: null` (normalized to absence) — clients should always write normalized forms, as the CLI does.",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema", "assignments"],
@@ -94,7 +94,7 @@
         },
         "empty_repo": {
           "type": "boolean",
-          "description": "Opt the assignment into truly bare student repos: accept creates the repo with no initial commit (auto_init false) and commits NO control files — no README, no .classroom50.yaml accept marker, no .github/workflows/autograde.yaml shim. Autograding and the Feedback PR are disabled for the assignment; regrade and score collection skip it. Mutually exclusive with template, tests, feedback_pr, allowed_files, and pass_threshold (see the conditional at the assignment level). IMMUTABLE after creation: flipping it later would require retrofitting control files into (or stripping them from) every already-accepted student repo, so writers must reject an edit that changes it. On the wire it is collapsed like feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
+          "description": "Opt the assignment into truly bare student repos: accept creates the repo with no initial commit (auto_init false) and commits NO control files — no README, no .classroom50.yaml accept marker, no .github/workflows/autograde.yaml shim. Autograding and the Feedback PR are disabled for the assignment; regrade and score collection skip it. Mutually exclusive with template, tests, feedback_pr, allowed_files, release_assets, and pass_threshold (see the conditional at the assignment level). IMMUTABLE after creation: flipping it later would require retrofitting control files into (or stripping them from) every already-accepted student repo, so writers must reject an edit that changes it. On the wire it is collapsed like feedback_pr: the CLI omits the field when false (omitempty), so readers must treat an absent field as `false`; accept an explicit `false` too."
         },
         "allowed_files": {
           "type": "array",
@@ -105,6 +105,17 @@
             "pattern": "^(?!\\s*$)[^\\u0000\\n]+$"
           },
           "description": "Ordered .gitignore-style patterns defining which files belong to the submission (order matters, last match wins, `!` re-includes). Example: [\"*\", \"!hello.py\"] ignores everything then re-includes hello.py — an allowlist of exactly hello.py. Empty/absent means every file is allowed. The autograde runner enforces it best-effort by removing disallowed working-tree files before grading (control files like .classroom50.yaml and .github/ are always kept), but fails open on git/resource failure — so it is a grading-scope/hygiene tool, not a secret-hiding boundary; `gh student submit` applies it as a best-effort pre-push filter."
+        },
+        "release_assets": {
+          "type": "array",
+          "maxItems": 50,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^(?!.*[\\u0000-\\u001f\\u007f-\\u009f])(?![\\s\\S]*[\\uD800-\\uDBFF](?![\\uDC00-\\uDFFF]))(?![\\s\\S]*(?:^|[^\\uD800-\\uDBFF])[\\uDC00-\\uDFFF])(?!/)(?![A-Za-z]:)(?![.][gG][iI][tT](?:/|$))(?!(?:[^/]+/)*[^/]*[.][.][^/]*$)(?!(?:[^/]+/)*(?:[rR][eE][sS][uU][lL][tT][.][jJ][sS][oO][nN]|[rR][eE][lL][eE][aA][sS][eE]-[bB][oO][dD][yY][.][mM][dD])$)(?:(?![.]{1,2}/)[^/\\\\\\u0000-\\u001f\\u007f-\\u009f]+/)*[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9_-])?$"
+          },
+          "description": "Ordered exact workspace-relative file paths attached to each passing or failing submission Release after grading. Empty/absent disables the feature. Paths must not contain unpaired Unicode surrogates and are flattened to unique Release-safe basenames; writers and runtimes additionally enforce basename uniqueness and an aggregate maximum of 8,192 raw UTF-8 bytes across configured path strings."
         },
         "pass_threshold": {
           "type": "integer",
@@ -140,6 +151,7 @@
               { "not": { "required": ["template"] } },
               { "not": { "required": ["tests"] } },
               { "not": { "required": ["allowed_files"] } },
+              { "not": { "required": ["release_assets"] } },
               { "not": { "required": ["pass_threshold"] } },
               { "properties": { "feedback_pr": { "const": false } } }
             ]

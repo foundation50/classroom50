@@ -138,6 +138,9 @@ export type Assignment = {
   // Ordered .gitignore-style allowlist (last match wins, `!` re-includes).
   // Empty/absent = all files allowed. Enforced server-side.
   allowed_files?: string[]
+  // Ordered exact workspace-relative paths whose files upload as extra
+  // submission-release assets, pass or fail. Empty/absent disables.
+  release_assets?: string[]
   // Integer percentage (0–100) at/above which a submission counts as "passing"
   // in the gradebook rollup, badges, and passing/failing filter. Display/contract
   // only — it doesn't change a student's actual (points-based) score. Absent =

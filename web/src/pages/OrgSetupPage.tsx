@@ -13,6 +13,7 @@ import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useState } from "react"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
+import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import {
@@ -231,6 +232,7 @@ const OrgSetupPage = () => {
     org,
     plan: orgPlanDetails?.plan?.name,
     onStepUpdate: (update) => {
+      if (org) recordBudgetNoticeFromStep(org, update.id, update.data)
       setSteps((steps) => applyStepUpdate(steps, update))
     },
     confirmSkeletonOverwrite,

@@ -83,12 +83,16 @@ type AssignmentsJSON struct {
 // the submission (last match wins, `!` re-includes); empty/absent allows all.
 // The runner enforces it by removing disallowed files before grading.
 //
+// ReleaseAssets is an ordered list of exact workspace-relative files collected
+// after grading and flattened to unique Release-safe basenames. Empty or absent
+// disables the feature, and omitempty keeps writers canonical.
+//
 // EmptyRepo opts into truly bare student repos: accept creates the repo with
 // no initial commit and lands NO control files (no README, no
 // .classroom50.yaml marker, no autograde shim), so autograding and the
 // Feedback PR never run. Mutually exclusive with Template, Tests, FeedbackPR,
-// AllowedFiles, and PassThreshold, and IMMUTABLE once the entry exists —
-// flipping it later would mean retrofitting every already-accepted repo.
+// AllowedFiles, ReleaseAssets, and PassThreshold, and IMMUTABLE once the entry
+// exists — flipping it later would mean retrofitting every already-accepted repo.
 // Mirrors FeedbackPR's wire shape: omitempty, absent reads as false.
 type AssignmentEntry struct {
 	Slug          string           `json:"slug"`
@@ -105,6 +109,7 @@ type AssignmentEntry struct {
 	FeedbackPR    bool             `json:"feedback_pr,omitempty"`
 	EmptyRepo     bool             `json:"empty_repo,omitempty"`
 	AllowedFiles  []string         `json:"allowed_files,omitempty"`
+	ReleaseAssets []string         `json:"release_assets,omitempty"`
 	PassThreshold *int             `json:"pass_threshold,omitempty"`
 	MigratedFrom  *MigratedFromRef `json:"migrated_from,omitempty"`
 
@@ -120,7 +125,8 @@ var knownEntryKeys = map[string]struct{}{
 	"slug": {}, "name": {}, "description": {}, "template": {}, "due": {},
 	"due_meta": {}, "mode": {}, "autograder": {}, "max_group_size": {},
 	"runtime": {}, "tests": {}, "feedback_pr": {}, "empty_repo": {},
-	"allowed_files": {}, "pass_threshold": {}, "migrated_from": {},
+	"allowed_files": {}, "release_assets": {}, "pass_threshold": {},
+	"migrated_from": {},
 }
 
 // UnmarshalJSON captures unknown top-level keys into Extra, then strictly
@@ -132,6 +138,11 @@ func (e *AssignmentEntry) UnmarshalJSON(data []byte) error {
 	var raw map[string]json.RawMessage
 	if err := json.Unmarshal(data, &raw); err != nil {
 		return err
+	}
+	if releaseAssets, ok := raw["release_assets"]; ok {
+		if err := rejectUnpairedReleaseAssetSurrogates(releaseAssets); err != nil {
+			return err
+		}
 	}
 
 	known := make(map[string]json.RawMessage, len(raw))
@@ -740,6 +751,9 @@ func ValidateAssignmentEntry(entry AssignmentEntry) error {
 	if err := ValidateAllowedFiles(entry.AllowedFiles); err != nil {
 		return err
 	}
+	if err := ValidateReleaseAssets(entry.ReleaseAssets); err != nil {
+		return err
+	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {
 		return err
 	}
@@ -767,6 +781,9 @@ func validateEmptyRepoExclusions(entry AssignmentEntry) error {
 	}
 	if len(entry.AllowedFiles) > 0 {
 		return errors.New("empty_repo is mutually exclusive with allowed_files (--empty-repo vs --allowed-files): a bare repo never autogrades")
+	}
+	if len(entry.ReleaseAssets) > 0 {
+		return errors.New("empty_repo is mutually exclusive with release_assets: a bare repo never autogrades, so no submission release exists to attach assets to")
 	}
 	if entry.PassThreshold != nil {
 		return errors.New("empty_repo is mutually exclusive with pass_threshold (--empty-repo vs --pass-threshold): a bare repo never autogrades")
@@ -856,6 +873,9 @@ func ValidateExistingEntry(entry AssignmentEntry) error {
 		}
 	}
 	if err := ValidateAllowedFiles(entry.AllowedFiles); err != nil {
+		return fmt.Errorf("entry %q: %w", entry.Slug, err)
+	}
+	if err := ValidateReleaseAssets(entry.ReleaseAssets); err != nil {
 		return fmt.Errorf("entry %q: %w", entry.Slug, err)
 	}
 	if err := ValidatePassThreshold(entry.PassThreshold); err != nil {

@@ -11,14 +11,15 @@ name: cli Release Please
 # .release-please-manifest.json (the `cli` package key IS the path). The
 # `cli-v*` tag scheme is namespaced apart from the web app's `web-v*` tags.
 #
-# Token model: release-please runs with GITHUB_TOKEN. A tag pushed by
-# GITHUB_TOKEN does NOT retrigger other workflows (Actions' recursion guard),
-# so cli-release.yaml is intentionally driven by the `cli-v*` tag push here.
-# NOTE: if a maintainers-only `cli-v*` tag protection rule is in place, the
-# Actions bot (github-actions[bot]) must be allowed to create `cli-v*` tags, or
-# the Release PR will merge without a tag being pushed and no build will fire.
-# (Also requires "Allow GitHub Actions to create and approve pull requests" so
-# the Release PR can be opened.)
+# Token model: release-please runs with CLI_RELEASE_PAT (an admin PAT), NOT the
+# default GITHUB_TOKEN. The `cli-release-tags` ruleset restricts `cli-v*` tag
+# creation to the Admin role, and github-actions[bot] can't be granted a repo-
+# level bypass here (org policy), so the bot's GITHUB_TOKEN cannot create the
+# tag. An admin PAT satisfies the Admin-role bypass. A side benefit: a tag
+# pushed by a PAT DOES retrigger cli-release.yaml (no Actions recursion guard),
+# which builds and publishes the `gh-teacher` and `gh-student` extensions.
+# (Opening the Release PR also requires "Allow GitHub Actions to create and
+# approve pull requests".)
 
 on:
   push:
@@ -45,7 +46,7 @@ jobs:
       - uses: googleapis/release-please-action@v5
         id: release
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.CLI_RELEASE_PAT }}
           target-branch: main
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json

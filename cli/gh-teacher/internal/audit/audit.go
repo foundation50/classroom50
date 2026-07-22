@@ -120,6 +120,11 @@ type auditReport struct {
 	// ManualUnreadable: web-UI-only settings with no REST field; audit can't
 	// confirm them and asks the teacher to eyeball them.
 	ManualUnreadable []orgpolicy.ManualStep `json:"manual_unreadable"`
+	// BudgetCap is the org's $0 Actions spending-cap verdict. A "missing" tier
+	// (or an alert-only cap that doesn't stop spend) is critical drift and
+	// gates LockdownComplete; a "warn" tier (a teacher cap over the warn
+	// threshold) is advisory and never gates.
+	BudgetCap budgetCapResult `json:"budget_cap"`
 	// DefaultBranchRec: advisory-only. When set, the org's default repository
 	// branch name (this value) isn't `main`; recommended, never a failure.
 	DefaultBranchRec string `json:"default_branch_recommendation,omitempty"`
@@ -145,6 +150,35 @@ type auditSetting struct {
 	Fix string `json:"fix,omitempty"`
 }
 
+// budgetCapResult is the org Actions budget-cap audit outcome.
+type budgetCapResult struct {
+	// ReadOK is false when the budgets list couldn't be read (no billing
+	// visibility / token lacks Organization Administration: Read). Then the
+	// verdict is inconclusive and advisory, never a critical gate.
+	ReadOK bool `json:"read_ok"`
+	// Tier is the orgpolicy.BudgetTier string ("missing"/"enforced"/"ok"/
+	// "warn"), empty when ReadOK is false.
+	Tier string `json:"tier"`
+	// Amount is the matched budget's dollar amount (0 when missing).
+	Amount int `json:"amount"`
+	// SettingsURL is the org billing-budgets page for the hand-fix.
+	SettingsURL string `json:"settings_url"`
+}
+
+// isCritical reports whether the budget cap is drift that should fail the
+// audit: a successful read showing the guardrail is absent (missing tier,
+// which also covers an alert-only cap that doesn't stop spend). An unreadable
+// verdict is advisory, not critical.
+func (b budgetCapResult) isCritical() bool {
+	return b.ReadOK && b.Tier == string(orgpolicy.BudgetMissing)
+}
+
+// isWarn reports whether the budget cap is a non-gating warning: a teacher-set
+// cap over the warn threshold.
+func (b budgetCapResult) isWarn() bool {
+	return b.ReadOK && b.Tier == string(orgpolicy.BudgetWarn)
+}
+
 // buildAuditReport reads the org back and classifies every in-scope setting as
 // enforced/unenforced, plus the always-unreadable manual items. A read failure
 // yields ReadOK=false with LockdownComplete=false (conservatively a failure).
@@ -157,6 +191,7 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 		Unenforced:       []auditSetting{},
 		ManualUnreadable: orgpolicy.ManualHardeningSteps(org),
 		SettingsURL:      settingsURL,
+		BudgetCap:        budgetCapResult{SettingsURL: orgpolicy.OrgBudgetsURL(org)},
 	}
 
 	live, err := readOrgMemberSettings(client, org)
@@ -180,6 +215,14 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 	// Any drift fails (match the web GUI). The per-setting Critical flag is
 	// still surfaced for ordering/labeling but no longer gates the verdict.
 	report.LockdownComplete = len(report.Unenforced) == 0
+
+	// Actions budget cap: a successful read showing the guardrail is absent is
+	// critical drift that gates the verdict; a read failure is advisory (no
+	// billing visibility), and a >threshold cap is a non-gating warning.
+	report.BudgetCap = classifyBudgetCap(client, org)
+	if report.BudgetCap.isCritical() {
+		report.LockdownComplete = false
+	}
 
 	// Advisory-only: the org default branch name isn't `main`. Never gates the
 	// verdict (GitHub has no API to set it — only a hand-fix reminder).
@@ -211,6 +254,22 @@ func readOrgMemberSettings(client githubapi.Client, org string) (map[string]any,
 		return nil, err
 	}
 	return live, nil
+}
+
+// classifyBudgetCap reads the org's billing budgets and classifies the Actions
+// cap. A read failure yields ReadOK=false (advisory, inconclusive) rather than
+// a false critical — mirroring how the member-default read-back degrades.
+func classifyBudgetCap(client githubapi.Client, org string) budgetCapResult {
+	res := budgetCapResult{SettingsURL: orgpolicy.OrgBudgetsURL(org)}
+	budgets, err := githubapi.ListOrgBudgets(client, org)
+	if err != nil {
+		return res // ReadOK stays false.
+	}
+	v := orgpolicy.ClassifyBudget(budgets)
+	res.ReadOK = true
+	res.Tier = string(v.Tier)
+	res.Amount = v.Amount
+	return res
 }
 
 // renderJSON writes the report as one indented JSON object. HTML escaping is
@@ -246,9 +305,12 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 		for _, s := range r.Enforced {
 			u.OkItem("%s", s.Desc)
 		}
+		if r.BudgetCap.ReadOK && (r.BudgetCap.Tier == string(orgpolicy.BudgetEnforced) || r.BudgetCap.Tier == string(orgpolicy.BudgetOK)) {
+			u.OkItem("Actions spending cap in place ($%d)", r.BudgetCap.Amount)
+		}
 	}
 
-	if len(r.Unenforced) > 0 {
+	if len(r.Unenforced) > 0 || r.BudgetCap.isCritical() {
 		u.Heading("Action required — these are NOT locked down")
 		for _, s := range r.Unenforced {
 			label := s.Fix
@@ -261,7 +323,13 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 				u.Checkbox("(non-critical) %s", label)
 			}
 		}
-		u.Detail("at %s", r.SettingsURL)
+		if r.BudgetCap.isCritical() {
+			u.Checkbox("set a $0 GitHub Actions budget (hard-stop) to block paid Actions minutes")
+			u.Detail("at %s", r.BudgetCap.SettingsURL)
+		}
+		if len(r.Unenforced) > 0 {
+			u.Detail("at %s", r.SettingsURL)
+		}
 	}
 
 	// The four web-UI-only settings can't be read back. Present them as an
@@ -276,8 +344,16 @@ func (r *auditReport) renderHuman(u *ui.UI) {
 	}
 
 	// Advisory recommendation — highly recommended, never a failure.
-	if r.DefaultBranchRec != "" || r.ConfigRepoBranchRec != "" {
+	if r.DefaultBranchRec != "" || r.ConfigRepoBranchRec != "" || r.BudgetCap.isWarn() || !r.BudgetCap.ReadOK {
 		u.Heading("Recommended (not required)")
+	}
+	if r.BudgetCap.isWarn() {
+		u.Detail("Your org has a GitHub Actions budget over $%d ($%d). Classroom 50 recommends a $0 hard-stop cap so a runaway autograde workflow can't run up a bill; lower it at %s.",
+			orgpolicy.BudgetWarnThreshold, r.BudgetCap.Amount, r.BudgetCap.SettingsURL)
+	}
+	if !r.BudgetCap.ReadOK {
+		u.Detail("Couldn't verify the org's Actions spending cap (your token likely lacks Organization Administration: Read, or the plan doesn't expose budgets). Confirm a $0 GitHub Actions budget is set at %s.",
+			r.BudgetCap.SettingsURL)
 	}
 	if r.DefaultBranchRec != "" {
 		u.Detail("Your org's default branch name for new repositories is %q; we recommend %q so new repos (including student assignment repos) match Classroom 50's convention. Existing repos are unaffected.",

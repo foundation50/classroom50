@@ -615,6 +615,7 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		droppedTemplate = nil
 		droppedAllowedCnt = 0
 		droppedPassThreshold = nil
+		attemptEntry := entry
 		// Refuse on an archived classroom (active:false), mirroring the web.
 		// Checked at parentSHA so a concurrent unarchive is observed on retry.
 		if err := ensureClassroomActive(client, org, classroom, parentSHA); err != nil {
@@ -689,13 +690,15 @@ func runAssignmentAdd(client githubapi.Client, out, errOut io.Writer, p addAssig
 		if hasPrev && entry.PassThreshold == nil && file.Assignments[prevIdx].PassThreshold != nil {
 			droppedPassThreshold = file.Assignments[prevIdx].PassThreshold
 		}
-		// Carry forward the existing entry's Extra (unknown/future keys):
-		// `entry` is rebuilt from CLI flags and carries none, so without this
-		// the wholesale-replace upsert would drop them.
+		// The CLI has no release-assets authoring flag. Preserve this typed field and
+		// unknown Extra keys when a same-slug add rebuilds the rest from flags. This
+		// stays inside the retry callback so a rebase observes the latest parent.
 		if hasPrev {
-			entry.Extra = file.Assignments[prevIdx].Extra
+			previous := file.Assignments[prevIdx]
+			attemptEntry.ReleaseAssets = append([]string(nil), previous.ReleaseAssets...)
+			attemptEntry.Extra = previous.Extra
 		}
-		updated, replaced := assignment.UpsertAssignment(file.Assignments, entry)
+		updated, replaced := assignment.UpsertAssignment(file.Assignments, attemptEntry)
 		if replaced {
 			action = "updated"
 		} else {

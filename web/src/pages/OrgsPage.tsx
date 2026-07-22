@@ -12,12 +12,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronDown,
-  ExternalLink,
-  Info,
   Lock,
   MailOpen,
   Plus,
-  RefreshCw,
   ShieldCheck,
   User,
 } from "lucide-react"
@@ -34,64 +31,6 @@ import { EnterDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
-
-function MissingOrgNotice({
-  refreshing,
-  onRefresh,
-}: {
-  refreshing: boolean
-  onRefresh: () => void
-}) {
-  const { t } = useTranslation()
-  return (
-    <details className="group rounded-xl border border-info/20 bg-info/5">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
-        <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
-        <span className="min-w-0 flex-1 truncate font-medium text-base-content">
-          {t("orgs.missingNotice.title")}
-        </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          disabled={refreshing}
-          onClick={(e) => {
-            // The button lives inside <summary>; stop the click from toggling
-            // the disclosure so refreshing doesn't also expand/collapse it.
-            e.preventDefault()
-            onRefresh()
-          }}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={["size-3.5", refreshing ? "animate-spin" : ""].join(" ")}
-          />
-          {refreshing
-            ? t("orgs.missingNotice.refreshing")
-            : t("orgs.missingNotice.refresh")}
-        </Button>
-        <ChevronDown
-          aria-hidden="true"
-          className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
-        />
-      </summary>
-
-      <div className="border-t border-info/20 px-4 py-3">
-        <p className="text-sm leading-6 text-base-content/70">
-          {t("orgs.missingNotice.body")}
-        </p>
-        <a
-          href="https://github.com/settings/connections/applications"
-          target="_blank"
-          rel="noreferrer"
-          className="btn btn-info btn-sm mt-3"
-        >
-          {t("orgs.missingNotice.manageOauth")}
-          <ExternalLink aria-hidden="true" className="size-4" />
-        </a>
-      </div>
-    </details>
-  )
-}
 
 // A single pending org invitation: org identity from the membership record
 // (avatar/name/description) plus an inline accept-and-verify. Pending members
@@ -502,11 +441,6 @@ const OrgsPage = () => {
           <>
             <PageHeader title={t("orgs.headingCl50")} />
 
-            <MissingOrgNotice
-              refreshing={isFetching}
-              onRefresh={handleRefresh}
-            />
-
             {hasInvites && <PendingInvites invites={pendingInvites} />}
 
             {hasContent && (
@@ -604,6 +538,16 @@ const OrgsPage = () => {
               <EmptyState
                 title={t("orgs.emptyTitle")}
                 body={t("orgs.emptyBody")}
+                action={
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    onClick={() => setModalOpen(true)}
+                  >
+                    <Plus aria-hidden="true" className="size-4" />
+                    {t("orgs.setUpFirst.cta")}
+                  </Button>
+                }
               />
             )}
           </>
@@ -613,6 +557,8 @@ const OrgsPage = () => {
       <NewOrgModal
         open={modalOpen}
         needsSetupOrgs={needsSetupOrgs}
+        refreshing={isFetching}
+        onRefresh={handleRefresh}
         onClose={() => setModalOpen(false)}
       />
     </>

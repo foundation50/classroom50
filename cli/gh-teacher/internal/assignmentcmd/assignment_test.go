@@ -1,6 +1,7 @@
 package assignmentcmd
 
 import (
+	"encoding/json"
 	"reflect"
 	"strings"
 	"testing"
@@ -250,13 +251,14 @@ func TestFormatAssignmentListJSON(t *testing.T) {
 	t.Run("populated entries preserve every field and use 2-space indent", func(t *testing.T) {
 		entries := []assignment.AssignmentEntry{
 			{
-				Slug:        "hello",
-				Name:        "Hello",
-				Description: "First assignment",
-				Template:    &assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"},
-				Due:         "2026-09-15T23:59:00-04:00",
-				Mode:        "individual",
-				Autograder:  "default",
+				Slug:          "hello",
+				Name:          "Hello",
+				Description:   "First assignment",
+				Template:      &assignment.TemplateRef{Owner: "cs50", Repo: "hello-template", Branch: "main"},
+				Due:           "2026-09-15T23:59:00-04:00",
+				Mode:          "individual",
+				Autograder:    "default",
+				ReleaseAssets: []string{"report.pdf", "plots/chart.png"},
 			},
 		}
 		got, err := formatAssignmentListJSON(entries)
@@ -286,6 +288,16 @@ func TestFormatAssignmentListJSON(t *testing.T) {
 		// Tests field should be gone from the on-disk shape.
 		if strings.Contains(str, `"tests"`) {
 			t.Errorf("output should NOT contain the legacy `tests` field:\n%s", str)
+		}
+		var decoded []assignment.AssignmentEntry
+		if err := json.Unmarshal(got, &decoded); err != nil {
+			t.Fatalf("decode assignment list JSON: %v", err)
+		}
+		if !reflect.DeepEqual(
+			decoded[0].ReleaseAssets,
+			[]string{"report.pdf", "plots/chart.png"},
+		) {
+			t.Fatalf("JSON release_assets = %#v", decoded[0].ReleaseAssets)
 		}
 	})
 

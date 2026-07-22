@@ -11,11 +11,19 @@ import { githubKeys } from "./keys"
 // push publishes a `submit/<timestamp>-<sha>` release whose body GitHub renders
 // as the score + per-test table. We list these and link students straight to
 // the release page rather than reading result.json.
-const SUBMISSION_TAG_PREFIX = "submit/"
+export const SUBMISSION_TAG_PREFIX = "submit/"
 
 // published_at is null for a draft; fall back to created_at so ordering holds.
-function releaseTime(release: GitHubRelease): number {
+export function releaseTime(release: GitHubRelease): number {
   return new Date(release.published_at ?? release.created_at).getTime()
+}
+
+// The `submit/*` releases from a repo's release list, newest first — the shared
+// filter+sort both the full-list query and the latest-only read derive from.
+function submitReleasesNewestFirst(releases: GitHubRelease[]): GitHubRelease[] {
+  return releases
+    .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
+    .sort((a, b) => releaseTime(b) - releaseTime(a))
 }
 
 // All graded-submission releases for a student's repo, newest first. A repo
@@ -40,14 +48,63 @@ export function releasesQuery(
           { method: "GET", signal },
         )
 
-        return releases
-          .filter((r) => r.tag_name.startsWith(SUBMISSION_TAG_PREFIX))
-          .sort((a, b) => releaseTime(b) - releaseTime(a))
+        return submitReleasesNewestFirst(releases)
       }, []),
     enabled: Boolean(owner && repo),
     staleTime: 5 * 60 * 1000,
     retry: false,
   })
+}
+
+// The newest `submit/*` release for a repo (with its assets), or null when the
+// repo has no submission release or doesn't exist (404). Used by the live
+// teacher fan-out. A missing repo (not accepted) 404s and resolves to null
+// rather than throwing, so one absent repo never voids a batch. Reads a single
+// page — GitHub returns releases newest-first, so the top submit release is the
+// latest (unlike the CLI's full-history walk).
+export async function latestSubmitReleaseWithAssets(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<GitHubRelease | null> {
+  return (await latestSubmitReleaseAndCount(client, owner, repo, signal)).latest
+}
+
+// The newest `submit/*` release for a repo AND how many submit/* releases the
+// repo has — the live submission COUNT. Both come from the SAME single
+// `per_page=100` request the presence read already makes, so surfacing the
+// count adds no extra API calls to the teacher fan-out. It lets the dashboard
+// correct a row's count when a student pushed again after the last collection
+// (scores.json is a snapshot). A missing repo (not accepted) 404s and resolves
+// to `{ latest: null, count: 0 }` rather than throwing, so one absent repo
+// never voids a batch.
+//
+// `count` saturates at one page (100): a repo with more than 100 submit
+// releases is far beyond any real assignment, and paging further would defeat
+// the point of a cheap presence read. The dashboard treats the count as a
+// lower bound, so a saturated value only under-reports an already-implausible
+// history.
+export async function latestSubmitReleaseAndCount(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  signal?: AbortSignal,
+): Promise<{ latest: GitHubRelease | null; count: number }> {
+  return tolerateGitHubError(
+    async () => {
+      const releases = await client.request<GitHubRelease[]>(
+        `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(
+          repo,
+        )}/releases?per_page=100`,
+        { method: "GET", signal },
+      )
+
+      const submits = submitReleasesNewestFirst(releases)
+      return { latest: submits[0] ?? null, count: submits.length }
+    },
+    { latest: null, count: 0 },
+  )
 }
 
 type RepositorySecret = {

@@ -12,6 +12,12 @@ import {
   type ClassifyResult,
   type MemberDefaultSetting,
 } from "@/orgPolicy/desiredState"
+import {
+  BUDGET_WARN_THRESHOLD,
+  classifyBudget,
+  orgBudgetsApiPath,
+  type BudgetsListResponse,
+} from "@/orgPolicy/budget"
 import { logger } from "@/lib/logger"
 import { CONFIG_REPO, DEFAULT_BRANCH } from "@/util/configRepo"
 
@@ -22,9 +28,11 @@ const log = logger.scope("github:orgChecks")
 export const RECOMMENDED_ORG_DEFAULT_BRANCH = DEFAULT_BRANCH
 
 // A concern's read-only state: enforced means the live value already matches
-// the desired policy; unenforced means it drifted; unreadable means the read
-// itself failed (permission/transient) so the verdict is inconclusive.
-export type CheckState = "enforced" | "unenforced" | "unreadable"
+// the desired policy; unenforced means it drifted; warn means it's acceptable
+// but not ideal (a non-gating advisory, e.g. an oversized budget); unreadable
+// means the read itself failed (permission/transient) so the verdict is
+// inconclusive.
+export type CheckState = "enforced" | "unenforced" | "warn" | "unreadable"
 
 export type CheckVerdict = {
   state: CheckState
@@ -133,6 +141,44 @@ export async function checkOrgActions(
 type OrgWorkflowPermissions = {
   default_workflow_permissions: "read" | "write"
   can_approve_pull_request_reviews: boolean
+}
+
+// orgBudget: GET /organizations/{org}/settings/billing/budgets — enforced when
+// a $0 hard-stop Actions cap is in place. A missing/alert-only cap is
+// unenforced (critical drift); a cap over the warn threshold is a non-gating
+// warning; a read failure (no billing visibility) is unreadable/advisory.
+export async function checkOrgBudget(
+  client: GitHubClient,
+  org: string,
+): Promise<CheckVerdict> {
+  try {
+    const resp = await client.request<BudgetsListResponse>(
+      orgBudgetsApiPath(org),
+    )
+    const v = classifyBudget(resp.budgets ?? [])
+    switch (v.tier) {
+      case "enforced":
+      case "ok":
+        return { state: "enforced" }
+      case "warn":
+        return {
+          state: "warn",
+          detail: `Actions budget is $${v.amount} (over $${BUDGET_WARN_THRESHOLD}); recommend a $0 hard-stop cap`,
+        }
+      case "missing":
+        return {
+          state: "unenforced",
+          detail: "no $0 hard-stop Actions budget",
+        }
+    }
+  } catch (err) {
+    // Any read failure (403 no billing visibility, 404 plan without budgets,
+    // transient) is advisory/inconclusive — mirror the CLI, which never treats
+    // an unreadable budgets list as critical drift. (Unlike other checks, a 404
+    // here is "can't read", not "not configured": an org with no budget returns
+    // 200 with an empty list.)
+    return { state: "unreadable", detail: readFailedDetail(err) }
+  }
 }
 
 // orgPrCreation: GET /orgs/{org}/actions/permissions/workflow — enforced when

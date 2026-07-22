@@ -139,6 +139,20 @@ describe("SubmissionsTable non-submitter repo links", () => {
   })
 })
 
+describe("SubmissionsTable initial loading", () => {
+  it("shows the loading state and not the empty state while core data loads", () => {
+    render(<SubmissionsTable {...baseProps} initialLoading />)
+    expect(screen.getByText("submissions.table.loading")).toBeTruthy()
+    expect(screen.queryByText("submissions.table.emptyNoDataTitle")).toBeNull()
+  })
+
+  it("shows the empty state (not loading) once loaded with no data", () => {
+    render(<SubmissionsTable {...baseProps} initialLoading={false} />)
+    expect(screen.getByText("submissions.table.emptyNoDataTitle")).toBeTruthy()
+    expect(screen.queryByText("submissions.table.loading")).toBeNull()
+  })
+})
+
 describe("SubmissionsTable empty_repo score cell", () => {
   it("renders a no-grading em-dash instead of a score for an empty_repo assignment", () => {
     render(

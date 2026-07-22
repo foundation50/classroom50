@@ -25,10 +25,34 @@ func orgLiveFromSettings(plan string) map[string]any {
 	return live
 }
 
+// isBudgetsPath reports whether the request targets the org billing-budgets
+// endpoint, so a test handler can serve budgets separately from the org read.
+func isBudgetsPath(r *http.Request) bool {
+	return strings.Contains(r.URL.Path, "/settings/billing/budgets")
+}
+
+// enforcedActionsBudget is the JSON a happy-path budgets read returns: a single
+// $0 hard-stop org Actions budget (the enforced tier), so member-default tests
+// aren't derailed by an unrelated budget-cap failure.
+func enforcedActionsBudget() map[string]any {
+	return map[string]any{
+		"budgets": []map[string]any{{
+			"budget_scope":          orgpolicy.BudgetScopeOrg,
+			"budget_product_sku":    orgpolicy.BudgetProductSKUActions,
+			"budget_amount":         0,
+			"prevent_further_usage": true,
+		}},
+	}
+}
+
 func TestBuildAuditReport_AllEnforced(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodGet {
 			t.Errorf("audit must be read-only; got %s %s", r.Method, r.URL.Path)
+		}
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
 		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(orgLiveFromSettings("team"))
@@ -54,12 +78,19 @@ func TestBuildAuditReport_AllEnforced(t *testing.T) {
 	if len(report.ManualUnreadable) != 4 {
 		t.Errorf("ManualUnreadable = %d, want 4 (the API-less hardening steps)", len(report.ManualUnreadable))
 	}
+	if report.BudgetCap.Tier != string(orgpolicy.BudgetEnforced) {
+		t.Errorf("BudgetCap.Tier = %q, want enforced", report.BudgetCap.Tier)
+	}
 }
 
 func TestBuildAuditReport_RecommendsNonMainDefaultBranch(t *testing.T) {
 	live := orgLiveFromSettings("team")
 	live["default_repository_branch"] = "master"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		_ = json.NewEncoder(w).Encode(live)
 	}))
 	t.Cleanup(server.Close)
@@ -83,6 +114,10 @@ func TestBuildAuditReport_NoRecommendationWhenDefaultBranchIsMain(t *testing.T) 
 	live := orgLiveFromSettings("team")
 	live["default_repository_branch"] = "main"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		_ = json.NewEncoder(w).Encode(live)
 	}))
 	t.Cleanup(server.Close)
@@ -97,6 +132,10 @@ func TestBuildAuditReport_NoRecommendationWhenDefaultBranchIsMain(t *testing.T) 
 func TestBuildAuditReport_RecommendsNonMainConfigRepoBranch(t *testing.T) {
 	live := orgLiveFromSettings("team")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/repos/") {
 			_ = json.NewEncoder(w).Encode(map[string]any{"default_branch": "master"})
 			return
@@ -125,6 +164,10 @@ func TestBuildAuditReport_NoConfigRepoRecommendationWhenUnreadable(t *testing.T)
 	// recommendation without failing the audit — it's advisory.
 	live := orgLiveFromSettings("team")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		if strings.HasPrefix(r.URL.Path, "/repos/") {
 			w.WriteHeader(http.StatusNotFound)
 			_, _ = w.Write([]byte(`{"message":"Not Found"}`))
@@ -153,6 +196,10 @@ func TestBuildAuditReport_CriticalDriftFails(t *testing.T) {
 	live[drifted] = true // re-opened the privilege
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(live)
 	}))
@@ -185,6 +232,10 @@ func TestBuildAuditReport_NonCriticalDriftFails(t *testing.T) {
 	live[drifted] = false
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(live)
 	}))
@@ -241,6 +292,10 @@ func TestBuildAuditReport_PlanScopesEnterpriseFields(t *testing.T) {
 	live["members_can_view_dependency_insights"] = true
 
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(enforcedActionsBudget())
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(live)
 	}))
@@ -256,6 +311,156 @@ func TestBuildAuditReport_PlanScopesEnterpriseFields(t *testing.T) {
 		if s.Field == "members_can_view_dependency_insights" {
 			t.Errorf("enterprise-only field must not appear in a Team-plan audit")
 		}
+	}
+}
+
+func TestBuildAuditReport_MissingBudgetIsCritical(t *testing.T) {
+	// A successful budgets read showing no Actions cap is critical drift: the
+	// guardrail is absent, so the audit must fail.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"budgets": []map[string]any{}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if report.LockdownComplete {
+		t.Errorf("a missing Actions budget is critical drift; LockdownComplete must be false")
+	}
+	if report.BudgetCap.Tier != string(orgpolicy.BudgetMissing) {
+		t.Errorf("BudgetCap.Tier = %q, want missing", report.BudgetCap.Tier)
+	}
+	if !report.BudgetCap.ReadOK {
+		t.Errorf("BudgetCap.ReadOK = false, want true (the budgets read succeeded)")
+	}
+}
+
+func TestBuildAuditReport_OverThresholdBudgetWarnsButPasses(t *testing.T) {
+	// A teacher-set cap over the warn threshold is a non-gating warning: the
+	// audit still passes (exit 0), but the report flags it.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"budgets": []map[string]any{{
+				"budget_scope":          orgpolicy.BudgetScopeOrg,
+				"budget_product_sku":    orgpolicy.BudgetProductSKUActions,
+				"budget_amount":         orgpolicy.BudgetWarnThreshold + 25,
+				"prevent_further_usage": true,
+			}}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if !report.LockdownComplete {
+		t.Errorf("an over-threshold budget is advisory; LockdownComplete must stay true")
+	}
+	if !report.BudgetCap.isWarn() {
+		t.Errorf("BudgetCap should be a warning; got tier %q", report.BudgetCap.Tier)
+	}
+}
+
+func TestBuildAuditReport_BudgetReadFailureIsAdvisory(t *testing.T) {
+	// A budgets read failure (no billing visibility / token lacks
+	// Administration: Read) must NOT fail the audit — it's inconclusive and
+	// advisory, distinct from a successful read showing a missing cap.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			w.WriteHeader(http.StatusForbidden)
+			_, _ = w.Write([]byte(`{"message":"Forbidden"}`))
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if !report.LockdownComplete {
+		t.Errorf("a budgets read failure must not fail the audit (advisory)")
+	}
+	if report.BudgetCap.ReadOK {
+		t.Errorf("BudgetCap.ReadOK = true on a 403, want false")
+	}
+	if report.BudgetCap.isCritical() {
+		t.Errorf("an unreadable budget must not be critical")
+	}
+}
+
+func TestBuildAuditReport_AlertOnlyBudgetIsCritical(t *testing.T) {
+	// A $0 budget that only alerts (no hard stop) still lets Actions spend, so
+	// it classifies as missing → critical.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"budgets": []map[string]any{{
+				"budget_scope":          orgpolicy.BudgetScopeOrg,
+				"budget_product_sku":    orgpolicy.BudgetProductSKUActions,
+				"budget_amount":         0,
+				"prevent_further_usage": false,
+			}}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if report.LockdownComplete {
+		t.Errorf("an alert-only $0 budget doesn't stop spend; must be critical drift")
+	}
+	if report.BudgetCap.Tier != string(orgpolicy.BudgetMissing) {
+		t.Errorf("BudgetCap.Tier = %q, want missing (alert-only)", report.BudgetCap.Tier)
+	}
+}
+
+func TestBuildAuditReport_LargeAlertOnlyBudgetIsCritical(t *testing.T) {
+	// A large alert-only budget ($100, prevent_further_usage:false) stops NO
+	// spend — it must be critical drift, not a passing >$50 "warn". Guards the
+	// classifier's hard-stop-before-amount ordering: a regression that checked
+	// the amount first would wrongly let this pass the deploy gate.
+	live := orgLiveFromSettings("team")
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if isBudgetsPath(r) {
+			_ = json.NewEncoder(w).Encode(map[string]any{"budgets": []map[string]any{{
+				"budget_scope":          orgpolicy.BudgetScopeOrg,
+				"budget_product_sku":    orgpolicy.BudgetProductSKUActions,
+				"budget_amount":         100,
+				"prevent_further_usage": false,
+			}}})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(live)
+	}))
+	t.Cleanup(server.Close)
+	client := githubtest.NewTestClient(t, server)
+
+	report := buildAuditReport(client, "cs50-fall-2026", "team")
+
+	if report.LockdownComplete {
+		t.Errorf("a large alert-only budget stops no spend; must be critical drift, not a passing warn")
+	}
+	if report.BudgetCap.Tier != string(orgpolicy.BudgetMissing) {
+		t.Errorf("BudgetCap.Tier = %q, want missing (large alert-only)", report.BudgetCap.Tier)
 	}
 }
 

@@ -2,6 +2,7 @@ import { createFileRoute, Outlet, redirect } from "@tanstack/react-router"
 import { useTranslation } from "react-i18next"
 import { ScopeWarningBanner } from "@/auth/ScopeWarningBanner"
 import { SkeletonDriftBanner } from "@/components/SkeletonDriftBanner"
+import { BudgetCreatedBanner } from "@/components/BudgetCreatedBanner"
 import { OfflineBanner } from "@/components/OfflineBanner"
 import { GitHubStatusBanner } from "@/components/GitHubStatusBanner"
 import { UpdateAvailableBanner } from "@/components/UpdateAvailableBanner"
@@ -58,6 +59,7 @@ function AuthedLayout() {
       <GitHubStatusBanner />
       <ScopeWarningBanner />
       <SkeletonDriftBanner />
+      <BudgetCreatedBanner />
       <UpdateAvailableBanner />
       <Outlet />
     </>

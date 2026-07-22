@@ -6,6 +6,7 @@ import {
   getConfigRepoBranch,
 } from "@/github-core/configRepoReads"
 import { prefixCommit } from "@/util/commit"
+import { validateReleaseAssets } from "@/util/releaseAssets"
 import {
   createGitCommit,
   createGitTree,
@@ -102,6 +103,9 @@ export function buildReusedEntry(
         }
       : undefined,
     allowed_files: source.allowed_files ? [...source.allowed_files] : undefined,
+    release_assets: source.release_assets?.length
+      ? [...source.release_assets]
+      : undefined,
     tests: source.tests ? source.tests.map((t) => ({ ...t })) : undefined,
   }
   if (!entry.template) delete entry.template
@@ -114,6 +118,19 @@ export function buildReusedEntry(
   if (entry.runtime && !entry.runtime.apt) delete entry.runtime.apt
   if (!entry.runtime) delete entry.runtime
   if (!entry.allowed_files) delete entry.allowed_files
+  if (!entry.release_assets) {
+    delete entry.release_assets
+  } else {
+    if (entry.empty_repo) {
+      throw new Error(
+        "empty_repo: an empty repository can't attach submission release files — it never autogrades or publishes a submission Release.",
+      )
+    }
+    const releaseAssetsError = validateReleaseAssets(entry.release_assets)
+    if (releaseAssetsError) {
+      throw new Error(`release_assets: ${releaseAssetsError.message}`)
+    }
+  }
   if (!entry.tests) delete entry.tests
 
   return entry

@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import datetime
 import difflib
+import errno
 import importlib.util
 import io
 import json
@@ -45,6 +46,7 @@ import pathlib
 import re
 import shlex
 import shutil
+import stat
 import subprocess
 import sys
 import tarfile
@@ -64,6 +66,14 @@ RESULT_SCHEMA_V1 = "classroom50/result/v1"
 # (cli/shared/contract/contract.go); test_runner.py pins these literals.
 RESULT_FILENAME = "result.json"
 RELEASE_BODY_FILENAME = "release-body.md"
+RELEASE_ASSETS_DIRNAME = "classroom50-release-assets"
+RELEASE_ASSETS_MAX_FILES = 50
+RELEASE_ASSETS_MAX_PATH_BYTES = 8_192
+RELEASE_ASSETS_MAX_BYTES = 104_857_600
+RELEASE_ASSET_BASENAME = re.compile(
+    r"^[A-Za-z0-9_-](?:[A-Za-z0-9._-]{0,253}[A-Za-z0-9_-])?$",
+    re.ASCII,
+)
 
 # Name of both the per-assignment override and classroom-default entrypoint.
 ENTRYPOINT_FILENAME = "autograder.py"
@@ -706,6 +716,278 @@ def parse_allowed_files(raw: str | None) -> list[str]:
         print("runner: ALLOWED_FILES must be a JSON array of non-empty strings; skipping enforcement", file=sys.stderr)
         return []
     return value
+
+
+def _ascii_fold(value: str) -> str:
+    return value.translate(str.maketrans(
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ", "abcdefghijklmnopqrstuvwxyz"
+    ))
+
+
+def validate_release_asset_paths(value: Any) -> list[str]:
+    if not isinstance(value, list):
+        raise ValueError("release_assets must be an array")
+    if len(value) > RELEASE_ASSETS_MAX_FILES:
+        raise ValueError(
+            f"release_assets has {len(value)} paths "
+            f"(max {RELEASE_ASSETS_MAX_FILES})"
+        )
+
+    seen_paths: set[str] = set()
+    seen_basenames: set[str] = set()
+    total_path_bytes = 0
+    for index, configured_path in enumerate(value):
+        where = f"release_assets[{index}]"
+        if not isinstance(configured_path, str) or not configured_path.strip():
+            raise ValueError(f"{where} must be a non-empty string")
+        if any(0xD800 <= ord(char) <= 0xDFFF for char in configured_path):
+            raise ValueError(f"{where} must not contain Unicode surrogates")
+        total_path_bytes += len(configured_path.encode("utf-8"))
+        if total_path_bytes > RELEASE_ASSETS_MAX_PATH_BYTES:
+            raise ValueError(
+                f"release_assets paths exceed {RELEASE_ASSETS_MAX_PATH_BYTES} "
+                "UTF-8 bytes"
+            )
+        if configured_path.startswith("/") or re.match(
+            r"^[A-Za-z]:", configured_path, re.ASCII
+        ):
+            raise ValueError(f"{where} must be relative")
+        if "\\" in configured_path:
+            raise ValueError(f"{where} must use '/' separators")
+        if any(ord(char) < 0x20 or 0x7F <= ord(char) <= 0x9F
+               for char in configured_path):
+            raise ValueError(f"{where} must not contain control characters")
+
+        segments = configured_path.split("/")
+        if any(segment in ("", ".", "..") for segment in segments):
+            raise ValueError(f"{where} has an invalid path segment")
+        if _ascii_fold(segments[0]) == ".git":
+            raise ValueError(f"{where} must not select the root .git tree")
+
+        basename = segments[-1]
+        folded_basename = _ascii_fold(basename)
+        if not RELEASE_ASSET_BASENAME.fullmatch(basename) or ".." in basename:
+            raise ValueError(f"{where} basename {basename!r} is not Release-safe")
+        if folded_basename in ("result.json", "release-body.md"):
+            raise ValueError(f"{where} basename {basename!r} is reserved")
+        if configured_path in seen_paths:
+            raise ValueError(f"{where} duplicates path {configured_path!r}")
+        if basename in seen_basenames:
+            raise ValueError(f"{where} duplicates basename {basename!r}")
+        seen_paths.add(configured_path)
+        seen_basenames.add(basename)
+    return list(value)
+
+
+def parse_release_assets(raw: str | None) -> list[str]:
+    if raw is None or not raw.strip():
+        return []
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise ValueError("RELEASE_ASSETS is not valid JSON") from exc
+    return validate_release_asset_paths(value)
+
+
+def _workflow_warning(message: str) -> None:
+    escaped = "".join(
+        char if 0x20 <= ord(char) < 0x7F else f"\\u{ord(char):04x}"
+        for char in message
+    ).replace("%", "%25")
+    print(f"::warning::{escaped}")
+
+
+def open_release_asset_source(
+    workspace: pathlib.Path, configured_path: str
+) -> int:
+    """Open the configured leaf for reading WITHOUT following any symlink, and
+    return the pinned file descriptor. Every segment is opened with
+    O_NOFOLLOW/O_DIRECTORY so a symlink swapped onto a parent or the leaf after
+    validation (a student process double-forked during grading survives into
+    post-grade staging) is rejected at open time — closing the validate-then-
+    reopen TOCTOU. The returned fd is what _copy_release_asset reads from, so
+    the copy can never re-resolve the path against a mutated tree. Caller owns
+    closing the fd."""
+    validate_release_asset_paths([configured_path])
+    segments = configured_path.split("/")
+    dir_fd = os.open(workspace, os.O_RDONLY | os.O_DIRECTORY | os.O_CLOEXEC)
+    leaf_fd = -1
+    try:
+        for index, segment in enumerate(segments):
+            is_leaf = index == len(segments) - 1
+            flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC
+            if not is_leaf:
+                flags |= os.O_DIRECTORY
+            try:
+                next_fd = os.open(segment, flags, dir_fd=dir_fd)
+            except OSError as exc:
+                # O_NOFOLLOW rejects a symlink with ELOOP; O_DIRECTORY on a
+                # symlink-to-dir can surface as ENOTDIR first. lstat the segment
+                # (relative to the current dir fd, no follow) to report a
+                # symlinked segment precisely rather than as a plain non-dir.
+                if exc.errno in (errno.ELOOP, errno.ENOTDIR):
+                    try:
+                        seg_info = os.lstat(segment, dir_fd=dir_fd)
+                    except OSError:
+                        seg_info = None
+                    if seg_info is not None and stat.S_ISLNK(seg_info.st_mode):
+                        raise ValueError(
+                            f"{configured_path!r} contains a symlink"
+                        ) from exc
+                    if not is_leaf and exc.errno == errno.ENOTDIR:
+                        raise ValueError(
+                            f"{configured_path!r} has a non-directory parent"
+                        ) from exc
+                raise
+            if is_leaf:
+                info = os.fstat(next_fd)
+                if not stat.S_ISREG(info.st_mode):
+                    os.close(next_fd)
+                    raise ValueError(
+                        f"{configured_path!r} is not a regular file"
+                    )
+                leaf_fd = next_fd
+            else:
+                os.close(dir_fd)
+                dir_fd = next_fd
+        return leaf_fd
+    except BaseException:
+        if leaf_fd >= 0:
+            os.close(leaf_fd)
+        raise
+    finally:
+        os.close(dir_fd)
+
+
+def _copy_release_asset(
+    source_fd: int, destination: pathlib.Path, max_bytes: int
+) -> int:
+    """Copy from an already-open, symlink-free source fd (see
+    open_release_asset_source) to `destination`, capped at max_bytes. Reading
+    the pinned fd — never re-opening by path — is what makes this copy immune to
+    a symlink swapped in after validation."""
+    copied = 0
+    created = False
+    try:
+        with os.fdopen(source_fd, "rb", closefd=False) as input_file, \
+                destination.open("xb") as output_file:
+            created = True
+            while chunk := input_file.read(1024 * 1024):
+                if copied + len(chunk) > max_bytes:
+                    raise ValueError(
+                        f"{destination.name!r} exceeds the remaining byte budget"
+                    )
+                output_file.write(chunk)
+                copied += len(chunk)
+    except (OSError, ValueError):
+        if created:
+            try:
+                destination.unlink(missing_ok=True)
+            except OSError:
+                pass
+        raise
+    return copied
+
+
+def stage_release_assets(
+    workspace: pathlib.Path,
+    destination: pathlib.Path,
+    configured_paths: list[str],
+) -> list[str]:
+    configured_paths = validate_release_asset_paths(configured_paths)
+    try:
+        existing = destination.lstat()
+    except FileNotFoundError:
+        pass
+    else:
+        if stat.S_ISDIR(existing.st_mode) and not stat.S_ISLNK(existing.st_mode):
+            shutil.rmtree(destination)
+        else:
+            destination.unlink()
+    destination.mkdir(parents=True)
+
+    accepted: list[str] = []
+    total = 0
+    for configured_path in configured_paths:
+        basename = configured_path.split("/")[-1]
+        target = destination / basename
+        copy_attempted = False
+        try:
+            try:
+                target.lstat()
+            except FileNotFoundError:
+                pass
+            else:
+                raise FileExistsError(
+                    f"release asset {basename!r} has a runtime destination collision"
+                )
+            source_fd = open_release_asset_source(workspace, configured_path)
+            copy_attempted = True
+            try:
+                copied = _copy_release_asset(
+                    source_fd, target, RELEASE_ASSETS_MAX_BYTES - total
+                )
+            finally:
+                os.close(source_fd)
+        except (OSError, ValueError) as exc:
+            if copy_attempted:
+                try:
+                    target.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            _workflow_warning(f"release_assets: {configured_path!r} skipped ({exc})")
+            continue
+        total += copied
+        accepted.append(basename)
+    return accepted
+
+
+def _stage_release_assets_and_emit(
+    workspace: pathlib.Path, github_output: str | None, rc: int
+) -> int:
+    """Stage the configured release assets after grading and emit the staged
+    dir + accepted basenames + skipped count to $GITHUB_OUTPUT. Fail-open: any
+    staging error only warns and never changes `rc` (the grade result). Split
+    out of main() so the staging/output contract the workflow upload step
+    depends on is unit-testable without the full grading pipeline."""
+    accepted_assets: list[str] = []
+    configured_asset_count = 0
+    staging_dir = (
+        pathlib.Path(
+            os.environ.get("RUNNER_TEMP")
+            or tempfile.mkdtemp(prefix="classroom50-")
+        )
+        / RELEASE_ASSETS_DIRNAME
+    )
+    try:
+        configured_paths = parse_release_assets(os.environ.get("RELEASE_ASSETS"))
+        configured_asset_count = len(configured_paths)
+        accepted_assets = stage_release_assets(
+            workspace, staging_dir, configured_paths
+        )
+    except (OSError, ValueError) as exc:
+        _workflow_warning(f"release_assets: staging disabled ({exc})")
+
+    skipped = configured_asset_count - len(accepted_assets)
+    if skipped > 0:
+        # Machine-readable signal so a teacher can tell a fully-published
+        # Release from a partial one without scraping ::warning:: annotations.
+        print(
+            f"::notice::release_assets: attached {len(accepted_assets)} of "
+            f"{configured_asset_count} configured file(s); {skipped} skipped"
+        )
+
+    if github_output:
+        try:
+            with open(github_output, "a") as output:
+                # release-assets-dir is the absolute staged dir the workflow
+                # upload step reads (see STAGED_RELEASE_DIR in the workflow).
+                output.write(f"release-assets={','.join(accepted_assets)}\n")
+                output.write(f"release-assets-dir={staging_dir}\n")
+                output.write(f"release-assets-skipped={skipped}\n")
+        except OSError as exc:
+            _workflow_warning(f"release_assets: could not emit staged names ({exc})")
+    return rc
 
 
 def _isolated_git_env() -> dict[str, str]:
@@ -2054,7 +2336,8 @@ def main() -> int:
         rc = _grade()
     finally:
         append_removed_files_note(workspace, removed_files)
-    return rc
+
+    return _stage_release_assets_and_emit(workspace, github_output, rc)
 
 
 if __name__ == "__main__":

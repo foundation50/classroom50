@@ -40,6 +40,7 @@ const fullSource: Assignment = {
   max_group_size: 3,
   runtime: { "runs-on": "ubuntu-latest", container: { image: "python:3.12" } },
   allowed_files: ["src/*.py", "!src/secret.py"],
+  release_assets: ["report.pdf", "plots/chart.png"],
   pass_threshold: 80,
   tests: [{ type: "run", name: "build", run: "make", points: 10 }],
 }
@@ -69,13 +70,16 @@ describe("buildReusedEntry", () => {
     expect(entry.runtime).not.toBe(fullSource.runtime)
     expect(entry.runtime?.container).not.toBe(fullSource.runtime?.container)
     expect(entry.allowed_files).not.toBe(fullSource.allowed_files)
+    expect(entry.release_assets).not.toBe(fullSource.release_assets)
     expect(entry.tests).not.toBe(fullSource.tests)
     expect(entry.tests?.[0]).not.toBe(fullSource.tests?.[0])
 
     // Mutating the copy must not leak back into the source.
     entry.allowed_files?.push("extra")
+    entry.release_assets?.push("extra.txt")
     entry.tests?.push({ type: "run", name: "x", run: "x", points: 0 })
     expect(fullSource.allowed_files).toHaveLength(2)
+    expect(fullSource.release_assets).toHaveLength(2)
     expect(fullSource.tests).toHaveLength(1)
   })
 
@@ -150,6 +154,37 @@ describe("buildReusedEntry", () => {
     }
     const entry = buildReusedEntry(source, { slug: "z2", name: "Zero 2" })
     expect(entry.pass_threshold).toBe(0)
+  })
+
+  it("omits empty release_assets and rejects invalid populated reuse", () => {
+    const empty = buildReusedEntry(
+      { ...fullSource, release_assets: [] },
+      { slug: "copy", name: "Copy" },
+    )
+    expect("release_assets" in empty).toBe(false)
+
+    expect(() =>
+      buildReusedEntry(
+        { ...fullSource, release_assets: ["a/report.pdf", "b/report.pdf"] },
+        { slug: "copy", name: "Copy" },
+      ),
+    ).toThrow(/configured more than once/i)
+  })
+
+  it("rejects populated release_assets when reusing an empty_repo assignment", () => {
+    const source: Assignment = {
+      slug: "bare",
+      name: "Bare",
+      mode: "individual",
+      autograder: "default",
+      feedback_pr: false,
+      empty_repo: true,
+      release_assets: ["report.pdf"],
+    }
+
+    expect(() =>
+      buildReusedEntry(source, { slug: "bare-copy", name: "Bare Copy" }),
+    ).toThrow(/empty_repo.*release/i)
   })
 
   it("preserves an empty tests/allowed_files array (present, not dropped)", () => {
@@ -355,13 +390,13 @@ describe("editAssignment (preserved-entry integration)", () => {
   // on the template-less path: ref read, commit read, assignments.json contents
   // read, then tree/commit/ref writes. classroom.json is absent (404) so the
   // archive guard reads the classroom as active.
-  function makeClient(): {
+  function makeClient(entry: Assignment = existingEntry): {
     client: GitHubClient
     committedContent: () => string
   } {
     const assignmentsFile = {
       schema: "classroom50/assignments/v1",
-      assignments: [existingEntry],
+      assignments: [entry],
     }
     const b64 = (s: string) => Buffer.from(s, "utf-8").toString("base64")
 
@@ -436,6 +471,7 @@ describe("editAssignment (preserved-entry integration)", () => {
       due_date: "",
       mode: "individual",
       max_group_size: 0,
+      release_assets: "",
       tests: [],
       ...overrides,
     } as unknown as Parameters<typeof editAssignment>[1]
@@ -473,6 +509,41 @@ describe("editAssignment (preserved-entry integration)", () => {
     expect(written.assignments).toHaveLength(1)
     expect(written.assignments[0].slug).toBe(SLUG)
     expect(written.assignments[0].name).toBe("Homework 1 (edited)")
+  })
+
+  it("writes ordered exact release paths and omits blank input", async () => {
+    const first = makeClient()
+    await editAssignment(
+      first.client,
+      editInput({ release_assets: "report.pdf\nplots/chart.png" }),
+    )
+    const written = JSON.parse(first.committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect(written.assignments[0].release_assets).toEqual([
+      "report.pdf",
+      "plots/chart.png",
+    ])
+
+    const second = makeClient({
+      ...existingEntry,
+      release_assets: ["report.pdf"],
+    })
+    await editAssignment(second.client, editInput({ release_assets: "" }))
+    const cleared = JSON.parse(second.committedContent()) as {
+      assignments: Assignment[]
+    }
+    expect("release_assets" in cleared.assignments[0]).toBe(false)
+  })
+
+  it("rejects invalid direct release paths", async () => {
+    const ordinary = makeClient()
+    await expect(
+      editAssignment(
+        ordinary.client,
+        editInput({ release_assets: "../report.pdf" }),
+      ),
+    ).rejects.toThrow(/release_assets/)
   })
 
   it("throws when the target slug does not exist (edit is slug-keyed)", async () => {
@@ -701,6 +772,7 @@ describe("editAssignment (preserved-entry integration)", () => {
       [{ setup_command: "make" }, /never autogrades/],
       [{ feedback_pr: true }, /no baseline commit/],
       [{ allowed_files: "*.py" }, /restrict allowed files/],
+      [{ release_assets: "report.pdf" }, /release/],
       [{ pass_threshold: 70 }, /passing threshold/],
     ]
     for (const [overrides, want] of cases) {
@@ -964,6 +1036,7 @@ describe("grantTeamTemplateRead (student + HTA/TA staff team eager grant)", () =
       due_date: "",
       mode: "individual",
       max_group_size: 0,
+      release_assets: "",
       tests: [],
       // These tests exercise the owner-only template read-grant, which the
       // write path now performs only when the caller holds manageOrg.

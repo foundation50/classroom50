@@ -225,8 +225,8 @@ func TestInitStepLabels_CountMatchesRenderedSteps(t *testing.T) {
 	// the count is also the `total` in the [n/total] header. Guard the
 	// length so a reordering or addition can't desync the indices used
 	// in init.go's RunE.
-	if len(initStepLabels) != 12 {
-		t.Fatalf("initStepLabels = %d, want 12 (update init.go RunE step() calls if you change this)", len(initStepLabels))
+	if len(initStepLabels) != 13 {
+		t.Fatalf("initStepLabels = %d, want 13 (update init.go RunE step() calls if you change this)", len(initStepLabels))
 	}
 	// Every label must be non-empty (a blank header renders as a bare
 	// counter).

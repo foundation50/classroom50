@@ -17,6 +17,26 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.12.0](https://github.com/foundation50/classroom50/compare/web-v1.11.0...web-v1.12.0) (2026-07-21)
+
+
+### Features
+
+* add Head TA (HTA) role ([#344](https://github.com/foundation50/classroom50/issues/344)) ([b6a7deb](https://github.com/foundation50/classroom50/commit/b6a7debaba1f829759f546690fc0600ff50e47f1))
+* enforce a $0 Actions budget cap as org policy ([#356](https://github.com/foundation50/classroom50/issues/356)) ([3cb60e4](https://github.com/foundation50/classroom50/commit/3cb60e4653cf14b80cd3c46961b9f271a4562235))
+* **web:** add RTL language support (Arabic, Hebrew, Farsi, Urdu) ([#340](https://github.com/foundation50/classroom50/issues/340)) ([5e36401](https://github.com/foundation50/classroom50/commit/5e36401705b709a8c595825c756e658d203d1034))
+* **web:** capability-gate RBAC so TAs/Head TAs can't invoke owner-only or write ops ([#346](https://github.com/foundation50/classroom50/issues/346)) ([4335378](https://github.com/foundation50/classroom50/commit/433537843d3f78f441b74e7eedbf9fdd8df6fcca))
+* **web:** centralize classroom resource reconcile on owner open ([#349](https://github.com/foundation50/classroom50/issues/349)) ([c795216](https://github.com/foundation50/classroom50/commit/c7952160e7b7d425f445f6c6fd4ef3e0f1ee2a4b))
+* **web:** show live submission presence in teacher gradebook ([#354](https://github.com/foundation50/classroom50/issues/354)) ([a7a8465](https://github.com/foundation50/classroom50/commit/a7a8465def2a835147b2395e35dcf1571007c48f))
+
+
+### Bug Fixes
+
+* **web:** guide teachers past missing and Free-plan orgs in setup modal ([#355](https://github.com/foundation50/classroom50/issues/355)) ([4018f4b](https://github.com/foundation50/classroom50/commit/4018f4bc4767751cf4b8b67f0b0de2903a8b0ca0))
+* **web:** let CLDR fixed-count plural forms drop the count placeholder in verify_locale ([#345](https://github.com/foundation50/classroom50/issues/345)) ([99d8c76](https://github.com/foundation50/classroom50/commit/99d8c76dd6009a27b84c987c16535299b7ae96cc))
+* **web:** patch brace-expansion DoS (GHSA-3jxr-9vmj-r5cp) ([#357](https://github.com/foundation50/classroom50/issues/357)) ([ab4c306](https://github.com/foundation50/classroom50/commit/ab4c3060dc217904ea87ccbff485a959840fc212))
+* **web:** refresh staff list after add and guard teacher self-removal ([#350](https://github.com/foundation50/classroom50/issues/350)) ([e3a7b9a](https://github.com/foundation50/classroom50/commit/e3a7b9aed7bf9d201831937c740e6c0a8053f18e))
+
 ## [1.11.0](https://github.com/foundation50/classroom50/compare/web-v1.10.0...web-v1.11.0) (2026-07-20)
 
 

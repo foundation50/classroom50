@@ -14,6 +14,8 @@ export {
   isFreshRepoLagError,
   withFreshRepoRetry,
   REPO_READ_CONCURRENCY,
+  withGithubReadSlot,
+  retryOnRateLimit,
   type FreshRepoRetryOptions,
 } from "./queries/shared"
 export {
@@ -77,6 +79,12 @@ export {
   teamFailedInvitationsQuery,
 } from "./queries/invitationReads"
 export {
+  getOrgActionsUsage,
+  getOrgActionsBudget,
+  includedActionsMinutes,
+  type OrgActionsUsage,
+} from "./queries/billingReads"
+export {
   fetchJson,
   pagesAssignmentUrl,
   classroomsIndexUrl,
@@ -90,6 +98,8 @@ export {
 } from "./queries/pagesReads"
 export {
   releasesQuery,
+  latestSubmitReleaseWithAssets,
+  latestSubmitReleaseAndCount,
   getServiceTokenStatus,
   getCollectScoresRunAfterId,
   getRegradeRunAfterId,

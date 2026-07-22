@@ -8,10 +8,10 @@ const useGetOrgRepos = (org: string) => {
   return useQuery({
     queryKey: githubKeys.orgRepos(org),
     queryFn: () => getOrgRepos(client, org),
-    // Drives the "Accepted" count; refetch on tab refocus (overriding the global
-    // refetchOnWindowFocus:false) so it reflects newly accepted assignments.
-    refetchOnWindowFocus: true,
-    staleTime: 20 * 1000,
+    // The org repo list (paginated across the whole org) drives the "Accepted"
+    // signal. It's refreshed on explicit Refresh + normal staleness rather than
+    // on every tab refocus, which used to re-paginate the entire org on focus.
+    staleTime: 60 * 1000,
   })
 }
 

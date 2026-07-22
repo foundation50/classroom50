@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { Button } from "@/components/ui"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
+import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import { githubKeys } from "@/github-core/queries"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
@@ -88,6 +89,7 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       // navigate away mid-run. The work isn't cancelable (no AbortSignal), so
       // the mounted guard just stops setState churn.
       if (!mountedRef.current) return
+      recordBudgetNoticeFromStep(org, update.id, update.data)
       setSteps((prev) => applyStepUpdate(prev, update))
     },
     confirmSkeletonOverwrite,
@@ -98,6 +100,11 @@ const RerunOrgSetup = ({ org }: { org: string }) => {
       if (result && result.status === "error") return
       void queryClient.invalidateQueries({
         queryKey: githubKeys.orgAuditPrefix(org),
+      })
+      // Re-run can flip the Actions policy (or intentionally leave a pause), so
+      // refresh the kill-switch toggle's derived mode too.
+      void queryClient.invalidateQueries({
+        queryKey: githubKeys.orgActionsMode(org),
       })
       void queryClient.invalidateQueries({ queryKey: ["orgs"] })
     },

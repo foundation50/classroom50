@@ -36,6 +36,9 @@ type Routes = {
   // The classroom50 config repo's default branch (or an error to simulate an
   // unreadable/uninitialized repo). Defaults to "main" (no recommendation).
   configRepoBranch?: string | GitHubAPIError
+  // The org budgets list response (or an error to simulate no billing
+  // visibility). Defaults to a single $0 hard-stop Actions budget (enforced).
+  budgets?: unknown | GitHubAPIError
 }
 
 // A fully-enforced fake org: every check returns its desired value, both
@@ -60,6 +63,22 @@ function makeClient(overrides: Routes = {}): GitHubClient {
         if (overrides.configRepoBranch instanceof GitHubAPIError)
           return reject(overrides.configRepoBranch)
         return ok({ default_branch: overrides.configRepoBranch ?? "main" })
+      }
+      if (path.includes("/settings/billing/budgets")) {
+        if (overrides.budgets instanceof GitHubAPIError)
+          return reject(overrides.budgets)
+        return ok(
+          overrides.budgets ?? {
+            budgets: [
+              {
+                budget_scope: "organization",
+                budget_product_sku: "actions",
+                budget_amount: 0,
+                prevent_further_usage: true,
+              },
+            ],
+          },
+        )
       }
       if (path.endsWith("/actions/permissions"))
         return ok({ enabled_repositories: "all", allowed_actions: "all" })
@@ -109,6 +128,52 @@ describe("buildOrgAuditReport", () => {
     // we set, all enforced here (11 on a team plan).
     expect(report.defaultVerdicts).toHaveLength(11)
     expect(report.defaultVerdicts.every((v) => v.enforced)).toBe(true)
+  })
+
+  it("fails the verdict when the Actions budget is missing", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({ budgets: { budgets: [] } }),
+      "acme",
+      "team",
+    )
+    expect(report.verdict).toBe("fail")
+    const budget = report.concerns.find((c) => c.id === "orgBudget")
+    expect(budget?.verdict.state).toBe("unenforced")
+  })
+
+  it("warns (without failing) when the Actions budget is over the threshold", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({
+        budgets: {
+          budgets: [
+            {
+              budget_scope: "organization",
+              budget_product_sku: "actions",
+              budget_amount: 500,
+              prevent_further_usage: true,
+            },
+          ],
+        },
+      }),
+      "acme",
+      "team",
+    )
+    // A warn concern must NOT collapse the top-level verdict to fail.
+    expect(report.verdict).toBe("ok")
+    const budget = report.concerns.find((c) => c.id === "orgBudget")
+    expect(budget?.verdict.state).toBe("warn")
+  })
+
+  it("treats an unreadable budgets list as advisory, failing the verdict but distinct from missing", async () => {
+    const report = await buildOrgAuditReport(
+      makeClient({ budgets: httpError(403) }),
+      "acme",
+      "team",
+    )
+    const budget = report.concerns.find((c) => c.id === "orgBudget")
+    // Unreadable (not "unenforced"): the CLI treats this as advisory, and the
+    // GUI's deriveVerdict fails on unreadable like any other read outage.
+    expect(budget?.verdict.state).toBe("unreadable")
   })
 
   it("recommends switching a non-main org default branch without failing", async () => {
@@ -389,6 +454,7 @@ describe("buildOrgAuditReport", () => {
     const expected: ConcernId[] = [
       "orgDefaults",
       "orgActions",
+      "orgBudget",
       "orgPrCreation",
       "branchProtection",
       "workflowPermissions",

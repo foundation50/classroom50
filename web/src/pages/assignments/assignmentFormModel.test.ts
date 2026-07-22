@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import type { TFunction } from "i18next"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import {
+  assignmentToFormValues,
   validateAssignmentForm,
   toSubmitValues,
   type CreateAssignmentFormValues,
@@ -52,6 +53,7 @@ const base: CreateAssignmentFormValues = {
   runtime_apt: "",
   setup_command: "",
   allowed_files: "",
+  release_assets: "",
   pass_threshold_enabled: false,
   pass_threshold: 80,
   tests: [],
@@ -271,5 +273,50 @@ describe("toSubmitValues — runtime field clearing", () => {
     expect(out.allowed_files).toBe("")
     expect(out.pass_threshold_enabled).toBe(false)
     expect(out.tests).toEqual([])
+  })
+})
+
+describe("release_assets", () => {
+  it("maps stored exact paths to textarea text in order", () => {
+    const values = assignmentToFormValues({
+      slug: "hw1",
+      name: "Homework",
+      mode: "individual",
+      autograder: "default",
+      release_assets: ["report.pdf", "plots/chart.png"],
+    })
+    expect(values.release_assets).toBe("report.pdf\nplots/chart.png")
+  })
+
+  it.each([
+    [
+      Array.from({ length: 51 }, (_, i) => `f${i}.pdf`).join("\n"),
+      "assignments.form.validation.releaseAssetsTooMany",
+    ],
+    [
+      `${"a/".repeat(4094)}a.pdf`,
+      "assignments.form.validation.releaseAssetsTooLarge",
+    ],
+    ["../report.pdf", "assignments.form.validation.releaseAssetsInvalidPath"],
+    ["*.pdf", "assignments.form.validation.releaseAssetsInvalidBasename"],
+    [
+      "a/report.pdf\nb/report.pdf",
+      "assignments.form.validation.releaseAssetsDuplicateBasename",
+    ],
+    [
+      "a/report.pdf\na/report.pdf",
+      "assignments.form.validation.releaseAssetsDuplicatePath",
+    ],
+  ])("uses a stable locale key for %s", (raw, key) => {
+    expect(
+      validateAssignmentForm({ ...base, release_assets: raw }, t)
+        .release_assets,
+    ).toBe(key)
+  })
+
+  it("ignores and clears a hidden stale value for empty_repo", () => {
+    const value = { ...base, empty_repo: true, release_assets: "../bad.pdf" }
+    expect(validateAssignmentForm(value, t).release_assets).toBeUndefined()
+    expect(toSubmitValues(value).release_assets).toBe("")
   })
 })

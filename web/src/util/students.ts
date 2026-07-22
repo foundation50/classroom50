@@ -66,3 +66,24 @@ export const initialsFromParts = (
 // A student's section by username, or "" if unknown/unset.
 export const getSection = (key: string, students: Student[]): string =>
   findByUsername(key, students)?.section?.trim() ?? ""
+
+// Case-insensitive sort key for ordering a roster by display name: full name
+// when known, else username, else email. Mirrors the team-roster sortKey so the
+// dashboard's deterministic order matches other roster views.
+export const studentSortKey = (student: Student): string => {
+  const name = nameFromParts(student.first_name, student.last_name)
+  return (name || student.username || student.email || "").toLowerCase()
+}
+
+// Roster sorted by display name (ascending), stable and case-insensitive. Ties
+// break on the lowercased username so the order is fully deterministic — the
+// spine the submissions dashboard pages over and targets repos by.
+export const sortStudentsByName = (students: Student[]): Student[] =>
+  [...students].sort((a, b) => {
+    const byName = studentSortKey(a).localeCompare(studentSortKey(b))
+    if (byName !== 0) return byName
+    return a.username
+      .trim()
+      .toLowerCase()
+      .localeCompare(b.username.trim().toLowerCase())
+  })

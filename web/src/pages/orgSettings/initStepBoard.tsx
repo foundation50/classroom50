@@ -29,6 +29,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 export const INIT_STEP_ORDER: InitStepId[] = [
   "orgDefaults",
   "orgActions",
+  "orgBudget",
   "orgPrCreation",
   "configRepo",
   "skeleton",
@@ -71,6 +72,12 @@ export const INIT_STEP_META: Record<InitStepId, InitStepMeta> = {
     why: "orgSettings.steps.orgActions.why",
     remediation: "orgSettings.steps.orgActions.remediation",
     settingsUrl: (org) => `${orgSettingsBase(org)}/actions`,
+  },
+  orgBudget: {
+    what: "orgSettings.steps.orgBudget.what",
+    why: "orgSettings.steps.orgBudget.why",
+    remediation: "orgSettings.steps.orgBudget.remediation",
+    settingsUrl: (org) => `${orgSettingsBase(org)}/billing/budgets`,
   },
   orgPrCreation: {
     what: "orgSettings.steps.orgPrCreation.what",
@@ -132,6 +139,11 @@ export const initialInitSteps: Record<InitStepId, InitStepUpdate> = {
     id: "orgActions",
     status: "pending",
     title: "orgSettings.steps.orgActions.title",
+  },
+  orgBudget: {
+    id: "orgBudget",
+    status: "pending",
+    title: "orgSettings.steps.orgBudget.title",
   },
   orgPrCreation: {
     id: "orgPrCreation",

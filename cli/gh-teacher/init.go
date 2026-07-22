@@ -33,16 +33,18 @@ func initCmd() *cobra.Command {
 			"      enabled member capabilities are private-repo creation and\n" +
 			"      public Pages creation).\n" +
 			"  2.  GitHub Actions enabled for the org.\n" +
-			"  3.  Actions allowed to create pull requests (for Feedback PRs).\n" +
-			"  4.  Branch rulesets protecting submission history + Feedback base.\n" +
-			"  5.  The private classroom50 config repo (auto-initialized).\n" +
-			"  6.  Repo-level Actions re-enabled.\n" +
-			"  7.  The embedded skeleton workflows/scripts (single commit).\n" +
-			"  8.  GitHub Pages (workflow build, visibility public).\n" +
-			"  9.  Branch protection on the default branch.\n" +
-			"  10. Workflow GITHUB_TOKEN permissions.\n" +
-			"  11. Reusable-workflow access for the org.\n" +
-			"  12. The repo-level CLASSROOM50_SERVICE_TOKEN secret.\n\n" +
+			"  3.  A $0 GitHub Actions spending cap (created only if none exists;\n" +
+			"      an existing teacher-set budget is left untouched).\n" +
+			"  4.  Actions allowed to create pull requests (for Feedback PRs).\n" +
+			"  5.  Branch rulesets protecting submission history + Feedback base.\n" +
+			"  6.  The private classroom50 config repo (auto-initialized).\n" +
+			"  7.  Repo-level Actions re-enabled.\n" +
+			"  8.  The embedded skeleton workflows/scripts (single commit).\n" +
+			"  9.  GitHub Pages (workflow build, visibility public).\n" +
+			"  10. Branch protection on the default branch.\n" +
+			"  11. Workflow GITHUB_TOKEN permissions.\n" +
+			"  12. Reusable-workflow access for the org.\n" +
+			"  13. The repo-level CLASSROOM50_SERVICE_TOKEN secret.\n\n" +
 			"Preflight: before any change, init verifies your OAuth scopes,\n" +
 			"org access and ownership, the org plan, and that a service token\n" +
 			"is available — and stops without mutating if a hard check fails.\n\n" +
@@ -52,14 +54,15 @@ func initCmd() *cobra.Command {
 			"history, process listings, and CI logs). Create a fine-grained PAT\n" +
 			"with Resource owner = your org, Repository access = All\n" +
 			"repositories, Contents: Read and write, Actions: Read and\n" +
-			"write, and Organization permissions -> Members: Read — student\n" +
-			"repos are created on demand, so an \"Only select repositories\"\n" +
-			"scope silently misses them. Contents read is needed to collect\n" +
-			"scores; Contents write pushes submit/* tags and Actions write\n" +
-			"re-runs autograde workflows when regrading; Members: Read is\n" +
-			"needed to list the classroom team (collection is team-driven).\n" +
-			"Since init requires you to be an org owner, your own PAT is\n" +
-			"auto-approved.\n" +
+			"write, and Organization permissions -> Members: Read AND\n" +
+			"Administration: Read and write — student repos are created on\n" +
+			"demand, so an \"Only select repositories\" scope silently misses\n" +
+			"them. Contents read is needed to collect scores; Contents write\n" +
+			"pushes submit/* tags and Actions write re-runs autograde workflows\n" +
+			"when regrading; Members: Read is needed to list the classroom team\n" +
+			"(collection is team-driven); Organization Administration is needed\n" +
+			"to set the $0 Actions spending cap. Since init requires you to be\n" +
+			"an org owner, your own PAT is auto-approved.\n" +
 			"init validates the token before storing it (and a re-run leaves\n" +
 			"an already-configured token untouched; replace it with\n" +
 			"`gh teacher rotate-service-token <org>`).\n\n" +
@@ -210,11 +213,17 @@ func initCmd() *cobra.Command {
 				return err
 			}
 
+			// Reconcile the $0 Actions spending cap right after enabling
+			// Actions: it's create-only (never overrides a teacher's budget)
+			// and best-effort, so it never aborts init.
+			step(initStepLabels[2])
+			summary.BudgetCap = ensureOrgActionsBudgetCap(client, stepOut, stepErr, org)
+
 			// Allow Actions' GITHUB_TOKEN to open the opt-in Feedback PR.
 			// Org-level so student repos inherit it; a maintain student can't
 			// set it per-repo. Even with pull-requests: write, PR creation is
 			// rejected unless this org toggle is on, and it defaults off.
-			step(initStepLabels[2])
+			step(initStepLabels[3])
 			prCreateReady, err := ensureOrgCanCreatePRs(client, stepOut, stepErr, org)
 			if err != nil {
 				prog.Abort()
@@ -224,7 +233,7 @@ func initCmd() *cobra.Command {
 			// Install the org-level rulesets protecting submission history and
 			// the Feedback PR base. Org-level so they auto-cover every
 			// current/future student repo; warn-and-continue if blocked.
-			step(initStepLabels[3])
+			step(initStepLabels[4])
 			rulesetsReady, err := ensureClassroomRulesets(client, stepOut, stepErr, org)
 			if err != nil {
 				prog.Abort()
@@ -233,7 +242,7 @@ func initCmd() *cobra.Command {
 
 			// Default branch comes from the create/fetch response (org policy
 			// can rename it).
-			step(initStepLabels[4])
+			step(initStepLabels[5])
 			repo, created, err := ensureConfigRepo(client, org)
 			if err != nil {
 				prog.Abort()
@@ -252,13 +261,13 @@ func initCmd() *cobra.Command {
 
 			// Re-enable repo-level Actions before the skeleton push so the
 			// workflows' first run isn't blocked.
-			step(initStepLabels[5])
+			step(initStepLabels[6])
 			if err := ensureRepoActionsEnabled(client, stepOut, stepErr, org, configrepo.ConfigRepoName); err != nil {
 				prog.Abort()
 				return err
 			}
 
-			step(initStepLabels[6])
+			step(initStepLabels[7])
 			// commitSkeleton may prompt (skeleton-refresh confirmation) on
 			// stderr and read stdin, so clear the in-place line first and give
 			// it the REAL stderr; success chatter still goes to discard.
@@ -269,28 +278,28 @@ func initCmd() *cobra.Command {
 				prog.Abort()
 				return err
 			}
-			step(initStepLabels[7])
+			step(initStepLabels[8])
 			if err := enablePages(client, stepOut, stepErr, org, configrepo.ConfigRepoName); err != nil {
 				prog.Abort()
 				return err
 			}
-			step(initStepLabels[8])
+			step(initStepLabels[9])
 			if err := applyBranchProtection(client, stepOut, org, configrepo.ConfigRepoName, branch); err != nil {
 				prog.Abort()
 				return err
 			}
-			step(initStepLabels[9])
+			step(initStepLabels[10])
 			if err := setWorkflowPermissions(client, stepOut, org, configrepo.ConfigRepoName); err != nil {
 				prog.Abort()
 				return err
 			}
-			step(initStepLabels[10])
+			step(initStepLabels[11])
 			if err := enableReusableWorkflowAccess(client, stepOut, stepErr, org, configrepo.ConfigRepoName); err != nil {
 				prog.Abort()
 				return err
 			}
 
-			step(initStepLabels[11])
+			step(initStepLabels[12])
 			// The service-token prompt (when needed) must not hide behind the
 			// progress line: finalize progress and flush buffered warnings
 			// first.

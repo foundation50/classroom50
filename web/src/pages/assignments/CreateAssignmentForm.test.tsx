@@ -24,6 +24,7 @@ vi.mock("./TemplateField", () => ({
 import CreateAssignmentForm, {
   assignmentToFormValues,
 } from "./CreateAssignmentForm"
+import type { CreateAssignmentFormValues } from "./assignmentFormModel"
 import { utcIsoToDatetimeLocalValue } from "./formFieldHelpers"
 import * as formFieldHelpers from "./formFieldHelpers"
 import type { Assignment } from "@/types/classroom"
@@ -230,5 +231,30 @@ describe("assignment slug field", () => {
     const slug = slugInput(container)
     expect(slug.value).toBe("hw1")
     expect(slug.disabled).toBe(true)
+  })
+})
+
+describe("submission release files visibility", () => {
+  const renderForm = (defaultValues?: Partial<CreateAssignmentFormValues>) =>
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CreateAssignmentForm
+          defaultValues={defaultValues}
+          onSubmit={() => {}}
+        />
+      </QueryClientProvider>,
+    )
+
+  it("renders the textarea for an ordinary assignment", () => {
+    const { container } = renderForm()
+    expect(container.querySelector("#release_assets")).not.toBeNull()
+  })
+
+  it("hides the textarea for empty_repo even with stale text", () => {
+    const { container } = renderForm({
+      empty_repo: true,
+      release_assets: "../bad.pdf",
+    })
+    expect(container.querySelector("#release_assets")).toBeNull()
   })
 })

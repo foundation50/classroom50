@@ -108,6 +108,16 @@ export type GitHubRepo = {
   html_url: string
 }
 
+// A release asset (GET /repos/{o}/{r}/releases returns these inline). The live
+// teacher view reads `result.json` from here; `browser_download_url` is the
+// download entry point (the authed API asset route 302-redirects to signed S3).
+export type GitHubReleaseAsset = {
+  id: number
+  name: string
+  browser_download_url: string
+  size?: number
+}
+
 export type GitHubRelease = {
   id: number
   tag_name: string
@@ -117,6 +127,9 @@ export type GitHubRelease = {
   prerelease: boolean
   created_at: string
   published_at: string | null
+  // Present on the list endpoint; absent-tolerant so existing release readers
+  // (student submissions list) that ignore assets keep working.
+  assets?: GitHubReleaseAsset[]
 }
 
 export type GitHubUser = {

@@ -283,6 +283,7 @@ func preflightFailError(res preflightResult) error {
 var initStepLabels = []string{
 	"Locking down org member privileges",
 	"Enabling GitHub Actions (org)",
+	"Setting the $0 Actions budget cap",
 	"Allowing Actions to create pull requests (org)",
 	"Installing branch rulesets (Feedback PR protections)",
 	"Creating the config repo",

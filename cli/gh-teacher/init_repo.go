@@ -228,6 +228,57 @@ func reportPartialMemberDefaults(errOut io.Writer, org string, settings []orgpol
 		org, appliedList, strings.Join(notAttempted, ", "), settingsURL)
 }
 
+// ensureOrgActionsBudgetCap reconciles the org's $0 GitHub Actions spending
+// cap. It's create-only: if no conforming Actions budget exists it POSTs the
+// desired $0 hard-stop cap; it NEVER modifies or deletes a teacher-set budget
+// (GitHub allows one budget per scope+SKU, and overriding the teacher's choice
+// would be surprising — audit surfaces the verdict instead).
+//
+// Create-only and never fatal: the budget cap is a guardrail, not a
+// prerequisite for the classroom to work. Returns the reconciliation status
+// for the summary (see initSummary.BudgetCap for the values).
+func ensureOrgActionsBudgetCap(client githubapi.Client, out, errOut io.Writer, org string) string {
+	settingsURL := orgpolicy.OrgBudgetsURL(org)
+
+	budgets, err := githubapi.ListOrgBudgets(client, org)
+	if err != nil {
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't read org billing budgets (%v); this usually means the token lacks Organization permissions -> Administration: Read, or the org/plan doesn't expose budgets. Set a $0 GitHub Actions budget by hand at %s to hard-stop paid Actions minutes.\n",
+			org, err, settingsURL)
+		return "unreadable"
+	}
+
+	switch v := orgpolicy.ClassifyBudget(budgets); v.Tier {
+	case orgpolicy.BudgetEnforced, orgpolicy.BudgetOK:
+		_, _ = fmt.Fprintf(out, "%s: Actions budget cap already in place ($%d)\n", org, v.Amount)
+		return "present"
+	case orgpolicy.BudgetWarn:
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: an Actions budget over $%d ($%d) is set; leaving it untouched — lower it to $0 at %s to hard-stop paid Actions minutes.\n",
+			org, orgpolicy.BudgetWarnThreshold, v.Amount, settingsURL)
+		return "warn"
+	case orgpolicy.BudgetMissing:
+		// Fall through to create below.
+	}
+
+	status, err := githubapi.CreateOrgActionsBudgetCap(client, org)
+	if err != nil {
+		if cliutil.IsHTTPStatus(err, http.StatusForbidden) {
+			_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); add Organization permissions -> Administration: Read and write to your token, or create the $0 GitHub Actions budget by hand at %s.\n",
+				org, err, settingsURL)
+			return "failed"
+		}
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: couldn't create the $0 Actions budget cap (%v); create it by hand at %s.\n",
+			org, err, settingsURL)
+		return "failed"
+	}
+	if status != http.StatusCreated && status != http.StatusOK {
+		_, _ = fmt.Fprintf(errOut, "Warning: %s: creating the $0 Actions budget cap returned HTTP %d; create it by hand at %s.\n",
+			org, status, settingsURL)
+		return "failed"
+	}
+	_, _ = fmt.Fprintf(out, "%s: created a $0 GitHub Actions budget cap (blocks paid Actions minutes)\n", org)
+	return "created"
+}
+
 // orgActionsPermissions is the subset of GET /orgs/{org}/actions/permissions
 // that we read.
 type orgActionsPermissions struct {

@@ -1,8 +1,13 @@
 import { describe, expect, it, vi } from "vitest"
 
 import { GitHubAPIError, type GitHubRateLimit } from "@/github-core/errors"
-import { getServiceTokenStatus } from "./releaseRunReads"
+import {
+  getServiceTokenStatus,
+  latestSubmitReleaseAndCount,
+  latestSubmitReleaseWithAssets,
+} from "./releaseRunReads"
 import type { GitHubClient } from "../client"
+import type { GitHubRelease } from "../types"
 
 const noRateLimit: GitHubRateLimit = {
   limit: null,
@@ -62,6 +67,124 @@ describe("getServiceTokenStatus", () => {
         clientThrowing(new TypeError("Failed to fetch")),
         "org",
       ),
+    ).rejects.toThrow()
+  })
+})
+
+const clientReturning = (releases: GitHubRelease[]): GitHubClient =>
+  ({ request: vi.fn().mockResolvedValue(releases) }) as unknown as GitHubClient
+
+const release = (
+  tag: string,
+  when: string,
+  extra: Partial<GitHubRelease> = {},
+): GitHubRelease => ({
+  id: 1,
+  tag_name: tag,
+  name: tag,
+  html_url: `https://github.com/o/r/releases/tag/${tag}`,
+  draft: false,
+  prerelease: false,
+  created_at: when,
+  published_at: when,
+  ...extra,
+})
+
+describe("latestSubmitReleaseWithAssets", () => {
+  it("returns the newest submit/* release among several", async () => {
+    const client = clientReturning([
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z"),
+      release("submit/2026-02-01T00:00:00Z-bbbb", "2026-02-01T00:00:00Z"),
+    ])
+    const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+  })
+
+  it("ignores non-submit/* tags", async () => {
+    const client = clientReturning([
+      release("v1.0.0", "2026-05-01T00:00:00Z"),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+    ])
+    const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
+    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+  })
+
+  it("returns null when there are no submit/* releases", async () => {
+    const client = clientReturning([release("v1.0.0", "2026-05-01T00:00:00Z")])
+    expect(await latestSubmitReleaseWithAssets(client, "o", "r")).toBeNull()
+  })
+
+  it("returns null on a 404 (repo not accepted)", async () => {
+    const client = clientThrowing(apiError(404))
+    expect(await latestSubmitReleaseWithAssets(client, "o", "r")).toBeNull()
+  })
+
+  it("rethrows a non-404 error (e.g. 403) rather than hiding it as no-submission", async () => {
+    await expect(
+      latestSubmitReleaseWithAssets(clientThrowing(apiError(403)), "o", "r"),
+    ).rejects.toThrow()
+  })
+
+  it("carries the release's assets through for the caller", async () => {
+    const client = clientReturning([
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z", {
+        assets: [
+          {
+            id: 9,
+            name: "result.json",
+            browser_download_url: "https://github.com/o/r/releases/download/x",
+          },
+        ],
+      }),
+    ])
+    const latest = await latestSubmitReleaseWithAssets(client, "o", "r")
+    expect(latest?.assets?.[0]?.name).toBe("result.json")
+  })
+})
+
+describe("latestSubmitReleaseAndCount", () => {
+  it("returns the newest submit/* release and the submit-release count", async () => {
+    const client = clientReturning([
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+      release("submit/2026-03-01T00:00:00Z-cccc", "2026-03-01T00:00:00Z"),
+      release("submit/2026-02-01T00:00:00Z-bbbb", "2026-02-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-03-01T00:00:00Z-cccc")
+    expect(count).toBe(3)
+  })
+
+  it("counts only submit/* releases, ignoring other tags", async () => {
+    const client = clientReturning([
+      release("v1.0.0", "2026-05-01T00:00:00Z"),
+      release("submit/2026-01-01T00:00:00Z-aaaa", "2026-01-01T00:00:00Z"),
+      release("nightly", "2026-04-01T00:00:00Z"),
+    ])
+    const { latest, count } = await latestSubmitReleaseAndCount(
+      client,
+      "o",
+      "r",
+    )
+    expect(latest?.tag_name).toBe("submit/2026-01-01T00:00:00Z-aaaa")
+    expect(count).toBe(1)
+  })
+
+  it("resolves { latest: null, count: 0 } on a 404 (repo not accepted)", async () => {
+    const client = clientThrowing(apiError(404))
+    expect(await latestSubmitReleaseAndCount(client, "o", "r")).toEqual({
+      latest: null,
+      count: 0,
+    })
+  })
+
+  it("rethrows a non-404 error rather than hiding it as no-submission", async () => {
+    await expect(
+      latestSubmitReleaseAndCount(clientThrowing(apiError(403)), "o", "r"),
     ).rejects.toThrow()
   })
 })

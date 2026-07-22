@@ -2,6 +2,11 @@ package main
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"reflect"
+	"sort"
 	"strings"
 	"testing"
 
@@ -126,6 +131,24 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		}
 	}
 
+	jobsValue, _ := nested(doc, "jobs")
+	jobs, ok := jobsValue.(map[string]any)
+	if !ok {
+		t.Fatal("jobs: not a map")
+	}
+	if got := sortedMapKeys(jobs); !reflect.DeepEqual(got, []string{"grade", "set-latest", "setup"}) {
+		t.Errorf("autograde jobs = %v, want setup/grade/set-latest only", got)
+	}
+	if got := workflowStepsByUsesPrefix(jobs["grade"], "actions/upload-artifact@"); len(got) != 0 {
+		t.Errorf("grade upload-artifact steps = %d, want zero", len(got))
+	}
+	if got, ok := nested(doc, "jobs", "setup", "outputs", "release-assets"); !ok || got != "${{ steps.read.outputs.release-assets }}" {
+		t.Errorf("setup release-assets output = %#v", got)
+	}
+	if got, ok := nested(doc, "jobs", "grade", "env", "RELEASE_ASSETS"); !ok || got != "${{ needs.setup.outputs.release-assets }}" {
+		t.Errorf("grade RELEASE_ASSETS = %#v", got)
+	}
+
 	// Workflow-level concurrency: every push grades (no cancel).
 	if got, ok := nested(doc, "concurrency", "cancel-in-progress"); !ok || got != false {
 		t.Errorf("autograde-runner.yaml concurrency.cancel-in-progress = %v, want false", got)
@@ -153,18 +176,6 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 		t.Errorf("autograde-runner.yaml grade.env.MODE = %v, want the setup `mode` output (F1 mode-aware validation)", got)
 	}
 
-	// === Setup → grade → set-latest job structure ===
-	jobs, _ := nested(doc, "jobs")
-	jobsMap, ok := jobs.(map[string]any)
-	if !ok {
-		t.Fatalf("jobs: not a map")
-	}
-	for _, j := range []string{"setup", "grade", "set-latest"} {
-		if _, present := jobsMap[j]; !present {
-			t.Errorf("autograde-runner.yaml missing job %q", j)
-		}
-	}
-
 	// === grade job ===
 	if got, _ := nested(doc, "jobs", "grade", "runs-on"); got != "${{ fromJSON(needs.setup.outputs.runs-on) }}" {
 		t.Errorf("grade.runs-on = %v, want fromJSON(needs.setup.outputs.runs-on) parameterization (runs-on is emitted as a JSON array to support multi-label custom runners)", got)
@@ -179,6 +190,20 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// inside containers, and our run: blocks use bash idioms (`set -euo pipefail`).
 	if got, _ := nested(doc, "jobs", "grade", "defaults", "run", "shell"); got != "bash" {
 		t.Errorf("grade.defaults.run.shell = %v, want \"bash\" (steps fail in non-bash containers)", got)
+	}
+
+	gradeCheckouts := workflowStepsByUsesPrefix(jobs["grade"], "actions/checkout@")
+	if len(gradeCheckouts) != 1 {
+		t.Fatalf("grade checkout action count = %d, want exactly one", len(gradeCheckouts))
+	}
+	gradeCheckout := gradeCheckouts[0]
+	wantGradeCheckoutInputs := map[string]any{
+		"ref":                 "${{ github.sha }}",
+		"fetch-depth":         0,
+		"persist-credentials": false,
+	}
+	if got, _ := nested(gradeCheckout, "with"); !reflect.DeepEqual(got, wantGradeCheckoutInputs) {
+		t.Errorf("grade checkout inputs = %#v, want %#v", got, wantGradeCheckoutInputs)
 	}
 
 	// === setup job: outputs the inline validator emits ===
@@ -251,6 +276,18 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	// === substring checks for content embedded inside run: scripts ===
 	// These check semantics that YAML structure can't see — shell-
 	// script lines, inline-Python statements, regex literals.
+	var pipSteps []map[string]any
+	for _, step := range workflowSteps(jobs["setup"]) {
+		run, _ := step["run"].(string)
+		if strings.Contains(run, "python3 -m pip install") {
+			pipSteps = append(pipSteps, step)
+		}
+	}
+	if len(pipSteps) != 1 {
+		t.Errorf("setup pip install step count = %d, want exactly one", len(pipSteps))
+	} else if got := pipSteps[0]["working-directory"]; got != "${{ runner.temp }}" {
+		t.Errorf("setup pip install working-directory = %#v, want runner.temp", got)
+	}
 
 	// Auto-tag step: short-SHA suffix prevents collisions; idempotency
 	// reuses an existing submit/* tag for the same SHA. `--refs` filters
@@ -334,6 +371,153 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	if !strings.Contains(body, "if: success() && steps.autograde.outputs.status != 'error'") {
 		t.Errorf("release step not gated on success() && status != 'error'")
 	}
+	if _, ok := workflowStepByID(jobs["grade"], "autograde"); !ok {
+		t.Error("grade autograde step is missing")
+	}
+	var releaseSteps []map[string]any
+	for _, step := range workflowSteps(jobs["grade"]) {
+		run, _ := step["run"].(string)
+		if strings.Contains(run, `gh release create "$TAG" result.json`) {
+			releaseSteps = append(releaseSteps, step)
+		}
+	}
+	if len(releaseSteps) != 1 {
+		t.Errorf("grade Release step count = %d, want exactly one", len(releaseSteps))
+	} else {
+		releaseStep := releaseSteps[0]
+		if got, ok := nested(releaseStep, "env", "STAGED_RELEASE_BASENAMES"); !ok || got != "${{ steps.autograde.outputs.release-assets }}" {
+			t.Errorf("Release step STAGED_RELEASE_BASENAMES = %#v", got)
+		}
+		if got, ok := nested(releaseStep, "env", "STAGED_RELEASE_DIR"); !ok || got != "${{ steps.autograde.outputs.release-assets-dir }}" {
+			t.Errorf("Release step STAGED_RELEASE_DIR = %#v", got)
+		}
+		releaseRun, _ := releaseStep["run"].(string)
+		for _, want := range []string{
+			`ASSETS_DIR="${STAGED_RELEASE_DIR:-${RUNNER_TEMP:-/tmp}/classroom50-release-assets}"`,
+			`if [[ -n "${STAGED_RELEASE_BASENAMES:-}" ]]; then`,
+			`IFS=',' read -r -a ASSET_NAMES <<< "${STAGED_RELEASE_BASENAMES:-}"`,
+			`[[ ! "$NAME" =~ ^[A-Za-z0-9._-]{1,255}$ || "$NAME" == .* || "$NAME" == *. || "$NAME" == *..* ]]`,
+			`[[ ! -f "$ASSET" || -L "$ASSET" ]]`,
+			`EXTRA_ASSETS+=("$ASSET")`,
+			`gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --yes`,
+			`gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"}`,
+		} {
+			if !strings.Contains(releaseRun, want) {
+				t.Errorf("Release shell is missing %q", want)
+			}
+		}
+		// Immutable releases reject a post-create upload/edit, so assets must be
+		// collected BEFORE the release is created (extras attached in the same
+		// `gh release create`). Assert the collection loop precedes creation.
+		collectAt := strings.Index(releaseRun, `EXTRA_ASSETS+=("$ASSET")`)
+		createAt := strings.Index(releaseRun, `gh release create "$TAG" result.json ${EXTRA_ASSETS[@]+"${EXTRA_ASSETS[@]}"}`)
+		if collectAt < 0 || createAt < 0 || collectAt >= createAt {
+			t.Errorf("Release shell must collect extras before `gh release create` (collect=%d create=%d)", collectAt, createAt)
+		}
+
+		t.Run("ReleaseShellAllowsEmptyAssetList", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), []byte("#!/bin/sh\nexit 0\n"), 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=",
+				"TAG=submit/test",
+			)
+			if output, err := cmd.CombinedOutput(); err != nil {
+				t.Fatalf("Release shell with no extras: %v\n%s", err, output)
+			}
+		})
+
+		t.Run("ReleaseShellFiltersInvalidAndCreatesWithExtras", func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			// `release view` succeeds so the exists/delete-then-recreate path runs.
+			fakeGH := []byte(`#!/bin/sh
+printf '%s\n' "$*" >> "$GH_LOG"
+`)
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+
+			for _, name := range []string{"result.json", "release-body.md"} {
+				if err := os.WriteFile(filepath.Join(tmp, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			runnerTemp := filepath.Join(tmp, "runner")
+			assetsDir := filepath.Join(runnerTemp, "classroom50-release-assets")
+			if err := os.MkdirAll(assetsDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			for _, name := range []string{"result..json", "first.pdf", "second.pdf"} {
+				if err := os.WriteFile(filepath.Join(assetsDir, name), []byte("fixture"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GH_TOKEN=test-token",
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES=result..json,first.pdf,second.pdf",
+				"STAGED_RELEASE_DIR="+assetsDir,
+				"RUNNER_TEMP="+runnerTemp,
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell: %v\n%s", err, output)
+			}
+
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(log), "result..json") {
+				t.Errorf("invalid staged basename reached gh:\n%s", log)
+			}
+			// Immutable-safe: view -> delete (exists) -> create with result.json
+			// plus the two valid extras attached atomically. No post-create upload.
+			gotCalls := strings.Split(strings.TrimSpace(string(log)), "\n")
+			wantCalls := []string{
+				"release view submit/test --repo example/classroom-assignment-student",
+				"release delete submit/test --repo example/classroom-assignment-student --yes",
+				"release create submit/test result.json " +
+					filepath.Join(assetsDir, "first.pdf") + " " +
+					filepath.Join(assetsDir, "second.pdf") +
+					" --repo example/classroom-assignment-student --title Submission submit/test --notes-file release-body.md --latest=false",
+			}
+			if !reflect.DeepEqual(gotCalls, wantCalls) {
+				t.Errorf("gh calls = %#v, want %#v", gotCalls, wantCalls)
+			}
+			if !strings.Contains(string(output), "::warning::release_assets: invalid staged basename (skipped)") {
+				t.Errorf("Release shell output missing invalid-basename warning:\n%s", output)
+			}
+		})
+	}
 
 	// set-latest uses commit-time-based comparison (not lexical tag
 	// compare) so two pushes in the same UTC second still order
@@ -347,6 +531,95 @@ func TestSkeletonFiles_AutogradeRunner(t *testing.T) {
 	}
 	if !strings.Contains(body, `gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true`) {
 		t.Errorf("set-latest job missing forward-only latest pointer flip")
+	}
+}
+
+func TestSkeletonFiles_AutogradeRunnerSkipsReservedReleaseAssetBasenamesCaseInsensitive(t *testing.T) {
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	body, ok := files[".github/workflows/autograde-runner.yaml"]
+	if !ok {
+		t.Fatal("autograde-runner.yaml missing from skeleton")
+	}
+
+	var doc map[string]any
+	if err := yaml.Unmarshal([]byte(body), &doc); err != nil {
+		t.Fatalf("parse autograde-runner.yaml: %v", err)
+	}
+	grade, ok := nested(doc, "jobs", "grade")
+	if !ok {
+		t.Fatal("autograde-runner.yaml grade job missing")
+	}
+	var releaseRun string
+	for _, step := range workflowSteps(grade) {
+		run, _ := step["run"].(string)
+		if strings.Contains(run, `gh release create "$TAG" result.json`) {
+			releaseRun = run
+			break
+		}
+	}
+	if releaseRun == "" {
+		t.Fatal("autograde-runner.yaml Release shell missing")
+	}
+
+	for _, name := range []string{
+		"result.json", "RESULT.JSON", "ReSuLt.JsOn",
+		"release-body.md", "RELEASE-BODY.MD", "Release-Body.Md",
+	} {
+		t.Run(name, func(t *testing.T) {
+			tmp := t.TempDir()
+			binDir := filepath.Join(tmp, "bin")
+			if err := os.MkdirAll(binDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			ghLog := filepath.Join(tmp, "gh.log")
+			fakeGH := []byte("#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$GH_LOG\"\n")
+			if err := os.WriteFile(filepath.Join(binDir, "gh"), fakeGH, 0o700); err != nil {
+				t.Fatal(err)
+			}
+
+			runnerTemp := filepath.Join(tmp, "runner")
+			assetsDir := filepath.Join(runnerTemp, "classroom50-release-assets")
+			if err := os.MkdirAll(assetsDir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			stagedPath := filepath.Join(assetsDir, name)
+			if err := os.WriteFile(stagedPath, []byte("tampered"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+
+			cmd := exec.Command("bash", "-c", releaseRun)
+			cmd.Dir = tmp
+			cmd.Env = append(os.Environ(),
+				"PATH="+binDir+string(os.PathListSeparator)+os.Getenv("PATH"),
+				"GH_LOG="+ghLog,
+				"GITHUB_REPOSITORY=example/classroom-assignment-student",
+				"STAGED_RELEASE_BASENAMES="+name,
+				"STAGED_RELEASE_DIR="+assetsDir,
+				"RUNNER_TEMP="+runnerTemp,
+				"TAG=submit/test",
+			)
+			output, err := cmd.CombinedOutput()
+			if err != nil {
+				t.Fatalf("Release shell: %v\n%s", err, output)
+			}
+			log, err := os.ReadFile(ghLog)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if strings.Contains(string(log), stagedPath) {
+				t.Errorf("reserved staged asset reached gh release create:\n%s", log)
+			}
+			if !strings.Contains(string(log), "release create submit/test result.json") {
+				t.Errorf("core result.json release create did not run:\n%s", log)
+			}
+			wantWarning := "::warning::release_assets: reserved staged basename " + name + " (skipped)"
+			if !strings.Contains(string(output), wantWarning) {
+				t.Errorf("Release shell output missing %q:\n%s", wantWarning, output)
+			}
+		})
 	}
 }
 
@@ -459,6 +732,58 @@ func nested(doc any, keys ...string) (any, bool) {
 		cur = v
 	}
 	return cur, true
+}
+
+func sortedMapKeys(value any) []string {
+	values, ok := value.(map[string]any)
+	if !ok {
+		return nil
+	}
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+func workflowSteps(job any) []map[string]any {
+	jobMap, ok := job.(map[string]any)
+	if !ok {
+		return nil
+	}
+	rawSteps, ok := jobMap["steps"].([]any)
+	if !ok {
+		return nil
+	}
+	steps := make([]map[string]any, 0, len(rawSteps))
+	for _, raw := range rawSteps {
+		if step, ok := raw.(map[string]any); ok {
+			steps = append(steps, step)
+		}
+	}
+	return steps
+}
+
+func workflowStepByID(job any, id string) (map[string]any, bool) {
+	for _, step := range workflowSteps(job) {
+		if step["id"] == id {
+			return step, true
+		}
+	}
+	return nil, false
+}
+
+func workflowStepsByUsesPrefix(job any, prefix string) []map[string]any {
+	var matches []map[string]any
+	foldedPrefix := strings.ToLower(prefix)
+	for _, step := range workflowSteps(job) {
+		uses, _ := step["uses"].(string)
+		if strings.HasPrefix(strings.ToLower(uses), foldedPrefix) {
+			matches = append(matches, step)
+		}
+	}
+	return matches
 }
 
 func keys(m map[string]string) []string {

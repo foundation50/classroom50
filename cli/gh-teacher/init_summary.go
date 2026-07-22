@@ -27,6 +27,12 @@ type initSummary struct {
 	// each with its GitHub-UI instruction. Derived from the read-back.
 	LockdownManualSteps []orgpolicy.ManualStep `json:"lockdown_manual_steps"`
 	FeedbackPRReady     bool                   `json:"feedback_pr_ready"`
+	// BudgetCap describes the reconciliation outcome for the org's $0 Actions
+	// spending cap: "created" (init made it), "present" (already conforming),
+	// "warn" (teacher set a cap over the warn threshold — left untouched),
+	// "unreadable" (couldn't read budgets), "failed" (create write denied), or
+	// "" (not attempted, e.g. dry run). Informational; it never gates Ready.
+	BudgetCap string `json:"budget_cap"`
 	// ServiceToken describes how the token ended up configured this run, so a
 	// re-run is self-explanatory.
 	ServiceToken string `json:"service_token"`
@@ -123,6 +129,18 @@ func (s *initSummary) renderHuman(u *ui.UI) {
 		u.Item("feedback PR prerequisites: ready")
 	} else {
 		u.Item("feedback PR prerequisites: incomplete — assignments using --feedback-pr may not open PRs")
+	}
+	switch s.BudgetCap {
+	case "created":
+		u.Item("actions budget cap: created a $0 spending cap (blocks paid Actions minutes)")
+	case "present":
+		u.Item("actions budget cap: in place")
+	case "warn":
+		u.Item("actions budget cap: a budget over $%d is set — left as-is; lower it to $0 to hard-stop paid Actions minutes", orgpolicy.BudgetWarnThreshold)
+	case "unreadable":
+		u.Item("actions budget cap: couldn't verify (token lacks Organization Administration: Read); set a $0 Actions budget by hand")
+	case "failed":
+		u.Item("actions budget cap: couldn't be created (token needs Organization Administration: Read and write); set a $0 Actions budget by hand")
 	}
 
 	// 2b. Informational notes (plan/policy caveats that aren't actions).

@@ -40,7 +40,12 @@
   --color-success: #3f7d54;
   --color-success-content: #fafafa;
   --color-warning: #a4741d;
-  --color-warning-content: #1b1b1d;
+  /* Light content so a SOLID warning fill (btn-warning / non-soft badge) reads
+     as white-on-gold like every other semantic fill here — the dark #1b1b1d
+     content it shipped with gave dark-on-gold, failing contrast. Soft badges are
+     unaffected (they use --color-warning as foreground, not the content token).
+     The fill itself is darkened for text use in the AA-override block below. */
+  --color-warning-content: #fafafa;
   --color-error: #b0392f;
   --color-error-content: #fafafa;
 
@@ -185,6 +190,30 @@ body {
 @keyframes shimmer {
   100% {
     transform: translateX(100%);
+  }
+}
+
+/* Scroll affordance for capped-height lists. `scroll-fade-y` marks the
+   container; a small hook (useScrollFade) sets data-fade-top / data-fade-bottom
+   to the edge(s) that have more content, and the mask softens only that edge.
+   No hook / no support => no attributes => no fade, list still scrolls. */
+@utility scroll-fade-y {
+  overflow-y: auto;
+  --scroll-fade-size: 1.75rem;
+  --scroll-fade-top: 0px;
+  --scroll-fade-bottom: 0px;
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 var(--scroll-fade-top),
+    #000 calc(100% - var(--scroll-fade-bottom)),
+    transparent 100%
+  );
+  &[data-fade-top="true"] {
+    --scroll-fade-top: var(--scroll-fade-size);
+  }
+  &[data-fade-bottom="true"] {
+    --scroll-fade-bottom: var(--scroll-fade-size);
   }
 }
 

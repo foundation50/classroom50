@@ -125,14 +125,15 @@ Click the "+ Assignment" button on the classroom page to create a new assignment
 
 ### Creating an Assignment - Advanced Settings
 
-![View of Advanced Settings for "+ Assignment" form](images/web_create_assignment_advanced.png)
-
 For teachers seeking more technical customization of their autograding workflows, the assignment creation form has a section dedicated to advanced settings. These advanced settings include:
 
 - **GitHub Runner**: [GitHub Actions](https://github.com/features/actions) autograding workflows run with [GitHub Runners](https://docs.github.com/en/actions/concepts/runners/github-hosted-runners), essentially virtual machines that act as the environment within which the workflows execute. For most use cases, `ubuntu-latest` is a reasonable default, but you can customize the runner used for your assignment here.
 - **Docker Image**: This field allows specifying a custom Docker image in which autograding checks are run. Note that when using this override, the Runner **must** be an Ubuntu variant, otherwise Actions will trigger an error.
 - **Setup Command**: In cases where an assignment needs some setup work before autograding can actually be processed (e.g., to compile some C code using `gcc`), specify a shell command here that runs before autograding begins.
 - **Allowed files**: To prevent certain files from being included for consideration during the autograding process, this serves as a `.gitignore`-style list of files or patterns that teachers can use to include only certain files.
+- **Submission release files**: Enter one exact workspace-relative file path per line. The workflow collects these files after grading and uploads them to the submission Release under their basenames. Paths are not globs, and basenames must be unique and Release-safe. Missing or unsafe files produce warnings without changing the grade or suppressing `result.json`.
+
+Existing organizations must refresh the shared skeleton before using this field. Submission publishing does not support GitHub Immutable Releases. See [Attaching generated files to submission Releases](Autograders#attaching-generated-files-to-submission-releases) for path rules, limits, rollout, and rerun behavior.
 
 ### Creating an Assignment - Autograding Tests
 

@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -27,13 +28,20 @@ type testCmdFixture struct {
 	treePath string
 	// refPatched reports whether the branch ref was advanced.
 	refPatched bool
+	// patchAttempts records how many times the branch ref was patched.
+	patchAttempts int
 }
 
 // newTestCmdServer builds the fixture server. assignmentsBody is served
 // for cs-principles/assignments.json; autograderExists controls the 200
-// vs 404 of the cs-principles/autograders/hello/autograder.py probe.
-func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists bool) (*httptest.Server, *testCmdFixture) {
+// vs 404 of the cs-principles/autograders/hello/autograder.py probe. When
+// rebasedAssignmentsBody is supplied, the first ref patch loses a race and
+// the retry reads that body from parent-sha-2.
+func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists bool, rebasedAssignmentsBody ...string) (*httptest.Server, *testCmdFixture) {
 	t.Helper()
+	if len(rebasedAssignmentsBody) > 1 {
+		t.Fatal("newTestCmdServer accepts at most one rebased assignments body")
+	}
 	fix := &testCmdFixture{}
 
 	mux := http.NewServeMux()
@@ -41,9 +49,13 @@ func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists boo
 		_ = json.NewEncoder(w).Encode(map[string]string{"default_branch": "main"})
 	})
 	mux.HandleFunc("/repos/o/classroom50/contents/cs-principles/assignments.json", func(w http.ResponseWriter, r *http.Request) {
+		body := assignmentsBody
+		if len(rebasedAssignmentsBody) == 1 && r.URL.Query().Get("ref") == "parent-sha-2" {
+			body = rebasedAssignmentsBody[0]
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"type":     "file",
-			"content":  base64.StdEncoding.EncodeToString([]byte(assignmentsBody)),
+			"content":  base64.StdEncoding.EncodeToString([]byte(body)),
 			"encoding": "base64",
 		})
 	})
@@ -70,17 +82,37 @@ func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists boo
 		if r.Method == http.MethodPatch {
 			fix.mu.Lock()
 			fix.refPatched = true
+			fix.patchAttempts++
+			attempt := fix.patchAttempts
 			fix.mu.Unlock()
+			if len(rebasedAssignmentsBody) == 1 && attempt == 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnprocessableEntity)
+				_, _ = io.WriteString(w, `{"message":"Update is not a fast forward"}`)
+				return
+			}
 			w.WriteHeader(http.StatusOK)
 			return
 		}
+		fix.mu.Lock()
+		attempts := fix.patchAttempts
+		fix.mu.Unlock()
+		parentSHA := "parent-sha"
+		if len(rebasedAssignmentsBody) == 1 && attempts > 0 {
+			parentSHA = "parent-sha-2"
+		}
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"object": map[string]string{"sha": "parent-sha"},
+			"object": map[string]string{"sha": parentSHA},
 		})
 	})
 	mux.HandleFunc("/repos/o/classroom50/git/commits/parent-sha", func(w http.ResponseWriter, r *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"tree": map[string]string{"sha": "parent-tree"},
+		})
+	})
+	mux.HandleFunc("/repos/o/classroom50/git/commits/parent-sha-2", func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"tree": map[string]string{"sha": "parent-tree-2"},
 		})
 	})
 	mux.HandleFunc("/repos/o/classroom50/git/blobs", func(w http.ResponseWriter, r *http.Request) {
@@ -737,6 +769,74 @@ func TestRunAssignmentAdd_PreservesUnknownEntryField(t *testing.T) {
 	fix.mu.Unlock()
 	if !strings.Contains(committed, "future_field") {
 		t.Errorf("committed blob dropped future_field:\n%s", committed)
+	}
+}
+
+func TestRunAssignmentAdd_PreservesReleaseAssets(t *testing.T) {
+	seeded := `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [{
+    "slug": "hello",
+    "name": "Hello",
+    "template": {"owner":"cs50","repo":"hello-template","branch":"main"},
+    "mode": "individual",
+    "autograder": "default",
+    "release_assets": ["report.pdf", "plots/chart.png"]
+  }]
+}`
+	server, fix := newTestCmdServer(t, seeded, false)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	if err := runAssignmentAdd(client, &stdout, &stderr, helloAddParams()); err != nil {
+		t.Fatalf("runAssignmentAdd: %v", err)
+	}
+	got := decodeCommitted(t, fix).Assignments[0].ReleaseAssets
+	want := []string{"report.pdf", "plots/chart.png"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("release_assets = %#v, want %#v", got, want)
+	}
+}
+
+func TestRunAssignmentAdd_RetryDoesNotResurrectPreservedFieldsAfterConcurrentDelete(t *testing.T) {
+	seeded := `{
+  "schema": "classroom50/assignments/v1",
+  "assignments": [{
+    "slug": "hello",
+    "name": "Hello",
+    "template": {"owner":"cs50","repo":"hello-template","branch":"main"},
+    "mode": "individual",
+    "autograder": "default",
+    "release_assets": ["report.pdf"],
+    "future_field": {"nested": true}
+  }]
+}`
+	rebased := `{"schema":"classroom50/assignments/v1","assignments":[]}`
+	server, fix := newTestCmdServer(t, seeded, false, rebased)
+	client := githubtest.NewTestClient(t, server)
+
+	var stdout, stderr bytes.Buffer
+	if err := runAssignmentAdd(client, &stdout, &stderr, helloAddParams()); err != nil {
+		t.Fatalf("runAssignmentAdd: %v", err)
+	}
+
+	fix.mu.Lock()
+	patchAttempts := fix.patchAttempts
+	fix.mu.Unlock()
+	if patchAttempts != 2 {
+		t.Fatalf("branch patch attempts = %d, want 2", patchAttempts)
+	}
+
+	file := decodeCommitted(t, fix)
+	if len(file.Assignments) != 1 || file.Assignments[0].Slug != "hello" {
+		t.Fatalf("committed assignments = %#v, want exactly one hello entry", file.Assignments)
+	}
+	got := file.Assignments[0]
+	if len(got.ReleaseAssets) != 0 {
+		t.Errorf("release_assets = %#v, want empty after concurrent delete", got.ReleaseAssets)
+	}
+	if _, ok := got.Extra["future_field"]; ok {
+		t.Errorf("Extra = %#v, future_field was resurrected after concurrent delete", got.Extra)
 	}
 }
 

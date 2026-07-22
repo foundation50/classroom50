@@ -37,7 +37,16 @@
     "no": "No",
     "skipToMainContent": "Skip to main content",
     "openOrgOnGitHub": "Open {{org}} on GitHub",
-    "dismissNotification": "Dismiss notification"
+    "dismissNotification": "Dismiss notification",
+    "pagination": {
+      "show": "Show",
+      "entries": "entries",
+      "showAria": "Rows per page",
+      "range": "{{from}} to {{to}} of {{total}}",
+      "navAria": "Pagination",
+      "previous": "Previous page",
+      "next": "Next page"
+    }
   },
   "notFound": {
     "title": "Page not found",
@@ -573,11 +582,21 @@
       "button": "Set up new organization",
       "title": "Set up a new Classroom 50 organization",
       "description": "Pick one of your GitHub organizations to configure Classroom 50 in. Don't see the one you want? Create it on GitHub first.",
-      "pickPrompt": "Organizations ready to set up",
+      "pickPrompt_one": "Organization ready to set up ({{count}})",
+      "pickPrompt_other": "Organizations ready to set up ({{count}})",
       "createOnGitHub": "Create an organization on GitHub",
-      "allSetUp": "All of your organizations are already set up.",
+      "allSetUp": "All organizations we can see are already set up.",
       "setUp": "Set up",
-      "freePlanDisabled": "Free plan — Classroom 50 needs a Team or Enterprise organization"
+      "notSupportedBadge": "Not supported",
+      "details": "Details",
+      "freePlanInfo": {
+        "title": "This organization is on the Free plan",
+        "body": "Classroom 50 only works with organizations on the GitHub Team or Enterprise plan.",
+        "educationTitle": "Get GitHub Team for free",
+        "educationBody": "As a verified teacher, you can upgrade any organization you own to GitHub Team at no cost through GitHub Education.",
+        "educationCta": "Learn more at GitHub Education",
+        "dismiss": "Got it"
+      }
     },
     "missingNotice": {
       "title": "Not seeing your organization?",
@@ -588,7 +607,6 @@
     },
     "card": {
       "noAccessBadge": "No <code>classroom50</code> access",
-      "planTitleFree": "Free plan — Classroom 50 needs a Team or Enterprise organization",
       "planTitlePaid": "GitHub plan — Classroom 50 can be set up on Team and Enterprise plans",
       "viewOnGitHub": "View on GitHub",
       "openOnGitHub": "Open {{org}} on GitHub",
@@ -701,7 +719,7 @@
       "emptyRepoHelp": "Create each student's repository completely empty: no starter files, no autograding, no feedback pull request. For assignments where students build everything from scratch, including their own GitHub Actions. This choice is permanent for the assignment.",
       "emptyRepoLocked": "It can't be changed after creation.",
       "advanced": "Advanced settings",
-      "advancedHelp": "Optional runtime overrides. Blank uses the defaults (ubuntu-latest + Python 3.12).",
+      "advancedHelp": "Optional grading and runtime settings. Blank fields use their documented defaults.",
       "dockerImage": "Docker image",
       "dockerImagePlaceholder": "e.g. gcc:13",
       "dockerImageTip": "Grade inside this public Docker image instead of a GitHub-hosted runner. The image provides the OS and its packages. It must be publicly pullable (for example ubuntu:24.04).",
@@ -713,6 +731,11 @@
       "setupCommandTip": "A command run once before grading, for example to compile. It is added as a leading 0-point autograding step named “setup”. A non-zero exit fails the run.",
       "allowedFiles": "Allowed files",
       "allowedFilesTip": "Ordered {{gitignore}}-style patterns, one per line, defining which files belong to a submission (last match wins, {{bang}} re-includes). E.g. {{star}} then {{example}} allows only {{result}}. Blank allows every file.",
+      "releaseAssets": "Submission release files",
+      "releaseAssetsTip": "One exact workspace-relative file path per line; paths are exact, not glob patterns, and may total at most 8 KiB of UTF-8 text. Files are collected after grading and attached on both passing and failing grades; missing files are skipped. Release filenames may use only ASCII letters, numbers, dots, underscores, and hyphens, and may not begin or end with a dot or contain consecutive periods.",
+      "releaseAssetsPlaceholder": "report.pdf\nplots/chart.png",
+      "releaseAssetCount_one": "{{count}} release file",
+      "releaseAssetCount_other": "{{count}} release files",
       "patternCount_one": "{{count}} pattern",
       "patternCount_other": "{{count}} patterns",
       "passThresholdToggle": "Set a passing threshold",
@@ -758,7 +781,13 @@
         "nameRequired": "Assignment name is required.",
         "slugRequired": "Assignment slug is required.",
         "maxGroupSizeInvalid": "Max group size must be a valid number.",
-        "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}."
+        "passThresholdRange": "Pass threshold must be a whole number between {{min}} and {{max}}.",
+        "releaseAssetsTooMany": "Choose at most {{max}} submission release files (currently {{count}}).",
+        "releaseAssetsTooLarge": "Submission release file paths may total at most {{max}} UTF-8 bytes (8 KiB); currently {{bytes}}.",
+        "releaseAssetsInvalidPath": "{{path}} is not an exact workspace-relative file path.",
+        "releaseAssetsInvalidBasename": "{{basename}} is not a safe Release filename or is reserved.",
+        "releaseAssetsDuplicatePath": "{{path}} is listed more than once; each release file path must be unique.",
+        "releaseAssetsDuplicateBasename": "{{basename}} would be uploaded more than once; Release filenames must be unique."
       }
     },
     "autograder": {
@@ -1115,6 +1144,7 @@
       "verdictFail": "Org policy incomplete",
       "stateEnforced": "OK",
       "stateUnenforced": "Needs attention",
+      "stateWarn": "Recommended",
       "stateUnreadable": "Unreadable",
       "viewOnGitHub": "View on GitHub",
       "fixIt": "Fix it",
@@ -1139,6 +1169,34 @@
       "renameModalBody": "This renames the classroom50 config repo's default branch to \"main\". If any students have already accepted assignments, their autograde workflow pins the current branch name and will stop grading until they re-accept or you re-point their shim. Prefer this only before students accept, or be ready to re-run their setup.",
       "memberPermsToggle": "Member permissions we configure",
       "memberPermsHint": "The full list of organization member privileges Classroom 50 sets, including the ones already in place. Drifted ones are called out above."
+    },
+    "actions": {
+      "title": "GitHub Actions",
+      "description": "Pause autograding org-wide to stop Actions spend. Course management keeps working.",
+      "openSettings": "Open Actions settings",
+      "statusActive": "Autograding on",
+      "statusPaused": "Autograding paused",
+      "statusDisabled": "Actions off",
+      "usageTitle": "Actions minutes this month",
+      "usageOfIncluded": "{{used}} min used / {{included}} min included",
+      "usageMinutes": "{{minutes}} min used",
+      "usageCost": "${{amount}} billed this month.",
+      "usageOverQuota": "{{over}} minutes over the included quota.",
+      "budgetNone": "No spending budget set.",
+      "budgetHardStop": "$0 hard-stop budget set — paid minutes blocked.",
+      "budgetAmount": "Spending budget: ${{amount}}.",
+      "budgetManage": "Manage budgets",
+      "loading": "Checking status…",
+      "applying": "Updating…",
+      "toggleLabel": "Pause autograding for all student repositories",
+      "toggleHint": "Turning this on stops student pushes from being graded (no Actions minutes). The classroom50 config repo keeps working. Turn off to resume.",
+      "pausedNotice": "Paused — student pushes aren't graded. Re-running org setup won't resume until you turn this off.",
+      "disabledNotice": "Actions are off for the whole org, so nothing runs. Re-run org setup or enable Actions on GitHub.",
+      "unknownNotice": "Couldn't read this org's Actions permissions — you may lack owner rights, or an enterprise policy controls them.",
+      "confirmTitle": "Pause autograding for the whole organization?",
+      "confirmBody": "Student submissions won't be graded until you resume. The classroom50 config repo keeps working. Reversible any time.",
+      "confirmButton": "Pause autograding",
+      "toggleFailed": "Couldn't update Actions permissions: {{message}}"
     },
     "rerun": {
       "title": "Re-run setup",
@@ -1200,6 +1258,12 @@
         "what": "Enables GitHub Actions for the organization.",
         "why": "Autograding and the published assignment site run as Actions workflows, so they can't run until Actions is enabled.",
         "remediation": "Open the org Actions settings and allow Actions to run (set the policy to allow all actions, or at minimum the workflows Classroom 50 ships)."
+      },
+      "orgBudget": {
+        "title": "Actions spending cap",
+        "what": "Creates a $0 GitHub Actions spending cap (only if none exists).",
+        "why": "A $0 hard-stop budget blocks paid Actions minutes, so a runaway autograde workflow can't run up a bill. An existing budget you set is left untouched.",
+        "remediation": "Open the org billing budgets settings and set a $0 GitHub Actions budget with \"prevent further usage\" enabled (needs Organization Administration access)."
       },
       "orgPrCreation": {
         "title": "Actions pull request creation",
@@ -1278,6 +1342,12 @@
       "body": "All Classroom 50 workflow files now match the latest bundled version.",
       "dismiss": "Dismiss"
     }
+  },
+  "budgetCreated": {
+    "title": "Actions spending cap set to $0",
+    "body": "Classroom 50 created a $0 GitHub Actions spending budget for this organization, so a runaway autograde workflow can't run up a bill. Raise or remove it any time on GitHub.",
+    "manage": "Manage the budget on GitHub",
+    "dismiss": "Got it"
   },
   "classes": {
     "createTitle": "Create classroom",
@@ -1543,23 +1613,28 @@
     "lateBadge_one": "{{count}} late",
     "lateBadge_other": "{{count}} late",
     "downloadCsv": "Download scores (CSV)",
-    "viewSourceRepo": "View source repository",
-    "collectionNote": "Submissions are collected automatically, but new ones can take up to 24 hours to appear.",
+    "viewSourceRepo": "View template",
     "emptyRepoNote": "This assignment uses empty repositories — autograding, scores, and the feedback pull request are disabled. Students create and push their own work; the table below shows who has accepted.",
-    "lastCollected": "Last collected (org-wide) {{when}}.",
-    "updated": "Updated {{when}}",
-    "justNow": "just now",
-    "refresh": "Refresh submissions",
+    "freshness": {
+      "collected": "Submission data synced {{when}}",
+      "neverCollected": "Submission data not synced yet",
+      "sync": "Sync now",
+      "syncHelp": "New pushes to assignment repos since the last collection. Run Collect Scores to rebuild scores.json and grade the newest work.",
+      "refresh": "Refresh submissions",
+      "refreshing": "Collecting…",
+      "refreshHelp": "Run Collect Scores to rebuild scores.json from the latest pushes"
+    },
+    "live": {
+      "incomplete_one": "{{count}} repo couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\".",
+      "incomplete_other": "{{count}} repos couldn't be read, so live submission status may be incomplete. Retry, or run \"Sync submissions now\"."
+    },
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",
-      "invite": "Invite link"
+      "share": "Share"
     },
     "metrics": {
       "title": "Submission metrics"
-    },
-    "dashboard": {
-      "never": "never"
     },
     "errors": {
       "gradebookLoad": "Couldn't load the gradebook.",
@@ -1679,11 +1754,15 @@
       "showSubmissions": "Show all submissions",
       "submissionCount_one": "{{count}} submission",
       "submissionCount_other": "{{count}} submissions",
+      "staleCount": "New",
+      "staleCountTitle": "This student has pushed more submissions than have been graded. Run \"Sync submissions now\" to grade and score the newest.",
       "late": "Late",
       "lateRowTitle": "The latest submission was pushed after the deadline.",
       "lateHistoryTitle": "Pushed after the deadline.",
       "gradedAt": "Graded {{date}}",
       "gradedAtTitle": "When the autograder last (re-)graded this submission. Regrading updates this without changing the submission time.",
+      "liveLatest": "Latest push {{date}} · not yet graded",
+      "liveLatestTitle": "A newer submission was pushed after the last collection, so it isn't graded yet. Run \"Sync submissions now\" to grade and score it.",
       "membersAria": "View and manage group members",
       "members": "Members",
       "openRepoLabel": "Open repository {{repo}}",
@@ -1696,6 +1775,10 @@
       "noDetailsLabel": "No autograder details yet",
       "noDetails": "No details yet",
       "noGradingTitle": "Autograding is disabled for this assignment",
+      "resolvingNonSubmitters": "Checking who hasn't submitted yet…",
+      "loading": "Loading submissions…",
+      "pendingGrade": "Pending",
+      "pendingGradeTitle": "Submitted — grade not yet collected. Run \"Sync submissions now\" or wait for the nightly collection.",
       "notSubmitted": "Not submitted",
       "acceptedAwaiting": "Accepted · awaiting submission",
       "notAccepted": "Not accepted",

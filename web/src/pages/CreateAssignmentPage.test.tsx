@@ -31,8 +31,15 @@ vi.mock("@/lib/githubHealth/githubStatusApi", () => ({
 // Stub the form to a single submit button that fires onSubmit with a minimal
 // payload — the page's onError/onSuccess wiring is what's under test.
 vi.mock("@/pages/assignments/CreateAssignmentForm", () => ({
-  default: ({ onSubmit }: { onSubmit: (values: { slug: string }) => void }) => (
-    <button type="button" onClick={() => onSubmit({ slug: "hw1" })}>
+  default: ({
+    onSubmit,
+  }: {
+    onSubmit: (values: { slug: string; release_assets: string }) => void
+  }) => (
+    <button
+      type="button"
+      onClick={() => onSubmit({ slug: "hw1", release_assets: "report.pdf" })}
+    >
       submit
     </button>
   ),
@@ -120,6 +127,15 @@ beforeEach(() => {
   navigateMock.mockClear()
   __resetGitHubHealthForTest()
   vi.stubGlobal("scrollTo", vi.fn())
+})
+
+it("passes release_assets through the create boundary", () => {
+  render(<CreateAssignmentPage />)
+  submit()
+  expect(mutateAsync).toHaveBeenCalledWith(
+    expect.objectContaining({ release_assets: "report.pdf" }),
+    expect.any(Object),
+  )
 })
 
 afterEach(() => {

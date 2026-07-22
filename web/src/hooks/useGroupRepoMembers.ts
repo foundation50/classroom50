@@ -2,7 +2,12 @@ import { useMemo } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { githubKeys, REPO_READ_CONCURRENCY } from "@/github-core/queries"
+import {
+  githubKeys,
+  REPO_READ_CONCURRENCY,
+  retryOnRateLimit,
+  withGithubReadSlot,
+} from "@/github-core/queries"
 import type { GitHubUser } from "@/github-core/types"
 import { mapWithConcurrency } from "@/util/concurrency"
 
@@ -22,7 +27,7 @@ type GroupRepoRef = { owner: string; repoName: string }
 export function useGroupRepoMemberLogins(
   org: string,
   repos: GroupRepoRef[],
-): Set<string> {
+): { logins: Set<string>; isPending: boolean } {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
 
@@ -31,7 +36,9 @@ export function useGroupRepoMemberLogins(
   // of group repos changes, not on every render.
   const repoKey = [...repoNames].sort().join(",")
 
-  const { data } = useQuery({
+  const enabled = Boolean(org) && repoNames.length > 0
+
+  const { data, isLoading } = useQuery({
     queryKey: [...githubKeys.all, "group-collaborators", org, repoKey] as const,
     queryFn: async () => {
       const logins = new Set<string>()
@@ -47,8 +54,15 @@ export function useGroupRepoMemberLogins(
           try {
             // affiliation=direct excludes org-inherited access (owners/admins),
             // matching useGetRepoCollaborators so both share one cache entry.
-            const collaborators = await client.request<GitHubUser[]>(
-              `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+            // Through the shared read slot (+ rate-limit retry) so this fan-out
+            // and the live-submissions fan-out share one concurrency budget on
+            // the same page load rather than each bursting to REPO_READ_CONCURRENCY.
+            const collaborators = await withGithubReadSlot(() =>
+              retryOnRateLimit(() =>
+                client.request<GitHubUser[]>(
+                  `/repos/${encodeURIComponent(org)}/${encodeURIComponent(repo)}/collaborators?affiliation=direct`,
+                ),
+              ),
             )
             // Prime the per-repo cache the rows and Members modal read from.
             queryClient.setQueryData(
@@ -64,9 +78,15 @@ export function useGroupRepoMemberLogins(
       return logins
     },
     staleTime: 60 * 1000,
-    enabled: Boolean(org) && repoNames.length > 0,
+    enabled,
   })
 
   const empty = useMemo(() => new Set<string>(), [])
-  return data ?? empty
+  return {
+    logins: data ?? empty,
+    // Pending only while an enabled fetch hasn't resolved yet. A disabled hook
+    // (no group repos) is never pending — there's nothing to reconcile — so the
+    // "no group" list can settle immediately.
+    isPending: enabled && isLoading,
+  }
 }
