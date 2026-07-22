@@ -1595,7 +1595,7 @@
     "menu": {
       "actions": "Actions",
       "metrics": "Metrics",
-      "invite": "Invite link"
+      "share": "Share"
     },
     "metrics": {
       "title": "Submission metrics"

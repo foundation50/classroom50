@@ -8,7 +8,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import MissingParams from "@/components/MissingParams"
-import { Alert, Badge, Button, Spinner } from "@/components/ui"
+import { Alert, Badge, Spinner } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import SubmissionsTable from "@/pages/submissions/SubmissionsTable"
 import SubmissionsControls from "@/pages/submissions/SubmissionsControls"
@@ -721,27 +721,6 @@ const SubmissionsPageContent = () => {
             )}
           </div>
         }
-        // One honest freshness surface (mode toggle + provenance line + refresh +
-        // degraded-read warning), right-aligned in the header opposite the title
-        // so it fills the space instead of taking its own full-width row.
-        action={
-          <DataFreshness
-            mode={liveActive ? "live" : "static"}
-            lastCollectedLabel={lastCollectedLabel}
-            fetching={scoresFetching || liveFetching}
-            errorCount={liveErrorCount}
-            emptyRepo={isEmptyRepoAssignment}
-            liveCapable={liveCapable}
-            onViewModeChange={setViewMode}
-            onRefresh={() => {
-              // Always refresh the snapshot (grades live there in both modes).
-              // Only re-run the live fan-out in live mode — the live query is
-              // disabled in static, so refetching it there is an inert no-op.
-              refetchScores()
-              if (liveActive) refetchLive()
-            }}
-          />
-        }
       />
 
       {/* Live status strip. Full phase mapping: dispatching stays a quiet
@@ -836,41 +815,42 @@ const SubmissionsPageContent = () => {
         sections={sections}
         liveCapable={liveCapable}
         viewMode={liveActive ? "live" : "static"}
+        leading={
+          <DataFreshness
+            mode={liveActive ? "live" : "static"}
+            lastCollectedLabel={lastCollectedLabel}
+            fetching={scoresFetching || liveFetching}
+            errorCount={liveErrorCount}
+            emptyRepo={isEmptyRepoAssignment}
+            liveCapable={liveCapable}
+            onViewModeChange={setViewMode}
+            onRefresh={() => {
+              // Always refresh the snapshot (grades live there in both modes).
+              // Only re-run the live fan-out in live mode — the live query is
+              // disabled in static, so refetching it there is an inert no-op.
+              refetchScores()
+              if (liveActive) refetchLive()
+            }}
+          />
+        }
         trailing={
-          <>
-            {!liveActive && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setMetricsOpen(true)}
-                title={t("submissions.metrics.title")}
-              >
-                {t("submissions.menu.metrics")}
-              </Button>
-            )}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setAcceptOpen(true)}
-              title={t("submissions.accept.heading")}
-            >
-              {t("submissions.menu.invite")}
-            </Button>
-            <SubmissionsActionsMenu
-              collecting={collecting}
-              regrading={regrading}
-              regradeAllActive={regradeAllActive}
-              canRegradeAll={canRegradeAll}
-              emptyRoster={emptyRoster.show}
-              emptyRepo={isEmptyRepoAssignment}
-              onCollect={() => collectScores.collect()}
-              onRegradeAll={() => setRegradeConfirmOpen(true)}
-              viewHref={viewRun?.html_url || viewWorkflowUrl}
-              viewLabel={viewLabel}
-              onDownloadCsv={downloadScoresCsv}
-              downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
-            />
-          </>
+          <SubmissionsActionsMenu
+            collecting={collecting}
+            regrading={regrading}
+            regradeAllActive={regradeAllActive}
+            canRegradeAll={canRegradeAll}
+            emptyRoster={emptyRoster.show}
+            emptyRepo={isEmptyRepoAssignment}
+            onShare={() => setAcceptOpen(true)}
+            // Metrics summarizes the graded snapshot; hide it in live view.
+            onMetrics={liveActive ? undefined : () => setMetricsOpen(true)}
+            onCollect={() => collectScores.collect()}
+            onRegradeAll={() => setRegradeConfirmOpen(true)}
+            viewHref={viewRun?.html_url || viewWorkflowUrl}
+            viewLabel={viewLabel}
+            onDownloadCsv={downloadScoresCsv}
+            downloadDisabled={!scoresInfo.length && !nonSubmitters.length}
+          />
         }
       />
       <SubmissionsTable

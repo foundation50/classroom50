@@ -13,6 +13,7 @@ const baseProps = {
   regrading: false,
   regradeAllActive: false,
   emptyRoster: false,
+  onShare: () => {},
   onCollect: () => {},
   onRegradeAll: () => {},
   viewHref: "https://example.test/run",
@@ -40,5 +41,19 @@ describe("SubmissionsActionsMenu — canRegradeAll gate", () => {
   it("defaults to showing Regrade all when the prop is omitted", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)
     expect(screen.queryByText("submissions.regradeAll.label")).not.toBeNull()
+  })
+})
+
+describe("SubmissionsActionsMenu — Share + Metrics items", () => {
+  it("always shows Share (the first item)", () => {
+    render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.menu.share")).not.toBeNull()
+  })
+
+  it("shows Metrics only when onMetrics is provided (hidden in live view)", () => {
+    const { rerender } = render(<SubmissionsActionsMenu {...baseProps} />)
+    expect(screen.queryByText("submissions.menu.metrics")).toBeNull()
+    rerender(<SubmissionsActionsMenu {...baseProps} onMetrics={() => {}} />)
+    expect(screen.queryByText("submissions.menu.metrics")).not.toBeNull()
   })
 })

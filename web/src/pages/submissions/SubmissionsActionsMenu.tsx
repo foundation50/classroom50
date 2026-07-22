@@ -1,18 +1,21 @@
 import {
+  BarChart3,
   ChevronDown,
   DownloadCloud,
   ExternalLink,
   FileDown,
   RefreshCw,
+  Share2,
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui"
 
 // Consolidates the workflow actions (Collect now / Regrade all / View workflow)
-// plus the CSV export into one dropdown so the toolbar stays compact and the
-// roster surfaces higher. daisyUI dropdowns are focus-driven; selecting an item
-// blurs to close. Disabled/loading gating mirrors the former inline buttons.
+// plus the CSV export, Share (accept link), and Metrics into one dropdown so the
+// toolbar stays compact and the roster surfaces higher. daisyUI dropdowns are
+// focus-driven; selecting an item blurs to close. Disabled/loading gating
+// mirrors the former inline buttons.
 export function SubmissionsActionsMenu({
   collecting,
   regrading,
@@ -20,6 +23,8 @@ export function SubmissionsActionsMenu({
   canRegradeAll = true,
   emptyRoster,
   emptyRepo = false,
+  onShare,
+  onMetrics,
   onCollect,
   onRegradeAll,
   viewHref,
@@ -39,6 +44,11 @@ export function SubmissionsActionsMenu({
   // empty_repo assignment: never autogrades, so the grading actions (Collect
   // now / Regrade all / View workflow) are hidden — only the CSV export stays.
   emptyRepo?: boolean
+  // Opens the Share (accept-link) modal — the first item.
+  onShare: () => void
+  // Opens the Metrics modal. Omitted (hidden) in live view, where the graded
+  // snapshot stats don't apply.
+  onMetrics?: () => void
   onCollect: () => void
   onRegradeAll: () => void
   viewHref: string
@@ -88,6 +98,40 @@ export function SubmissionsActionsMenu({
         tabIndex={0}
         className="dropdown-content menu z-10 mt-1 w-64 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
       >
+        {/* Share (accept link) — the first item, since inviting students is the
+            most common non-grading action. */}
+        <li>
+          <button
+            type="button"
+            onClick={() => {
+              closeMenu()
+              onShare()
+            }}
+          >
+            <Share2 aria-hidden="true" className="size-4" />
+            {t("submissions.menu.share")}
+          </button>
+        </li>
+        {/* Metrics — graded-snapshot stats; hidden in live view (onMetrics
+            omitted there). */}
+        {onMetrics && (
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu()
+                onMetrics()
+              }}
+            >
+              <BarChart3 aria-hidden="true" className="size-4" />
+              {t("submissions.menu.metrics")}
+            </button>
+          </li>
+        )}
+        <div
+          className="my-1 border-t border-base-content/10"
+          role="separator"
+        />
         {/* Collect stays for empty_repo assignments: it's org-wide and
             collect_scores.py skips this assignment server-side (see the
             SubmissionsPage comment). Only grading actions hide. */}
