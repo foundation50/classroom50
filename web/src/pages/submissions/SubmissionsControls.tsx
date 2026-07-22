@@ -1,5 +1,6 @@
 import type { ReactNode } from "react"
 import { useTranslation } from "react-i18next"
+import { Share2 } from "lucide-react"
 
 import { Button, Toolbar } from "@/components/ui"
 import type {
@@ -32,6 +33,7 @@ const SubmissionsControls = ({
   passingAvailable = false,
   sections = [],
   hideSortAndStatus = false,
+  onShare,
   leading,
   trailing,
 }: {
@@ -50,6 +52,9 @@ const SubmissionsControls = ({
   // the Status/Passing selects are HIDDEN — not just disabled — to keep the
   // toolbar honest. Search + Section still apply (they don't reorder the spine).
   hideSortAndStatus?: boolean
+  // Opens the Share (accept-link) modal. Rendered as a prominent button next to
+  // the search bar (the most common non-grading action), not buried in Actions.
+  onShare?: () => void
   // Left-aligned lead content (the DataFreshness widget). Search + filters +
   // sort + actions sit on the right.
   leading?: ReactNode
@@ -101,6 +106,13 @@ const SubmissionsControls = ({
           onChange={onQueryChange}
           ariaLabel={t("submissions.filters.searchAria")}
         />
+
+        {onShare && (
+          <Button variant="outline" size="sm" onClick={onShare}>
+            <Share2 aria-hidden="true" className="size-4" />
+            {t("submissions.menu.share")}
+          </Button>
+        )}
 
         {sections.length > 0 && (
           <Toolbar.FilterSelect

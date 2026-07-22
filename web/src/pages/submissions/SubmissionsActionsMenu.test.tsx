@@ -13,7 +13,6 @@ const baseProps = {
   regrading: false,
   regradeAllActive: false,
   emptyRoster: false,
-  onShare: () => {},
   onCollect: () => {},
   onRegradeAll: () => {},
   viewHref: "https://example.test/run",
@@ -44,10 +43,10 @@ describe("SubmissionsActionsMenu — canRegradeAll gate", () => {
   })
 })
 
-describe("SubmissionsActionsMenu — Share + Metrics items", () => {
-  it("always shows Share (the first item)", () => {
+describe("SubmissionsActionsMenu — Metrics item", () => {
+  it("does not include Share (moved next to the search bar)", () => {
     render(<SubmissionsActionsMenu {...baseProps} />)
-    expect(screen.queryByText("submissions.menu.share")).not.toBeNull()
+    expect(screen.queryByText("submissions.menu.share")).toBeNull()
   })
 
   it("shows Metrics only when onMetrics is provided (hidden in live view)", () => {

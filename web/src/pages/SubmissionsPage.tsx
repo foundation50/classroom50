@@ -837,6 +837,7 @@ const SubmissionsPageContent = () => {
         // Live shows a page-scoped fan-out that can only align to the plain
         // name-ordered, unfiltered view, so hide Sort + Status while live.
         hideSortAndStatus={liveCapable}
+        onShare={() => setAcceptOpen(true)}
         leading={
           <DataFreshness
             lastCollectedLabel={lastCollectedLabel}
@@ -865,7 +866,6 @@ const SubmissionsPageContent = () => {
             canRegradeAll={canRegradeAll}
             emptyRoster={emptyRoster.show}
             emptyRepo={isEmptyRepoAssignment}
-            onShare={() => setAcceptOpen(true)}
             // Metrics summarizes the graded snapshot; hide it when live (the
             // overlay adds ungraded pending rows the stats don't model).
             onMetrics={liveCapable ? undefined : () => setMetricsOpen(true)}
