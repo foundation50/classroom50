@@ -149,6 +149,11 @@ export const githubKeys = {
   // permissions. Invalidated after a pause/resume toggle.
   orgActionsMode: (owner: string) =>
     [...githubKeys.all, "orgActionsMode", owner] as const,
+
+  // Current-month GitHub Actions usage (minutes + $) from the enhanced billing
+  // usage-summary endpoint.
+  orgActionsUsage: (owner: string) =>
+    [...githubKeys.all, "orgActionsUsage", owner] as const,
 }
 
 // Refresh a single classroom team's members + pending invitations after a

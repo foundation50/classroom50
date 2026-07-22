@@ -79,6 +79,10 @@ export {
   teamFailedInvitationsQuery,
 } from "./queries/invitationReads"
 export {
+  getOrgActionsUsage,
+  type OrgActionsUsage,
+} from "./queries/billingReads"
+export {
   fetchJson,
   pagesAssignmentUrl,
   classroomsIndexUrl,

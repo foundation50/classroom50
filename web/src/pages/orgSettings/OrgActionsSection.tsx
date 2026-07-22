@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
-import { ExternalLink, PauseCircle, PlayCircle } from "lucide-react"
+import { Activity, ExternalLink, PauseCircle, PlayCircle } from "lucide-react"
 
 import { Badge, MonoLtr, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
@@ -10,10 +10,32 @@ import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { CONFIG_REPO } from "@/util/configRepo"
 import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import useGetOrgActionsMode from "@/hooks/useGetOrgActionsMode"
+import useGetOrgActionsUsage from "@/hooks/useGetOrgActionsUsage"
 import { useSetOrgActionsMode } from "@/hooks/mutations/useSetOrgActionsMode"
 import SettingsSection from "./SettingsSection"
 
 const ACTIONS_ANCHOR = "github-actions"
+
+// This-month Actions usage (minutes + $), shown when billing is readable. A
+// small advisory row, not a gate — renders nothing when usage is unavailable.
+const ActionsUsageRow = ({ org }: { org: string }) => {
+  const { t } = useTranslation()
+  const { data: usage, isLoading } = useGetOrgActionsUsage(org)
+
+  if (isLoading || !usage) return null
+
+  return (
+    <div className="flex items-start gap-2 text-sm text-base-content/70">
+      <Activity className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span>
+        {t("orgSettings.actions.usageThisMonth", {
+          minutes: usage.minutes.toLocaleString(),
+          amount: usage.netAmountUsd.toFixed(2),
+        })}
+      </span>
+    </div>
+  )
+}
 
 // GitHub Actions kill switch. Pausing restricts org Actions to the config repo
 // only, which blocks every student repo's autograde shim from running (and the
@@ -30,7 +52,11 @@ const OrgActionsSection = ({ org }: { org: string }) => {
   const mutation = useSetOrgActionsMode(org)
 
   const paused = mode === "paused"
+  const disabled = mode === "disabled"
   const unknown = mode === "unknown"
+  // The toggle can't be operated when we can't read the policy (unknown) or
+  // when Actions are off org-wide (disabled) — neither is a pause we own.
+  const toggleDisabled = mutation.isPending || unknown || disabled
 
   const applyMode = (next: "paused" | "active") =>
     mutation.mutateAsync(next, {
@@ -57,10 +83,15 @@ const OrgActionsSection = ({ org }: { org: string }) => {
       description={t("orgSettings.actions.description")}
       titleAdornment={
         isLoading ? undefined : (
-          <Badge tone={paused ? "warning" : "success"} size="sm">
+          <Badge
+            tone={paused ? "warning" : disabled ? "neutral" : "success"}
+            size="sm"
+          >
             {paused
               ? t("orgSettings.actions.statusPaused")
-              : t("orgSettings.actions.statusActive")}
+              : disabled
+                ? t("orgSettings.actions.statusDisabled")
+                : t("orgSettings.actions.statusActive")}
           </Badge>
         )
       }
@@ -82,6 +113,8 @@ const OrgActionsSection = ({ org }: { org: string }) => {
         </div>
       ) : (
         <div className="space-y-4">
+          <ActionsUsageRow org={org} />
+
           <label
             htmlFor="autograde-pause-toggle"
             className="flex items-start gap-3"
@@ -91,11 +124,11 @@ const OrgActionsSection = ({ org }: { org: string }) => {
               type="checkbox"
               className="toggle toggle-warning mt-0.5"
               checked={paused}
-              disabled={mutation.isPending || unknown}
+              disabled={toggleDisabled}
               aria-label={t("orgSettings.actions.toggleLabel")}
               onChange={(e) => {
                 const wantPause = e.target.checked
-                if (mutation.isPending) return
+                if (toggleDisabled) return
                 if (wantPause) {
                   setConfirmPause(true)
                   return
@@ -120,7 +153,9 @@ const OrgActionsSection = ({ org }: { org: string }) => {
               <MonoLtr className="rounded bg-base-200 px-1.5 py-0.5 text-[11px]">
                 {paused
                   ? `enabled_repositories = selected (${CONFIG_REPO})`
-                  : "enabled_repositories = all"}
+                  : disabled
+                    ? "enabled_repositories = none"
+                    : "enabled_repositories = all"}
               </MonoLtr>
             </p>
           )}
@@ -141,13 +176,19 @@ const OrgActionsSection = ({ org }: { org: string }) => {
             </CalloutDiv>
           )}
 
-          {!paused && !unknown && !mutation.isPending && (
+          {!paused && !disabled && !unknown && !mutation.isPending && (
             <div className="flex items-start gap-2 text-sm text-base-content/60">
               <PlayCircle
                 className="mt-0.5 size-4 shrink-0 text-success"
                 aria-hidden="true"
               />
               <span>{t("orgSettings.actions.activeNotice")}</span>
+            </div>
+          )}
+
+          {disabled && !mutation.isPending && (
+            <div className="rounded-lg border border-base-300 bg-base-200/50 p-3 text-sm text-base-content/70">
+              {t("orgSettings.actions.disabledNotice")}
             </div>
           )}
 
