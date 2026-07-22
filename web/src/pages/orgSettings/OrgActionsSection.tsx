@@ -2,12 +2,11 @@ import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { ExternalLink } from "lucide-react"
 
-import { Badge, MonoLtr, Spinner } from "@/components/ui"
+import { Badge, Spinner } from "@/components/ui"
 import { ConfirmModal } from "@/components/modals"
 import { CalloutDiv } from "@/lib/motionComponents"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
-import { CONFIG_REPO } from "@/util/configRepo"
 import { githubOrgActionsSettingsUrl } from "@/util/orgUrl"
 import { orgBudgetsUrl } from "@/orgPolicy/budget"
 import { includedActionsMinutes } from "@/github-core/queries"
@@ -224,20 +223,6 @@ const OrgActionsSection = ({ org }: { org: string }) => {
             </span>
           </label>
 
-          {/* Make the exact org setting we apply legible, not implied. */}
-          {!unknown && (
-            <p className="flex flex-wrap items-center gap-1.5 text-xs text-base-content/60">
-              <span>{t("orgSettings.actions.appliedLabel")}</span>
-              <MonoLtr className="rounded bg-base-200 px-1.5 py-0.5 text-[11px]">
-                {paused
-                  ? `enabled_repositories = selected (${CONFIG_REPO})`
-                  : disabled
-                    ? "enabled_repositories = none"
-                    : "enabled_repositories = all"}
-              </MonoLtr>
-            </p>
-          )}
-
           {mutation.isPending && (
             <div className="flex items-center gap-2 text-sm text-base-content/70">
               <Spinner /> {t("orgSettings.actions.applying")}
@@ -248,12 +233,6 @@ const OrgActionsSection = ({ org }: { org: string }) => {
             <CalloutDiv className="rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-base-content/80">
               {t("orgSettings.actions.pausedNotice")}
             </CalloutDiv>
-          )}
-
-          {!paused && !disabled && !unknown && !mutation.isPending && (
-            <div className="text-sm text-base-content/60">
-              {t("orgSettings.actions.activeNotice")}
-            </div>
           )}
 
           {disabled && !mutation.isPending && (
