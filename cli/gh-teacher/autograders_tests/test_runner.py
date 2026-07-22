@@ -1671,6 +1671,46 @@ class TestFinalizeResult:
         assert result["datetime"] == "2026-06-01T14:33:11Z"
         assert result["graded_at"] == "2027-09-09T09:09:09Z"
 
+    def test_mirrors_autograder_body_to_step_summary(self, tmp_path, monkeypatch):
+        # The custom-autograder path mirrors release-body.md to the run's
+        # Summary page (the wiki's "custom autograders get this too"). The
+        # mirror is centralized in main()'s finally; drive it directly.
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
+        (tmp_path / ag.RELEASE_BODY_FILENAME).write_text("### custom body\n")
+        f = self._finalizer(tmp_path)
+        assert ag.finalize_result(f, is_group=False) == 0
+        ag.mirror_body_to_step_summary(tmp_path)
+        assert summary.read_text() == "### custom body\n"
+
+    def test_non_utf8_body_does_not_crash_summary_mirror(self, tmp_path, monkeypatch):
+        # A custom autograder may write arbitrary bytes (e.g. raw student
+        # output) into release-body.md; the summary mirror must degrade
+        # (replacement chars), never crash a successfully graded run.
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        (tmp_path / "result.json").write_text(json.dumps(self._autograder_result()))
+        (tmp_path / ag.RELEASE_BODY_FILENAME).write_bytes(b"### body \xff\xfe raw\n")
+        f = self._finalizer(tmp_path)
+        assert ag.finalize_result(f, is_group=False) == 0
+        ag.mirror_body_to_step_summary(tmp_path)  # must not raise
+        assert "### body" in summary.read_text()
+
+    def test_error_path_body_reaches_summary(self, tmp_path, monkeypatch):
+        # Regression: the summary mirror used to live only on the success
+        # tails, so an infrastructure error wrote a release body that no
+        # surface mirrored. The centralized mirror must surface the error
+        # body the wiki promises appears on the Summary page.
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        f = self._finalizer(tmp_path)
+        assert f.error("boom") == 0
+        body = (tmp_path / ag.RELEASE_BODY_FILENAME).read_text()
+        ag.mirror_body_to_step_summary(tmp_path)
+        assert summary.read_text() == body
+        assert "boom" in summary.read_text()
+
     def test_drops_forged_submitted_by_when_actor_unknown(self, tmp_path):
         # submitted_by is stamped unconditionally: when the runner couldn't
         # resolve the actor (None), a result.json's self-asserted submitted_by
@@ -1970,4 +2010,34 @@ class TestRemovedFilesReporting:
         body.write_text("body\n")
         ag.append_removed_files_note(tmp_path, [])
         assert body.read_text() == "body\n"
+
+    def test_note_then_central_mirror_keeps_summary_faithful(self, tmp_path, monkeypatch):
+        # append_removed_files_note only writes release-body.md; main()'s
+        # finally then mirrors the final body (note included) to the summary.
+        # Together they keep the summary a faithful mirror of the release body.
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        body = tmp_path / ag.RELEASE_BODY_FILENAME
+        body.write_text("mirrored body\n")
+        ag.append_removed_files_note(tmp_path, ["scratch.py"])
+        ag.mirror_body_to_step_summary(tmp_path)
+        assert summary.read_text() == body.read_text()
+        assert "Removed 1 file(s)" in summary.read_text()
+
+    def test_note_on_non_utf8_body_does_not_crash(self, tmp_path, monkeypatch):
+        # A custom autograder may have written arbitrary bytes to
+        # release-body.md; appending the note reads it first, so a strict
+        # decode would raise UnicodeDecodeError (a ValueError, NOT an OSError)
+        # and escape the guard, crashing a graded run in main()'s finally.
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(tmp_path / "summary.md"))
+        body = tmp_path / ag.RELEASE_BODY_FILENAME
+        body.write_bytes(b"### body \xff\xfe raw\n")
+        ag.append_removed_files_note(tmp_path, ["scratch.py"])  # must not raise
+        assert "Removed 1 file(s)" in body.read_text(errors="replace")
+
+    def test_empty_removed_list_is_a_no_op(self, tmp_path, monkeypatch):
+        summary = tmp_path / "summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(summary))
+        ag.append_removed_files_note(tmp_path, [])
+        assert not summary.exists()
 

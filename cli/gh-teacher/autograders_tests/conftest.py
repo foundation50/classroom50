@@ -21,6 +21,8 @@ import importlib.util
 import pathlib
 import sys
 
+import pytest
+
 _HERE = pathlib.Path(__file__).resolve().parent
 _SCRIPTS_DIR = _HERE.parent / "skeleton" / "dotgithub" / "scripts"
 _EMBED_DIR = _HERE.parent / "embed"
@@ -39,3 +41,17 @@ def _load_module(name: str, path: pathlib.Path):
 
 runner = _load_module("runner", _SCRIPTS_DIR / "runner.py")
 collect_scores = _load_module("collect_scores", _SCRIPTS_DIR / "collect_scores.py")
+
+
+@pytest.fixture(autouse=True)
+def _isolate_actions_env(monkeypatch):
+    """This suite itself runs on GitHub Actions, where GITHUB_ACTIONS /
+    GITHUB_STEP_SUMMARY are set for real — without isolation, runner-path
+    tests would emit ANSI (breaking output assertions) and append release
+    bodies to the CI job's own Summary page. NO_COLOR is cleared too: a
+    developer who exports it globally would otherwise suppress the ANSI the
+    color-gate tests assert. Tests that exercise these surfaces opt back in
+    with monkeypatch.setenv."""
+    monkeypatch.delenv("GITHUB_ACTIONS", raising=False)
+    monkeypatch.delenv("GITHUB_STEP_SUMMARY", raising=False)
+    monkeypatch.delenv("NO_COLOR", raising=False)

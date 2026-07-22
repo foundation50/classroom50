@@ -36,6 +36,7 @@ history is unavailable or baseline == commit).
 from __future__ import annotations
 
 import datetime
+import difflib
 import errno
 import importlib.util
 import io
@@ -90,6 +91,15 @@ DEFAULT_TEST_TIMEOUT = 10
 # Cap captured stdout/stderr in the release body so a runaway program can't
 # bloat the published release.
 MAX_CAPTURED_CHARS = 2000
+
+# ANSI codes for the log report -- the Actions log viewer renders these, the
+# release body (Markdown) must never see them, so color is applied only at
+# render time in render_log_report.
+ANSI_RED = "\x1b[31m"
+ANSI_GREEN = "\x1b[32m"
+ANSI_CYAN = "\x1b[36m"
+ANSI_BOLD = "\x1b[1m"
+ANSI_RESET = "\x1b[0m"
 
 # Test types and io comparison modes -- mirror the allow-lists in tests.go.
 TEST_TYPE_IO = "io"
@@ -1123,14 +1133,19 @@ def render_removed_files_note(removed: list[str]) -> str:
 
 
 def append_removed_files_note(workspace: pathlib.Path, removed: list[str]) -> None:
-    """Append the removed-files note to release-body.md. Best-effort: a
-    missing body or write error must not fail the grade."""
+    """Append the removed-files note to release-body.md. Runs in main()'s
+    finally, before the final body is mirrored to the Summary page, so the note
+    reaches both surfaces without a second write here. Best-effort: a missing
+    body or write error must not fail the grade. errors="replace" guards against
+    a custom autograder's non-UTF-8 body (UnicodeDecodeError is a ValueError,
+    not an OSError, so a strict read would escape the except and crash a run)."""
     if not removed:
         return
+    note = render_removed_files_note(removed)
     body_path = workspace / RELEASE_BODY_FILENAME
     try:
-        existing = body_path.read_text() if body_path.exists() else ""
-        body_path.write_text(existing + render_removed_files_note(removed))
+        existing = body_path.read_text(encoding="utf-8", errors="replace") if body_path.exists() else ""
+        body_path.write_text(existing + note)
     except OSError as exc:
         print(f"runner: could not append removed-files note to {RELEASE_BODY_FILENAME}: {exc}", file=sys.stderr)
 
@@ -1467,6 +1482,19 @@ def _clip(text: str | None) -> str:
     return text
 
 
+def _unified_diff(expected: str, actual: str) -> str:
+    """Unified diff of expected vs actual stdout for a failed exact-comparison
+    io test. A diff pinpoints the divergent line; the raw side-by-side blocks
+    it replaces made students eyeball-compare up to 2000 chars each. Inputs
+    are stripped to mirror compare_output's exact semantics, so the diff never
+    flags leading/trailing whitespace the comparison ignores."""
+    lines = difflib.unified_diff(
+        expected.strip().splitlines(), actual.strip().splitlines(),
+        fromfile="expected", tofile="actual stdout", lineterm="",
+    )
+    return _clip("\n".join(lines))
+
+
 def _fence(text: str) -> str:
     """A backtick fence longer than any backtick run inside `text`, so student
     output containing ``` can't break out of the code block and inject Markdown
@@ -1682,8 +1710,19 @@ def execute_test(spec: dict[str, Any], *, cwd: pathlib.Path,
         return _make_outcome(name, points, False, f"invalid regex in expected: {exc}")
     detail = f"exit {rp.returncode}; comparison={comparison}"
     if not passed:
-        detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
-                   f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
+        # A line diff only makes sense against a full expected output, and only
+        # for exact: for included/regex the expectation is a fragment or
+        # pattern, so those keep the verbatim expected/actual blocks. The exact
+        # comparison also sees separator characters splitlines() folds away
+        # (\x0c, \x85, \u2028, a literal \r in an inline expected), so a failing
+        # exact test can yield an empty diff — fall back to the same verbatim
+        # blocks rather than show FAIL with no explanation.
+        diff = _unified_diff(expected, rp.stdout) if comparison == COMPARISON_EXACT else ""
+        if diff:
+            detail += f"\n{diff}"
+        else:
+            detail += (f"\n--- expected ({comparison}) ---\n{_clip(expected)}"
+                       f"\n--- actual stdout ---\n{_clip(rp.stdout)}")
         if rp.stderr.strip():
             detail += f"\n--- stderr ---\n{_clip(rp.stderr)}"
     return _make_outcome(name, points, passed, detail)
@@ -1697,6 +1736,11 @@ def _validate_test_spec(t: Any) -> str | None:
     name = t.get("name")
     if not isinstance(name, str) or not name:
         return "name must be a non-empty string"
+    # Mirror tests.go / tests-v1.schema.json: names are echoed into the release
+    # body and, since the log report, into a column-0 `::group::FAIL: {name}`
+    # line — a control char there could inject a workflow command.
+    if any(ord(c) < 0x20 or ord(c) == 0x7f for c in name):
+        return "name must not contain control characters"
     if t.get("type") not in TEST_TYPES:
         return f"type {t.get('type')!r} must be one of {list(TEST_TYPES)}"
     if not isinstance(t.get("run"), str) or not t.get("run"):
@@ -1779,6 +1823,90 @@ def render_declarative_body(result: dict[str, Any], outcomes: list[dict[str, Any
 
     lines.append(f"Status: {summary}")
     return "\n".join(lines) + "\n"
+
+
+def _colorize(text: str, code: str, *, color: bool) -> str:
+    """Wrap `text` in an ANSI code, or return it untouched when color is off."""
+    if not color:
+        return text
+    return f"{code}{text}{ANSI_RESET}"
+
+
+def _strip_control_chars(text: str) -> str:
+    """Drop ASCII control chars (incl. newlines) so a name can't inject a
+    column-0 workflow command into the log report. Mirrors tests.go's
+    no-control-chars rule as a defense-in-depth backstop to _validate_test_spec."""
+    return "".join(c for c in text if ord(c) >= 0x20 and ord(c) != 0x7f)
+
+
+def render_log_report(outcomes: list[dict[str, Any]], *, color: bool) -> str:
+    """Per-test report for the workflow log: a PASS/FAIL line per test, then
+    one collapsible ::group:: per failing test with its captured detail.
+    Failures only get groups — folding every passing test would bury the red
+    ones. The release body carries the same data as Markdown; this is the
+    log-surface rendering (ANSI is fine here, Markdown tables are not).
+
+    Detail lines are indented two spaces: detail carries student-controlled
+    program output, and GitHub only interprets workflow commands (::error::,
+    ::endgroup::, ::stop-commands::) at column 0 — the indent makes command
+    injection impossible. This is the log-surface analogue of _fence on the
+    Markdown surface.
+    """
+    lines = []
+    for o in outcomes:
+        name = _strip_control_chars(o["test-name"])
+        if o["passed"]:
+            verdict = _colorize("PASS", ANSI_GREEN, color=color)
+        else:
+            verdict = _colorize("FAIL", ANSI_BOLD + ANSI_RED, color=color)
+        lines.append(f"{verdict}  {name}  ({o['score']}/{o['max-score']})")
+
+    for o in outcomes:
+        if o["passed"]:
+            continue
+        # test-name lands at column 0 in the group header; _validate_test_spec
+        # already rejects control chars, but strip here too so a name can never
+        # inject a workflow command even if it reached this renderer some other
+        # way (mirrors the two-space indent that defends the detail lines).
+        lines.append(f"::group::FAIL: {_strip_control_chars(o['test-name'])}")
+        for dl in (o.get("detail") or "").rstrip().splitlines():
+            if dl.startswith("+"):
+                dl = _colorize(dl, ANSI_GREEN, color=color)
+            elif dl.startswith("-"):
+                dl = _colorize(dl, ANSI_RED, color=color)
+            elif dl.startswith("@@"):
+                dl = _colorize(dl, ANSI_CYAN, color=color)
+            lines.append(f"  {dl}")
+        lines.append("::endgroup::")
+    return "\n".join(lines) + "\n"
+
+
+def append_step_summary(markdown: str) -> None:
+    """Append Markdown to the workflow run's Summary page ($GITHUB_STEP_SUMMARY).
+    Best-effort: the summary is a convenience surface, so an unset var (local
+    runs, tests) or a write failure must never affect the grading outcome."""
+    path = os.environ.get("GITHUB_STEP_SUMMARY")
+    if not path:
+        return
+    try:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(markdown)
+    except OSError:
+        pass
+
+
+def mirror_body_to_step_summary(workspace: pathlib.Path) -> None:
+    """Mirror the final release-body.md to the run's Summary page. Called once
+    from main()'s finally so every exit path (declarative grade, custom
+    autograder, infrastructure error, vacuous pass) surfaces the same body the
+    release carries. errors="replace": a custom autograder may write arbitrary
+    bytes, and a decode error must never crash a graded run (UnicodeDecodeError
+    is a ValueError, not an OSError, so the read is guarded too)."""
+    body_path = workspace / RELEASE_BODY_FILENAME
+    try:
+        append_step_summary(body_path.read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        pass
 
 
 class DeclarativeGrader:
@@ -1876,10 +2004,16 @@ def run_declarative(tests_path: pathlib.Path, finalize: Finalizer,
         return finalize.error(f"declarative grader produced invalid result: {err}")
 
     status, summary = derive_status_and_summary(result)
+    # Failure details used to live only in the release body, forcing a
+    # detour from the (natural) Actions log to the release to see why a
+    # test failed. Print the per-test report to the log too, ANSI-colored
+    # only under Actions so pytest-captured and local output stay clean.
+    color = os.environ.get("GITHUB_ACTIONS") == "true" and "NO_COLOR" not in os.environ
+    print(render_log_report(outcomes, color=color), end="")
     print(f"runner: {summary}")
     (finalize.workspace / RESULT_FILENAME).write_text(json.dumps(result, indent=2) + "\n")
-    (finalize.workspace / RELEASE_BODY_FILENAME).write_text(
-        render_declarative_body(result, outcomes, summary))
+    body = render_declarative_body(result, outcomes, summary)
+    (finalize.workspace / RELEASE_BODY_FILENAME).write_text(body)
     append_outputs(finalize.github_output, status, summary)
     return 0
 
@@ -2041,7 +2175,8 @@ def finalize_result(finalize: Finalizer, *, is_group: bool) -> int:
     if err is not None:
         return finalize.error(err)
 
-    # Synthesize release-body.md if the autograder didn't write one.
+    # Synthesize release-body.md if the autograder didn't write one. main()'s
+    # finally mirrors the final body to the Summary page on every exit path.
     body_path = workspace / RELEASE_BODY_FILENAME
     if not body_path.is_file():
         _, fallback = derive_status_and_summary(result)
@@ -2221,6 +2356,13 @@ def main() -> int:
         rc = _grade()
     finally:
         append_removed_files_note(workspace, removed_files)
+        # Mirror the FINAL release body to the run's Summary page from here —
+        # the one point every exit path (success, error, vacuous pass) passes
+        # through, after the removed-files note has been folded in. Doing it
+        # here (not in run_declarative / finalize_result / the note) keeps the
+        # Summary a faithful mirror of release-body.md on all paths; the error
+        # and vacuous-pass paths previously wrote a body no surface mirrored.
+        mirror_body_to_step_summary(workspace)
 
     return _stage_release_assets_and_emit(workspace, github_output, rc)
 

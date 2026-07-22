@@ -120,12 +120,49 @@ class TestExecuteIO:
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert o["passed"]
 
-    def test_fail_includes_expected_and_actual(self, tmp_path):
+    def test_exact_fail_shows_unified_diff(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "printf 'one\\nnope\\n'",
+                "expected": "one\ntwo", "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected" in o["detail"]
+        assert "+++ actual stdout" in o["detail"]
+        assert "-two" in o["detail"] and "+nope" in o["detail"]
+        # The matching line is context, not a change.
+        assert "-one" not in o["detail"] and "+one" not in o["detail"]
+        # A non-empty diff replaces the verbatim blocks — never both (a
+        # both-emitted regression would otherwise pass).
+        assert "--- expected (exact) ---" not in o["detail"]
+        assert "--- actual stdout ---" not in o["detail"]
+
+    def test_included_fail_keeps_expected_and_actual_blocks(self, tmp_path):
+        # A line diff against a substring expectation is noise; included and
+        # regex failures keep the verbatim expected/actual blocks.
         spec = {"name": "t", "type": "io", "run": "echo nope",
+                "expected": "yes", "comparison": "included", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected (included) ---" in o["detail"]
+        assert "--- actual stdout ---" in o["detail"]
+        assert "+++" not in o["detail"]
+
+    def test_exact_fail_with_empty_diff_falls_back_to_blocks(self, tmp_path):
+        # Separator characters splitlines() folds away (here \x0c) fail the
+        # exact comparison but produce an empty unified diff; the detail must
+        # fall back to the verbatim blocks, never show FAIL with nothing.
+        spec = {"name": "t", "type": "io", "run": "printf 'one\\ftwo'",
+                "expected": "one\ntwo", "comparison": "exact", "points": 1}
+        o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
+        assert not o["passed"]
+        assert "--- expected (exact) ---" in o["detail"]
+        assert "--- actual stdout ---" in o["detail"]
+
+    def test_fail_includes_stderr_block(self, tmp_path):
+        spec = {"name": "t", "type": "io", "run": "echo warn >&2; echo nope",
                 "expected": "yes", "comparison": "exact", "points": 1}
         o = ag.execute_test(spec, cwd=tmp_path, fixtures_dir=tmp_path)
         assert not o["passed"]
-        assert "expected" in o["detail"] and "actual stdout" in o["detail"]
+        assert "--- stderr ---" in o["detail"] and "warn" in o["detail"]
 
     def test_invalid_regex_fails_with_message(self, tmp_path):
         spec = {"name": "t", "type": "io", "run": "echo x",
@@ -291,6 +328,17 @@ class TestLoadTests:
         with pytest.raises(ag.TestsConfigError, match="timeout"):
             ag.load_tests(p)
 
+    def test_control_char_in_name_rejected(self, tmp_path):
+        # Mirrors tests.go / tests-v1.schema.json: a name is echoed into the
+        # release body and a column-0 `::group::FAIL: {name}` log line, where a
+        # newline could inject a workflow command. A hand-edited tests.json
+        # bypasses the CLI validators, so the grader must reject it too.
+        p = self._write(tmp_path, {"schema": "classroom50/tests/v1", "tests": [
+            {"name": "t\n::error::pwned", "type": "run", "run": "true", "points": 1},
+        ]})
+        with pytest.raises(ag.TestsConfigError, match="control characters"):
+            ag.load_tests(p)
+
     @pytest.mark.parametrize("bad_field", [
         {"name": "a", "type": "run", "run": "true", "points": 1, "exit-code": "abc"},
         {"name": "a", "type": "run", "run": "true", "points": 1, "exit-code": []},
@@ -350,6 +398,91 @@ class TestRenderDeclarativeBody:
 
 
 # ---------------------------------------------------------------------------
+# render_log_report
+# ---------------------------------------------------------------------------
+
+
+class TestRenderLogReport:
+    def _outcomes(self):
+        return [
+            {"test-name": "good", "passed": True, "score": 2, "max-score": 2, "detail": "ok"},
+            {"test-name": "bad", "passed": False, "score": 0, "max-score": 1,
+             "detail": "exit 1\n--- expected\n+++ actual stdout\n-two\n+nope"},
+        ]
+
+    def test_all_pass_has_no_groups(self):
+        outcomes = [{"test-name": "a", "passed": True, "score": 1, "max-score": 1, "detail": ""}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "PASS  a  (1/1)" in report
+        assert "::group::" not in report
+
+    def test_failures_get_one_group_each(self):
+        report = ag.render_log_report(self._outcomes(), color=False)
+        assert "PASS  good  (2/2)" in report
+        assert "FAIL  bad  (0/1)" in report
+        assert report.count("::group::FAIL: bad") == 1
+        assert report.count("::endgroup::") == 1
+        # Detail lines are inside the group, indented.
+        assert "\n  exit 1\n" in report
+
+    def test_color_off_emits_no_ansi(self):
+        report = ag.render_log_report(self._outcomes(), color=False)
+        assert "\x1b[" not in report
+
+    def test_color_on_colors_verdicts_and_diff_lines(self):
+        report = ag.render_log_report(self._outcomes(), color=True)
+        assert f"{ag.ANSI_GREEN}PASS{ag.ANSI_RESET}" in report
+        assert f"{ag.ANSI_BOLD}{ag.ANSI_RED}FAIL{ag.ANSI_RESET}" in report
+        assert f"  {ag.ANSI_RED}-two{ag.ANSI_RESET}" in report
+        assert f"  {ag.ANSI_GREEN}+nope{ag.ANSI_RESET}" in report
+
+    def test_detail_cannot_inject_workflow_commands(self):
+        # Detail carries student-controlled output; GitHub only interprets
+        # workflow commands at column 0, so every detail line must be
+        # indented. A student's ::endgroup::/::error:: must never take effect.
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1,
+                     "detail": "::endgroup::\n::error::pwned\n::stop-commands::x"}]
+        report = ag.render_log_report(outcomes, color=False)
+        for line in report.splitlines():
+            if line.startswith("::"):
+                assert line in ("::group::FAIL: t", "::endgroup::")
+
+    def test_test_name_cannot_inject_workflow_commands(self):
+        # test-name is interpolated into the column-0 `::group::FAIL: {name}`
+        # header. Stripping control chars (incl. newlines) guarantees no
+        # student/hand-edited name can start a NEW line with a workflow
+        # command — the only `::`-prefixed lines are the group open/close.
+        outcomes = [{"test-name": "t\n::error::pwned", "passed": False,
+                     "score": 0, "max-score": 1, "detail": "d"}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "\n::error::" not in report
+        for line in report.splitlines():
+            if line.startswith("::"):
+                assert line.startswith("::group::FAIL: ") or line == "::endgroup::"
+
+    def test_missing_detail_renders_empty_group(self):
+        outcomes = [{"test-name": "t", "passed": False, "score": 0, "max-score": 1}]
+        report = ag.render_log_report(outcomes, color=False)
+        assert "::group::FAIL: t\n::endgroup::" in report
+
+
+# ---------------------------------------------------------------------------
+# append_step_summary
+# ---------------------------------------------------------------------------
+
+
+class TestAppendStepSummary:
+    def test_write_failure_is_swallowed(self, tmp_path, monkeypatch):
+        # The docstring contract: a write failure must never affect grading.
+        monkeypatch.setenv(
+            "GITHUB_STEP_SUMMARY", str(tmp_path / "no-such-dir" / "summary.md"))
+        ag.append_step_summary("# hi")  # must not raise
+
+    def test_unset_var_is_a_no_op(self):
+        ag.append_step_summary("# hi")  # conftest delenv'd the var; must not raise
+
+
+# ---------------------------------------------------------------------------
 # run_declarative (end-to-end)
 # ---------------------------------------------------------------------------
 
@@ -376,7 +509,9 @@ class TestRunDeclarative:
         p.write_text(json.dumps({"schema": "classroom50/tests/v1", "tests": specs}))
         return p
 
-    def test_grades_and_writes_all_artifacts(self, tmp_path):
+    def test_grades_and_writes_all_artifacts(self, tmp_path, monkeypatch, capsys):
+        step_summary = tmp_path / "step-summary.md"
+        monkeypatch.setenv("GITHUB_STEP_SUMMARY", str(step_summary))
         fin, gho = _finalizer(tmp_path)
         p = self._write_tests(tmp_path, [
             {"name": "compiles", "type": "run", "run": "true", "points": 1},
@@ -399,8 +534,41 @@ class TestRunDeclarative:
         assert "classroom50 autograde: 3/4" in body
         assert "Failure details" in body  # `bad` failed
 
+        # run_declarative writes the body; main()'s finally mirrors the final
+        # body to the Summary page. Drive that mirror to pin the parity.
+        ag.mirror_body_to_step_summary(tmp_path)
+        assert step_summary.read_text() == body
+
+        # The per-test report reaches stdout (the workflow log). Plain text
+        # here: GITHUB_ACTIONS is unset under pytest, so the color gate holds.
+        out = capsys.readouterr().out
+        assert "FAIL  bad  (0/1)" in out
+        assert "::group::FAIL: bad" in out
+        assert "\x1b[" not in out
+
         out = gho.read_text()
         assert "status=failure" in out  # not all tests passed
+
+    def test_color_gate_turns_on_under_actions(self, tmp_path, monkeypatch, capsys):
+        # The conftest fixture deletes GITHUB_ACTIONS; opt back in to pin the
+        # positive half of the gate (ANSI in the log under Actions).
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        fin, _ = _finalizer(tmp_path)
+        p = self._write_tests(tmp_path, [
+            {"name": "bad", "type": "run", "run": "false", "points": 1},
+        ])
+        ag.run_declarative(p, fin, tmp_path)
+        assert f"{ag.ANSI_BOLD}{ag.ANSI_RED}FAIL{ag.ANSI_RESET}" in capsys.readouterr().out
+
+    def test_no_color_opts_out_under_actions(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setenv("GITHUB_ACTIONS", "true")
+        monkeypatch.setenv("NO_COLOR", "1")
+        fin, _ = _finalizer(tmp_path)
+        p = self._write_tests(tmp_path, [
+            {"name": "bad", "type": "run", "run": "false", "points": 1},
+        ])
+        ag.run_declarative(p, fin, tmp_path)
+        assert "\x1b[" not in capsys.readouterr().out
 
     def test_all_pass_reports_success(self, tmp_path):
         fin, gho = _finalizer(tmp_path)

@@ -63,15 +63,18 @@ jobs:
       allowed-files:  ${{ steps.read.outputs.allowed-files }}
       release-assets: ${{ steps.read.outputs.release-assets }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out repository
+        uses: actions/checkout@v7
         with:
           # Full history -- the acceptance check walks back to the commit
           # that added .classroom50.yaml; a shallow clone hides it.
           fetch-depth: 0
-      - uses: actions/setup-python@v6
+      - name: Set up Python
+        uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - run: python3 -m pip install --quiet --user pyyaml
+      - name: Install PyYAML
+        run: python3 -m pip install --quiet --user pyyaml
         working-directory: ${{ runner.temp }}
 
       # === Skip the acceptance commit ===
@@ -80,7 +83,8 @@ jobs:
       # it via the Pages-fetched runner.py and skip the tag/read steps and
       # grade job. Branch trigger only (a tag push is always a submission).
       # Fails open (grades) on a fetch failure.
-      - id: acceptance
+      - name: Detect acceptance commit
+        id: acceptance
         if: github.ref_type == 'branch'
         env:
           REPO_OWNER: ${{ github.repository_owner }}
@@ -130,7 +134,8 @@ jobs:
       # Branch trigger: create submit/<UTC-timestamp>-<short-sha> at
       # the pushed SHA. Tag trigger: reuse the pushed tag. Tags pushed
       # with github.token don't fire workflows (anti-recursion).
-      - id: tag
+      - name: Tag submission
+        id: tag
         if: steps.acceptance.outputs.is-acceptance != 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -175,7 +180,8 @@ jobs:
       # an attacker-hosted Pages site. Allow-lists mirror
       # cli/gh-teacher/runtime.go (runtime block) and
       # cli/gh-teacher/tests.go (declarative tests block).
-      - id: read
+      - name: Read assignment config
+        id: read
         if: steps.acceptance.outputs.is-acceptance != 'true'
         env:
           SUBMISSION_TAG: ${{ steps.tag.outputs.tag }}
@@ -629,7 +635,8 @@ jobs:
       # "[]" = none.
       RELEASE_ASSETS: ${{ needs.setup.outputs.release-assets }}
     steps:
-      - uses: actions/checkout@v7
+      - name: Check out submission
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           # Full history -- runner.py needs the student's baseline
@@ -642,23 +649,27 @@ jobs:
       # prebuilt toolchains (and their dependencies), so layering setup-*
       # / apt on top would shadow the runner's environment and break
       # autograders that import preinstalled packages (see issue #369).
-      - if: needs.setup.outputs.python != '' && needs.setup.outputs.self-hosted != 'true'
+      - name: Set up Python
+        if: needs.setup.outputs.python != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-python@v6
         with:
           python-version: ${{ needs.setup.outputs.python }}
 
-      - if: needs.setup.outputs.node != '' && needs.setup.outputs.self-hosted != 'true'
+      - name: Set up Node
+        if: needs.setup.outputs.node != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-node@v6
         with:
           node-version: ${{ needs.setup.outputs.node }}
 
-      - if: needs.setup.outputs.java != '' && needs.setup.outputs.self-hosted != 'true'
+      - name: Set up Java
+        if: needs.setup.outputs.java != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: ${{ needs.setup.outputs.java }}
 
-      - if: needs.setup.outputs.go != '' && needs.setup.outputs.self-hosted != 'true'
+      - name: Set up Go
+        if: needs.setup.outputs.go != '' && needs.setup.outputs.self-hosted != 'true'
         uses: actions/setup-go@v6
         with:
           go-version: ${{ needs.setup.outputs.go }}
@@ -666,12 +677,14 @@ jobs:
       # No first-party setup-rust; dtolnay/rust-toolchain is the de-facto
       # standard. Pinned to @master with an explicit `toolchain:` input
       # (its @rev-derived default can't read a version from a SHA pin).
-      - if: needs.setup.outputs.rust != '' && needs.setup.outputs.self-hosted != 'true'
+      - name: Set up Rust
+        if: needs.setup.outputs.rust != '' && needs.setup.outputs.self-hosted != 'true'
         uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ needs.setup.outputs.rust }}
 
-      - if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && needs.setup.outputs.self-hosted != 'true'
+      - name: Install apt packages
+        if: needs.setup.outputs.apt != '' && runner.os == 'Linux' && needs.setup.outputs.self-hosted != 'true'
         run: |
           set -euo pipefail
           sudo apt-get update -qq
@@ -685,7 +698,8 @@ jobs:
       # `--retry-delay 2` uses a fixed 2s gap (it disables curl's
       # exponential backoff), so 3 retries add ~6s plus the 30s
       # per-attempt ceiling — well under the grade job's 15-minute timeout.
-      - id: autograde
+      - name: Grade details
+        id: autograde
         run: |
           set -euo pipefail
           # Re-assert the checkout as safe before git-dependent steps. In
@@ -705,7 +719,8 @@ jobs:
           python3 "$RUNNER_SCRIPT"
 
       # === Post commit status ===
-      - if: always()
+      - name: Post commit status
+        if: always()
         env:
           GH_TOKEN: ${{ github.token }}
           STATE:   ${{ steps.autograde.outputs.status || 'error' }}
@@ -723,7 +738,8 @@ jobs:
       # Created with --latest=false; the set-latest job below owns
       # the latest-pointer flip (serialized to avoid races between
       # concurrent grade jobs). Idempotent on workflow re-runs.
-      - if: success() && steps.autograde.outputs.status != 'error'
+      - name: Publish submission release
+        if: success() && steps.autograde.outputs.status != 'error'
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ env.SUBMISSION_TAG }}
@@ -862,7 +878,8 @@ jobs:
       group: classroom50-set-latest-${{ github.repository }}
       cancel-in-progress: false
     steps:
-      - env:
+      - name: Advance latest release pointer
+        env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.setup.outputs.submission-tag }}
           SHA: ${{ github.sha }}

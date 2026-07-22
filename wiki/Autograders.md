@@ -112,7 +112,9 @@ Or set the whole array at once with `gh teacher assignment add ... --tests <file
 
 ### How it flows
 
-The tests live inline on the assignment's entry in `assignments.json`. On the next config-repo push, the publish-pages workflow **materializes** them into `<classroom>/autograders/<slug>/tests.json` and tars that into the per-assignment Pages bundle, alongside any fixture files in the same directory. At grade time, `runner.py` runs each spec in the student checkout: one row per test in `result.json`, plus a pass/fail breakdown in the release body with a truncated expected-vs-actual diff for each failure.
+The tests live inline on the assignment's entry in `assignments.json`. On the next config-repo push, the publish-pages workflow **materializes** them into `<classroom>/autograders/<slug>/tests.json` and tars that into the per-assignment Pages bundle, alongside any fixture files in the same directory. At grade time, `runner.py` runs each spec in the student checkout: one row per test in `result.json`, plus a pass/fail breakdown in the release body with failure details for each failing test — a unified diff of expected vs. actual stdout for `exact` io tests, verbatim expected/actual blocks for `included`/`regex`, and captured stderr. Captured output is truncated at 2000 characters.
+
+The same breakdown surfaces in three places per run: the **release body** (Markdown, as above), the **grade job's log** under the "Grade details" step (one ANSI-colored PASS/FAIL line per test, plus a collapsible log group per failing test with its details), and the **run's Summary page** (the release-body Markdown, mirrored via `$GITHUB_STEP_SUMMARY` — custom autograders get this too). Students and teachers debugging from the Actions tab see failures without opening the release.
 
 Test commands are teacher-authored shell, executed at the same privilege as a hand-written `autograder.py` — inside the sandboxed grade job, fetched as data from Pages, never interpolated into workflow YAML. Students can't edit `assignments.json`; it lives in your config repo.
 
@@ -513,7 +515,7 @@ Classroom 50 distinguishes an ordinary passing or failing grade from a grading o
 | Configured extra is missing, unsafe, a directory/symlink, or over budget | Warning; valid core and other extras continue |
 | Core Release creation or `result.json` upload | Grade job fails; latest does not move; an already-posted grade status is not rewritten |
 | One extra Release upload | Warning; later extras continue; core Release stays published |
-| Tests run and some fail | `status=failure`; core Release and valid extras publish |
+| Tests run and some fail | `status=failure`; core Release and valid extras publish. Failure details also appear on the run's Summary page and — for declarative tests — as a per-test report in the grade job's log ("Grade details" step), so there's no need to open the release. |
 | All tests pass | `status=success`; core Release and valid extras publish |
 
 Failures that prevent the reusable workflow from loading do not appear in `scores.json`; collect-scores counts the student as not yet submitted. GitHub shows failures from a called reusable workflow as nested jobs in the student's Actions tab.
