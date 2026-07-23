@@ -14,6 +14,7 @@ import "./i18n"
 import { GitHubAuthProvider } from "./auth/useGithubAuth"
 import { GitHubClientProviderFromAuth } from "./context/github/GitHubClientProviderFromAuth"
 import { NotificationProvider } from "./context/notifications/NotificationProvider"
+import { HiddenOrgsProvider } from "./context/hiddenOrgs/HiddenOrgsProvider"
 import { ActionActivityProvider } from "./context/actions/ActionActivityProvider"
 import { ActionsBanner } from "./components/status/ActionsBanner"
 import { LanguagePackUpdateToaster } from "./components/settings/LanguagePackUpdateToaster"
@@ -87,9 +88,11 @@ createRoot(document.getElementById("root")!).render(
           <GitHubClientProviderFromAuth>
             <ActionActivityProvider>
               <NotificationProvider>
-                <App />
-                <ActionsBanner />
-                <LanguagePackUpdateToaster />
+                <HiddenOrgsProvider>
+                  <App />
+                  <ActionsBanner />
+                  <LanguagePackUpdateToaster />
+                </HiddenOrgsProvider>
               </NotificationProvider>
             </ActionActivityProvider>
             {import.meta.env.DEV && (

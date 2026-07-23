@@ -18,6 +18,7 @@ import { Route as AuthedOrgRouteRouteImport } from './routes/_authed/$org/route'
 import { Route as AuthIndexRouteImport } from './routes/auth/index'
 import { Route as AuthedOrgIndexRouteImport } from './routes/_authed/$org/index'
 import { Route as AuthedOrgClassroomRouteRouteImport } from './routes/_authed/$org/$classroom/route'
+import { Route as AuthedSettingsIndexRouteImport } from './routes/_authed/settings/index'
 import { Route as AuthedOrgClassroomIndexRouteImport } from './routes/_authed/$org/$classroom/index'
 import { Route as AuthedOrgActivityIndexRouteImport } from './routes/_authed/$org/activity/index'
 import { Route as AuthedOrgClassesIndexRouteImport } from './routes/_authed/$org/classes/index'
@@ -80,6 +81,11 @@ const AuthedOrgClassroomRouteRoute = AuthedOrgClassroomRouteRouteImport.update({
   id: '/$classroom',
   path: '/$classroom',
   getParentRoute: () => AuthedOrgRouteRoute,
+} as any)
+const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
+  id: '/settings/',
+  path: '/settings/',
+  getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedOrgClassroomIndexRoute = AuthedOrgClassroomIndexRouteImport.update({
   id: '/',
@@ -192,6 +198,7 @@ export interface FileRoutesByFullPath {
   '/auth/': typeof AuthIndexRoute
   '/$org/$classroom': typeof AuthedOrgClassroomRouteRouteWithChildren
   '/$org/': typeof AuthedOrgIndexRoute
+  '/settings/': typeof AuthedSettingsIndexRoute
   '/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
   '/$org/activity/': typeof AuthedOrgActivityIndexRoute
   '/$org/classes/': typeof AuthedOrgClassesIndexRoute
@@ -218,6 +225,7 @@ export interface FileRoutesByTo {
   '/': typeof AuthedIndexRoute
   '/auth': typeof AuthIndexRoute
   '/$org': typeof AuthedOrgIndexRoute
+  '/settings': typeof AuthedSettingsIndexRoute
   '/$org/$classroom': typeof AuthedOrgClassroomIndexRoute
   '/$org/activity': typeof AuthedOrgActivityIndexRoute
   '/$org/classes': typeof AuthedOrgClassesIndexRoute
@@ -248,6 +256,7 @@ export interface FileRoutesById {
   '/auth/': typeof AuthIndexRoute
   '/_authed/$org/$classroom': typeof AuthedOrgClassroomRouteRouteWithChildren
   '/_authed/$org/': typeof AuthedOrgIndexRoute
+  '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/_authed/$org/$classroom/': typeof AuthedOrgClassroomIndexRoute
   '/_authed/$org/activity/': typeof AuthedOrgActivityIndexRoute
   '/_authed/$org/classes/': typeof AuthedOrgClassesIndexRoute
@@ -278,6 +287,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/$org/$classroom'
     | '/$org/'
+    | '/settings/'
     | '/$org/$classroom/'
     | '/$org/activity/'
     | '/$org/classes/'
@@ -304,6 +314,7 @@ export interface FileRouteTypes {
     | '/'
     | '/auth'
     | '/$org'
+    | '/settings'
     | '/$org/$classroom'
     | '/$org/activity'
     | '/$org/classes'
@@ -333,6 +344,7 @@ export interface FileRouteTypes {
     | '/auth/'
     | '/_authed/$org/$classroom'
     | '/_authed/$org/'
+    | '/_authed/settings/'
     | '/_authed/$org/$classroom/'
     | '/_authed/$org/activity/'
     | '/_authed/$org/classes/'
@@ -425,6 +437,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/$org/$classroom'
       preLoaderRoute: typeof AuthedOrgClassroomRouteRouteImport
       parentRoute: typeof AuthedOrgRouteRoute
+    }
+    '/_authed/settings/': {
+      id: '/_authed/settings/'
+      path: '/settings'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AuthedSettingsIndexRouteImport
+      parentRoute: typeof AuthedRoute
     }
     '/_authed/$org/$classroom/': {
       id: '/_authed/$org/$classroom/'
@@ -627,11 +646,13 @@ const AuthedOrgRouteRouteWithChildren = AuthedOrgRouteRoute._addFileChildren(
 interface AuthedRouteChildren {
   AuthedOrgRouteRoute: typeof AuthedOrgRouteRouteWithChildren
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedOrgRouteRoute: AuthedOrgRouteRouteWithChildren,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
 }
 
 const AuthedRouteWithChildren =

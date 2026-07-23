@@ -4,6 +4,7 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { useAcceptOrgInvite } from "@/hooks/mutations/useAcceptOrgInvite"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
@@ -12,6 +13,8 @@ import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronDown,
+  EllipsisVertical,
+  EyeOff,
   Lock,
   MailOpen,
   Plus,
@@ -182,6 +185,19 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
 function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
   const { t } = useTranslation()
   const { org, canOpen } = useOrgAffordances(summary)
+  const { hide } = useHiddenOrgs()
+  const { notify } = useToast()
+
+  const handleHide = () => {
+    hide(org.login)
+    notify({
+      tone: "info",
+      key: `org-hidden-${org.login}`,
+      durationMs: 4000,
+      message: t("orgs.card.hidden", { org: org.login }),
+    })
+  }
+
   return (
     <>
       <GitHubLink
@@ -200,6 +216,27 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
           {t("orgs.card.open")}
         </Link>
       )}
+      <div className="dropdown dropdown-end shrink-0">
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="square"
+          aria-label={t("orgs.card.moreActions", { org: org.login })}
+        >
+          <EllipsisVertical aria-hidden="true" className="size-4" />
+        </Button>
+        <ul
+          tabIndex={0}
+          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+        >
+          <li>
+            <button type="button" onClick={handleHide}>
+              <EyeOff aria-hidden="true" className="size-4" />
+              {t("orgs.card.hide")}
+            </button>
+          </li>
+        </ul>
+      </div>
     </>
   )
 }
@@ -343,19 +380,22 @@ const OrgsPage = () => {
 
   const { viewMode, sortKey, changeView, changeSort } =
     useListPrefsState(orgListPrefs)
+  const { hidden } = useHiddenOrgs()
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
 
   // Confirmed Classroom 50 orgs the user can use: a teacher's ready org, or a
   // student's enrolled org (no_access confirmed via the public Pages index).
+  // Orgs the user hid from the home page are dropped here (unhide from Settings).
   const cl50Orgs = useMemo(
     () =>
       orgs.filter(
         (summary) =>
-          summary.classroom50.status === "ready" ||
-          summary.classroom50.status === "no_access",
+          (summary.classroom50.status === "ready" ||
+            summary.classroom50.status === "no_access") &&
+          !hidden.has(summary.org.login),
       ),
-    [orgs],
+    [orgs, hidden],
   )
   // Admin-owned orgs without Classroom 50 yet — offered through the modal.
   const needsSetupOrgs = useMemo(

@@ -193,6 +193,7 @@
     "setup": "Setup",
     "classroomSettings": "Classroom settings",
     "organizationSettings": "Organization settings",
+    "settings": "Settings",
     "newAssignment": "New assignment",
     "acceptAssignment": "Accept assignment",
     "members": "Members",
@@ -612,7 +613,10 @@
       "viewOnGitHub": "View on GitHub",
       "openOnGitHub": "Open {{org}} on GitHub",
       "open": "Open",
-      "updatedAgo": "Updated {{when}}"
+      "updatedAgo": "Updated {{when}}",
+      "moreActions": "More actions for {{org}}",
+      "hide": "Hide from home",
+      "hidden": "Hid {{org}} from your home page."
     },
     "invites": {
       "summary_one": "You have {{count}} pending invitation",
@@ -628,6 +632,18 @@
       "acceptError": "Couldn't accept the invitation to {{org}}. It may need SSO authorization on GitHub, or try again.",
       "viewOnGitHub": "View invite on GitHub",
       "openInviteOnGitHub": "Open the {{org}} invitation on GitHub"
+    }
+  },
+  "settings": {
+    "page": {
+      "heading": "Settings",
+      "subheading": "Preferences for this browser. Nothing here is shared with your organizations."
+    },
+    "hiddenOrgs": {
+      "heading": "Hidden organizations",
+      "subheading": "Organizations you've hidden from your home page. Unhide one to show it again.",
+      "unhide": "Unhide",
+      "empty": "You haven't hidden any organizations."
     }
   },
   "assignments": {
