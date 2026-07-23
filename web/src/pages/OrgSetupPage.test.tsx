@@ -63,6 +63,8 @@ vi.mock("@/components/ui", async (importOriginal) => {
   }
 })
 vi.mock("./OrgSettingsPage", () => ({ OrgSettingsPane: () => null }))
+vi.mock("canvas-confetti", () => ({ default: vi.fn() }))
+import confetti from "canvas-confetti"
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({}),
 }))
@@ -128,6 +130,7 @@ afterEach(() => {
   repoStatusMock.mockReset()
   tokenStatusMock.mockReset()
   retry.mockReset()
+  vi.mocked(confetti).mockClear()
 })
 
 describe("OrgSetupPage owner gate", () => {
@@ -234,16 +237,56 @@ describe("OrgSetupPage derived wizard stage", () => {
 })
 
 describe("OrgSetupPage wizard navigation", () => {
-  it("stage 3 'Manage service token' returns to step 2 (back override beats derived floor)", () => {
+  it("stage 3 finish screen shows Done and no token-management round-trip", () => {
     owner({ isOwner: true })
     repoStatus({ data: "ready" })
     tokenStatus({ data: { status: "present" } })
     renderPage()
     expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
-    fireEvent.click(screen.getByText("setup.manageServiceToken"))
-    // Now on stage 2: the Back button is shown, finish screen gone.
-    expect(screen.queryByText("setup.back")).not.toBeNull()
-    expect(screen.queryByText("setup.allSetTitle")).toBeNull()
+    expect(screen.queryByText("setup.done")).not.toBeNull()
+    // The "Manage service token" escape hatch was removed: a just-set-up org is
+    // unlikely to need it, and Org Settings still exposes token management.
+    expect(screen.queryByText("setup.manageServiceToken")).toBeNull()
+  })
+
+  it("does not celebrate when landing on an already-set-up org (mount at done)", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
+    tokenStatus({ data: { status: "present" } })
+    renderPage()
+    expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
+    // Confetti celebrates a fresh completion, not a cold load of a done org.
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it("does not celebrate before the finish screen (stage 1/2)", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
+    tokenStatus({ data: { status: "missing" } })
+    renderPage()
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it("celebrates once when the token save advances the wizard into done", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
+    tokenStatus({ data: { status: "missing" } })
+    const { rerender } = renderPage()
+    expect(confetti).not.toHaveBeenCalled()
+
+    // Simulate the service-token save landing: derived stage transitions to done.
+    tokenStatus({ data: { status: "present" } })
+    rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <OrgSetupPage />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
+    expect(confetti).toHaveBeenCalledTimes(6)
   })
 
   it("stage 2 'Back' returns to step 1 even when configReady", () => {
@@ -257,20 +300,5 @@ describe("OrgSetupPage wizard navigation", () => {
     // Back drops below the derived floor (stage 2) to stage 1's Next button.
     expect(screen.queryByText("setup.nextServiceToken")).not.toBeNull()
     expect(screen.queryByText("setup.back")).toBeNull()
-  })
-
-  it("token present: Manage then Back returns to the finish screen, not a trap", () => {
-    owner({ isOwner: true })
-    repoStatus({ data: "ready" })
-    tokenStatus({ data: { status: "present" } })
-    renderPage()
-    // Go to the token form from the finish screen…
-    fireEvent.click(screen.getByText("setup.manageServiceToken"))
-    expect(screen.queryByText("setup.back")).not.toBeNull()
-    expect(screen.queryByText("setup.allSetTitle")).toBeNull()
-    // …then Back returns to the derived floor (stage 3), not stage 1.
-    fireEvent.click(screen.getByText("setup.back"))
-    expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
-    expect(screen.queryByText("setup.runSetup")).toBeNull()
   })
 })

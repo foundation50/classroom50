@@ -1,17 +1,18 @@
 import { useParams } from "@tanstack/react-router"
-import { ArrowLeft, ArrowRight, CheckCircle2 } from "lucide-react"
+import { ArrowLeft, ArrowRight, Check, CheckCircle2 } from "lucide-react"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { useTranslation } from "react-i18next"
 
 import PageShell from "@/components/PageShell"
 import PageHeader from "@/components/PageHeader"
 import { Spinner } from "@/components/Spinner"
-import { Alert, Button, Card, RouterButton, rtlFlip } from "@/components/ui"
+import { Alert, Button, Card, RouterButton, cx, rtlFlip } from "@/components/ui"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { useIsOrgOwner } from "@/context/githubOrgRole/useIsOrgOwner"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
+import confetti from "canvas-confetti"
 import { type InitStepId, type InitStepUpdate } from "@/github-core/mutations"
 import { recordBudgetNoticeFromStep } from "@/orgPolicy/budgetNoticeStore"
 import useRunOrgSetup from "@/hooks/mutations/useRunOrgSetup"
@@ -32,6 +33,84 @@ import {
   initialInitSteps,
 } from "./orgSettings/initStepBoard"
 
+const SETUP_STEP_COUNT = 3
+
+// Celebrate reaching the finish screen: confetti fans out from across the top
+// edge (the GitHub 2FA look) rather than raining in straight columns. Honors
+// prefers-reduced-motion.
+const fireSetupConfetti = () => {
+  const base = {
+    ticks: 300,
+    gravity: 0.9,
+    spread: 120,
+    startVelocity: 32,
+    angle: -90,
+    zIndex: 1000,
+    disableForReducedMotion: true,
+  }
+  const drops = 6
+  for (let i = 0; i < drops; i++) {
+    confetti({
+      ...base,
+      particleCount: 26,
+      origin: { x: (i + 0.5) / drops, y: -0.15 },
+    })
+  }
+}
+
+// Custom stepper: DaisyUI's `steps` numbers every node, but the wizard
+// reference wants completed steps to collapse to a check. Done/current/upcoming
+// each map to one class recipe.
+const stepStateClass = {
+  done: "border-primary text-primary",
+  current: "border-primary bg-primary text-primary-content",
+  upcoming: "border-base-300 text-base-content/50",
+} as const
+
+const SetupStepper = ({ stage }: { stage: number }) => {
+  const { t } = useTranslation()
+  return (
+    <ol className="flex items-center" aria-label={t("setup.progressLabel")}>
+      {Array.from({ length: SETUP_STEP_COUNT }, (_, i) => {
+        const step = i + 1
+        const state =
+          step < stage ? "done" : step === stage ? "current" : "upcoming"
+        const isFirst = i === 0
+        return (
+          <li
+            key={step}
+            className={cx("flex items-center", !isFirst && "flex-1")}
+            aria-current={state === "current" ? "step" : undefined}
+          >
+            {!isFirst && (
+              <span
+                aria-hidden="true"
+                className={cx(
+                  "h-0.5 flex-1 rounded-full transition-colors",
+                  state === "upcoming" ? "bg-base-300" : "bg-primary",
+                )}
+              />
+            )}
+            <span
+              className={cx(
+                "flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors",
+                stepStateClass[state],
+              )}
+            >
+              {state === "done" ? (
+                <Check aria-hidden="true" className="size-4" />
+              ) : (
+                <span aria-hidden="true">{step}</span>
+              )}
+              <span className="sr-only">{t("setup.stepLabel", { step })}</span>
+            </span>
+          </li>
+        )
+      })}
+    </ol>
+  )
+}
+
 const OrgSteps = ({
   steps,
   mutation,
@@ -40,7 +119,6 @@ const OrgSteps = ({
   stage = 1,
   onGoToServiceToken = () => {},
   onLeaveServiceToken = () => {},
-  onManageToken = () => {},
 }: {
   steps: Record<InitStepId, InitStepUpdate>
   mutation: { isPending: boolean; mutateAsync: () => Promise<unknown> }
@@ -49,25 +127,28 @@ const OrgSteps = ({
   stage?: number
   onGoToServiceToken?: () => void
   onLeaveServiceToken?: () => void
-  onManageToken?: () => void
 }) => {
   const { t } = useTranslation()
   const runSetup = useSafeSubmit()
+
+  // Celebrate only a fresh completion — the stage advancing INTO done — not
+  // landing on an already-set-up org (mount-at-done) or a re-render. prevStage
+  // seeds from the mount stage so an initial done stays silent.
+  const prevStageRef = useRef(stage)
+  useEffect(() => {
+    const justCompleted =
+      prevStageRef.current < STAGE_DONE && stage === STAGE_DONE
+    prevStageRef.current = stage
+    if (justCompleted) fireSetupConfetti()
+  }, [stage])
+
   return (
     <Card>
       <Card.Body className="gap-5">
         <div className="grid grid-cols-[1fr_auto_1fr] items-center">
-          <ul className="steps steps-horizontal col-start-2 justify-self-center">
-            <li
-              className={`step ${stage === 1 ? "step-info" : "step-success"}`}
-            ></li>
-            <li
-              className={`step ${stage === 2 ? "step-info" : stage === 3 ? "step-success" : "[--step-bg:var(--color-base-300)]"}`}
-            ></li>
-            <li
-              className={`step ${stage === 3 ? "step-primary" : "[--step-bg:var(--color-base-300)]"}`}
-            ></li>
-          </ul>
+          <div className="col-start-2 w-56 justify-self-center">
+            <SetupStepper stage={stage} />
+          </div>
           <Card.Actions className="col-start-3 justify-self-end">
             {stage === 1 &&
               (!configReady ? (
@@ -130,19 +211,8 @@ const OrgSteps = ({
             </div>
             <div className="flex flex-wrap items-center justify-center gap-3">
               <RouterButton variant="primary" to="/$org" params={{ org }}>
-                <span className="truncate">
-                  {t("setup.goToOrg", {
-                    org: org || t("setup.yourOrganization"),
-                  })}
-                </span>
-                <ArrowRight
-                  aria-hidden="true"
-                  className={`size-4 shrink-0 ${rtlFlip}`}
-                />
+                {t("setup.done")}
               </RouterButton>
-              <Button variant="ghost" onClick={onManageToken}>
-                {t("setup.manageServiceToken")}
-              </Button>
             </div>
           </EnterDiv>
         )}
@@ -164,7 +234,7 @@ const NotTeamOrEnterpriseNotice = () => {
 // Derive the wizard stage from what exists on GitHub (config repo + service
 // token), matching the app's "behavior is derived from what exists" model. The
 // stage is NOT local state: it survives reload/remount because it's read from
-// GitHub. Backward navigation is the only local intent (see backOverride).
+// GitHub. Forward/back navigation is the only local intent (see forwardIntent).
 const STAGE_SETUP = 1
 const STAGE_SERVICE_TOKEN = 2
 const STAGE_DONE = 3
@@ -195,12 +265,11 @@ const OrgSetupPage = () => {
   const derivedStage = tokenPresent ? STAGE_DONE : STAGE_SETUP
 
   // Forward intent only ever raises the stage (never traps the user below a
-  // derived advance). Backward intent (Back button, Manage-token) may drop
-  // below the derived floor; a fresh derived advance clears it.
+  // derived advance). Backward intent (the token step's Back button) returns to
+  // the derived floor by resetting forwardIntent.
   const [forwardIntent, setForwardIntent] = useState(STAGE_SETUP)
-  const [backOverride, setBackOverride] = useState<number | null>(null)
 
-  const effectiveStage = backOverride ?? Math.max(derivedStage, forwardIntent)
+  const effectiveStage = Math.max(derivedStage, forwardIntent)
 
   // A settled indeterminate probe is a 403/permission or transient error, NOT a
   // real "missing" — surfacing stage 1 "Run setup" here would invite a needless
@@ -322,19 +391,15 @@ const OrgSetupPage = () => {
             org={org}
             stage={effectiveStage}
             onGoToServiceToken={() => {
-              setBackOverride(null)
               setForwardIntent(STAGE_SERVICE_TOKEN)
             }}
             // Leaving the token step returns to the derived floor: stage 1 when
-            // no token is set (the review board), or stage 3 when a token is
-            // present (the "Manage service token" round-trip from the finish
-            // screen). Reset both overrides so max(derivedStage, forwardIntent)
+            // no token is set (the review board), or stage 3 once a token is
+            // present. Reset forwardIntent so max(derivedStage, forwardIntent)
             // governs — otherwise the stale forwardIntent would pin stage 2.
             onLeaveServiceToken={() => {
-              setBackOverride(null)
               setForwardIntent(STAGE_SETUP)
             }}
-            onManageToken={() => setBackOverride(STAGE_SERVICE_TOKEN)}
           />
         ))}
 
