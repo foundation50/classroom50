@@ -23,22 +23,18 @@ const useGetOwnOrgMembership = (org: string | undefined) => {
     queryFn: () => getPendingOrgInvite(client, org ?? ""),
     staleTime: 10 * 60 * 1000,
     retry: retryTransientGitHubError,
-    // A DEFINITIVE cached error (401/403/404) must survive a fresh observer
-    // mounting. An ancestor gate (OrgLayout) toggles a full-screen spinner on
-    // this query's `isLoading`, which unmounts the subtree that ALSO reads this
-    // query; refetching the definitive error on the remount's fresh observer
-    // flips isLoading back to true — a subscribe→refetch→spinner→unmount→remount
-    // loop that pinned a non-member on an infinite spinner. Suppress the remount
-    // refetch only for definitive statuses (the loop's driver, and retrying
-    // can't change the verdict); transient 5xx/429/network errors still refetch
-    // on remount so the documented self-heal is preserved.
-    retryOnMount: (query) => {
-      const error = query.state.error
-      return !(
-        error instanceof GitHubAPIError &&
-        isDefinitiveGitHubStatus(error.status)
-      )
-    },
+    // A definitive cached error (401/403/404) must survive a fresh observer's
+    // mount. OrgLayout toggles a full-screen spinner on this query's isLoading,
+    // unmounting the subtree that also reads it; refetching the definitive error
+    // on remount flips isLoading back to true — a spinner->unmount->remount->
+    // refetch loop that pinned non-members on an endless spinner. Transient
+    // 5xx/429/network errors still refetch on remount (documented self-heal);
+    // only definitive statuses (the loop driver, unchangeable by a retry) don't.
+    retryOnMount: (query) =>
+      !(
+        query.state.error instanceof GitHubAPIError &&
+        isDefinitiveGitHubStatus(query.state.error.status)
+      ),
     enabled: Boolean(org),
   })
 }
