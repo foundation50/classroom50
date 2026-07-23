@@ -164,16 +164,76 @@ describe("buildOrgAuditReport", () => {
     expect(budget?.verdict.state).toBe("warn")
   })
 
-  it("treats an unreadable budgets list as advisory, failing the verdict but distinct from missing", async () => {
+  it("treats an unreadable budget as advisory (never gates), distinct from a missing cap", async () => {
+    // Enterprise-managed billing returns 400 on the org budgets endpoint; a
+    // plan without budgets can 403/404. None of these is fixable by the teacher,
+    // so — mirroring the CLI's "Recommended (not required)" — an unreadable cap
+    // must NOT fail the verdict. Only a missing cap (unenforced) is critical.
+    for (const status of [400, 403, 404]) {
+      const report = await buildOrgAuditReport(
+        makeClient({ budgets: httpError(status) }),
+        "acme",
+        "team",
+      )
+      const budget = report.concerns.find((c) => c.id === "orgBudget")
+      expect(budget?.verdict.state).toBe("unreadable")
+      // The verdict stays ok: an unreadable budget is the one unreadable concern
+      // that doesn't gate (see deriveVerdict).
+      expect(report.verdict).toBe("ok")
+    }
+  })
+
+  it("exempts only orgBudget: an unreadable budget alongside another unreadable concern still fails", async () => {
+    // Guards the narrowness of the exception — it must stay orgBudget-scoped.
+    // Pages unreadable (500) must still gate even though the budget (400) does
+    // not, in the same report.
     const report = await buildOrgAuditReport(
-      makeClient({ budgets: httpError(403) }),
+      {
+        request: <T>(path: string) => {
+          const ok = (v: unknown) => Promise.resolve(v as T)
+          if (path === "/orgs/acme") {
+            const live: Record<string, unknown> = {}
+            for (const s of memberDefaultSettings("team"))
+              live[s.field] = s.value
+            return ok(live)
+          }
+          if (path.endsWith("/actions/permissions"))
+            return ok({ enabled_repositories: "all", allowed_actions: "all" })
+          if (path.endsWith("/actions/permissions/workflow"))
+            return ok({
+              default_workflow_permissions: "write",
+              can_approve_pull_request_reviews: true,
+            })
+          if (path.includes("/protection"))
+            return ok({
+              allow_force_pushes: { enabled: false },
+              allow_deletions: { enabled: false },
+            })
+          if (path.includes("/permissions/access"))
+            return ok({ access_level: "organization" })
+          if (path.includes("/settings/billing/budgets"))
+            return Promise.reject(httpError(400)) as Promise<T>
+          if (path.includes("/pages"))
+            return Promise.reject(httpError(500)) as Promise<T>
+          if (path.includes("/rulesets"))
+            return ok([
+              { id: 1, name: RULESET_NAME_SUBMISSION_HISTORY },
+              { id: 2, name: RULESET_NAME_FEEDBACK_BASE },
+            ])
+          return Promise.reject(new Error(`unexpected: ${path}`)) as Promise<T>
+        },
+        requestRaw: () => Promise.reject(new Error("unexpected requestRaw")),
+      },
       "acme",
       "team",
     )
-    const budget = report.concerns.find((c) => c.id === "orgBudget")
-    // Unreadable (not "unenforced"): the CLI treats this as advisory, and the
-    // GUI's deriveVerdict fails on unreadable like any other read outage.
-    expect(budget?.verdict.state).toBe("unreadable")
+    expect(report.verdict).toBe("fail")
+    expect(
+      report.concerns.find((c) => c.id === "orgBudget")?.verdict.state,
+    ).toBe("unreadable")
+    expect(report.concerns.find((c) => c.id === "pages")?.verdict.state).toBe(
+      "unreadable",
+    )
   })
 
   it("recommends switching a non-main org default branch without failing", async () => {

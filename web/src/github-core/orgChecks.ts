@@ -172,12 +172,14 @@ export async function checkOrgBudget(
         }
     }
   } catch (err) {
-    // Any read failure (403 no billing visibility, 404 plan without budgets,
-    // transient) is advisory/inconclusive — mirror the CLI, which never treats
-    // an unreadable budgets list as critical drift. (Unlike other checks, a 404
-    // here is "can't read", not "not configured": an org with no budget returns
-    // 200 with an empty list.)
-    return { state: "unreadable", detail: readFailedDetail(err) }
+    // A read failure yields "unreadable", which deriveVerdict treats as
+    // advisory (never gates) for orgBudget specifically. (A 404 here is "can't
+    // read", not "not configured": an org with no budget returns 200 with an
+    // empty list, so we don't reuse unreadableFrom.)
+    return {
+      state: "unreadable",
+      detail: `couldn't verify the Actions spending cap (${readFailedDetail(err)}) — likely enterprise-managed billing or a plan without org budgets. Confirm a $0 hard-stop cap manually.`,
+    }
   }
 }
 
