@@ -87,7 +87,9 @@ const CONCERN_STATE_BADGE: Record<
   enforced: { tone: "success" },
   unenforced: { tone: "error" },
   warn: { tone: "warning" },
-  unreadable: { tone: "neutral", ghost: true },
+  // Warning, not ghost: "couldn't verify — confirm manually" is attention-worthy,
+  // and a ghost badge would ignore the tone and render neutral-grey (Badge.tsx).
+  unreadable: { tone: "warning" },
 }
 
 // What a Fix-it result means for the pane, derived purely from the RepairResult
