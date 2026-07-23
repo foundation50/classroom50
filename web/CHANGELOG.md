@@ -17,6 +17,22 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.14.0](https://github.com/foundation50/classroom50/compare/web-v1.13.0...web-v1.14.0) (2026-07-23)
+
+
+### Features
+
+* **web:** guide teachers and students through assignment enrollment (accept-link UX) ([#382](https://github.com/foundation50/classroom50/issues/382)) ([e66f76b](https://github.com/foundation50/classroom50/commit/e66f76ba67938630863f502342ab0c1e73e89eb0))
+
+
+### Bug Fixes
+
+* **cli:** skip managed toolchain setup on self-hosted autograde runners ([#370](https://github.com/foundation50/classroom50/issues/370)) ([d1cf8b0](https://github.com/foundation50/classroom50/commit/d1cf8b05e6b4cf95fdffb050fa0c78b413f808c8))
+* **web:** bump js-yaml to 4.3.0 for GHSA-52cp-r559-cp3m ([#367](https://github.com/foundation50/classroom50/issues/367)) ([52e1b48](https://github.com/foundation50/classroom50/commit/52e1b4800bab4189ae001777945d26dfd24882a5))
+* **web:** don't fail org preflight when the Actions budget is unreadable ([#385](https://github.com/foundation50/classroom50/issues/385)) ([559aaf1](https://github.com/foundation50/classroom50/commit/559aaf1a47a25e12e63b725b9b680b28000684be))
+* **web:** recover accept secret from team description for bare links ([#380](https://github.com/foundation50/classroom50/issues/380)) ([7c4231e](https://github.com/foundation50/classroom50/commit/7c4231e01001e4dc9a3995251b394b9f68983ce1))
+* **web:** stop infinite accept spinner for non-org-members ([#377](https://github.com/foundation50/classroom50/issues/377)) ([b89dfc9](https://github.com/foundation50/classroom50/commit/b89dfc9ac8082f6d274514fa347c5e7585219fd1))
+
 ## [1.13.0](https://github.com/foundation50/classroom50/compare/web-v1.12.0...web-v1.13.0) (2026-07-22)
 
 

@@ -17,6 +17,18 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.14.0](https://github.com/foundation50/classroom50/compare/cli-v1.13.0...cli-v1.14.0) (2026-07-23)
+
+
+### Features
+
+* **gh-teacher:** add additional details to autograded logs.  ([#353](https://github.com/foundation50/classroom50/issues/353)) ([254381e](https://github.com/foundation50/classroom50/commit/254381e9fae3dcc8f63b4f0c43e6c4ad3b695aa1))
+
+
+### Bug Fixes
+
+* **cli:** skip managed toolchain setup on self-hosted autograde runners ([#370](https://github.com/foundation50/classroom50/issues/370)) ([d1cf8b0](https://github.com/foundation50/classroom50/commit/d1cf8b05e6b4cf95fdffb050fa0c78b413f808c8))
+
 ## [1.13.0](https://github.com/foundation50/classroom50/compare/cli-v1.12.0...cli-v1.13.0) (2026-07-22)
 
 
