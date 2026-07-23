@@ -122,12 +122,20 @@ export default useStudentClassrooms
 // team-description bootstrap record is the source. `enabled: false` skips the
 // GET /user/teams read for callers that already hold the secret (e.g. an accept
 // link's ?k=), returning undefined without a network round-trip.
+//
+// `isLoading` is the in-flight state of that read, so a caller can wait before
+// fetching under a still-undefined secret (a protected classroom would 404 the
+// unprotected path). It is false when the read is disabled — nothing to wait on.
 export function useClassroomSecret(
   org: string | undefined,
   classroom: string | undefined,
   enabled = true,
-): string | undefined {
-  const { classrooms } = useStudentClassrooms(enabled ? org : undefined)
-  if (!classroom) return undefined
-  return classrooms.find((c) => c.classroom === classroom)?.secret
+): { secret: string | undefined; isLoading: boolean } {
+  const { classrooms, isLoading } = useStudentClassrooms(
+    enabled ? org : undefined,
+  )
+  const secret = classroom
+    ? classrooms.find((c) => c.classroom === classroom)?.secret
+    : undefined
+  return { secret, isLoading: enabled ? isLoading : false }
 }

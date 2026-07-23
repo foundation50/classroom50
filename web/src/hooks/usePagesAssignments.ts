@@ -10,11 +10,15 @@ const usePagesAssignments = (
   // (post-accept), or classroom.json (teachers). Empty/undefined fetches the
   // plain path (unprotected classroom).
   secret?: string,
+  // Gate the read while the secret is still being resolved: fetching under a
+  // not-yet-known secret would hit the unprotected path and 404 a protected
+  // classroom. Defaults true for callers whose secret is available synchronously.
+  enabled = true,
 ) => {
   return useQuery({
     queryKey: ["pages", "assignments", org, classroom, secret ?? ""],
     queryFn: () => fetchPagesAssignments(org ?? "", classroom ?? "", secret),
-    enabled: Boolean(org && classroom),
+    enabled: enabled && Boolean(org && classroom),
   })
 }
 

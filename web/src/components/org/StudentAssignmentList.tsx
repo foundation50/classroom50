@@ -371,7 +371,10 @@ export function StudentAssignmentList({
 }) {
   const { t } = useTranslation()
   const { user } = useGithubAuth()
-  const secret = useClassroomSecret(org, classroom)
+  const { secret, isLoading: loadingSecret } = useClassroomSecret(
+    org,
+    classroom,
+  )
   const { viewMode, sortKey, changeView, changeSort } = useListPrefsState(
     studentAssignmentListPrefs,
   )
@@ -382,9 +385,10 @@ export function StudentAssignmentList({
 
   const {
     data: assignments,
-    isLoading,
+    isLoading: loadingAssignmentsData,
     isError,
-  } = usePagesAssignments(org, classroom, secret)
+  } = usePagesAssignments(org, classroom, secret, !loadingSecret)
+  const isLoading = loadingSecret || loadingAssignmentsData
   const { data: repos } = useGetOrgRepos(org)
 
   const acceptedSlugs = useMemo(() => {

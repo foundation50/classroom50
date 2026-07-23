@@ -42,9 +42,13 @@ vi.mock("@/hooks/useStudentClassrooms", () => ({
     _org?: string,
     classroom?: string,
     enabled = true,
-  ): string | undefined => {
-    if (!enabled || !classroom) return undefined
-    return studentClassroomsData.find((c) => c.classroom === classroom)?.secret
+  ): { secret: string | undefined; isLoading: boolean } => {
+    if (!enabled || !classroom) return { secret: undefined, isLoading: false }
+    return {
+      secret: studentClassroomsData.find((c) => c.classroom === classroom)
+        ?.secret,
+      isLoading: false,
+    }
   },
 }))
 vi.mock("@/hooks/useGetRepo", () => ({
@@ -234,6 +238,20 @@ describe("AcceptAssignmentPage secret selection", () => {
 
   it("falls back to the team-description secret for a bare accept link", () => {
     searchParams.k = undefined
+    studentClassroomsData = [{ classroom: "cs101", secret: "team-secret" }]
+    renderWith()
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101",
+      "team-secret",
+    )
+  })
+
+  it("treats an empty ?k= as absent and uses the team-description secret", () => {
+    // A bare `?k=` (empty value) must not shadow the recovered team secret: the
+    // enabled gate already treats "" as absent, so precedence must agree, or a
+    // protected classroom fetches the unprotected path and 404s.
+    searchParams.k = ""
     studentClassroomsData = [{ classroom: "cs101", secret: "team-secret" }]
     renderWith()
     expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(

@@ -527,19 +527,27 @@ const AcceptAssignmentPage = () => {
   // selects the <classroom>/<secret>/ Pages path; absent otherwise. Read
   // loosely so the page works if mounted without the typed route in tests.
   const search = useSearch({ strict: false }) as { k?: string }
-  const linkSecret = typeof search.k === "string" ? search.k : undefined
+  const linkSecret =
+    typeof search.k === "string" && search.k !== "" ? search.k : undefined
 
   // Fallback for a bare accept link (no ?k=): an already-enrolled student's own
-  // team description carries the classroom's capability secret. Skipped when the
-  // link already supplies one, so the common path avoids a GET /user/teams read.
-  const teamSecret = useClassroomSecret(org, classroom, !linkSecret)
+  // team description carries the classroom's capability secret.
+  const { secret: teamSecret, isLoading: loadingSecret } = useClassroomSecret(
+    org,
+    classroom,
+    !linkSecret,
+  )
   const secret = linkSecret ?? teamSecret
 
   const { user } = useGithubAuth()
   const username = user?.login
 
-  const { data: assignmentsData, isLoading: loadingAssignments } =
-    usePagesAssignments(org, classroom, secret)
+  // Wait for the team-description read before fetching assignments: under a
+  // still-undefined secret the read would hit the unprotected path and 404 a
+  // protected classroom.
+  const { data: assignmentsData, isLoading: loadingAssignmentsData } =
+    usePagesAssignments(org, classroom, secret, !loadingSecret)
+  const loadingAssignments = loadingSecret || loadingAssignmentsData
   const {
     data: orgInvite,
     isLoading: loadingOrgMembership,
