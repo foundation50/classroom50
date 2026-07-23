@@ -56,6 +56,7 @@ import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import useAcceptShareSummary from "@/hooks/useAcceptShareSummary"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
@@ -139,6 +140,10 @@ const SubmissionsPageContent = () => {
   // students is wasted effort. `show` is loading-aware (won't flash before the
   // roster resolves).
   const emptyRoster = useEmptyRosterWarning(org, classroom)
+  // Roster-readiness summary for the share modal (student reach + no-students
+  // warning). Owns its own roster reads (React Query dedupes the shared query),
+  // like useEmptyRosterWarning.
+  const acceptShareSummary = useAcceptShareSummary(org, classroom)
   // Teacher-only page, so reading the classroom's capability-URL secret from
   // classroom.json is fine. For a protected classroom the shared accept link
   // must carry the key as `?k=<secret>`, else students hit "not found".
@@ -988,6 +993,10 @@ const SubmissionsPageContent = () => {
         url={assignmentSubmitUrl}
         cli={assignmentSubmitCli}
         hasSecret={Boolean(secret)}
+        org={org}
+        classroom={classroom}
+        classroomName={classroomMeta?.name || classroomMeta?.short_name}
+        summary={acceptShareSummary}
       />
     </PageShell>
   )
