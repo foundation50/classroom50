@@ -9,22 +9,17 @@ name: web Release Please
 #
 # Scoped to web/ via a web-only config + manifest
 # (release-please-config.web.json + .release-please-manifest.web.json). The CLI
-# has its OWN pair; the two workflows must never share one config listing both
-# packages. Each config also sets `separate-pull-requests: true` so release-please
-# names each Release PR branch with its component suffix
-# (release-please--branches--main--components--web vs ...--cli). Without that, two
-# single-package configs both default to the shared branch
-# `release-please--branches--main` and — running under different concurrency
-# groups — clobber each other's Release PR. Separate configs + separate PRs make
-# each workflow open and release only its own package. The `web-v*` tag scheme is
-# namespaced apart from the CLI's `cli-v*` tags.
+# has its OWN pair — the two workflows must never share one config listing both
+# packages. Both configs also set `separate-pull-requests: true`: without it two
+# single-package configs collide on the shared branch
+# `release-please--branches--main` and clobber each other's Release PR; with it
+# each gets a component-suffixed branch (...--components--web vs ...--cli). The
+# `web-v*` tags are namespaced apart from the CLI's `cli-v*`.
 #
-# Token model: release-please runs with GITHUB_TOKEN. A tag pushed by
-# GITHUB_TOKEN does NOT retrigger other workflows (Actions' recursion guard),
-# so instead of relying on web-deploy.yaml's tag trigger, the deploy job below
-# is gated on release-please's `release_created` output and runs in the same
-# run. (Requires "Allow GitHub Actions to create and approve pull requests" in
-# repo/org settings so the Release PR can be opened.)
+# Token model: release-please runs with GITHUB_TOKEN. A GITHUB_TOKEN-pushed tag
+# does NOT retrigger other workflows (Actions' recursion guard), so the deploy
+# job below is gated on this run's own output rather than a tag trigger.
+# (Requires "Allow GitHub Actions to create and approve pull requests".)
 
 on:
   push:
@@ -66,10 +61,8 @@ jobs:
           RP_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: echo "$RP_OUTPUTS"
 
-      # "Latest" on this repo represents the web app (classroom50.org). Assert it
-      # here so the badge tracks web even if a cli-v* release was created around
-      # the same time (cli-release-please.yaml demotes its own release; this makes
-      # web authoritative regardless of publish ordering).
+      # Assert web as the repo's "Latest" release, regardless of publish order
+      # vs the cli-v* release (see cli-release-please.yaml for why).
       - name: Mark web release as latest
         if: ${{ steps.release.outputs['web--tag_name'] != '' }}
         env:
