@@ -14,7 +14,10 @@ vi.mock("react-i18next", async (importOriginal) => {
 })
 
 import { ConcernRow } from "./OrgPolicyAuditPane"
-import { classifyRepairOutcome } from "./OrgPolicyAuditPane"
+import {
+  classifyRepairOutcome,
+  CONCERN_STATE_BADGE,
+} from "./OrgPolicyAuditPane"
 import type { ConcernCheck } from "@/orgPolicy/audit"
 
 afterEach(cleanup)
@@ -56,6 +59,38 @@ describe("ConcernRow", () => {
     // The manual settings link is still available.
     const link = screen.getByText("orgSettings.audit.viewOnGitHub").closest("a")
     expect(link?.getAttribute("href")).toBe(drifted.settingsUrl)
+  })
+
+  it("renders a translated detail descriptor via its i18n key", () => {
+    const unreadable: ConcernCheck = {
+      id: "orgBudget",
+      title: "Actions spending cap",
+      verdict: {
+        state: "unreadable",
+        detail: {
+          key: "orgSettings.audit.detail.budgetUnreadable",
+          params: { reason: "400" },
+        },
+      },
+      settingsUrl:
+        "https://github.com/organizations/acme/settings/billing/budgets",
+    }
+    render(
+      <ConcernRow concern={unreadable} canFix fixing={false} onFix={noop} />,
+    )
+    // The raw descriptor is never rendered; the key is (t() passes it through
+    // in this test's mock), proving detail goes through translation.
+    expect(
+      screen.getByText("orgSettings.audit.detail.budgetUnreadable"),
+    ).not.toBeNull()
+  })
+})
+
+describe("CONCERN_STATE_BADGE", () => {
+  it("renders an unreadable concern with a warning, non-ghost badge", () => {
+    // A ghost badge would ignore the tone and render neutral-grey (Badge.tsx),
+    // silently swallowing the warning intent — guard against that regression.
+    expect(CONCERN_STATE_BADGE.unreadable).toEqual({ tone: "warning" })
   })
 })
 

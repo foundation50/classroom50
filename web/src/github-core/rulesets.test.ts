@@ -146,6 +146,9 @@ describe("checkRulesets", () => {
     ])
     const verdict = await checkRulesets(client, "acme")
     expect(verdict.state).toBe("unenforced")
-    expect(verdict.detail).toContain(RULESET_NAME_FEEDBACK_BASE)
+    expect(verdict.detail?.key).toBe("orgSettings.audit.detail.rulesetsMissing")
+    expect(String(verdict.detail?.params?.names)).toContain(
+      RULESET_NAME_FEEDBACK_BASE,
+    )
   })
 })

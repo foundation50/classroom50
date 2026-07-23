@@ -34,23 +34,38 @@ export const RECOMMENDED_ORG_DEFAULT_BRANCH = DEFAULT_BRANCH
 // inconclusive.
 export type CheckState = "enforced" | "unenforced" | "warn" | "unreadable"
 
-export type CheckVerdict = {
-  state: CheckState
-  detail?: string
+// An i18n descriptor for a concern's `detail`: a translation key plus its
+// interpolation params. The data layer stays language-free — it names the
+// message; the render site (OrgPolicyAuditPane, provisioning) calls t(). Keys
+// live under `orgSettings.audit.detail.*` in the locale packs.
+export type CheckDetail = {
+  key: string
+  params?: Record<string, string | number>
 }
 
-// The `detail` string for a failed read, distinguishing an HTTP status from a
-// non-API error. Shared so every "unreadable" verdict phrases it identically.
-export function readFailedDetail(err: unknown): string {
+export type CheckVerdict = {
+  state: CheckState
+  detail?: CheckDetail
+}
+
+// The `detail` descriptor for a failed read, distinguishing an HTTP status from
+// a non-API error. Shared so every "unreadable" verdict phrases it identically.
+export function readFailedDetail(err: unknown): CheckDetail {
   if (err instanceof GitHubAPIError) {
-    return `read failed (${err.status})`
+    return {
+      key: "orgSettings.audit.detail.readFailedStatus",
+      params: { status: err.status },
+    }
   }
-  return "read failed"
+  return { key: "orgSettings.audit.detail.readFailed" }
 }
 
 function unreadableFrom(err: unknown): CheckVerdict {
   if (err instanceof GitHubAPIError && err.status === 404) {
-    return { state: "unenforced", detail: "not configured" }
+    return {
+      state: "unenforced",
+      detail: { key: "orgSettings.audit.detail.notConfigured" },
+    }
   }
   return { state: "unreadable", detail: readFailedDetail(err) }
 }
@@ -131,7 +146,13 @@ export async function checkOrgActions(
       state: enforced ? "enforced" : "unenforced",
       detail: enforced
         ? undefined
-        : `enabled_repositories="${perms.enabled_repositories}", allowed_actions="${perms.allowed_actions ?? "unset"}"`,
+        : {
+            key: "orgSettings.audit.detail.orgActions",
+            params: {
+              enabledRepositories: perms.enabled_repositories,
+              allowedActions: perms.allowed_actions ?? "unset",
+            },
+          },
     }
   } catch (err) {
     return unreadableFrom(err)
@@ -163,12 +184,15 @@ export async function checkOrgBudget(
       case "warn":
         return {
           state: "warn",
-          detail: `Actions budget is $${v.amount} (over $${BUDGET_WARN_THRESHOLD}); recommend a $0 hard-stop cap`,
+          detail: {
+            key: "orgSettings.audit.detail.budgetOverThreshold",
+            params: { amount: v.amount, threshold: BUDGET_WARN_THRESHOLD },
+          },
         }
       case "missing":
         return {
           state: "unenforced",
-          detail: "no $0 hard-stop Actions budget",
+          detail: { key: "orgSettings.audit.detail.budgetMissing" },
         }
     }
   } catch (err) {
@@ -178,7 +202,13 @@ export async function checkOrgBudget(
     // empty list, so we don't reuse unreadableFrom.)
     return {
       state: "unreadable",
-      detail: `couldn't verify the Actions spending cap (${readFailedDetail(err)}) — likely enterprise-managed billing or a plan without org budgets. Confirm a $0 hard-stop cap manually.`,
+      detail: {
+        key: "orgSettings.audit.detail.budgetUnreadable",
+        params: {
+          reason:
+            err instanceof GitHubAPIError ? String(err.status) : "read failed",
+        },
+      },
     }
   }
 }
@@ -326,8 +356,7 @@ export async function checkWorkflowPermissions(
       if (orgPerms.default_workflow_permissions !== "write") {
         return {
           state: "enforced",
-          detail:
-            "org policy defaults workflows to read; the skeleton workflows declare their own permissions",
+          detail: { key: "orgSettings.audit.detail.workflowOrgManaged" },
         }
       }
     } catch {

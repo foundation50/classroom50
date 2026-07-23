@@ -80,7 +80,7 @@ const CONCERN_STATE_LABEL: Record<CheckState, string> = {
   unreadable: "orgSettings.audit.stateUnreadable",
 }
 
-const CONCERN_STATE_BADGE: Record<
+export const CONCERN_STATE_BADGE: Record<
   CheckState,
   { tone: BadgeTone; ghost?: boolean }
 > = {
@@ -153,7 +153,7 @@ export function ConcernRow({
           <div className="text-sm font-semibold">{concern.title}</div>
           {concern.verdict.detail && (
             <p className="mt-0.5 text-xs text-base-content/70">
-              {concern.verdict.detail}
+              {t(concern.verdict.detail.key, concern.verdict.detail.params)}
             </p>
           )}
           {unresolvedMessage !== undefined && (

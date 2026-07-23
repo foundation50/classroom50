@@ -1132,6 +1132,17 @@
       "saveButton": "Save service token"
     },
     "audit": {
+      "detail": {
+        "readFailed": "read failed",
+        "readFailedStatus": "read failed ({{status}})",
+        "notConfigured": "not configured",
+        "orgActions": "enabled_repositories=\"{{enabledRepositories}}\", allowed_actions=\"{{allowedActions}}\"",
+        "budgetOverThreshold": "Actions budget is ${{amount}} (over ${{threshold}}); recommend a $0 hard-stop cap",
+        "budgetMissing": "no $0 hard-stop Actions budget",
+        "budgetUnreadable": "couldn't verify the Actions spending cap (read failed ({{reason}})) — likely enterprise-managed billing or a plan without org budgets. Confirm a $0 hard-stop cap manually.",
+        "workflowOrgManaged": "org policy defaults workflows to read; the skeleton workflows declare their own permissions",
+        "rulesetsMissing": "missing: {{names}}"
+      },
       "title": "Organization policy",
       "planBadgeTitle": "GitHub plan — determines which policies are in scope (Enterprise unlocks additional member-privilege fields)",
       "description": "What Classroom 50 configures on your behalf, and whether anything has drifted from the expected lockdown.",

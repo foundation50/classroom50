@@ -271,7 +271,9 @@ describe("checkWorkflowPermissions", () => {
     })
     const verdict = await checkWorkflowPermissions(client, "acme")
     expect(verdict.state).toBe("enforced")
-    expect(verdict.detail).toMatch(/org policy/i)
+    expect(verdict.detail?.key).toBe(
+      "orgSettings.audit.detail.workflowOrgManaged",
+    )
   })
 
   it("unenforced when repo is read but the org allows write (fixable)", async () => {
