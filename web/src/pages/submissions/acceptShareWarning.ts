@@ -3,7 +3,9 @@
 // student team, so a teacher who shares it before enrolling anyone (or while
 // everyone is still a pending invite) hands out a link nobody can use yet.
 //
-//   - noStudents: zero enrolled students — nobody can accept (the #376 case).
+//   - noStudents: no enrolled students can accept — nobody with the student
+//                 role is an active member yet (the #376 case). Staff-only
+//                 (TA/HTA/teacher) enrollment still counts as noStudents.
 //   - pending:    some enrolled, but `pending` invited students can't accept
 //                 until they join the org.
 //   - none:       at least one enrolled student and nothing pending to flag.
