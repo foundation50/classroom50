@@ -205,7 +205,7 @@ The CLIs call GitHub through [`go-gh`](https://github.com/cli/go-gh);
 | POST | `/repos/{template_owner}/{template_repo}/generate` | Generate the repo from a template. |
 | POST | `/orgs/{org}/repos` | Create an empty repo (template-less). |
 | GET / PATCH | `/repos/{owner}/{repo}` | Recover from "already exists"; disable issues/projects/wiki. |
-| PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Keep the student as admin; `gh student invite`. |
+| PUT | `/repos/{owner}/{repo}/collaborators/{username}` | Set the founder role: `push` (individual) or `admin` (group); also backs `gh student invite`. |
 | GET / POST / PATCH | `/repos/{owner}/{repo}/git/{refs,commits,blobs,trees}` + `/branches/{branch}` | Commit the setup files. |
 | GET | `/repos/{owner}/{repo}/contents/{path}` | Fetch `.gitignore`/`.github/` from the template (`submit`). |
 

@@ -338,9 +338,9 @@ rebase failures → `lost the rebase race`, retry.
 
 Manage a classroom's **staff teams** — `classroom50-<classroom>-{teacher,hta,ta}`.
 The `teacher` and `hta` (head TA) teams get write on the config repo; `ta` gets
-read-only. Membership lives entirely in these teams (there's no `role` column in
-`roster.csv`), so a classroom's staff is the same from the CLI or the web app.
-(`instructor` is a legacy alias of `teacher`.)
+read-only. The classroom's GitHub teams — not the `role` column in `roster.csv` —
+are the role authority, so a classroom's staff is the same from the CLI or the
+web app. (`instructor` is a legacy alias of `teacher`.)
 
 ```sh
 gh teacher staff add <org> <classroom> <username> [--role teacher|hta|ta]
