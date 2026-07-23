@@ -10,12 +10,8 @@ import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useUpdateOrgProfile } from "@/hooks/mutations/useUpdateOrgProfile"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
-import {
-  githubOrgUrl,
-  githubOrgPeopleUrl,
-  githubOrgTeamsUrl,
-  githubOrgSettingsUrl,
-} from "@/util/orgUrl"
+import { githubOrgSettingsUrl } from "@/util/orgUrl"
+import { normalizeWebsiteUrl, safeHttpUrl } from "@/util/url"
 
 type ProfileFormValues = {
   name: string
@@ -26,23 +22,15 @@ type ProfileFormValues = {
   company: string
 }
 
-// A definition-list row; renders "Not set" in muted text for empty values.
-function InfoRow({ label, value }: { label: string; value?: string | null }) {
-  const { t } = useTranslation()
+// A definition-list row; renders nothing when the value is empty so the view
+// shows only fields that are actually set (all fields are editable in edit mode).
+// `value` may be a string or a node (e.g. a mailto/website link).
+function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
+  if (!value) return null
   return (
     <div>
-      <dt className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-        {label}
-      </dt>
-      <dd className="mt-0.5 break-words text-sm">
-        {value ? (
-          value
-        ) : (
-          <span className="text-base-content/40">
-            {t("orgs.detailsModal.notSet")}
-          </span>
-        )}
-      </dd>
+      <dt className="text-xs font-medium text-base-content/50">{label}</dt>
+      <dd className="mt-0.5 break-words text-sm">{value}</dd>
     </div>
   )
 }
@@ -88,8 +76,15 @@ function OrgDetailsModal({
   const form = useForm({
     defaultValues: currentValues(),
     onSubmit: async ({ value }) => {
+      // Relax website input: accept a bare host (e.g. "classroom50.org") and
+      // default it to https:// via the built-in URL parser. An empty string
+      // clears the field; a value that can't be made safe is sent as-is and
+      // GitHub validates it.
+      const normalizedBlog = value.blog.trim()
+        ? (normalizeWebsiteUrl(value.blog) ?? value.blog.trim())
+        : ""
       try {
-        await updateProfile.mutateAsync(value)
+        await updateProfile.mutateAsync({ ...value, blog: normalizedBlog })
         notify({
           tone: "success",
           durationMs: 4000,
@@ -124,55 +119,38 @@ function OrgDetailsModal({
     onClose()
   }
 
-  const links: { label: string; href: string }[] = [
-    { label: t("orgs.detailsModal.linkProfile"), href: org.html_url },
-    { label: t("orgs.detailsModal.linkRepos"), href: githubOrgUrl(org.login) },
-    {
-      label: t("orgs.detailsModal.linkTeams"),
-      href: githubOrgTeamsUrl(org.login),
-    },
-    {
-      label: t("orgs.detailsModal.linkPeople"),
-      href: githubOrgPeopleUrl(org.login),
-    },
-    ...(isOwner
-      ? [
-          {
-            label: t("orgs.detailsModal.linkSettings"),
-            href: githubOrgSettingsUrl(org.login),
-          },
-        ]
-      : []),
-  ]
-
   return (
     <Modal
       open={open}
       onClose={handleClose}
-      size="lg"
+      size="2xl"
       aria-labelledby={titleId}
     >
-      {/* Header: avatar + name; avatar is read-only with a link out to GitHub. */}
+      {/* Header: avatar + name, with an owner-only pencil badge on the avatar
+          in edit mode (links to GitHub settings — the REST API can't set an org
+          avatar). pe-8 keeps the row clear of the Modal's close X. */}
       <div className="flex items-center gap-3 pe-8">
-        <div className="flex flex-col items-center gap-1">
+        <div className="relative shrink-0">
           <img
             src={org.avatar_url}
             alt=""
-            className="size-12 shrink-0 rounded-xl border border-base-300"
+            className="size-12 rounded-xl border border-base-300"
           />
-          {isOwner && (
+          {isOwner && editing && (
             <a
               href={githubOrgSettingsUrl(org.login)}
               target="_blank"
               rel="noreferrer"
-              title={t("orgs.detailsModal.avatarHint")}
-              className="text-[10px] text-base-content/50 hover:text-primary"
+              title={t("orgs.detailsModal.editOnGitHub")}
+              aria-label={t("orgs.detailsModal.editOnGitHub")}
+              className="absolute -bottom-1.5 -start-1.5 flex size-5 items-center justify-center rounded-full border border-base-300 bg-base-100 text-base-content/70 shadow-sm hover:text-primary"
             >
-              {t("orgs.detailsModal.changeAvatar")}
+              <Pencil aria-hidden="true" className="size-3" />
             </a>
           )}
         </div>
-        <div className="min-w-0">
+
+        <div className="min-w-0 flex-1">
           <h3 id={titleId} className="truncate text-lg font-bold">
             {heading}
           </h3>
@@ -244,7 +222,9 @@ function OrgDetailsModal({
                       id={id}
                       aria-describedby={describedById}
                       inputSize="sm"
-                      type="url"
+                      type="text"
+                      inputMode="url"
+                      placeholder={t("orgs.detailsModal.websitePlaceholder")}
                       value={field.state.value}
                       onChange={(e) => field.handleChange(e.target.value)}
                       onBlur={field.handleBlur}
@@ -298,7 +278,7 @@ function OrgDetailsModal({
             <form.Field name="company">
               {(field) => (
                 <FormField
-                  label={t("orgs.detailsModal.company")}
+                  label={t("orgs.detailsModal.school")}
                   htmlFor={field.name}
                 >
                   {({ id, describedById }) => (
@@ -339,76 +319,105 @@ function OrgDetailsModal({
         </form>
       ) : (
         <>
-          <dl className="mt-5 grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+          <div className="mt-5 flex flex-col gap-3">
+            {/* Description spans full width; Website + Email follow as a pair. */}
             <InfoRow
               label={t("orgs.detailsModal.description")}
               value={details?.description}
             />
-            <InfoRow
-              label={t("orgs.detailsModal.website")}
-              value={details?.blog}
-            />
-            <InfoRow
-              label={t("orgs.detailsModal.location")}
-              value={details?.location}
-            />
-            <InfoRow
-              label={t("orgs.detailsModal.email")}
-              value={details?.email}
-            />
-            <InfoRow
-              label={t("orgs.detailsModal.company")}
-              value={details?.company}
-            />
-            {details?.plan?.name && (
-              <InfoRow
-                label={t("orgs.detailsModal.plan")}
-                value={details.plan.name}
-              />
-            )}
-            <InfoRow
-              label={t("orgs.detailsModal.role")}
-              value={
-                isOwner
-                  ? t("orgs.detailsModal.roleAdmin")
-                  : t("orgs.detailsModal.roleMember")
-              }
-            />
-          </dl>
 
-          <div className="mt-6">
-            <p className="text-xs font-medium uppercase tracking-wide text-base-content/50">
-              {t("orgs.detailsModal.linksHeading")}
-            </p>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {links.map((link) => (
-                <Button
-                  key={link.label}
-                  as="a"
-                  href={link.href}
-                  target="_blank"
-                  rel="noreferrer"
-                  variant="outline"
-                  size="sm"
-                >
-                  <GitHub aria-hidden="true" className="size-4" />
-                  {link.label}
-                  <ExternalLink aria-hidden="true" className="size-3" />
-                </Button>
-              ))}
-            </div>
+            <dl className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
+              <InfoRow
+                label={t("orgs.detailsModal.website")}
+                value={
+                  safeHttpUrl(details?.blog) ? (
+                    <a
+                      href={safeHttpUrl(details?.blog)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-primary hover:underline"
+                    >
+                      {details?.blog}
+                    </a>
+                  ) : (
+                    details?.blog
+                  )
+                }
+              />
+              <InfoRow
+                label={t("orgs.detailsModal.email")}
+                value={
+                  details?.email ? (
+                    <a
+                      href={`mailto:${details.email}`}
+                      className="text-primary hover:underline"
+                    >
+                      {details.email}
+                    </a>
+                  ) : null
+                }
+              />
+              <InfoRow
+                label={t("orgs.detailsModal.location")}
+                value={details?.location}
+              />
+              <InfoRow
+                label={t("orgs.detailsModal.school")}
+                value={details?.company}
+              />
+              {/* Plan and org ID are owner-facing details. Plan is only
+                  returned to owners anyway; org ID is hidden from members to
+                  keep the member view focused on the public profile. */}
+              {isOwner && (
+                <InfoRow
+                  label={t("orgs.detailsModal.plan")}
+                  value={details?.plan?.name}
+                />
+              )}
+              {isOwner && (
+                <InfoRow
+                  label={t("orgs.detailsModal.orgId")}
+                  value={String(org.id)}
+                />
+              )}
+              <InfoRow
+                label={t("orgs.detailsModal.role")}
+                value={
+                  isOwner
+                    ? t("orgs.detailsModal.roleAdmin")
+                    : t("orgs.detailsModal.roleMember")
+                }
+              />
+            </dl>
           </div>
 
-          <div className="modal-action">
-            <Button variant="ghost" size="sm" onClick={handleClose}>
-              {t("orgs.detailsModal.close")}
-            </Button>
-            {isOwner && (
-              <Button variant="primary" size="sm" onClick={startEditing}>
-                <Pencil aria-hidden="true" className="size-4" />
-                {t("orgs.detailsModal.edit")}
-              </Button>
+          <div className="modal-action items-center justify-between">
+            {isOwner ? (
+              <a
+                href={githubOrgSettingsUrl(org.login)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1.5 text-sm text-base-content/70 hover:text-primary"
+              >
+                <GitHub aria-hidden="true" className="size-4" />
+                {t("orgs.detailsModal.manageOnGitHub")}
+                <ExternalLink aria-hidden="true" className="size-3" />
+              </a>
+            ) : (
+              // Keep the buttons right-aligned when the manage link is hidden.
+              <span />
             )}
+            <div className="flex items-center gap-2">
+              <Button variant="ghost" size="sm" onClick={handleClose}>
+                {t("orgs.detailsModal.close")}
+              </Button>
+              {isOwner && (
+                <Button variant="primary" size="sm" onClick={startEditing}>
+                  <Pencil aria-hidden="true" className="size-4" />
+                  {t("orgs.detailsModal.edit")}
+                </Button>
+              )}
+            </div>
           </div>
         </>
       )}

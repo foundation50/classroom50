@@ -63,7 +63,7 @@ afterEach(() => {
 })
 
 describe("OrgDetailsModal", () => {
-  it("shows the display name, slug, plan, and owner role in view mode", () => {
+  it("shows the display name, slug, plan, org id, and owner role in view mode", () => {
     planDetails.mockReturnValue({
       data: {
         name: "Classroom 50 Summer Dev",
@@ -75,7 +75,9 @@ describe("OrgDetailsModal", () => {
     expect(screen.getByText("Classroom 50 Summer Dev")).toBeTruthy()
     expect(screen.getByText("classroom50-summer-dev")).toBeTruthy()
     expect(screen.getByText("team")).toBeTruthy()
+    expect(screen.getByText("4242")).toBeTruthy()
     expect(screen.getByText("orgs.detailsModal.roleAdmin")).toBeTruthy()
+    expect(screen.getByText("orgs.detailsModal.manageOnGitHub")).toBeTruthy()
   })
 
   it("falls back to the slug heading when no display name is set", () => {
@@ -86,15 +88,30 @@ describe("OrgDetailsModal", () => {
     ).toBeGreaterThan(0)
   })
 
-  it("hides Edit and the Settings link for a non-owner member", () => {
-    planDetails.mockReturnValue({ data: { name: "Acme" } })
+  it("for a non-owner: hides Edit, Manage link, plan, and org id", () => {
+    planDetails.mockReturnValue({
+      data: { name: "Acme", plan: { name: "team" } },
+    })
     render(
       <OrgDetailsModal summary={summary("member")} open onClose={() => {}} />,
     )
     expect(screen.queryByText("orgs.detailsModal.edit")).toBeNull()
-    expect(screen.queryByText("orgs.detailsModal.linkSettings")).toBeNull()
-    expect(screen.getByText("orgs.detailsModal.linkRepos")).toBeTruthy()
+    expect(screen.queryByText("orgs.detailsModal.manageOnGitHub")).toBeNull()
+    expect(screen.queryByText("orgs.detailsModal.plan")).toBeNull()
+    expect(screen.queryByText("orgs.detailsModal.orgId")).toBeNull()
+    expect(screen.queryByText("team")).toBeNull()
     expect(screen.getByText("orgs.detailsModal.roleMember")).toBeTruthy()
+  })
+
+  it("hides profile fields that have no value", () => {
+    planDetails.mockReturnValue({
+      data: { name: "Acme", description: "hi", location: null, company: "" },
+    })
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+    expect(screen.getByText("orgs.detailsModal.description")).toBeTruthy()
+    // Empty location/school rows are omitted entirely.
+    expect(screen.queryByText("orgs.detailsModal.location")).toBeNull()
+    expect(screen.queryByText("orgs.detailsModal.school")).toBeNull()
   })
 
   it("lets an owner edit and save the profile", async () => {
@@ -115,6 +132,22 @@ describe("OrgDetailsModal", () => {
     )
     expect(notify).toHaveBeenCalledWith(
       expect.objectContaining({ tone: "success" }),
+    )
+  })
+
+  it("defaults a bare website host to https:// on save", async () => {
+    planDetails.mockReturnValue({ data: { name: "Acme", blog: "" } })
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+
+    await userEvent.click(screen.getByText("orgs.detailsModal.edit"))
+    const websiteInput = screen.getByPlaceholderText(
+      "orgs.detailsModal.websitePlaceholder",
+    )
+    await userEvent.type(websiteInput, "classroom50.org")
+    await userEvent.click(screen.getByText("orgs.detailsModal.save"))
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ blog: "https://classroom50.org" }),
     )
   })
 })

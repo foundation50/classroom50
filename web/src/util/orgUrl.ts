@@ -8,9 +8,6 @@ export const githubOrgUrl = (org: string): string =>
 export const githubOrgPeopleUrl = (org: string): string =>
   `https://github.com/orgs/${org}/people`
 
-export const githubOrgTeamsUrl = (org: string): string =>
-  `https://github.com/orgs/${org}/teams`
-
 export const githubOrgSettingsUrl = (org: string): string =>
   `https://github.com/organizations/${org}/settings/profile`
 

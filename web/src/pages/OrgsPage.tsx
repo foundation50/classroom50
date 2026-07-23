@@ -23,7 +23,6 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react"
-import GitHub from "@/assets/github.svg?react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
@@ -232,17 +231,6 @@ function HideOrgMenu({
           tabIndex={0}
           className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
         >
-          <li>
-            <a
-              href={`https://github.com/${org.login}`}
-              target="_blank"
-              rel="noreferrer"
-              title={t("orgs.card.openOnGitHub", { org: org.login })}
-            >
-              <GitHub aria-hidden="true" className="size-4" />
-              {t("orgs.card.viewOnGitHub")}
-            </a>
-          </li>
           <li>
             <button
               type="button"
