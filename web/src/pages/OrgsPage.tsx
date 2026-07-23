@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   User,
 } from "lucide-react"
+import GitHub from "@/assets/github.svg?react"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -220,6 +221,17 @@ function HideOrgMenu({
         className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
       >
         <li>
+          <a
+            href={`https://github.com/${org.login}`}
+            target="_blank"
+            rel="noreferrer"
+            title={t("orgs.card.openOnGitHub", { org: org.login })}
+          >
+            <GitHub aria-hidden="true" className="size-4" />
+            {t("orgs.card.viewOnGitHub")}
+          </a>
+        </li>
+        <li>
           <button type="button" onClick={handleHide}>
             <EyeOff aria-hidden="true" className="size-4" />
             {t("orgs.card.hide")}
@@ -236,13 +248,6 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
 
   return (
     <>
-      <GitHubLink
-        href={`https://github.com/${org.login}`}
-        label={t("orgs.card.viewOnGitHub")}
-        title={t("orgs.card.openOnGitHub", { org: org.login })}
-        className="shrink-0"
-        showLogo={false}
-      />
       {canOpen && (
         <Link
           to="/$org"
