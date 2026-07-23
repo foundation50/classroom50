@@ -35,15 +35,13 @@ import {
 
 const SETUP_STEP_COUNT = 3
 
-// Celebrate reaching the finish screen with confetti scattered evenly across
-// the full width, fanning out and drifting down (like the GitHub 2FA screen)
-// rather than falling in straight columns. Honors prefers-reduced-motion.
+// Celebrate reaching the finish screen: confetti fans out from across the top
+// edge (the GitHub 2FA look) rather than raining in straight columns. Honors
+// prefers-reduced-motion.
 const fireSetupConfetti = () => {
   const base = {
     ticks: 300,
     gravity: 0.9,
-    // Wide spread + real launch velocity so each emitter fans out and pieces
-    // cross laterally instead of raining straight down.
     spread: 120,
     startVelocity: 32,
     angle: -90,
@@ -55,49 +53,55 @@ const fireSetupConfetti = () => {
     confetti({
       ...base,
       particleCount: 26,
-      // Launch points spaced across the width, above the top edge.
       origin: { x: (i + 0.5) / drops, y: -0.15 },
     })
   }
 }
 
-// GitHub-style progress stepper: completed steps collapse to a check inside a
-// filled circle with a solid connector; the current step shows its number in a
-// primary-filled circle; upcoming steps stay muted. Replaces DaisyUI `steps`
-// (which renders a number in every node) to match the setup wizard reference.
+// Custom stepper: DaisyUI's `steps` numbers every node, but the wizard
+// reference wants completed steps to collapse to a check. Done/current/upcoming
+// each map to one class recipe.
+const stepStateClass = {
+  done: "border-primary text-primary",
+  current: "border-primary bg-primary text-primary-content",
+  upcoming: "border-base-300 text-base-content/50",
+} as const
+
 const SetupStepper = ({ stage }: { stage: number }) => {
   const { t } = useTranslation()
   return (
     <ol className="flex items-center" aria-label={t("setup.progressLabel")}>
       {Array.from({ length: SETUP_STEP_COUNT }, (_, i) => {
         const step = i + 1
-        const isDone = step < stage
-        const isCurrent = step === stage
+        const state =
+          step < stage ? "done" : step === stage ? "current" : "upcoming"
         const isFirst = i === 0
         return (
           <li
             key={step}
             className={cx("flex items-center", !isFirst && "flex-1")}
-            aria-current={isCurrent ? "step" : undefined}
+            aria-current={state === "current" ? "step" : undefined}
           >
             {!isFirst && (
               <span
                 aria-hidden="true"
                 className={cx(
                   "h-0.5 flex-1 rounded-full transition-colors",
-                  isDone || isCurrent ? "bg-primary" : "bg-base-300",
+                  state === "upcoming" ? "bg-base-300" : "bg-primary",
                 )}
               />
             )}
             <span
               className={cx(
                 "flex size-8 shrink-0 items-center justify-center rounded-full border-2 text-sm font-semibold transition-colors",
-                isCurrent && "border-primary bg-primary text-primary-content",
-                isDone && "border-primary text-primary",
-                !isCurrent && !isDone && "border-base-300 text-base-content/50",
+                stepStateClass[state],
               )}
             >
-              {isDone ? <Check aria-hidden="true" className="size-4" /> : step}
+              {state === "done" ? (
+                <Check aria-hidden="true" className="size-4" />
+              ) : (
+                <span aria-hidden="true">{step}</span>
+              )}
               <span className="sr-only">{t("setup.stepLabel", { step })}</span>
             </span>
           </li>
@@ -127,14 +131,15 @@ const OrgSteps = ({
   const { t } = useTranslation()
   const runSetup = useSafeSubmit()
 
-  // Fire once on entering the finish screen; the ref guards re-renders and a
-  // Back→forward return so the burst doesn't repeat within the same session.
-  const celebratedRef = useRef(false)
+  // Celebrate only a fresh completion — the stage advancing INTO done — not
+  // landing on an already-set-up org (mount-at-done) or a re-render. prevStage
+  // seeds from the mount stage so an initial done stays silent.
+  const prevStageRef = useRef(stage)
   useEffect(() => {
-    if (stage === STAGE_DONE && !celebratedRef.current) {
-      celebratedRef.current = true
-      fireSetupConfetti()
-    }
+    const justCompleted =
+      prevStageRef.current < STAGE_DONE && stage === STAGE_DONE
+    prevStageRef.current = stage
+    if (justCompleted) fireSetupConfetti()
   }, [stage])
 
   return (

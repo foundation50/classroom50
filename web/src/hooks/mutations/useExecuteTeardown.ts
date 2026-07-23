@@ -1,4 +1,8 @@
-import { useMutation, useQueryClient } from "@tanstack/react-query"
+import {
+  useMutation,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query"
 import {
   executeTeardown,
   TeardownRateLimitError,
@@ -8,26 +12,25 @@ import { githubKeys } from "@/github-core/queries"
 import { orgClassroom50StatusKey } from "@/hooks/useOrgClassroom50Status"
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 
-// Refresh the org list and DROP the setup-gating caches (service-token status +
-// config-repo probe) for the torn-down org. Teardown deletes the config repo
-// and its service-token secret, so remove (not just invalidate) those keys: the
-// wizard derives its stage from `data` synchronously, and a lingering
-// "present"/"ready" would jump a fresh re-add straight to "You're all set".
-function forgetTeardownState(
-  queryClient: ReturnType<typeof useQueryClient>,
-  org: string,
-) {
-  void queryClient.invalidateQueries({ queryKey: ["orgs"] })
-  queryClient.removeQueries({ queryKey: githubKeys.serviceToken(org) })
-  queryClient.removeQueries({ queryKey: orgClassroom50StatusKey(org) })
+// Evict the setup-gating caches (service-token status + config-repo probe) for
+// an org whose config repo is now gone. The wizard reads this data
+// synchronously, so remove (not just invalidate). Cancel first: an in-flight
+// save optimistically re-seeds "present" and would otherwise resurrect it.
+function forgetSetupState(queryClient: QueryClient, org: string) {
+  const keys = [githubKeys.serviceToken(org), orgClassroom50StatusKey(org)]
+  for (const queryKey of keys) {
+    void queryClient.cancelQueries({ queryKey })
+    queryClient.removeQueries({ queryKey })
+  }
 }
 
 // Execute a teardown (delete every repo + classroom team, marker deleted last).
-// Hook refreshes org state on success AND on a rate-limit failure (which may
-// have already deleted some repos). It does NOT swallow the error — mutateAsync
-// still REJECTS so the caller's ConfirmModal shows the failure inline (the
-// re-throw contract); the clean-run home-redirect stays at the call site (see
-// ./README.md).
+// Refreshes the org list on every outcome; only forgets the setup-gating caches
+// when the marker (config repo) was actually deleted — a retained marker (any
+// partial run, including the rate-limit abort) leaves the org still set up, so
+// evicting would flash the wizard back to step 1. Does NOT swallow the error —
+// mutateAsync still REJECTS so the caller's ConfirmModal shows the failure
+// inline; the clean-run home-redirect stays at the call site (see ./README.md).
 export function useExecuteTeardown(plan: TeardownPlan | null) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -35,18 +38,18 @@ export function useExecuteTeardown(plan: TeardownPlan | null) {
   return useMutation({
     mutationFn: async () => {
       if (!plan) return
-      const result = await executeTeardown(client, plan)
-      return result
+      return executeTeardown(client, plan)
     },
-    onSuccess: () => {
-      if (plan) forgetTeardownState(queryClient, plan.org)
+    onSuccess: (result) => {
+      if (!plan) return
+      void queryClient.invalidateQueries({ queryKey: ["orgs"] })
+      if (result?.markerDeleted) forgetSetupState(queryClient, plan.org)
     },
     onError: (err) => {
-      // A scope/rate-limit failure may have already deleted some repos (and
-      // possibly the config repo/secret), so refresh the org view and forget
-      // the setup-gating caches. Rejection still propagates to the caller.
-      if (err instanceof TeardownRateLimitError && plan) {
-        forgetTeardownState(queryClient, plan.org)
+      // A rate-limit abort may have deleted some repos (marker always retained),
+      // so refresh the org view. Rejection still propagates to the caller.
+      if (err instanceof TeardownRateLimitError) {
+        void queryClient.invalidateQueries({ queryKey: ["orgs"] })
       }
     },
   })

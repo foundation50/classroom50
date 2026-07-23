@@ -249,13 +249,44 @@ describe("OrgSetupPage wizard navigation", () => {
     expect(screen.queryByText("setup.manageServiceToken")).toBeNull()
   })
 
-  it("celebrates with confetti on reaching the finish screen", () => {
+  it("does not celebrate when landing on an already-set-up org (mount at done)", () => {
     owner({ isOwner: true })
     repoStatus({ data: "ready" })
     tokenStatus({ data: { status: "present" } })
     renderPage()
     expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
-    expect(confetti).toHaveBeenCalled()
+    // Confetti celebrates a fresh completion, not a cold load of a done org.
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it("does not celebrate before the finish screen (stage 1/2)", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
+    tokenStatus({ data: { status: "missing" } })
+    renderPage()
+    expect(confetti).not.toHaveBeenCalled()
+  })
+
+  it("celebrates once when the token save advances the wizard into done", () => {
+    owner({ isOwner: true })
+    repoStatus({ data: "ready" })
+    tokenStatus({ data: { status: "missing" } })
+    const { rerender } = renderPage()
+    expect(confetti).not.toHaveBeenCalled()
+
+    // Simulate the service-token save landing: derived stage transitions to done.
+    tokenStatus({ data: { status: "present" } })
+    rerender(
+      <QueryClientProvider
+        client={
+          new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        }
+      >
+        <OrgSetupPage />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByText("setup.allSetTitle")).not.toBeNull()
+    expect(confetti).toHaveBeenCalledTimes(6)
   })
 
   it("stage 2 'Back' returns to step 1 even when configReady", () => {
