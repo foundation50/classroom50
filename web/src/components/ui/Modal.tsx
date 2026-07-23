@@ -46,6 +46,9 @@ export type ModalProps = {
   closeDisabled?: boolean
   "aria-labelledby"?: string
   "aria-label"?: string
+  // Forwarded to the dialog element. Lets a caller repurpose keys (e.g. Enter)
+  // without hand-rolling a wrapper the a11y lint would flag.
+  onKeyDown?: React.KeyboardEventHandler<HTMLDialogElement>
   // Extra classes for the modal-box.
   boxClassName?: string
   dialogRef?: RefObject<HTMLDialogElement | null>
@@ -62,6 +65,7 @@ export function Modal({
   boxClassName,
   dialogRef,
   ref,
+  onKeyDown,
   children,
   ...aria
 }: ModalProps) {
@@ -92,6 +96,7 @@ export function Modal({
       ref={setRefs}
       className="modal"
       onClose={() => onClose?.()}
+      onKeyDown={onKeyDown}
       onCancel={(event) => {
         // Esc triggers `cancel` before `close`. When dismissal is blocked
         // (e.g., a submit is in flight), veto it so the dialog stays open —
