@@ -424,6 +424,7 @@
     "fileLabel": "File: {{fileName}}",
     "usernamesFound_one": "Found {{count}} GitHub username to import.",
     "usernamesFound_other": "Found {{count}} GitHub usernames to import.",
+    "importMergeNotice": "Importing adds to your existing roster — students already enrolled are skipped, and no one is removed. You can safely import in batches.",
     "githubUsernameColumn": "GitHub username",
     "nameColumn": "Name",
     "emailColumn": "Email",

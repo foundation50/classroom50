@@ -530,9 +530,14 @@ const UploadRoster = ({
         {phase === "preview" && uploadKind !== "email-list" && (
           <div>
             <Alert tone="info" className="mb-4">
-              <span>
-                {t("students.usernamesFound", { count: rows.length })}
-              </span>
+              <div className="flex flex-col gap-1">
+                <span>
+                  {t("students.usernamesFound", { count: rows.length })}
+                </span>
+                <span className="text-sm opacity-80">
+                  {t("students.importMergeNotice")}
+                </span>
+              </div>
             </Alert>
 
             {/* Preflight against current GitHub membership: what processing will
