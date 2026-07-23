@@ -80,14 +80,16 @@ const CONCERN_STATE_LABEL: Record<CheckState, string> = {
   unreadable: "orgSettings.audit.stateUnreadable",
 }
 
-const CONCERN_STATE_BADGE: Record<
+export const CONCERN_STATE_BADGE: Record<
   CheckState,
   { tone: BadgeTone; ghost?: boolean }
 > = {
   enforced: { tone: "success" },
   unenforced: { tone: "error" },
   warn: { tone: "warning" },
-  unreadable: { tone: "neutral", ghost: true },
+  // Warning, not ghost: "couldn't verify — confirm manually" is attention-worthy,
+  // and a ghost badge would ignore the tone and render neutral-grey (Badge.tsx).
+  unreadable: { tone: "warning" },
 }
 
 // What a Fix-it result means for the pane, derived purely from the RepairResult
@@ -151,7 +153,7 @@ export function ConcernRow({
           <div className="text-sm font-semibold">{concern.title}</div>
           {concern.verdict.detail && (
             <p className="mt-0.5 text-xs text-base-content/70">
-              {concern.verdict.detail}
+              {t(concern.verdict.detail.key, concern.verdict.detail.params)}
             </p>
           )}
           {unresolvedMessage !== undefined && (

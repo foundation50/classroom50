@@ -135,6 +135,13 @@ function concernSettingsUrl(id: ConcernId, org: string): string {
 // Any drift fails the audit — stricter than the CLI, which warns on
 // non-critical drift (see header). An unreadable concern also fails: a partial
 // read outage is "needs attention", not a clean bill.
+//
+// The one exception is orgBudget: its endpoint is legitimately, permanently
+// unreadable for enterprise-managed billing (org budget URLs 400/404) and plans
+// that don't expose budgets, so an unreadable cap is an expected steady state,
+// not an outage. Mirroring the CLI (which lists it under "Recommended"), an
+// unreadable budget is advisory and never gates — but a missing cap
+// (unenforced) is still critical drift that fails.
 function deriveVerdict(
   readOk: boolean,
   lockdownComplete: boolean,
@@ -142,9 +149,10 @@ function deriveVerdict(
 ): AuditVerdict {
   if (!readOk) return "fail"
   if (!lockdownComplete) return "fail"
-  const anyUnresolved = concerns.some(
-    (c) => c.verdict.state === "unenforced" || c.verdict.state === "unreadable",
-  )
+  const anyUnresolved = concerns.some((c) => {
+    if (c.id === "orgBudget" && c.verdict.state === "unreadable") return false
+    return c.verdict.state === "unenforced" || c.verdict.state === "unreadable"
+  })
   return anyUnresolved ? "fail" : "ok"
 }
 

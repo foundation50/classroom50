@@ -116,7 +116,12 @@ export async function checkRulesets(
     return {
       state: missing.length === 0 ? "enforced" : "unenforced",
       detail:
-        missing.length === 0 ? undefined : `missing: ${missing.join(", ")}`,
+        missing.length === 0
+          ? undefined
+          : {
+              key: "orgSettings.audit.detail.rulesetsMissing",
+              params: { names: missing.join(", ") },
+            },
     }
   } catch (err) {
     return { state: "unreadable", detail: readFailedDetail(err) }

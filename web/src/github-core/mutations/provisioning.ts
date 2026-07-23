@@ -583,11 +583,17 @@ export async function ensurePages(
   }
 
   // Not enforced, or the read-back was unreadable: surface why, preferring the
-  // write-time warning when we have one.
+  // write-time warning when we have one. verdict.detail is an i18n descriptor
+  // (see CheckVerdict); this module builds English messages, so surface its
+  // status param when present rather than the whole descriptor.
+  const readFailReason =
+    verdict.detail?.params?.status ??
+    verdict.detail?.params?.reason ??
+    "read failed"
   const message =
     visibilityResult.warning ??
     (verdict.state === "unreadable"
-      ? `${org}/${repo}: couldn't verify GitHub Pages (${verdict.detail ?? "read failed"}). Check it at ${settingsUrl} → Pages.`
+      ? `${org}/${repo}: couldn't verify GitHub Pages (${readFailReason}). Check it at ${settingsUrl} → Pages.`
       : `${org}/${repo}: GitHub Pages isn't fully configured (needs a workflow build and a public site). Set it at ${settingsUrl} → Pages.`)
 
   return {
