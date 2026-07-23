@@ -53,12 +53,16 @@ type AutogradingTestModalProps = {
   dialogRef: React.RefObject<HTMLDialogElement | null>
   index: number | null
   onClose: () => void
+  onCancel: () => void
+  onDone: () => void
 }
 const AutogradingTestModal = ({
   form,
   dialogRef,
   index,
   onClose,
+  onCancel,
+  onDone,
 }: AutogradingTestModalProps) => {
   const { t } = useTranslation()
   const titleId = useId()
@@ -91,7 +95,7 @@ const AutogradingTestModal = ({
   }
 
   const handleDone = () => {
-    if (validateAndShowErrors()) onClose()
+    if (validateAndShowErrors()) onDone()
   }
 
   return (
@@ -470,7 +474,7 @@ const AutogradingTestModal = ({
         </div>
       </div>
       <div className="modal-backdrop">
-        <button type="button" onClick={onClose}>
+        <button type="button" onClick={onCancel}>
           {t("common.close")}
         </button>
       </div>
@@ -487,6 +491,12 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  // The editor is for a just-added draft not yet committed: closing it without
+  // "Done" discards the draft so an empty test never lands in the list.
+  const isNewRef = useRef(false)
+  // Set by "Done" so the dialog's close handler keeps (rather than discards) a
+  // pending new draft. Escape/backdrop leave it false → discard.
+  const committedRef = useRef(false)
 
   useEffect(() => {
     if (editingIndex === null) return
@@ -498,13 +508,40 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   }, [editingIndex])
 
   const openEditor = (index: number) => {
+    isNewRef.current = false
+    committedRef.current = false
     setEditingIndex(index)
   }
 
-  const closeEditor = () => {
+  const openNewEditor = () => {
+    const newIndex = form.getFieldValue("tests").length
+    form.pushFieldValue("tests", emptyTestDraft())
+    isNewRef.current = true
+    committedRef.current = false
+    setEditingIndex(newIndex)
+  }
+
+  // Single close handler for every path (Done, Escape, backdrop): a pending new
+  // draft is discarded unless "Done" committed it; existing tests keep edits.
+  const handleClose = () => {
+    if (isNewRef.current && !committedRef.current && editingIndex !== null) {
+      form.removeFieldValue("tests", editingIndex)
+    }
+    isNewRef.current = false
+    committedRef.current = false
+    setEditingIndex(null)
+  }
+
+  const closeDialog = () => {
     const dialog = dialogRef.current
     if (dialog?.open) dialog.close()
-    setEditingIndex(null)
+    else handleClose()
+  }
+
+  // "Done" marks the draft committed, then closes (fires handleClose).
+  const commitEditor = () => {
+    committedRef.current = true
+    closeDialog()
   }
 
   return (
@@ -535,14 +572,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 </h3>
               </div>
               <div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const newIndex = field.state.value.length
-                    field.pushValue(emptyTestDraft())
-                    openEditor(newIndex)
-                  }}
-                >
+                <Button variant="outline" onClick={openNewEditor}>
                   {t("assignments.autograder.addTest")}
                 </Button>
               </div>
@@ -640,7 +670,9 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
               form={form}
               dialogRef={dialogRef}
               index={editingIndex}
-              onClose={closeEditor}
+              onClose={handleClose}
+              onCancel={closeDialog}
+              onDone={commitEditor}
             />
           </Card.Body>
         )}
