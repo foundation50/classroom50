@@ -11,7 +11,7 @@ import {
   rtlFlip,
 } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import type { AcceptShareSummary } from "./acceptShareWarning"
+import type { AcceptShareSummary } from "./acceptShareSummary"
 
 // The "How students accept" content, moved out of the page into a modal so the
 // roster surfaces higher. Owns its own clipboard state (two independent copy

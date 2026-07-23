@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { resolveAcceptShareSummary } from "./acceptShareWarning"
+import { resolveAcceptShareSummary } from "./acceptShareSummary"
 
 describe("resolveAcceptShareSummary", () => {
   const base = {

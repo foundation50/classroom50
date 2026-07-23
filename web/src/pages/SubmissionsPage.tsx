@@ -56,7 +56,7 @@ import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
-import { resolveAcceptShareSummary } from "@/pages/submissions/acceptShareWarning"
+import { resolveAcceptShareSummary } from "@/pages/submissions/acceptShareSummary"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
@@ -123,7 +123,6 @@ const SubmissionsPageContent = () => {
   // authoritative empty roster.
   const {
     rows: teamRows,
-    counts: rosterCounts,
     roleCounts: rosterRoleCounts,
     pendingHidden: rosterPendingHidden,
     isLoading: rosterLoading,
@@ -145,23 +144,31 @@ const SubmissionsPageContent = () => {
   const emptyRoster = useEmptyRosterWarning(org, classroom)
   // Roster-readiness summary for the share modal: how many students can accept
   // (enrolled + pending, since the accept flow auto-accepts a pending invite),
-  // and whether to warn that none can yet. Uses the enrolled STUDENT count
-  // (roleCounts.student), not all-enrolled, so staff-only enrollment still reads
-  // as "no students can accept".
+  // and whether to warn that none can yet. Both terms must be STUDENT-scoped:
+  // roleCounts.student is already student-only, but counts.pending tallies EVERY
+  // pending row (incl. staff-team invites), so derive a student-scoped pending
+  // count from the rows — else a lone pending co-teacher/TA would read as "1
+  // student can accept" and silence the warning (the #376 case this guards).
+  const pendingStudentCount = useMemo(
+    () =>
+      teamRows.filter((r) => r.state === "pending" && hasStudentEnrollment(r))
+        .length,
+    [teamRows],
+  )
   const acceptShareSummary = useMemo(
     () =>
       resolveAcceptShareSummary({
         isLoading: rosterLoading,
         isError: rosterError,
         enrolledStudents: rosterRoleCounts.student,
-        pending: rosterCounts.pending,
+        pending: pendingStudentCount,
         pendingHidden: rosterPendingHidden,
       }),
     [
       rosterLoading,
       rosterError,
       rosterRoleCounts.student,
-      rosterCounts.pending,
+      pendingStudentCount,
       rosterPendingHidden,
     ],
   )
