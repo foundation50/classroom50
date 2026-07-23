@@ -8,7 +8,7 @@ name: web Deploy to Preview (preview.classroom50.org)
 # Branch model: single trunk. `main` is the default/integration branch — feature
 # PRs merge into it (squash) and each merge deploys here to preview. Production
 # (classroom50.org) is cut only by merging the release-please Release PR, which
-# tags `web-v*` and deploys via web-release-please.yaml. A release-PR merge is
+# tags `web-v*` and deploys via release-please.yaml. A release-PR merge is
 # also a push to main, so it redeploys preview too (harmless, same content).
 #
 # Why a separate repo: GitHub Pages allows only one custom domain per repo, so

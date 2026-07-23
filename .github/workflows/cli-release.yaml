@@ -10,17 +10,20 @@ name: CLI extension release
 # provenance is attested so the source-less target repos' binaries are
 # verifiable (see wiki/Installation.md for the verify command).
 #
-# Trigger tag `cli-vX.Y.Z` on this repo; VERSION is the tag with `cli-`
-# stripped (the prefix scopes it apart from the `v1` branch / web tags). A
-# VERSION containing `-` (v1.0.0-rc.1) publishes as a prerelease.
+# Triggered by release-please.yaml, which dispatches this workflow with the
+# `cli-vX.Y.Z` tag after creating it (a GITHUB_TOKEN-pushed tag can't fire the
+# `push: tags` trigger below — Actions' recursion guard — so the tag trigger is
+# a manual fallback). VERSION is the tag with `cli-` stripped (the prefix scopes
+# it apart from the `v1` branch / web tags). A VERSION containing `-`
+# (v1.0.0-rc.1) publishes as a prerelease.
 #
 # Setup (repo Settings, before the first release):
 #   - Secret `CLI_RELEASE_PAT`: a dedicated fine-grained PAT, `contents:write`
 #     on gh-teacher + gh-student only, short expiry. Not MIRROR_PAT — separate
 #     scopes limit blast radius.
-#   - Environment `cli-release` with required reviewers (gates PAT use on human
-#     approval; combined with a `cli-v*` maintainers-only tag protection rule,
-#     tag-push authority == release authority).
+#   - Environment `cli-release` (no required reviewers): the `publish` jobs run
+#     in it so the PAT is exposed only to those jobs, but publishing is
+#     automatic on release — release authority == merging the Release PR.
 #   - Target repos must be named exactly gh-teacher / gh-student for
 #     `gh extension install <owner>/<repo>` to resolve.
 
