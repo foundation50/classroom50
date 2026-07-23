@@ -1246,7 +1246,10 @@
       "title": "Organization preflight check failed",
       "body_one": "An issue was found with this organization's {{categories}}.",
       "body_other": "Issues were found with this organization's {{categories}}.",
-      "reviewFix": "Review and fix on the <settingsLink>organization settings page</settingsLink>."
+      "reviewFix": "Review and fix on the <settingsLink>organization settings page</settingsLink>.",
+      "unverifiedTitle": "Couldn't verify the Actions spending cap",
+      "unverifiedBody": "This organization's billing couldn't be read, so we can't confirm a spending cap is set. Keep an eye on Actions costs, and check your billing settings or with your billing admin if usage isn't capped.",
+      "unverifiedReview": "See details on the <settingsLink>organization settings page</settingsLink>."
     },
     "overwrite": {
       "title": "Update workflow files to keep grading working?",

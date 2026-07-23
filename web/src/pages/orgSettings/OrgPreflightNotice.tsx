@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router"
 import { Trans, useTranslation } from "react-i18next"
-import { XCircle } from "lucide-react"
+import { AlertTriangle, XCircle } from "lucide-react"
 
 import useGetServiceTokenStatus from "@/hooks/useGetServiceTokenStatus"
 import useGetOrgAudit from "@/hooks/useGetOrgAudit"
@@ -38,32 +38,65 @@ const OrgPreflightNotice = ({ org }: { org: string }) => {
     failing.push(t("orgSettings.preflight.categoryServiceToken"))
   if (policyFail) failing.push(t("orgSettings.preflight.categoryOrgPolicy"))
 
-  if (failing.length === 0) return null
+  if (failing.length > 0) {
+    const categories = failing.join(", ")
+    return (
+      <CalloutDiv role="alert" className="alert alert-error alert-soft mb-6">
+        <XCircle aria-hidden="true" className="size-5" />
+        <div className="text-sm">
+          <p className="font-semibold">{t("orgSettings.preflight.title")}</p>
+          <p className="mt-0.5 text-base-content/70">
+            {t("orgSettings.preflight.body", {
+              count: failing.length,
+              categories,
+            })}{" "}
+            <Trans
+              i18nKey="orgSettings.preflight.reviewFix"
+              components={{
+                settingsLink: (
+                  <Link to="/$org/settings" params={{ org }} className="link" />
+                ),
+              }}
+            />
+          </p>
+        </div>
+      </CalloutDiv>
+    )
+  }
 
-  const categories = failing.join(", ")
-
-  return (
-    <CalloutDiv role="alert" className="alert alert-error alert-soft mb-6">
-      <XCircle aria-hidden="true" className="size-5" />
-      <div className="text-sm">
-        <p className="font-semibold">{t("orgSettings.preflight.title")}</p>
-        <p className="mt-0.5 text-base-content/70">
-          {t("orgSettings.preflight.body", {
-            count: failing.length,
-            categories,
-          })}{" "}
-          <Trans
-            i18nKey="orgSettings.preflight.reviewFix"
-            components={{
-              settingsLink: (
-                <Link to="/$org/settings" params={{ org }} className="link" />
-              ),
-            }}
-          />
-        </p>
-      </div>
-    </CalloutDiv>
+  // No hard failure, but the spending-cap read is inconclusive (enterprise-
+  // managed billing returns 400/403/404 permanently). Don't gate — that's the
+  // whole point of treating an unreadable budget as advisory — but don't go
+  // silently green either: nudge the teacher to confirm a cap with their admin.
+  // Derived live from the audit each render; nothing is persisted.
+  const budgetUnverified = audit?.concerns.some(
+    (c) => c.id === "orgBudget" && c.verdict.state === "unreadable",
   )
+  if (budgetUnverified) {
+    return (
+      <CalloutDiv role="status" className="alert alert-warning alert-soft mb-6">
+        <AlertTriangle aria-hidden="true" className="size-5" />
+        <div className="text-sm">
+          <p className="font-semibold">
+            {t("orgSettings.preflight.unverifiedTitle")}
+          </p>
+          <p className="mt-0.5 text-base-content/70">
+            {t("orgSettings.preflight.unverifiedBody")}{" "}
+            <Trans
+              i18nKey="orgSettings.preflight.unverifiedReview"
+              components={{
+                settingsLink: (
+                  <Link to="/$org/settings" params={{ org }} className="link" />
+                ),
+              }}
+            />
+          </p>
+        </div>
+      </CalloutDiv>
+    )
+  }
+
+  return null
 }
 
 export default OrgPreflightNotice
