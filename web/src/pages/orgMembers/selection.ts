@@ -1,6 +1,6 @@
 // Pure selection logic for a member list's multi-select, extracted so the
 // tricky invariants (select-all targets only filtered + selectable rows; the
-// non-selectable row — e.g. the signed-in owner/self — is never selectable; a
+// non-selectable row — e.g., the signed-in owner/self — is never selectable; a
 // selection persists across filtering) are unit-testable without rendering.
 //
 // Generic over any row carrying a stable `key`, so both the Org Members list
@@ -62,7 +62,7 @@ export function toggleRow(
 
 // Shift-click range fill: add every selectable row between the anchor and the
 // target (inclusive). `order` must be the ACTUAL rendered order so a reordered
-// view (e.g. group-by-section) fills the span the user sees. Only ever adds; a
+// view (e.g., group-by-section) fills the span the user sees. Only ever adds; a
 // no-op if either endpoint is absent.
 export function selectRange<T extends Keyed>(
   order: T[],
@@ -85,7 +85,7 @@ export function selectRange<T extends Keyed>(
 }
 
 // Whether a "select all" click should warn instead of selecting: the view has
-// rows, but none are selectable (e.g. filtered to staff, who can't be
+// rows, but none are selectable (e.g., filtered to staff, who can't be
 // bulk-acted). A no-op click needs feedback; an empty view (no rows) does not.
 export function shouldWarnNoneSelectable(
   filteredCount: number,

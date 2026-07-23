@@ -7,7 +7,7 @@ import { isTeacherRole } from "./roles"
 export type Capability =
   // Org-wide (org admin only).
   | "manageOrg" // org settings / members / activity
-  // Org-scoped staff signal for surfaces with no classroom in scope (e.g. the
+  // Org-scoped staff signal for surfaces with no classroom in scope (e.g., the
   // org "Published" page), backed by the team-based "staff of any classroom"
   // signal (member of >=1 classroom staff team).
   | "viewOrgStaffContent"
@@ -33,7 +33,7 @@ export type CapabilityInput = {
 // Fail-closed and self-contained: an `unresolved` role is denied here (it does
 // NOT rely on callers to separately gate the sentinel). Route guards still pair
 // a `resolved` signal to decide spinner-vs-NotFound, but a consumer that reads
-// `can(...)` alone (e.g. a nav affordance) can't be tricked into granting during
+// `can(...)` alone (e.g., a nav affordance) can't be tricked into granting during
 // the in-flight window.
 export function can(cap: Capability, input: CapabilityInput): boolean {
   const { githubOrgRole, classroomRole, orgStaff } = input

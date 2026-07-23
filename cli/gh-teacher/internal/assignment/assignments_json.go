@@ -356,7 +356,7 @@ func ValidateDueDate(due string) error {
 		return nil
 	}
 	if _, err := time.Parse(time.RFC3339, due); err != nil {
-		return fmt.Errorf("due %q is not an RFC 3339 timestamp with timezone (e.g. 2026-09-15T23:59:00-04:00)", due)
+		return fmt.Errorf("due %q is not an RFC 3339 timestamp with timezone (e.g., 2026-09-15T23:59:00-04:00)", due)
 	}
 	return nil
 }
@@ -662,7 +662,7 @@ func NextAvailableSlug(entries []AssignmentEntry, slug string) (string, error) {
 	for n := start; ; n++ {
 		candidate := fmt.Sprintf("%s-%d", base, n)
 		if len(candidate) > slugMaxLen {
-			return "", fmt.Errorf("cannot auto-suffix slug %q: every candidate (e.g. %q) exceeds the %d-character slug cap — pass an explicit, shorter --slug",
+			return "", fmt.Errorf("cannot auto-suffix slug %q: every candidate (e.g., %q) exceeds the %d-character slug cap — pass an explicit, shorter --slug",
 				slug, candidate, slugMaxLen)
 		}
 		if !SlugExistsFold(entries, candidate) {

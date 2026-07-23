@@ -34,7 +34,7 @@ export async function probeOrgClassroom50Status(
 }
 
 // Query key for the config-repo existence probe. Exported so callers that
-// invalidate/refetch the probe (e.g. the setup wizard after init) can't drift
+// invalidate/refetch the probe (e.g., the setup wizard after init) can't drift
 // from the key the hook registers.
 export const orgClassroom50StatusKey = (org: string | undefined) =>
   ["github", "repos", org, CONFIG_REPO, "exists"] as const

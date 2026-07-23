@@ -496,7 +496,7 @@ describe("reconcileNonSubmitters", () => {
   })
 
   it("re-lists a teammate as no-group when the member set is empty (fetch failed)", () => {
-    // Guards the failure-mode contract: an empty groupRepoMembers (e.g. the
+    // Guards the failure-mode contract: an empty groupRepoMembers (e.g., the
     // bounded fetch errored) degrades to listing everyone uncredited.
     const out = reconcileNonSubmitters(roster, [], new Set())
     expect(out.map((s) => s.username).sort()).toEqual(["alice", "bob", "carol"])

@@ -123,7 +123,7 @@ func ValidateRuntime(r RuntimeRef) error {
 			continue
 		}
 		if !LanguageVersionPattern.MatchString(pair.value) {
-			return fmt.Errorf("%s %q must match %s (e.g. \"3.12\", \"20\", \"1.23.4\")", pair.field, pair.value, LanguageVersionPattern.String())
+			return fmt.Errorf("%s %q must match %s (e.g., \"3.12\", \"20\", \"1.23.4\")", pair.field, pair.value, LanguageVersionPattern.String())
 		}
 	}
 
@@ -171,7 +171,7 @@ func ValidateContainer(c ContainerSpec) error {
 		return fmt.Errorf("runtime.container.image %q contains characters other than [A-Za-z0-9._:/@+-]", c.Image)
 	}
 	if c.User != "" && !ContainerUserPattern.MatchString(c.User) {
-		return fmt.Errorf("runtime.container.user %q must match %s (e.g. \"root\", \"0\", \"1000:1000\")", c.User, ContainerUserPattern.String())
+		return fmt.Errorf("runtime.container.user %q must match %s (e.g., \"root\", \"0\", \"1000:1000\")", c.User, ContainerUserPattern.String())
 	}
 	return nil
 }

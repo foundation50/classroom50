@@ -278,7 +278,7 @@ export function buildTeamRoster(input: BuildTeamRosterInput): TeamRosterRow[] {
     if (existingPending) {
       // A staffer already pending: the org-level list re-reports them as a
       // generic invite, but they aren't a student — don't add the "student"
-      // role. A genuine multi-team pending (e.g. teacher + ta) still unions.
+      // role. A genuine multi-team pending (e.g., teacher + ta) still unions.
       if (role !== "student") addRole(existingPending, role)
       continue
     }

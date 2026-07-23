@@ -52,7 +52,7 @@ describe("retryOnRateLimit", () => {
     expect(fn).toHaveBeenCalledTimes(2)
   })
 
-  it("does not retry a non-rate-limit error (e.g. 403 scope gap, 500)", async () => {
+  it("does not retry a non-rate-limit error (e.g., 403 scope gap, 500)", async () => {
     const fn = vi.fn().mockRejectedValue(plainError(500))
     await expect(retryOnRateLimit(fn)).rejects.toBeInstanceOf(GitHubAPIError)
     expect(fn).toHaveBeenCalledTimes(1)

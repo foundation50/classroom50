@@ -36,7 +36,7 @@ func NewCmd() *cobra.Command {
 			"assignment's --max-group-size (read from the teacher's published\n" +
 			"assignments.json) and refuses to add a new teammate once the group is\n" +
 			"full. This is an advisory guardrail for the honest case — it can be\n" +
-			"bypassed (e.g. via the GitHub UI), and the authoritative size/credit\n" +
+			"bypassed (e.g., via the GitHub UI), and the authoritative size/credit\n" +
 			"boundary is collection time. Run outside such a repo (or for an\n" +
 			"individual assignment / a TA invite), it just adds the collaborator.",
 		Example: "  gh student invite cs50/cs50-fall-2026-hello-alice cs50-duck\n",

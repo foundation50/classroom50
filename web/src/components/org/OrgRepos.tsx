@@ -200,7 +200,7 @@ export const OrgRepos = ({
   if (classroom) {
     // Classroom repos are `<classroom>-<assignment>-<user>`, so require the
     // trailing "-" to avoid matching a sibling classroom whose name extends
-    // this one (e.g. "cs" wrongly matching "cs101-a1-bob").
+    // this one (e.g., "cs" wrongly matching "cs101-a1-bob").
     writableRepos = writableRepos.filter((repo) =>
       repo.name.startsWith(`${classroom}-`),
     )

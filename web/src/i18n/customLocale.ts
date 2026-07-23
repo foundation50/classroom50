@@ -33,7 +33,7 @@ const REGISTRY_INDEX_URL = `${LANGUAGE_REGISTRY_BASE_URL}/index.json`
 // The manifest is a small JSON list; anything larger is suspect.
 const MAX_REGISTRY_BYTES = 64 * 1024
 
-// Dotted keys to translated strings, e.g. { "notFound.title": "..." }. Nested
+// Dotted keys to translated strings, e.g., { "notFound.title": "..." }. Nested
 // JSON is accepted on input and flattened before validation.
 export type FlatBundle = Record<string, string>
 
@@ -69,7 +69,7 @@ const langCodeSchema = z
   .max(35)
   .regex(
     /^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$/,
-    "Language code must be a valid BCP-47 tag (e.g. de, pt-BR)",
+    "Language code must be a valid BCP-47 tag (e.g., de, pt-BR)",
   )
 
 const flatBundleSchema = z
@@ -218,7 +218,7 @@ export function normalizeLangCode(code: string): string {
   return result.data
 }
 
-// Label for a language code, e.g. "Japanese (ja)". Falls back to the bare code
+// Label for a language code, e.g., "Japanese (ja)". Falls back to the bare code
 // when Intl.DisplayNames is unavailable or can't resolve the tag.
 export function languageLabel(code: string, uiLocale?: string): string {
   const name = languageName(code, uiLocale)

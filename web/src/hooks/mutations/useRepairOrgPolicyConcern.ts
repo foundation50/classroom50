@@ -8,7 +8,7 @@ import { useGitHubClient } from "@/context/github/GitHubProvider"
 // always-run data-consistency effects: the audit-prefix invalidation AND the
 // caller's `onRepaired` (which records the persistent "didn't stick" outcome to
 // the per-org store). Both run in the hook's onSuccess so a mid-repair unmount
-// (e.g. an org switch remounting the pane) can't drop the durable write.
+// (e.g., an org switch remounting the pane) can't drop the durable write.
 // Pure component-state (enterprise-pin / unresolved-concern / transient-notice
 // setState) stays at the call site's per-call onSuccess (skipped on unmount).
 export function useRepairOrgPolicyConcern(

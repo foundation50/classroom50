@@ -50,7 +50,7 @@ A worked example lives at
    gh teacher assignment add <org> <classroom> <slug> --name "…" --template <owner>/<repo>
    ```
 
-   The assignment **slug** (e.g. `hello`) is what students pass to
+   The assignment **slug** (e.g., `hello`) is what students pass to
    `gh student accept`; it needn't match the repository name.
 
 2. **Set visibility** (see below).

@@ -318,7 +318,7 @@ class TestApplyUpdates:
         assert entries[0]["member_usernames"] == ["alice", "bob"]
 
     def test_group_credited_set_shrink_warns_and_still_replaces(self, capsys):
-        # A previously-credited teammate (bob) is dropped on re-collect (e.g. he
+        # A previously-credited teammate (bob) is dropped on re-collect (e.g., he
         # left the classroom team but is still a repo collaborator). The entry is
         # still replaced in place, but the silent revocation must surface a
         # warning naming the dropped member. The owner-only warning in
@@ -1046,7 +1046,7 @@ class TestAssignmentRepoName:
 class TestResolveTeamSlug:
     def test_prefers_persisted_slug(self):
         # classroom.json team.slug is authoritative (GitHub may re-slug on a
-        # name collision, e.g. classroom50-cs-1).
+        # name collision, e.g., classroom50-cs-1).
         assert (
             cs.resolve_team_slug({"team": {"slug": "classroom50-cs-1"}}, "cs")
             == "classroom50-cs-1"
@@ -1526,7 +1526,7 @@ class TestScoresIO:
         assert not path.exists()
 
     def test_save_preserves_existing_file_when_replace_fails(self, tmp_path, monkeypatch):
-        # On os.replace failure (e.g. permissions), the original is
+        # On os.replace failure (e.g., permissions), the original is
         # untouched and the temp file is cleaned up.
         path = tmp_path / "scores.json"
         path.write_text(json.dumps({"schema": cs.SCORES_SCHEMA_V1, "assignments": {}}))

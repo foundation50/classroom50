@@ -24,7 +24,7 @@ export type ListPrefsConfig<ViewMode extends string, SortKey extends string> = {
   sortValues: readonly SortKey[]
   defaultView: ViewMode
   defaultSort: SortKey
-  // Optional hook to rewrite a validated sort on read — e.g. a page that must
+  // Optional hook to rewrite a validated sort on read — e.g., a page that must
   // not auto-restore a fan-out-bearing sort returns its default instead.
   sanitizeSortOnLoad?: (sort: SortKey, defaultSort: SortKey) => SortKey
 }

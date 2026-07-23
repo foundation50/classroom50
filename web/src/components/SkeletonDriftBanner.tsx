@@ -53,7 +53,7 @@ export function resolveDriftBannerView(
 }
 
 // Global warning banner for an org owner when the `classroom50` config repo's
-// scaffolded workflows have drifted from the bundled skeleton (e.g. after an
+// scaffolded workflows have drifted from the bundled skeleton (e.g., after an
 // action-pin bump). Self-service: the owner refreshes the drifted files inline
 // (confirming the overwrite), and once the fix resolves cleanly we show a green
 // confirmation the owner dismisses (X or the Dismiss button).

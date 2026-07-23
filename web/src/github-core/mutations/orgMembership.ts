@@ -40,7 +40,7 @@ export function createOrgInvitation(
 
 // Owner-only. Returns { cancelled: true } when the DELETE removed a live
 // invitation, or { cancelled: false } on a 404 — the invite was already gone
-// (e.g. a resend replaced it, or it was cancelled elsewhere). A 404 stays
+// (e.g., a resend replaced it, or it was cancelled elsewhere). A 404 stays
 // non-throwing so resend's cancel-then-recreate and best-effort dismiss still
 // proceed, but the boolean lets a caller avoid reporting a phantom cancel.
 export async function cancelOrgInvitation(

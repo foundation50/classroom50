@@ -26,7 +26,7 @@ export type UseStudentClassroomSummariesResult = {
 // `<classroom>-` prefix AND the `-<login>` suffix — the same identity
 // StudentAssignmentList checks via studentRepoName. This keeps the card's count
 // consistent with the assignment list and excludes unrelated writable repos
-// (e.g. a personal `<classroom>-notes`) and other owners' group repos.
+// (e.g., a personal `<classroom>-notes`) and other owners' group repos.
 export function useStudentClassroomSummaries(
   org: string | undefined,
 ): UseStudentClassroomSummariesResult {

@@ -4,7 +4,7 @@ import { Card } from "./Card"
 import { cx } from "./cx"
 
 // A dashboard stat tile: an uppercase label, a large value with an optional
-// `/ outOf` denominator, and an optional `hint` line (e.g. a shortcut link).
+// `/ outOf` denominator, and an optional `hint` line (e.g., a shortcut link).
 // Wraps Card so the tiles share one surface recipe and stop hand-composing the
 // `text-2xl font-bold` + `text-base-content/70` body at each call site.
 

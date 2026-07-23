@@ -25,7 +25,7 @@ type ProfileFormValues = {
 
 // A definition-list row; renders nothing when the value is empty so the view
 // shows only fields that are actually set (all fields are editable in edit mode).
-// `value` may be a string or a node (e.g. a mailto/website link).
+// `value` may be a string or a node (e.g., a mailto/website link).
 function InfoRow({ label, value }: { label: string; value?: React.ReactNode }) {
   if (!value) return null
   return (
@@ -77,9 +77,9 @@ function OrgDetailsModal({
   const form = useForm({
     defaultValues: currentValues(),
     onSubmit: async ({ value }) => {
-      // Relax website input: accept a bare host (e.g. "classroom50.org") and
+      // Relax website input: accept a bare host (e.g., "classroom50.org") and
       // default it to https:// via the built-in URL parser. A blank value clears
-      // the field; an unsafe value (e.g. a javascript: scheme) is dropped from
+      // the field; an unsafe value (e.g., a javascript: scheme) is dropped from
       // the payload rather than sent raw, so the sanitizer isn't defeated.
       const trimmedBlog = value.blog.trim()
       const normalizedBlog = trimmedBlog ? normalizeWebsiteUrl(trimmedBlog) : ""

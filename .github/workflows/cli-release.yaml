@@ -33,7 +33,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Release tag (e.g. cli-v1.0.0). VERSION is this with the cli- prefix stripped.'
+        description: 'Release tag (e.g., cli-v1.0.0). VERSION is this with the cli- prefix stripped.'
         required: true
         type: string
       attest:
@@ -68,7 +68,7 @@ jobs:
           set -euo pipefail
           version="${TAG#cli-}"
           if [ "$version" = "$TAG" ]; then
-            echo "::error::Tag '$TAG' does not start with the 'cli-' prefix; expected e.g. cli-v1.0.0."
+            echo "::error::Tag '$TAG' does not start with the 'cli-' prefix; expected e.g., cli-v1.0.0."
             exit 1
           fi
           # Restrict VERSION to a semver shape and charset before it reaches

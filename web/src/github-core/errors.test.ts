@@ -73,7 +73,7 @@ describe("SAML SSO detection", () => {
 
   it("isSsoRequired is false when the header rides a non-403 status", () => {
     // GitHub only emits X-GitHub-SSO on a 403; a header echoed onto a dead-token
-    // 401 or a transient 5xx/429 (e.g. proxy-copied) must NOT read as an SSO
+    // 401 or a transient 5xx/429 (e.g., proxy-copied) must NOT read as an SSO
     // gate, or it would mask a re-auth / outage as "authorize SSO".
     const header = `required; url=${orgSsoUrl}`
     expect(apiError(401, header).isSsoRequired).toBe(false)

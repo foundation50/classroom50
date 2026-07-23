@@ -27,7 +27,7 @@ function resolveReleaseInfo() {
     try {
       return execSync(`git ${args}`, {
         stdio: ["ignore", "pipe", "ignore"],
-        // Cap a hung git (e.g. a stuck credential/index lock) so a build can't
+        // Cap a hung git (e.g., a stuck credential/index lock) so a build can't
         // hang on version stamping; a timeout throws and falls through to the
         // "unknown" fallback below.
         timeout: 5000,

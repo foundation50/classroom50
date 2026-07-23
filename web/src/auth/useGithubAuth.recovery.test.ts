@@ -27,7 +27,7 @@ describe("shouldExpireOnUserError", () => {
     expect(shouldExpireOnUserError(new GitHubUserFetchError(500))).toBe(false)
   })
 
-  it("does NOT expire on a non-GitHubUserFetchError (e.g. a network error)", () => {
+  it("does NOT expire on a non-GitHubUserFetchError (e.g., a network error)", () => {
     expect(shouldExpireOnUserError(new Error("failed to fetch"))).toBe(false)
   })
 

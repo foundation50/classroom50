@@ -78,7 +78,7 @@ describe("toStudent", () => {
     expect(s.username).toBe("x")
   })
 
-  it("drops unknown legacy columns (e.g. pruned onboarding columns)", () => {
+  it("drops unknown legacy columns (e.g., pruned onboarding columns)", () => {
     const s = toStudent({
       username: "x",
       enrollment_status: "enrolled",
@@ -178,7 +178,7 @@ describe("resolveEmptyRosterWarning", () => {
   })
 
   it("passes hasRosterRows through unchanged (rows exist even when enrolled is 0)", () => {
-    // e.g. zero enrolled team members but >0 pending org invites -> rows exist.
+    // e.g., zero enrolled team members but >0 pending org invites -> rows exist.
     expect(
       resolveEmptyRosterWarning({ ...base, hasRosterRows: true }),
     ).toMatchObject({ show: true, hasRosterRows: true })

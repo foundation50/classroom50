@@ -823,7 +823,7 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 	}
 	// The generate/PATCH echoes (and an immediate GET) can report a stale
 	// default_branch: right after generate GitHub reports the org default
-	// (`main`) while the template's real branch (e.g. `master`) hasn't been
+	// (`main`) while the template's real branch (e.g., `master`) hasn't been
 	// copied yet. Wait for the branch to actually materialize and use that, so a
 	// `master`-default template doesn't pin the shim + commit at a `heads/main`
 	// ref that never exists.

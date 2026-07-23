@@ -98,7 +98,7 @@ export function useReuseAssignment({
     },
   })
 
-  // Re-arm the auto-suffix default (e.g. after switching target/source); the
+  // Re-arm the auto-suffix default (e.g., after switching target/source); the
   // next render derives a fresh default from the new taken-set.
   const resetSlug = () => {
     setSlugInput("")

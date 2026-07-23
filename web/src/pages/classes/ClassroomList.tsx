@@ -73,7 +73,7 @@ const ClassroomList = ({
     return Array.from(set).sort((a, b) => a.localeCompare(b))
   }, [summaries])
   const showTermFilter = terms.length > 1
-  // Guard against a stale selection when the available terms change (e.g. the
+  // Guard against a stale selection when the available terms change (e.g., the
   // last classroom of a term is deleted): fall back to "all".
   const activeTerm =
     termFilter !== "all" && !terms.includes(termFilter) ? "all" : termFilter
@@ -126,7 +126,7 @@ const ClassroomList = ({
   }, [filtered, sortKey, studentCounts])
 
   // While a card is "busy" (its menu or a destructive confirm modal is open),
-  // freeze the rendered order so an async re-sort (e.g. a roster resolving under
+  // freeze the rendered order so an async re-sort (e.g., a roster resolving under
   // the student-count sort) can't reshuffle the list under an in-flight action.
   // A ref holds the latest sorted list so the callback can stay stable (a
   // changing callback identity would re-fire the child's effect every render).

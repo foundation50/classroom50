@@ -47,7 +47,7 @@ jobs:
       - name: Install actionlint + shellcheck
         # Both pinned to specific releases so the lint result is
         # reproducible: apt's shellcheck floats by runner image and its
-        # info-level checks (e.g. SC2015 in 0.9.0 vs 0.11.0) differ,
+        # info-level checks (e.g., SC2015 in 0.9.0 vs 0.11.0) differ,
         # which would make CI red on a version bump we didn't choose.
         # actionlint shells out to whichever `shellcheck` is on PATH, so
         # we put the pinned one first.

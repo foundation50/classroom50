@@ -31,7 +31,7 @@ type initSummary struct {
 	// spending cap: "created" (init made it), "present" (already conforming),
 	// "warn" (teacher set a cap over the warn threshold — left untouched),
 	// "unreadable" (couldn't read budgets), "failed" (create write denied), or
-	// "" (not attempted, e.g. dry run). Informational; it never gates Ready.
+	// "" (not attempted, e.g., dry run). Informational; it never gates Ready.
 	BudgetCap string `json:"budget_cap"`
 	// ServiceToken describes how the token ended up configured this run, so a
 	// re-run is self-explanatory.
@@ -39,7 +39,7 @@ type initSummary struct {
 	// ManualHardeningRequired: org settings with no REST API. Surfaced as
 	// structured data so an agent can branch on "manual steps pending".
 	ManualHardeningRequired []orgpolicy.ManualStep `json:"manual_hardening_required"`
-	// Notes are plan/policy caveats that are NOT action items — e.g. on
+	// Notes are plan/policy caveats that are NOT action items — e.g., on
 	// Team/Free, public-repo creation can't be locked off, so "lockdown
 	// complete" doesn't mean public creation is disabled.
 	Notes     []string         `json:"notes"`

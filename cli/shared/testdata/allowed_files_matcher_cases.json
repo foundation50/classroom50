@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared golden fixture pinning the allowed_files gitignore matcher to identical (patterns, paths) -> disallowed output across the two parallel implementations: Go ignorematch.Disallowed (cli/gh-student) and Python enforce_allowed_files's classifier (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py). Both delegate to `git check-ignore`; this fixture catches edge-case drift between the two sides. `disallowed` lists exactly the input paths the patterns ignore (i.e. NOT allowed).",
+  "_comment": "Shared golden fixture pinning the allowed_files gitignore matcher to identical (patterns, paths) -> disallowed output across the two parallel implementations: Go ignorematch.Disallowed (cli/gh-student) and Python enforce_allowed_files's classifier (cli/gh-teacher/skeleton/dotgithub/scripts/runner.py). Both delegate to `git check-ignore`; this fixture catches edge-case drift between the two sides. `disallowed` lists exactly the input paths the patterns ignore (i.e., NOT allowed).",
   "cases": [
     {
       "name": "allowlist re-includes one file",

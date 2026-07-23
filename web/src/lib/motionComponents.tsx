@@ -13,7 +13,7 @@ import { calloutVariants, enterExit, rowHover } from "./motion"
 type DivProps = ComponentPropsWithoutRef<typeof motion.div>
 
 /** Scale-up + fade-in entrance for cards, content, and grids. Extra motion
- *  props (e.g. `layout`, `exit`) pass through, so a caller inside
+ *  props (e.g., `layout`, `exit`) pass through, so a caller inside
  *  <AnimatePresence> can opt into exit + layout reflow without changing the
  *  default entrance. */
 export function EnterDiv({ children, ...props }: DivProps) {
@@ -31,7 +31,7 @@ export function EnterDiv({ children, ...props }: DivProps) {
 
 /** EnterDiv plus `exit` + `layout`: for lists inside <AnimatePresence> where a
  *  removed item should animate out (enterExit's exit) while its siblings reflow
- *  smoothly into the new layout — e.g. hiding an org on the home grid. Scoped to
+ *  smoothly into the new layout — e.g., hiding an org on the home grid. Scoped to
  *  presence-animated lists so the plain EnterDiv keeps its zero-reflow default. */
 export function PresenceCardDiv({ children, ...props }: DivProps) {
   return (

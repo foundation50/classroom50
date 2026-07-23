@@ -42,7 +42,7 @@ type reuseServerConfig struct {
 	templatePrivate   bool
 	templateMissing   bool // template repo 404s
 	// grantStatus overrides the classroom-team grant PUT response; 0 =>
-	// the default 204 (success). Set to e.g. 500 to exercise the
+	// the default 204 (success). Set to e.g., 500 to exercise the
 	// grant-fails-after-the-copy-landed path.
 	grantStatus int
 	// grantRateLimited, when set, makes the classroom-team grant PUT return a
@@ -55,7 +55,7 @@ type reuseServerConfig struct {
 	// reference the same owner.
 	templateOwner string
 	// taGrantStatus overrides the TA-staff-team grant PUT response; 0 =>
-	// the default 204 (success). Set to e.g. 500 to exercise the TA-grant
+	// the default 204 (success). Set to e.g., 500 to exercise the TA-grant
 	// failure path (which must warn, not fail the reuse).
 	taGrantStatus int
 }

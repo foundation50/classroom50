@@ -12,7 +12,7 @@ file or pasting a URL to it.
    translatable string.
 2. Translate the **values** into your target language. Leave the **keys** and
    the JSON structure exactly as they are.
-3. Save it as `<code>.json` (e.g. `de.json`, `pt-BR.json`).
+3. Save it as `<code>.json` (e.g., `de.json`, `pt-BR.json`).
 
 An LLM does this well. Use the ready-made prompt in
 [`TRANSLATION_PROMPT.md`](./TRANSLATION_PROMPT.md) — it is language-agnostic and
@@ -30,7 +30,7 @@ The agent should then:
 
 1. Read [`TRANSLATION_PROMPT.md`](./TRANSLATION_PROMPT.md) and translate
    [`en.json`](./en.json) into the target language.
-2. Save the result as `<code>.json` in this folder (e.g. `ko.json`).
+2. Save the result as `<code>.json` in this folder (e.g., `ko.json`).
 3. Verify integrity against the base before finishing:
 
    ```bash
@@ -151,7 +151,7 @@ this same `TRANSLATION_PROMPT.md` as its system prompt and gates output with
 `verify_locale.py`, so machine and hand-made packs follow one contract. A
 language with no marker yet, or a manual `workflow_dispatch`, falls back to a
 full first-time translation. If a patched pack ever fails the structural gate
-(e.g. a pre-existing defect on a key this run didn't touch), CI automatically
+(e.g., a pre-existing defect on a key this run didn't touch), CI automatically
 retries that language with a full retranslation — which re-emits every key — and
 only fails the language if it still doesn't pass.
 
@@ -182,7 +182,7 @@ from storage. A pack is rejected when it breaks any of these:
   booleans, or null.
 - **Language code** must be a plausible BCP-47 tag: a 2-3 letter language
   subtag, optionally followed by `-` subtags (`de`, `ja`, `pt-BR`,
-  `zh-Hans-CN`). It is detected from the file name / URL (e.g. `pt-BR.json` ->
+  `zh-Hans-CN`). It is detected from the file name / URL (e.g., `pt-BR.json` ->
   `pt-BR`); you are only prompted to type it when it can't be detected.
 - **Size cap:** 512 KB per pack file.
 - **Key cap:** 5,000 keys per pack.
@@ -217,7 +217,7 @@ Account menu (avatar in the sidebar) → **Language**:
   file name (enter it manually only if detection fails). A preview shows the
   detected code, translation coverage, and sample strings; the pack is applied
   only after you confirm.
-- **URL:** paste a link to the raw JSON (e.g. a public
+- **URL:** paste a link to the raw JSON (e.g., a public
   `raw.githubusercontent.com` link) and press Fetch — the code is detected from
   the URL. Only `http(s)` URLs are accepted, the response is size-capped while
   downloading, and the host must allow CORS — if the fetch fails, download the

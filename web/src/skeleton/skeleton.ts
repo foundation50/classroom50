@@ -74,7 +74,7 @@ const BUNDLED_SKELETON: ReadonlyMap<string, string> = (() => {
 })()
 
 export type SkeletonFile = {
-  // Path inside the target config repo, e.g. ".github/workflows/...".
+  // Path inside the target config repo, e.g., ".github/workflows/...".
   path: string
   mode: "100644"
   type: "blob"

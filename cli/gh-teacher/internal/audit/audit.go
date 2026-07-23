@@ -43,7 +43,7 @@ func NewCmd() *cobra.Command {
 		Long: "Re-read an organization and report whether the least-privilege\n" +
 			"member-privilege lockdown that `gh teacher init` applies is\n" +
 			"actually in effect. Read-only: makes no changes.\n\n" +
-			"Use it to confirm a manual fix took hold — e.g. after you\n" +
+			"Use it to confirm a manual fix took hold — e.g., after you\n" +
 			"unchecked the boxes from init's \"Action required\" list — without\n" +
 			"re-running init.\n\n" +
 			"Reports two groups:\n" +
@@ -232,7 +232,7 @@ func buildAuditReport(client githubapi.Client, org, plan string) auditReport {
 	}
 
 	// Advisory-only: the classroom50 config repo drifted off `main`. Renameable
-	// in the web app; here we only recommend + link. A read failure (e.g. repo
+	// in the web app; here we only recommend + link. A read failure (e.g., repo
 	// not yet initialized) simply omits the recommendation — it never gates the
 	// verdict.
 	if branch, err := configrepo.ResolveConfigRepoBranch(client, org); err == nil {

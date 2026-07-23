@@ -15,7 +15,7 @@ import {
 // (same storage key + theme names) so the pre-mount paint matches what React
 // resolves. Nothing else binds them and the drift symptom (a wrong-theme flash)
 // is nearly invisible in review — so guard the contract here, like the repo's
-// other hand-mirrored-contract drift tests (e.g. skeleton.test.ts).
+// other hand-mirrored-contract drift tests (e.g., skeleton.test.ts).
 describe("theme anti-flash contract (index.html <-> useTheme)", () => {
   // Resolve from the vitest cwd (the web package root) rather than
   // import.meta.url: this suite runs under happy-dom, where import.meta.url is

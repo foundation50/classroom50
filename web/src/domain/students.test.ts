@@ -1040,7 +1040,7 @@ describe("updateStudent — edit a roster row's teacher-facing fields in place",
   })
 
   it("upserts a new row when no row matches but identity is provided", async () => {
-    // A team member (e.g. a staff instructor) with no roster.csv row yet: editing
+    // A team member (e.g., a staff instructor) with no roster.csv row yet: editing
     // their profile should CREATE the row from identity rather than throw.
     const { client, committed } = makeClient({ startingCsv: HEADER + aliceRow })
 

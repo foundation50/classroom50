@@ -38,8 +38,8 @@ On every submission, the autograde-runner workflow fetches `runner.py` (the runn
 
 ## Maintenance
 
-- **Year rollover**: edit `CHECK50_SPEC_PREFIX` at the top of `autograder.py` when CS50 advances `cs50/problems/<year>` (e.g. `2026` → `2027`). After editing, re-run `gh teacher autograder set-default --from ./autograder.py` to push the change.
-- **Per-assignment exceptions**: drop a per-assignment override at `<classroom>/autograders/<slug>/autograder.py` for any assignment that needs grading logic outside the check50 model (e.g. a project, a non-CS50 problem set). The runner picks per-assignment overrides over the classroom default automatically.
+- **Year rollover**: edit `CHECK50_SPEC_PREFIX` at the top of `autograder.py` when CS50 advances `cs50/problems/<year>` (e.g., `2026` → `2027`). After editing, re-run `gh teacher autograder set-default --from ./autograder.py` to push the change.
+- **Per-assignment exceptions**: drop a per-assignment override at `<classroom>/autograders/<slug>/autograder.py` for any assignment that needs grading logic outside the check50 model (e.g., a project, a non-CS50 problem set). The runner picks per-assignment overrides over the classroom default automatically.
 
 ## Why `user: root`
 

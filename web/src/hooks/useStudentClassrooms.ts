@@ -120,7 +120,7 @@ export default useStudentClassrooms
 
 // A student's capability secret for a classroom, from the team-description
 // bootstrap record (config-free). `enabled: false` skips the GET /user/teams
-// read for callers that already hold the secret (e.g. an accept link's ?k=).
+// read for callers that already hold the secret (e.g., an accept link's ?k=).
 // `isLoading` tracks that read; false when disabled (nothing to wait on).
 export function useClassroomSecret(
   org: string | undefined,

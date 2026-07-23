@@ -181,7 +181,7 @@ func boolJSON(b bool) string {
 
 // TestProvisionServiceSecret_PutStatus pins the PUT status handling: the
 // Actions-secret upload must succeed on 201 (created) and 204 (updated),
-// and the new assertion must reject any other 2xx (e.g. a 200 that means
+// and the new assertion must reject any other 2xx (e.g., a 200 that means
 // the write didn't land as a create/update) rather than reporting a
 // stored token. The handler serves a valid NaCl public key on the GET so
 // sealbox encryption succeeds and the flow reaches the PUT.

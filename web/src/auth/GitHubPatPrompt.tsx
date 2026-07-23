@@ -31,7 +31,7 @@ const REQUIRED_PAT_SCOPES = REQUIRED_SCOPES.filter(
 
 // Classic-token page with the required scopes pre-checked. Built with
 // URLSearchParams (matching buildGithubAuthorizeUrl) so the scope list's
-// reserved characters (e.g. the ":" in admin:org) are encoded correctly.
+// reserved characters (e.g., the ":" in admin:org) are encoded correctly.
 const CREATE_TOKEN_URL = `https://github.com/settings/tokens/new?${new URLSearchParams(
   {
     description: "Classroom 50",

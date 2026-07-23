@@ -28,7 +28,7 @@ const EditAssignmentForm = ({
   onError?: (error: GitHubAPIError) => void
   onMutate?: () => void
   onCancel?: () => void
-  // View the assignment config read-only (e.g. an archived classroom).
+  // View the assignment config read-only (e.g., an archived classroom).
   readOnly?: boolean
 }) => {
   const { t } = useTranslation()

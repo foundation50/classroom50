@@ -53,7 +53,7 @@ func NextPageLink(header string) string {
 //     page), or NO Link header (test server / Link-less endpoint) with a short
 //     page (len < perPage, including empty).
 //   - ("", false)      — no Link header AND a full page: the caller synthesizes
-//     the next page (e.g. pageURL(page+1)) and continues.
+//     the next page (e.g., pageURL(page+1)) and continues.
 //
 // Callers own how they build a synthesized next page, so that URL isn't
 // returned here; only the decision is shared.
@@ -85,7 +85,7 @@ func IsHTTPNotFound(err error) bool {
 // with a `Retry-After` header (secondary limit / 429) or `x-ratelimit-remaining:
 // 0` (primary limit), and they surface as 403 or 429 — indistinguishable from a
 // real authz 403 by status code alone. Callers that treat a plain 403 as benign
-// (e.g. "an owner must grant this") must exclude this case so a transient
+// (e.g., "an owner must grant this") must exclude this case so a transient
 // throttle stays a loud, non-zero-exit failure instead of silent guidance.
 func IsRateLimited(err error) bool {
 	httpErr, ok := errors.AsType[*api.HTTPError](err)
@@ -108,7 +108,7 @@ func IsRateLimited(err error) bool {
 }
 
 // BackoffDelay is the exponential backoff for optimistic-retry loops:
-// 200ms * 2^attempt (attempt is 0-based), i.e. 200ms, 400ms, 800ms, ...
+// 200ms * 2^attempt (attempt is 0-based), i.e., 200ms, 400ms, 800ms, ...
 // Callers gate it (skip the sleep after the final attempt).
 func BackoffDelay(attempt int) time.Duration {
 	return time.Duration(200*(1<<attempt)) * time.Millisecond
@@ -153,8 +153,8 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 
 // ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
 // returns the branch that actually materialized. Right after POST .../generate,
-// GET /repos reports a transient default_branch (the org default, e.g. `main`)
-// while the real branch (copied from the template, e.g. `master`) hasn't been
+// GET /repos reports a transient default_branch (the org default, e.g., `main`)
+// while the real branch (copied from the template, e.g., `master`) hasn't been
 // created yet — so trusting default_branch, or an immediate confirming GET,
 // can pin a `heads/main` that never exists. This polls the repo's branch list
 // until at least one ref exists, then returns the live default_branch when it
@@ -162,8 +162,8 @@ func WaitForStableBranch(client *api.RESTClient, owner, repo, branch string) err
 // `fallback` if nothing materializes within the window.
 // ResolveSettledDefaultBranch waits out GitHub's async template-copy lag and
 // returns the branch that actually materialized. Right after POST .../generate,
-// GET /repos reports a transient default_branch (the org default, e.g. `main`)
-// while the real branch (copied from the template, e.g. `master`) hasn't been
+// GET /repos reports a transient default_branch (the org default, e.g., `main`)
+// while the real branch (copied from the template, e.g., `master`) hasn't been
 // created yet — so trusting default_branch, or an immediate confirming GET,
 // can pin a `heads/main` that never exists. This polls the repo's branch list
 // up to `attempts` times (sleeping `delay*(i+1)` between tries) until at least

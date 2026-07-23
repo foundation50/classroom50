@@ -54,7 +54,7 @@ const ALL_SUCCESS_DISMISS_MS = 8000
 export type Tracker = {
   // Session op id, or `run-<id>` for a discovered run.
   id: string
-  // Phase-wrapped label for display + aria-live, e.g. "Collecting scores…" ->
+  // Phase-wrapped label for display + aria-live, e.g., "Collecting scores…" ->
   // "Collecting scores — done". Announces state, not just the icon.
   displayLabel: string
   phase: TrackerPhase
@@ -130,7 +130,7 @@ export function useActionActivity(): ActionActivity {
   const [retriedAt, setRetriedAt] = useState<Record<string, number>>({})
 
   // Read before the query so the poll can stay alive while any op is still
-  // outstanding (e.g. a deploy whose run hasn't appeared yet).
+  // outstanding (e.g., a deploy whose run hasn't appeared yet).
   const ops = operationsForOrg(org)
 
   const runsQuery = useQuery({

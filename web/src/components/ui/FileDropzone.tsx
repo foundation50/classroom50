@@ -5,7 +5,7 @@ import { Button } from "./Button"
 import { cx } from "./cx"
 
 // A picked file plus its intended repo-relative path. For a dropped folder the
-// path is the path WITHIN the dropped folder (e.g. "src/main.c"); for a flat
+// path is the path WITHIN the dropped folder (e.g., "src/main.c"); for a flat
 // file it's just the name. The path is carried alongside the File because a
 // drag-drop traversal can't write to the read-only File.webkitRelativePath.
 export type PickedFile = {

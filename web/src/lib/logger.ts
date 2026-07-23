@@ -158,7 +158,7 @@ function emit(
       org,
       label: scope ? `[${scope}] ${message}` : message,
       source: site,
-      // Collapse a burst of identical recorded lines (e.g. one warn per 401 in
+      // Collapse a burst of identical recorded lines (e.g., one warn per 401 in
       // a multi-org read) into one Activity entry so the ring doesn't evict
       // genuine errors — same window the mutation/toast paths use.
       dedupKey: scope ? `log-${scope}-${message}` : `log-${message}`,

@@ -10,7 +10,7 @@ const Avatar = ({
   initials: string
   name: string
   github: string
-  // Secondary line under the name (e.g. section badge or GitHub handle). Shown
+  // Secondary line under the name (e.g., section badge or GitHub handle). Shown
   // only when set — no implicit handle fallback.
   subtitle?: React.ReactNode
   // When set, the avatar circle + name become a button opening details.

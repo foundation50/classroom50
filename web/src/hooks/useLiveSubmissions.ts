@@ -43,7 +43,7 @@ export type UseLiveSubmissionsResult = {
   errorCount: number
   isFetching: boolean
   // True only while the FIRST fetch for the current inputs is in flight (not a
-  // background refetch). Callers gate flash-prone derived state (e.g. the
+  // background refetch). Callers gate flash-prone derived state (e.g., the
   // "not submitted" list) on this so a row doesn't first render not-submitted
   // and then jump to Pending once live presence lands.
   isPending: boolean
@@ -118,7 +118,7 @@ export function useLiveSubmissions({
           const repo = studentRepoName(classroom!, assignment!, owner)
           try {
             // Route through the shared read slot so this fan-out and any other
-            // per-repo fan-out on the page (e.g. group-member reads) share one
+            // per-repo fan-out on the page (e.g., group-member reads) share one
             // concurrency budget, and retry once on a rate-limit before giving
             // up on a repo.
             const { latest: release, count } = await withGithubReadSlot(() =>

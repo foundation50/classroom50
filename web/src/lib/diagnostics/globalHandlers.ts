@@ -17,7 +17,7 @@ export function installDiagnosticsHandlers(): void {
 
   window.addEventListener("error", (event) => {
     // event.error is the thrown value when available; fall back to the message
-    // (e.g. cross-origin script errors that null out error). The event's
+    // (e.g., cross-origin script errors that null out error). The event's
     // filename:lineno is a reliable source even when a stack is unavailable.
     const source =
       event.filename && event.lineno

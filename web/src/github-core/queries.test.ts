@@ -136,7 +136,7 @@ describe("listOrgAdmins (role=admin fallback)", () => {
     )
   })
 
-  it("rethrows a non-403/404 error (e.g. 500) rather than degrading silently", async () => {
+  it("rethrows a non-403/404 error (e.g., 500) rather than degrading silently", async () => {
     await expect(listOrgAdmins(rejectingClient(500), "acme")).rejects.toThrow(
       GitHubAPIError,
     )
@@ -163,7 +163,7 @@ describe("listOrgTeams (org teams fallback)", () => {
     )
   })
 
-  it("rethrows a non-404 error (e.g. 403/500) rather than degrading silently", async () => {
+  it("rethrows a non-404 error (e.g., 403/500) rather than degrading silently", async () => {
     await expect(listOrgTeams(rejectingClient(403), "acme")).rejects.toThrow(
       GitHubAPIError,
     )
@@ -459,7 +459,7 @@ describe("releasesQuery", () => {
     expect(releases).toEqual([])
   })
 
-  it("rethrows a non-404 (e.g. 403/5xx) so it surfaces as an error", async () => {
+  it("rethrows a non-404 (e.g., 403/5xx) so it surfaces as an error", async () => {
     const request = vi.fn().mockRejectedValue(apiError(403))
     await expect(run({ request } as unknown as GitHubClient)).rejects.toThrow()
   })

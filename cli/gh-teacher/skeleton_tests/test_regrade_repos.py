@@ -294,7 +294,7 @@ def test_create_tag_ref_swallows_ref_already_exists_422(monkeypatch):
 
 
 def test_create_tag_ref_propagates_other_422(monkeypatch):
-    # A 422 that is NOT "already exists" (e.g. invalid sha) is a real failure
+    # A 422 that is NOT "already exists" (e.g., invalid sha) is a real failure
     # and must propagate so the caller records the repo as failed rather than
     # mis-counting it as first-graded (phantom-tagged).
     def fake_request(method, url, token, *, accept, body=None, _retries=3):
@@ -421,7 +421,7 @@ def test_main_load_roster_hard_http_error_reports_token_scope(monkeypatch, capsy
 
 
 def test_main_load_roster_transient_http_error_reports_generic(monkeypatch, capsys):
-    # A non-hard team-listing failure (e.g. 404 missing/re-slugged team) exits 1
+    # A non-hard team-listing failure (e.g., 404 missing/re-slugged team) exits 1
     # with the generic "listing the classroom team failed" message — distinct
     # from the hard-error token-scope guidance.
     _set_main_env(monkeypatch)
@@ -700,7 +700,7 @@ def test_list_team_member_logins_propagates_404(monkeypatch):
 
 
 def test_list_team_member_logins_raises_valueerror_on_non_array(monkeypatch):
-    # A non-array body (e.g. a GitHub error envelope during a partial outage)
+    # A non-array body (e.g., a GitHub error envelope during a partial outage)
     # raises ValueError from _paginate_login_list rather than silently yielding
     # no members — main() converts this to a loud error, not a crash.
     def fake_get(url, token, *, accept, _retries=3):

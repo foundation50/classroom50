@@ -151,7 +151,7 @@ describe("submitAssignment", () => {
     })
   })
 
-  it("commits to the repo's actual default branch (e.g. master), not a guessed main", async () => {
+  it("commits to the repo's actual default branch (e.g., master), not a guessed main", async () => {
     const { client, created } = makeClient({
       defaultBranch: "master",
       existingTree: [blob(".github/workflows/autograde.yaml", "wf-sha")],

@@ -6,7 +6,7 @@ name: web Deploy to GitHub Pages
 # release-please Release PR tags `web-vX.Y.Z` and that workflow builds + deploys
 # the tagged commit. This workflow is kept as a manual escape hatch only
 # (workflow_dispatch) to re-publish a chosen ref without cutting a release —
-# e.g. to recover a broken Pages deploy or redeploy an existing tag.
+# e.g., to recover a broken Pages deploy or redeploy an existing tag.
 #
 # classroom50.org is this repo's Pages custom domain (Settings -> Pages, source:
 # GitHub Actions). web/CNAME carries the domain into the published artifact; the

@@ -114,7 +114,7 @@ export function useClassroomRoleContext(): ClassroomRoleContextValue {
 }
 
 // Like useClassroomRoleContext but returns null off-route (no provider). For
-// surfaces rendered on BOTH org-level and classroom routes (e.g. the drawer
+// surfaces rendered on BOTH org-level and classroom routes (e.g., the drawer
 // footer), which read the classroom role when in a classroom and fall back to
 // org-level signals otherwise. Mirrors useRoleView's safe off-route default.
 export function useClassroomRoleContextOptional(): ClassroomRoleContextValue | null {

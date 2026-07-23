@@ -65,7 +65,7 @@ export function classifyConfigCommit(message: string): TimelineType {
 }
 
 // Drop the "[Classroom 50] " prefix for display; keep the rest verbatim. A
-// non-prefixed commit (e.g. a workflow-authored scores commit) is returned
+// non-prefixed commit (e.g., a workflow-authored scores commit) is returned
 // unchanged.
 function stripPrefix(message: string): string {
   const p = `${COMMIT_PREFIX} `

@@ -14,7 +14,7 @@
     },
     "term": {
       "type": "string",
-      "description": "Free-form term label (e.g. \"Fall 2026\"). Omitted when empty."
+      "description": "Free-form term label (e.g., \"Fall 2026\"). Omitted when empty."
     },
     "active": {
       "type": "boolean",

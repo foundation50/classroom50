@@ -114,7 +114,7 @@ organization.
 Create a **fine-grained personal access token** at **Settings → Developer
 settings → Personal access tokens → Fine-grained tokens → Generate new token**:
 
-1. **Token name** — e.g. `classroom50-<org>`.
+1. **Token name** — e.g., `classroom50-<org>`.
 2. **Resource owner** — select **the organization**. This is critical: the token
    can only reach repos owned by the resource owner you pick.
 3. **Expiration** — up to 1 year. Set a reminder to rotate it.
@@ -264,7 +264,7 @@ pending invite when they accept their first assignment.
 **Other targets:**
 
 ```sh
-gh teacher invite --admin <org> <username>              # invite as org admin (e.g. a TA)
+gh teacher invite --admin <org> <username>              # invite as org admin (e.g., a TA)
 gh teacher invite <org>/<repo> <username>               # invite to one repo (default: push)
 gh teacher invite -p maintain <org>/<repo> <username>   # other permissions
 ```
@@ -358,7 +358,7 @@ shim). The slug must match `^[a-z0-9][a-z0-9-]{1,38}$`.
 | --- | --- |
 | `--template <owner>/<repo>[@branch]` | Starter-code repository (must be flagged as a template). Branch defaults to the template's default. |
 | `--description <text>` | Short description. |
-| `--due <ISO-8601>` | Due date, e.g. `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
+| `--due <ISO-8601>` | Due date, e.g., `2026-09-15T23:59:00-04:00`. Stored as UTC; local timezone assumed if you omit the offset. A bare date with no time is rejected. |
 | `--mode individual\|group` | `individual` (default) or `group`. Group requires `--max-group-size`. |
 | `--max-group-size <N>` | Max collaborators on a group repo (2–100). Advisory, not hard-enforced. |
 | `--runtime <path>` | JSON describing the autograde environment (`runs-on`, language versions, `apt`, or a `container`). Omit for ubuntu-latest + Python 3.12. See [Autograders](Autograders). |

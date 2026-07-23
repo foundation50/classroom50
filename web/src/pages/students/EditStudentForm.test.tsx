@@ -143,7 +143,7 @@ describe("EditStudentForm in-flight Save button", () => {
 
   // The real bug: the roster modal recreates the `student` object every render
   // (rowToStudent(row)) and passes a stable `resetSignal`. A parent re-render
-  // mid-submit (e.g. from the submitting flag flowing up) must NOT re-run the
+  // mid-submit (e.g., from the submitting flag flowing up) must NOT re-run the
   // form-reset effect — form.reset() clears isSubmitting, re-enabling Save while
   // the write is still running. Keying the reset on `resetSignal` alone fixes
   // it; this pins that a fresh `student` identity mid-flight keeps Save disabled.

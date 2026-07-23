@@ -54,7 +54,7 @@ export async function orgPublishesClassroom50Pages(
     // (5xx, 429) are transient -> indeterminate.
     if (res.status === 404) return "no"
     if (!res.ok) return "indeterminate"
-    // Confirm it's actually the index shape, not a stray 200 (e.g. a custom 404
+    // Confirm it's actually the index shape, not a stray 200 (e.g., a custom 404
     // page served with 200).
     const data = (await res.json()) as { classrooms?: unknown }
     return Array.isArray(data?.classrooms) ? "yes" : "no"
@@ -131,7 +131,7 @@ type Classroom50Status =
 const CONFIG_REPO_MARKER_PATH = `${ORG_GITHUB_DIR}/${CONFIG_REPO_MARKER_REL}`
 
 // True when a readable `classroom50` repo is a real config repo, not a name
-// collision (an org owning an unrelated repo named `classroom50`, e.g. this
+// collision (an org owning an unrelated repo named `classroom50`, e.g., this
 // project's own source). A clean 404 on the marker means collision; any other
 // error is transient/permission, so fail open — hiding a real teacher's org
 // behind a read blip is worse than briefly showing one extra.

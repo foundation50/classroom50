@@ -154,7 +154,7 @@ jobs:
         run: |
           python3 - <<'PY'
           import glob, json, os
-          # Public fields only — keep internal/teacher-side keys (e.g. the
+          # Public fields only — keep internal/teacher-side keys (e.g., the
           # `team` block, which carries the GitHub team id/slug) out of the
           # unauthenticated Pages index. New public fields must be added
           # here explicitly rather than dumping classroom.json wholesale.

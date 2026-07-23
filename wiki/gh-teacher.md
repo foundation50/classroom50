@@ -12,7 +12,7 @@ output, or `--verbose` / `-v` for per-step detail.
 | Command | Description |
 | --- | --- |
 | `whoami` | Print the authenticated GitHub user. |
-| `login` | Log in with the Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`). Add scopes with `-s` (e.g. `delete_repo`). |
+| `login` | Log in with the Classroom 50 scopes (`admin:org`, `read:org`, `repo`, `workflow`). Add scopes with `-s` (e.g., `delete_repo`). |
 | `logout` | Log out via `gh auth logout`. |
 | `init <org>` | Set up `<org>/classroom50` (org lockdown, config repo, Pages, branch protection, service token). Idempotent. |
 | `audit <org>` | Read-only audit of the org member-privilege lockdown. |
@@ -519,7 +519,7 @@ gh teacher member list <org> --quiet
 ```
 
 Shows *actual* GitHub membership (the roster is the *intended* list), so you can
-reconcile drift — e.g. a student who never accepted their invite. Default is an
+reconcile drift — e.g., a student who never accepted their invite. Default is an
 aligned table; `--json` emits `{login, kind, role, github_id}`; `--quiet` prints
 one login per line. Reading org invitations needs `admin:org`. Read-only.
 

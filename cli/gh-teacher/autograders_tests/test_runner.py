@@ -255,7 +255,7 @@ class TestBaselineSha:
     def test_accept_commit_subject_is_irrelevant(self, tmp_path):
         # The baseline is found by the added .classroom50.yaml, NOT the
         # commit subject. A repo whose accept commit carries an arbitrary
-        # subject (e.g. the web GUI's "Accept <classroom>/<assignment>")
+        # subject (e.g., the web GUI's "Accept <classroom>/<assignment>")
         # still baselines correctly -- _make_repo's ACCEPT spec already
         # uses a non-CLI subject.
         shas = _make_repo(tmp_path / "repo", [
@@ -1158,7 +1158,7 @@ class TestValidateResult:
 
     def test_extra_fields_allowed(self):
         # The autograder is free to add fields beyond the v1 baseline
-        # (e.g. its own diagnostic block); we only check the contract.
+        # (e.g., its own diagnostic block); we only check the contract.
         ok = {**self.BASE, "extra_field": "anything"}
         assert ag.validate_result(
             ok, classroom="cs-principles", assignment="hello"
@@ -1685,7 +1685,7 @@ class TestFinalizeResult:
         assert summary.read_text() == "### custom body\n"
 
     def test_non_utf8_body_does_not_crash_summary_mirror(self, tmp_path, monkeypatch):
-        # A custom autograder may write arbitrary bytes (e.g. raw student
+        # A custom autograder may write arbitrary bytes (e.g., raw student
         # output) into release-body.md; the summary mirror must degrade
         # (replacement chars), never crash a successfully graded run.
         summary = tmp_path / "summary.md"

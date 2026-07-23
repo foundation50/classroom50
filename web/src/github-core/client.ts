@@ -111,7 +111,7 @@ export function createGitHubClient(args: {
 
     // Report the token's live state to the provider before any throw, so the
     // 401/403 revocation path still surfaces. `scopes` is the X-OAuth-Scopes
-    // header (`null` when absent, e.g. a fine-grained PAT — distinct from an
+    // header (`null` when absent, e.g., a fine-grained PAT — distinct from an
     // empty grant); `status` lets the provider tell a dead token (401) from a
     // healthy one.
     args.onResponse?.({

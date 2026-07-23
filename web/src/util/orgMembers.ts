@@ -23,7 +23,7 @@ export type ClassroomAccess = {
 //  - member-on-roster: a healthy member on >=1 roster.
 //  - on-roster-not-member: the target discrepancy — on a roster but no longer
 //    (or never) an org member.
-//  - member-no-roster: an org member on no roster (e.g. co-teacher, or a
+//  - member-no-roster: an org member on no roster (e.g., co-teacher, or a
 //    leftover after an unenroll).
 export type MemberClassification =
   "member-on-roster" | "on-roster-not-member" | "member-no-roster"

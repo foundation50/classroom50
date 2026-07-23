@@ -79,7 +79,7 @@ export function runTimes(run: GitHubWorkflowRun): {
   return { startedAtMs, endedAtMs }
 }
 
-// Workflow file name (e.g. "publish-pages.yaml") from a run's `path`.
+// Workflow file name (e.g., "publish-pages.yaml") from a run's `path`.
 export function workflowFile(run: GitHubWorkflowRun): string | undefined {
   return run.path?.split("/").pop()
 }

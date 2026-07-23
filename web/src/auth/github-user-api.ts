@@ -6,7 +6,7 @@ import { LOG_SCOPE_AUTH } from "@/lib/logScopes"
 const log = logger.scope(LOG_SCOPE_AUTH)
 
 // Carries the HTTP status so callers can branch on auth failures (401) without
-// string-matching the message — e.g. the session-expiry effect in useGithubAuth.
+// string-matching the message — e.g., the session-expiry effect in useGithubAuth.
 export class GitHubUserFetchError extends Error {
   status: number
 
@@ -24,7 +24,7 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
       Accept: "application/vnd.github+json",
     },
     // Bare fetch has no built-in timeout: without this a hung/half-open
-    // connection (e.g. on reconnect) never settles, pinning the session-
+    // connection (e.g., on reconnect) never settles, pinning the session-
     // validation query "pending" and stranding the app on its loading spinner.
     // A timeout aborts to a rejected fetch, which the query treats as a
     // transient error and retries.
@@ -42,7 +42,7 @@ export async function fetchGithubUser(token: string): Promise<GitHubUser> {
 // Validate a pasted PAT against GET /user and surface the granted scopes in one
 // call, so the PAT sign-in path can block on missing scopes before completing.
 // `scopes` is the X-OAuth-Scopes header: a string for classic PATs (and OAuth
-// tokens), or `null` when absent (e.g. a fine-grained PAT) — the caller must
+// tokens), or `null` when absent (e.g., a fine-grained PAT) — the caller must
 // treat null as "unknown", not "no scopes", matching useMissingScopes.
 export async function fetchGithubUserWithScopes(
   token: string,

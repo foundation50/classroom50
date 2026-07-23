@@ -197,7 +197,7 @@ export async function editAssignment(
   editedAssignment.slug = targetAssignment.slug
 
   // The form rebuilds only the fields it manages; carry forward the rest
-  // (e.g. `migrated_from`, unknown future keys) so an edit doesn't drop them.
+  // (e.g., `migrated_from`, unknown future keys) so an edit doesn't drop them.
   const preservedEntry = preserveUnmanagedAssignmentKeys(
     targetAssignment,
     editedAssignment,

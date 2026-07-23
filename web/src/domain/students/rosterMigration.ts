@@ -25,7 +25,7 @@ export type MigrateRosterFileResult = {
 // its bytes verbatim and delete the legacy file in ONE tree commit. Idempotent:
 // a no-op when roster.csv already exists, and nothing-to-do when neither file
 // is present (a brand-new classroom's roster.csv is created by the team sync
-// instead). Runs inside the conflict-retry loop so a concurrent write (e.g. an
+// instead). Runs inside the conflict-retry loop so a concurrent write (e.g., an
 // interleaved roster edit) is re-read rather than clobbered.
 export async function migrateRosterFile(
   client: GitHubClient,

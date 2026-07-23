@@ -61,7 +61,7 @@ export async function acceptAndVerifyOrgMembership(
 }
 
 // Thrown by acceptAndVerifyOrgMembership when the invite was accepted but the
-// re-read membership is still not "active" (e.g. GitHub lag). Distinct from a
+// re-read membership is still not "active" (e.g., GitHub lag). Distinct from a
 // GitHubAPIError so the UI can offer a retry rather than a not-a-member screen.
 export class NotActiveMemberError extends Error {
   org: string

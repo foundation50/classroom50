@@ -115,7 +115,7 @@ func ClassifyOrgInviteError(client githubapi.Client, org, username, path string,
 // OrgForbiddenKind classifies a 403 by what X-OAuth-Scopes reveals, so callers
 // phrase their own message without re-inspecting the header. ScopeMissing: a
 // classic token lacking admin:org; NotAdmin: has the scope but isn't an admin;
-// Generic: absent header (e.g. a fine-grained PAT).
+// Generic: absent header (e.g., a fine-grained PAT).
 type OrgForbiddenKind int
 
 const (

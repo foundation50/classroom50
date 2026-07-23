@@ -3,7 +3,7 @@ import type { GithubDeviceCodeResponse, GithubTokenResponse } from "./types"
 
 // Must exactly match the OAuth App's registered callback URL (.../login).
 // Deriving it from the live pathname breaks the flow when launched from another
-// route (e.g. the re-authorize banner). See #57.
+// route (e.g., the re-authorize banner). See #57.
 const OAUTH_CALLBACK_PATH = "/login"
 
 function redirectUri() {

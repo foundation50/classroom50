@@ -76,7 +76,7 @@ export const testToDraft = (test: AssignmentTest): AssignmentTestDraft => ({
 })
 
 // draftToTest serializes a draft into the exact v1 wire shape: kebab-case keys,
-// type-inapplicable fields dropped (the CLI rejects e.g. `expected` on a run
+// type-inapplicable fields dropped (the CLI rejects e.g., `expected` on a run
 // test), optional fields omitted when empty/zero — the same normalized form
 // `gh teacher assignment test add` writes.
 export function draftToTest(draft: AssignmentTestDraft): AssignmentTest {

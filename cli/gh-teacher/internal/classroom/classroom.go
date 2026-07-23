@@ -137,8 +137,8 @@ func classroomAddCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", `Full display name for the classroom (e.g. "CS Principles")`)
-	cmd.Flags().StringVar(&term, "term", "", "Term identifier (e.g. Spring-2026)")
+	cmd.Flags().StringVar(&name, "name", "", `Full display name for the classroom (e.g., "CS Principles")`)
+	cmd.Flags().StringVar(&term, "term", "", "Term identifier (e.g., Spring-2026)")
 	cmd.Flags().BoolVar(&unlisted, "unlisted", false, "Publish this classroom's resources at an unguessable URL path segment (obscurity, not access control; prompts to accept a generated key)")
 	cmd.Flags().StringVar(&key, "key", "", "Supply a specific access key for the unlisted URL (implies --unlisted); must match "+configrepo.SecretPatternDescription)
 	return cmd
@@ -368,7 +368,7 @@ func classroomListCmd() *cobra.Command {
 		Short: "List the classrooms registered in the config repo",
 		Long: "List every classroom registered in <org>/classroom50.\n\n" +
 			"A classroom is a root-level directory holding a classroom.json;\n" +
-			"directories without one (e.g. .github) are skipped.\n\n" +
+			"directories without one (e.g., .github) are skipped.\n\n" +
 			"Archived classrooms (classroom.json `active: false`) are hidden\n" +
 			"by default, mirroring the web's default classes list; pass --all\n" +
 			"to include them. In the default output an archived classroom is\n" +
@@ -515,8 +515,8 @@ func classroomEditCmd() *cobra.Command {
 			return editClassroom(client, cmd.OutOrStdout(), cmd.ErrOrStderr(), org, shortName, setName, strings.TrimSpace(name), setTerm, strings.TrimSpace(term))
 		},
 	}
-	cmd.Flags().StringVar(&name, "name", "", `New display name for the classroom (e.g. "CS Principles")`)
-	cmd.Flags().StringVar(&term, "term", "", "New term identifier (e.g. Fall-2026)")
+	cmd.Flags().StringVar(&name, "name", "", `New display name for the classroom (e.g., "CS Principles")`)
+	cmd.Flags().StringVar(&term, "term", "", "New term identifier (e.g., Fall-2026)")
 	return cmd
 }
 

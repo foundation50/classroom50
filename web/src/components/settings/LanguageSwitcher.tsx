@@ -501,7 +501,7 @@ export default LanguageSwitcher
 
 // Shared shell for collapsible sections: a controlled native <details> with a
 // rotating chevron. `open` stays an explicit prop so a section can widen its
-// open condition (e.g. install also opens when a code is needed).
+// open condition (e.g., install also opens when a code is needed).
 const AccordionSection = ({
   section,
   title,

@@ -28,7 +28,7 @@ export async function encryptSecret(publicKey: string, secret: string) {
  * The shared token needs Contents: Read and write, Actions: Read and write, AND
  * Administration: Read and write on student repos: collect-scores reads, regrade
  * (re-running an autograde run, or pushing a submit/* tag) WRITES, and collect
- * grants staff teams (e.g. TAs) repo access via PUT /orgs/{org}/teams/{slug}/repos/...
+ * grants staff teams (e.g., TAs) repo access via PUT /orgs/{org}/teams/{slug}/repos/...
  * which needs Administration. We can't introspect a fine-grained PAT's Actions
  * scope via the API, so we assert the Contents write capability
  * (permissions.push) AND the admin capability (permissions.admin) here — a
@@ -125,7 +125,7 @@ export async function validateServiceToken(
   // Administration (not implied by Contents); reject an admin-less token here.
   if (!repo.permissions?.admin) {
     throw new Error(
-      `This token can read and write ${org}/${CONFIG_REPO} but lacks admin access — collecting scores grants staff teams (e.g. TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
+      `This token can read and write ${org}/${CONFIG_REPO} but lacks admin access — collecting scores grants staff teams (e.g., TAs) read access to student repos, which needs Administration: write. ${scopeHint}`,
     )
   }
 

@@ -1002,7 +1002,7 @@ const SubmissionsPageContent = () => {
   )
 }
 
-// The teacher gradebook. Students who land here directly (e.g. an old link) are
+// The teacher gradebook. Students who land here directly (e.g., an old link) are
 // redirected to their own submission view; we wait for the role to resolve so a
 // real teacher never bounces, and avoid firing teacher-only reads for a student.
 const SubmissionsPage = () => {

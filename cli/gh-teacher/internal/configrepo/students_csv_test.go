@@ -517,7 +517,7 @@ func TestDedupeByUsername_LastWins(t *testing.T) {
 	}
 }
 
-// --- legacy extra columns (e.g. a prior web schema) ------------------------
+// --- legacy extra columns (e.g., a prior web schema) ------------------------
 
 // An earlier web app appended optional extra columns to the roster. The CLI
 // must still parse such a wider file (not reject it) and preserve those columns

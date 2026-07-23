@@ -6,7 +6,7 @@ import { useCallback, useEffect, useState } from "react"
 // (no state) to avoid a re-render on every scroll frame.
 export function useScrollFade<T extends HTMLElement>() {
   // Track the node in state (not a ref) so the effect re-subscribes when the
-  // element remounts — e.g. a conditionally-rendered list that appears after a
+  // element remounts — e.g., a conditionally-rendered list that appears after a
   // loading/empty phase. A ref wouldn't retrigger the effect, leaking listeners
   // on the old node and leaving the new one unbound.
   const [element, setElement] = useState<T | null>(null)
@@ -26,7 +26,7 @@ export function useScrollFade<T extends HTMLElement>() {
     recompute()
     element.addEventListener("scroll", recompute, { passive: true })
     // Observe the container and its children: the container catches viewport
-    // resizes, the children catch content growing after mount (e.g. async row
+    // resizes, the children catch content growing after mount (e.g., async row
     // badges) that changes scrollHeight without resizing the capped box.
     const observer = new ResizeObserver(recompute)
     observer.observe(element)

@@ -17,7 +17,7 @@ import (
 // `roster migrate` touches. files maps repo-relative path -> content (present
 // files); a path absent from the map 404s on both contents reads and existence
 // checks. treeExtra lists paths that appear in the recursive tree listing but
-// are NOT in files — i.e. the git tree says the blob exists while a contents
+// are NOT in files — i.e., the git tree says the blob exists while a contents
 // GET 404s, modelling the eventual-consistency/spurious-404 case. tree records
 // the last git Tree payload so a test can assert which paths were upserted
 // (non-null sha) vs deleted (null sha).

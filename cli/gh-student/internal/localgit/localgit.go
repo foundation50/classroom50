@@ -23,7 +23,7 @@ func CurrentGitRoot() (string, bool, error) {
 			// Not inside a git tree.
 			return "", false, nil
 		}
-		// e.g. git not installed.
+		// e.g., git not installed.
 		return "", false, fmt.Errorf("check git repository: %w", err)
 	}
 

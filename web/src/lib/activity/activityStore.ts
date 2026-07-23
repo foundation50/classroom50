@@ -33,7 +33,7 @@ export type ActivityEntry = {
   ssoRequired?: boolean
   scopeGap?: boolean
   // First app (non-node_modules, non-framework) frame of the error's stack, for
-  // pinpointing an uncaught error's origin — e.g. "useGithubAuth.tsx:743". Kept
+  // pinpointing an uncaught error's origin — e.g., "useGithubAuth.tsx:743". Kept
   // short (one frame) and app-origin only; still no raw body/token.
   source?: string
   // Epoch ms; drives TTL eviction and display order.
@@ -45,7 +45,7 @@ const STORAGE_KEY = "cl50:activity"
 // spirit of ActionActivityProvider's op TTL, widened since this is a browse view.
 const TTL_MS = 60 * 60 * 1000
 const MAX_ENTRIES = 50
-// Collapse a burst of the same failure (e.g. a mutation that also toasts) into
+// Collapse a burst of the same failure (e.g., a mutation that also toasts) into
 // one entry when they arrive within this window carrying the same dedup key.
 const DEDUP_WINDOW_MS = 5000
 
@@ -114,7 +114,7 @@ export function sourceFromStack(stack: string | undefined): string | undefined {
   for (const line of stack.split("\n")) {
     // A stack frame referencing a bundled source. Skip framework/vendor frames.
     if (/node_modules|react-dom|react\/|scheduler/.test(line)) continue
-    // Match the last path segment + line:col, e.g. ".../useGithubAuth.tsx:743:11".
+    // Match the last path segment + line:col, e.g., ".../useGithubAuth.tsx:743:11".
     // Strip a Vite HMR "?t=..." cache-buster so the frame stays readable.
     const m = line.match(
       /([\w.-]+\.(?:tsx?|jsx?|mjs))(?:\?[^:]*)?:(\d+)(?::(\d+))?/,
@@ -156,7 +156,7 @@ export function toActivityEntry(
       ...base,
       label: context?.label ?? error.message,
       // Prefer the error's own stack (sourcemapped to .tsx in dev); fall back to
-      // the caller-supplied source (e.g. window.onerror's filename:lineno).
+      // the caller-supplied source (e.g., window.onerror's filename:lineno).
       source: sourceFromStack(error.stack) ?? context?.source,
     }
   }
@@ -263,7 +263,7 @@ export function recordErrorToast(message: string): void {
   pushEntry(toActivityEntry(new Error(message)))
 }
 
-// Record a non-error, meaningful action (e.g. a dispatched workflow).
+// Record a non-error, meaningful action (e.g., a dispatched workflow).
 export function recordAction(label: string, context?: { org?: string }): void {
   pushEntry({
     id: nextId(),

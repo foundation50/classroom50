@@ -51,7 +51,7 @@ export function FormField({
   children,
 }: {
   label: ReactNode
-  // Provide when the control has its own stable id (e.g. TanStack `field.name`);
+  // Provide when the control has its own stable id (e.g., TanStack `field.name`);
   // otherwise an id is generated.
   htmlFor?: string
   required?: boolean

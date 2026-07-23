@@ -843,7 +843,7 @@ func refreshResultJSON(client githubapi.Client, token, apiBase, org, repo, targe
 	// results.json symlink (materialized verbatim by git clone) would redirect
 	// these writes. os.Root confines writes to the clone (refusing symlink
 	// escape); writeGuarded replaces any pre-existing entry with a fresh regular
-	// file so an in-clone symlink/hardlink (e.g. to .git/hooks/*, which git would
+	// file so an in-clone symlink/hardlink (e.g., to .git/hooks/*, which git would
 	// then execute) or a blocking FIFO can't be written through. GHSA-qx2g-vpwq-466c.
 	root, err := os.OpenRoot(target)
 	if err != nil {
@@ -910,7 +910,7 @@ type releaseAsset struct {
 }
 
 // listAllSubmitReleases returns every submit-tag release for a repo, newest
-// first, walking the full /releases pagination. Non-submit releases (e.g. a
+// first, walking the full /releases pagination. Non-submit releases (e.g., a
 // student's hand-created tag) are filtered out. Mirrors all_submit_releases in
 // collect_scores.py.
 func listAllSubmitReleases(client githubapi.Client, owner, repo string) ([]release, error) {
@@ -1122,7 +1122,7 @@ func cloneOrgRepo(out, errOut io.Writer, org, repo, target string, quiet, verbos
 
 	if err := cmd.Run(); err != nil {
 		if stderrTail != nil {
-			// Last line is git's actionable error (e.g. `fatal: ...`).
+			// Last line is git's actionable error (e.g., `fatal: ...`).
 			if msg := lastNonEmptyLine(stderrTail.String()); msg != "" {
 				return fmt.Errorf("%w: %s", err, msg)
 			}

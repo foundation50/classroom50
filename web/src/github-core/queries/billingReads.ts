@@ -31,7 +31,7 @@ type BillingUsageItem = {
   product?: string
   sku?: string
   unitType?: string
-  // grossQuantity is total usage (e.g. all Actions minutes run); netQuantity is
+  // grossQuantity is total usage (e.g., all Actions minutes run); netQuantity is
   // only the BILLABLE remainder after the plan's included quota, so it reads 0
   // while you're still within quota. We want total usage, so sum grossQuantity.
   grossQuantity?: number

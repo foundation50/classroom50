@@ -191,7 +191,7 @@ CLIs" above). You do not tag or edit the changelog by hand:
    stamped into the build via `VITE_APP_VERSION` and the running app reports it.
    In the same run it dispatches `cli-release` for the `cli-v*` tag (see above).
 
-To force a specific version (e.g. a first `1.0.0` or a jump), land a commit on
+To force a specific version (e.g., a first `1.0.0` or a jump), land a commit on
 `main` whose body contains `Release-As: X.Y.Z`.
 
 [`web-deploy`](.github/workflows/web-deploy.yaml) is retained only as a manual

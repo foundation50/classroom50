@@ -786,7 +786,7 @@ func createOrgRuleset(client githubapi.Client, org string, body orgRulesetBody) 
 }
 
 // updateOrgRuleset PUTs the full definition over an existing ruleset by ID, so
-// a re-run reconciles a stale ruleset (e.g. an older CLI's wrong branch
+// a re-run reconciles a stale ruleset (e.g., an older CLI's wrong branch
 // pattern) to the current definition.
 func updateOrgRuleset(client githubapi.Client, org string, id int64, body orgRulesetBody) error {
 	payload, err := json.Marshal(body)

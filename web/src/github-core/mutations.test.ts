@@ -1126,7 +1126,7 @@ describe("ensureSkeletonFiles non-fast-forward retry", () => {
     const { files, shas } = await bundledShas()
     const drifted = files[0].path
     // A 422 whose message/body don't mention a fast-forward race is a real
-    // error (e.g. validation), not the optimistic-rebase loss — rethrow it.
+    // error (e.g., validation), not the optimistic-rebase loss — rethrow it.
     const err = apiError(422, "Validation failed", { message: "Invalid ref" })
     const { client, refPatches } = retryingClient(
       { ...shas, [drifted]: "0".repeat(40) },

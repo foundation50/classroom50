@@ -5,7 +5,7 @@ Fails loudly on any dropped/added/renamed key, non-string leaf value,
 placeholder mismatch, or markup-marker mismatch. Run from the src/locales
 folder:
 
-    python verify_locale.py <CODE>.json      # e.g. python verify_locale.py de.json
+    python verify_locale.py <CODE>.json      # e.g., python verify_locale.py de.json
 
 Exit code is 0 on PASS and 1 on FAIL, so it can gate CI or a shipping step.
 """
@@ -61,7 +61,7 @@ def placeholders_ok(key, base_val, trans_val):
 def markup_markers(value):
     """Sorted list of <tag>/</tag>/<tag/> markers in a string (empty for non-strings).
 
-    These are react-i18next <Trans> component tags (e.g. <repo>{{repo}}</repo>)
+    These are react-i18next <Trans> component tags (e.g., <repo>{{repo}}</repo>)
     that translations must carry over verbatim. The tag name must start with a
     letter so non-markup angle-bracket text like "<1 day" or the literal
     "<owner>/<repo>" placeholder hint still compare as-is between packs without
@@ -79,7 +79,7 @@ _BARE_MARKER_RE = re.compile(r"^</?[a-zA-Z]\w*\s*/?>$")
 
 
 def attribute_markers(value):
-    """Tags in a string that carry attributes (i.e. are not bare markers).
+    """Tags in a string that carry attributes (i.e., are not bare markers).
 
     Mirrors customLocale.ts's runtime pack-ingest guard: react-i18next's <Trans>
     merges a marker tag's attributes onto the mapped component (pack side wins),
@@ -95,7 +95,7 @@ def attribute_markers(value):
 # CLDR plural categories per target language (Intl.PluralRules cardinal set).
 # en.json carries only _one/_other, and i18next does NOT fall back to the
 # pack's own _other when a category-specific key is missing -- it jumps
-# straight to English (e.g. an ar pack without _few renders English for
+# straight to English (e.g., an ar pack without _few renders English for
 # counts 3-10). Python's stdlib has no CLDR data, so the map is hand-pinned
 # for the languages in targets.json; unlisted codes assume (one, other).
 # Reported as a WARNING, not a failure: several long-published packs (ru, pl,

@@ -21,7 +21,7 @@ export function Toolbar({
   children,
   ...props
 }: ToolbarProps) {
-  // A caller gap (e.g. gap-3) overrides the default; without the guard cx would
+  // A caller gap (e.g., gap-3) overrides the default; without the guard cx would
   // emit both, and Tailwind source order is unspecified.
   const hasGap = hasUtility("gap-", className)
   return (
@@ -137,12 +137,12 @@ export type ToolbarSelectionProps = {
   onToggleSelectAll: () => void
   selectAllAriaLabel: string
   label: ReactNode
-  // Rendered between the count and the actions, regardless of selection (e.g. the
+  // Rendered between the count and the actions, regardless of selection (e.g., the
   // roster group-by-section toggle).
   aux?: ReactNode
   // The selection-revealed actions (shown when rows are selected).
   children?: ReactNode
-  // The no-selection trailing group (e.g. the roster Add/Upload/Invite group).
+  // The no-selection trailing group (e.g., the roster Add/Upload/Invite group).
   idleActions?: ReactNode
 }
 

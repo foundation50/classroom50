@@ -325,7 +325,7 @@ const RosterBulkActionsBar = ({
           org,
           invitationId: row.invitation_id as number,
         })
-        // A 404 means the id was stale (e.g. a resend already replaced it), so
+        // A 404 means the id was stale (e.g., a resend already replaced it), so
         // report it as "already gone" rather than a phantom cancellation.
         if (didCancel) cancelled.push({ key: row.key, label })
         else alreadyGone.push({ key: row.key, label })

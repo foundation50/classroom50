@@ -6,7 +6,7 @@ import {
   createRouter,
 } from "@tanstack/react-router"
 
-// Regression guard for #71: a query-bearing returnTo (e.g. the ?k= accept key)
+// Regression guard for #71: a query-bearing returnTo (e.g., the ?k= accept key)
 // must survive navigation. navigate({ to: returnTo }) folds "?k=..." into the
 // pathname; history.push preserves it — the behavior useGithubAuth and the
 // /login guard rely on.

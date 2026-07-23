@@ -176,7 +176,7 @@ shape `assignment test list --json` emits:
 | `name` | Required. Unique within the assignment; ≤ 100 UTF-8 bytes; no control characters. |
 | `type` | Required. `io`, `run`, or `python`. |
 | `run` | Required. Shell command, run in the student checkout. |
-| `setup` | Optional pre-command (e.g. compile). Non-zero exit fails the test. |
+| `setup` | Optional pre-command (e.g., compile). Non-zero exit fails the test. |
 | `input` / `input-file` | `io` only, mutually exclusive. Inline stdin or a bundled fixture. |
 | `expected` / `expected-file` | `io` only, mutually exclusive. Must be non-empty for `included`/`regex`. |
 | `comparison` | `io` only. `included` (substring), `exact` (trimmed equality), or `regex` (Python `re.search`, multiline). |
@@ -217,7 +217,7 @@ To keep precedence from silently swallowing tests, the CLI refuses `assignment
 test add` / `--tests` while a per-assignment `autograder.py` exists.
 
 <details>
-<summary>Writing a valid assignments.json from another client (e.g. a GUI)</summary>
+<summary>Writing a valid assignments.json from another client (e.g., a GUI)</summary>
 
 Anything that writes a valid `assignments.json` gets the whole pipeline for
 free. A non-CLI client should:

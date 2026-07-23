@@ -17,7 +17,7 @@ export type BestEffortOwnerReconcileConfig<TResult> = {
   // The reconcile itself, taking org/classroom as VARIABLES (not closed-over)
   // so a run resolving after a fast classroom switch acts on its own classroom.
   run: (vars: ReconcileVars) => Promise<TResult>
-  // Side effects on a settled run (e.g. cache invalidation). Called with the
+  // Side effects on a settled run (e.g., cache invalidation). Called with the
   // run's own org/classroom. Fires even if the component unmounted, so keep it
   // to data-consistency work (no toasts/nav — those belong at the call site).
   onSettled?: (result: TResult, vars: ReconcileVars) => void
@@ -26,7 +26,7 @@ export type BestEffortOwnerReconcileConfig<TResult> = {
   // a later render retries). Defaults to "a 403 the viewer can't fix".
   isPermanent?: (err: unknown) => boolean
   // Classifies a SUCCESSFUL result as one that shouldn't latch — its key is
-  // released so a later render retries (e.g. a run that no-op'd because a
+  // released so a later render retries (e.g., a run that no-op'd because a
   // precondition wasn't met yet and may flip within the same mount). Defaults to
   // "always latch a success".
   isTransientSuccess?: (result: TResult) => boolean
@@ -59,7 +59,7 @@ export function useBestEffortOwnerReconcile<TResult>({
     mutationFn: run,
     onSuccess: (result, vars) => {
       // Release the key for a non-latching success so a later render retries
-      // (e.g. an archived-skip that may un-archive within the same mount).
+      // (e.g., an archived-skip that may un-archive within the same mount).
       if (isTransientSuccess?.(result)) {
         inFlight.current.delete(`${vars.org}/${vars.classroom}`)
       }

@@ -138,7 +138,7 @@ ACCEPT_MARKER_PATH = ".classroom50.yaml"
 # Mirrors classroomcfg.DropFiles (cli/gh-student/internal/classroomcfg/
 # metadata.go), which commits exactly MetadataPath + AutogradeWorkflowPath --
 # keep in lockstep. is_acceptance_commit uses this to fail open when the tip
-# accept commit also adds non-setup files (e.g. amended/squashed real work),
+# accept commit also adds non-setup files (e.g., amended/squashed real work),
 # so that work is graded rather than silently skipped.
 ACCEPT_COMMIT_PATHS = frozenset(
     {
@@ -194,7 +194,7 @@ def username_from_repo(repository: str, classroom: str, assignment: str, actor: 
 
     Mirrors the naming formula single-sourced in cli/shared/contract
     (AssignmentRepoName); keep byte-identical. Falls back to GITHUB_ACTOR when
-    the repo name doesn't follow the convention (e.g. hand-created test repos).
+    the repo name doesn't follow the convention (e.g., hand-created test repos).
     """
     if "/" in repository:
         _, repo = repository.split("/", 1)
@@ -540,7 +540,7 @@ def _baseline_scan(workspace: pathlib.Path) -> tuple[str | None, str]:
         (ACCEPT_MARKER_PATH). A trusted baseline.
       - SOURCE_ROOT:      the repo's root commit (no commit added the marker)
         -- a best-effort baseline.
-      - SOURCE_GIT_ERROR: git ran but failed (e.g. "dubious ownership" in a
+      - SOURCE_GIT_ERROR: git ran but failed (e.g., "dubious ownership" in a
         container, or an un-deepenable shallow clone). History might exist; we
         couldn't read it. Distinct from SOURCE_NONE so the caller warns right.
       - SOURCE_NONE:      no history to resolve -- git unavailable or not a repo.
@@ -686,7 +686,7 @@ def feedback_base_outcome(
     A reviewable diff against the root commit beats no Feedback PR at all, and
     the untrusted-baseline warning tells the teacher to verify.
 
-    `scan` lets a caller that already ran `_baseline_scan` (e.g. main(), which
+    `scan` lets a caller that already ran `_baseline_scan` (e.g., main(), which
     also needs the review-link baseline) reuse it instead of re-walking history
     -- the scan issues several sequential git calls, so a second walk doubles
     the worst-case time against the job ceiling.
@@ -1163,7 +1163,7 @@ def no_baseline_warning(source: str = SOURCE_NONE) -> str:
     if source == SOURCE_GIT_ERROR:
         return (
             f"{prefix}could not read git history to resolve the Feedback PR "
-            "baseline; a baseline may exist but git could not read it (e.g. a "
+            "baseline; a baseline may exist but git could not read it (e.g., a "
             "container's 'dubious ownership' guard). The Feedback PR step will "
             "skip. See the runner log above for the git error."
         )
@@ -1322,7 +1322,7 @@ def commit_submitted_at(sha: str, workspace: pathlib.Path) -> datetime.datetime:
     if not raw:
         return now_utc()
     try:
-        # %cI is strict ISO-8601 with an offset (e.g. 2026-06-30T12:00:00+01:00).
+        # %cI is strict ISO-8601 with an offset (e.g., 2026-06-30T12:00:00+01:00).
         parsed = datetime.datetime.fromisoformat(raw)
     except ValueError:
         return now_utc()
@@ -1649,7 +1649,7 @@ def _grade_python(spec: dict[str, Any], cwd: pathlib.Path, timeout: int,
         return _make_outcome(name, points, passed, detail, score=score)
 
     # Fallback: no parseable report -> all-or-nothing on the exit code
-    # (e.g. an offline runner couldn't load pytest-json-report).
+    # (e.g., an offline runner couldn't load pytest-json-report).
     passed = rp.returncode == 0
     detail = (f"pytest exit {rp.returncode} "
               f"(no JSON report from pytest-json-report; scored on exit code)")

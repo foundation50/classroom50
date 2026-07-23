@@ -20,7 +20,7 @@ type Client interface {
 	// resp (resp may be nil).
 	Post(path string, body io.Reader, resp interface{}) error
 	// Request issues an arbitrary-method request and returns the raw
-	// response, so callers can read headers (e.g. Link for pagination)
+	// response, so callers can read headers (e.g., Link for pagination)
 	// or status codes the decode-and-discard verbs hide.
 	Request(method string, path string, body io.Reader) (*http.Response, error)
 }

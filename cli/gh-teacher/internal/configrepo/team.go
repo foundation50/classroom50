@@ -403,7 +403,7 @@ func adoptSecretTeamByName(client githubapi.Client, org, name, description, noti
 	// student team, which carries the bootstrap record). GitHub returns
 	// notification_setting only to org members, so an empty value is "unknown,
 	// not read" — skip it rather than force a PATCH every reconcile. A concrete
-	// value that differs is reconciled on purpose (e.g. a student team left
+	// value that differs is reconciled on purpose (e.g., a student team left
 	// enabled gets disabled — #335).
 	needPrivacy := existing.Privacy != "secret"
 	needNotification := existing.NotificationSetting != "" && existing.NotificationSetting != notificationSetting
@@ -597,7 +597,7 @@ func teamHasRepoAccess(client githubapi.Client, org, slug, repoOwner, repo strin
 // teamRepoPermission returns the team's current permission string on
 // <repoOwner>/<repo> ("admin"/"maintain"/"push"/"triage"/"pull"), or "" when
 // the team has no access (404). Unlike teamHasRepoAccess it reads the actual
-// permission so a grant can DOWNGRADE (e.g. push → pull), which the demotion of
+// permission so a grant can DOWNGRADE (e.g., push → pull), which the demotion of
 // a TA team from write to read-only requires.
 func teamRepoPermission(client githubapi.Client, org, slug, repoOwner, repo string) (string, error) {
 	path := fmt.Sprintf("orgs/%s/teams/%s/repos/%s/%s",
