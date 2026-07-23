@@ -29,6 +29,7 @@ export function AcceptLinkModal({
   hasSecret,
   org,
   classroom,
+  classroomName,
   warning,
 }: {
   open: boolean
@@ -40,6 +41,9 @@ export function AcceptLinkModal({
   // without a resolved classroom can omit the warning entirely.
   org?: string
   classroom?: string
+  // Human-readable classroom name for the warning copy (classroom.json name /
+  // short_name), falling back to the classroom slug at the call site.
+  classroomName?: string
   // Roster-readiness warning: whether anyone can actually accept this link yet.
   // Resolved by the page (which already reads the team roster) and passed in so
   // this component stays presentational. Omit / "none" to show no warning.
@@ -70,6 +74,7 @@ export function AcceptLinkModal({
           warning={warning}
           org={org}
           classroom={classroom}
+          classroomName={classroomName}
         />
 
         {hasSecret ? (
@@ -116,10 +121,12 @@ function AcceptShareWarningNotice({
   warning,
   org,
   classroom,
+  classroomName,
 }: {
   warning?: AcceptShareWarning
   org?: string
   classroom?: string
+  classroomName?: string
 }) {
   const { t } = useTranslation()
   if (!warning || warning.kind === "none" || !org || !classroom) return null
@@ -138,8 +145,8 @@ function AcceptShareWarningNotice({
           <span className="text-sm">
             <Trans
               i18nKey="submissions.accept.warnNoStudents"
-              values={{ org }}
-              components={{ org: <EmphasisLtr /> }}
+              values={{ classroom: classroomName || classroom }}
+              components={{ classroom: <EmphasisLtr /> }}
             />
           </span>
         </div>

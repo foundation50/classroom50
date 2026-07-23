@@ -1015,6 +1015,7 @@ const SubmissionsPageContent = () => {
         hasSecret={Boolean(secret)}
         org={org}
         classroom={classroom}
+        classroomName={classroomMeta?.name || classroomMeta?.short_name}
         warning={acceptShareWarning}
       />
     </PageShell>
