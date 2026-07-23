@@ -7,6 +7,18 @@ supported by the [Fifty Foundation](https://fifty.foundation).
 Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 `gh teacher` and `gh student` command-line tools.
 
+> [!NOTE]
+> The Fifty Foundation will host two online training sessions to teach you how
+> to use Classroom 50 and to answer your questions live. The sessions will take
+> place at the following times:
+>
+> - [Friday, July 24, 1pm-2pm EDT](https://time.cs50.io/20260724T1300-0400/PT1H?title=Classroom+50+Training+Session)
+> - [Friday, August 14, 1pm-2pm EDT](https://time.cs50.io/20260814T1300-0400/PT1H?title=Classroom+50+Training+Session)
+>
+> To sign up to attend one of the training sessions, [complete the registration form here](https://docs.google.com/forms/d/e/1FAIpQLSdSZzOUOtSExmldFOsdlePWGZkJELHnZBpH3NPhXAJMDG9eXA/viewform?usp=dialog).
+>
+> A recorded training session will also be made available for those who cannot attend live.
+
 ## How it works, in brief
 
 Classroom 50 has no server or database of its own. The web app is a static site
@@ -59,16 +71,6 @@ served from **GitHub Pages** — all inside your own organization.
 New to the terminology? See the [Glossary](Glossary). Curious how it all fits
 together? Read [How Classroom 50 Works](How-Classroom-50-Works). Have a question?
 Check the [FAQ](FAQ).
-
-## Training sessions
-
-The Fifty Foundation hosts live online training sessions:
-
-- [Friday, July 24, 1–2pm EDT](https://time.cs50.io/20260724T1300-0400/PT1H?title=Classroom+50+Training+Session)
-- [Friday, August 14, 1–2pm EDT](https://time.cs50.io/20260814T1300-0400/PT1H?title=Classroom+50+Training+Session)
-
-[Register here](https://docs.google.com/forms/d/e/1FAIpQLSdSZzOUOtSExmldFOsdlePWGZkJELHnZBpH3NPhXAJMDG9eXA/viewform?usp=dialog).
-A recording will be made available afterward.
 
 > [!NOTE]
 > If you used the pre-release version of Classroom 50 before July 1, 2026,
