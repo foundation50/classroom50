@@ -66,6 +66,17 @@ jobs:
           RP_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
         run: echo "$RP_OUTPUTS"
 
+      # "Latest" on this repo represents the web app (classroom50.org). Assert it
+      # here so the badge tracks web even if a cli-v* release was created around
+      # the same time (cli-release-please.yaml demotes its own release; this makes
+      # web authoritative regardless of publish ordering).
+      - name: Mark web release as latest
+        if: ${{ steps.release.outputs['web--tag_name'] != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs['web--tag_name'] }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=true
+
   # Build + deploy the freshly tagged release to production. Gated on a real
   # release (non-empty tag_name ⇒ Release PR was merged) so a plain push to main
   # never deploys. Mirrors web-deploy.yaml's build so the tagged commit ships

@@ -54,3 +54,15 @@ jobs:
           target-branch: main
           config-file: release-please-config.cli.json
           manifest-file: .release-please-manifest.cli.json
+
+      # "Latest" on this repo represents the web app (classroom50.org), not the
+      # CLI. release-please has no make_latest option (googleapis/release-please
+      # #2317) and creates every release as latest, so the cli-v* release would
+      # otherwise steal the badge. Demote it right after creation; web-release-
+      # please.yaml (re)asserts web as latest.
+      - name: Ensure CLI release is not marked latest
+        if: ${{ steps.release.outputs['cli--tag_name'] != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+        run: gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --latest=false
