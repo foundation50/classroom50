@@ -72,7 +72,7 @@ jobs:
           cd "$work"
           remote="https://x-access-token:${SYNC_TOKEN}@github.com/${TARGET_REPO}.wiki.git"
           if ! git clone --quiet "$remote" wiki; then
-            echo "::error::Could not clone ${TARGET_REPO}.wiki.git. Enable the wiki on ${TARGET_REPO} and create at least one page (e.g. Home) via the GitHub UI to initialize the wiki repo, then re-run this workflow."
+            echo "::error::Could not clone ${TARGET_REPO}.wiki.git. Enable the wiki on ${TARGET_REPO} and create at least one page (e.g., Home) via the GitHub UI to initialize the wiki repo, then re-run this workflow."
             exit 1
           fi
           cd wiki

@@ -120,7 +120,7 @@ describe("latestSubmitReleaseWithAssets", () => {
     expect(await latestSubmitReleaseWithAssets(client, "o", "r")).toBeNull()
   })
 
-  it("rethrows a non-404 error (e.g. 403) rather than hiding it as no-submission", async () => {
+  it("rethrows a non-404 error (e.g., 403) rather than hiding it as no-submission", async () => {
     await expect(
       latestSubmitReleaseWithAssets(clientThrowing(apiError(403)), "o", "r"),
     ).rejects.toThrow()

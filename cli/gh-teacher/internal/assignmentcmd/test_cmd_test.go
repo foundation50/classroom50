@@ -155,7 +155,7 @@ func newTestCmdServer(t *testing.T, assignmentsBody string, autograderExists boo
 }
 
 // helloAssignments returns an assignments.json body with one valid "hello"
-// entry carrying the given tests array (raw JSON, e.g. `[]` or a populated
+// entry carrying the given tests array (raw JSON, e.g., `[]` or a populated
 // array).
 func helloAssignments(testsJSON string) string {
 	tests := ""

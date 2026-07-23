@@ -132,7 +132,7 @@ describe("selection helpers", () => {
   })
 
   describe("shouldWarnNoneSelectable", () => {
-    it("warns when the view has rows but none are selectable (e.g. all staff)", () => {
+    it("warns when the view has rows but none are selectable (e.g., all staff)", () => {
       expect(shouldWarnNoneSelectable(3, 0)).toBe(true)
     })
     it("does not warn on an empty view (no rows to select)", () => {

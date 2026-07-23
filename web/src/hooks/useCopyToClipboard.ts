@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 
 // Copies text and flips a `copied` flag that auto-resets after `resetMs`.
 // Clears the pending reset before re-arming and on unmount; leaves `copied`
-// false if the write rejects (e.g. a non-secure context).
+// false if the write rejects (e.g., a non-secure context).
 export function useCopyToClipboard(text: string, resetMs = 2000) {
   const [copied, setCopied] = useState(false)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -29,7 +29,7 @@ export function useCopyToClipboard(text: string, resetMs = 2000) {
     }
   }
 
-  // Clear the flag and any pending timer immediately (e.g. when the copy text
+  // Clear the flag and any pending timer immediately (e.g., when the copy text
   // changes so a stale "Copied" doesn't linger).
   const reset = () => {
     if (resetTimerRef.current) clearTimeout(resetTimerRef.current)

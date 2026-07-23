@@ -29,7 +29,7 @@ export const RECOMMENDED_ORG_DEFAULT_BRANCH = DEFAULT_BRANCH
 
 // A concern's read-only state: enforced means the live value already matches
 // the desired policy; unenforced means it drifted; warn means it's acceptable
-// but not ideal (a non-gating advisory, e.g. an oversized budget); unreadable
+// but not ideal (a non-gating advisory, e.g., an oversized budget); unreadable
 // means the read itself failed (permission/transient) so the verdict is
 // inconclusive.
 export type CheckState = "enforced" | "unenforced" | "warn" | "unreadable"

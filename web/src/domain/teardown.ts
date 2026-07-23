@@ -86,7 +86,7 @@ async function collectClassroomTeams(
         org,
       },
     )
-    // No readable classroom dirs (e.g. marker already partially gone) — nothing
+    // No readable classroom dirs (e.g., marker already partially gone) — nothing
     // to resolve; let the repo flow proceed.
     return []
   }
@@ -175,7 +175,7 @@ function countLabel(count: number, singular: string, plural: string): string {
 //  - "deleted": gone (or already gone via 404).
 //  - "rate-limited": exhausted retries while throttled — recoverable, retry later.
 //  - "transient-failed": exhausted retries on a non-throttle transient error
-//    (e.g. 5xx) — recoverable, a re-run may succeed.
+//    (e.g., 5xx) — recoverable, a re-run may succeed.
 //  - "permanent-failed": an unretryable refusal a re-run will repeat forever
 //    (a reused-slug id mismatch, or a scope 403 a caller chose not to rethrow).
 type DeleteOutcome =
@@ -207,7 +207,7 @@ async function withDeleteRetry(
       const isRateLimited = err instanceof GitHubAPIError && err.isRateLimited
       lastWasRateLimit = isRateLimited
 
-      // A non-GitHubAPIError (e.g. the id-mismatch guard) can never succeed on
+      // A non-GitHubAPIError (e.g., the id-mismatch guard) can never succeed on
       // retry: a permanent refusal.
       if (!(err instanceof GitHubAPIError)) return "permanent-failed"
 

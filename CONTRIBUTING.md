@@ -106,8 +106,8 @@ the type right is functional, not cosmetic.
   - `docs:` `chore:` `ci:` `test:` `refactor:` `perf:` `style:` -> no release on their own
 - **Scope** (optional): the affected area — `web`, `gh-teacher`, `gh-student`,
   `cli`, `locales`. Omit for repo-wide changes.
-- **Summary:** imperative mood, lower-case, no trailing period, aim for <= 72
-  characters (e.g. `fix(web): stop double-firing the accept request`).
+- **Summary:** imperative mood, lowercase, no trailing period, aim for <= 72
+  characters (e.g., `fix(web): stop double-firing the accept request`).
 - **Body:** optional and usually unnecessary. Add one only when the "why" isn't
   obvious from the summary; keep it short and explain intent or trade-offs, not
   what the diff already shows. Wrap at ~72 columns.
@@ -191,7 +191,7 @@ CLIs" above). You do not tag or edit the changelog by hand:
    stamped into the build via `VITE_APP_VERSION` and the running app reports it.
    In the same run it dispatches `cli-release` for the `cli-v*` tag (see above).
 
-To force a specific version (e.g. a first `1.0.0` or a jump), land a commit on
+To force a specific version (e.g., a first `1.0.0` or a jump), land a commit on
 `main` whose body contains `Release-As: X.Y.Z`.
 
 [`web-deploy`](.github/workflows/web-deploy.yaml) is retained only as a manual

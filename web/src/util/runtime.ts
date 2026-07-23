@@ -100,7 +100,7 @@ export function validateLanguageVersion(value: string): string | undefined {
   const trimmed = value.trim()
   if (trimmed === "") return undefined
   if (!LANGUAGE_VERSION_PATTERN.test(trimmed)) {
-    return "Use letters, numbers, and . _ + - only (e.g. 3.12, 20, 1.23.4)."
+    return "Use letters, numbers, and . _ + - only (e.g., 3.12, 20, 1.23.4)."
   }
   return undefined
 }
@@ -122,7 +122,7 @@ export function validateContainerImage(value: string): string | undefined {
   const trimmed = value.trim()
   if (trimmed === "") return undefined
   if (!CONTAINER_IMAGE_PATTERN.test(trimmed)) {
-    return "Use a public image reference (letters, numbers, and . _ : / @ + - only, e.g. ubuntu:24.04)."
+    return "Use a public image reference (letters, numbers, and . _ : / @ + - only, e.g., ubuntu:24.04)."
   }
   return undefined
 }
@@ -133,7 +133,7 @@ export function validateContainerUser(value: string): string | undefined {
   const trimmed = value.trim()
   if (trimmed === "") return undefined
   if (!CONTAINER_USER_PATTERN.test(trimmed)) {
-    return 'Use a `docker run --user` value (e.g. "root", "0", "1000:1000").'
+    return 'Use a `docker run --user` value (e.g., "root", "0", "1000:1000").'
   }
   return undefined
 }

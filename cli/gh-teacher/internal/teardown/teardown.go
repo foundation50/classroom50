@@ -30,7 +30,7 @@ func NewCmd() *cobra.Command {
 		Use:   "teardown <org>",
 		Short: "Delete every repo in a Classroom 50 org (development reset)",
 		Long: "Delete every repository in <org> after confirming the org is a\n" +
-			"Classroom 50 setup (i.e. <org>/classroom50 exists). Intended for\n" +
+			"Classroom 50 setup (i.e., <org>/classroom50 exists). Intended for\n" +
 			"resetting a development org between iterations — production\n" +
 			"teachers should use the GitHub web UI for selective deletion.\n\n" +
 			"Before any deletion, the command lists every repo it would\n" +

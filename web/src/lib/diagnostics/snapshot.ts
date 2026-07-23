@@ -57,7 +57,7 @@ export function buildDiagnostics(input: SnapshotInput = {}): string {
 
 function scopesLine(scopes: string | null): string {
   if (scopes === null) {
-    return `OAuth scopes: unknown (no X-OAuth-Scopes header — e.g. a fine-grained PAT)`
+    return `OAuth scopes: unknown (no X-OAuth-Scopes header — e.g., a fine-grained PAT)`
   }
   const missing = missingScopes(scopes)
   const gap = missing.length > 0 ? ` (missing: ${missing.join(", ")})` : ""

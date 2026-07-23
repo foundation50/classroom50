@@ -441,7 +441,7 @@ export async function listClassroomMembersWithRoles(
   ) => {
     const existing = byId.get(member.id)
     // Keep the highest-precedence role when a person is on several teams
-    // (e.g. a teacher also on the student team records "teacher").
+    // (e.g., a teacher also on the student team records "teacher").
     if (existing && ROLE_RANK[existing.role] >= ROLE_RANK[role]) return
     byId.set(member.id, {
       id: member.id,
@@ -574,7 +574,7 @@ export async function resolveTeamIdByRole(
       result[role] = team.id
       if (role === "teacher") result.instructor = team.id
     } catch (err) {
-      // Only a DEFINITIVE failure (e.g. 403 no permission to create/grant the
+      // Only a DEFINITIVE failure (e.g., 403 no permission to create/grant the
       // staff team) degrades to a teamless invite. A transient 5xx/429/network
       // error must propagate — sending a teacher an org-OWNER invite while
       // silently dropping them off the teacher team is worse than retrying.

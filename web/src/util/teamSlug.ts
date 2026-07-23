@@ -63,7 +63,7 @@ export function resolveClassroomRoleSlug(
 // derive an org-level staff signal from the viewer's own team memberships
 // (GET /user/teams) without reading the config repo.
 //
-// A classroom short-name may contain hyphens (e.g. `cs-principles`), so match a
+// A classroom short-name may contain hyphens (e.g., `cs-principles`), so match a
 // known role SUFFIX first, then take the middle as the classroom — never split
 // naively on `-`. Only staff roles are recognized (including the legacy
 // `-instructor` team so a not-yet-migrated staffer still reads as staff): a bare

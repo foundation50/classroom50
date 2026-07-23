@@ -64,7 +64,7 @@ jobs:
         working-directory: test/e2e
         run: go test -tags e2e -timeout 60m -v ./...
 
-      # Safety net: if the test process was hard-killed (e.g. timeout) the
+      # Safety net: if the test process was hard-killed (e.g., timeout) the
       # in-test teardown can't run, so best-effort wipe the throwaway org's
       # repos here. (Guarded by the classroom50 marker so it never touches
       # a non-Classroom org. The next run's teardown-first also self-heals.)

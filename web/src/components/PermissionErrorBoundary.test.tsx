@@ -80,7 +80,7 @@ describe("PermissionErrorBoundary", () => {
     spy.mockRestore()
   })
 
-  it("re-throws a non-403/404 GitHubAPIError (e.g. 500)", () => {
+  it("re-throws a non-403/404 GitHubAPIError (e.g., 500)", () => {
     const spy = vi.spyOn(console, "error").mockImplementation(() => {})
     expect(() =>
       render(

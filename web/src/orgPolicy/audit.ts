@@ -67,7 +67,7 @@ export type OrgAuditReport = {
   concerns: ConcernCheck[]
   // The four API-less settings the teacher confirms by hand; never fail.
   manualUnreadable: ManualStep[]
-  // Advisory recommendations that never affect `verdict` — e.g. the org's
+  // Advisory recommendations that never affect `verdict` — e.g., the org's
   // default repository branch name isn't `main`. Not enforceable via API, so
   // surfaced as a "highly recommended, not required" hand-fix.
   recommendations: OrgRecommendation[]

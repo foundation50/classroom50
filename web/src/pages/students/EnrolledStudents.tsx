@@ -277,7 +277,7 @@ const EnrolledStudents = ({
   )
   const handleToggleSelectAll = () => {
     // Select-all only ever targets selectable (student-only) rows. When the
-    // current view has rows but none are selectable — e.g. filtered to staff —
+    // current view has rows but none are selectable — e.g., filtered to staff —
     // the click would silently no-op, so explain why instead.
     if (shouldWarnNoneSelectable(filtered.length, selectableFiltered.length)) {
       notify({
@@ -396,7 +396,7 @@ const EnrolledStudents = ({
   const onRowUnenrolled = (rowKey: string, teamWarning?: string) => {
     if (teamWarning) setWarning(rowKey, teamWarning)
     // Remember this login so the automatic backfill (auto-sync-on-open) doesn't
-    // re-add the student the teacher just removed — e.g. when a best-effort
+    // re-add the student the teacher just removed — e.g., when a best-effort
     // team-drop failed, or the CSV delete hasn't propagated yet.
     const removed = rows.find((r) => r.key === rowKey)
     if (removed?.username) suppressedLogins.remember([removed.username])

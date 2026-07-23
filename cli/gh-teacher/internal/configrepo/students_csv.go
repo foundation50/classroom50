@@ -473,7 +473,7 @@ func ValidateRosterEmail(email string) error {
 		return fmt.Errorf("invalid email %q: %w", email, err)
 	}
 	if parsed.Name != "" {
-		return fmt.Errorf("invalid email %q: include only the address (e.g. alice@example.edu), not a display name", email)
+		return fmt.Errorf("invalid email %q: include only the address (e.g., alice@example.edu), not a display name", email)
 	}
 	return nil
 }

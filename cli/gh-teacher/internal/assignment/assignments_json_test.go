@@ -687,7 +687,7 @@ func TestParseAssignments_Rejects(t *testing.T) {
 			wantErrPart: "RFC 3339",
 		},
 		{
-			name:        "trailing content (e.g. botched merge)",
+			name:        "trailing content (e.g., botched merge)",
 			in:          `{"schema":"classroom50/assignments/v1","assignments":[]}{"schema":"classroom50/assignments/v1","assignments":[]}`,
 			wantErrPart: "after top-level value",
 		},
@@ -1065,7 +1065,7 @@ func TestValidateAssignmentEntry_Rejects(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			entry := base
 			// base.Template is a pointer shared across subtests; clone it
-			// so a mutation case (e.g. clearing Template.Owner) doesn't
+			// so a mutation case (e.g., clearing Template.Owner) doesn't
 			// corrupt the shared base for later subtests.
 			if base.Template != nil {
 				tpl := *base.Template

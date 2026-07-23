@@ -26,7 +26,7 @@ export type GitHubHealth = {
   suspected: boolean
   // Authoritative githubstatus.com indicator once probed; null until then.
   statusIndicator: GitHubStatusIndicator | null
-  // Human-readable githubstatus.com summary (e.g. "Partially Degraded
+  // Human-readable githubstatus.com summary (e.g., "Partially Degraded
   // Service"); null when unprobed / probe failed.
   statusDescription: string | null
 }
@@ -74,14 +74,14 @@ function setState(next: GitHubHealth) {
 // is a positively-identified outage — a 5xx GitHubAPIError, a network-failure
 // TypeError, or a non-abort timeout DOMException. Everything else is false:
 // a definitive 4xx, a rate limit, a caller/navigation abort, a friendly wrapper
-// with no outage cause (e.g. a TemplateAccessError — a teacher-action
+// with no outage cause (e.g., a TemplateAccessError — a teacher-action
 // problem), and any unrecognized local throw. Positive-identification only is
 // what keeps both the detector and the hint free of false positives — a bad
 // template / not-a-member / SSO gate / local app bug must never read as "GitHub
 // is down".
 //
 // Errors are unwrapped along `.cause` first: some flows rethrow a friendly
-// wrapper (e.g. AcceptStepError) that preserves the original GitHubAPIError as
+// wrapper (e.g., AcceptStepError) that preserves the original GitHubAPIError as
 // its cause, and the classification must key off that original, not the wrapper.
 export function isDefiniteOutageError(error: unknown): boolean {
   const unwrapped = outageRelevantError(error)
@@ -166,7 +166,7 @@ async function probeStatus(now: number) {
     if (!result || result.indicator === "none") {
       // GitHub reports healthy (or the probe was inconclusive): keep the
       // locally-suspected state with the generic message — the user is still
-      // hitting failures even if the global status is green (e.g. a proxy or
+      // hitting failures even if the global status is green (e.g., a proxy or
       // GitHub edge issue that the status page doesn't reflect).
       return
     }

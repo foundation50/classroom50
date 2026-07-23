@@ -94,7 +94,7 @@ describe("useOutageHint().isOutage — strict, false-positive-proof", () => {
     expect(
       result.current.isOutage(new WrapperError("rate limited", apiError(429))),
     ).toBe(false)
-    // A wrapper with no cause is not an outage (e.g. TemplateAccessError).
+    // A wrapper with no cause is not an outage (e.g., TemplateAccessError).
     expect(result.current.isOutage(new WrapperError("ask teacher"))).toBe(false)
   })
 })

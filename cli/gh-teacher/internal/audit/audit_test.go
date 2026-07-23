@@ -160,7 +160,7 @@ func TestBuildAuditReport_RecommendsNonMainConfigRepoBranch(t *testing.T) {
 }
 
 func TestBuildAuditReport_NoConfigRepoRecommendationWhenUnreadable(t *testing.T) {
-	// A config-repo read failure (e.g. repo not initialized) must omit the
+	// A config-repo read failure (e.g., repo not initialized) must omit the
 	// recommendation without failing the audit — it's advisory.
 	live := orgLiveFromSettings("team")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

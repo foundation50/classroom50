@@ -101,7 +101,7 @@ const sharedTeamDescriptionCasesPath = "../../../shared/testdata/team_descriptio
 
 // TestMarshalTeamDescription_SharedFixtureParity pins the Go encoding to the
 // shared golden bytes so the Go writer and the TS marshalTeamDescription can't
-// drift: a one-sided edit (e.g. HTML-escaping) fails on the other language's
+// drift: a one-sided edit (e.g., HTML-escaping) fails on the other language's
 // copy of these same cases. Byte-identity matters because the web reconcile
 // compares the current description to the desired string for exact equality —
 // any divergence makes the CLI and web perpetually overwrite each other.

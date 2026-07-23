@@ -6,7 +6,7 @@ import { isSafeReturnTo } from "@/auth/returnTo"
 // guard (or App's session-expiry redirect) bounces an unauthenticated user here
 // (#71). useGithubAuth handles the sign-in round-trip; this guard covers the
 // already-authenticated case. The value is pathname + search, so it may carry a
-// query (e.g. the ?k= accept key); `redirect({ to })` would fold that into the
+// query (e.g., the ?k= accept key); `redirect({ to })` would fold that into the
 // pathname, so split into { to, search } first. /login is rejected to avoid a
 // self-redirect hop.
 function toRedirectTarget(value: string): {

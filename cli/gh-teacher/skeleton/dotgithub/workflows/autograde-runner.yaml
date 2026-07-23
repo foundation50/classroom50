@@ -151,7 +151,7 @@ jobs:
           # (workflow re-run of the same commit), reuse it instead of
           # racing on a fresh timestamp. `--refs` filters out the
           # `refs/tags/X^{}` peeled-ref rows that annotated tags emit
-          # — without it, awk could capture e.g. `submit/foo^{}` and
+          # — without it, awk could capture e.g., `submit/foo^{}` and
           # produce an invalid pseudo-tag.
           EXISTING=$(git ls-remote --refs --tags origin \
                        | awk -v sha="$SHA" '$1 == sha && $2 ~ /^refs\/tags\/submit\// { sub("refs/tags/", "", $2); print $2; exit }')
@@ -362,7 +362,7 @@ jobs:
               fail(f"entry {assignment!r} has malformed runtime block")
 
           # Allow-list mirrors Go's RuntimeRef + DisallowUnknownFields.
-          # A hand-edited assignments.json with extra keys (e.g. an
+          # A hand-edited assignments.json with extra keys (e.g., an
           # `options:` smuggled at runtime level) would otherwise pass
           # this validator silently while the CLI rejects it at write.
           _RUNTIME_KEYS = {"runs-on", "container", "python", "node", "java", "go", "rust", "apt"}

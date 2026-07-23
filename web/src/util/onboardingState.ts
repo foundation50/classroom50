@@ -15,7 +15,7 @@ export type OnboardingState = "loading" | "notInvited" | "active" | "error"
 export type OnboardingStateInput = {
   // The initial GET /user/memberships/orgs/{org} read is still resolving.
   loadingMembership: boolean
-  // That read errored (e.g. SSO 403, unexpected). A definitive 404 is NOT this
+  // That read errored (e.g., SSO 403, unexpected). A definitive 404 is NOT this
   // (see isMembershipReadError) — it falls through to notInvited.
   membershipReadError: boolean
   // A membership record exists (active OR pending). Absent = never invited.

@@ -344,11 +344,11 @@ type FreshRepoRetry struct {
 	// before the tree build; a (retryable) error here lets the loop ride out a
 	// ref that reads 200 with an empty SHA. Optional.
 	ValidateParent func(parentSHA, parentTreeSHA string) error
-	// Classify404 is forwarded to CreateTree (e.g. the teacher's
+	// Classify404 is forwarded to CreateTree (e.g., the teacher's
 	// missing-workflow-scope terminal mapping). Optional.
 	Classify404 func(error) error
 	// IsRetryable decides whether an error from the read+build is worth another
-	// attempt (e.g. 404/409/empty-ref). Required — a nil func makes every error
+	// attempt (e.g., 404/409/empty-ref). Required — a nil func makes every error
 	// terminal.
 	IsRetryable func(error) bool
 }

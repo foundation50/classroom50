@@ -297,7 +297,7 @@ describe("buildOrgAuditReport", () => {
       onMain.recommendations.some((r) => r.id === "configRepoDefaultBranch"),
     ).toBe(false)
 
-    // A read failure (e.g. repo not initialized) suppresses the advisory rec.
+    // A read failure (e.g., repo not initialized) suppresses the advisory rec.
     const unreadable = await buildOrgAuditReport(
       makeClient({ configRepoBranch: httpError(404) }),
       "acme",

@@ -20,7 +20,7 @@ type CreateAssignmentFormProps = {
   onCancel?: () => void
   edit?: boolean
   loading?: boolean
-  // Render every field/button disabled (e.g. an archived classroom). A disabled
+  // Render every field/button disabled (e.g., an archived classroom). A disabled
   // <fieldset> natively disables all descendant controls, including submit.
   readOnly?: boolean
   // Org slug for verifying a runner label against the org's self-hosted

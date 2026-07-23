@@ -54,7 +54,7 @@ export const TemplateField = ({
   const client = useOptionalGitHubClient()
   // The "Fix template access" recovery grants a team read on the template repo
   // (addRepositoryToTeam) — an org-owner-only GitHub call. Only offer it to an
-  // owner; a non-owner (e.g. a head-TA authoring) would 403. Org owner and
+  // owner; a non-owner (e.g., a head-TA authoring) would 403. Org owner and
   // classroom teacher are independent axes (KTD-4), so gate on manageOrg.
   const { isOwner } = useIsOrgOwner()
   const { user, isLoadingUser } = useGithubAuth()

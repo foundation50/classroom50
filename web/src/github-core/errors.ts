@@ -240,13 +240,13 @@ export function githubNonJsonResponseError(
 // Run a GitHub read/write, swallowing a tolerated error into `fallback` instead
 // of throwing — the "absent reads as empty/none" idiom, unified so call sites
 // stop re-spelling the `instanceof GitHubAPIError && status === 404` guard.
-// Defaults to 404-only; pass `predicate` to widen (e.g. 403||404 for a list a
-// caller can't read) and `onCaught` for a side-effect (e.g. log.warn) before
+// Defaults to 404-only; pass `predicate` to widen (e.g., 403||404 for a list a
+// caller can't read) and `onCaught` for a side-effect (e.g., log.warn) before
 // returning. Any error the predicate rejects, and any non-GitHubAPIError throw,
 // rethrows unchanged.
 //
 // `F` defaults to `T` but is separate so a fallback wider than the op result
-// (e.g. op yields `GitHubRepo[]`, fallback is `null`) types as `T | F` without a
+// (e.g., op yields `GitHubRepo[]`, fallback is `null`) types as `T | F` without a
 // cast at the call site.
 export async function tolerateGitHubError<T, F = T>(
   op: () => Promise<T>,

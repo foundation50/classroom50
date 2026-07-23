@@ -107,7 +107,7 @@ func rosterAddCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&firstName, "first-name", "", "Student's first name (written into the first_name column)")
 	cmd.Flags().StringVar(&lastName, "last-name", "", "Student's last name (written into the last_name column)")
-	cmd.Flags().StringVar(&email, "email", "", "Student's email address (written into the email column; bare local@domain form, e.g. alice@example.edu; optional)")
+	cmd.Flags().StringVar(&email, "email", "", "Student's email address (written into the email column; bare local@domain form, e.g., alice@example.edu; optional)")
 	cmd.Flags().StringVar(&section, "section", "", "Section identifier (free-form text, written into the section column)")
 	return cmd
 }

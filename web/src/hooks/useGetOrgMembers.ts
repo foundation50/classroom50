@@ -11,7 +11,7 @@ const useGetOrgMembers = (org: string) => {
   } = useQuery({
     queryKey: githubKeys.orgMembers(org),
     queryFn: () => listOrgMembers(client, org),
-    // Guard against an empty org (e.g. a hook called before a route's
+    // Guard against an empty org (e.g., a hook called before a route's
     // missing-params guard); without this, org="" would fire GET /orgs//members.
     enabled: Boolean(org),
     staleTime: 10 * 60 * 1000,

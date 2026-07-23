@@ -563,7 +563,7 @@ func TestAcceptIntoRepo_SelfHealFork(t *testing.T) {
 		mux.HandleFunc(markerPath, func(w http.ResponseWriter, _ *http.Request) {
 			_ = json.NewEncoder(w).Encode(map[string]any{"type": "file"})
 		})
-		// Reconcile fails (e.g. transient 5xx / SSO 403 / departed founder): a
+		// Reconcile fails (e.g., transient 5xx / SSO 403 / departed founder): a
 		// healthy already-accepted repo must NOT fail the re-run over it.
 		mux.HandleFunc("/repos/"+org+"/"+repoName+"/collaborators/alice", func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusServiceUnavailable)

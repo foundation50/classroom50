@@ -45,7 +45,7 @@ type Resource = {
   // Why it's published / who reads it.
   description: string
   kind: ResourceKind
-  // Some artifacts exist only once a teacher configures them (e.g. a classroom
+  // Some artifacts exist only once a teacher configures them (e.g., a classroom
   // default autograder), so a 404 is expected, not a problem.
   optional?: boolean
 }

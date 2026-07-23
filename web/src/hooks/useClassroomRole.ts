@@ -135,7 +135,7 @@ export function useClassroomRole(
   const role = applyViewAs(actualRole, viewAs)
 
   // Only count a query as loading when it's actually fetching — a DISABLED query
-  // (e.g. team reads on an org-level route) is `pending` but idle and must not
+  // (e.g., team reads on an org-level route) is `pending` but idle and must not
   // pin the guard's spinner.
   const isLoading =
     teacherQuery.fetchStatus === "fetching" ||

@@ -448,7 +448,7 @@ const SubmissionsTable = ({
   // to decide whether the profile modal shows "Open repo" for a non-submitter —
   // a never-accepted student has no repo, so the link would 404.
   acceptedUsernames?: Set<string>
-  // Passing bar as a fraction of max (e.g. 1.0 = full marks); drives score badge
+  // Passing bar as a fraction of max (e.g., 1.0 = full marks); drives score badge
   // color. `null`/omitted means no passing threshold (badges render neutral).
   thresholdFraction?: number | null
   // Whether a search/filter is currently narrowing the set. Distinguishes the
@@ -472,7 +472,7 @@ const SubmissionsTable = ({
   // Client-side pagination over the combined display list (submitters, then
   // non-submitters, then group repos). `page` is 0-based; the caller owns the
   // state and resets it on filter/sort/size change. Optional — omitting them
-  // (e.g. in tests) renders every row on one page with no pager.
+  // (e.g., in tests) renders every row on one page with no pager.
   page?: number
   pageSize?: number
   onPageChange?: (page: number) => void

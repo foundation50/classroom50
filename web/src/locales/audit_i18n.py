@@ -84,7 +84,7 @@ EN_FILE = LOCALES_DIR / "en.json"
 PLURAL_SUFFIXES = ("_zero", "_one", "_two", "_few", "_many", "_other")
 
 # Legal characters in an i18next key: dotted segments, plus '-' (JSON keys allow
-# hyphens) and ':' (the i18next namespace separator, e.g. "common:foo.bar").
+# hyphens) and ':' (the i18next namespace separator, e.g., "common:foo.bar").
 _KEY_CHARS = r"[A-Za-z0-9_.:-]+"
 # The translator call, matched for both quoted and backtick-static keys below.
 # The (?<![.\w]) look-behind rejects any object method named `t` (e.g.
@@ -122,7 +122,7 @@ CODEISH_RE = re.compile(r"^[a-z0-9]+(?:[-_/][a-z0-9]+)*$")  # ubuntu-latest, foo
 # camelCase Link/Emphasis tails stay legal (nav.allClassesLink is a whole
 # label, not a fragment), as do plural _one/_other/... via the exact-name
 # alternation. A leading lowercase run before the camel tail is required so a
-# bare "prefix"/"suffix" leaf (e.g. a form label named exactly that) doesn't
+# bare "prefix"/"suffix" leaf (e.g., a form label named exactly that) doesn't
 # match — those aren't concat fragments.
 SPLIT_SUFFIX_RE = re.compile(
     r"_(?:prefix|suffix|middle|from|emphasis|link|\d+)$"

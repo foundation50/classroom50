@@ -21,4 +21,4 @@ Closes #
   - Skeleton scripts (Python): `python3 -m pytest cli/gh-teacher/skeleton_tests -q`
 - [ ] If I changed a cross-binary contract, I updated `schemas/*.schema.json` **and** every mirror (Go / Python / TypeScript), and the parity tests pass.
 - [ ] If I added or changed a CLI command or flag, I documented it in the [wiki](https://github.com/foundation50/classroom50/wiki) (not in a README).
-- [ ] My commits follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g. `feat(web): ...`, `fix(gh-teacher): ...`).
+- [ ] My commits follow [Conventional Commits](https://www.conventionalcommits.org/) (e.g., `feat(web): ...`, `fix(gh-teacher): ...`).

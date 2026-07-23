@@ -133,7 +133,7 @@ export type FreshRepoRetryOptions = {
 }
 
 // Retry `fn` while it hits fresh-repo lag. `fn` must re-read its own state each
-// attempt and may throw a synthetic error to signal non-HTTP lag (e.g. a 200
+// attempt and may throw a synthetic error to signal non-HTTP lag (e.g., a 200
 // with a blank SHA).
 export async function withFreshRepoRetry<T>(
   fn: () => Promise<T>,

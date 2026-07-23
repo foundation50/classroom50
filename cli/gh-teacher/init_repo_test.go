@@ -219,7 +219,7 @@ func TestEnsureClassroomRulesets_CreateForbiddenWarnsButSucceeds(t *testing.T) {
 }
 
 func TestEnsureClassroomRulesets_ListFailsWarnsButSucceeds(t *testing.T) {
-	// Can't even list rulesets (e.g. plan without org rulesets) → one
+	// Can't even list rulesets (e.g., plan without org rulesets) → one
 	// warning, no POSTs, no error.
 	var (
 		mu    sync.Mutex
@@ -1016,7 +1016,7 @@ func TestEnablePages_VisibilityPUTFailureWarnsButSucceeds(t *testing.T) {
 func TestEnablePages_PlanWithoutVisibilityControlIsSuccess(t *testing.T) {
 	// On non-Enterprise plans the visibility PUT 400s with
 	// "Private pages is not enabled... All Pages will be public."
-	// — i.e. the site is already public, which is the state init
+	// — i.e., the site is already public, which is the state init
 	// wants. Must report success on stdout with no warning.
 	// Mirrors the Team-plan report in https://github.com/foundation50/classroom50/issues/22.
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

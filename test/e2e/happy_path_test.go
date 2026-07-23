@@ -18,7 +18,7 @@ import (
 // each depends on the previous (you can't accept before Pages serves the
 // manifest, etc.).
 func TestHappyPath(t *testing.T) {
-	repo := fmt.Sprintf("%s-%s-%s", cfg.Classroom, cfg.Assignment, cfg.Student) // e.g. cs-principles-hello-bot50
+	repo := fmt.Sprintf("%s-%s-%s", cfg.Classroom, cfg.Assignment, cfg.Student) // e.g., cs-principles-hello-bot50
 	pagesBase := fmt.Sprintf("https://%s.github.io/classroom50", cfg.Org)
 	// Timestamp of the most recent commit to classroom50 (init/classroom/roster/
 	// assignment/autograder). Every such commit triggers a fresh publish-pages
@@ -319,7 +319,7 @@ func gitIdentityEnv() []string {
 // token via GIT_CONFIG_* env, so git authenticates HTTPS pushes/fetches
 // WITHOUT a token-embedded remote URL (which `gh student submit` can't
 // parse — it reads remote.origin.url to derive owner/repo). The leading
-// empty `credential.helper` resets any inherited global helper (e.g. a
+// empty `credential.helper` resets any inherited global helper (e.g., a
 // `gh` helper logged in as a different user) so only this token is used.
 // The helper is SCOPED to github.com (credential.https://github.com.helper)
 // so the PAT is only ever handed to GitHub, never to some other host if a

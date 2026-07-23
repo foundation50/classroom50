@@ -199,7 +199,7 @@ def main() -> int:
         try:
             outcome = regrade_repo(api_url, org, repo_name, service_token)
         except _SkipRepo:
-            # Benign per-repo skip (e.g. the latest run can't be re-run right
+            # Benign per-repo skip (e.g., the latest run can't be re-run right
             # now); already warned at the source.
             skipped += 1
             continue
@@ -343,7 +343,7 @@ def rerun_workflow_run(
     """Re-run a completed workflow run via the Actions rerun API. Replays at
     the same commit; runtime-fetched resources (runner.py and the autograder
     bundle, both from Pages at grade time) are re-fetched, so a teacher's updated
-    autograder takes effect. A 403 (not re-runnable — e.g. still in progress) is
+    autograder takes effect. A 403 (not re-runnable — e.g., still in progress) is
     surfaced as a per-repo skip by the caller, not a hard auth failure, so one
     un-rerunnable repo doesn't abort the run."""
     url = f"{_repo_url(api_url, org, repo)}/actions/runs/{run_id}/rerun"
@@ -362,7 +362,7 @@ def rerun_workflow_run(
 
 
 class _SkipRepo(Exception):
-    """A benign per-repo condition (e.g. a non-rerunnable run) that should be
+    """A benign per-repo condition (e.g., a non-rerunnable run) that should be
     counted as skipped, not failed."""
 
 

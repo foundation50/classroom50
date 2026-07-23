@@ -133,7 +133,7 @@ func assignmentTestAddCmd() *cobra.Command {
 	cmd.Flags().StringVar(&name, "name", "", "Test name, unique within the assignment (required)")
 	cmd.Flags().StringVar(&ttype, "type", "", "Test type: io | run | python (required)")
 	cmd.Flags().StringVar(&run, "run", "", "Command to run (required)")
-	cmd.Flags().StringVar(&setup, "setup", "", "Optional command run before --run (e.g. compile)")
+	cmd.Flags().StringVar(&setup, "setup", "", "Optional command run before --run (e.g., compile)")
 	cmd.Flags().StringVar(&input, "input", "", "io only: inline stdin for the run command")
 	cmd.Flags().StringVar(&inputFile, "input-file", "", "io only: bundled fixture file fed on stdin")
 	cmd.Flags().StringVar(&expected, "expected", "", "io only: inline expected stdout")

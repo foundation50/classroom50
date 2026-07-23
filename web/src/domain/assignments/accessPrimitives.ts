@@ -47,7 +47,7 @@ export type AcceptStepStatus = "pending" | "running" | "complete" | "error"
 export type AcceptStepUpdate = {
   id: AcceptStepId
   status: AcceptStepStatus
-  // Step label; on resolution can override the default (e.g. "Repository
+  // Step label; on resolution can override the default (e.g., "Repository
   // already exists").
   message?: string
   error?: string
@@ -174,7 +174,7 @@ export type TemplateAccessVerification =
   | { kind: "not-visible"; owner: string; repo: string }
   | { kind: "not-template"; owner: string; repo: string }
   // No usable branch: no @branch given and the repo has no default branch
-  // (e.g. a commitless template). resolveTemplate rejects this too.
+  // (e.g., a commitless template). resolveTemplate rejects this too.
   | { kind: "no-branch"; owner: string; repo: string }
   | { kind: "private-out-of-org"; owner: string; repo: string }
   // Read denied (HTTP 403): org restricts third-party apps, the per-user

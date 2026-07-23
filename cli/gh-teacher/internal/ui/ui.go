@@ -187,7 +187,7 @@ func (u *UI) Result(status Status, format string, a ...any) {
 }
 
 // Numbered prints an ordinal list item ("  1. <msg>") with a hanging wrap. Used
-// for manual steps that are NOT checkboxes (e.g. API-less settings to eyeball,
+// for manual steps that are NOT checkboxes (e.g., API-less settings to eyeball,
 // not state the CLI tracks).
 func (u *UI) Numbered(n int, format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)
@@ -216,7 +216,7 @@ func (u *UI) Checkbox(format string, a ...any) {
 	_, _ = fmt.Fprintf(u.w, "  [ ] %s\n", softWrap(msg, summaryWrapWidth, "      "))
 }
 
-// Detail prints an indented, dimmed continuation line (e.g. a URL under a
+// Detail prints an indented, dimmed continuation line (e.g., a URL under a
 // checklist).
 func (u *UI) Detail(format string, a ...any) {
 	msg := fmt.Sprintf(format, a...)

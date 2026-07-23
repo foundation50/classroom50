@@ -120,7 +120,7 @@ func TestMain(m *testing.M) {
 				sample = sample[:5]
 			}
 			fmt.Fprintf(os.Stderr, "e2e: refusing to run — %s contains %d repo(s) other than the "+
-				"classroom50 marker (e.g. %v). The suite teardown-FIRST deletes every repo in the org, "+
+				"classroom50 marker (e.g., %v). The suite teardown-FIRST deletes every repo in the org, "+
 				"so this looks like it may not be a throwaway org. Point E2E_ORG at a disposable org, or "+
 				"set E2E_ALLOW_DIRTY_ORG=1 if you are certain this org is disposable.\n",
 				cfg.Org, len(extras), sample)

@@ -20,7 +20,7 @@ const log = logger.scope("context:notifications")
 
 export type ToastTone = "info" | "success" | "warning" | "error"
 
-// An optional inline action rendered in the toast (e.g. "Undo"). Clicking it
+// An optional inline action rendered in the toast (e.g., "Undo"). Clicking it
 // runs onClick and then dismisses the toast.
 export type ToastAction = {
   label: string
@@ -45,10 +45,10 @@ export type NotifyInput = {
   // route-level errorComponent). Use plain text, a plain <a href>, or a button
   // calling router.navigate.
   message: React.ReactNode
-  // Optional inline action button (e.g. Undo).
+  // Optional inline action button (e.g., Undo).
   action?: ToastAction
   // Optional dedup key: a later notify() with the same key replaces the prior
-  // toast in place instead of stacking a duplicate (e.g. repeated retries).
+  // toast in place instead of stacking a duplicate (e.g., repeated retries).
   key?: string
   durationMs?: number
 }
@@ -218,7 +218,7 @@ export function useToast() {
 }
 
 // Like useToast() but returns null instead of throwing when no provider is
-// mounted, for consumers rendered both inside and outside it (e.g. the banner).
+// mounted, for consumers rendered both inside and outside it (e.g., the banner).
 export function useOptionalToast() {
   return useContext(NotificationContext)
 }

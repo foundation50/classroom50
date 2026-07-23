@@ -75,7 +75,7 @@ export type GitHubTeamMembership = "member" | "non-member" | "unresolved"
 
 // --- The app<->GitHub org-role mapping (both directions, single-sourced) -----
 // The ONLY place the admin<->owner correspondence is decided (GitHub wire
-// "admin" == product "owner", i.e. teacher). Security-sensitive: a missed
+// "admin" == product "owner", i.e., teacher). Security-sensitive: a missed
 // hand-copy elsewhere could silently mis-scope owner access, so all three
 // helpers below live here.
 

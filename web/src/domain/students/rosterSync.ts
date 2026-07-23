@@ -80,7 +80,7 @@ export async function syncRosterFromTeam(
 
     const { ids, logins } = rosterClaimSet(currentStudents)
     // Email set mirrors buildTeamRoster's indexCsv.byEmail fold: a member whose
-    // GitHub email matches an existing (e.g. pre-resolution, id/login-less) CSV
+    // GitHub email matches an existing (e.g., pre-resolution, id/login-less) CSV
     // row is the SAME person the view folds by email, so appending would create
     // a duplicate email-colliding row the view masks but that breaks email-keyed
     // logic (match-by-email, invite dedupe).
@@ -106,7 +106,7 @@ export async function syncRosterFromTeam(
     //  - on a team now -> set the team-derived primary role (promotion/demotion,
     //    or a first-ever role on a pre-role row);
     //  - on NO team, and every team read SUCCEEDED (fullyRead) -> clear the role
-    //    to "" (e.g. a TA removed from the staff team; the stale "ta" must not
+    //    to "" (e.g., a TA removed from the staff team; the stale "ta" must not
     //    linger). When a staff read was degraded (not fullyRead), leave the role
     //    UNCHANGED — "absent from an incomplete read" is not proof of removal, so
     //    a transient staff-team blip must never wipe an active staffer's role.

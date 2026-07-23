@@ -22,7 +22,7 @@ export type DataFreshnessProps = {
   // A collect is in flight (dispatching/running) — disables the button and spins.
   collecting: boolean
   // Trigger a Collect Scores run to rebuild scores.json. Omitted when the
-  // viewer can't collect (e.g. empty roster) — then no button renders.
+  // viewer can't collect (e.g., empty roster) — then no button renders.
   onRefresh?: () => void
   // Repos the live fan-out couldn't read (owner only); > 0 shows a warning so
   // an incomplete live status doesn't look authoritative.

@@ -7,7 +7,7 @@ import { cx } from "./cx"
 // most common form/panel card (`bg-base-100 border-base-300 shadow-sm`, box
 // radius); `bordered`/`shadow`/`radius` toggle the variants the audit found
 // (dashed empties, rounded-xl/2xl list cards). `as` swaps the element tag for
-// semantics (e.g. `section`). The `className` escape hatch keeps per-site
+// semantics (e.g., `section`). The `className` escape hatch keeps per-site
 // layout utilities (grid spans, `w-full`, `overflow-hidden`).
 
 type CardRadius = "box" | "xl" | "2xl"

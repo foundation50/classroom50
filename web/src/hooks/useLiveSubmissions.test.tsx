@@ -107,7 +107,7 @@ describe("useLiveSubmissions", () => {
     expect(result.current.errorCount).toBe(1)
   })
 
-  it("does not fetch when disabled (e.g. empty_repo assignment)", () => {
+  it("does not fetch when disabled (e.g., empty_repo assignment)", () => {
     const { result } = renderHook(
       () => useLiveSubmissions({ ...base, repoOwners: ["a"], enabled: false }),
       { wrapper: wrapper(makeClient()) },

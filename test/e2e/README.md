@@ -36,7 +36,7 @@ The suite is doubly gated and is a **clean no-op** when either gate is unmet:
 cd test/e2e
 export E2E_ORG=classroom50-e2e-test-org
 export E2E_TEACHER_PAT=...   # owner of E2E_ORG
-export E2E_STUDENT_PAT=...   # a separate bot (e.g. bot50)
+export E2E_STUDENT_PAT=...   # a separate bot (e.g., bot50)
 export E2E_COLLECT_TOKEN=... # fine-grained: Contents R/W + Members: Read
 export E2E_STUDENT2_PAT=...  # optional: a 3rd bot → enables the §7 group flow
 GOWORK=off go test -tags e2e -timeout 60m -v ./...
@@ -63,6 +63,6 @@ run's teardown-first plus the workflow's `if: always()` safety-net wipe.
   in `happy_path_test.go` (step 4.2).
 - Enterprise test orgs grant more than a real **Team-plan** teacher, so this validates the happy path
   but won't catch Team-plan-only permission failures.
-- First real run in a **new** environment may still need small tweaks (e.g. git push auth in §5.1,
+- First real run in a **new** environment may still need small tweaks (e.g., git push auth in §5.1,
   exact workflow filenames). Both flows have been run green against a live org, but a fresh org /
   credential set can surface environment-specific rough edges.

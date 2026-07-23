@@ -192,7 +192,7 @@ func TestMigrate_PhaseDelete(t *testing.T) {
 }
 
 // adoptedSameSlugClassroom: the teacher ref adopted the SAME team as the
-// instructor ref (shared slug) — e.g. a prior partial migration recorded both
+// instructor ref (shared slug) — e.g., a prior partial migration recorded both
 // pointing at the one team.
 const adoptedSameSlugClassroom = `{
   "schema": "classroom50/classroom/v1",

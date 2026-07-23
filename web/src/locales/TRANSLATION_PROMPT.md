@@ -5,7 +5,7 @@ pack with an LLM. It is written to be applicable to **any** target language.
 After translating, always run the integrity check in
 [`verify_locale.py`](./verify_locale.py) before shipping the pack.
 
-Replace `<CODE>` with the target BCP-47 locale code (e.g. `es`, `hi`, `zh-CN`).
+Replace `<CODE>` with the target BCP-47 locale code (e.g., `es`, `hi`, `zh-CN`).
 
 ---
 
@@ -26,7 +26,7 @@ Translate the JSON **values** in `en.json` into the target language (locale code
   If your language forces a choice, pick the most inclusive general-purpose
   option.
 - **Follow the target language's own conventions.** Every language has its own
-  norms for punctuation, quotation marks, ellipsis, spacing (e.g. around Latin
+  norms for punctuation, quotation marks, ellipsis, spacing (e.g., around Latin
   words/numbers), word order, honorific/politeness level, measure words, and
   pluralization. Apply the conventions that a native reader expects — do not carry
   over English punctuation, spacing, or sentence structure just because the source
@@ -55,7 +55,7 @@ Translate the JSON **values** in `en.json` into the target language (locale code
    language needs other forms (`_zero`, `_few`, `_many`, …), you **must** add those
    sibling keys for the same base key — i18next does not fall back to your
    `_other` for a missing category; it renders **English** for those counts
-   (e.g. Arabic without `_few` shows English for counts 3–10). Arabic needs all
+   (e.g., Arabic without `_few` shows English for counts 3–10). Arabic needs all
    of `_zero`/`_one`/`_two`/`_few`/`_many`/`_other`; Hebrew needs
    `_one`/`_two`/`_other`; Russian/Polish/Czech need `_one`/`_few`/`_many`/`_other`.
    Never remove the existing `_one`/`_other` keys.
@@ -78,7 +78,7 @@ runtime. For each such value:
 2. **Reorder freely.** Like a bare placeholder, a tagged span can move anywhere
    in the sentence — put it wherever the target grammar wants it, together with
    its content.
-3. **Translate the content inside a tag** when it is prose (e.g. link text like
+3. **Translate the content inside a tag** when it is prose (e.g., link text like
    `<link>accept it</link>`), but leave it untouched when it is a
    `{{placeholder}}` or code.
 4. Adapt the surrounding words (particles, prepositions, measure words) to the
@@ -89,7 +89,7 @@ placeholder to confirm it is grammatical.
 
 ## GitHub UI label consistency
 
-Some strings (e.g. under `orgSettings`) reference **buttons/fields the user must
+Some strings (e.g., under `orgSettings`) reference **buttons/fields the user must
 click on GitHub**. Render these to **match GitHub's own official UI in the target
 language** so users can locate the control; if GitHub does not localize a given
 label, keep it in English. Be consistent — one policy per label, applied

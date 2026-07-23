@@ -19,7 +19,7 @@
     },
     "term": {
       "type": "string",
-      "description": "Free-form term label (e.g. \"Fall 2026\"); may be empty."
+      "description": "Free-form term label (e.g., \"Fall 2026\"); may be empty."
     },
     "org": {
       "type": "string",

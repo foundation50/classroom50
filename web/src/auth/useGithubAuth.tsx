@@ -73,7 +73,7 @@ function formatError(
     return t("auth.errorNetwork", { target: networkTarget })
   }
 
-  // A server-provided message (e.g. an OAuth error_description) is already a
+  // A server-provided message (e.g., an OAuth error_description) is already a
   // formed string we can't pre-translate; pass it through unchanged.
   return message
 }
@@ -361,7 +361,7 @@ function useGithubAuthState() {
     const code = params.get("code")
     const returnedState = params.get("state")
 
-    // No code: recover a stranded "exchanging" screen — e.g. bfcache restored
+    // No code: recover a stranded "exchanging" screen — e.g., bfcache restored
     // this page after Back on GitHub's consent screen, leaving startWebFlow's
     // state with no code to exchange. Else the card spins forever (#oauth-hang).
     if (!code) {
@@ -852,7 +852,7 @@ function useGithubAuthState() {
   // Navigate to the stashed deep link once status is "authenticated", so the
   // target _authed guard sees an authenticated context instead of bouncing
   // through /login (#71). history.push (not navigate({ to })) preserves the
-  // query — e.g. the ?k= accept key. A bad path degrades to the homepage.
+  // query — e.g., the ?k= accept key. A bad path degrades to the homepage.
   useEffect(() => {
     if (status !== "authenticated") return
     const returnTo = pendingReturnToRef.current

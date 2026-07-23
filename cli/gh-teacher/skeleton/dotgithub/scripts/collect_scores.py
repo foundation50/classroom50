@@ -1020,7 +1020,7 @@ def save_scores(path: pathlib.Path, scores: dict[str, Any]) -> None:
         payload = json.dumps(scores, indent=2, allow_nan=False) + "\n"
     except ValueError as exc:
         raise ScoresFileError(f"{path}: encode failed: {exc}") from exc
-    # Re-parse to catch silent corruption (e.g. NaN in a score) before touching
+    # Re-parse to catch silent corruption (e.g., NaN in a score) before touching
     # the destination file.
     strict_json_loads(payload)
     tmp_path = path.with_name(path.name + ".tmp")
@@ -1101,7 +1101,7 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
             continue
         if same_submission(existing, entry):
             continue
-        # A group re-collect that drops a previously-credited member (e.g. a
+        # A group re-collect that drops a previously-credited member (e.g., a
         # teammate who left the classroom team but is still a repo collaborator)
         # replaces the entry in place, silently revoking their shared credit.
         # The owner-only warning in collect_classroom only fires on collapse to
@@ -1113,7 +1113,7 @@ def apply_updates(scores: dict[str, Any], updates: Iterable[dict[str, Any]]) -> 
                 f"{slug}: group entry owned by {row_key(entry)!r} lost previously-"
                 f"credited member(s) {', '.join(sorted(dropped))} on re-collect. A "
                 f"teammate is credited only while on the classroom team; verify the "
-                f"drop is intended (e.g. an unenrollment) and not a team-vs-roster "
+                f"drop is intended (e.g., an unenrollment) and not a team-vs-roster "
                 f"divergence, since the shared score is now revoked for them."
             )
         # Preserve an explicit "override": false on replacement — the teacher's
@@ -1130,7 +1130,7 @@ def _dropped_group_members(
     existing: dict[str, Any], incoming: dict[str, Any]
 ) -> set[str]:
     """Members credited on the existing group entry but absent from the incoming
-    one (case-insensitive), i.e. teammates whose shared credit a re-collect
+    one (case-insensitive), i.e., teammates whose shared credit a re-collect
     would silently revoke. Empty for individual entries or when the credited set
     didn't shrink."""
     def credited(entry: dict[str, Any]) -> set[str]:
@@ -1326,7 +1326,7 @@ def all_submit_releases(
 ) -> list[dict[str, Any]]:
     """Every submit-tag release for a repo, newest first, walking the full
     /releases pagination — the complete submission history (a student who pushed
-    N times has N submit/* releases, all returned). Non-submit releases (e.g. a
+    N times has N submit/* releases, all returned). Non-submit releases (e.g., a
     hand-created tag) are filtered out. A 404 (no releases, or repo not
     accepted) yields an empty list.
 

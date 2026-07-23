@@ -1,4 +1,4 @@
-// Guards hrefs built from untrusted data (e.g. a student's committed
+// Guards hrefs built from untrusted data (e.g., a student's committed
 // `result.json`): a `javascript:`/`data:` href is a script sink, so only
 // http(s) links are safe to render.
 
@@ -23,7 +23,7 @@ export function safeHttpUrl(
 }
 
 // Normalize a user-typed website into a safe absolute http(s) URL, defaulting a
-// bare host (no scheme, e.g. "classroom50.org") to https://. Uses the built-in
+// bare host (no scheme, e.g., "classroom50.org") to https://. Uses the built-in
 // WHATWG URL parser to validate; returns "" for blank input and undefined when
 // the value can't be made into a safe http(s) URL (so callers can reject it).
 // Trims surrounding whitespace first.

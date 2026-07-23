@@ -78,7 +78,7 @@ RETRYABLE_ERROR_CODES = {
 
 
 # i18next plural suffixes, mirroring verify_locale.py. When a base plural key is
-# removed, the gate rejects any leftover sibling variant (e.g. a pack's extra
+# removed, the gate rejects any leftover sibling variant (e.g., a pack's extra
 # `_few`), so removals must sweep the whole plural group, not just the exact key.
 PLURAL_SUFFIXES = ("_zero", "_one", "_two", "_few", "_many", "_other")
 
@@ -148,11 +148,11 @@ def plural_group_keys(removed_key: str, pack_keys: set[str], base_keys: set[str]
     """Pack keys to delete when `removed_key` is dropped from en.json.
 
     Mirrors verify_locale.py's `is_allowed_plural_variant`: the gate tolerates a
-    pack's extra plural sibling (e.g. an added `_few`) only while a base
+    pack's extra plural sibling (e.g., an added `_few`) only while a base
     `_one`/`_other` for the stem exists. So we sweep the whole plural group only
     once that base group is entirely gone — otherwise those siblings are still
     gate-allowed and deleting them would drop community edits. A key with no base
-    `_one`/`_other` isn't a plural form (it just looks like one, e.g. `step_two`),
+    `_one`/`_other` isn't a plural form (it just looks like one, e.g., `step_two`),
     so only itself is removed.
     """
     if not any(removed_key.endswith(suffix) for suffix in PLURAL_SUFFIXES):
@@ -479,7 +479,7 @@ def translate_keys(
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--code", required=True, help="BCP-47 target locale code, e.g. ja")
+    parser.add_argument("--code", required=True, help="BCP-47 target locale code, e.g., ja")
     parser.add_argument("--base", required=True, type=Path, help="Path to en.json")
     parser.add_argument(
         "--prompt",

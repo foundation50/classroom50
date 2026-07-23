@@ -45,8 +45,8 @@ func classroomMigrateCmd() *cobra.Command {
 			"org under one classroom50 config repo. Migrating N legacy\n" +
 			"classrooms into one target org means running this command N\n" +
 			"times, once per source classroom.\n\n" +
-			"--source accepts a numeric GitHub Classroom ID (e.g. 95884) or\n" +
-			"the source org's login (e.g. classroom50test). Org-login\n" +
+			"--source accepts a numeric GitHub Classroom ID (e.g., 95884) or\n" +
+			"the source org's login (e.g., classroom50test). Org-login\n" +
 			"resolution errors if zero or more than one classroom matches.\n" +
 			"Archived classrooms resolve when looked up by numeric ID; they\n" +
 			"are skipped during org-name resolution unless --include-archived\n" +
@@ -60,7 +60,7 @@ func classroomMigrateCmd() *cobra.Command {
 			"^[a-z0-9][a-z0-9-]{1,38}$. Pass --short-name explicitly if\n" +
 			"the derived value fails validation.\n\n" +
 			"--template-suffix appends a string to every target template\n" +
-			"repo name (e.g. --template-suffix migrated → readability-migrated).\n" +
+			"repo name (e.g., --template-suffix migrated → readability-migrated).\n" +
 			"Use to escape collisions with existing target-org repos.\n\n" +
 			"--dry-run runs discovery against the source and prints what\n" +
 			"would be migrated. No API writes to either source or target.",
@@ -100,8 +100,8 @@ func classroomMigrateCmd() *cobra.Command {
 	cmd.Flags().StringVar(&source, "source", "", "Source classroom — numeric ID or org login (required)")
 	cmd.Flags().StringVar(&target, "target", "", "Destination org owning the classroom50 config repo (required)")
 	cmd.Flags().StringVar(&shortName, "short-name", "", "Override the auto-derived classroom directory name")
-	cmd.Flags().StringVar(&term, "term", "", "Set classroom.json.term (e.g. Spring-2026)")
-	cmd.Flags().StringVar(&templateSuffix, "template-suffix", "", "Suffix appended to every target template repo name (e.g. --template-suffix migrated → readability-migrated)")
+	cmd.Flags().StringVar(&term, "term", "", "Set classroom.json.term (e.g., Spring-2026)")
+	cmd.Flags().StringVar(&templateSuffix, "template-suffix", "", "Suffix appended to every target template repo name (e.g., --template-suffix migrated → readability-migrated)")
 	cmd.Flags().BoolVar(&includeArchived, "include-archived", false, "Include archived classrooms when resolving --source by org name (ignored when --source is a numeric ID)")
 	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print the discovered migration plan without API writes")
 	return cmd

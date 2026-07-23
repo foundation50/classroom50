@@ -24,7 +24,7 @@ export type EditStudentFormValues = {
 // own) so it embeds directly in the roster detail modal — nesting a second
 // `<dialog showModal>` inside another modal dialog is invalid.
 //
-// `resetSignal` lets a parent that keeps the form mounted (e.g. a detail modal
+// `resetSignal` lets a parent that keeps the form mounted (e.g., a detail modal
 // reused across rows) reset field values to the current student on open; a
 // changed value re-syncs from `defaults()`.
 const EditStudentForm = ({
@@ -46,7 +46,7 @@ const EditStudentForm = ({
   // Lets a parent dialog block close (Escape/backdrop) while a save is running.
   onSubmittingChange?: (submitting: boolean) => void
   // The read-only "GitHub: @username" panel. Hidden when a parent already shows
-  // the GitHub identity elsewhere (e.g. the roster detail modal's header).
+  // the GitHub identity elsewhere (e.g., the roster detail modal's header).
   showGitHubPanel?: boolean
 }) => {
   const runSave = useSafeSubmit()
@@ -116,7 +116,7 @@ const EditStudentForm = ({
   // Reset to the student's CURRENT values only when the parent deliberately
   // signals it (open, or a switch to a different row/edit session). `defaults`
   // is intentionally NOT a dependency: parents recreate the `student` object
-  // every render (e.g. the roster modal's `rowToStudent(row)`), so keying on it
+  // every render (e.g., the roster modal's `rowToStudent(row)`), so keying on it
   // would re-run mid-submit — `form.reset` clears `isSubmitting`, so the Save
   // button would flicker back to enabled while the write is in flight.
   useEffect(() => {

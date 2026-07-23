@@ -76,7 +76,7 @@ export function repoQuery(client: GitHubClient, owner: string, repo: string) {
 
 export async function getOrgRepos(client: GitHubClient, owner: string) {
   // Paginate to exhaustion: a single per_page=100 page silently under-counts
-  // orgs with >100 repos, making repo-list-derived signals (e.g. assignment
+  // orgs with >100 repos, making repo-list-derived signals (e.g., assignment
   // acceptance on the submissions dashboard) miss students in large orgs. A
   // first-page 404 surfaces as null.
   return tolerateGitHubError(

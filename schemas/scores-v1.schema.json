@@ -136,7 +136,7 @@
       "type": "object",
       "additionalProperties": true,
       "required": ["test-name", "passed", "score", "max-score"],
-      "description": "One graded test. additionalProperties is true: an autograder.py may attach extra diagnostic fields (e.g. output, message) that the runner and collector preserve verbatim.",
+      "description": "One graded test. additionalProperties is true: an autograder.py may attach extra diagnostic fields (e.g., output, message) that the runner and collector preserve verbatim.",
       "properties": {
         "test-name": {
           "type": "string",

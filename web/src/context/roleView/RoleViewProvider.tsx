@@ -99,7 +99,7 @@ export function RoleViewProvider({
 }
 
 // Read the current preview. Returns a no-op default when no provider is mounted
-// (e.g. org-less routes), so callers never null-check.
+// (e.g., org-less routes), so callers never null-check.
 export function useRoleView(): RoleViewContextValue {
   return useContext(RoleViewContext) ?? { viewAs: null, setViewAs: () => {} }
 }

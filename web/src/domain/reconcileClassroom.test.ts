@@ -97,7 +97,7 @@ describe("reconcileClassroom", () => {
     expect(order).toEqual(["migrate", "staff"])
   })
 
-  it("surfaces a newly created staff team (e.g. a backfilled -hta)", async () => {
+  it("surfaces a newly created staff team (e.g., a backfilled -hta)", async () => {
     ensureStaffTeams.mockResolvedValue({ teams: {}, created: ["hta"] })
     const result = await reconcileClassroom(client, "org", "cs101")
     expect(result.staffCreated).toEqual(["hta"])
@@ -221,7 +221,7 @@ describe("reconcileClassroom", () => {
     ).rejects.not.toBeInstanceOf(ClassroomReconcilePermanentError)
   })
 
-  it("leaves a non-description 404 (e.g. transient team read) as a plain GitHubAPIError", async () => {
+  it("leaves a non-description 404 (e.g., transient team read) as a plain GitHubAPIError", async () => {
     // A 404 from the migration/staff steps must stay transient (a plain
     // GitHubAPIError), not get rewrapped as permanent — only the description
     // step's wrong-slug read is unconvergeable.

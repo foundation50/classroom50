@@ -201,7 +201,7 @@ export function useTeamRoster(
   }, [orgMembersQuery.data])
 
   // Pending is owner-only. A definitive non-owner is hidden without a request;
-  // an owner whose student pending read returns a definitive 403 (e.g. a token
+  // an owner whose student pending read returns a definitive 403 (e.g., a token
   // scope gap) is also hidden. A transient error is NOT a hide (it self-heals
   // and folds into isError below).
   const studentInvitesForbidden =

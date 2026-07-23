@@ -35,7 +35,7 @@ Config + org scopes are ALWAYS probed. Per-classroom, the probe also reads the
 classroom team's members (the exact call collect-scores makes), which exercises
 team VISIBILITY — a secret team the token can't see 404/403s here even when the
 org-members proxy passes. It additionally reads each STAFF team (classroom.json
-`teams`, e.g. `classroom50-<short>-ta`) the collect-time grant targets, so a
+`teams`, e.g., `classroom50-<short>-ta`) the collect-time grant targets, so a
 secret/invisible staff team fails RED here rather than silently granting TAs no
 access at cron. A team that doesn't exist yet (404) is a PASS with a note (an
 early-term classroom legitimately has no team), never a failure.
@@ -200,7 +200,7 @@ def check_config_contents_and_write(api_url: str, org: str, token: str) -> list[
             "note this proves admin on the config repo only; the grant targets student "
             "repos + templates, so the token must be scoped to All repositories"
             if admin
-            else "permissions.admin is false — collect grants staff teams (e.g. TAs) repo access, which needs Administration: Read and write",
+            else "permissions.admin is false — collect grants staff teams (e.g., TAs) repo access, which needs Administration: Read and write",
         ),
     ]
 

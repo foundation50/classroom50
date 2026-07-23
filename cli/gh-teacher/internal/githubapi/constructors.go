@@ -3,7 +3,7 @@ package githubapi
 import "github.com/cli/go-gh/v2/pkg/api"
 
 // ClientOptions aliases go-gh's api.ClientOptions for the few call sites
-// that build a non-default client (e.g. a client authenticated as a
+// that build a non-default client (e.g., a client authenticated as a
 // supplied service token).
 type ClientOptions = api.ClientOptions
 

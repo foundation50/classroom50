@@ -18,7 +18,7 @@ import { cx } from "./cx"
 // control modes:
 //   - controlled: pass `open` + `onClose` (the common case). The effect calls
 //     showModal()/close() to match `open`.
-//   - ref-driven: pass a `dialogRef` you open imperatively (e.g. a hook that
+//   - ref-driven: pass a `dialogRef` you open imperatively (e.g., a hook that
 //     needs the element). `open` may be omitted.
 // `onClose` fires on the native dialog close (Esc, backdrop, close button).
 
@@ -94,7 +94,7 @@ export function Modal({
       onClose={() => onClose?.()}
       onCancel={(event) => {
         // Esc triggers `cancel` before `close`. When dismissal is blocked
-        // (e.g. a submit is in flight), veto it so the dialog stays open —
+        // (e.g., a submit is in flight), veto it so the dialog stays open —
         // matching the hand-rolled modals' Esc guard.
         if (closeDisabled) event.preventDefault()
       }}

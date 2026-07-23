@@ -4,7 +4,7 @@ const log = logger.scope("github:status")
 
 // githubstatus.com's public Statuspage summary. `indicator` escalates
 // none -> minor -> major -> critical; `description` is the human summary
-// (e.g. "Partially Degraded Service"). CORS-open (access-control-allow-origin: *).
+// (e.g., "Partially Degraded Service"). CORS-open (access-control-allow-origin: *).
 const STATUS_SUMMARY_URL = "https://www.githubstatus.com/api/v2/status.json"
 const PROBE_TIMEOUT_MS = 5_000
 

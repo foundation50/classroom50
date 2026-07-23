@@ -629,7 +629,7 @@ func isControlPath(rel string) bool {
 }
 
 // lastNonEmptyLine returns the last non-empty trimmed line of s, used to
-// surface git's actionable error (e.g. `fatal: ...`) when its stderr was
+// surface git's actionable error (e.g., `fatal: ...`) when its stderr was
 // buffered rather than streamed.
 func lastNonEmptyLine(s string) string {
 	lines := strings.Split(s, "\n")

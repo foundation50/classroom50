@@ -27,7 +27,7 @@ type Client interface {
 	// (resp may be nil).
 	Patch(path string, body io.Reader, resp interface{}) error
 	// RequestWithContext issues an arbitrary-method request bound to a context
-	// and returns the raw response, so callers can read headers (e.g. Link for
+	// and returns the raw response, so callers can read headers (e.g., Link for
 	// pagination) or status codes the decode-and-discard verbs hide, and
 	// cancel / deadline an in-flight request (the group-membership
 	// collaborators walk uses this — go-gh's default client has no HTTP

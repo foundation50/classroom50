@@ -44,7 +44,7 @@ jobs:
           # members), Repository -> Contents: Read and write on
           # <classroom>-* student repos, and Repository ->
           # Administration: Read and write (collection grants staff teams
-          # — e.g. TAs — read access to student repos and private
+          # — e.g., TAs — read access to student repos and private
           # templates via PUT teams/.../repos/...). Collection READS
           # (team members, releases + result.json) and grants team access;
           # the contents-write scope is shared with regrade.yaml, which

@@ -72,7 +72,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
 
   await withFreshRepoRetry(async () => {
     // A freshly template-generated repo's real branch (copied from the template,
-    // e.g. `master`) only materializes after GitHub finishes the async copy —
+    // e.g., `master`) only materializes after GitHub finishes the async copy —
     // until then `default_branch` transiently reports the org default (`main`)
     // and no ref exists. Re-resolve the live default branch each attempt so we
     // commit to the branch that actually appears, not a pre-guessed `main` that

@@ -10,7 +10,7 @@ import { CONFIG_REPO } from "@/util/configRepo"
 // card. Uses `repoQuery` so the result shares the
 // `githubKeys.repo(login, "classroom50")` cache with other classroom50-repo
 // readers instead of adding a bespoke per-org query. Maps login -> ISO
-// timestamp, or undefined when pending / unreadable (e.g. no_access orgs,
+// timestamp, or undefined when pending / unreadable (e.g., no_access orgs,
 // 404s) — the caller pins those to the bottom of the sort.
 const useOrgLastModified = (
   logins: string[],

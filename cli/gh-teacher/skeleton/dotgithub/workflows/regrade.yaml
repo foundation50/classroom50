@@ -2,7 +2,7 @@ name: Regrade
 
 # Teacher-triggered regrade fan-out. For each targeted student repo it
 # RE-RUNS the repo's latest autograde workflow run (re-fetching the current
-# autograder from Pages), so an existing commit is graded again — e.g. after
+# autograder from Pages), so an existing commit is graded again — e.g., after
 # the teacher fixed a buggy test or changed the autograder. Re-running the
 # same run grades the SAME commit and does NOT create a new submission, so
 # the student's submission time and `late` flag don't change (the runner

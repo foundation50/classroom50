@@ -21,7 +21,7 @@ type Options struct {
 	// RequiredScopes are the extra OAuth scopes (beyond gh's defaults) the
 	// CLI needs; requested on every `gh auth login` it triggers.
 	RequiredScopes []string
-	// CommandName is the user-facing command, e.g. "gh teacher" / "gh student",
+	// CommandName is the user-facing command, e.g., "gh teacher" / "gh student",
 	// used in guidance messages so they point at the right login command.
 	CommandName string
 }
@@ -101,7 +101,7 @@ func IsInteractiveTTY() bool {
 }
 
 // IsCharDevice reports whether f is a character device (a TTY). Exported
-// because callers (e.g. the service-token prompt) check stdin/stderr
+// because callers (e.g., the service-token prompt) check stdin/stderr
 // independently, not just the combined interactive check.
 func IsCharDevice(f *os.File) bool {
 	fi, err := f.Stat()

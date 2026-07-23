@@ -3,7 +3,7 @@ import { DEFAULT_GITHUB_SCOPE } from "./constants"
 export const REQUIRED_SCOPES = DEFAULT_GITHUB_SCOPE.split(/\s+/).filter(Boolean)
 
 // GitHub normalizes granted scopes and a broader scope implies narrower ones,
-// so we map each grantable scope -> the scopes it also satisfies (e.g. `repo`
+// so we map each grantable scope -> the scopes it also satisfies (e.g., `repo`
 // covers `repo:status`, `admin:org` covers `read:org`); unknown scopes satisfy
 // only themselves. Biased toward over-satisfying: a missed gap is softer than a
 // spurious banner a re-auth can't clear.

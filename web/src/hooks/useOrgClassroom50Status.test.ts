@@ -107,7 +107,7 @@ describe("probeOrgClassroom50Status", () => {
     ).rejects.toMatchObject({ status: 500 })
   })
 
-  it("rethrows a non-GitHubAPIError (e.g. a network failure) unchanged", async () => {
+  it("rethrows a non-GitHubAPIError (e.g., a network failure) unchanged", async () => {
     const network = new Error("network down")
     const client = clientReturning(async () => {
       throw network

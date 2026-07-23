@@ -130,7 +130,7 @@ function ClassroomMenu({
   }
 
   // Hold the parent's list order frozen while this card is "busy" — the menu is
-  // open OR a destructive confirm modal is open — so an async re-sort (e.g. a
+  // open OR a destructive confirm modal is open — so an async re-sort (e.g., a
   // roster resolving under the student-count sort) can't reshuffle the list out
   // from under an in-flight Archive/Delete. The menu closes before the modal
   // opens, so gating on the menu alone would release the freeze mid-flow.

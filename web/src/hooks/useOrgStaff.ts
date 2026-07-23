@@ -78,7 +78,7 @@ export function useOrgStaff(org: string | undefined): UseOrgStaffResult {
   // A disabled hook (org-less route, no viewer) is NOT loading — it has nothing
   // to resolve; callers gate on roleResolved. Keying on fetchStatus avoids
   // pinning a permanent spinner on org-less surfaces (the footer role label).
-  // Once resolved (e.g. an owner, who needs no teams read), we're not loading
+  // Once resolved (e.g., an owner, who needs no teams read), we're not loading
   // even if an irrelevant teams read is still in flight.
   const isLoading = !roleResolved && teamsQuery.fetchStatus === "fetching"
 

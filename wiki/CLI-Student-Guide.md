@@ -39,8 +39,8 @@ gh student accept <org> <classroom> <assignment>
 ![gh student accept](images/gh_student_accept.gif)
 
 - `<org>` — your classroom's GitHub organization.
-- `<classroom>` — the classroom your teacher set up (e.g. `cs-principles`).
-- `<assignment>` — the assignment slug (e.g. `hello`).
+- `<classroom>` — the classroom your teacher set up (e.g., `cs-principles`).
+- `<assignment>` — the assignment slug (e.g., `hello`).
 
 This creates a **private** repository at
 `<org>/<classroom>-<assignment>-<username>` from the assignment's template (or

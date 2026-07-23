@@ -253,7 +253,7 @@ func runAutograderList(client githubapi.Client, out, errOut io.Writer, org, clas
 					Kind: autograderKindNamedShim,
 					Path: dirPath + "/" + e.Name,
 				})
-				// Any other file (e.g. a stray README) isn't an autograder
+				// Any other file (e.g., a stray README) isn't an autograder
 				// artifact; skip.
 			}
 		}

@@ -131,7 +131,7 @@ export function parseStudentsCsv(csv: string): StudentCsvRow[] {
   return rows
 }
 
-// True when EVERY short data row is short by exactly one column, i.e. only the
+// True when EVERY short data row is short by exactly one column, i.e., only the
 // trailing field was dropped. Re-parses without `header` to read raw row widths
 // (the header-keyed `data` hides which physical column is missing), so a row
 // dropping a middle cell — which Papa would silently left-shift — is NOT treated

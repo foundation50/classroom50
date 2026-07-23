@@ -200,7 +200,7 @@ func TestRunMemberListOrg_InvitationsForbidden(t *testing.T) {
 		scopes string // X-OAuth-Scopes on the 403
 		want   string // substring the error must contain
 	}{
-		// No header (e.g. fine-grained PAT) -> generic: points at the scope + access.
+		// No header (e.g., fine-grained PAT) -> generic: points at the scope + access.
 		{"generic (no scopes header)", "", "admin:org"},
 		// Has other scopes but not admin:org -> scope-missing sentinel.
 		{"scope missing", "repo, read:org", "missing admin:org OAuth scope"},

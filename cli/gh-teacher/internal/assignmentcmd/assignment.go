@@ -244,10 +244,10 @@ func assignmentAddCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g. "Hello") (required)`)
+	cmd.Flags().StringVar(&name, "name", "", `Display name written into the assignment entry (e.g., "Hello") (required)`)
 	cmd.Flags().StringVar(&template, "template", "", "Optional template repo as <owner>/<repo> or <owner>/<repo>@<branch>. Omit for a template-less assignment (students get an empty repo with just the autograder shim).")
 	cmd.Flags().StringVar(&description, "description", "", "Optional one-line description")
-	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g. 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
+	cmd.Flags().StringVar(&due, "due", "", "Optional due date (e.g., 2026-09-15T23:59:00-04:00); stored as UTC. Omit the offset to use the machine's local timezone")
 	cmd.Flags().StringVar(&mode, "mode", assignment.ModeIndividual, "Assignment mode: `individual` (default) or `group`. Group mode requires --max-group-size.")
 	cmd.Flags().IntVar(&maxGroupSize, "max-group-size", 0, "Maximum collaborators on a group repo (>= 2; required with --mode group). Enforced within the CLI when students join; direct GitHub-UI invites can bypass it.")
 	cmd.Flags().StringVar(&autograder, "autograder", contract.DefaultAutograderName, "Autograder workflow shim this assignment opts into; resolves to <classroom>/autograders/<name>.yaml in the config repo")
@@ -848,7 +848,7 @@ type templateArg struct {
 }
 
 // parseTemplateRef parses `<owner>/<repo>[@branch]`. Rejects empty
-// parts and extra `/` or `@` (e.g. `cs50//hello`, `cs50/hello@@main`).
+// parts and extra `/` or `@` (e.g., `cs50//hello`, `cs50/hello@@main`).
 func parseTemplateRef(raw string) (templateArg, error) {
 	if raw == "" {
 		return templateArg{}, errors.New("--template must not be empty")
@@ -918,7 +918,7 @@ func localDueLocation() (*time.Location, error) {
 // dueZoneName is the best-effort human-readable zone recorded in due_meta when
 // the offset was auto-detected. A named location reports its IANA name;
 // time.Local reports "Local", so fall back to the abbreviation at that instant
-// (e.g. "EDT"). due_meta.offset is always exact regardless.
+// (e.g., "EDT"). due_meta.offset is always exact regardless.
 func dueZoneName(loc *time.Location, t time.Time) string {
 	if name := loc.String(); name != "" && name != "Local" {
 		return name
