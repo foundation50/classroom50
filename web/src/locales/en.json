@@ -865,7 +865,6 @@
       "timeout": "Timeout (seconds)",
       "timeoutHint": "0 = default (10s)",
       "points": "Points",
-      "done": "Done",
       "type": {
         "io": {
           "label": "Input/Output",

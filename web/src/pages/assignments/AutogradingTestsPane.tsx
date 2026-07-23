@@ -4,7 +4,15 @@ import type { TFunction } from "i18next"
 import { Pencil, Trash } from "lucide-react"
 import type { AssignmentForm } from "./assignmentFormModel"
 
-import { Badge, Button, Card, Input, Select, Textarea } from "@/components/ui"
+import {
+  Badge,
+  Button,
+  Card,
+  Input,
+  Modal,
+  Select,
+  Textarea,
+} from "@/components/ui"
 import type { AssignmentTestDraft } from "@/util/assignmentTests"
 import { emptyTestDraft, validateTestDraft } from "@/util/assignmentTests"
 import type { AssignmentTestComparison } from "@/types/classroom"
@@ -27,6 +35,8 @@ const TYPE_OPTIONS = [
   },
 ] as const
 
+type TestErrors = Partial<Record<keyof AssignmentTestDraft, string>>
+
 const FieldError = ({ error, id }: { error?: string; id?: string }) =>
   error ? (
     <p id={id} className="text-error text-sm mt-1" role="alert">
@@ -34,76 +44,62 @@ const FieldError = ({ error, id }: { error?: string; id?: string }) =>
     </p>
   ) : null
 
-// Draft fields that can carry a validation error; stale errors are cleared on
-// each re-validation.
-const VALIDATED_FIELDS = [
-  "name",
-  "run",
-  "points",
-  "timeout",
-  "input",
-  "inputFile",
-  "expected",
-  "expectedFile",
-  "exitCode",
-] as const
+// Editor works on a local copy; nothing reaches the form's `tests` until commit.
+// `mode` routes commit (append vs overwrite at `index`); `baseline` is the
+// opening state the dirty check compares against.
+type EditorState = {
+  mode: "new" | "edit"
+  index: number
+  baseline: AssignmentTestDraft
+}
 
 type AutogradingTestModalProps = {
-  form: AssignmentForm
+  editor: EditorState
   dialogRef: React.RefObject<HTMLDialogElement | null>
-  index: number | null
-  onClose: () => void
+  otherNames: string[]
+  onCancel: () => void
+  onCommit: (draft: AssignmentTestDraft) => void
 }
+
 const AutogradingTestModal = ({
-  form,
+  editor,
   dialogRef,
-  index,
-  onClose,
+  otherNames,
+  onCancel,
+  onCommit,
 }: AutogradingTestModalProps) => {
   const { t } = useTranslation()
   const titleId = useId()
-  if (index === null) return null
+  const fieldId = useId()
+  const [draft, setDraft] = useState<AssignmentTestDraft>(editor.baseline)
+  const [errors, setErrors] = useState<TestErrors>({})
 
-  // Validate this test now (form-level validator only runs on page submit) and
-  // surface per-field errors. Returns valid?; "Done" waits until valid.
-  const validateAndShowErrors = () => {
-    const drafts: AssignmentTestDraft[] = form.state.values.tests
-    const otherNames = drafts
-      .filter((_, i) => i !== index)
-      .map((d) => d.name.trim())
-    const errors = validateTestDraft(drafts[index], otherNames)
+  const set = <K extends keyof AssignmentTestDraft>(
+    key: K,
+    value: AssignmentTestDraft[K],
+  ) => setDraft((prev) => ({ ...prev, [key]: value }))
 
-    for (const fieldName of VALIDATED_FIELDS) {
-      const message = errors[fieldName]
-      const key = `tests[${index}].${fieldName}` as Parameters<
-        typeof form.getFieldMeta
-      >[0]
-      // Fields that never mounted (e.g., exit code on an io test, or unbuilt
-      // fixture-file inputs) have no meta and nowhere to show an error.
-      if (!form.getFieldMeta(key)) continue
-      form.setFieldMeta(key, (meta) => ({
-        ...meta,
-        errorMap: { ...meta.errorMap, onSubmit: message },
-      }))
-    }
+  const dirty = !draftsEqual(draft, editor.baseline)
 
-    return Object.keys(errors).length === 0
+  const handleCommit = () => {
+    const found = validateTestDraft(draft, otherNames)
+    setErrors(found)
+    if (Object.keys(found).length === 0) onCommit(draft)
   }
 
-  const handleDone = () => {
-    if (validateAndShowErrors()) onClose()
-  }
+  const field = (name: keyof AssignmentTestDraft) => `${fieldId}-${name}`
 
   return (
-    <dialog
-      ref={dialogRef}
-      className="modal"
+    <Modal
+      dialogRef={dialogRef}
+      size="3xl"
+      boxClassName="max-h-[90vh]"
       aria-labelledby={titleId}
-      onClose={onClose}
+      onClose={onCancel}
       onKeyDown={(e) => {
         // Enter inside a modal input would implicitly submit the surrounding
-        // create-assignment form (this dialog renders inside it). Repurpose as
-        // "Done"; textareas keep Enter for newlines.
+        // create-assignment form (this modal renders inside it). Repurpose as
+        // commit; textareas keep Enter for newlines.
         if (
           e.key === "Enter" &&
           e.target instanceof HTMLElement &&
@@ -111,372 +107,286 @@ const AutogradingTestModal = ({
           e.target.tagName !== "BUTTON"
         ) {
           e.preventDefault()
-          handleDone()
+          if (dirty) handleCommit()
         }
       }}
     >
-      <div className="modal-box max-w-3xl max-h-[90vh]">
-        <div className="mb-6">
-          <h3 id={titleId} className="text-lg font-bold">
-            {t("assignments.autograder.editTest", { number: index + 1 })}
-          </h3>
-          <p className="text-sm opacity-70">
-            {t("assignments.autograder.editTestHint")}
-          </p>
+      <div className="mb-6">
+        <h3 id={titleId} className="text-lg font-bold">
+          {t("assignments.autograder.editTest", { number: editor.index + 1 })}
+        </h3>
+        <p className="text-sm opacity-70">
+          {t("assignments.autograder.editTestHint")}
+        </p>
+      </div>
+
+      <div className="space-y-5">
+        <div>
+          <label htmlFor={field("name")} className="label font-bold">
+            {t("assignments.autograder.testName")}
+          </label>
+          <Input
+            id={field("name")}
+            value={draft.name}
+            onChange={(e) => set("name", e.target.value)}
+            placeholder={t("assignments.autograder.testNamePlaceholder")}
+            invalid={!!errors.name}
+            aria-describedby={
+              errors.name ? `${field("name")}-error` : undefined
+            }
+          />
+          <FieldError error={errors.name} id={`${field("name")}-error`} />
         </div>
 
-        <div className="space-y-5">
-          <form.Field name={`tests[${index}].name`}>
-            {(field) => (
-              <div>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("assignments.autograder.testName")}
-                </label>
-                <Input
-                  id={field.name}
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder={t("assignments.autograder.testNamePlaceholder")}
-                  invalid={field.state.meta.errors.length > 0}
-                  aria-describedby={
-                    field.state.meta.errors.length > 0
-                      ? `${field.name}-error`
-                      : undefined
-                  }
-                />
-                <FieldError
-                  error={field.state.meta.errors[0]}
-                  id={`${field.name}-error`}
-                />
-              </div>
-            )}
-          </form.Field>
+        <fieldset>
+          <legend className="label font-bold">
+            {t("assignments.autograder.testType")}
+          </legend>
+          <div className="join w-full">
+            {TYPE_OPTIONS.map((option) => (
+              <input
+                key={option.value}
+                type="radio"
+                className="join-item btn btn-sm"
+                name={`${fieldId}-type`}
+                aria-label={t(option.labelKey)}
+                checked={draft.type === option.value}
+                onChange={() => set("type", option.value)}
+              />
+            ))}
+          </div>
+          <p className="label text-sm pt-1">
+            {(() => {
+              const hintKey = TYPE_OPTIONS.find(
+                (o) => o.value === draft.type,
+              )?.hintKey
+              return hintKey ? t(hintKey) : null
+            })()}
+          </p>
+        </fieldset>
 
-          <form.Field name={`tests[${index}].type`}>
-            {(field) => (
-              <fieldset>
-                <legend className="label font-bold">
-                  {t("assignments.autograder.testType")}
-                </legend>
-                <div className="join w-full">
-                  {TYPE_OPTIONS.map((option) => (
-                    <input
-                      key={option.value}
-                      type="radio"
-                      className="join-item btn btn-sm"
-                      name={`tests-${index}-type`}
-                      aria-label={t(option.labelKey)}
-                      checked={field.state.value === option.value}
-                      onChange={() => field.handleChange(option.value)}
-                    />
-                  ))}
-                </div>
-                <p className="label text-sm pt-1">
-                  {(() => {
-                    const hintKey = TYPE_OPTIONS.find(
-                      (o) => o.value === field.state.value,
-                    )?.hintKey
-                    return hintKey ? t(hintKey) : null
-                  })()}
-                </p>
-              </fieldset>
-            )}
-          </form.Field>
+        <div>
+          <label htmlFor={field("setup")} className="label font-bold">
+            {t("assignments.autograder.setupCommand")}
+          </label>
+          <Input
+            id={field("setup")}
+            className="font-mono"
+            value={draft.setup}
+            onChange={(e) => set("setup", e.target.value)}
+            placeholder={t("assignments.autograder.setupCommandPlaceholder")}
+          />
+        </div>
 
-          <form.Field name={`tests[${index}].setup`}>
-            {(field) => (
-              <div>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("assignments.autograder.setupCommand")}
-                </label>
-                <Input
-                  id={field.name}
-                  className="font-mono"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder={t(
-                    "assignments.autograder.setupCommandPlaceholder",
-                  )}
-                />
-              </div>
-            )}
-          </form.Field>
+        <div>
+          <label htmlFor={field("run")} className="label font-bold">
+            {t("assignments.autograder.runCommand")}
+          </label>
+          <Input
+            id={field("run")}
+            className="font-mono"
+            value={draft.run}
+            onChange={(e) => set("run", e.target.value)}
+            placeholder={t("assignments.autograder.runCommandPlaceholder")}
+            invalid={!!errors.run}
+            aria-describedby={errors.run ? `${field("run")}-error` : undefined}
+          />
+          <FieldError error={errors.run} id={`${field("run")}-error`} />
+        </div>
 
-          <form.Field name={`tests[${index}].run`}>
-            {(field) => (
-              <div>
-                <label htmlFor={field.name} className="label font-bold">
-                  {t("assignments.autograder.runCommand")}
-                </label>
-                <Input
-                  id={field.name}
-                  className="font-mono"
-                  value={field.state.value}
-                  onBlur={field.handleBlur}
-                  onChange={(e) => field.handleChange(e.target.value)}
-                  placeholder={t(
-                    "assignments.autograder.runCommandPlaceholder",
-                  )}
-                  invalid={field.state.meta.errors.length > 0}
-                  aria-describedby={
-                    field.state.meta.errors.length > 0
-                      ? `${field.name}-error`
-                      : undefined
-                  }
-                />
-                <FieldError
-                  error={field.state.meta.errors[0]}
-                  id={`${field.name}-error`}
-                />
-              </div>
-            )}
-          </form.Field>
+        {draft.type === "io" && (
+          <>
+            <div>
+              <label htmlFor={field("input")} className="label font-bold">
+                {t("assignments.autograder.input")}
+              </label>
+              <Textarea
+                id={field("input")}
+                className="font-mono"
+                value={draft.input}
+                onChange={(e) => set("input", e.target.value)}
+                placeholder={t("assignments.autograder.inputPlaceholder")}
+                rows={3}
+              />
+            </div>
 
-          <form.Subscribe selector={(state) => state.values.tests[index]?.type}>
-            {(typeValue) => (
-              <>
-                {typeValue === "io" && (
-                  <>
-                    <form.Field name={`tests[${index}].input`}>
-                      {(field) => (
-                        <div>
-                          <label
-                            htmlFor={field.name}
-                            className="label font-bold"
-                          >
-                            {t("assignments.autograder.input")}
-                          </label>
-                          <Textarea
-                            id={field.name}
-                            className="font-mono"
-                            value={field.state.value}
-                            onBlur={field.handleBlur}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder={t(
-                              "assignments.autograder.inputPlaceholder",
-                            )}
-                            rows={3}
-                          />
-                        </div>
-                      )}
-                    </form.Field>
-
-                    <form.Field name={`tests[${index}].expected`}>
-                      {(field) => (
-                        <div>
-                          <label
-                            htmlFor={field.name}
-                            className="label font-bold"
-                          >
-                            {t("assignments.autograder.expectedOutput")}
-                          </label>
-                          <Textarea
-                            id={field.name}
-                            className="font-mono"
-                            value={field.state.value}
-                            onBlur={field.handleBlur}
-                            onChange={(e) => field.handleChange(e.target.value)}
-                            placeholder={t(
-                              "assignments.autograder.expectedOutputPlaceholder",
-                            )}
-                            rows={5}
-                            invalid={field.state.meta.errors.length > 0}
-                            aria-describedby={
-                              field.state.meta.errors.length > 0
-                                ? `${field.name}-error`
-                                : undefined
-                            }
-                          />
-                          <FieldError
-                            error={field.state.meta.errors[0]}
-                            id={`${field.name}-error`}
-                          />
-                        </div>
-                      )}
-                    </form.Field>
-
-                    <form.Field name={`tests[${index}].comparison`}>
-                      {(field) => (
-                        <div>
-                          <label
-                            htmlFor={field.name}
-                            className="label font-bold"
-                          >
-                            {t("assignments.autograder.comparison")}
-                          </label>
-                          <Select
-                            id={field.name}
-                            value={field.state.value}
-                            onBlur={field.handleBlur}
-                            onChange={(e) =>
-                              field.handleChange(
-                                e.target.value as AssignmentTestComparison,
-                              )
-                            }
-                          >
-                            <option value="included">
-                              {t("assignments.autograder.comparisonIncluded")}
-                            </option>
-                            <option value="exact">
-                              {t("assignments.autograder.comparisonExact")}
-                            </option>
-                            <option value="regex">
-                              {t("assignments.autograder.comparisonRegex")}
-                            </option>
-                          </Select>
-                        </div>
-                      )}
-                    </form.Field>
-                  </>
+            <div>
+              <label htmlFor={field("expected")} className="label font-bold">
+                {t("assignments.autograder.expectedOutput")}
+              </label>
+              <Textarea
+                id={field("expected")}
+                className="font-mono"
+                value={draft.expected}
+                onChange={(e) => set("expected", e.target.value)}
+                placeholder={t(
+                  "assignments.autograder.expectedOutputPlaceholder",
                 )}
+                rows={5}
+                invalid={!!errors.expected}
+                aria-describedby={
+                  errors.expected ? `${field("expected")}-error` : undefined
+                }
+              />
+              <FieldError
+                error={errors.expected}
+                id={`${field("expected")}-error`}
+              />
+            </div>
 
-                {typeValue === "run" && (
-                  <form.Field name={`tests[${index}].exitCode`}>
-                    {(field) => (
-                      <div className="flex flex-col">
-                        <label htmlFor={field.name} className="label font-bold">
-                          {t("assignments.autograder.exitCode")}
-                        </label>
-                        <Input
-                          id={field.name}
-                          className="w-32"
-                          type="number"
-                          min={0}
-                          max={255}
-                          step={1}
-                          value={field.state.value}
-                          onBlur={field.handleBlur}
-                          onChange={(e) =>
-                            field.handleChange(
-                              e.target.value === ""
-                                ? ""
-                                : e.target.valueAsNumber,
-                            )
-                          }
-                          placeholder="0"
-                          invalid={field.state.meta.errors.length > 0}
-                          aria-describedby={
-                            field.state.meta.errors.length > 0
-                              ? `${field.name}-error`
-                              : undefined
-                          }
-                        />
-                        <p className="label text-sm pt-1">
-                          {t("assignments.autograder.exitCodeHint")}
-                        </p>
-                        <FieldError
-                          error={field.state.meta.errors[0]}
-                          id={`${field.name}-error`}
-                        />
-                      </div>
-                    )}
-                  </form.Field>
-                )}
+            <div>
+              <label htmlFor={field("comparison")} className="label font-bold">
+                {t("assignments.autograder.comparison")}
+              </label>
+              <Select
+                id={field("comparison")}
+                value={draft.comparison}
+                onChange={(e) =>
+                  set("comparison", e.target.value as AssignmentTestComparison)
+                }
+              >
+                <option value="included">
+                  {t("assignments.autograder.comparisonIncluded")}
+                </option>
+                <option value="exact">
+                  {t("assignments.autograder.comparisonExact")}
+                </option>
+                <option value="regex">
+                  {t("assignments.autograder.comparisonRegex")}
+                </option>
+              </Select>
+            </div>
+          </>
+        )}
 
-                {typeValue === "python" && (
-                  <p className="rounded-box border border-dashed p-3 text-sm opacity-70">
-                    <Trans
-                      i18nKey="assignments.autograder.pythonNote"
-                      components={{ code: <code dir="ltr" /> }}
-                    />
-                  </p>
-                )}
-              </>
-            )}
-          </form.Subscribe>
+        {draft.type === "run" && (
+          <div className="flex flex-col">
+            <label htmlFor={field("exitCode")} className="label font-bold">
+              {t("assignments.autograder.exitCode")}
+            </label>
+            <Input
+              id={field("exitCode")}
+              className="w-32"
+              type="number"
+              min={0}
+              max={255}
+              step={1}
+              value={draft.exitCode}
+              onChange={(e) =>
+                set(
+                  "exitCode",
+                  e.target.value === "" ? "" : e.target.valueAsNumber,
+                )
+              }
+              placeholder="0"
+              invalid={!!errors.exitCode}
+              aria-describedby={
+                errors.exitCode ? `${field("exitCode")}-error` : undefined
+              }
+            />
+            <p className="label text-sm pt-1">
+              {t("assignments.autograder.exitCodeHint")}
+            </p>
+            <FieldError
+              error={errors.exitCode}
+              id={`${field("exitCode")}-error`}
+            />
+          </div>
+        )}
 
-          <div className="flex gap-8">
-            <form.Field name={`tests[${index}].timeout`}>
-              {(field) => (
-                <div className="flex flex-col">
-                  <label htmlFor={field.name} className="label font-bold">
-                    {t("assignments.autograder.timeout")}
-                  </label>
-                  <Input
-                    id={field.name}
-                    className="w-32"
-                    type="number"
-                    min={0}
-                    max={600}
-                    step={1}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) =>
-                      field.handleChange(
-                        e.target.value === "" ? 0 : e.target.valueAsNumber,
-                      )
-                    }
-                    invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                  />
-                  <p className="label text-sm pt-1">
-                    {t("assignments.autograder.timeoutHint")}
-                  </p>
-                  <FieldError
-                    error={field.state.meta.errors[0]}
-                    id={`${field.name}-error`}
-                  />
-                </div>
-              )}
-            </form.Field>
+        {draft.type === "python" && (
+          <p className="rounded-box border border-dashed p-3 text-sm opacity-70">
+            <Trans
+              i18nKey="assignments.autograder.pythonNote"
+              components={{ code: <code dir="ltr" /> }}
+            />
+          </p>
+        )}
 
-            <form.Field name={`tests[${index}].points`}>
-              {(field) => (
-                <div className="flex flex-col">
-                  <label htmlFor={field.name} className="label font-bold">
-                    {t("assignments.autograder.points")}
-                  </label>
-                  <Input
-                    id={field.name}
-                    className="w-32"
-                    type="number"
-                    min={0}
-                    max={1000}
-                    step={1}
-                    value={field.state.value}
-                    onBlur={field.handleBlur}
-                    onChange={(e) =>
-                      field.handleChange(
-                        e.target.value === "" ? 0 : e.target.valueAsNumber,
-                      )
-                    }
-                    invalid={field.state.meta.errors.length > 0}
-                    aria-describedby={
-                      field.state.meta.errors.length > 0
-                        ? `${field.name}-error`
-                        : undefined
-                    }
-                  />
-                  <FieldError
-                    error={field.state.meta.errors[0]}
-                    id={`${field.name}-error`}
-                  />
-                </div>
-              )}
-            </form.Field>
+        <div className="flex gap-8">
+          <div className="flex flex-col">
+            <label htmlFor={field("timeout")} className="label font-bold">
+              {t("assignments.autograder.timeout")}
+            </label>
+            <Input
+              id={field("timeout")}
+              className="w-32"
+              type="number"
+              min={0}
+              max={600}
+              step={1}
+              value={draft.timeout}
+              onChange={(e) =>
+                set(
+                  "timeout",
+                  e.target.value === "" ? 0 : e.target.valueAsNumber,
+                )
+              }
+              invalid={!!errors.timeout}
+              aria-describedby={
+                errors.timeout ? `${field("timeout")}-error` : undefined
+              }
+            />
+            <p className="label text-sm pt-1">
+              {t("assignments.autograder.timeoutHint")}
+            </p>
+            <FieldError
+              error={errors.timeout}
+              id={`${field("timeout")}-error`}
+            />
+          </div>
+
+          <div className="flex flex-col">
+            <label htmlFor={field("points")} className="label font-bold">
+              {t("assignments.autograder.points")}
+            </label>
+            <Input
+              id={field("points")}
+              className="w-32"
+              type="number"
+              min={0}
+              max={1000}
+              step={1}
+              value={draft.points}
+              onChange={(e) =>
+                set(
+                  "points",
+                  e.target.value === "" ? 0 : e.target.valueAsNumber,
+                )
+              }
+              invalid={!!errors.points}
+              aria-describedby={
+                errors.points ? `${field("points")}-error` : undefined
+              }
+            />
+            <FieldError error={errors.points} id={`${field("points")}-error`} />
           </div>
         </div>
+      </div>
 
-        <div className="modal-action">
-          <Button variant="primary" onClick={handleDone}>
-            {t("assignments.autograder.done")}
-          </Button>
-        </div>
+      <div className="modal-action">
+        <Button variant="ghost" onClick={onCancel}>
+          {t("common.cancel")}
+        </Button>
+        <Button variant="primary" onClick={handleCommit} disabled={!dirty}>
+          {editor.mode === "new"
+            ? t("assignments.autograder.addTest")
+            : t("common.save")}
+        </Button>
       </div>
-      <div className="modal-backdrop">
-        <button type="button" onClick={onClose}>
-          {t("common.close")}
-        </button>
-      </div>
-    </dialog>
+    </Modal>
   )
 }
+
+// Drives the editor's dirty check so an untouched draft can't be committed.
+// Safe as a key-by-key `===` because every draft field is a primitive.
+export const draftsEqual = (
+  a: AssignmentTestDraft,
+  b: AssignmentTestDraft,
+): boolean =>
+  (Object.keys(a) as (keyof AssignmentTestDraft)[]).every(
+    (key) => a[key] === b[key],
+  )
 
 const typeBadge = (type: AssignmentTestDraft["type"], t: TFunction) => {
   const labelKey = TYPE_OPTIONS.find((o) => o.value === type)?.labelKey
@@ -486,27 +396,53 @@ const typeBadge = (type: AssignmentTestDraft["type"], t: TFunction) => {
 const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
-  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [editor, setEditor] = useState<EditorState | null>(null)
 
   useEffect(() => {
-    if (editingIndex === null) return
-
+    if (!editor) return
     const dialog = dialogRef.current
     if (!dialog || dialog.open) return
-
     dialog.showModal()
-  }, [editingIndex])
+  }, [editor])
 
-  const openEditor = (index: number) => {
-    setEditingIndex(index)
+  const openNewEditor = () => {
+    setEditor({
+      mode: "new",
+      index: form.getFieldValue("tests").length,
+      baseline: emptyTestDraft(),
+    })
+  }
+
+  const openEditEditor = (index: number) => {
+    setEditor({
+      mode: "edit",
+      index,
+      baseline: form.getFieldValue("tests")[index],
+    })
   }
 
   const closeEditor = () => {
     const dialog = dialogRef.current
     if (dialog?.open) dialog.close()
-    setEditingIndex(null)
+    setEditor(null)
   }
 
+  // The only path from a local draft into the form. Cancel/Escape/backdrop
+  // never reach it, so an abandoned draft leaves the list unchanged.
+  const commitEditor = (draft: AssignmentTestDraft) => {
+    if (!editor) return
+    if (editor.mode === "new") {
+      form.pushFieldValue("tests", draft)
+    } else {
+      form.setFieldValue(`tests[${editor.index}]`, draft)
+    }
+    closeEditor()
+  }
+
+  const otherNames = (tests: AssignmentTestDraft[], active: EditorState) =>
+    tests
+      .filter((_, i) => active.mode === "new" || i !== active.index)
+      .map((d) => d.name.trim())
   return (
     <Card bordered={false}>
       <form.Field name="tests" mode="array">
@@ -535,14 +471,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                 </h3>
               </div>
               <div>
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    const newIndex = field.state.value.length
-                    field.pushValue(emptyTestDraft())
-                    openEditor(newIndex)
-                  }}
-                >
+                <Button variant="outline" onClick={openNewEditor}>
                   {t("assignments.autograder.addTest")}
                 </Button>
               </div>
@@ -607,7 +536,7 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
                             <Button
                               variant="ghost"
                               size="sm"
-                              onClick={() => openEditor(index)}
+                              onClick={() => openEditEditor(index)}
                               aria-label={t("assignments.autograder.editTest", {
                                 number: index + 1,
                               })}
@@ -636,12 +565,18 @@ const AutogradingTestsPane = ({ form }: { form: AssignmentForm }) => {
               </tbody>
             </table>
 
-            <AutogradingTestModal
-              form={form}
-              dialogRef={dialogRef}
-              index={editingIndex}
-              onClose={closeEditor}
-            />
+            {editor && (
+              <AutogradingTestModal
+                // Remount per open so the local draft re-initializes from the
+                // freshly opened baseline.
+                key={`${editor.mode}-${editor.index}`}
+                editor={editor}
+                dialogRef={dialogRef}
+                otherNames={otherNames(field.state.value, editor)}
+                onCancel={closeEditor}
+                onCommit={commitEditor}
+              />
+            )}
           </Card.Body>
         )}
       </form.Field>
