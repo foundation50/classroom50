@@ -1,10 +1,4 @@
-import {
-  AlertTriangle,
-  ChevronRight,
-  LinkIcon,
-  Users,
-  UserPlus,
-} from "lucide-react"
+import { AlertTriangle, ChevronRight, LinkIcon, UserPlus } from "lucide-react"
 import { Trans, useTranslation } from "react-i18next"
 
 import {
@@ -165,13 +159,13 @@ function AcceptShareSummaryNotice({
   }
 
   return (
-    <div className="flex items-center gap-2 text-sm text-base-content/70">
-      <Users aria-hidden="true" className="size-4 shrink-0" />
-      <span>
-        {t("submissions.accept.shareWithCount", {
-          count: summary.acceptableStudents,
-        })}
-      </span>
+    <div className="text-sm text-info">
+      <Trans
+        i18nKey="submissions.accept.shareWithCount"
+        count={summary.acceptableStudents}
+        values={{ count: summary.acceptableStudents }}
+        components={{ count: <span className="font-bold" /> }}
+      />
     </div>
   )
 }
