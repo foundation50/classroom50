@@ -1,6 +1,16 @@
-import { describe, expect, it } from "vitest"
-import { classifyMembershipError } from "./MembershipError"
+// @vitest-environment happy-dom
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { classifyMembershipError, MembershipError } from "./MembershipError"
 import { GitHubAPIError } from "@/github-core/errors"
+
+vi.mock("react-i18next", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("react-i18next")>()
+  return {
+    ...actual,
+    useTranslation: () => ({ t: (key: string) => key }),
+  }
+})
 
 const rateLimit = {
   limit: null,
@@ -126,5 +136,23 @@ describe("classifyMembershipError", () => {
     // Data-minimization: details carry only the boolean, never the raw header.
     expect(JSON.stringify(info.details)).not.toContain("authorization_request")
     expect(JSON.stringify(info.details)).not.toContain("secret-token")
+  })
+})
+
+describe("MembershipError rendering", () => {
+  afterEach(cleanup)
+
+  it("gives the not-a-member screen a 'Check again' action (not a dead end)", () => {
+    const onRetry = vi.fn()
+    const info = classifyMembershipError(makeError({ status: 404 }), {
+      org: "acme",
+    })
+    render(<MembershipError info={info} org="acme" onRetry={onRetry} />)
+
+    const button = screen.getByRole("button", {
+      name: "membership.notAMember.checkAgain",
+    })
+    fireEvent.click(button)
+    expect(onRetry).toHaveBeenCalledTimes(1)
   })
 })

@@ -137,8 +137,9 @@ const MembershipDetails = ({
 // Shared, cause-specific membership error card for the onboarding and accept
 // pages: a per-cause title/body, at least one recovery action (never a dead
 // end), and a collapsed, data-minimized diagnostics block for the teacher.
-// `onRetry` backs the generic Retry action; SSO/not-a-member causes point
-// elsewhere.
+// `onRetry` backs the generic Retry and the not-a-member "Check again"
+// (re-reads membership after the teacher's invite lands); ssoWithUrl points to
+// the SSO authorize URL instead.
 export const MembershipError = ({
   info,
   org,
@@ -218,6 +219,12 @@ export const MembershipError = ({
                 rel="noopener noreferrer"
               >
                 {t("membership.ssoRequired.authorizeButton")}
+              </Button>
+            )}
+
+            {cause === "notAMember" && onRetry && (
+              <Button variant="primary" size="sm" onClick={onRetry}>
+                {t("membership.notAMember.checkAgain")}
               </Button>
             )}
 

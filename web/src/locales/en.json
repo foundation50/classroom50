@@ -1051,8 +1051,9 @@
     },
     "notAMember": {
       "title": "Not a member yet",
-      "body": "We couldn't confirm your membership in the <org>{{org}}</org> organization.",
-      "instructions": "Ask your teacher to confirm they've invited you, then reload this page. If you just accepted an email invitation, give GitHub a moment and try again."
+      "body": "You're not yet a member of the <org>{{org}}</org> organization, so you can't accept this assignment. Joining is required first — a GitHub organization invitation gives you access to create your assignment repository.",
+      "instructions": "Ask your teacher to add you to the class roster and send you an invitation (they can do this from the classroom roster page). GitHub will email the invitation to your account — accept it, then check again here. If you just accepted an invitation, give GitHub a moment to catch up.",
+      "checkAgain": "Check again"
     },
     "generic": {
       "title": "Something went wrong",
