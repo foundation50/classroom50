@@ -1,5 +1,6 @@
 import { AlertTriangle, ChevronRight, LinkIcon, UserPlus } from "lucide-react"
 import { Trans, useTranslation } from "react-i18next"
+import { Link } from "@tanstack/react-router"
 
 import {
   Alert,
@@ -159,25 +160,21 @@ function AcceptShareSummaryNotice({
   }
 
   return (
-    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div className="text-sm text-info">
-        <Trans
-          i18nKey="submissions.accept.shareWithCount"
-          count={summary.acceptableStudents}
-          values={{ count: summary.acceptableStudents }}
-          components={{ count: <span className="font-bold" /> }}
-        />
-      </div>
-      <RouterButton
-        to="/$org/$classroom/roster"
-        params={{ org, classroom }}
-        variant="ghost"
-        size="sm"
-        className="whitespace-nowrap sm:shrink-0"
-      >
-        <UserPlus aria-hidden="true" className="size-4" />
-        {t("submissions.accept.manageRoster")}
-      </RouterButton>
-    </div>
+    <p className="text-sm text-base-content/70">
+      <Trans
+        i18nKey="submissions.accept.shareWithCount"
+        count={summary.acceptableStudents}
+        values={{ count: summary.acceptableStudents }}
+        components={{
+          count: (
+            <Link
+              to="/$org/$classroom/roster"
+              params={{ org, classroom }}
+              className="font-bold text-info underline decoration-info/40 underline-offset-2 hover:decoration-info"
+            />
+          ),
+        }}
+      />
+    </p>
   )
 }
