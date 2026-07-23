@@ -182,9 +182,15 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
   }
 }
 
-function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
+function HideOrgMenu({
+  summary,
+  className,
+}: {
+  summary: Classroom50OrgSummary
+  className?: string
+}) {
   const { t } = useTranslation()
-  const { org, canOpen } = useOrgAffordances(summary)
+  const { org } = useOrgAffordances(summary)
   const { hide } = useHiddenOrgs()
   const { notify } = useToast()
 
@@ -197,6 +203,35 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
       message: t("orgs.card.hidden", { org: org.login }),
     })
   }
+
+  return (
+    <div className={`dropdown dropdown-end ${className ?? ""}`}>
+      <Button
+        variant="ghost"
+        size="sm"
+        shape="square"
+        aria-label={t("orgs.card.moreActions", { org: org.login })}
+      >
+        <EllipsisVertical aria-hidden="true" className="size-4" />
+      </Button>
+      <ul
+        tabIndex={0}
+        className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+      >
+        <li>
+          <button type="button" onClick={handleHide}>
+            <EyeOff aria-hidden="true" className="size-4" />
+            {t("orgs.card.hide")}
+          </button>
+        </li>
+      </ul>
+    </div>
+  )
+}
+
+function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
+  const { t } = useTranslation()
+  const { org, canOpen } = useOrgAffordances(summary)
 
   return (
     <>
@@ -216,27 +251,6 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
           {t("orgs.card.open")}
         </Link>
       )}
-      <div className="dropdown dropdown-end shrink-0">
-        <Button
-          variant="ghost"
-          size="sm"
-          shape="square"
-          aria-label={t("orgs.card.moreActions", { org: org.login })}
-        >
-          <EllipsisVertical aria-hidden="true" className="size-4" />
-        </Button>
-        <ul
-          tabIndex={0}
-          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
-        >
-          <li>
-            <button type="button" onClick={handleHide}>
-              <EyeOff aria-hidden="true" className="size-4" />
-              {t("orgs.card.hide")}
-            </button>
-          </li>
-        </ul>
-      </div>
     </>
   )
 }
@@ -270,8 +284,9 @@ function OrgCard({
       shadow={false}
       className="col-span-12 md:col-span-6"
     >
-      <Card.Body className="justify-between">
-        <div className="flex gap-4">
+      <Card.Body className="relative justify-between">
+        <HideOrgMenu summary={summary} className="absolute end-2 top-2" />
+        <div className="flex gap-4 pe-8">
           <img
             src={org.avatar_url}
             alt=""
@@ -356,6 +371,7 @@ function OrgRow({
 
       <div className="flex shrink-0 items-center justify-end gap-2">
         <OrgActions summary={summary} />
+        <HideOrgMenu summary={summary} />
       </div>
     </motion.div>
   )
