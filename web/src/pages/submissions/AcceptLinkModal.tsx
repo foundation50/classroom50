@@ -123,7 +123,7 @@ function AcceptShareSummaryNotice({
   classroomName?: string
 }) {
   const { t } = useTranslation()
-  if (!summary || !org || !classroom) return null
+  if (!summary || !summary.resolved || !org || !classroom) return null
 
   if (summary.warnNoStudents) {
     return (
@@ -159,13 +159,25 @@ function AcceptShareSummaryNotice({
   }
 
   return (
-    <div className="text-sm text-info">
-      <Trans
-        i18nKey="submissions.accept.shareWithCount"
-        count={summary.acceptableStudents}
-        values={{ count: summary.acceptableStudents }}
-        components={{ count: <span className="font-bold" /> }}
-      />
+    <div className="flex flex-col items-start gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div className="text-sm text-info">
+        <Trans
+          i18nKey="submissions.accept.shareWithCount"
+          count={summary.acceptableStudents}
+          values={{ count: summary.acceptableStudents }}
+          components={{ count: <span className="font-bold" /> }}
+        />
+      </div>
+      <RouterButton
+        to="/$org/$classroom/roster"
+        params={{ org, classroom }}
+        variant="ghost"
+        size="sm"
+        className="whitespace-nowrap sm:shrink-0"
+      >
+        <UserPlus aria-hidden="true" className="size-4" />
+        {t("submissions.accept.manageRoster")}
+      </RouterButton>
     </div>
   )
 }
