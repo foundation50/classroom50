@@ -1,35 +1,41 @@
-// Roster-readiness warning for the assignment share (accept-link) modal. The
-// accept link only works for ACTIVE org members enrolled on the classroom's
-// student team, so a teacher who shares it before enrolling anyone (or while
-// everyone is still a pending invite) hands out a link nobody can use yet.
+// Roster-readiness summary for the assignment share (accept-link) modal.
 //
-//   - noStudents: no enrolled students can accept — nobody with the student
-//                 role is an active member yet (the #376 case). Staff-only
-//                 (TA/HTA/teacher) enrollment still counts as noStudents.
-//   - pending:    some enrolled, but `pending` invited students can't accept
-//                 until they join the org.
-//   - none:       at least one enrolled student and nothing pending to flag.
-export type AcceptShareWarning =
-  | { kind: "none" }
-  | { kind: "noStudents" }
-  | { kind: "pending"; pending: number }
+// The accept link works for any student the accept flow can turn into an active
+// org member: an already-enrolled student, AND a student with a PENDING org
+// invite (the accept page auto-accepts the invite inline — see
+// useAcceptAndVerifyMembership). So the count of students who can accept is
+// enrolled + pending; a teacher who shares before ANY student exists (zero
+// enrolled and zero pending) hands out a link nobody can use yet (the #376
+// case).
+export type AcceptShareSummary = {
+  // Students who can accept the link now or after auto-accepting their invite:
+  // enrolled students + pending student invites.
+  acceptableStudents: number
+  // Whether to warn that no student can accept yet (acceptableStudents === 0),
+  // loading/error-safe (see resolveAcceptShareSummary).
+  warnNoStudents: boolean
+}
 
 // Pure decision so the branches (esp. the fail-safe on loading/error) are
-// testable without React. Mirrors resolveEmptyRosterWarning: a loading or
-// errored roster read NEVER warns — asserting "no students" on a transient or
-// permission blip would false-alarm a populated classroom. `pendingHidden`
-// (a non-owner can't read invitations) suppresses the pending note the same way.
-export function resolveAcceptShareWarning(input: {
+// testable without React. A loading or errored roster read NEVER warns and
+// reports a 0 count — asserting "no students" on a transient or permission blip
+// would false-alarm a populated classroom (mirrors resolveEmptyRosterWarning).
+// `pendingHidden` (a non-owner can't read invitations) drops pending from the
+// tally so an unreadable count isn't guessed.
+export function resolveAcceptShareSummary(input: {
   isLoading: boolean
   isError: boolean
   enrolledStudents: number
   pending: number
   pendingHidden: boolean
-}): AcceptShareWarning {
-  if (input.isLoading || input.isError) return { kind: "none" }
-  if (input.enrolledStudents === 0) return { kind: "noStudents" }
-  if (!input.pendingHidden && input.pending > 0) {
-    return { kind: "pending", pending: input.pending }
+}): AcceptShareSummary {
+  if (input.isLoading || input.isError) {
+    return { acceptableStudents: 0, warnNoStudents: false }
   }
-  return { kind: "none" }
+  const pending = input.pendingHidden ? 0 : input.pending
+  const acceptableStudents = input.enrolledStudents + pending
+  return {
+    acceptableStudents,
+    warnNoStudents: acceptableStudents === 0,
+  }
 }

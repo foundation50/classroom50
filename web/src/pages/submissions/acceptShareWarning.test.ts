@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { resolveAcceptShareWarning } from "./acceptShareWarning"
+import { resolveAcceptShareSummary } from "./acceptShareWarning"
 
-describe("resolveAcceptShareWarning", () => {
+describe("resolveAcceptShareSummary", () => {
   const base = {
     isLoading: false,
     isError: false,
@@ -10,56 +10,73 @@ describe("resolveAcceptShareWarning", () => {
     pendingHidden: false,
   }
 
-  it("never warns while the roster is loading", () => {
+  it("never warns and reports 0 while the roster is loading", () => {
     expect(
-      resolveAcceptShareWarning({
+      resolveAcceptShareSummary({
         ...base,
         isLoading: true,
         enrolledStudents: 0,
       }),
-    ).toEqual({ kind: "none" })
+    ).toEqual({ acceptableStudents: 0, warnNoStudents: false })
   })
 
   it("never warns on a roster read error (no false alarm on a blip)", () => {
     expect(
-      resolveAcceptShareWarning({
+      resolveAcceptShareSummary({
         ...base,
         isError: true,
         enrolledStudents: 0,
       }),
-    ).toEqual({ kind: "none" })
+    ).toEqual({ acceptableStudents: 0, warnNoStudents: false })
   })
 
-  it("warns noStudents when zero students are enrolled", () => {
-    expect(resolveAcceptShareWarning({ ...base, enrolledStudents: 0 })).toEqual(
-      { kind: "noStudents" },
+  it("warns when zero students are enrolled and none pending", () => {
+    expect(resolveAcceptShareSummary({ ...base, enrolledStudents: 0 })).toEqual(
+      {
+        acceptableStudents: 0,
+        warnNoStudents: true,
+      },
     )
   })
 
-  it("flags pending invites when some students are enrolled", () => {
+  it("counts pending invites as acceptable (accept flow auto-accepts them)", () => {
     expect(
-      resolveAcceptShareWarning({ ...base, enrolledStudents: 2, pending: 4 }),
-    ).toEqual({ kind: "pending", pending: 4 })
+      resolveAcceptShareSummary({ ...base, enrolledStudents: 2, pending: 4 }),
+    ).toEqual({ acceptableStudents: 6, warnNoStudents: false })
   })
 
-  it("suppresses the pending note when pending is unreadable (non-owner)", () => {
+  it("does not warn when only pending students exist (they can still accept)", () => {
     expect(
-      resolveAcceptShareWarning({
+      resolveAcceptShareSummary({ ...base, enrolledStudents: 0, pending: 5 }),
+    ).toEqual({ acceptableStudents: 5, warnNoStudents: false })
+  })
+
+  it("excludes pending from the count when unreadable (non-owner)", () => {
+    expect(
+      resolveAcceptShareSummary({
         ...base,
         enrolledStudents: 2,
         pending: 4,
         pendingHidden: true,
       }),
-    ).toEqual({ kind: "none" })
+    ).toEqual({ acceptableStudents: 2, warnNoStudents: false })
   })
 
-  it("prefers noStudents over pending when zero are enrolled", () => {
+  it("warns when only-pending but pending is unreadable (non-owner)", () => {
     expect(
-      resolveAcceptShareWarning({ ...base, enrolledStudents: 0, pending: 5 }),
-    ).toEqual({ kind: "noStudents" })
+      resolveAcceptShareSummary({
+        ...base,
+        enrolledStudents: 0,
+        pending: 5,
+        pendingHidden: true,
+      }),
+    ).toEqual({ acceptableStudents: 0, warnNoStudents: true })
   })
 
-  it("returns none when enrolled and nothing pending", () => {
-    expect(resolveAcceptShareWarning(base)).toEqual({ kind: "none" })
+  it("reports the enrolled count when nothing is pending", () => {
+    expect(resolveAcceptShareSummary(base)).toEqual({
+      acceptableStudents: 3,
+      warnNoStudents: false,
+    })
   })
 })

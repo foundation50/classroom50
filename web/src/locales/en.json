@@ -1692,8 +1692,8 @@
       "copyCli": "Copy CLI command",
       "preferCli": "Prefer the command line?",
       "warnNoStudents": "No students can accept this link in <classroom>{{classroom}}</classroom> yet. Add students to the roster and invite them to the organization first.",
-      "warnPending_one": "{{count}} invited student hasn't joined the organization yet and can't accept this link until they do.",
-      "warnPending_other": "{{count}} invited students haven't joined the organization yet and can't accept this link until they do.",
+      "shareWithCount_one": "Sharing with {{count}} student who can accept this assignment.",
+      "shareWithCount_other": "Sharing with {{count}} students who can accept this assignment.",
       "manageRoster": "Manage roster"
     },
     "stats": {

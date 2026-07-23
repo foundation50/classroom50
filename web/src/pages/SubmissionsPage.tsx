@@ -56,7 +56,7 @@ import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
-import { resolveAcceptShareWarning } from "@/pages/submissions/acceptShareWarning"
+import { resolveAcceptShareSummary } from "@/pages/submissions/acceptShareWarning"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
@@ -143,13 +143,14 @@ const SubmissionsPageContent = () => {
   // students is wasted effort. `show` is loading-aware (won't flash before the
   // roster resolves).
   const emptyRoster = useEmptyRosterWarning(org, classroom)
-  // Roster-readiness warning for the share modal: warn when no student can
-  // accept the link yet, or flag pending (invited-but-not-joined) students.
-  // Uses the enrolled STUDENT count (roleCounts.student), not all-enrolled, so a
-  // staff-only classroom still reads as "no students who can accept".
-  const acceptShareWarning = useMemo(
+  // Roster-readiness summary for the share modal: how many students can accept
+  // (enrolled + pending, since the accept flow auto-accepts a pending invite),
+  // and whether to warn that none can yet. Uses the enrolled STUDENT count
+  // (roleCounts.student), not all-enrolled, so staff-only enrollment still reads
+  // as "no students can accept".
+  const acceptShareSummary = useMemo(
     () =>
-      resolveAcceptShareWarning({
+      resolveAcceptShareSummary({
         isLoading: rosterLoading,
         isError: rosterError,
         enrolledStudents: rosterRoleCounts.student,
@@ -1016,7 +1017,7 @@ const SubmissionsPageContent = () => {
         org={org}
         classroom={classroom}
         classroomName={classroomMeta?.name || classroomMeta?.short_name}
-        warning={acceptShareWarning}
+        summary={acceptShareSummary}
       />
     </PageShell>
   )

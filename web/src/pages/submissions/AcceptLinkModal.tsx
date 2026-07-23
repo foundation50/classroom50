@@ -1,8 +1,8 @@
 import {
   AlertTriangle,
   ChevronRight,
-  Info,
   LinkIcon,
+  Users,
   UserPlus,
 } from "lucide-react"
 import { Trans, useTranslation } from "react-i18next"
@@ -16,7 +16,7 @@ import {
   rtlFlip,
 } from "@/components/ui"
 import { useCopyToClipboard } from "@/hooks/useCopyToClipboard"
-import type { AcceptShareWarning } from "./acceptShareWarning"
+import type { AcceptShareSummary } from "./acceptShareWarning"
 
 // The "How students accept" content, moved out of the page into a modal so the
 // roster surfaces higher. Owns its own clipboard state (two independent copy
@@ -30,7 +30,7 @@ export function AcceptLinkModal({
   org,
   classroom,
   classroomName,
-  warning,
+  summary,
 }: {
   open: boolean
   onClose: () => void
@@ -38,16 +38,16 @@ export function AcceptLinkModal({
   cli: string
   hasSecret: boolean
   // For the roster warning's "manage roster" link. Optional so a call site
-  // without a resolved classroom can omit the warning entirely.
+  // without a resolved classroom can omit the summary entirely.
   org?: string
   classroom?: string
   // Human-readable classroom name for the warning copy (classroom.json name /
   // short_name), falling back to the classroom slug at the call site.
   classroomName?: string
-  // Roster-readiness warning: whether anyone can actually accept this link yet.
-  // Resolved by the page (which already reads the team roster) and passed in so
-  // this component stays presentational. Omit / "none" to show no warning.
-  warning?: AcceptShareWarning
+  // Roster-readiness summary: how many students can accept, and whether to warn
+  // that none can yet. Resolved by the page (which already reads the team
+  // roster) and passed in so this component stays presentational.
+  summary?: AcceptShareSummary
 }) {
   const { t } = useTranslation()
   const { copied: copiedUrl, copy: copyUrl } = useCopyToClipboard(url, 1500)
@@ -70,8 +70,8 @@ export function AcceptLinkModal({
       </div>
 
       <div className="mt-4 flex flex-col gap-4">
-        <AcceptShareWarningNotice
-          warning={warning}
+        <AcceptShareSummaryNotice
+          summary={summary}
           org={org}
           classroom={classroom}
           classroomName={classroomName}
@@ -113,25 +113,25 @@ export function AcceptLinkModal({
 
 export default AcceptLinkModal
 
-// Roster-readiness notice shown inside the share modal. Warns (error tone) when
-// no student can accept the link yet, or informs (info tone) when some invited
-// students are still pending and can't accept until they join the org. Renders
-// nothing for "none" or a missing classroom.
-function AcceptShareWarningNotice({
-  warning,
+// Roster-readiness notice shown inside the share modal. Warns (warning tone)
+// when no student can accept the link yet, otherwise shows how many students
+// the link reaches (enrolled + pending, since the accept flow auto-accepts a
+// pending invite). Renders nothing while unresolved or without a classroom.
+function AcceptShareSummaryNotice({
+  summary,
   org,
   classroom,
   classroomName,
 }: {
-  warning?: AcceptShareWarning
+  summary?: AcceptShareSummary
   org?: string
   classroom?: string
   classroomName?: string
 }) {
   const { t } = useTranslation()
-  if (!warning || warning.kind === "none" || !org || !classroom) return null
+  if (!summary || !org || !classroom) return null
 
-  if (warning.kind === "noStudents") {
+  if (summary.warnNoStudents) {
     return (
       <Alert
         tone="warning"
@@ -165,26 +165,13 @@ function AcceptShareWarningNotice({
   }
 
   return (
-    <Alert
-      tone="info"
-      className="flex flex-col items-stretch gap-3 sm:flex-row sm:items-center sm:justify-between"
-    >
-      <div className="flex items-start gap-2">
-        <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-        <span className="text-sm">
-          {t("submissions.accept.warnPending", { count: warning.pending })}
-        </span>
-      </div>
-      <RouterButton
-        to="/$org/$classroom/roster"
-        params={{ org, classroom }}
-        variant="info"
-        size="sm"
-        className="whitespace-nowrap sm:shrink-0"
-      >
-        <UserPlus aria-hidden="true" className="size-4" />
-        {t("submissions.accept.manageRoster")}
-      </RouterButton>
-    </Alert>
+    <div className="flex items-center gap-2 text-sm text-base-content/70">
+      <Users aria-hidden="true" className="size-4 shrink-0" />
+      <span>
+        {t("submissions.accept.shareWithCount", {
+          count: summary.acceptableStudents,
+        })}
+      </span>
+    </div>
   )
 }
