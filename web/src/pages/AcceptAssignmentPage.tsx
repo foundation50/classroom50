@@ -26,7 +26,7 @@ import {
   MembershipError,
 } from "@/components/MembershipError"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
-import useStudentClassrooms from "@/hooks/useStudentClassrooms"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useSafeSubmit } from "@/hooks/useSafeSubmit"
 import { formatDueDateTime, isPastDue } from "@/util/formatDate"
 import { studentRepoName } from "@/util/studentRepo"
@@ -530,12 +530,9 @@ const AcceptAssignmentPage = () => {
   const linkSecret = typeof search.k === "string" ? search.k : undefined
 
   // Fallback for a bare accept link (no ?k=): an already-enrolled student's own
-  // team description carries the classroom's capability secret, so recover it
-  // from GET /user/teams. The link secret still wins when present.
-  const { classrooms: studentClassrooms } = useStudentClassrooms(org)
-  const teamSecret = classroom
-    ? studentClassrooms.find((c) => c.classroom === classroom)?.secret
-    : undefined
+  // team description carries the classroom's capability secret. Skipped when the
+  // link already supplies one, so the common path avoids a GET /user/teams read.
+  const teamSecret = useClassroomSecret(org, classroom, !linkSecret)
   const secret = linkSecret ?? teamSecret
 
   const { user } = useGithubAuth()

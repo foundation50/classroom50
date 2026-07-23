@@ -117,3 +117,17 @@ export function useStudentClassrooms(
 }
 
 export default useStudentClassrooms
+
+// Resolve a student's capability secret for a classroom, config-free: the
+// team-description bootstrap record is the source. `enabled: false` skips the
+// GET /user/teams read for callers that already hold the secret (e.g. an accept
+// link's ?k=), returning undefined without a network round-trip.
+export function useClassroomSecret(
+  org: string | undefined,
+  classroom: string | undefined,
+  enabled = true,
+): string | undefined {
+  const { classrooms } = useStudentClassrooms(enabled ? org : undefined)
+  if (!classroom) return undefined
+  return classrooms.find((c) => c.classroom === classroom)?.secret
+}

@@ -38,13 +38,14 @@ vi.mock("@/hooks/usePagesAssignments", () => ({
   },
 }))
 vi.mock("@/hooks/useStudentClassrooms", () => ({
-  default: () => ({
-    classrooms: studentClassroomsData,
-    isLoading: false,
-    isError: false,
-    roleResolved: true,
-    refetch: vi.fn(),
-  }),
+  useClassroomSecret: (
+    _org?: string,
+    classroom?: string,
+    enabled = true,
+  ): string | undefined => {
+    if (!enabled || !classroom) return undefined
+    return studentClassroomsData.find((c) => c.classroom === classroom)?.secret
+  },
 }))
 vi.mock("@/hooks/useGetRepo", () => ({
   default: () => ({ data: null, isLoading: false }),

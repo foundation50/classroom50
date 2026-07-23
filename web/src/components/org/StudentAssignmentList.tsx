@@ -15,7 +15,7 @@ import { EnterDiv } from "@/lib/motionComponents"
 import { useGithubAuth } from "@/auth/useGithubAuth"
 import usePagesAssignments from "@/hooks/usePagesAssignments"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
-import { useStudentClassrooms } from "@/hooks/useStudentClassrooms"
+import { useClassroomSecret } from "@/hooks/useStudentClassrooms"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { studentAssignmentListPrefs } from "@/lib/studentAssignmentListPrefs"
 import {
@@ -32,19 +32,6 @@ import {
   isPastDue,
 } from "@/util/formatDate"
 import type { Assignment } from "@/types/classroom"
-
-// Resolve the classroom's capability secret for a student, config-free: the
-// team-description bootstrap record (useStudentClassrooms) is the primary
-// source; for a pre-schema team it falls back to any of the student's accepted
-// repos' membership in this classroom (the caller passes that secret in). Empty
-// when the classroom is listed (no secret needed).
-function useClassroomSecret(
-  org: string,
-  classroom: string,
-): string | undefined {
-  const { classrooms } = useStudentClassrooms(org)
-  return classrooms.find((c) => c.classroom === classroom)?.secret
-}
 
 function ModeBadge({ mode }: { mode: Assignment["mode"] }) {
   const { t } = useTranslation()
