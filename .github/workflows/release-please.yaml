@@ -18,10 +18,11 @@ name: Release Please
 # THIS repo (tags, Releases, Pages), which GITHUB_TOKEN can do. The one thing it
 # can't do is start cli-release.yaml: a GITHUB_TOKEN-pushed tag does NOT trigger
 # other workflows (Actions' recursion guard), so we dispatch cli-release.yaml
-# explicitly below instead of relying on its cli-v* tag trigger. The cross-repo
-# binary publish still uses CLI_RELEASE_PAT — but only inside cli-release.yaml,
-# where the writes to gh-teacher/gh-student actually happen. (Opening the Release
-# PR requires "Allow GitHub Actions to create and approve pull requests".)
+# explicitly below (at the cli-v* tag) and wait on it, so a failed CLI publish
+# fails this release instead of reporting green. The cross-repo binary publish
+# still uses CLI_RELEASE_PAT — but only inside cli-release.yaml, where the writes
+# to gh-teacher/gh-student actually happen. (Opening the Release PR requires
+# "Allow GitHub Actions to create and approve pull requests".)
 
 on:
   push:
@@ -82,12 +83,45 @@ jobs:
       # A GITHUB_TOKEN-pushed cli-v* tag won't trigger cli-release.yaml (recursion
       # guard), so kick it off explicitly. cli-release.yaml holds CLI_RELEASE_PAT
       # and does the cross-repo publish to gh-teacher/gh-student.
+      #
+      # Dispatch AT the cli-v* tag (not main): cli-release.yaml's checkout then
+      # builds the released commit and stamps github.sha from it, matching the
+      # web deploy's "build the tag, not the main tip" contract. Then block on
+      # the dispatched run so a failed CLI publish fails this release rather than
+      # reporting green while gh-teacher/gh-student got no binaries.
       - name: Publish CLI extensions for the new tag
         if: ${{ steps.release.outputs['cli--tag_name'] != '' }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
-        run: gh workflow run cli-release.yaml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$CLI_TAG"
+        run: |
+          set -euo pipefail
+
+          # Record the newest existing cli-release run so we can identify the one
+          # we're about to create (gh workflow run returns no run id).
+          before="$(gh run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
+            --limit 1 --json databaseId --jq '.[0].databaseId // 0')"
+
+          gh workflow run cli-release.yaml --repo "$GITHUB_REPOSITORY" --ref "$CLI_TAG" -f tag="$CLI_TAG"
+
+          # Poll for the run dispatch created after `before`. Registration is not
+          # instantaneous, so retry briefly before giving up.
+          run_id=""
+          for _ in $(seq 1 30); do
+            run_id="$(gh run list --workflow cli-release.yaml --repo "$GITHUB_REPOSITORY" \
+              --event workflow_dispatch --limit 10 \
+              --json databaseId --jq "[.[].databaseId | select(. > ${before})] | max // empty")"
+            [ -n "$run_id" ] && break
+            sleep 5
+          done
+          if [ -z "$run_id" ]; then
+            echo "::error::Dispatched cli-release.yaml but could not find the new run to wait on."
+            exit 1
+          fi
+
+          echo "Waiting on cli-release run $run_id ($CLI_TAG)…"
+          # Exit non-zero (failing this release) if the CLI publish run fails.
+          gh run watch "$run_id" --repo "$GITHUB_REPOSITORY" --exit-status
 
   # Build + deploy the freshly tagged web release to production. Gated on a real
   # web release (non-empty tag => Release PR was merged) so a plain push to main
