@@ -542,9 +542,6 @@ const AcceptAssignmentPage = () => {
   const { user } = useGithubAuth()
   const username = user?.login
 
-  // Wait for the team-description read before fetching assignments: under a
-  // still-undefined secret the read would hit the unprotected path and 404 a
-  // protected classroom.
   const { data: assignmentsData, isLoading: loadingAssignmentsData } =
     usePagesAssignments(org, classroom, secret, !loadingSecret)
   const loadingAssignments = loadingSecret || loadingAssignmentsData

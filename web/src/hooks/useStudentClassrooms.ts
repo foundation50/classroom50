@@ -118,14 +118,10 @@ export function useStudentClassrooms(
 
 export default useStudentClassrooms
 
-// Resolve a student's capability secret for a classroom, config-free: the
-// team-description bootstrap record is the source. `enabled: false` skips the
-// GET /user/teams read for callers that already hold the secret (e.g. an accept
-// link's ?k=), returning undefined without a network round-trip.
-//
-// `isLoading` is the in-flight state of that read, so a caller can wait before
-// fetching under a still-undefined secret (a protected classroom would 404 the
-// unprotected path). It is false when the read is disabled — nothing to wait on.
+// A student's capability secret for a classroom, from the team-description
+// bootstrap record (config-free). `enabled: false` skips the GET /user/teams
+// read for callers that already hold the secret (e.g. an accept link's ?k=).
+// `isLoading` tracks that read; false when disabled (nothing to wait on).
 export function useClassroomSecret(
   org: string | undefined,
   classroom: string | undefined,
