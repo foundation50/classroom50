@@ -167,7 +167,7 @@ cascade into deleting a student's work:
 
 ## Assignment repositories
 
-Each accepted assignment produces a repository named:
+Each accepted assignment produces a repository named in all-lowercase:
 
 ```
 <classroom>-<assignment>-<username>
