@@ -51,6 +51,12 @@ vi.mock("@/hooks/useGetMyOrgRepos", () => ({
 }))
 vi.mock("@/hooks/useStudentClassrooms", () => ({
   useStudentClassrooms: () => studentClassrooms(),
+  useClassroomSecret: (_org?: string, classroom?: string) => ({
+    secret: studentClassrooms().classrooms.find(
+      (c: { classroom: string; secret?: string }) => c.classroom === classroom,
+    )?.secret,
+    isLoading: false,
+  }),
 }))
 vi.mock("@/auth/useGithubAuth", () => ({
   useGithubAuth: () => ({ user: { login: "student1" } }),

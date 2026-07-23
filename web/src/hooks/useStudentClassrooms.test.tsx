@@ -17,7 +17,10 @@ vi.mock("@/github-core/queries", () => ({
   myTeamsQuery: () => ({ queryKey: ["my-teams"] }),
 }))
 
-import { useStudentClassrooms } from "./useStudentClassrooms"
+import {
+  useStudentClassrooms,
+  useClassroomSecret,
+} from "./useStudentClassrooms"
 import type { MyTeam } from "@/github-core/types"
 
 const team = (
@@ -224,5 +227,68 @@ describe("useStudentClassrooms", () => {
       "zeta",
       "alpha",
     ])
+  })
+})
+
+describe("useClassroomSecret", () => {
+  it("returns the matching classroom's secret when enabled", () => {
+    useQueryMock.mockReturnValue(
+      teams({
+        data: [
+          team("classroom50-ml", {
+            description: desc({ name: "ML", secret: "a1b2c3d4" }),
+          }),
+        ],
+        isSuccess: true,
+      }),
+    )
+    const { result } = renderHook(() => useClassroomSecret("acme", "ml"))
+    expect(result.current).toEqual({ secret: "a1b2c3d4", isLoading: false })
+  })
+
+  it("returns undefined for a classroom with no matching team", () => {
+    useQueryMock.mockReturnValue(
+      teams({ data: [team("classroom50-cs101")], isSuccess: true }),
+    )
+    const { result } = renderHook(() => useClassroomSecret("acme", "ml"))
+    expect(result.current.secret).toBeUndefined()
+  })
+
+  it("skips the GET /user/teams read when disabled", () => {
+    useQueryMock.mockReturnValue(teams())
+    const { result } = renderHook(() => useClassroomSecret("acme", "ml", false))
+    // The read is gated off: org is passed as undefined, so useStudentClassrooms
+    // disables the query rather than issuing a network round-trip.
+    expect(useQueryMock).toHaveBeenCalledWith(
+      expect.objectContaining({ enabled: false }),
+    )
+    expect(result.current).toEqual({ secret: undefined, isLoading: false })
+  })
+
+  it("reports isLoading while the enabled read is in flight", () => {
+    useQueryMock.mockReturnValue(teams({ fetchStatus: "fetching" }))
+    const { result } = renderHook(() => useClassroomSecret("acme", "ml"))
+    expect(result.current).toEqual({ secret: undefined, isLoading: true })
+  })
+
+  it("never reports isLoading when disabled, even mid-flight", () => {
+    useQueryMock.mockReturnValue(teams({ fetchStatus: "fetching" }))
+    const { result } = renderHook(() => useClassroomSecret("acme", "ml", false))
+    expect(result.current.isLoading).toBe(false)
+  })
+
+  it("returns undefined without a match when classroom is absent", () => {
+    useQueryMock.mockReturnValue(
+      teams({
+        data: [
+          team("classroom50-ml", {
+            description: desc({ secret: "a1b2c3d4" }),
+          }),
+        ],
+        isSuccess: true,
+      }),
+    )
+    const { result } = renderHook(() => useClassroomSecret("acme", undefined))
+    expect(result.current.secret).toBeUndefined()
   })
 })

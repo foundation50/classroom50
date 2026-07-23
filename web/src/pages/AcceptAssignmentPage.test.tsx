@@ -13,21 +13,43 @@ import type { GitHubRepo } from "@/github-core/types"
 
 const acceptAssignment = vi.fn()
 
+const pagesAssignmentsSpy =
+  vi.fn<(org?: string, classroom?: string, secret?: string) => void>()
+const searchParams: { k?: string } = { k: "test-secret" }
+let studentClassroomsData: Array<{ classroom: string; secret?: string }> = []
+
 vi.mock("@/domain/assignments", () => ({
   acceptAssignment: (...args: unknown[]) => acceptAssignment(...args),
 }))
 vi.mock("@/hooks/usePagesAssignments", () => ({
-  default: () => ({
-    data: [
-      {
-        slug: "hello-python",
-        name: "Hello Python",
-        mode: "individual",
-        autograder: "default",
-      },
-    ],
-    isLoading: false,
-  }),
+  default: (org?: string, classroom?: string, secret?: string) => {
+    pagesAssignmentsSpy(org, classroom, secret)
+    return {
+      data: [
+        {
+          slug: "hello-python",
+          name: "Hello Python",
+          mode: "individual",
+          autograder: "default",
+        },
+      ],
+      isLoading: false,
+    }
+  },
+}))
+vi.mock("@/hooks/useStudentClassrooms", () => ({
+  useClassroomSecret: (
+    _org?: string,
+    classroom?: string,
+    enabled = true,
+  ): { secret: string | undefined; isLoading: boolean } => {
+    if (!enabled || !classroom) return { secret: undefined, isLoading: false }
+    return {
+      secret: studentClassroomsData.find((c) => c.classroom === classroom)
+        ?.secret,
+      isLoading: false,
+    }
+  },
 }))
 vi.mock("@/hooks/useGetRepo", () => ({
   default: () => ({ data: null, isLoading: false }),
@@ -90,7 +112,7 @@ vi.mock("@tanstack/react-router", async (importOriginal) => {
       classroom: "cs101",
       assignment: "hello-python",
     }),
-    useSearch: () => ({ k: "test-secret" }),
+    useSearch: () => searchParams,
     Link: ({ children }: { children: ReactNode }) => <a href="/">{children}</a>,
   }
 })
@@ -126,6 +148,9 @@ const renderPage = (client: QueryClient) =>
 
 beforeEach(() => {
   acceptAssignment.mockReset()
+  pagesAssignmentsSpy.mockReset()
+  searchParams.k = "test-secret"
+  studentClassroomsData = []
   __resetGitHubHealthForTest()
 })
 
@@ -187,6 +212,65 @@ describe("AcceptAssignmentPage repository cache", () => {
       )
     },
   )
+})
+
+describe("AcceptAssignmentPage secret selection", () => {
+  const renderWith = () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    renderPage(client)
+  }
+
+  it("uses the ?k= link secret when present", () => {
+    searchParams.k = "test-secret"
+    studentClassroomsData = [{ classroom: "cs101", secret: "team-secret" }]
+    renderWith()
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101",
+      "test-secret",
+    )
+  })
+
+  it("falls back to the team-description secret for a bare accept link", () => {
+    searchParams.k = undefined
+    studentClassroomsData = [{ classroom: "cs101", secret: "team-secret" }]
+    renderWith()
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101",
+      "team-secret",
+    )
+  })
+
+  it("treats an empty ?k= as absent and uses the team-description secret", () => {
+    // A bare `?k=` (empty value) must not shadow the recovered team secret: the
+    // enabled gate already treats "" as absent, so precedence must agree, or a
+    // protected classroom fetches the unprotected path and 404s.
+    searchParams.k = ""
+    studentClassroomsData = [{ classroom: "cs101", secret: "team-secret" }]
+    renderWith()
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101",
+      "team-secret",
+    )
+  })
+
+  it("passes no secret for a bare link when the student has no matching team", () => {
+    searchParams.k = undefined
+    studentClassroomsData = [{ classroom: "other", secret: "team-secret" }]
+    renderWith()
+    expect(pagesAssignmentsSpy).toHaveBeenLastCalledWith(
+      "acme",
+      "cs101",
+      undefined,
+    )
+  })
 })
 
 describe("AcceptAssignmentPage outage hint", () => {
