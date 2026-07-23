@@ -15,7 +15,7 @@ const SettingsPage = () => {
   const hiddenLogins = [...hidden].sort((a, b) => a.localeCompare(b))
 
   return (
-    <PageShell page="orgs" selected="settings" settings>
+    <PageShell page="orgs" selected="settings">
       <PageHeader
         title={t("settings.page.heading")}
         subtitle={t("settings.page.subheading")}

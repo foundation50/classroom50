@@ -1,10 +1,10 @@
-import { ExternalLink, Pencil } from "lucide-react"
+import { Pencil } from "lucide-react"
 import { useId, useState } from "react"
 import { useForm } from "@tanstack/react-form"
 import { useTranslation } from "react-i18next"
 
 import { Button, FormField, Input, Modal, Textarea } from "@/components/ui"
-import GitHub from "@/assets/github.svg?react"
+import { GitHubLink } from "@/components/GitHubLink"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useUpdateOrgProfile } from "@/hooks/mutations/useUpdateOrgProfile"
@@ -62,8 +62,7 @@ function OrgDetailsModal({
   const updateProfile = useUpdateOrgProfile(org.login)
 
   const isOwner = isOwnerGitHubOrgRole(membership.role)
-  const displayName = details?.name ?? undefined
-  const heading = displayName ?? org.login
+  const heading = details?.name ?? org.login
   const websiteHref = safeHttpUrl(details?.blog)
 
   const currentValues = (): ProfileFormValues => ({
@@ -397,16 +396,10 @@ function OrgDetailsModal({
 
           <div className="modal-action items-center justify-between">
             {isOwner ? (
-              <a
+              <GitHubLink
                 href={githubOrgSettingsUrl(org.login)}
-                target="_blank"
-                rel="noreferrer"
-                className="inline-flex items-center gap-1.5 text-sm text-base-content/70 hover:text-primary"
-              >
-                <GitHub aria-hidden="true" className="size-4" />
-                {t("orgs.detailsModal.manageOnGitHub")}
-                <ExternalLink aria-hidden="true" className="size-3" />
-              </a>
+                label={t("orgs.detailsModal.manageOnGitHub")}
+              />
             ) : (
               // Keep the buttons right-aligned when the manage link is hidden.
               <span />

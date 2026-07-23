@@ -24,7 +24,7 @@ import {
   User,
 } from "lucide-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
-import { AnimatePresence, motion } from "motion/react"
+import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -32,7 +32,6 @@ import { Badge, Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
-import { enterExit } from "@/lib/motion"
 import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
@@ -269,18 +268,15 @@ function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
   const { t } = useTranslation()
   const { org, canOpen } = useOrgAffordances(summary)
 
+  if (!canOpen) return null
   return (
-    <>
-      {canOpen && (
-        <Link
-          to="/$org"
-          params={{ org: org.login }}
-          className="btn btn-primary btn-sm"
-        >
-          {t("orgs.card.open")}
-        </Link>
-      )}
-    </>
+    <Link
+      to="/$org"
+      params={{ org: org.login }}
+      className="btn btn-primary btn-sm"
+    >
+      {t("orgs.card.open")}
+    </Link>
   )
 }
 
@@ -368,14 +364,7 @@ function OrgRow({
   const heading = displayName ?? org.login
 
   return (
-    <motion.div
-      layout
-      className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between"
-      variants={enterExit}
-      initial="initial"
-      animate="animate"
-      exit="exit"
-    >
+    <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <img
           src={org.avatar_url}
@@ -408,7 +397,7 @@ function OrgRow({
         <OrgActions summary={summary} />
         <HideOrgMenu summary={summary} />
       </div>
-    </motion.div>
+    </PresenceCardDiv>
   )
 }
 

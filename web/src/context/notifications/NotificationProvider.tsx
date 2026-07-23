@@ -45,8 +45,7 @@ export type NotifyInput = {
   // route-level errorComponent). Use plain text, a plain <a href>, or a button
   // calling router.navigate.
   message: React.ReactNode
-  // Optional inline action button (e.g. Undo). Its onClick runs, then the toast
-  // is dismissed.
+  // Optional inline action button (e.g. Undo).
   action?: ToastAction
   // Optional dedup key: a later notify() with the same key replaces the prior
   // toast in place instead of stacking a duplicate (e.g. repeated retries).
