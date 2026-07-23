@@ -1690,7 +1690,11 @@
       "unlistedNote": "This classroom uses an unlisted URL, so the link includes the access key — treat it like a shared password and send the full link as-is.",
       "copyLink": "Copy accept link",
       "copyCli": "Copy CLI command",
-      "preferCli": "Prefer the command line?"
+      "preferCli": "Prefer the command line?",
+      "warnNoStudents": "No students are enrolled in <org>{{org}}</org> yet, so no one can accept this link. Add students to the roster and invite them to the organization first.",
+      "warnPending_one": "{{count}} invited student hasn't joined the organization yet and can't accept this link until they do.",
+      "warnPending_other": "{{count}} invited students haven't joined the organization yet and can't accept this link until they do.",
+      "manageRoster": "Manage roster"
     },
     "stats": {
       "submitted": "Submitted",

@@ -56,6 +56,7 @@ import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import { resolveAcceptShareWarning } from "@/pages/submissions/acceptShareWarning"
 import { QueryErrorAlert } from "@/components/QueryErrorAlert"
 import useGetOrgRepos from "@/hooks/useGetMyOrgRepos"
 import { useGroupRepoMemberLogins } from "@/hooks/useGroupRepoMembers"
@@ -122,6 +123,9 @@ const SubmissionsPageContent = () => {
   // authoritative empty roster.
   const {
     rows: teamRows,
+    counts: rosterCounts,
+    roleCounts: rosterRoleCounts,
+    pendingHidden: rosterPendingHidden,
     isLoading: rosterLoading,
     isError: rosterError,
     refetch: refetchRoster,
@@ -139,6 +143,27 @@ const SubmissionsPageContent = () => {
   // students is wasted effort. `show` is loading-aware (won't flash before the
   // roster resolves).
   const emptyRoster = useEmptyRosterWarning(org, classroom)
+  // Roster-readiness warning for the share modal: warn when no student can
+  // accept the link yet, or flag pending (invited-but-not-joined) students.
+  // Uses the enrolled STUDENT count (roleCounts.student), not all-enrolled, so a
+  // staff-only classroom still reads as "no students who can accept".
+  const acceptShareWarning = useMemo(
+    () =>
+      resolveAcceptShareWarning({
+        isLoading: rosterLoading,
+        isError: rosterError,
+        enrolledStudents: rosterRoleCounts.student,
+        pending: rosterCounts.pending,
+        pendingHidden: rosterPendingHidden,
+      }),
+    [
+      rosterLoading,
+      rosterError,
+      rosterRoleCounts.student,
+      rosterCounts.pending,
+      rosterPendingHidden,
+    ],
+  )
   // Teacher-only page, so reading the classroom's capability-URL secret from
   // classroom.json is fine. For a protected classroom the shared accept link
   // must carry the key as `?k=<secret>`, else students hit "not found".
@@ -988,6 +1013,9 @@ const SubmissionsPageContent = () => {
         url={assignmentSubmitUrl}
         cli={assignmentSubmitCli}
         hasSecret={Boolean(secret)}
+        org={org}
+        classroom={classroom}
+        warning={acceptShareWarning}
       />
     </PageShell>
   )
