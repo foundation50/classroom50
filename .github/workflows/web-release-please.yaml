@@ -7,9 +7,15 @@ name: web Release Please
 # the `web-vX.Y.Z` tag + GitHub Release, which is the single production-release
 # signal (see web-deploy.yaml, now tag-only).
 #
-# Monorepo-scoped to web/ via release-please-config.json +
-# .release-please-manifest.json. The `web-v*` tag scheme is namespaced apart
-# from the CLI's `cli-v*` tags.
+# Scoped to web/ via a web-only config + manifest
+# (release-please-config.web.json + .release-please-manifest.web.json). The CLI
+# has its OWN pair; the two workflows must never share one config listing both
+# packages. When they did, both fired on the same push to main and each raced to
+# release BOTH packages against the single Release PR — nondeterministically one
+# run created both releases while the other failed creating a release that
+# already existed ("Published releases must have a valid tag"). Separate configs
+# make each workflow release only its own package. The `web-v*` tag scheme is
+# namespaced apart from the CLI's `cli-v*` tags.
 #
 # Token model: release-please runs with GITHUB_TOKEN. A tag pushed by
 # GITHUB_TOKEN does NOT retrigger other workflows (Actions' recursion guard),
@@ -37,7 +43,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       # Path-prefixed outputs use the package PATH (the key under `packages` in
-      # release-please-config.json), which is "web" — not the `component`. Gate
+      # release-please-config.web.json), which is "web" — not the `component`. Gate
       # on tag_name (empty ⇒ no release) rather than release_created: it's a
       # single string that's robust to the boolean/string coercion that made the
       # deploy job silently skip on the v1.12/v1.13 releases.
@@ -48,8 +54,8 @@ jobs:
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
           target-branch: main
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          config-file: release-please-config.web.json
+          manifest-file: .release-please-manifest.web.json
 
       # Dump every output release-please emitted so a future "tag created but
       # deploy skipped" regression is root-causeable from this log alone.

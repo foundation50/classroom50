@@ -7,19 +7,21 @@ name: cli Release Please
 # which the existing `cli-release.yaml` workflow consumes to build and publish
 # the `gh-teacher` and `gh-student` extensions.
 #
-# Monorepo-scoped to `cli/` via release-please-config.json +
-# .release-please-manifest.json (the `cli` package key IS the path). The
-# `cli-v*` tag scheme is namespaced apart from the web app's `web-v*` tags.
+# Scoped to cli/ via a cli-only config + manifest
+# (release-please-config.cli.json + .release-please-manifest.cli.json). The web
+# app has its OWN pair; the two workflows must never share one config listing
+# both packages, or they race to release both packages against the single
+# Release PR (see web-release-please.yaml for the failure mode). The `cli-v*` tag
+# scheme is namespaced apart from the web app's `web-v*` tags.
 #
-# Token model: release-please runs with CLI_RELEASE_PAT (an admin PAT), NOT the
-# default GITHUB_TOKEN. The `cli-release-tags` ruleset restricts `cli-v*` tag
-# creation to the Admin role, and github-actions[bot] can't be granted a repo-
-# level bypass here (org policy), so the bot's GITHUB_TOKEN cannot create the
-# tag. An admin PAT satisfies the Admin-role bypass. A side benefit: a tag
-# pushed by a PAT DOES retrigger cli-release.yaml (no Actions recursion guard),
-# which builds and publishes the `gh-teacher` and `gh-student` extensions.
-# (Opening the Release PR also requires "Allow GitHub Actions to create and
-# approve pull requests".)
+# Token model: release-please runs with CLI_RELEASE_PAT (a PAT), NOT the default
+# GITHUB_TOKEN, for two reasons that GITHUB_TOKEN can't satisfy: (1) a tag pushed
+# by GITHUB_TOKEN does NOT retrigger cli-release.yaml (Actions' recursion guard),
+# but a PAT-pushed tag does — and cli-release.yaml is what builds and publishes
+# the extensions; (2) cli-release.yaml's publish step writes Releases to the
+# separate foundation50/gh-teacher and foundation50/gh-student repos, which
+# GITHUB_TOKEN (scoped to this repo only) cannot do. (Opening the Release PR also
+# requires "Allow GitHub Actions to create and approve pull requests".)
 
 on:
   push:
@@ -48,5 +50,5 @@ jobs:
         with:
           token: ${{ secrets.CLI_RELEASE_PAT }}
           target-branch: main
-          config-file: release-please-config.json
-          manifest-file: .release-please-manifest.json
+          config-file: release-please-config.cli.json
+          manifest-file: .release-please-manifest.cli.json

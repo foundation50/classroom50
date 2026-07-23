@@ -166,7 +166,7 @@ separate long-lived `preview` branch to promote from.
 Releases to production (classroom50.org) are automated with
 [release-please](https://github.com/googleapis/release-please)
 ([`web-release-please`](.github/workflows/web-release-please.yaml),
-[`release-please-config.json`](release-please-config.json)). You do not tag or
+[`release-please-config.web.json`](release-please-config.web.json)). You do not tag or
 edit the changelog by hand:
 
 1. Merge feature PRs into `main` as usual (each deploys to preview).
