@@ -1,0 +1,159 @@
+name: Release Please
+
+# Single release pipeline for the whole repo. Day-to-day work lands on `main`
+# (all PRs merge straight into main). release-please watches `main` and maintains
+# ONE grouped *Release PR* that bumps web/package.json + web/CHANGELOG.md and
+# cli/CHANGELOG.md together. The `linked-versions` plugin keeps web and cli in
+# lockstep: any release-worthy commit bumps BOTH to the same version, even when
+# only one side changed. Merging that Release PR creates both `web-vX.Y.Z` and
+# `cli-vX.Y.Z` tags.
+#
+# Downstream of the tags, in this same run:
+#   - web: build + deploy the tagged commit to classroom50.org (GitHub Pages),
+#     and mark web-v* as the repo's "Latest" release.
+#   - cli: dispatch cli-release.yaml with the cli-v* tag to build the extensions
+#     and publish binaries to foundation50/gh-teacher + gh-student.
+#
+# Token model: release-please runs with GITHUB_TOKEN. Every write it makes is to
+# THIS repo (tags, Releases, Pages), which GITHUB_TOKEN can do. The one thing it
+# can't do is start cli-release.yaml: a GITHUB_TOKEN-pushed tag does NOT trigger
+# other workflows (Actions' recursion guard), so we dispatch cli-release.yaml
+# explicitly below instead of relying on its cli-v* tag trigger. The cross-repo
+# binary publish still uses CLI_RELEASE_PAT — but only inside cli-release.yaml,
+# where the writes to gh-teacher/gh-student actually happen. (Opening the Release
+# PR requires "Allow GitHub Actions to create and approve pull requests".)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  actions: write
+
+concurrency:
+  group: release-please
+  cancel-in-progress: false
+
+jobs:
+  release-please:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      # Path-prefixed outputs use each package's PATH key ("web"/"cli"), which
+      # equals its component here. Gate on tag_name (empty => no release) rather
+      # than release_created: a single string that's robust to the boolean/string
+      # coercion that silently skipped the deploy on the v1.12/v1.13 releases.
+      web_tag: ${{ steps.release.outputs['web--tag_name'] }}
+      cli_tag: ${{ steps.release.outputs['cli--tag_name'] }}
+    steps:
+      - uses: googleapis/release-please-action@v5
+        id: release
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          target-branch: main
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
+
+      - name: Debug release-please outputs
+        env:
+          RP_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$RP_OUTPUTS"
+
+      # "Latest" on this repo tracks the web app (classroom50.org). release-please
+      # marks every release it creates as latest (no make_latest option —
+      # googleapis/release-please#2317), so pin it explicitly: web is latest, the
+      # cli-v* release never is.
+      - name: Pin the Latest release to web
+        if: ${{ steps.release.outputs['web--tag_name'] != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          WEB_TAG: ${{ steps.release.outputs['web--tag_name'] }}
+          CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+        run: |
+          set -euo pipefail
+          if [ -n "$CLI_TAG" ]; then
+            gh release edit "$CLI_TAG" --repo "$GITHUB_REPOSITORY" --latest=false
+          fi
+          gh release edit "$WEB_TAG" --repo "$GITHUB_REPOSITORY" --latest=true
+
+      # A GITHUB_TOKEN-pushed cli-v* tag won't trigger cli-release.yaml (recursion
+      # guard), so kick it off explicitly. cli-release.yaml holds CLI_RELEASE_PAT
+      # and does the cross-repo publish to gh-teacher/gh-student.
+      - name: Publish CLI extensions for the new tag
+        if: ${{ steps.release.outputs['cli--tag_name'] != '' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CLI_TAG: ${{ steps.release.outputs['cli--tag_name'] }}
+        run: gh workflow run cli-release.yaml --repo "$GITHUB_REPOSITORY" --ref main -f tag="$CLI_TAG"
+
+  # Build + deploy the freshly tagged web release to production. Gated on a real
+  # web release (non-empty tag => Release PR was merged) so a plain push to main
+  # never deploys. Mirrors web-deploy.yaml's build so the tagged commit ships
+  # stamped with its version.
+  deploy:
+    needs: release-please
+    if: ${{ needs.release-please.outputs.web_tag != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Check out the tag release-please just created so the build stamps
+          # the released commit + version, not a later main tip.
+          ref: ${{ needs.release-please.outputs.web_tag }}
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - run: npm ci
+
+      # Gate the deploy on the same suite as web-deploy.yaml (incl. the skeleton
+      # parity test that vite build can't catch).
+      - run: npm test
+
+      # Resolve the SHA of the checked-out tag so the build stamps the commit
+      # that was actually released, not github.sha (the main tip that triggered
+      # the run, which can differ from the release commit).
+      - id: sha
+        run: echo "value=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - run: npm run build
+        env:
+          VITE_GITHUB_CLIENT_ID: ${{ vars.VITE_GITHUB_CLIENT_ID }}
+          # Tag name (web-vX.Y.Z); vite.config.ts strips the web-v prefix.
+          VITE_APP_VERSION: ${{ needs.release-please.outputs.web_tag }}
+          VITE_APP_COMMIT: ${{ steps.sha.outputs.value }}
+
+      - name: Add SPA fallback
+        run: cp dist/index.html dist/404.html
+
+      - name: Write CNAME into dist
+        run: cp CNAME dist/CNAME
+
+      - uses: actions/configure-pages@v6
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: web/dist
+
+      - id: deployment
+        uses: actions/deploy-pages@v5

@@ -2,7 +2,7 @@ name: web Deploy to GitHub Pages
 
 # Manual redeploy of the web app (web/) to classroom50.org via GitHub Pages.
 #
-# Production RELEASES are handled by web-release-please.yaml: merging the
+# Production RELEASES are handled by release-please.yaml: merging the
 # release-please Release PR tags `web-vX.Y.Z` and that workflow builds + deploys
 # the tagged commit. This workflow is kept as a manual escape hatch only
 # (workflow_dispatch) to re-publish a chosen ref without cutting a release —

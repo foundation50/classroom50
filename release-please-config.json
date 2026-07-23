@@ -1,7 +1,6 @@
 {
   "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
   "last-release-sha": "0dd6c60d865443b49378a1d9832503328e5ec646",
-  "separate-pull-requests": true,
   "packages": {
     "web": {
       "release-type": "node",
@@ -10,6 +9,21 @@
       "include-component-in-tag": true,
       "include-v-in-tag": true,
       "tag-separator": "-"
+    },
+    "cli": {
+      "release-type": "go",
+      "component": "cli",
+      "changelog-path": "CHANGELOG.md",
+      "include-component-in-tag": true,
+      "include-v-in-tag": true,
+      "tag-separator": "-"
     }
-  }
+  },
+  "plugins": [
+    {
+      "type": "linked-versions",
+      "groupName": "classroom50",
+      "components": ["web", "cli"]
+    }
+  ]
 }

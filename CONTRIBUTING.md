@@ -119,15 +119,17 @@ app").
 
 ## Releasing the CLIs (maintainers)
 
-The two `gh` extensions (`gh-teacher`, `gh-student`) are released together from
-this monorepo. Like the web app, CLI releases are automated with release-please
-([`cli-release-please`](.github/workflows/cli-release-please.yaml),
-[`release-please-config.cli.json`](release-please-config.cli.json)): merge
-`fix:`/`feat:` commits touching `cli/**` into `main`, and release-please keeps a
-CLI **release PR** that bumps [`cli/CHANGELOG.md`](cli/CHANGELOG.md). Merging it
-tags the commit `cli-vX.Y.Z`, which triggers the
-[`cli-release`](.github/workflows/cli-release.yaml) workflow to cross-compile
-both extensions and publish per-platform binaries as GitHub Releases on the
+The two `gh` extensions (`gh-teacher`, `gh-student`) are released together with
+the web app from a single release-please pipeline
+([`release-please`](.github/workflows/release-please.yaml),
+[`release-please-config.json`](release-please-config.json)) — see "Releasing
+(maintainers)" below for the shared flow. The `linked-versions` plugin keeps the
+CLI and web versions in lockstep, so every release tags `cli-vX.Y.Z` alongside
+`web-vX.Y.Z` even when only the web app changed.
+
+When a `cli-vX.Y.Z` tag is created, `release-please.yaml` dispatches the
+[`cli-release`](.github/workflows/cli-release.yaml) workflow, which cross-compiles
+both extensions and publishes per-platform binaries as GitHub Releases on the
 standalone mirror repos
 [`foundation50/gh-teacher`](https://github.com/foundation50/gh-teacher) and
 [`foundation50/gh-student`](https://github.com/foundation50/gh-student), where
@@ -147,12 +149,11 @@ workflow:
   with a `-` suffix as a pre-release.
 
 Requirements (repo Settings, one-time): the `CLI_RELEASE_PAT` secret
-(`contents: write` on both mirror repos — needed because the built-in
-`GITHUB_TOKEN` can't create releases on those separate repos, and a
-`GITHUB_TOKEN`-pushed `cli-v*` tag wouldn't retrigger `cli-release`), and the
-`cli-release` environment (no required reviewers — publishing is automatic on
-release, so release authority == merging the CLI release PR). The workflow header
-documents these in full.
+(`contents: write` on both mirror repos). It's needed only for the cross-repo
+binary publish inside `cli-release` — the built-in `GITHUB_TOKEN` can't create
+Releases on those separate repos. The `cli-release` environment has no required
+reviewers (publishing is automatic on release). The workflow header documents
+these in full.
 
 You can also trigger `cli-release` manually from the Actions tab
 (`workflow_dispatch` with a `cli-v*` tag) — useful for re-running a failed
@@ -169,22 +170,26 @@ separate long-lived `preview` branch to promote from.
 
 Releases to production (classroom50.org) are automated with
 [release-please](https://github.com/googleapis/release-please)
-([`web-release-please`](.github/workflows/web-release-please.yaml),
-[`release-please-config.web.json`](release-please-config.web.json)). You do not tag or
-edit the changelog by hand:
+([`release-please`](.github/workflows/release-please.yaml),
+[`release-please-config.json`](release-please-config.json)). One grouped release
+PR covers the whole repo — web and CLI version in lockstep (see "Releasing the
+CLIs" above). You do not tag or edit the changelog by hand:
 
 1. Merge feature PRs into `main` as usual (each deploys to preview).
    release-please reads the [Conventional Commits](https://www.conventionalcommits.org/)
-   since the last release and maintains a **release PR** on `main` that bumps
-   `web/package.json` and [`web/CHANGELOG.md`](web/CHANGELOG.md) (`feat:` ->
-   minor, `fix:` -> patch, `feat!:`/`fix!:` -> major).
-2. When ready to release, merge that release PR. release-please then tags the
-   commit `web-vX.Y.Z` (namespaced apart from the CLI's `cli-v*` tags) and
-   publishes the GitHub Release from the changelog.
+   since the last release and maintains a single **release PR** on `main` that
+   bumps `web/package.json` + [`web/CHANGELOG.md`](web/CHANGELOG.md) and
+   [`cli/CHANGELOG.md`](cli/CHANGELOG.md) together (`feat:` -> minor, `fix:` ->
+   patch, `feat!:`/`fix!:` -> major).
+2. When ready to release, merge that release PR. release-please tags the commit
+   both `web-vX.Y.Z` and `cli-vX.Y.Z` (namespaced apart from each other) and
+   publishes the GitHub Releases from the changelogs, pinning `web-v*` as the
+   repo's "Latest".
 3. The same workflow builds the tagged commit and deploys it to
-   **classroom50.org** — gated on the release actually being created, so a plain
-   merge to `main` only touches preview, never production. The version is
+   **classroom50.org** — gated on the web release actually being created, so a
+   plain merge to `main` only touches preview, never production. The version is
    stamped into the build via `VITE_APP_VERSION` and the running app reports it.
+   In the same run it dispatches `cli-release` for the `cli-v*` tag (see above).
 
 To force a specific version (e.g. a first `1.0.0` or a jump), land a commit on
 `main` whose body contains `Release-As: X.Y.Z`.
