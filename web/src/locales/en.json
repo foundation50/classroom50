@@ -616,7 +616,27 @@
       "updatedAgo": "Updated {{when}}",
       "moreActions": "More actions for {{org}}",
       "hide": "Hide from home",
-      "hidden": "Hid {{org}} from your home page."
+      "hidden": "Hid {{org}} from your home page.",
+      "details": "Details"
+    },
+    "detailsModal": {
+      "title": "Organization details",
+      "displayName": "Display name",
+      "slug": "Slug",
+      "description": "Description",
+      "orgId": "Organization ID",
+      "plan": "Plan",
+      "role": "Your role",
+      "roleAdmin": "Owner",
+      "roleMember": "Member",
+      "noDescription": "No description",
+      "linksHeading": "On GitHub",
+      "linkProfile": "Organization page",
+      "linkRepos": "Repositories",
+      "linkTeams": "Teams",
+      "linkPeople": "People",
+      "linkSettings": "Settings",
+      "close": "Close"
     },
     "invites": {
       "summary_one": "You have {{count}} pending invitation",

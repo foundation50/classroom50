@@ -16,6 +16,7 @@ import {
   ChevronDown,
   EllipsisVertical,
   EyeOff,
+  Info,
   Lock,
   MailOpen,
   Plus,
@@ -23,6 +24,7 @@ import {
   User,
 } from "lucide-react"
 import GitHub from "@/assets/github.svg?react"
+import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
 import { motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
@@ -195,6 +197,7 @@ function HideOrgMenu({
   const { org } = useOrgAffordances(summary)
   const { hide } = useHiddenOrgs()
   const { notify } = useToast()
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const handleHide = () => {
     hide(org.login)
@@ -206,39 +209,67 @@ function HideOrgMenu({
     })
   }
 
+  // daisyUI keeps a focus-driven dropdown open until blur; blur the active item
+  // so the menu closes when opening the modal.
+  const closeMenu = () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+  }
+
   return (
-    <div className={`dropdown dropdown-end ${className ?? ""}`}>
-      <Button
-        variant="ghost"
-        size="sm"
-        shape="square"
-        aria-label={t("orgs.card.moreActions", { org: org.login })}
-      >
-        <EllipsisVertical aria-hidden="true" className="size-4" />
-      </Button>
-      <ul
-        tabIndex={0}
-        className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
-      >
-        <li>
-          <a
-            href={`https://github.com/${org.login}`}
-            target="_blank"
-            rel="noreferrer"
-            title={t("orgs.card.openOnGitHub", { org: org.login })}
-          >
-            <GitHub aria-hidden="true" className="size-4" />
-            {t("orgs.card.viewOnGitHub")}
-          </a>
-        </li>
-        <li>
-          <button type="button" onClick={handleHide}>
-            <EyeOff aria-hidden="true" className="size-4" />
-            {t("orgs.card.hide")}
-          </button>
-        </li>
-      </ul>
-    </div>
+    <>
+      <div className={`dropdown dropdown-end ${className ?? ""}`}>
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="square"
+          aria-label={t("orgs.card.moreActions", { org: org.login })}
+        >
+          <EllipsisVertical aria-hidden="true" className="size-4" />
+        </Button>
+        <ul
+          tabIndex={0}
+          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+        >
+          <li>
+            <a
+              href={`https://github.com/${org.login}`}
+              target="_blank"
+              rel="noreferrer"
+              title={t("orgs.card.openOnGitHub", { org: org.login })}
+            >
+              <GitHub aria-hidden="true" className="size-4" />
+              {t("orgs.card.viewOnGitHub")}
+            </a>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu()
+                setDetailsOpen(true)
+              }}
+            >
+              <Info aria-hidden="true" className="size-4" />
+              {t("orgs.card.details")}
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={handleHide}>
+              <EyeOff aria-hidden="true" className="size-4" />
+              {t("orgs.card.hide")}
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <OrgDetailsModal
+        summary={summary}
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
+    </>
   )
 }
 
@@ -304,12 +335,6 @@ function OrgCard({
           <div className="min-w-0 flex-1">
             <h2 className="truncate text-lg font-bold">{heading}</h2>
 
-            {displayName && displayName !== org.login && (
-              <p className="truncate font-mono text-xs text-base-content/50">
-                {org.login}
-              </p>
-            )}
-
             {org.description && (
               <p className="mt-1 line-clamp-2 text-sm text-base-content/70">
                 {org.description}
@@ -366,11 +391,6 @@ function OrgRow({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <span className="truncate font-semibold">{heading}</span>
-            {displayName && displayName !== org.login && (
-              <span className="truncate font-mono text-xs text-base-content/50">
-                {org.login}
-              </span>
-            )}
             {showNoAccessBadge && (
               <span className="hidden sm:inline-flex">
                 <NoAccessBadge />
