@@ -19,6 +19,15 @@ const useGetOwnOrgMembership = (org: string | undefined) => {
     queryFn: () => getPendingOrgInvite(client, org ?? ""),
     staleTime: 10 * 60 * 1000,
     retry: retryTransientGitHubError,
+    // A definitive result (active membership, or a 403/404 error) must survive a
+    // fresh observer mounting. An ancestor gate (OrgLayout) toggles a
+    // full-screen spinner on this query's `isLoading`, which unmounts the subtree
+    // that ALSO reads this query; without this, the remount's fresh observer
+    // refetches the errored query (retryOnMount default), flipping isLoading back
+    // to true — a subscribe→refetch→spinner→unmount→remount loop that pinned a
+    // non-member on an infinite spinner. Keep the cached error; the membership
+    // error screen offers an explicit retry.
+    retryOnMount: false,
     enabled: Boolean(org),
   })
 }
