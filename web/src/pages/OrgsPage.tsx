@@ -470,14 +470,15 @@ const OrgsPage = () => {
     [cl50Orgs, query],
   )
 
-  // Last-modified data is fetched only when its sort is active, for the shown
-  // set, so other views never fan out per-org.
-  const lastModifiedActive = sortKey === "last-modified"
+  // Each shown org's classroom50 config-repo pushed_at, for the "Updated …"
+  // line on every card and the last-modified sort. Fetched for the shown set on
+  // every home view (a deliberate per-card fan-out, shared with the repo cache),
+  // not just when the last-modified sort is active.
   const shownLogins = useMemo(
     () => filtered.map((summary) => summary.org.login),
     [filtered],
   )
-  const lastModified = useOrgLastModified(shownLogins, lastModifiedActive)
+  const lastModified = useOrgLastModified(shownLogins, true)
 
   const sorted = useMemo(() => {
     const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
@@ -590,9 +591,7 @@ const OrgsPage = () => {
               <div className="grid grid-cols-12 gap-4">
                 <AnimatePresence mode="popLayout" initial={false}>
                   {sorted.map((summary) => {
-                    const updatedIso = lastModifiedActive
-                      ? lastModified[summary.org.login]
-                      : undefined
+                    const updatedIso = lastModified[summary.org.login]
                     const updatedAgo = updatedIso
                       ? formatRelativeToNow(new Date(updatedIso))
                       : undefined
