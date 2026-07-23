@@ -120,22 +120,22 @@ app").
 ## Releasing the CLIs (maintainers)
 
 The two `gh` extensions (`gh-teacher`, `gh-student`) are released together from
-this monorepo by the [`cli-release`](.github/workflows/cli-release.yaml)
-workflow. It cross-compiles both extensions and publishes per-platform binaries
-as GitHub Releases on the standalone mirror repos
+this monorepo. Like the web app, CLI releases are automated with release-please
+([`cli-release-please`](.github/workflows/cli-release-please.yaml),
+[`release-please-config.cli.json`](release-please-config.cli.json)): merge
+`fix:`/`feat:` commits touching `cli/**` into `main`, and release-please keeps a
+CLI **release PR** that bumps [`cli/CHANGELOG.md`](cli/CHANGELOG.md). Merging it
+tags the commit `cli-vX.Y.Z`, which triggers the
+[`cli-release`](.github/workflows/cli-release.yaml) workflow to cross-compile
+both extensions and publish per-platform binaries as GitHub Releases on the
+standalone mirror repos
 [`foundation50/gh-teacher`](https://github.com/foundation50/gh-teacher) and
 [`foundation50/gh-student`](https://github.com/foundation50/gh-student), where
 `gh extension install` looks for them.
 
-To cut a release, push a `cli-v*` tag on this repo:
-
-```sh
-git tag cli-v1.2.0        # a tag with a pre-release suffix (cli-v1.2.0-rc.1)
-git push origin cli-v1.2.0 # publishes as a GitHub pre-release
-```
-
 `VERSION` is the tag with the `cli-` prefix stripped (`cli-v1.2.0` -> `v1.2.0`),
-and it must be a `vMAJOR.MINOR.PATCH[-prerelease]` string. The workflow:
+and it must be a `vMAJOR.MINOR.PATCH[-prerelease]` string. The `cli-release`
+workflow:
 
 - injects the version, short commit, and build date into each binary via
   `-ldflags "-X main.version=… -X main.commit=… -X main.date=…"`, so
@@ -147,12 +147,16 @@ and it must be a `vMAJOR.MINOR.PATCH[-prerelease]` string. The workflow:
   with a `-` suffix as a pre-release.
 
 Requirements (repo Settings, one-time): the `CLI_RELEASE_PAT` secret
-(`contents: write` on both mirror repos) and the `cli-release` environment with
-required reviewers. The workflow header documents these in full.
+(`contents: write` on both mirror repos — needed because the built-in
+`GITHUB_TOKEN` can't create releases on those separate repos, and a
+`GITHUB_TOKEN`-pushed `cli-v*` tag wouldn't retrigger `cli-release`), and the
+`cli-release` environment (no required reviewers — publishing is automatic on
+release, so release authority == merging the CLI release PR). The workflow header
+documents these in full.
 
-You can also trigger a run manually from the Actions tab
-(`workflow_dispatch`) — useful for re-running a failed publish or forcing
-provenance attestation on a private repo.
+You can also trigger `cli-release` manually from the Actions tab
+(`workflow_dispatch` with a `cli-v*` tag) — useful for re-running a failed
+publish or forcing provenance attestation on a private repo.
 
 ## Releasing the web app (maintainers)
 

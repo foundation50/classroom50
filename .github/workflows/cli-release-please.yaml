@@ -10,9 +10,11 @@ name: cli Release Please
 # Scoped to cli/ via a cli-only config + manifest
 # (release-please-config.cli.json + .release-please-manifest.cli.json). The web
 # app has its OWN pair; the two workflows must never share one config listing
-# both packages, or they race to release both packages against the single
-# Release PR (see web-release-please.yaml for the failure mode). The `cli-v*` tag
-# scheme is namespaced apart from the web app's `web-v*` tags.
+# both packages. Each config sets `separate-pull-requests: true` so this
+# workflow's Release PR lands on its own component-suffixed branch
+# (release-please--branches--main--components--cli) rather than colliding with
+# web on the shared `release-please--branches--main` (see web-release-please.yaml).
+# The `cli-v*` tag scheme is namespaced apart from the web app's `web-v*` tags.
 #
 # Token model: release-please runs with CLI_RELEASE_PAT (a PAT), NOT the default
 # GITHUB_TOKEN, for two reasons that GITHUB_TOKEN can't satisfy: (1) a tag pushed
