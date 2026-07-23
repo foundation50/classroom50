@@ -4,21 +4,27 @@ import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import { useAcceptOrgInvite } from "@/hooks/mutations/useAcceptOrgInvite"
 import { useToast } from "@/context/notifications/NotificationProvider"
+import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
+import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
 import {
   ChevronDown,
+  EllipsisVertical,
+  EyeOff,
+  Info,
   Lock,
   MailOpen,
   Plus,
   ShieldCheck,
   User,
 } from "lucide-react"
-import { motion } from "motion/react"
+import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
+import { AnimatePresence } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -26,8 +32,7 @@ import { Badge, Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
-import { enterExit } from "@/lib/motion"
-import { EnterDiv } from "@/lib/motionComponents"
+import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
@@ -179,28 +184,99 @@ function useOrgAffordances(summary: Classroom50OrgSummary) {
   }
 }
 
+function HideOrgMenu({
+  summary,
+  className,
+}: {
+  summary: Classroom50OrgSummary
+  className?: string
+}) {
+  const { t } = useTranslation()
+  const { org } = useOrgAffordances(summary)
+  const { hide, unhide } = useHiddenOrgs()
+  const { notify } = useToast()
+  const [detailsOpen, setDetailsOpen] = useState(false)
+
+  const handleHide = () => {
+    hide(org.login)
+    notify({
+      tone: "info",
+      key: `org-hidden-${org.login}`,
+      durationMs: 6000,
+      message: t("orgs.card.hidden", { org: org.login }),
+      action: {
+        label: t("orgs.card.undoHide"),
+        onClick: () => unhide(org.login),
+      },
+    })
+  }
+
+  // daisyUI keeps a focus-driven dropdown open until blur; blur the active item
+  // so the menu closes when opening the modal.
+  const closeMenu = () => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+  }
+
+  return (
+    <>
+      <div className={`dropdown dropdown-end ${className ?? ""}`}>
+        <Button
+          variant="ghost"
+          size="sm"
+          shape="square"
+          aria-label={t("orgs.card.moreActions", { org: org.login })}
+        >
+          <EllipsisVertical aria-hidden="true" className="size-4" />
+        </Button>
+        <ul
+          tabIndex={0}
+          className="menu dropdown-content z-10 mt-1 w-48 rounded-box border border-base-content/5 bg-base-100 p-1 shadow"
+        >
+          <li>
+            <button
+              type="button"
+              onClick={() => {
+                closeMenu()
+                setDetailsOpen(true)
+              }}
+            >
+              <Info aria-hidden="true" className="size-4" />
+              {t("orgs.card.details")}
+            </button>
+          </li>
+          <li>
+            <button type="button" onClick={handleHide}>
+              <EyeOff aria-hidden="true" className="size-4" />
+              {t("orgs.card.hide")}
+            </button>
+          </li>
+        </ul>
+      </div>
+
+      <OrgDetailsModal
+        summary={summary}
+        open={detailsOpen}
+        onClose={() => setDetailsOpen(false)}
+      />
+    </>
+  )
+}
+
 function OrgActions({ summary }: { summary: Classroom50OrgSummary }) {
   const { t } = useTranslation()
   const { org, canOpen } = useOrgAffordances(summary)
+
+  if (!canOpen) return null
   return (
-    <>
-      <GitHubLink
-        href={`https://github.com/${org.login}`}
-        label={t("orgs.card.viewOnGitHub")}
-        title={t("orgs.card.openOnGitHub", { org: org.login })}
-        className="shrink-0"
-        showLogo={false}
-      />
-      {canOpen && (
-        <Link
-          to="/$org"
-          params={{ org: org.login }}
-          className="btn btn-primary btn-sm"
-        >
-          {t("orgs.card.open")}
-        </Link>
-      )}
-    </>
+    <Link
+      to="/$org"
+      params={{ org: org.login }}
+      className="btn btn-primary btn-sm"
+    >
+      {t("orgs.card.open")}
+    </Link>
   )
 }
 
@@ -225,16 +301,19 @@ function OrgCard({
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
+  const displayName = useOrgDisplayName(org.login)
+  const heading = displayName ?? org.login
 
   return (
     <Card
-      as={EnterDiv}
+      as={PresenceCardDiv}
       radius="xl"
       shadow={false}
       className="col-span-12 md:col-span-6"
     >
-      <Card.Body className="justify-between">
-        <div className="flex gap-4">
+      <Card.Body className="relative justify-between">
+        <HideOrgMenu summary={summary} className="absolute end-2 top-2" />
+        <div className="flex gap-4 pe-8">
           <img
             src={org.avatar_url}
             alt=""
@@ -242,7 +321,7 @@ function OrgCard({
           />
 
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-bold">{org.login}</h2>
+            <h2 className="truncate text-lg font-bold">{heading}</h2>
 
             {org.description && (
               <p className="mt-1 line-clamp-2 text-sm text-base-content/70">
@@ -281,14 +360,11 @@ function OrgRow({
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
+  const displayName = useOrgDisplayName(org.login)
+  const heading = displayName ?? org.login
 
   return (
-    <motion.div
-      className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between"
-      variants={enterExit}
-      initial="initial"
-      animate="animate"
-    >
+    <PresenceCardDiv className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between">
       <div className="flex min-w-0 items-center gap-3">
         <img
           src={org.avatar_url}
@@ -297,7 +373,7 @@ function OrgRow({
         />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate font-semibold">{org.login}</span>
+            <span className="truncate font-semibold">{heading}</span>
             {showNoAccessBadge && (
               <span className="hidden sm:inline-flex">
                 <NoAccessBadge />
@@ -319,8 +395,9 @@ function OrgRow({
 
       <div className="flex shrink-0 items-center justify-end gap-2">
         <OrgActions summary={summary} />
+        <HideOrgMenu summary={summary} />
       </div>
-    </motion.div>
+    </PresenceCardDiv>
   )
 }
 
@@ -343,19 +420,22 @@ const OrgsPage = () => {
 
   const { viewMode, sortKey, changeView, changeSort } =
     useListPrefsState(orgListPrefs)
+  const { hidden } = useHiddenOrgs()
   const [search, setSearch] = useState("")
   const [modalOpen, setModalOpen] = useState(false)
 
   // Confirmed Classroom 50 orgs the user can use: a teacher's ready org, or a
   // student's enrolled org (no_access confirmed via the public Pages index).
+  // Orgs the user hid from the home page are dropped here (unhide from Settings).
   const cl50Orgs = useMemo(
     () =>
       orgs.filter(
         (summary) =>
-          summary.classroom50.status === "ready" ||
-          summary.classroom50.status === "no_access",
+          (summary.classroom50.status === "ready" ||
+            summary.classroom50.status === "no_access") &&
+          !hidden.has(summary.org.login),
       ),
-    [orgs],
+    [orgs, hidden],
   )
   // Admin-owned orgs without Classroom 50 yet — offered through the modal.
   const needsSetupOrgs = useMemo(
@@ -379,14 +459,15 @@ const OrgsPage = () => {
     [cl50Orgs, query],
   )
 
-  // Last-modified data is fetched only when its sort is active, for the shown
-  // set, so other views never fan out per-org.
-  const lastModifiedActive = sortKey === "last-modified"
+  // Each shown org's classroom50 config-repo pushed_at, for the "Updated …"
+  // line on every card and the last-modified sort. Fetched for the shown set on
+  // every home view (a deliberate per-card fan-out, shared with the repo cache),
+  // not just when the last-modified sort is active.
   const shownLogins = useMemo(
     () => filtered.map((summary) => summary.org.login),
     [filtered],
   )
-  const lastModified = useOrgLastModified(shownLogins, lastModifiedActive)
+  const lastModified = useOrgLastModified(shownLogins, true)
 
   const sorted = useMemo(() => {
     const byName = (a: Classroom50OrgSummary, b: Classroom50OrgSummary) =>
@@ -497,27 +578,27 @@ const OrgsPage = () => {
               />
             ) : sorted.length > 0 ? (
               <div className="grid grid-cols-12 gap-4">
-                {sorted.map((summary) => {
-                  const updatedIso = lastModifiedActive
-                    ? lastModified[summary.org.login]
-                    : undefined
-                  const updatedAgo = updatedIso
-                    ? formatRelativeToNow(new Date(updatedIso))
-                    : undefined
-                  return viewMode === "grid" ? (
-                    <OrgCard
-                      key={summary.org.id}
-                      summary={summary}
-                      updatedAgo={updatedAgo}
-                    />
-                  ) : (
-                    <OrgRow
-                      key={summary.org.id}
-                      summary={summary}
-                      updatedAgo={updatedAgo}
-                    />
-                  )
-                })}
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {sorted.map((summary) => {
+                    const updatedIso = lastModified[summary.org.login]
+                    const updatedAgo = updatedIso
+                      ? formatRelativeToNow(new Date(updatedIso))
+                      : undefined
+                    return viewMode === "grid" ? (
+                      <OrgCard
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    ) : (
+                      <OrgRow
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    )
+                  })}
+                </AnimatePresence>
               </div>
             ) : needsSetupOrgs.length > 0 ? (
               <EmptyState

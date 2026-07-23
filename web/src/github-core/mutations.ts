@@ -123,3 +123,4 @@ export {
   ClassroomSourceReadError,
   type TeamDescriptionReconcileResult,
 } from "./mutations/teamDescription"
+export { updateOrgProfile, type OrgProfileUpdate } from "./mutations/orgProfile"

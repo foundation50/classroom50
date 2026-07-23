@@ -193,6 +193,7 @@
     "setup": "Setup",
     "classroomSettings": "Classroom settings",
     "organizationSettings": "Organization settings",
+    "settings": "Settings",
     "newAssignment": "New assignment",
     "acceptAssignment": "Accept assignment",
     "members": "Members",
@@ -609,10 +610,38 @@
     "card": {
       "noAccessBadge": "No <code>classroom50</code> access",
       "planTitlePaid": "GitHub plan — Classroom 50 can be set up on Team and Enterprise plans",
-      "viewOnGitHub": "View on GitHub",
-      "openOnGitHub": "Open {{org}} on GitHub",
       "open": "Open",
-      "updatedAgo": "Updated {{when}}"
+      "updatedAgo": "Updated {{when}}",
+      "moreActions": "More actions for {{org}}",
+      "hide": "Hide from home",
+      "hidden": "Hid {{org}} from your home page.",
+      "undoHide": "Undo",
+      "details": "Details"
+    },
+    "detailsModal": {
+      "displayName": "Display name",
+      "displayNamePlaceholder": "e.g. Classroom 50 Summer Dev",
+      "description": "Description",
+      "descriptionPlaceholder": "A short description of this organization",
+      "website": "Website",
+      "websitePlaceholder": "classroom50.org",
+      "location": "Location",
+      "email": "Contact email",
+      "school": "School",
+      "orgId": "Organization ID",
+      "plan": "Plan",
+      "role": "Your role",
+      "roleAdmin": "Owner",
+      "roleMember": "Member",
+      "editOnGitHub": "Edit on GitHub",
+      "edit": "Edit profile",
+      "save": "Save changes",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "saved": "Updated {{org}}'s profile.",
+      "saveError": "Couldn't update the profile: {{error}}",
+      "manageOnGitHub": "Manage on GitHub",
+      "close": "Close"
     },
     "invites": {
       "summary_one": "You have {{count}} pending invitation",
@@ -628,6 +657,18 @@
       "acceptError": "Couldn't accept the invitation to {{org}}. It may need SSO authorization on GitHub, or try again.",
       "viewOnGitHub": "View invite on GitHub",
       "openInviteOnGitHub": "Open the {{org}} invitation on GitHub"
+    }
+  },
+  "settings": {
+    "page": {
+      "heading": "Settings",
+      "subheading": "Preferences for this browser. Nothing here is shared with your organizations."
+    },
+    "hiddenOrgs": {
+      "heading": "Hidden organizations",
+      "subheading": "Organizations you've hidden from your home page. Unhide one to show it again.",
+      "unhide": "Unhide",
+      "empty": "You haven't hidden any organizations."
     }
   },
   "assignments": {

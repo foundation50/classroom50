@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { isSafeHttpUrl, safeHttpUrl } from "./url"
+import { isSafeHttpUrl, normalizeWebsiteUrl, safeHttpUrl } from "./url"
 
 describe("isSafeHttpUrl", () => {
   it("accepts http and https absolute URLs", () => {
@@ -29,5 +29,37 @@ describe("safeHttpUrl", () => {
     expect(safeHttpUrl("https://github.com")).toBe("https://github.com")
     expect(safeHttpUrl("javascript:alert(1)")).toBeUndefined()
     expect(safeHttpUrl(undefined)).toBeUndefined()
+  })
+})
+
+describe("normalizeWebsiteUrl", () => {
+  it("defaults a bare host to https://", () => {
+    expect(normalizeWebsiteUrl("classroom50.org")).toBe(
+      "https://classroom50.org",
+    )
+    expect(normalizeWebsiteUrl("www.example.com/path")).toBe(
+      "https://www.example.com/path",
+    )
+  })
+
+  it("preserves an explicit http(s) scheme", () => {
+    expect(normalizeWebsiteUrl("http://example.com")).toBe("http://example.com")
+    expect(normalizeWebsiteUrl("https://example.com/x")).toBe(
+      "https://example.com/x",
+    )
+  })
+
+  it("trims surrounding whitespace", () => {
+    expect(normalizeWebsiteUrl("  example.com  ")).toBe("https://example.com")
+  })
+
+  it("returns empty string for blank input (clears the field)", () => {
+    expect(normalizeWebsiteUrl("")).toBe("")
+    expect(normalizeWebsiteUrl("   ")).toBe("")
+    expect(normalizeWebsiteUrl(undefined)).toBe("")
+  })
+
+  it("rejects a script-injection scheme (undefined)", () => {
+    expect(normalizeWebsiteUrl("javascript:alert(1)")).toBeUndefined()
   })
 })

@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query"
 
 import { useGitHubClient } from "@/context/github/GitHubProvider"
+import { githubKeys } from "@/github-core/queries"
 import type { GitHubOrgDetails } from "@/github-core/types"
 
 export type NeedsSetupPlans = {
@@ -23,7 +24,7 @@ const useNeedsSetupPlans = (logins: string[]): NeedsSetupPlans => {
 
   const results = useQueries({
     queries: logins.map((login) => ({
-      queryKey: ["github", "orgs", login],
+      queryKey: githubKeys.orgDetails(login),
       queryFn: () => client.request<GitHubOrgDetails>(`/orgs/${login}`),
       staleTime: 10 * 60 * 1000,
     })),
