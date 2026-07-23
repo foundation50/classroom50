@@ -42,12 +42,12 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      # Path-prefixed outputs use each package's PATH key ("web"/"cli"), which
-      # equals its component here. Gate on tag_name (empty => no release) rather
-      # than release_created: a single string that's robust to the boolean/string
-      # coercion that silently skipped the deploy on the v1.12/v1.13 releases.
+      # web--tag_name is the "web" package's path-prefixed output (path == its
+      # component). The deploy job gates on it; empty => no release, robust to the
+      # boolean/string coercion that silently skipped deploy on v1.12/v1.13.
+      # (The CLI dispatch reads steps.release.outputs directly, so no cli output
+      # is needed here.)
       web_tag: ${{ steps.release.outputs['web--tag_name'] }}
-      cli_tag: ${{ steps.release.outputs['cli--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v5
         id: release
