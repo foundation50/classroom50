@@ -8,16 +8,27 @@
 // true → spinner → the subtree (and its observer) UNMOUNTS → the query settles →
 // spinner clears → subtree REMOUNTS → fresh observer refetches → loop.
 //
-// The fix (`retryOnMount: false` on useGetOwnOrgMembership) keeps the cached
-// error across remounts, so the queryFn runs a bounded number of times and the
-// tree stabilizes on the error screen. This test drives the exact mount/unmount
-// pattern and asserts the queryFn is not called unboundedly.
+// The fix is a `retryOnMount` predicate on useGetOwnOrgMembership that suppresses
+// the remount refetch only for DEFINITIVE errors (401/403/404) — the loop's
+// driver — while still refetching transient 5xx/429/network errors on remount so
+// the documented self-heal is preserved. These tests cover both halves:
+//   1. a definitive 403 settles without an unbounded refetch loop, and
+//   2. a transient 500 still refetches on a fresh mount (no permanent pinning).
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { cleanup, render, screen, waitFor } from "@testing-library/react"
+import { StrictMode } from "react"
+import {
+  cleanup,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { GitHubAPIError } from "@/github-core/errors"
 
 const requestCount = vi.fn()
+// Per-test HTTP status the mocked membership read rejects with.
+let responseStatus = 403
 
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({
@@ -25,9 +36,9 @@ vi.mock("@/context/github/GitHubProvider", () => ({
       requestCount(path)
       return Promise.reject(
         new GitHubAPIError({
-          status: 403,
+          status: responseStatus,
           url: `https://api.github.com${path}`,
-          message: "Forbidden",
+          message: `HTTP ${responseStatus}`,
           body: null,
           rateLimit: {
             limit: null,
@@ -56,16 +67,18 @@ function Gate({ org }: { org: string }) {
 function GatedChild({ org }: { org: string }) {
   // The gated subtree also reads membership (as AcceptAssignmentPage does).
   const { isError } = useGetOwnOrgMembership(org)
-  return <div>{isError ? "not-a-member" : "child-loading"}</div>
+  return <div>{isError ? "settled-error" : "child-loading"}</div>
 }
 
 afterEach(() => {
   cleanup()
   requestCount.mockClear()
+  responseStatus = 403
 })
 
-describe("useGetOwnOrgMembership — no remount refetch loop for non-members", () => {
-  it("settles on the error screen without an unbounded refetch loop", async () => {
+describe("useGetOwnOrgMembership — remount behavior", () => {
+  it("settles a definitive 403 without an unbounded refetch loop", async () => {
+    responseStatus = 403
     const client = new QueryClient({
       defaultOptions: {
         // Match production intent: a definitive 403 does not retry.
@@ -73,25 +86,66 @@ describe("useGetOwnOrgMembership — no remount refetch loop for non-members", (
       },
     })
 
+    // StrictMode double-invokes render + mounts each effect twice, reproducing
+    // the exact fresh-observer-on-remount condition the fix must survive.
     render(
-      <QueryClientProvider client={client}>
-        <Gate org="acme" />
-      </QueryClientProvider>,
+      <StrictMode>
+        <QueryClientProvider client={client}>
+          <Gate org="acme" />
+        </QueryClientProvider>
+      </StrictMode>,
     )
 
     // The tree must settle on the terminal error branch, not spin forever.
     await waitFor(() =>
-      expect(screen.queryByText("not-a-member")).not.toBeNull(),
+      expect(screen.queryByText("settled-error")).not.toBeNull(),
     )
 
     // Give any latent loop time to manifest.
     await new Promise((r) => setTimeout(r, 100))
 
-    // Without retryOnMount:false the errored query refetches on every remount,
-    // driving the loop into dozens/hundreds of requests. With the fix the
-    // cached error survives remounts, so the queryFn runs only a handful of
-    // times (initial mounts of the two observers + StrictMode doubling).
+    // Without the retryOnMount suppression the definitive error refetches on
+    // every remount, driving the loop into dozens/hundreds of requests. With the
+    // fix the cached error survives remounts, so the queryFn runs only a small,
+    // bounded number of times (a generous ceiling that a loop would blow past).
     expect(requestCount.mock.calls.length).toBeLessThan(6)
     expect(screen.queryByText("org-spinner")).toBeNull()
+  })
+
+  it("still refetches a transient 500 error on a fresh mount (self-heal preserved)", async () => {
+    responseStatus = 500
+    // Shared cache across mounts so the second mount sees the cached transient
+    // error and must decide whether to refetch it. retry:false isolates the
+    // remount-refetch decision (retryOnMount) from the in-fetch retry loop.
+    const client = new QueryClient({
+      defaultOptions: { queries: { retryDelay: 0 } },
+    })
+    const wrapper = ({ children }: { children: React.ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    )
+
+    const first = renderHook(() => useGetOwnOrgMembership("acme"), { wrapper })
+    // The hook's own retryTransientGitHubError retries a 500 twice; retryDelay:0
+    // (above) makes that settle promptly. Allow generous time for it to reach
+    // the terminal error before probing the remount behavior.
+    await waitFor(() => expect(first.result.current.isError).toBe(true), {
+      timeout: 3000,
+    })
+    const afterFirst = requestCount.mock.calls.length
+    first.unmount()
+
+    // Remount a fresh observer against the SAME client (cached 500 present).
+    const second = renderHook(() => useGetOwnOrgMembership("acme"), { wrapper })
+
+    // A transient error must NOT be pinned: the fresh mount refetches it, so the
+    // request count grows past the first mount's total. (A definitive 403 would
+    // stay flat here — that's the behavior the loop test locks in.)
+    await waitFor(
+      () => expect(requestCount.mock.calls.length).toBeGreaterThan(afterFirst),
+      { timeout: 3000 },
+    )
+    await waitFor(() => expect(second.result.current.isError).toBe(true), {
+      timeout: 3000,
+    })
   })
 })
