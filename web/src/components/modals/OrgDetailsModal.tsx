@@ -30,7 +30,12 @@ function OrgDetailsModal({
   const { t } = useTranslation()
   const titleId = useId()
   const { org, membership } = summary
-  const { data: details } = useGetOrgPlanDetails(open ? org.login : undefined)
+  // Fetch on the login unconditionally (not gated on `open`): this is the same
+  // ["github","orgs",login] key the card already fetches via useOrgDisplayName,
+  // so React Query dedupes it — no extra request. Gating on `open` dropped
+  // `details` the instant Close flipped open=false, collapsing the name/plan
+  // rows and shrinking the box mid-close (a visible flash).
+  const { data: details } = useGetOrgPlanDetails(org.login)
 
   const displayName = details?.name ?? undefined
   const isOwner = isOwnerGitHubOrgRole(membership.role)
