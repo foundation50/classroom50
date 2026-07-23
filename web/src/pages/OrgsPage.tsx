@@ -8,6 +8,7 @@ import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
+import useOrgDisplayName from "@/hooks/useOrgDisplayName"
 import useOrgLastModified from "@/hooks/useOrgLastModified"
 import { useQueryClient } from "@tanstack/react-query"
 import { Link, useNavigate } from "@tanstack/react-router"
@@ -276,6 +277,8 @@ function OrgCard({
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
+  const displayName = useOrgDisplayName(org.login)
+  const heading = displayName ?? org.login
 
   return (
     <Card
@@ -294,7 +297,13 @@ function OrgCard({
           />
 
           <div className="min-w-0 flex-1">
-            <h2 className="truncate text-lg font-bold">{org.login}</h2>
+            <h2 className="truncate text-lg font-bold">{heading}</h2>
+
+            {displayName && displayName !== org.login && (
+              <p className="truncate font-mono text-xs text-base-content/50">
+                {org.login}
+              </p>
+            )}
 
             {org.description && (
               <p className="mt-1 line-clamp-2 text-sm text-base-content/70">
@@ -333,6 +342,8 @@ function OrgRow({
 }) {
   const { t } = useTranslation()
   const { org, showNoAccessBadge } = useOrgAffordances(summary)
+  const displayName = useOrgDisplayName(org.login)
+  const heading = displayName ?? org.login
 
   return (
     <motion.div
@@ -349,7 +360,12 @@ function OrgRow({
         />
         <div className="min-w-0">
           <div className="flex items-center gap-2">
-            <span className="truncate font-semibold">{org.login}</span>
+            <span className="truncate font-semibold">{heading}</span>
+            {displayName && displayName !== org.login && (
+              <span className="truncate font-mono text-xs text-base-content/50">
+                {org.login}
+              </span>
+            )}
             {showNoAccessBadge && (
               <span className="hidden sm:inline-flex">
                 <NoAccessBadge />
