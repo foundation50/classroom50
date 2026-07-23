@@ -155,4 +155,24 @@ describe("MembershipError rendering", () => {
     fireEvent.click(button)
     expect(onRetry).toHaveBeenCalledTimes(1)
   })
+
+  it("still offers a recovery path when onRetry is absent (no dead end)", () => {
+    // Both production call sites pass onRetry, but the 'never a dead end'
+    // invariant must hold even if a future caller omits it: the button is gated
+    // on onRetry, so with none the screen still self-describes the recovery
+    // (ask your teacher, then check again) via the instructions copy.
+    const info = classifyMembershipError(makeError({ status: 404 }), {
+      org: "acme",
+    })
+    render(<MembershipError info={info} org="acme" />)
+
+    expect(
+      screen.queryByRole("button", {
+        name: "membership.notAMember.checkAgain",
+      }),
+    ).toBeNull()
+    expect(
+      screen.queryByText("membership.notAMember.instructions"),
+    ).not.toBeNull()
+  })
 })
