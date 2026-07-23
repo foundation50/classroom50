@@ -36,8 +36,11 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     outputs:
-      # `web--*` keys because component is "web" (see release-please-config).
-      release_created: ${{ steps.release.outputs['web--release_created'] }}
+      # Path-prefixed outputs use the package PATH (the key under `packages` in
+      # release-please-config.json), which is "web" — not the `component`. Gate
+      # on tag_name (empty ⇒ no release) rather than release_created: it's a
+      # single string that's robust to the boolean/string coercion that made the
+      # deploy job silently skip on the v1.12/v1.13 releases.
       tag_name: ${{ steps.release.outputs['web--tag_name'] }}
     steps:
       - uses: googleapis/release-please-action@v5
@@ -48,12 +51,20 @@ jobs:
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
 
+      # Dump every output release-please emitted so a future "tag created but
+      # deploy skipped" regression is root-causeable from this log alone.
+      - name: Debug release-please outputs
+        env:
+          RP_OUTPUTS: ${{ toJSON(steps.release.outputs) }}
+        run: echo "$RP_OUTPUTS"
+
   # Build + deploy the freshly tagged release to production. Gated on a real
-  # release (Release PR merged) so a plain push to main never deploys. Mirrors
-  # web-deploy.yaml's build so the tagged commit ships stamped with its version.
+  # release (non-empty tag_name ⇒ Release PR was merged) so a plain push to main
+  # never deploys. Mirrors web-deploy.yaml's build so the tagged commit ships
+  # stamped with its version.
   deploy:
     needs: release-please
-    if: ${{ needs.release-please.outputs.release_created == 'true' }}
+    if: ${{ needs.release-please.outputs.tag_name != '' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
