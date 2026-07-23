@@ -24,7 +24,7 @@ import {
   User,
 } from "lucide-react"
 import OrgDetailsModal from "@/components/modals/OrgDetailsModal"
-import { motion } from "motion/react"
+import { AnimatePresence, motion } from "motion/react"
 import { useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { GitHubLink } from "@/components/GitHubLink"
@@ -33,7 +33,7 @@ import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
 import Spinner from "@/components/Spinner"
 import { enterExit } from "@/lib/motion"
-import { EnterDiv } from "@/lib/motionComponents"
+import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
 import { useListPrefsState } from "@/lib/listPrefs"
 import { formatRelativeToNow } from "@/util/formatDate"
@@ -194,7 +194,7 @@ function HideOrgMenu({
 }) {
   const { t } = useTranslation()
   const { org } = useOrgAffordances(summary)
-  const { hide } = useHiddenOrgs()
+  const { hide, unhide } = useHiddenOrgs()
   const { notify } = useToast()
   const [detailsOpen, setDetailsOpen] = useState(false)
 
@@ -203,8 +203,12 @@ function HideOrgMenu({
     notify({
       tone: "info",
       key: `org-hidden-${org.login}`,
-      durationMs: 4000,
+      durationMs: 6000,
       message: t("orgs.card.hidden", { org: org.login }),
+      action: {
+        label: t("orgs.card.undoHide"),
+        onClick: () => unhide(org.login),
+      },
     })
   }
 
@@ -306,7 +310,7 @@ function OrgCard({
 
   return (
     <Card
-      as={EnterDiv}
+      as={PresenceCardDiv}
       radius="xl"
       shadow={false}
       className="col-span-12 md:col-span-6"
@@ -365,10 +369,12 @@ function OrgRow({
 
   return (
     <motion.div
+      layout
       className="col-span-12 flex flex-col gap-3 rounded-xl border border-base-300 bg-base-100 p-4 sm:flex-row sm:items-center sm:justify-between"
       variants={enterExit}
       initial="initial"
       animate="animate"
+      exit="exit"
     >
       <div className="flex min-w-0 items-center gap-3">
         <img
@@ -582,27 +588,29 @@ const OrgsPage = () => {
               />
             ) : sorted.length > 0 ? (
               <div className="grid grid-cols-12 gap-4">
-                {sorted.map((summary) => {
-                  const updatedIso = lastModifiedActive
-                    ? lastModified[summary.org.login]
-                    : undefined
-                  const updatedAgo = updatedIso
-                    ? formatRelativeToNow(new Date(updatedIso))
-                    : undefined
-                  return viewMode === "grid" ? (
-                    <OrgCard
-                      key={summary.org.id}
-                      summary={summary}
-                      updatedAgo={updatedAgo}
-                    />
-                  ) : (
-                    <OrgRow
-                      key={summary.org.id}
-                      summary={summary}
-                      updatedAgo={updatedAgo}
-                    />
-                  )
-                })}
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {sorted.map((summary) => {
+                    const updatedIso = lastModifiedActive
+                      ? lastModified[summary.org.login]
+                      : undefined
+                    const updatedAgo = updatedIso
+                      ? formatRelativeToNow(new Date(updatedIso))
+                      : undefined
+                    return viewMode === "grid" ? (
+                      <OrgCard
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    ) : (
+                      <OrgRow
+                        key={summary.org.id}
+                        summary={summary}
+                        updatedAgo={updatedAgo}
+                      />
+                    )
+                  })}
+                </AnimatePresence>
               </div>
             ) : needsSetupOrgs.length > 0 ? (
               <EmptyState

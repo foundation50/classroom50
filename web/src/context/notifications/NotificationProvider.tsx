@@ -20,11 +20,19 @@ const log = logger.scope("context:notifications")
 
 export type ToastTone = "info" | "success" | "warning" | "error"
 
+// An optional inline action rendered in the toast (e.g. "Undo"). Clicking it
+// runs onClick and then dismisses the toast.
+export type ToastAction = {
+  label: string
+  onClick: () => void
+}
+
 export type Toast = {
   // Stable id for React keys + dismissal. Auto-generated unless `key` is given.
   id: string
   tone: ToastTone
   message: React.ReactNode
+  action?: ToastAction
   // Auto-dismiss after this many ms; 0/undefined means it stays until dismissed.
   durationMs?: number
 }
@@ -37,6 +45,9 @@ export type NotifyInput = {
   // route-level errorComponent). Use plain text, a plain <a href>, or a button
   // calling router.navigate.
   message: React.ReactNode
+  // Optional inline action button (e.g. Undo). Its onClick runs, then the toast
+  // is dismissed.
+  action?: ToastAction
   // Optional dedup key: a later notify() with the same key replaces the prior
   // toast in place instead of stacking a duplicate (e.g. repeated retries).
   key?: string
@@ -79,7 +90,13 @@ export function NotificationProvider({ children }: PropsWithChildren) {
   )
 
   const notify = useCallback(
-    ({ tone = "info", message, key, durationMs }: NotifyInput): string => {
+    ({
+      tone = "info",
+      message,
+      action,
+      key,
+      durationMs,
+    }: NotifyInput): string => {
       // Record error toasts as session activity — a deliberate error toast is,
       // by construction, a real failure the app chose to show. Only string
       // messages are recorded (JSX carries no clean label). recordErrorToast
@@ -102,7 +119,7 @@ export function NotificationProvider({ children }: PropsWithChildren) {
       const id = key ?? nextId()
       clearTimer(id)
 
-      const toast: Toast = { id, tone, message, durationMs }
+      const toast: Toast = { id, tone, message, action, durationMs }
       setToasts((prev) => {
         const without = prev.filter((t) => t.id !== id)
         return [...without, toast]
@@ -164,6 +181,19 @@ const ToastViewport = ({
             className={`${alertToneClass(toast.tone)} max-w-sm`}
           >
             <span className="text-sm">{toast.message}</span>
+            {toast.action && (
+              <Button
+                variant="ghost"
+                size="xs"
+                className="font-semibold"
+                onClick={() => {
+                  toast.action?.onClick()
+                  onDismiss(toast.id)
+                }}
+              >
+                {toast.action.label}
+              </Button>
+            )}
             <Button
               variant="ghost"
               size="xs"

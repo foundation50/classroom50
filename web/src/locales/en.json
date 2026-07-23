@@ -615,6 +615,7 @@
       "moreActions": "More actions for {{org}}",
       "hide": "Hide from home",
       "hidden": "Hid {{org}} from your home page.",
+      "undoHide": "Undo",
       "details": "Details"
     },
     "detailsModal": {
