@@ -150,4 +150,20 @@ describe("OrgDetailsModal", () => {
       expect.objectContaining({ blog: "https://classroom50.org" }),
     )
   })
+
+  it("drops an unsafe website scheme from the payload instead of sending it raw", async () => {
+    planDetails.mockReturnValue({ data: { name: "Acme", blog: "" } })
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+
+    await userEvent.click(screen.getByText("orgs.detailsModal.edit"))
+    const websiteInput = screen.getByPlaceholderText(
+      "orgs.detailsModal.websitePlaceholder",
+    )
+    await userEvent.type(websiteInput, "javascript:alert(1)")
+    await userEvent.click(screen.getByText("orgs.detailsModal.save"))
+
+    expect(mutateAsync).toHaveBeenCalledTimes(1)
+    const payload = mutateAsync.mock.calls[0][0]
+    expect(payload).not.toHaveProperty("blog")
+  })
 })

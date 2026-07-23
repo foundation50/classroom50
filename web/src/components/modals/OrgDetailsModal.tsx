@@ -8,6 +8,7 @@ import GitHub from "@/assets/github.svg?react"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
 import { useUpdateOrgProfile } from "@/hooks/mutations/useUpdateOrgProfile"
+import type { OrgProfileUpdate } from "@/github-core/mutations"
 import { isOwnerGitHubOrgRole } from "@/authz"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import { githubOrgSettingsUrl } from "@/util/orgUrl"
@@ -63,6 +64,7 @@ function OrgDetailsModal({
   const isOwner = isOwnerGitHubOrgRole(membership.role)
   const displayName = details?.name ?? undefined
   const heading = displayName ?? org.login
+  const websiteHref = safeHttpUrl(details?.blog)
 
   const currentValues = (): ProfileFormValues => ({
     name: details?.name ?? "",
@@ -77,14 +79,16 @@ function OrgDetailsModal({
     defaultValues: currentValues(),
     onSubmit: async ({ value }) => {
       // Relax website input: accept a bare host (e.g. "classroom50.org") and
-      // default it to https:// via the built-in URL parser. An empty string
-      // clears the field; a value that can't be made safe is sent as-is and
-      // GitHub validates it.
-      const normalizedBlog = value.blog.trim()
-        ? (normalizeWebsiteUrl(value.blog) ?? value.blog.trim())
-        : ""
+      // default it to https:// via the built-in URL parser. A blank value clears
+      // the field; an unsafe value (e.g. a javascript: scheme) is dropped from
+      // the payload rather than sent raw, so the sanitizer isn't defeated.
+      const trimmedBlog = value.blog.trim()
+      const normalizedBlog = trimmedBlog ? normalizeWebsiteUrl(trimmedBlog) : ""
+      const update: OrgProfileUpdate = { ...value }
+      if (normalizedBlog === undefined) delete update.blog
+      else update.blog = normalizedBlog
       try {
-        await updateProfile.mutateAsync({ ...value, blog: normalizedBlog })
+        await updateProfile.mutateAsync(update)
         notify({
           tone: "success",
           durationMs: 4000,
@@ -330,9 +334,9 @@ function OrgDetailsModal({
               <InfoRow
                 label={t("orgs.detailsModal.website")}
                 value={
-                  safeHttpUrl(details?.blog) ? (
+                  websiteHref ? (
                     <a
-                      href={safeHttpUrl(details?.blog)}
+                      href={websiteHref}
                       target="_blank"
                       rel="noreferrer"
                       className="text-primary hover:underline"
@@ -349,7 +353,7 @@ function OrgDetailsModal({
                 value={
                   details?.email ? (
                     <a
-                      href={`mailto:${details.email}`}
+                      href={`mailto:${encodeURIComponent(details.email)}`}
                       className="text-primary hover:underline"
                     >
                       {details.email}

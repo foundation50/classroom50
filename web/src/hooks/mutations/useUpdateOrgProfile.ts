@@ -8,11 +8,12 @@ import {
 } from "@/github-core/mutations"
 import type { GitHubOrgDetails } from "@/github-core/types"
 
-// Edit an org's public profile (PATCH /orgs/{org}) — owner-only. On success it
-// seeds the returned org into the shared ["github","orgs",login] cache so the
-// home card title/details reflect the change immediately, then invalidates to
-// refetch canonical state. Invalidation lives here so a mid-flight unmount can't
-// drop it; the success/error toasts stay at the call site.
+// Edit an org's public profile (PATCH /orgs/{org}) — owner-only. The PATCH
+// response is the canonical updated org, so seed it into the shared
+// ["github","orgs",login] cache; the home card title/details reflect the change
+// immediately with no extra GET. Readers carry a 10-min staleTime, so a refetch
+// here would be redundant. The seed lives in the hook's onSuccess so a mid-flight
+// unmount can't drop it; the success/error toasts stay at the call site.
 export function useUpdateOrgProfile(org: string) {
   const client = useGitHubClient()
   const queryClient = useQueryClient()
@@ -21,9 +22,6 @@ export function useUpdateOrgProfile(org: string) {
     mutationFn: (update) => updateOrgProfile(client, org, update),
     onSuccess: (updated) => {
       queryClient.setQueryData(githubKeys.orgDetails(org), updated)
-      void queryClient.invalidateQueries({
-        queryKey: githubKeys.orgDetails(org),
-      })
     },
   })
 }

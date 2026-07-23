@@ -618,10 +618,8 @@
       "details": "Details"
     },
     "detailsModal": {
-      "title": "Organization profile",
       "displayName": "Display name",
       "displayNamePlaceholder": "e.g. Classroom 50 Summer Dev",
-      "slug": "URL slug",
       "description": "Description",
       "descriptionPlaceholder": "A short description of this organization",
       "website": "Website",
@@ -641,7 +639,6 @@
       "cancel": "Cancel",
       "saved": "Updated {{org}}'s profile.",
       "saveError": "Couldn't update the profile: {{error}}",
-      "ownerOnly": "Only organization owners can edit the profile.",
       "manageOnGitHub": "Manage on GitHub",
       "close": "Close"
     },
