@@ -197,6 +197,17 @@ export type GitHubOrgDetails = {
   // returns it; the membership list does not. Optional/nullable — fall back to
   // the login when absent.
   name?: string | null
+  // Editable profile fields from GET /orgs/{org}, writable via PATCH /orgs/{org}
+  // by an org owner. All optional/nullable — read defensively.
+  description?: string | null
+  // The org's public website. GitHub's API names this field `blog`.
+  blog?: string | null
+  location?: string | null
+  // The org's public contact email (profile), distinct from `billing_email`.
+  email?: string | null
+  company?: string | null
+  avatar_url?: string
+  html_url?: string
   // `plan` is only returned by GET /orgs/{org} to org owners; a non-owner
   // member gets a response without it, so it's optional and read defensively.
   plan?: {

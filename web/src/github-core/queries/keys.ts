@@ -12,6 +12,12 @@ export const githubKeys = {
   orgMembership: (org: string) =>
     [...githubKeys.all, "org-membership", org] as const,
 
+  // GET /orgs/{org} — the full org object (display name, description, plan,
+  // profile fields). Shared by the home card's name fetch, the plan-details
+  // reads, and the org-profile edit's invalidation, so they stay coherent.
+  orgDetails: (org: string | undefined) =>
+    [...githubKeys.all, "orgs", org] as const,
+
   // The authenticated viewer's OWN membership in an org (GET
   // /user/memberships/orgs/{org}) — distinct from `orgMembership` above (the
   // org-scoped membership read). Single-sourced here because both the read

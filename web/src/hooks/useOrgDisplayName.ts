@@ -1,5 +1,6 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
 import { useQuery } from "@tanstack/react-query"
+import { githubKeys } from "@/github-core/queries"
 import type { GitHubOrgDetails } from "@/github-core/types"
 
 // The org's human-friendly display name (e.g. "Classroom 50 Summer Dev" for the
@@ -11,7 +12,7 @@ const useOrgDisplayName = (login?: string): string | undefined => {
   const client = useGitHubClient()
 
   const { data } = useQuery({
-    queryKey: ["github", "orgs", login],
+    queryKey: githubKeys.orgDetails(login),
     queryFn: () => client.request<GitHubOrgDetails>(`/orgs/${login}`),
     enabled: !!login,
     staleTime: 10 * 60 * 1000,

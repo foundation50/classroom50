@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 
 vi.mock("react-i18next", async (importActual) => {
   const actual = await importActual<typeof import("react-i18next")>()
@@ -10,6 +11,16 @@ vi.mock("react-i18next", async (importActual) => {
 const planDetails = vi.fn()
 vi.mock("@/hooks/useGetOrgPlanDetails", () => ({
   default: (...a: unknown[]) => planDetails(...a),
+}))
+
+const mutateAsync = vi.fn().mockResolvedValue({})
+vi.mock("@/hooks/mutations/useUpdateOrgProfile", () => ({
+  useUpdateOrgProfile: () => ({ mutateAsync, isPending: false }),
+}))
+
+const notify = vi.fn()
+vi.mock("@/context/notifications/NotificationProvider", () => ({
+  useToast: () => ({ notify, dismiss: vi.fn() }),
 }))
 
 // happy-dom lacks <dialog> showModal/close; stub them so <Modal> renders open.
@@ -26,7 +37,6 @@ import OrgDetailsModal from "./OrgDetailsModal"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 
 const summary = (
-  overrides?: Partial<Classroom50OrgSummary["org"]>,
   role: "admin" | "member" = "admin",
 ): Classroom50OrgSummary => ({
   org: {
@@ -35,7 +45,6 @@ const summary = (
     avatar_url: "https://example.com/a.png",
     description: "Summer cohort",
     html_url: "https://github.com/classroom50-summer-dev",
-    ...overrides,
   },
   membership: { state: "active", role },
   classroom50: {
@@ -49,45 +58,63 @@ const summary = (
 afterEach(() => {
   cleanup()
   planDetails.mockReset()
+  mutateAsync.mockClear()
+  notify.mockClear()
 })
 
 describe("OrgDetailsModal", () => {
-  it("shows the display name, slug, id, plan, and owner role", () => {
+  it("shows the display name, slug, plan, and owner role in view mode", () => {
     planDetails.mockReturnValue({
-      data: { name: "Classroom 50 Summer Dev", plan: { name: "team" } },
+      data: {
+        name: "Classroom 50 Summer Dev",
+        description: "Summer cohort",
+        plan: { name: "team" },
+      },
     })
     render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
-    expect(
-      screen.getAllByText("Classroom 50 Summer Dev").length,
-    ).toBeGreaterThan(0)
+    expect(screen.getByText("Classroom 50 Summer Dev")).toBeTruthy()
     expect(screen.getByText("classroom50-summer-dev")).toBeTruthy()
-    expect(screen.getByText("4242")).toBeTruthy()
     expect(screen.getByText("team")).toBeTruthy()
     expect(screen.getByText("orgs.detailsModal.roleAdmin")).toBeTruthy()
   })
 
-  it("falls back to the slug when no display name is set", () => {
+  it("falls back to the slug heading when no display name is set", () => {
     planDetails.mockReturnValue({ data: { name: null } })
     render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
-    // Heading shows the slug; no separate display-name row label is rendered
-    // (that row is omitted). The slug still appears as the Slug row value.
     expect(
       screen.getAllByText("classroom50-summer-dev").length,
     ).toBeGreaterThan(0)
-    expect(screen.queryByText("orgs.detailsModal.displayName")).toBeNull()
   })
 
-  it("hides the Settings link for a non-owner member", () => {
+  it("hides Edit and the Settings link for a non-owner member", () => {
     planDetails.mockReturnValue({ data: { name: "Acme" } })
     render(
-      <OrgDetailsModal
-        summary={summary({}, "member")}
-        open
-        onClose={() => {}}
-      />,
+      <OrgDetailsModal summary={summary("member")} open onClose={() => {}} />,
     )
+    expect(screen.queryByText("orgs.detailsModal.edit")).toBeNull()
     expect(screen.queryByText("orgs.detailsModal.linkSettings")).toBeNull()
     expect(screen.getByText("orgs.detailsModal.linkRepos")).toBeTruthy()
     expect(screen.getByText("orgs.detailsModal.roleMember")).toBeTruthy()
+  })
+
+  it("lets an owner edit and save the profile", async () => {
+    planDetails.mockReturnValue({
+      data: { name: "Old Name", description: "old" },
+    })
+    render(<OrgDetailsModal summary={summary()} open onClose={() => {}} />)
+
+    await userEvent.click(screen.getByText("orgs.detailsModal.edit"))
+
+    const nameInput = screen.getByDisplayValue("Old Name")
+    await userEvent.clear(nameInput)
+    await userEvent.type(nameInput, "New Name")
+    await userEvent.click(screen.getByText("orgs.detailsModal.save"))
+
+    expect(mutateAsync).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "New Name" }),
+    )
+    expect(notify).toHaveBeenCalledWith(
+      expect.objectContaining({ tone: "success" }),
+    )
   })
 })
