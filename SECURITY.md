@@ -7,7 +7,7 @@ backend, and all state lives in GitHub repos and config files. Most security
 concerns therefore relate to the CLI extensions, the web app, the autograder
 workflows, or the tokens they use.
 
-## Reporting a vulnerability
+## Reporting a Vulnerability
 
 **Please do not report security vulnerabilities through public GitHub issues,
 discussions, or pull requests.**
@@ -27,7 +27,7 @@ When reporting, please include as much of the following as you can:
 **Never include real tokens, secrets, or private student data in a report.**
 Redact them and describe the exposure instead.
 
-## What to expect
+## What to Expect
 
 - We aim to acknowledge new reports within a few business days.
 - We will keep you informed as we investigate and work on a fix.
@@ -52,7 +52,7 @@ Out of scope:
   token to exploit.
 - Findings from automated scanners without a demonstrated, realistic impact.
 
-## Supported versions
+## Supported Versions
 
 Classroom 50 is under active development and ships from `main`. Security fixes
 are applied to the latest release of the CLI extensions and the deployed web
