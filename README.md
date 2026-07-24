@@ -1,6 +1,6 @@
 # Classroom 50
 
-Classroom 50 is a free and open-source tool for managing and grading programming assignments via GitHub. Supported by the [Fifty Foundation](https://fifty.foundation) as an open-source alternative to GitHub Classroom, Classroom 50 supports creating assignments, defining auto-graded correctness tests, and managing submissions.
+Classroom 50 is a free and open-source tool for managing and grading programming assignments via GitHub. Supported by the [Fifty Foundation](https://fifty.foundation/) as an open-source alternative to GitHub Classroom, Classroom 50 supports creating assignments, defining auto-graded correctness tests, and managing submissions.
 
 Each top-level folder is a self-contained piece that may eventually ship from its own repository.
 
