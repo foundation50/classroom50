@@ -614,8 +614,7 @@ const SubmissionsPageContent = () => {
   // spinner/label (distinct from the page-wide `regrading` gate).
   const regradeAllActive =
     regradeAll.phase === "dispatching" || regradeAll.phase === "running"
-  const { data: lastRun, refetch: refetchLastRun } =
-    useGetLastCollectScoresRun(org)
+  const { data: lastRun } = useGetLastCollectScoresRun(org)
   const collectWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${COLLECT_SCORES_WORKFLOW}`
   const regradeWorkflowUrl = `https://github.com/${org}/${CONFIG_REPO}/actions/workflows/${REGRADE_WORKFLOW}`
   const collecting =
@@ -684,10 +683,10 @@ const SubmissionsPageContent = () => {
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
   // finishes, so the freshness line re-derives (the collect just consumed the
-  // pushes latestPush was flagging). Invalidate (not just refetch) the last-run
-  // query: its 60s staleTime would otherwise let a cached entry from before the
-  // run short-circuit the update, leaving the "Last collected" line lagging even
-  // though the button color is already correct from the tracked run.
+  // pushes latestPush was flagging). Invalidate the last-run query rather than
+  // refetching it: its 60s staleTime would otherwise let a cached entry from
+  // before the run short-circuit the update, leaving the "Last collected" line
+  // lagging even though the button color is already correct from the tracked run.
   useEffect(() => {
     if (collectScores.phase === "completed") {
       refetchScores()
@@ -696,17 +695,9 @@ const SubmissionsPageContent = () => {
           queryKey: githubKeys.lastCollectScoresRun(org),
         })
       }
-      refetchLastRun()
       refetchOrgRepos()
     }
-  }, [
-    collectScores.phase,
-    org,
-    queryClient,
-    refetchScores,
-    refetchLastRun,
-    refetchOrgRepos,
-  ])
+  }, [collectScores.phase, org, queryClient, refetchScores, refetchOrgRepos])
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
