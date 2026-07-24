@@ -83,7 +83,14 @@ function apiError(status: number, message: string): GitHubAPIError {
     url: "https://api.github.com/test",
     message,
     body: { message },
-    rateLimit: { reset: null, resource: null, retryAfter: null },
+    rateLimit: {
+      limit: null,
+      remaining: null,
+      used: null,
+      reset: null,
+      resource: null,
+      retryAfter: null,
+    },
   })
 }
 
