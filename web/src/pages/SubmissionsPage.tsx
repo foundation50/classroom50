@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import Papa from "papaparse"
 
+import { useQueryClient } from "@tanstack/react-query"
 import { useParams, Navigate } from "@tanstack/react-router"
 
 import Breadcrumb from "@/components/breadcrumb"
@@ -33,6 +34,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   latestAssignmentPush,
+  latestCollectedAt,
   mergeLiveRows,
   reconcileNonSubmitters,
   rosterScopedRows,
@@ -73,6 +75,7 @@ import {
   COLLECT_SCORES_WORKFLOW,
   REGRADE_WORKFLOW,
 } from "@/github-core/workflows"
+import { githubKeys } from "@/github-core/queries"
 import {
   formatDueDateTime,
   formatRelativeToNow,
@@ -91,6 +94,7 @@ const EMPTY_SET: Set<string> = new Set()
 const SubmissionsPageContent = () => {
   const { t } = useTranslation()
   const { org, classroom, assignment } = useParams({ strict: false })
+  const queryClient = useQueryClient()
   // Regrade-all is a config-repo-write tier action (teacher|hta); Collect and
   // per-row regrade stay all-staff (the page already gates entry on
   // viewClassroomStaffContent). GitHub is the real enforcer; this is the UX gate.
@@ -639,11 +643,6 @@ const SubmissionsPageContent = () => {
       ? t("submissions.actions.viewRun")
       : t("submissions.actions.viewWorkflow")
 
-  const lastCollectedLabel =
-    lastRun?.status === "completed" && lastRun.created_at
-      ? formatRelativeToNow(new Date(lastRun.created_at))
-      : null
-
   // Staleness heuristic (no extra API call): the most recent push across this
   // assignment's repos, read from the already-loaded org repo list's pushed_at.
   // If it's newer than the last completed collect run, scores.json probably
@@ -658,23 +657,56 @@ const SubmissionsPageContent = () => {
       ),
     [orgRepos, classroom, assignment, siblingSlugs],
   )
+
+  // Effective "last collected" prefers the run we just dispatched and know
+  // finished over the status=completed query, which can still report the prior
+  // run while GitHub's Actions list catches up. Gating on phase "completed"
+  // means conclusion === "success" (see useGitHubOperation), so a failed/timed
+  // -out run never relaxes the button. Both the freshness label and the
+  // staleness color read this one value so they can't disagree.
+  const lastRunCompletedAt =
+    lastRun?.status === "completed" ? lastRun.created_at : null
+  const trackedCompletedAt =
+    collectScores.phase === "completed"
+      ? (collectScores.run?.created_at ?? null)
+      : null
+  const effectiveLastCollectedAt = latestCollectedAt(
+    lastRunCompletedAt,
+    trackedCompletedAt,
+  )
+
+  const lastCollectedLabel = effectiveLastCollectedAt
+    ? formatRelativeToNow(new Date(effectiveLastCollectedAt))
+    : null
   const snapshotStale =
     !isEmptyRepoAssignment &&
-    snapshotIsStale(
-      latestPush,
-      lastRun?.status === "completed" ? lastRun.created_at : null,
-    )
+    snapshotIsStale(latestPush, effectiveLastCollectedAt)
 
   // Refresh scores + last-run timestamp + org repo list once a manual collection
   // finishes, so the freshness line re-derives (the collect just consumed the
-  // pushes latestPush was flagging).
+  // pushes latestPush was flagging). Invalidate (not just refetch) the last-run
+  // query: its 60s staleTime would otherwise let a cached entry from before the
+  // run short-circuit the update, leaving the "Last collected" line lagging even
+  // though the button color is already correct from the tracked run.
   useEffect(() => {
     if (collectScores.phase === "completed") {
       refetchScores()
+      if (org) {
+        queryClient.invalidateQueries({
+          queryKey: githubKeys.lastCollectScoresRun(org),
+        })
+      }
       refetchLastRun()
       refetchOrgRepos()
     }
-  }, [collectScores.phase, refetchScores, refetchLastRun, refetchOrgRepos])
+  }, [
+    collectScores.phase,
+    org,
+    queryClient,
+    refetchScores,
+    refetchLastRun,
+    refetchOrgRepos,
+  ])
 
   const downloadScoresCsv = () => {
     // Group grades are per-repo (keyed by the founder/owner), so a per-teammate
