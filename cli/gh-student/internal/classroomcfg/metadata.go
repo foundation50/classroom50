@@ -97,20 +97,21 @@ func Render(cfg Config) ([]byte, error) {
 }
 
 // DropFiles commits `.classroom50.yaml` + the autograde workflow in one Tree
-// commit so the repo's initial shape lands atomically. This is the accept
-// commit; creating `.classroom50.yaml` here is what the runner uses to resolve
-// the Feedback-PR baseline (see MetadataPath). The commit message is
-// human-readable only. WaitForStableBranch polls first because GitHub doesn't
-// propagate the post-templated-repo commit ref synchronously (the contents API
-// briefly returns 409 "Git Repository is empty" otherwise).
-func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, workflowContent string) error {
+// commit so the repo's initial shape lands atomically, returning the accept
+// commit's SHA (the Feedback-PR baseline the `feedback` branch freezes at).
+// Creating `.classroom50.yaml` here is what the runner uses to resolve that
+// same baseline (see MetadataPath). The commit message is human-readable only.
+// WaitForStableBranch polls first because GitHub doesn't propagate the
+// post-templated-repo commit ref synchronously (the contents API briefly
+// returns 409 "Git Repository is empty" otherwise).
+func DropFiles(client githubapi.Client, owner, repo, branch string, cfg Config, workflowContent string) (string, error) {
 	if err := WaitForStableBranch(client, owner, repo, branch); err != nil {
-		return err
+		return "", err
 	}
 
 	metadataBytes, err := Render(cfg)
 	if err != nil {
-		return err
+		return "", err
 	}
 
 	files := map[string]string{

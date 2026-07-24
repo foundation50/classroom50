@@ -41,6 +41,7 @@ export {
   getBranchRefRepo,
   branchRefQuery,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   commitQuery,
   repoQuery,
   getOrgRepos,

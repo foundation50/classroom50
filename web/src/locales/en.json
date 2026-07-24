@@ -1648,7 +1648,8 @@
       "autograder": "Resolving the autograder",
       "repo": "Creating your repository",
       "access": "Granting you access",
-      "setup": "Setting up autograding"
+      "setup": "Setting up autograding",
+      "feedback": "Opening feedback pull request"
     },
     "progress": {
       "error": "Setup failed — review the steps",

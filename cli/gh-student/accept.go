@@ -417,6 +417,7 @@ func acceptAssignment(cmd *cobra.Command, client githubapi.Client, u *ui.UI, out
 		shim:           shim,
 		autograderName: autograderName,
 		emptyRepo:      entry.EmptyRepo,
+		feedbackPR:     entry.FeedbackPR,
 		fullName:       fullName,
 		htmlURL:        htmlURL,
 		alreadyExisted: alreadyExisted,
@@ -442,7 +443,11 @@ type acceptRepoParams struct {
 	shim, autograderName       string
 	// emptyRepo selects the bare path: no control files are committed and no
 	// marker probe runs — the only provisioning is the idempotent admin grant.
-	emptyRepo         bool
+	emptyRepo bool
+	// feedbackPR opts into opening the Feedback PR at accept time (issue
+	// #228) — best-effort, after provisioning succeeds. Never set together
+	// with emptyRepo (the entry validation fails closed on that combination).
+	feedbackPR        bool
 	fullName, htmlURL string
 	alreadyExisted    bool
 	// isOwner tolerates an org owner's unavoidable residual admin at the
@@ -484,6 +489,19 @@ func acceptIntoRepo(client githubapi.Client, u *ui.UI, verbose bool, out io.Writ
 				u.Detail("could not reconcile %s's role on %s/%s (repo already accepted; leaving as-is): %v", p.username, p.org, p.repoName, err)
 			}
 			p.createSp.Stop(fmt.Sprintf("Repo already exists: %s", p.fullName))
+			// Ensure the Feedback PR exists even on the healthy path: repos
+			// accepted before the accept-time-PR feature (issue #228) get
+			// their PR by re-accepting — the only Actions-free route. The
+			// accept SHA isn't in hand here (no DropFiles ran), so recover it
+			// from the marker's commit history; existing PRs short-circuit
+			// inside, keeping repeat re-accepts read-only.
+			if p.feedbackPR {
+				if acceptSHA, err := acceptCommitSHA(client, p.org, p.repoName); err != nil {
+					u.Warn("could not open the Feedback PR now; it will be opened automatically on your first submission: %v", err)
+				} else {
+					openFeedbackPRStep(client, u, verbose, p, acceptSHA)
+				}
+			}
 			return reportAlreadyAccepted(u, out, p.fullName, p.htmlURL)
 		}
 		// The ✓ here marks the completed probe (setup found incomplete), not
@@ -589,7 +607,8 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	const setupMsg = "Setting up autograder and metadata"
 	setupSp := u.Spinner(setupMsg)
 	setupSp.Start()
-	if err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim); err != nil {
+	acceptSHA, err := classroomcfg.DropFiles(client, p.org, p.repoName, p.branch, cfg, p.shim)
+	if err != nil {
 		setupSp.Fail(setupMsg)
 		return err
 	}
@@ -604,7 +623,52 @@ func provisionAcceptedRepo(client githubapi.Client, u *ui.UI, verbose bool, p ac
 	if err := verifyProvisioned(client, p.org, p.repoName); err != nil {
 		return err
 	}
+
+	// Last, because it's best-effort: everything above must hold for the
+	// accept to count, while a Feedback PR failure only defers to the runner.
+	if p.feedbackPR {
+		openFeedbackPRStep(client, u, verbose, p, acceptSHA)
+	}
 	return nil
+}
+
+// openFeedbackPRStep runs the accept-time Feedback PR creation behind a
+// spinner, converting any failure into a warning (the accept has already
+// succeeded; the autograde runner opens the PR on the first submission
+// instead). Split out so both the fresh-provision and the healthy
+// already-accepted paths report it identically.
+func openFeedbackPRStep(client githubapi.Client, u *ui.UI, verbose bool, p acceptRepoParams, acceptSHA string) {
+	const msg = "Opening feedback pull request"
+	sp := u.Spinner(msg)
+	sp.Start()
+	if err := ensureFeedbackPullRequest(client, u, verbose, p.org, p.repoName, p.branch, acceptSHA, p.mode); err != nil {
+		sp.Fail(msg)
+		u.Warn("could not open the Feedback PR now; it will be opened automatically on your first submission: %v", err)
+		return
+	}
+	sp.Stop("Feedback pull request ready")
+}
+
+// acceptCommitSHA recovers the accept commit — the earliest commit touching
+// the .classroom50.yaml marker — for a repo provisioned by an earlier accept.
+// Same resolution rule as the runner's baseline_sha(), so the feedback base
+// frozen here matches what the runner later verifies. The commits list is
+// newest-first; the marker is created exactly once (later accepts never
+// rewrite it), so the OLDEST entry is the accept commit.
+func acceptCommitSHA(client githubapi.Client, org, repoName string) (string, error) {
+	path := fmt.Sprintf("repos/%s/%s/commits?path=%s&per_page=100",
+		url.PathEscape(org), url.PathEscape(repoName),
+		classroomcfg.EscapeContentPath(classroomcfg.MetadataPath))
+	var commits []struct {
+		SHA string `json:"sha"`
+	}
+	if err := client.Get(path, &commits); err != nil {
+		return "", fmt.Errorf("GET %s: %w", path, err)
+	}
+	if len(commits) == 0 {
+		return "", fmt.Errorf("no commits touch %s in %s/%s", classroomcfg.MetadataPath, org, repoName)
+	}
+	return commits[len(commits)-1].SHA, nil
 }
 
 // verifyProvisioned confirms the repo is autogradable before accept reports

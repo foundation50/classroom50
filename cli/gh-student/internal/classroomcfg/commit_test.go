@@ -71,9 +71,12 @@ func TestCommitFiles_RetriesOnFreshRepoLag(t *testing.T) {
 	defer server.Close()
 	client := githubtest.NewTestClient(t, server)
 
-	err := CommitFiles(client, "o", "r", "main", "msg", map[string]string{"a.txt": "hi"})
+	sha, err := CommitFiles(client, "o", "r", "main", "msg", map[string]string{"a.txt": "hi"})
 	if err != nil {
 		t.Fatalf("CommitFiles: unexpected error: %v", err)
+	}
+	if sha == "" {
+		t.Error("CommitFiles returned an empty SHA; the accept commit is the Feedback-PR base anchor")
 	}
 
 	mu.Lock()
@@ -98,7 +101,7 @@ func TestCommitFiles_EmptyIsNoop(t *testing.T) {
 	defer server.Close()
 	client := githubtest.NewTestClient(t, server)
 
-	if err := CommitFiles(client, "o", "r", "main", "msg", nil); err != nil {
+	if _, err := CommitFiles(client, "o", "r", "main", "msg", nil); err != nil {
 		t.Fatalf("CommitFiles(nil): %v", err)
 	}
 }

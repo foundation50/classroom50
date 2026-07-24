@@ -234,6 +234,7 @@ const ACCEPT_STEP_ORDER: { id: AcceptStepId; labelKey: string }[] = [
   { id: "repo", labelKey: "accept.steps.repo" },
   { id: "access", labelKey: "accept.steps.access" },
   { id: "setup", labelKey: "accept.steps.setup" },
+  { id: "feedback", labelKey: "accept.steps.feedback" },
 ]
 
 type StepState = Record<

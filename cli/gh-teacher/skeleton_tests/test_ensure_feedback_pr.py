@@ -371,6 +371,31 @@ def test_label_for_mode(mode, want_label):
     assert color in ("5319E7", "0E8A16")
 
 
+def test_accept_time_pr_adopted_without_edits(monkeypatch):
+    """Issue #228: `gh student accept` / the web GUI may have already created
+    the Feedback PR (student-authored, base frozen at the accept commit,
+    body carrying the releases/latest link). The runner must ADOPT it —
+    find_pr matches by base+head only — with zero writes: no create, no
+    reopen, and no backfill edit (the accept-time body already has the link,
+    byte-mirrored from pr_body via the contract package)."""
+    accept_time_body = efp.pr_body("main", f"{SERVER}/{REPO}/releases/latest")
+    fake, state, desc, url = _run(monkeypatch, {
+        "head_branch": "main",
+        # The accept flow froze the base at the same baseline the runner
+        # resolves from the .classroom50.yaml marker -> SHA check passes.
+        "base_sha": BASE_SHA,
+        "pr_list": _pr_list_json("1", "OPEN", ""),
+        "pr_view_body": accept_time_body,
+    })
+    assert state == "success"
+    assert desc == "Feedback PR in place"
+    assert url.endswith("/pull/1")
+    assert not fake.made("api -X POST")       # base not re-created
+    assert not fake.made("pr create")
+    assert not fake.made("pr reopen")
+    assert not fake.made("pr edit")           # backfill no-ops on the link
+
+
 def test_pr_body_mentions_head_and_base(monkeypatch):
     body = efp.pr_body("main", "https://github.com/cs50/x/releases/latest")
     assert "`main`" in body

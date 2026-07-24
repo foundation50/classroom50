@@ -14,6 +14,13 @@ so the teacher reviews the full starter->latest diff with inline comments, and
 it auto-updates on every submission. PRs opened by GITHUB_TOKEN don't retrigger
 workflows, so there's no loop.
 
+Since issue #228 the accept clients (gh student accept / the web GUI) create
+the PR at accept time with the student's own token — same base/head, title,
+labels, and body (byte-mirrored via cli/shared/contract) — so it exists even
+with Actions disabled. find_pr matches by base+head only, so this script
+ADOPTS that PR; this create path remains the fallback for pre-feature repos
+and accepts whose best-effort PR step failed.
+
 Behavior (ported verbatim from the former inline bash):
   1. Freeze the base: create the `feedback` branch at BASE_SHA once, never
      advance it. If it already exists at a DIFFERENT sha, a student may have

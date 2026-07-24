@@ -12,8 +12,10 @@ import type { GitHubRepo } from "@/github-core/types"
 import {
   getBranchRefRepo,
   getCommitByRepo,
+  getOldestCommitShaForPath,
   withFreshRepoRetry,
 } from "@/github-core/queries"
+import { ensureFeedbackPullRequest } from "./feedbackPr"
 import { fetchAssignmentFromPages } from "../queries/assignments"
 import { getAuthenticatedUser } from "../queries/users"
 import { acceptAndVerifyOrgMembership } from "../users"
@@ -59,7 +61,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
   // default branch, which is only known after GitHub's async template copy
   // settles (see below). Omitted for branch-agnostic (teacher-authored) shims.
   rerenderShimForBranch?: (branch: string) => string
-}) {
+}): Promise<{ commitSha: string; branch: string }> {
   const {
     client,
     owner,
@@ -70,7 +72,7 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
     rerenderShimForBranch,
   } = params
 
-  await withFreshRepoRetry(async () => {
+  return await withFreshRepoRetry(async () => {
     // A freshly template-generated repo's real branch (copied from the template,
     // e.g., `master`) only materializes after GitHub finishes the async copy —
     // until then `default_branch` transiently reports the org default (`main`)
@@ -122,6 +124,11 @@ async function commitAcceptFilesWithFreshRepoRetry(params: {
       branch: targetBranch,
       commitSha: commit.sha,
     })
+
+    // The accept commit's SHA (the Feedback-PR base anchor) and the SETTLED
+    // branch it actually landed on — the caller's pre-guessed branch may be a
+    // transient `main` on a `master` template.
+    return { commitSha: commit.sha, branch: targetBranch }
   })
 }
 
@@ -168,7 +175,8 @@ function grantFounderAccessStep(params: {
 }
 
 // Provision (or heal) a just-created student repo — grant the founder role,
-// land the control files. Idempotent, so safe to re-run mid-flow.
+// land the control files, then (opt-in) open the Feedback PR. Idempotent, so
+// safe to re-run mid-flow.
 async function provisionAcceptedRepo(params: {
   client: GitHubClient
   org: string
@@ -178,6 +186,10 @@ async function provisionAcceptedRepo(params: {
   branch: string
   metadataYaml: string
   autogradeYaml: string
+  // Open the accept-time Feedback PR after setup succeeds (issue #228).
+  // Best-effort: its step always resolves complete, deferring to the runner
+  // on failure.
+  feedbackPr?: boolean
   isOwner?: boolean
   rerenderShimForBranch?: (branch: string) => string
   onStepUpdate?: OnAcceptStepUpdate
@@ -191,6 +203,7 @@ async function provisionAcceptedRepo(params: {
     branch,
     metadataYaml,
     autogradeYaml,
+    feedbackPr = false,
     isOwner = false,
     rerenderShimForBranch,
     onStepUpdate,
@@ -208,7 +221,7 @@ async function provisionAcceptedRepo(params: {
 
   // Land the metadata + autograde shim, retrying through GitHub's post-generate
   // git-data lag (see commitAcceptFilesWithFreshRepoRetry).
-  await withAcceptStep(
+  const committed = await withAcceptStep(
     {
       id: "setup",
       label: "Setting up autograding",
@@ -227,6 +240,88 @@ async function provisionAcceptedRepo(params: {
         rerenderShimForBranch,
       }),
   )
+
+  // Last, because it's best-effort: everything above must hold for the accept
+  // to count, while a Feedback PR failure only defers creation to the runner.
+  await openFeedbackPrStep({
+    client,
+    org,
+    repo: repo.name,
+    branch: committed.branch,
+    acceptCommitSha: committed.commitSha,
+    mode,
+    feedbackPr,
+    onStepUpdate,
+  })
+}
+
+// The tracked "feedback" step around ensureFeedbackPullRequest. Unlike the
+// throwing withAcceptStep steps, this ALWAYS resolves complete: a red error
+// row on an accept that succeeded would mislead — on failure the runner opens
+// the PR on the first submission instead, and the message says so. Skips
+// (feedbackPr false / missing accept SHA) also complete, so the checklist
+// never looks stuck.
+async function openFeedbackPrStep(params: {
+  client: GitHubClient
+  org: string
+  repo: string
+  branch: string
+  acceptCommitSha: string | null
+  mode: AssignmentMode
+  feedbackPr: boolean
+  onStepUpdate?: OnAcceptStepUpdate
+}) {
+  const {
+    client,
+    org,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
+    feedbackPr,
+    onStepUpdate,
+  } = params
+
+  if (!feedbackPr) {
+    onStepUpdate?.({
+      id: "feedback",
+      status: "complete",
+      message: "No feedback pull request for this assignment",
+    })
+    return
+  }
+
+  onStepUpdate?.({
+    id: "feedback",
+    status: "running",
+    message: "Opening feedback pull request",
+  })
+
+  const deferred =
+    "Couldn't open the feedback pull request now — it will open automatically on your first submission"
+
+  if (!acceptCommitSha) {
+    log.warn("feedback PR: accept commit not resolvable (non-fatal)", {
+      org,
+      repo,
+    })
+    onStepUpdate?.({ id: "feedback", status: "complete", message: deferred })
+    return
+  }
+
+  const result = await ensureFeedbackPullRequest({
+    client,
+    owner: org,
+    repo,
+    branch,
+    acceptCommitSha,
+    mode,
+  })
+  onStepUpdate?.({
+    id: "feedback",
+    status: "complete",
+    message: result.ok ? "Feedback pull request ready" : deferred,
+  })
 }
 
 export async function acceptAssignment(params: {
@@ -301,6 +396,11 @@ export async function acceptAssignment(params: {
   // control files are ever committed, so the autograder resolution and the
   // whole setup step are skipped. Mirrors the CLI's acceptIntoBareRepo.
   const isEmptyRepo = assignment.empty_repo === true
+
+  // feedback_pr opts into the accept-time Feedback PR (issue #228). Never
+  // set together with empty_repo (the teacher CLI enforces the exclusivity;
+  // the bare path below skips the step regardless).
+  const wantsFeedbackPr = assignment.feedback_pr === true && !isEmptyRepo
 
   // empty_repo and template are mutually exclusive at write time, but the
   // published manifest is not re-validated, so a hand-edited entry can carry
@@ -454,6 +554,11 @@ export async function acceptAssignment(params: {
       status: "complete",
       message: "No setup needed — this assignment uses an empty repository",
     })
+    onStepUpdate?.({
+      id: "feedback",
+      status: "complete",
+      message: "No feedback pull request for this assignment",
+    })
 
     return {
       status: alreadyAccepted ? "already-accepted" : "created",
@@ -536,6 +641,29 @@ export async function acceptAssignment(params: {
       })
       onStepUpdate?.({ id: "access", status: "complete" })
       onStepUpdate?.({ id: "setup", status: "complete" })
+      // Ensure the Feedback PR exists even on the healthy path: repos
+      // accepted before the accept-time-PR feature get their PR by
+      // re-accepting — the only Actions-free route. The accept SHA isn't in
+      // hand here (no commit ran), so recover it as the oldest commit
+      // touching the marker (the runner's baseline_sha() rule); existing PRs
+      // short-circuit inside, keeping repeat re-accepts read-only.
+      await openFeedbackPrStep({
+        client,
+        org,
+        repo: created.repo.name,
+        branch: created.repo.default_branch || sourceBranch,
+        acceptCommitSha: wantsFeedbackPr
+          ? await getOldestCommitShaForPath(
+              client,
+              org,
+              created.repo.name,
+              ".classroom50.yaml",
+            ).catch(() => null)
+          : null,
+        mode: assignment.mode,
+        feedbackPr: wantsFeedbackPr,
+        onStepUpdate,
+      })
       return {
         status: "already-accepted",
         repo: created.repo,
@@ -566,6 +694,7 @@ export async function acceptAssignment(params: {
       branch: created.repo.default_branch || sourceBranch,
       metadataYaml,
       autogradeYaml,
+      feedbackPr: wantsFeedbackPr,
       isOwner,
       rerenderShimForBranch: rerenderShim,
       onStepUpdate,
@@ -602,6 +731,7 @@ export async function acceptAssignment(params: {
     branch: targetBranch,
     metadataYaml,
     autogradeYaml,
+    feedbackPr: wantsFeedbackPr,
     isOwner,
     rerenderShimForBranch: rerenderShim,
     onStepUpdate,

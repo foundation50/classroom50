@@ -21,20 +21,21 @@ var errRefNotReady = errors.New("branch ref not fully propagated")
 
 // CommitFiles lands `files` (path → UTF-8 content) on `branch` as one Tree
 // commit, retrying the read+build while a freshly-templated repo's git-data
-// APIs lag. No rebase loop: this writes to the student's own just-accepted
-// repo, which has no concurrent writers (the teacher-side
+// APIs lag, and returns the new commit's SHA (the Feedback-PR base anchor when
+// this is the accept commit). No rebase loop: this writes to the student's own
+// just-accepted repo, which has no concurrent writers (the teacher-side
 // configwrite.CommitTree handles the contended config repo).
-func CommitFiles(client githubapi.Client, owner, repo, branch, message string, files map[string]string) error {
+func CommitFiles(client githubapi.Client, owner, repo, branch, message string, files map[string]string) (string, error) {
 	if len(files) == 0 {
-		return nil
+		return "", nil
 	}
 
 	entries, err := githubapi.UploadBlobs(client, owner, repo, files)
 	if err != nil {
-		return err
+		return "", err
 	}
 
-	_, err = githubapi.CommitWithFreshRepoRetry(client, owner, repo, branch, message, entries, gittree.FreshRepoRetry{
+	return githubapi.CommitWithFreshRepoRetry(client, owner, repo, branch, message, entries, gittree.FreshRepoRetry{
 		Attempts: commitFilesAttempts,
 		ValidateParent: func(parentSHA, parentTreeSHA string) error {
 			if parentSHA == "" || parentTreeSHA == "" {
@@ -44,7 +45,6 @@ func CommitFiles(client githubapi.Client, owner, repo, branch, message string, f
 		},
 		IsRetryable: isFreshRepoRetryable,
 	})
-	return err
 }
 
 // isFreshRepoRetryable reports the transient fresh-repo conditions worth a

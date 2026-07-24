@@ -195,12 +195,41 @@ func TestHappyPath(t *testing.T) {
 		if perm := collaboratorPermission(t, repo, cfg.Student); perm != "admin" {
 			t.Errorf("founder %s permission on %s = %q, want admin", cfg.Student, repo, perm)
 		}
+		// Issue #228: accept opens the Feedback PR immediately (no Actions
+		// run needed) — exactly one, base=feedback frozen at the accept
+		// commit (the one that introduced .classroom50.yaml).
+		prs := listFeedbackPRs(t, repo)
+		if len(prs) != 1 {
+			t.Fatalf("open feedback PRs right after accept = %d, want 1", len(prs))
+		}
+		var baseRef struct {
+			Object struct {
+				SHA string `json:"sha"`
+			} `json:"object"`
+		}
+		getJSON(t, cfg.TeacherPAT, "/repos/"+cfg.Org+"/"+repo+"/git/ref/heads/feedback", &baseRef)
+		var marker []struct {
+			SHA string `json:"sha"`
+		}
+		getJSON(t, cfg.TeacherPAT, "/repos/"+cfg.Org+"/"+repo+"/commits?path=.classroom50.yaml", &marker)
+		if len(marker) == 0 {
+			t.Fatal("no commits touch .classroom50.yaml")
+		}
+		if accept := marker[len(marker)-1].SHA; baseRef.Object.SHA != accept {
+			t.Errorf("feedback base = %s, want the accept commit %s (baseline mismatch would make the runner refuse the PR)", baseRef.Object.SHA, accept)
+		}
 	})
 
 	step(t, "4.3 re-accept is idempotent", func(t *testing.T) {
 		out := student(t, cfg.StudentPAT, "accept", cfg.Org, cfg.Classroom, cfg.Assignment)
 		if !strings.Contains(strings.ToLower(out), "already accepted") {
 			t.Errorf("re-accept did not report an already-accepted note (idempotency contract): %s", out)
+		}
+		// Still exactly one feedback PR: the accept-time ensure short-circuits
+		// on the existing PR instead of stacking a duplicate (or a second
+		// empty commit).
+		if prs := listFeedbackPRs(t, repo); len(prs) != 1 {
+			t.Errorf("open feedback PRs after re-accept = %d, want 1", len(prs))
 		}
 	})
 
@@ -226,9 +255,9 @@ func TestHappyPath(t *testing.T) {
 		}
 		// a release carrying result.json
 		waitForReleaseAsset(t, repo, "result.json", 5*time.Minute)
-		// Feedback PR opened against the frozen `feedback` base branch
-		// (feedback-pr is on by default; the runner freezes BASE_BRANCH =
-		// "feedback" at the baseline and opens the PR once there's a diff).
+		// Feedback PR against the frozen `feedback` base branch. Accept
+		// already opened it (issue #228); the runner must ADOPT that PR —
+		// still exactly one after a graded submission, not a duplicate.
 		waitFor(t, "feedback PR", 5*time.Minute, func() (bool, error) {
 			var pulls []struct {
 				Base struct {
@@ -249,6 +278,9 @@ func TestHappyPath(t *testing.T) {
 			}
 			return false, nil
 		})
+		if prs := listFeedbackPRs(t, repo); len(prs) != 1 {
+			t.Errorf("open feedback PRs after first submission = %d, want 1 (the runner must adopt the accept-time PR, not duplicate it)", len(prs))
+		}
 	})
 
 	step(t, "6.1 collect-scores", func(t *testing.T) {

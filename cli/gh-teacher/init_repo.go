@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/foundation50/classroom50-cli-shared/contract"
 	"github.com/foundation50/gh-teacher/internal/cliutil"
 	"github.com/foundation50/gh-teacher/internal/configrepo"
 	"github.com/foundation50/gh-teacher/internal/githubapi"
@@ -613,9 +614,10 @@ func applyBranchProtection(client githubapi.Client, out io.Writer, owner, repo, 
 }
 
 // feedbackBaseBranch is the frozen PR base the Feedback PR feature pins at each
-// student repo's baseline commit. Kept in lockstep with the autograde-runner
-// workflow's BASE_BRANCH.
-const feedbackBaseBranch = "feedback"
+// student repo's baseline commit. Aliases the shared contract constant so the
+// org ruleset, the accept clients, and the autograde-runner workflow's
+// BASE_BRANCH can't drift apart.
+const feedbackBaseBranch = contract.FeedbackBaseBranch
 
 // Stable ruleset names so re-running init is idempotent —
 // ensureClassroomRulesets reconciles an existing ruleset (by name) in place.

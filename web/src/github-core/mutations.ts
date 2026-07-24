@@ -106,6 +106,16 @@ export {
   removeRepoCollaborator,
 } from "./mutations/collaborators"
 export {
+  listPullRequestsByBaseHead,
+  createPullRequest,
+  createBranchRef,
+  ensureRepoLabel,
+  addIssueLabels,
+  is422AlreadyExists,
+  is422NoCommitsBetween,
+  type PullRequestSummary,
+} from "./mutations/pullRequests"
+export {
   buildClassroomUpdate,
   editClassroom,
   type UpdateClassroomMetadataInput,

@@ -42,6 +42,23 @@ export function getCommitByRepo(
     `/repos/${owner}/${repo}/git/commits/${branch}`,
   )
 }
+
+// The OLDEST commit touching `path` on the default branch, or null when none
+// do. The commits list is newest-first; used to recover the accept commit
+// (the one that created .classroom50.yaml) on repos provisioned by an earlier
+// accept — the same resolution rule as the runner's baseline_sha().
+export async function getOldestCommitShaForPath(
+  client: GitHubClient,
+  owner: string,
+  repo: string,
+  path: string,
+): Promise<string | null> {
+  const commits = await client.request<Array<{ sha: string }>>(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/commits?path=${encodeURIComponent(path)}&per_page=100`,
+  )
+  if (!commits.length) return null
+  return commits[commits.length - 1].sha
+}
 export function commitQuery(
   client: GitHubClient,
   org: string,

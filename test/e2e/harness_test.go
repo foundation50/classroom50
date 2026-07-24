@@ -319,6 +319,27 @@ func contentExists(t *testing.T, token, repo, path string) bool {
 	return st == 200
 }
 
+// feedbackPR is the slice element listFeedbackPRs returns: the open PRs whose
+// base is the frozen `feedback` branch (issue #228 asserts exactly one across
+// accept, re-accept, and runner adoption).
+type feedbackPR struct {
+	Number int `json:"number"`
+	Base   struct {
+		Ref string `json:"ref"`
+	} `json:"base"`
+	Labels []struct {
+		Name string `json:"name"`
+	} `json:"labels"`
+}
+
+// listFeedbackPRs returns the repo's OPEN PRs with base=feedback.
+func listFeedbackPRs(t *testing.T, repo string) []feedbackPR {
+	t.Helper()
+	var pulls []feedbackPR
+	getJSON(t, cfg.TeacherPAT, "/repos/"+cfg.Org+"/"+repo+"/pulls?state=open&base=feedback", &pulls)
+	return pulls
+}
+
 // fetchContent returns the decoded file at repo/path (contents API).
 func fetchContent(t *testing.T, token, repo, path string) (string, bool) {
 	t.Helper()

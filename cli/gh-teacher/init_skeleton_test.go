@@ -746,6 +746,65 @@ func TestCollectScoresCommitPrefix(t *testing.T) {
 	}
 }
 
+// TestFeedbackPRParity_GoVsPython pins the Go<->Python halves of the
+// accept-time Feedback PR contract (issue #228). Both `gh student accept` /
+// the web GUI (creating the PR) and ensure_feedback_pr.py (adopting and
+// maintaining it) must produce the same title, mode labels, and body — the
+// runner discovers the PR by base+head only, then backfill_release_link
+// REWRITES any open PR body lacking the releases/latest link, so a drifted
+// body would be silently clobbered and drifted labels would show teachers two
+// label sets. No compile-time link exists; this test is the enforcement.
+func TestFeedbackPRParity_GoVsPython(t *testing.T) {
+	files, err := skeletonFiles("main")
+	if err != nil {
+		t.Fatalf("skeletonFiles: %v", err)
+	}
+	script, ok := files[".github/scripts/ensure_feedback_pr.py"]
+	if !ok {
+		t.Fatal("ensure_feedback_pr.py missing from skeleton")
+	}
+
+	// Title: python passes it as `"--title", "Feedback"`.
+	wantTitle := fmt.Sprintf("%q", contract.FeedbackPRTitle)
+	if !strings.Contains(script, wantTitle) {
+		t.Errorf("ensure_feedback_pr.py does not carry the shared PR title %s (drift vs contract.FeedbackPRTitle)", wantTitle)
+	}
+
+	// Labels: python's _LABELS maps mode -> ("<label>", "<color>").
+	for _, mode := range []string{contract.ModeIndividual, contract.ModeGroup} {
+		name, color := contract.FeedbackLabelForMode(mode)
+		want := fmt.Sprintf("(%q, %q)", name, color)
+		if !strings.Contains(script, want) {
+			t.Errorf("ensure_feedback_pr.py _LABELS is missing %s for mode %q (label/color drift vs contract.FeedbackLabelForMode)", want, mode)
+		}
+	}
+
+	// Body: contract.FeedbackPRBody must be a byte-copy of pr_body's output.
+	// The python source builds it from string fragments, so compare
+	// load-bearing fragments that appear verbatim in both: the opening
+	// sentence and the don't-close warning (any wording edit must hit both
+	// languages or this fails).
+	body := contract.FeedbackPRBody("HEAD_BRANCH", "RELEASE_URL")
+	for _, fragment := range []string{
+		":wave:! Classroom 50 opened this pull request as a place for your ",
+		"**Don't close or merge this pull request** unless your teacher tells you to.",
+		"Click ",
+		"the **Subscribe** button to be notified when that happens.",
+	} {
+		if !strings.Contains(body, fragment) {
+			t.Fatalf("contract.FeedbackPRBody lost the fragment %q; update this test only together with pr_body in ensure_feedback_pr.py", fragment)
+		}
+		if !strings.Contains(script, fragment) {
+			t.Errorf("ensure_feedback_pr.py pr_body is missing the fragment %q mirrored in contract.FeedbackPRBody — the PR body has drifted between Go and Python", fragment)
+		}
+	}
+	// The runner's backfill trigger: the Go body must embed the release URL
+	// placeholder wherever python interpolates release_url.
+	if !strings.Contains(body, "RELEASE_URL") {
+		t.Error("contract.FeedbackPRBody does not embed the release URL; the runner's backfill_release_link would clobber accept-time PR bodies")
+	}
+}
+
 // TestStaffPermsParity_GoVsInlinePython pins the Go->Python leg of the
 // staff-team repo-permission mirror. configrepo.StaffTeamRepoPermissions (the
 // student-assignment-repo / private-template axis) is the source of truth;
