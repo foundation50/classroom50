@@ -14,6 +14,7 @@ Use it as a web app at [classroom50.org](https://classroom50.org/) or as the
 >
 > - [Friday, July 24, 1pm-2pm EDT](https://time.cs50.io/20260724T1300-0400/PT1H?title=Classroom+50+Training+Session)
 >   - [Slides](images/classroom_50_training_session.pdf)
+>   - [Video](https://youtu.be/gpIz6XEVlEE)
 > - [Friday, August 14, 1pm-2pm EDT](https://time.cs50.io/20260814T1300-0400/PT1H?title=Classroom+50+Training+Session)
 >
 > To sign up to attend one of the training sessions, [complete the registration form here](https://docs.google.com/forms/d/e/1FAIpQLSdSZzOUOtSExmldFOsdlePWGZkJELHnZBpH3NPhXAJMDG9eXA/viewform?usp=dialog).
