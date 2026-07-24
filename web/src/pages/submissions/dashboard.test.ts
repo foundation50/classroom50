@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
+import type { TeamRosterRow } from "@/util/teamRoster"
 import {
   DEFAULT_FILTERS,
   acceptedRosterCount,
@@ -39,6 +40,7 @@ import {
   showsNonSubmitters,
   snapshotIsStale,
   statusSelectValue,
+  submissionRosterStudents,
   type SubmissionFilters,
 } from "./dashboard"
 
@@ -70,6 +72,20 @@ const student = (over: Partial<Student> = {}): Student => ({
 })
 
 const repo = (name: string): GitHubRepo => ({ name }) as GitHubRepo
+
+const teamRow = (over: Partial<TeamRosterRow> = {}): TeamRosterRow => ({
+  key: over.username ?? "alice",
+  state: "enrolled",
+  roles: ["student"],
+  username: "alice",
+  github_id: "1",
+  first_name: "Alice",
+  last_name: "Adams",
+  section: "",
+  email: "",
+  avatar_url: "",
+  ...over,
+})
 
 const filters = (over: Partial<SubmissionFilters> = {}): SubmissionFilters => ({
   ...DEFAULT_FILTERS,
@@ -113,6 +129,73 @@ describe("rowOnRoster / rosterScopedRows", () => {
   it("ignores blank roster usernames (never matches an empty login)", () => {
     const rows = [row({ owner: "", usernames: [""] })]
     expect(rosterScopedRows(rows, [student({ username: "" })])).toEqual([])
+  })
+})
+
+describe("submissionRosterStudents", () => {
+  const noAcceptance = {
+    acceptedStaffLogins: new Set<string>(),
+    groupRepoMembers: new Set<string>(),
+  }
+
+  it("always includes enrolled students (accepted or not)", () => {
+    const rows = [
+      teamRow({ username: "alice", roles: ["student"] }),
+      teamRow({ username: "bob", roles: ["student"] }),
+    ]
+    const out = submissionRosterStudents(rows, noAcceptance)
+    expect(out.map((s) => s.username).sort()).toEqual(["alice", "bob"])
+  })
+
+  it("includes a student who is also staff", () => {
+    const rows = [teamRow({ username: "alice", roles: ["ta", "student"] })]
+    expect(submissionRosterStudents(rows, noAcceptance)).toHaveLength(1)
+  })
+
+  it("excludes a pure staff member who has not accepted", () => {
+    const rows = [teamRow({ username: "prof", roles: ["teacher"] })]
+    expect(submissionRosterStudents(rows, noAcceptance)).toEqual([])
+  })
+
+  it("includes a pure staff member who accepted an individual assignment", () => {
+    const rows = [teamRow({ username: "prof", roles: ["teacher"] })]
+    const out = submissionRosterStudents(rows, {
+      acceptedStaffLogins: new Set(["prof"]),
+      groupRepoMembers: new Set<string>(),
+    })
+    expect(out.map((s) => s.username)).toEqual(["prof"])
+  })
+
+  it("includes a pure staff member credited on a group repo", () => {
+    const rows = [teamRow({ username: "ta1", roles: ["ta"] })]
+    const out = submissionRosterStudents(rows, {
+      acceptedStaffLogins: new Set<string>(),
+      groupRepoMembers: new Set(["ta1"]),
+    })
+    expect(out.map((s) => s.username)).toEqual(["ta1"])
+  })
+
+  it("keeps a not-accepted student while dropping a not-accepted staffer", () => {
+    const rows = [
+      teamRow({ username: "alice", roles: ["student"] }),
+      teamRow({ username: "prof", roles: ["teacher"] }),
+    ]
+    // No acceptance data at all: student stays (shows as not-accepted), staff drops.
+    expect(
+      submissionRosterStudents(rows, noAcceptance).map((s) => s.username),
+    ).toEqual(["alice"])
+  })
+
+  it("ignores non-enrolled (pending / needs-attention) rows", () => {
+    const rows = [
+      teamRow({ username: "alice", state: "pending", roles: ["student"] }),
+      teamRow({
+        username: "prof",
+        state: "needs_attention_in_org",
+        roles: ["teacher"],
+      }),
+    ]
+    expect(submissionRosterStudents(rows, noAcceptance)).toEqual([])
   })
 })
 

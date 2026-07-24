@@ -1,10 +1,15 @@
 #!/usr/bin/env python3
 """Teacher-triggered scores collector.
 
-Walks the classroom team × assignment manifest: for each (team member,
+Walks the classroom teams × assignment manifest: for each (team member,
 assignment) pair, pages the canonical `<classroom>-<assignment>-<username>`
 repo's `submit/*` releases, validates each `result.json` asset, and upserts
-into `<classroom>/scores.json`. The classroom GitHub team is the source of
+into `<classroom>/scores.json`. The polled members are the union of the
+classroom's STUDENT team and its STAFF teams (teacher/hta/ta), so a staff
+member who accepted an assignment to test the autograde flow is collected like
+a student. Staff who never accepted have no assignment repo, so their poll
+returns no releases and they produce no entry (the "accepted" gate is implicit
+in the per-repo release read). The classroom GitHub teams are the source of
 truth for enrollment; the roster (roster.csv, or the legacy name) is only a
 best-effort source of optional display metadata (name/section/email).
 
@@ -398,6 +403,57 @@ def all_assignment_slugs(assignments: dict[str, Any]) -> list[str]:
     return slugs
 
 
+def list_enrolled_logins(
+    api_url: str,
+    org: str,
+    classroom_meta: dict[str, Any],
+    classroom_short: str,
+    service_token: str,
+) -> tuple[list[str], set[str]]:
+    """Return (polled logins, student logins). The first is the case-insensitive
+    dedup union of the student team and every staff team's members, first-seen
+    order/casing preserved (student team first). The second is the lowercased
+    set of STUDENT-team logins — used only so the per-assignment "X of Y
+    submitted" denominator counts students (expected to submit) rather than
+    every staffer polled (a non-accepting TA is a tester, not missing work).
+
+    Collection polls staff (teacher/hta/ta) too so a staff member testing an
+    assignment is graded like a student — but only when they've ACCEPTED: a
+    staff member with no `<classroom>-<assignment>-<username>` repo returns no
+    releases and so produces no entry (the accepted gate falls out of the
+    per-repo poll; no explicit staff check is needed). A staff member on no
+    team, or one who never accepted, never appears.
+
+    A hard auth/network error (401/403/599) propagates so main() aborts; a soft
+    per-team failure (e.g. a 404 on an uncreated staff team) is warned and that
+    team contributes nobody, matching how the staff-grant pass tolerates a
+    missing team."""
+    student_slug = resolve_team_slug(classroom_meta, classroom_short)
+    # Student team first so its casing wins in the dedup (the repo-name formula
+    # lowercases anyway, so casing is cosmetic — but keep it deterministic).
+    student_logins = list_team_member_logins(api_url, org, student_slug, service_token)
+    logins = list(student_logins)
+    for role, staff_slug in resolve_staff_team_slugs(classroom_meta).items():
+        try:
+            logins.extend(
+                list_team_member_logins(api_url, org, staff_slug, service_token)
+            )
+        except urllib.error.HTTPError as exc:
+            if is_hard_http_error(exc):
+                raise
+            emit_warning(
+                f"{classroom_short}: could not read staff team {staff_slug!r} "
+                f"({role}) members: HTTP {exc.code} ({exc.reason or 'no reason'}); "
+                f"skipping that team's members for collection."
+            )
+        except (json.JSONDecodeError, ValueError) as exc:
+            emit_warning(
+                f"{classroom_short}: staff team {staff_slug!r} ({role}) member "
+                f"listing malformed ({exc}); skipping that team's members."
+            )
+    return _dedupe_logins(logins), {u.strip().lower() for u in student_logins}
+
+
 def collect_classroom(
     *,
     api_url: str,
@@ -429,15 +485,21 @@ def collect_classroom(
     # token-access problem.
     mode_flip_assignments = 0
 
-    # Team-driven username source: the classroom GitHub team is authoritative
+    # Team-driven username source: the classroom GitHub teams are authoritative
     # for enrollment. The roster (roster.csv, or the legacy name) is only
-    # best-effort display metadata, so the (student, assignment) pairs come from
-    # the team member list, NOT the CSV. A 404 (team missing) or empty team
-    # yields no pairs (warn + return), replacing the old "roster missing" skip.
-    # A hard auth/network error propagates so main() aborts the whole run loudly.
+    # best-effort display metadata, so the (username, assignment) pairs come
+    # from the team member lists, NOT the CSV. The set is the union of the
+    # STUDENT team and every STAFF team (teacher/hta/ta) so a staff member who
+    # accepted an assignment (to test the autograde flow) is collected like a
+    # student — staff who never accepted have no repo, hence no releases, hence
+    # no entry (the accepted gate is implicit in the per-repo poll). A 404
+    # (student team missing) or empty union yields no pairs (warn + return). A
+    # hard auth/network error propagates so main() aborts the whole run loudly.
     team_slug = resolve_team_slug(classroom_meta, classroom_short)
     try:
-        team_logins = list_team_member_logins(api_url, org, team_slug, service_token)
+        team_usernames, student_logins = list_enrolled_logins(
+            api_url, org, classroom_meta, classroom_short, service_token
+        )
     except urllib.error.HTTPError as exc:
         if is_hard_http_error(exc):
             raise
@@ -456,18 +518,16 @@ def collect_classroom(
         )
         return results, mode_flip_assignments
 
-    if not team_logins:
+    if not team_usernames:
         emit_warning(
-            f"{classroom_short}: team {team_slug!r} has no members — no "
-            f"(student, assignment) pairs to poll; skipping."
+            f"{classroom_short}: teams {team_slug!r} (and staff teams) have no "
+            f"members — no (username, assignment) pairs to poll; skipping."
         )
         return results, mode_flip_assignments
 
-    # Deduplicate case-insensitively, preserving first-seen order/casing.
-    team_usernames = _dedupe_logins(team_logins)
-
-    # Group attribution credits a collaborator only if on the team (owner always
-    # credited) — same trust model, team-sourced set.
+    # Group attribution credits a collaborator only if on a classroom team
+    # (owner always credited) — same trust model, team-sourced set. Staff are in
+    # the union, so a staff collaborator on a group repo can be credited too.
     roster_logins = {u.lower() for u in team_usernames}
     for entry in assignments.get("assignments") or []:
         slug = entry.get("slug")
@@ -494,6 +554,11 @@ def collect_classroom(
         assignment_type = "group" if is_group else "individual"
 
         submitted = 0
+        # Staff (non-student-team) members who actually submitted this
+        # assignment. They count toward the "X of Y" denominator only when they
+        # submitted — a non-accepting staffer is a tester, not missing work, so
+        # counting every polled staffer in Y would understate student coverage.
+        staff_submitted = 0
         # Repos under THIS assignment whose only submissions were rejected by
         # validation (mode-flip symptom); reported once per assignment below.
         mode_flip_repos: list[str] = []
@@ -652,8 +717,14 @@ def collect_classroom(
 
             results.append(entry_row)
             submitted += 1
+            if username.strip().lower() not in student_logins:
+                staff_submitted += 1
 
-        print(f"{classroom_short}/{slug}: {submitted}/{len(team_usernames)} submitted")
+        # Denominator: students (expected to submit) + staff who actually
+        # submitted. Non-accepting staff (polled but no repo) are excluded so
+        # the coverage line reads as student coverage, not inflated by testers.
+        expected = len(student_logins) + staff_submitted
+        print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted")
 
         if mode_flip_repos:
             mode_flip_assignments += 1

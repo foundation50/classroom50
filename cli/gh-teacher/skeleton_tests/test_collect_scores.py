@@ -94,6 +94,18 @@ def stub_team_members(monkeypatch, logins: list[str]) -> None:
     monkeypatch.setattr(cs, "list_team_member_logins", lambda *a, **k: list(logins))
 
 
+def stub_team_members_by_slug(monkeypatch, by_slug: dict[str, list[str]]) -> None:
+    """Stub list_team_member_logins to return per-team-slug logins, so a test
+    can give the student team and each staff team distinct members. An unknown
+    slug yields []. The signature is
+    list_team_member_logins(api_url, org, team_slug, token)."""
+
+    def fake(api_url, org, team_slug, token):
+        return list(by_slug.get(team_slug, []))
+
+    monkeypatch.setattr(cs, "list_team_member_logins", fake)
+
+
 def write_minimal_classroom(root: pathlib.Path) -> pathlib.Path:
     """Create a tiny classroom fixture under `root` and return its path."""
     classroom = root / "cs-principles"
@@ -1100,6 +1112,70 @@ class TestListTeamMemberLogins:
             )
 
 
+class TestListEnrolledLogins:
+    def test_unions_student_and_staff_dedup_student_first(self, monkeypatch):
+        by_slug = {
+            "classroom50-cs-principles": ["alice", "Bob"],
+            "classroom50-cs-principles-teacher": ["prof"],
+            "classroom50-cs-principles-ta": ["bob", "ta1"],
+        }
+        stub_team_members_by_slug(monkeypatch, by_slug)
+        meta = {
+            "teams": {
+                "teacher": {"slug": "classroom50-cs-principles-teacher"},
+                "ta": {"slug": "classroom50-cs-principles-ta"},
+            }
+        }
+        logins, students = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", meta, "cs-principles", "token"
+        )
+        # Bob (student casing) wins over bob (ta); order is first-seen across the
+        # student team then each staff team.
+        assert logins == ["alice", "Bob", "prof", "ta1"]
+        # Student set is lowercased and holds only student-team members.
+        assert students == {"alice", "bob"}
+
+    def test_no_staff_teams_polls_only_student(self, monkeypatch):
+        stub_team_members_by_slug(monkeypatch, {"classroom50-cs-principles": ["alice"]})
+        logins, students = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", {}, "cs-principles", "token"
+        )
+        assert logins == ["alice"]
+        assert students == {"alice"}
+
+    def test_soft_staff_error_skips_that_team(self, monkeypatch, capsys):
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles-ta":
+                raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+            return ["alice"] if team_slug == "classroom50-cs-principles" else []
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        logins, students = cs.list_enrolled_logins(
+            "https://api.github.com", "cs50", meta, "cs-principles", "token"
+        )
+        assert logins == ["alice"]
+        assert students == {"alice"}
+        assert "could not read staff team" in capsys.readouterr().err
+
+    def test_hard_staff_error_propagates(self, monkeypatch):
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles-ta":
+                raise urllib.error.HTTPError("u", 403, "Forbidden", None, None)
+            return ["alice"] if team_slug == "classroom50-cs-principles" else []
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        with pytest.raises(urllib.error.HTTPError):
+            cs.list_enrolled_logins(
+                "https://api.github.com", "cs50", meta, "cs-principles", "token"
+            )
+
+
 class TestCollectClassroomTeamDriven:
     def _assignments(self):
         return {"assignments": [{"slug": "hello", "name": "H", "mode": "individual", "tests": []}]}
@@ -1132,7 +1208,7 @@ class TestCollectClassroomTeamDriven:
         )
         assert results == []
         assert mode_flip == 0
-        assert "has no members" in capsys.readouterr().err
+        assert "have no members" in capsys.readouterr().err
 
     def test_team_read_404_warns_and_skips(self, monkeypatch, capsys):
         import urllib.error
@@ -1194,6 +1270,209 @@ class TestCollectClassroomTeamDriven:
         assert results == []
         assert mode_flip == 0
         assert "member listing malformed" in capsys.readouterr().err
+
+    # Staff collection (the four-team union) ---------------------------------
+
+    def _meta_with_staff(self):
+        # A classroom.json `teams` block naming all three staff teams, so
+        # resolve_staff_team_slugs yields them and list_enrolled_logins polls
+        # each in addition to the student team.
+        return {
+            "teams": {
+                "teacher": {"slug": "classroom50-cs-principles-teacher"},
+                "hta": {"slug": "classroom50-cs-principles-hta"},
+                "ta": {"slug": "classroom50-cs-principles-ta"},
+            }
+        }
+
+    def test_polls_union_of_student_and_staff_teams(self, monkeypatch):
+        # Every team member (student + staff) is polled, student team first.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice"],
+            "classroom50-cs-principles-teacher": ["prof"],
+            "classroom50-cs-principles-hta": ["headta"],
+            "classroom50-cs-principles-ta": ["ta1"],
+        })
+        seen_repos = []
+
+        def fake_all(api_url, org, repo, token):
+            seen_repos.append(repo)
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=self._meta_with_staff(), assignments=self._assignments(),
+            service_token="token",
+        )
+        assert seen_repos == [
+            "cs-principles-hello-alice",
+            "cs-principles-hello-prof",
+            "cs-principles-hello-headta",
+            "cs-principles-hello-ta1",
+        ]
+
+    def test_dedupes_across_student_and_staff_teams(self, monkeypatch):
+        # A person on both the student team and a staff team is polled once.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice", "Bob"],
+            "classroom50-cs-principles-ta": ["bob", "ta1"],
+        })
+        # No teacher/hta teams in meta -> those slugs resolve to nothing polled.
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        seen_repos = []
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda api_url, org, repo, token: seen_repos.append(repo) or [],
+        )
+        cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        # Bob/bob collapse to one probe (student-team casing wins, first seen).
+        assert seen_repos == [
+            "cs-principles-hello-alice",
+            "cs-principles-hello-bob",
+            "cs-principles-hello-ta1",
+        ]
+
+    def test_staff_member_with_repo_is_collected(self, monkeypatch):
+        # A staff member who accepted (their repo exists, has a submit release)
+        # is collected exactly like a student.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": [],
+            "classroom50-cs-principles-ta": ["ta1"],
+        })
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda *a, **k: [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                              "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}],
+        )
+        monkeypatch.setattr(
+            cs, "download_result_asset", lambda *a, **k: make_result(username="ta1"),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        assert len(results) == 1
+        assert results[0]["owner"] == "ta1"
+
+    def test_staff_member_without_repo_is_absent(self, monkeypatch):
+        # A staff member who never accepted has no repo: all_submit_releases
+        # returns [] (a 404 collapses to []), so no entry is produced — the
+        # accepted gate is implicit in the per-repo release read.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice"],
+            "classroom50-cs-principles-ta": ["ta1"],
+        })
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+
+        def fake_all(api_url, org, repo, token):
+            # alice accepted; ta1 did not.
+            if repo == "cs-principles-hello-alice":
+                return [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                         "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}]
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+        monkeypatch.setattr(
+            cs, "download_result_asset", lambda *a, **k: make_result(username="alice"),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        owners = [r["owner"] for r in results]
+        assert owners == ["alice"]
+        assert "ta1" not in owners
+
+    def test_staff_team_soft_error_warns_and_continues(self, monkeypatch, capsys):
+        # A soft failure (404 on an uncreated staff team) contributes nobody but
+        # doesn't abort: the student team is still collected.
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles-ta":
+                raise urllib.error.HTTPError("u", 404, "Not Found", None, None)
+            return ["alice"] if team_slug == "classroom50-cs-principles" else []
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        monkeypatch.setattr(
+            cs, "all_submit_releases",
+            lambda *a, **k: [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                              "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}],
+        )
+        monkeypatch.setattr(
+            cs, "download_result_asset", lambda *a, **k: make_result(username="alice"),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        assert [r["owner"] for r in results] == ["alice"]
+        assert "could not read staff team" in capsys.readouterr().err
+
+    def test_staff_team_hard_error_propagates(self, monkeypatch):
+        # A hard failure (403) on a staff team aborts the whole run, same as the
+        # student team — a broken token must not silently under-collect.
+        import urllib.error
+
+        def fake(api_url, org, team_slug, token):
+            if team_slug == "classroom50-cs-principles-ta":
+                raise urllib.error.HTTPError("u", 403, "Forbidden", None, None)
+            return ["alice"] if team_slug == "classroom50-cs-principles" else []
+
+        monkeypatch.setattr(cs, "list_team_member_logins", fake)
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+        with pytest.raises(urllib.error.HTTPError):
+            cs.collect_classroom(
+                api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+                classroom_meta=meta, assignments=self._assignments(), service_token="token",
+            )
+
+    def test_summary_denominator_excludes_non_accepting_staff(self, monkeypatch, capsys):
+        # "X of Y submitted" counts students (expected to submit) plus staff who
+        # actually submitted — a non-accepting staffer (polled, no repo) must not
+        # inflate Y. Here: 2 students (alice submits, bob doesn't), 1 TA who
+        # submits, 1 TA who doesn't -> 2 of 3 submitted (2 students + 1 staff
+        # submitter), NOT 2 of 4.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice", "bob"],
+            "classroom50-cs-principles-ta": ["ta1", "ta2"],
+        })
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+
+        def fake_all(api_url, org, repo, token):
+            if repo in ("cs-principles-hello-alice", "cs-principles-hello-ta1"):
+                return [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                         "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}]
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+
+        # download_result_asset is called right after all_submit_releases for the
+        # same repo; thread the owner through the repo the loop is on.
+        owners = {"cs-principles-hello-alice": "alice", "cs-principles-hello-ta1": "ta1"}
+        seen = {"owner": None}
+
+        def fake_all2(api_url, org, repo, token):
+            seen["owner"] = owners.get(repo)
+            return fake_all(api_url, org, repo, token)
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all2)
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(username=seen["owner"]),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        assert sorted(r["owner"] for r in results) == ["alice", "ta1"]
+        assert "cs-principles/hello: 2/3 submitted" in capsys.readouterr().out
 
 
 class TestLateness:

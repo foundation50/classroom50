@@ -102,8 +102,11 @@ walkthrough.
 | `.github/scripts/probe_token.py` | Service-token scope probe. |
 | `README.md` | Describes the config repo layout. |
 
-Both collection and regrade are **team-driven**: the classroom GitHub team is
-the source of truth for enrollment.
+Both collection and regrade are **team-driven**: the classroom GitHub teams are
+the source of truth for enrollment. Collection polls the student team plus the
+staff teams (teacher/hta/ta), so a staff member who accepted an assignment (to
+test the autograde flow) is collected like a student; staff who never accepted
+have no repo and produce no entry.
 
 </details>
 

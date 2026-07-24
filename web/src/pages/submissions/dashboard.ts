@@ -6,6 +6,9 @@ import type { SubmissionRow } from "@/hooks/useGetScores"
 import type { GitHubRepo } from "@/github-core/types"
 import type { Student } from "@/types/classroom"
 import type { BadgeTone } from "@/components/ui"
+import type { TeamRosterRow } from "@/util/teamRoster"
+import { rowToStudent } from "@/util/teamRoster"
+import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import { getName, nameFromParts } from "@/util/students"
 import { studentRepoName } from "@/util/studentRepo"
 
@@ -36,6 +39,47 @@ export function rosterScopedRows(
       .filter((u) => u.length > 0),
   )
   return rows.filter((row) => rowOnRoster(row, rosterLogins))
+}
+
+// The gradee roster spine for the submissions view. Always includes every
+// enrolled STUDENT row (a plain student, or a student who is also staff) —
+// unchanged behavior, so a student who never accepted still shows as "not
+// accepted". A pure staff row (teacher/hta/ta with no student enrollment) is
+// included ONLY when that staff member has ACCEPTED this assignment, so a staff
+// member testing the autograde flow appears exactly like a student while staff
+// who never accepted stay hidden.
+//
+// Acceptance is derived from what already exists, no per-user fetch: for an
+// individual assignment, their `<classroom>-<assignment>-<login>` repo is in
+// the org repo list (`acceptedStaffLogins`); for a group assignment, they're a
+// founder or credited member of an existing group repo (`groupRepoMembers`,
+// lowercased). Collection independently picks up the same accepted staff (it
+// polls the staff teams and only records a repo that exists), so the view and
+// the gradebook stay in step.
+export function submissionRosterStudents(
+  teamRows: TeamRosterRow[],
+  {
+    acceptedStaffLogins,
+    groupRepoMembers,
+  }: {
+    acceptedStaffLogins: Set<string>
+    groupRepoMembers: Set<string>
+  },
+): Student[] {
+  const enrolled = teamRows.filter((r) => r.state === "enrolled")
+  const out: Student[] = []
+  for (const row of enrolled) {
+    if (hasStudentEnrollment(row)) {
+      out.push(rowToStudent(row))
+      continue
+    }
+    const login = row.username.trim().toLowerCase()
+    if (!login) continue
+    if (acceptedStaffLogins.has(login) || groupRepoMembers.has(login)) {
+      out.push(rowToStudent(row))
+    }
+  }
+  return out
 }
 
 // Fold live submission presence (submit/* releases read directly from student
