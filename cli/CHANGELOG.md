@@ -17,6 +17,13 @@ publish the extensions (see `.github/workflows/cli-release.yaml`). You no longer
 tag by hand; write Conventional Commit messages and release-please compiles the
 notes.
 
+## [1.15.0](https://github.com/foundation50/classroom50/compare/cli-v1.14.0...cli-v1.15.0) (2026-07-24)
+
+
+### Features
+
+* collect and show accepted staff submissions ([#393](https://github.com/foundation50/classroom50/issues/393)) ([675e117](https://github.com/foundation50/classroom50/commit/675e117a6ce0ee8692edc21e0963ff1a7d29a8d5))
+
 ## [1.14.0](https://github.com/foundation50/classroom50/compare/cli-v1.13.0...cli-v1.14.0) (2026-07-23)
 
 

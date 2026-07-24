@@ -17,6 +17,20 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.15.0](https://github.com/foundation50/classroom50/compare/web-v1.14.0...web-v1.15.0) (2026-07-24)
+
+
+### Features
+
+* collect and show accepted staff submissions ([#393](https://github.com/foundation50/classroom50/issues/393)) ([675e117](https://github.com/foundation50/classroom50/commit/675e117a6ce0ee8692edc21e0963ff1a7d29a8d5))
+* **web:** fix teardown re-add wizard bug and polish the setup finish screen ([#392](https://github.com/foundation50/classroom50/issues/392)) ([949b80d](https://github.com/foundation50/classroom50/commit/949b80d8cf5f285727048ef3ad542cf1df7b2240))
+* **web:** hide organizations from home and manage the org profile ([#387](https://github.com/foundation50/classroom50/issues/387)) ([a1eb14c](https://github.com/foundation50/classroom50/commit/a1eb14c429f61cd5ef13a401c735a38d025d15cb))
+
+
+### Bug Fixes
+
+* **web:** only create an autograding test when the editor is confirmed ([#391](https://github.com/foundation50/classroom50/issues/391)) ([10e51c1](https://github.com/foundation50/classroom50/commit/10e51c15b14ede154db4d5beabbfc2ed8e2c066d))
+
 ## [1.14.0](https://github.com/foundation50/classroom50/compare/web-v1.13.0...web-v1.14.0) (2026-07-23)
 
 
