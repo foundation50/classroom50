@@ -408,9 +408,12 @@ gh teacher member list <org>/<repo>  # repo collaborators
 ## 9. Collect scores
 
 Every submission publishes a GitHub Release carrying a `result.json`. The
-`collect-scores` workflow walks every `(student, assignment)` pair, collects each
+`collect-scores` workflow walks every `(member, assignment)` pair, collects each
 repo's submissions, and aggregates them into `<classroom>/scores.json` — the
-class's authoritative gradebook.
+class's authoritative gradebook. Members are the union of the student team and
+the staff teams (teacher/hta/ta), so a staff member who accepted an assignment
+to test the autograde flow is collected like a student; staff who never accepted
+have no repo and produce no entry.
 
 Run it from the Actions tab on `<org>/classroom50`, or from your shell:
 
@@ -427,9 +430,11 @@ you never trigger it. To disable that, comment out the `schedule:` block in
 <summary>What each collection run does</summary>
 
 1. Iterates each classroom (or just the one you passed).
-2. For each `(student, assignment)` pair, computes the repo name
+2. For each `(member, assignment)` pair — every student team member plus every
+   staff team member — computes the repo name
    `<classroom>-<assignment>-<username>` and walks its `submit/*` releases. No
-   releases means the student hasn't accepted or submitted yet.
+   releases means the member hasn't accepted or submitted yet (a staff member
+   who never accepted simply drops out here).
 3. Downloads and schema-validates each `result.json`, checking its identity
    against the source repo (a hostile payload can't land in another student's
    scores). For a group assignment, it reads the repo's collaborators and

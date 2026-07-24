@@ -41,6 +41,7 @@ import {
   showsNonSubmitters,
   snapshotIsStale,
   studentInSection,
+  submissionRosterStudents,
   type SubmissionFilters,
   type SubmissionSort,
 } from "@/pages/submissions/dashboard"
@@ -50,8 +51,8 @@ import useGetClassroomAssignments from "@/hooks/useGetClassAssignments"
 import useGetClassroom from "@/hooks/useGetClassroom"
 import useGetStudents from "@/hooks/useGetStudents"
 import { useTeamRoster } from "@/hooks/useTeamRoster"
-import { rowToStudent } from "@/util/teamRoster"
 import { getName, sortStudentsByName } from "@/util/students"
+import { studentRepoName } from "@/util/studentRepo"
 import { hasStudentEnrollment } from "@/util/classroomRoleUI"
 import type { Student } from "@/types/classroom"
 import useEmptyRosterWarning from "@/hooks/useEmptyRosterWarning"
@@ -110,13 +111,14 @@ const SubmissionsPageContent = () => {
     error: scoresErrorObj,
   } = useGetScores(org, classroom)
   const { data: assignmentData } = useGetClassroomAssignments(org, classroom)
-  // Team-driven usernames: the classroom GitHub team is authoritative for
+  // Team-driven usernames: the classroom GitHub teams are authoritative for
   // enrollment; roster.csv enriches display only. The dashboard consumes
-  // Student[], so map enrolled team rows into that shape.
-  // Restrict to rows carrying a STUDENT enrollment — a pure teacher/TA is an
-  // enrolled team member but not a gradee, and "Collect scores" already runs
-  // only against the student team, so excluding them keeps this roster in step
-  // with what's actually graded (a student who is also staff still counts).
+  // Student[], so map enrolled team rows into that shape (see
+  // submissionRosterStudents). Every enrolled STUDENT is a gradee (a
+  // not-yet-accepted student still lists as "not accepted"); a pure staff
+  // member (teacher/TA/HTA, not on the student team) is a gradee only once
+  // they've ACCEPTED, matching the collector, which polls the staff teams too
+  // but only records a repo that exists.
   const { students: csvStudents } = useGetStudents(org, classroom)
   // Surface the team fetch's error/loading: a transient or permission failure
   // of the enrolled source of truth must render as error+retry, not an
@@ -127,14 +129,89 @@ const SubmissionsPageContent = () => {
     isError: rosterError,
     refetch: refetchRoster,
   } = useTeamRoster(org ?? "", classroom ?? "", csvStudents)
+
+  // Assignment shape (group vs individual, empty_repo) and the org repo list
+  // are resolved up here because the gradee roster below needs them: a pure
+  // staff member (teacher/hta/ta, not on the student team) is shown as a gradee
+  // only once they've ACCEPTED — derived from an existing assignment repo — so
+  // staff testing the autograde flow appear while staff who never accepted stay
+  // hidden. Students are always shown (a not-yet-accepted student still lists as
+  // "not accepted"), unchanged.
+  const assignmentInfo = assignmentData?.assignments.find(
+    (a) => a.slug === assignment,
+  )
+  const isGroupAssignment = assignmentInfo?.mode === "group"
+  // empty_repo assignments never autograde: repos were created bare, with no
+  // autograde workflow. Grading UI (Regrade all, per-row regrade, scores,
+  // Feedback PR) is hidden and a notice explains why. Collect stays enabled —
+  // it's org-wide and collect_scores.py skips this assignment itself.
+  const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
+  // Org repo list drives repo-existence signals (individual acceptance below,
+  // group-repo enumeration, the staff-acceptance gate, and the pushed_at
+  // staleness heuristic). `refetch` is wired to Sync + collect-completion so
+  // `latestPush` isn't frozen at page load (else a push after load never flips
+  // the freshness line to "out of sync").
+  const { data: orgRepos, refetch: refetchOrgRepos } = useGetOrgRepos(org ?? "")
+  // Sibling slugs guard group-repo attribution against a slug-extending sibling
+  // ("hw1-bonus" under "hw1"); see existingGroupRepos.
+  const siblingSlugs = useMemo(
+    () => (assignmentData?.assignments ?? []).map((a) => a.slug),
+    [assignmentData],
+  )
+  const groupRepoList = useMemo(
+    () =>
+      isGroupAssignment
+        ? existingGroupRepos(
+            orgRepos,
+            classroom ?? "",
+            assignment ?? "",
+            siblingSlugs,
+          )
+        : [],
+    [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
+  )
+  // Members of every existing group repo (founders known from the repo name,
+  // plus each repo's collaborators). Feeds both the staff-acceptance gate and
+  // the "no group" reconciliation below (one shared derivation).
+  const { logins: groupRepoMembers, isPending: groupMembersPending } =
+    useGroupRepoMemberLogins(org ?? "", groupRepoList)
+  const groupRepoFounders = useMemo(
+    () =>
+      new Set([
+        ...groupRepoList.map((repo) => repo.owner),
+        ...groupRepoMembers,
+      ]),
+    [groupRepoList, groupRepoMembers],
+  )
+  // Staff logins who accepted an INDIVIDUAL assignment (their repo exists). Only
+  // pure-staff rows need gating; a student row is always included, so scope this
+  // to staff-only enrolled rows to keep it cheap. Group acceptance is handled by
+  // groupRepoFounders (a founder/member set), so this stays individual-only.
+  const acceptedStaffLogins = useMemo(() => {
+    const set = new Set<string>()
+    if (isGroupAssignment || !orgRepos) return set
+    const repoNames = new Set(orgRepos.map((r) => r.name.toLowerCase()))
+    for (const row of teamRows) {
+      if (row.state !== "enrolled" || hasStudentEnrollment(row)) continue
+      const login = row.username.trim()
+      if (!login) continue
+      if (
+        repoNames.has(studentRepoName(classroom ?? "", assignment ?? "", login))
+      ) {
+        set.add(login.toLowerCase())
+      }
+    }
+    return set
+  }, [teamRows, orgRepos, isGroupAssignment, classroom, assignment])
   const students: Student[] = useMemo(
     () =>
       sortStudentsByName(
-        teamRows
-          .filter((r) => r.state === "enrolled" && hasStudentEnrollment(r))
-          .map(rowToStudent),
+        submissionRosterStudents(teamRows, {
+          acceptedStaffLogins,
+          groupRepoMembers: groupRepoFounders,
+        }),
       ),
-    [teamRows],
+    [teamRows, acceptedStaffLogins, groupRepoFounders],
   )
   // Gate Regrade all / Collect now on an empty roster: dispatching with no
   // students is wasted effort. `show` is loading-aware (won't flash before the
@@ -164,15 +241,6 @@ const SubmissionsPageContent = () => {
   const [metricsOpen, setMetricsOpen] = useState(false)
   const [acceptOpen, setAcceptOpen] = useState(false)
 
-  const assignmentInfo = assignmentData?.assignments.find(
-    (a) => a.slug === assignment,
-  )
-  const isGroupAssignment = assignmentInfo?.mode === "group"
-  // empty_repo assignments never autograde: repos were created bare, with no
-  // autograde workflow. Grading UI (Regrade all, per-row regrade, scores,
-  // Feedback PR) is hidden and a notice explains why. Collect stays enabled —
-  // it's org-wide and collect_scores.py skips this assignment itself.
-  const isEmptyRepoAssignment = assignmentInfo?.empty_repo === true
   // Scope the collector's scores to the CURRENT roster (see rosterScopedRows).
   // Gate on a resolved roster so a transient load/permission failure falls back
   // to unscoped rows rather than blanking a populated gradebook.
@@ -217,12 +285,6 @@ const SubmissionsPageContent = () => {
     [students],
   )
 
-  // Org repo list drives repo-existence signals (individual acceptance below,
-  // group-repo enumeration, and the pushed_at staleness heuristic). `refetch` is
-  // wired to Sync + collect-completion so `latestPush` isn't frozen at page load
-  // (else a push after load never flips the freshness line to "out of sync").
-  const { data: orgRepos, refetch: refetchOrgRepos } = useGetOrgRepos(org ?? "")
-
   // Due-date presentation: absolute date + a relative countdown ("in 3 days" /
   // "2 hours ago"). Past due flips the badge to error and the label to overdue.
   const dueDate = assignmentInfo?.due
@@ -230,30 +292,6 @@ const SubmissionsPageContent = () => {
   const dueRelative = dueDate
     ? formatRelativeToNow(dueDeadlineInstant(dueDate) ?? new Date(dueDate))
     : null
-
-  // Group repos that already exist for this assignment, derived from the org
-  // repo list (empty for individual assignments). Named after the founder, so
-  // the `owner` segment is a roster login when the founder is enrolled. Sibling
-  // assignment slugs are passed so a repo of a slug-extending sibling
-  // ("hw1-bonus" under "hw1") isn't mis-attributed here. Computed once so both
-  // the non-submitter list (to avoid double-listing a member who has a repo) and
-  // the group-repo rows below share one derivation.
-  const siblingSlugs = useMemo(
-    () => (assignmentData?.assignments ?? []).map((a) => a.slug),
-    [assignmentData],
-  )
-  const groupRepoList = useMemo(
-    () =>
-      isGroupAssignment
-        ? existingGroupRepos(
-            orgRepos,
-            classroom ?? "",
-            assignment ?? "",
-            siblingSlugs,
-          )
-        : [],
-    [isGroupAssignment, orgRepos, classroom, assignment, siblingSlugs],
-  )
 
   // Whether the live presence overlay applies here: owner-only (personal token
   // can read the repos) and not an empty_repo assignment (never autograded). A
@@ -369,22 +407,6 @@ const SubmissionsPageContent = () => {
   // Repos whose latest submission landed after the deadline. `late` is computed
   // upstream (collect_scores.py) from push time, not grade time.
   const lateCount = scoresInfo.filter((row) => row.late).length
-
-  // Members of every existing group repo, fetched (bounded) and reconciled so
-  // the "no group" list is accurate on load: the union of founders (known from
-  // the repo name) plus each repo's collaborators means a teammate on a
-  // formed-but-unsubmitted group isn't also listed as "no group" (#245). The
-  // fetch is throttled and shares the collaborators cache with the rows/modal.
-  const { logins: groupRepoMembers, isPending: groupMembersPending } =
-    useGroupRepoMemberLogins(org ?? "", groupRepoList)
-  const groupRepoFounders = useMemo(
-    () =>
-      new Set([
-        ...groupRepoList.map((repo) => repo.owner),
-        ...groupRepoMembers,
-      ]),
-    [groupRepoList, groupRepoMembers],
-  )
 
   // Roster students with no submission. "Credited" = login appears in any row's
   // `usernames` (member_usernames for groups, else [owner]), so group teammates
