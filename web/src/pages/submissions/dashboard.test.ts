@@ -25,6 +25,7 @@ import {
   filterNonSubmitters,
   hasAccepted,
   latestAssignmentPush,
+  latestCollectedAt,
   mergeLiveRows,
   nonSubmitterStatus,
   pageBounds,
@@ -1005,6 +1006,72 @@ describe("latestAssignmentPush / snapshotIsStale", () => {
   it("is never stale when there is no push", () => {
     expect(snapshotIsStale(null, null)).toBe(false)
     expect(snapshotIsStale(null, "2026-06-20T10:00:00Z")).toBe(false)
+  })
+})
+
+describe("latestCollectedAt", () => {
+  it("returns the newer ISO regardless of argument order", () => {
+    expect(
+      latestCollectedAt("2026-06-20T10:00:00Z", "2026-06-25T10:00:00Z"),
+    ).toBe("2026-06-25T10:00:00Z")
+    expect(
+      latestCollectedAt("2026-06-25T10:00:00Z", "2026-06-20T10:00:00Z"),
+    ).toBe("2026-06-25T10:00:00Z")
+  })
+
+  it("returns the non-null value when the other is null/undefined", () => {
+    expect(latestCollectedAt("2026-06-20T10:00:00Z", null)).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+    expect(latestCollectedAt(null, "2026-06-20T10:00:00Z")).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+    expect(latestCollectedAt("2026-06-20T10:00:00Z", undefined)).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+  })
+
+  it("returns null when both are null/undefined", () => {
+    expect(latestCollectedAt(null, null)).toBeNull()
+    expect(latestCollectedAt(undefined, undefined)).toBeNull()
+  })
+
+  it("discards an unparseable value rather than letting it win", () => {
+    expect(latestCollectedAt("not-a-date", "2026-06-20T10:00:00Z")).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+    expect(latestCollectedAt("2026-06-20T10:00:00Z", "not-a-date")).toBe(
+      "2026-06-20T10:00:00Z",
+    )
+    expect(latestCollectedAt("not-a-date", null)).toBeNull()
+  })
+})
+
+// The freshness button's color is snapshotIsStale(latestPush, effective) where
+// effective = latestCollectedAt(lastRun, trackedRun). These cases prove the two
+// helpers compose to clear the button after a completed sync (R1) without going
+// falsely quiet when a newer push exists (R2), even while the status=completed
+// query still reports an older run.
+describe("freshness: effective last-collected clears stale after a sync", () => {
+  const lagging = "2026-06-20T10:00:00Z" // stale getLastCollectScoresRun result
+  const trackedRun = "2026-06-25T12:00:00Z" // the just-finished run we hold
+
+  it("clears stale when the tracked run is newer than the push (R1)", () => {
+    const push = "2026-06-25T11:00:00Z"
+    const effective = latestCollectedAt(lagging, trackedRun)
+    expect(snapshotIsStale(push, effective)).toBe(false)
+  })
+
+  it("stays stale when a push is newer than the tracked run (R2)", () => {
+    const push = "2026-06-25T13:00:00Z"
+    const effective = latestCollectedAt(lagging, trackedRun)
+    expect(snapshotIsStale(push, effective)).toBe(true)
+  })
+
+  it("stays stale on the lagging run alone before the tracked run lands", () => {
+    const push = "2026-06-25T11:00:00Z"
+    const effective = latestCollectedAt(lagging, null)
+    expect(snapshotIsStale(push, effective)).toBe(true)
   })
 })
 
