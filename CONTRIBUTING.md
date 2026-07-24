@@ -16,7 +16,7 @@ To contribute, you're welcome to:
 
 Please remove tokens, secrets, and private student data from any discussion and issue posts.
 
-## Ground rules
+## Ground Rules
 
 - **No backend.** Classroom 50 is 100% client-side. All state lives in GitHub
   repos and in JSON/CSV/YAML config files — there is no server. Behavior is
@@ -24,7 +24,7 @@ Please remove tokens, secrets, and private student data from any discussion and 
   when their assignment repo exists). Please don't add server-side state.
 - **Be kind.** Assume good faith and keep discussion focused on the work.
 
-## Project layout
+## Project Layout
 
 Classroom 50 is a monorepo of independently built but co-shipped pieces:
 
@@ -37,7 +37,7 @@ Classroom 50 is a monorepo of independently built but co-shipped pieces:
 | `schemas/`     | JSON Schema               | Source-of-truth schemas for the cross-tool contracts       |
 | `templates/`   | —                         | Example assignment templates teachers can copy             |
 
-## Build and test
+## Build and Test
 
 Please build, test, and lint the module you touched before opening a PR.
 
@@ -72,7 +72,7 @@ Skeleton scripts (Python):
 python3 -m pytest cli/gh-teacher/skeleton_tests -q
 ```
 
-## Cross-tool contracts
+## Cross-Tool Contracts
 
 Some names, paths, and schemas are shared across more than one tool (the web
 app and the CLIs), so they can only change by coordinating across all tools.
@@ -91,7 +91,7 @@ Document CLI commands and flags in the
 [wiki](https://github.com/foundation50/classroom50/wiki), not in per-tool
 READMEs.
 
-## Commits and pull requests
+## Commits and Pull Requests
 
 We squash-merge every PR, so the **PR title is the commit** that lands on
 `main` — and release-please reads it to compute the next web release. Getting
