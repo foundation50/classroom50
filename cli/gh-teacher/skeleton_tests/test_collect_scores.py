@@ -1126,19 +1126,22 @@ class TestListEnrolledLogins:
                 "ta": {"slug": "classroom50-cs-principles-ta"},
             }
         }
-        logins = cs.list_enrolled_logins(
+        logins, students = cs.list_enrolled_logins(
             "https://api.github.com", "cs50", meta, "cs-principles", "token"
         )
         # Bob (student casing) wins over bob (ta); order is first-seen across the
         # student team then each staff team.
         assert logins == ["alice", "Bob", "prof", "ta1"]
+        # Student set is lowercased and holds only student-team members.
+        assert students == {"alice", "bob"}
 
     def test_no_staff_teams_polls_only_student(self, monkeypatch):
         stub_team_members_by_slug(monkeypatch, {"classroom50-cs-principles": ["alice"]})
-        logins = cs.list_enrolled_logins(
+        logins, students = cs.list_enrolled_logins(
             "https://api.github.com", "cs50", {}, "cs-principles", "token"
         )
         assert logins == ["alice"]
+        assert students == {"alice"}
 
     def test_soft_staff_error_skips_that_team(self, monkeypatch, capsys):
         import urllib.error
@@ -1150,10 +1153,11 @@ class TestListEnrolledLogins:
 
         monkeypatch.setattr(cs, "list_team_member_logins", fake)
         meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
-        logins = cs.list_enrolled_logins(
+        logins, students = cs.list_enrolled_logins(
             "https://api.github.com", "cs50", meta, "cs-principles", "token"
         )
         assert logins == ["alice"]
+        assert students == {"alice"}
         assert "could not read staff team" in capsys.readouterr().err
 
     def test_hard_staff_error_propagates(self, monkeypatch):
@@ -1428,6 +1432,47 @@ class TestCollectClassroomTeamDriven:
                 api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
                 classroom_meta=meta, assignments=self._assignments(), service_token="token",
             )
+
+    def test_summary_denominator_excludes_non_accepting_staff(self, monkeypatch, capsys):
+        # "X of Y submitted" counts students (expected to submit) plus staff who
+        # actually submitted — a non-accepting staffer (polled, no repo) must not
+        # inflate Y. Here: 2 students (alice submits, bob doesn't), 1 TA who
+        # submits, 1 TA who doesn't -> 2 of 3 submitted (2 students + 1 staff
+        # submitter), NOT 2 of 4.
+        stub_team_members_by_slug(monkeypatch, {
+            "classroom50-cs-principles": ["alice", "bob"],
+            "classroom50-cs-principles-ta": ["ta1", "ta2"],
+        })
+        meta = {"teams": {"ta": {"slug": "classroom50-cs-principles-ta"}}}
+
+        def fake_all(api_url, org, repo, token):
+            if repo in ("cs-principles-hello-alice", "cs-principles-hello-ta1"):
+                return [{"tag_name": "submit/2026-06-01T10-00-00Z",
+                         "assets": [{"name": "result.json", "url": "https://api.github.com/a/1"}]}]
+            return []
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all)
+
+        # download_result_asset is called right after all_submit_releases for the
+        # same repo; thread the owner through the repo the loop is on.
+        owners = {"cs-principles-hello-alice": "alice", "cs-principles-hello-ta1": "ta1"}
+        seen = {"owner": None}
+
+        def fake_all2(api_url, org, repo, token):
+            seen["owner"] = owners.get(repo)
+            return fake_all(api_url, org, repo, token)
+
+        monkeypatch.setattr(cs, "all_submit_releases", fake_all2)
+        monkeypatch.setattr(
+            cs, "download_result_asset",
+            lambda *a, **k: make_result(username=seen["owner"]),
+        )
+        results, _ = cs.collect_classroom(
+            api_url="https://api.github.com", org="cs50", classroom_short="cs-principles",
+            classroom_meta=meta, assignments=self._assignments(), service_token="token",
+        )
+        assert sorted(r["owner"] for r in results) == ["alice", "ta1"]
+        assert "cs-principles/hello: 2/3 submitted" in capsys.readouterr().out
 
 
 class TestLateness:

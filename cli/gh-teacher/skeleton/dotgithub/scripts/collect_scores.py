@@ -409,9 +409,13 @@ def list_enrolled_logins(
     classroom_meta: dict[str, Any],
     classroom_short: str,
     service_token: str,
-) -> list[str]:
-    """Case-insensitive dedup union of the student team and every staff team's
-    members, first-seen order/casing preserved (student team first).
+) -> tuple[list[str], set[str]]:
+    """Return (polled logins, student logins). The first is the case-insensitive
+    dedup union of the student team and every staff team's members, first-seen
+    order/casing preserved (student team first). The second is the lowercased
+    set of STUDENT-team logins — used only so the per-assignment "X of Y
+    submitted" denominator counts students (expected to submit) rather than
+    every staffer polled (a non-accepting TA is a tester, not missing work).
 
     Collection polls staff (teacher/hta/ta) too so a staff member testing an
     assignment is graded like a student — but only when they've ACCEPTED: a
@@ -427,7 +431,8 @@ def list_enrolled_logins(
     student_slug = resolve_team_slug(classroom_meta, classroom_short)
     # Student team first so its casing wins in the dedup (the repo-name formula
     # lowercases anyway, so casing is cosmetic — but keep it deterministic).
-    logins = list_team_member_logins(api_url, org, student_slug, service_token)
+    student_logins = list_team_member_logins(api_url, org, student_slug, service_token)
+    logins = list(student_logins)
     for role, staff_slug in resolve_staff_team_slugs(classroom_meta).items():
         try:
             logins.extend(
@@ -446,7 +451,7 @@ def list_enrolled_logins(
                 f"{classroom_short}: staff team {staff_slug!r} ({role}) member "
                 f"listing malformed ({exc}); skipping that team's members."
             )
-    return _dedupe_logins(logins)
+    return _dedupe_logins(logins), {u.strip().lower() for u in student_logins}
 
 
 def collect_classroom(
@@ -492,7 +497,7 @@ def collect_classroom(
     # hard auth/network error propagates so main() aborts the whole run loudly.
     team_slug = resolve_team_slug(classroom_meta, classroom_short)
     try:
-        team_usernames = list_enrolled_logins(
+        team_usernames, student_logins = list_enrolled_logins(
             api_url, org, classroom_meta, classroom_short, service_token
         )
     except urllib.error.HTTPError as exc:
@@ -549,6 +554,11 @@ def collect_classroom(
         assignment_type = "group" if is_group else "individual"
 
         submitted = 0
+        # Staff (non-student-team) members who actually submitted this
+        # assignment. They count toward the "X of Y" denominator only when they
+        # submitted — a non-accepting staffer is a tester, not missing work, so
+        # counting every polled staffer in Y would understate student coverage.
+        staff_submitted = 0
         # Repos under THIS assignment whose only submissions were rejected by
         # validation (mode-flip symptom); reported once per assignment below.
         mode_flip_repos: list[str] = []
@@ -707,8 +717,14 @@ def collect_classroom(
 
             results.append(entry_row)
             submitted += 1
+            if username.strip().lower() not in student_logins:
+                staff_submitted += 1
 
-        print(f"{classroom_short}/{slug}: {submitted}/{len(team_usernames)} submitted")
+        # Denominator: students (expected to submit) + staff who actually
+        # submitted. Non-accepting staff (polled but no repo) are excluded so
+        # the coverage line reads as student coverage, not inflated by testers.
+        expected = len(student_logins) + staff_submitted
+        print(f"{classroom_short}/{slug}: {submitted}/{expected} submitted")
 
         if mode_flip_repos:
             mode_flip_assignments += 1
