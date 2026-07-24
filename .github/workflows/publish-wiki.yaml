@@ -5,17 +5,10 @@ name: Publish wiki
 # wiki/**. Manual runs are available from the Actions tab.
 #
 # Source of truth: wiki/ in this repo. The wiki repo is downstream-only —
-# direct edits there (including via the GitHub UI) are overwritten on the
-# next publish. This replaces the wiki half of the retired mirror workflow;
-# because it pushes to the SAME repo's wiki, the built-in GITHUB_TOKEN with
+# it's overwritten on every publish, so direct edits there (including via the
+# GitHub UI) are lost. To edit the wiki, change wiki/ and push to main.
+# Because it pushes to the SAME repo's wiki, the built-in GITHUB_TOKEN with
 # `contents: write` is sufficient (no PAT needed).
-#
-# Reconcile guard: to avoid silently destroying direct wiki edits, the sync
-# inspects the wiki's commit history. If the wiki has any commit made after
-# our last sync that the sync bot did NOT author, and its content differs
-# from wiki/, the workflow FAILS instead of overwriting. A human must pull
-# those edits back into wiki/ (open a PR to main); once wiki/ matches, the
-# guard passes and the sync resumes.
 #
 # One-time setup: enable the wiki and create at least one page via the
 # GitHub UI (Settings -> Features -> Wikis). GitHub does not initialize the
@@ -44,16 +37,13 @@ jobs:
     env:
       TARGET_REPO: ${{ github.repository }}
       SOURCE_SHA: ${{ github.sha }}
-      # Identity the sync bot commits under. Any downstream wiki commit NOT
-      # authored by this identity is treated as an unreconciled upstream edit.
-      SYNC_BOT_EMAIL: classroom50-sync@users.noreply.github.com
     steps:
       - uses: actions/checkout@v7
 
       - name: Configure git identity
         run: |
           git config --global user.name "classroom50-sync[bot]"
-          git config --global user.email "${SYNC_BOT_EMAIL}"
+          git config --global user.email "classroom50-sync@users.noreply.github.com"
 
       - name: Publish wiki content
         env:
@@ -76,43 +66,6 @@ jobs:
             exit 1
           fi
           cd wiki
-
-          # Detect unreconciled upstream edits: a commit not authored by the
-          # sync bot means someone changed the wiki directly. We only care
-          # about foreign commits made AFTER our most recent sync — before the
-          # first sync the wiki is bootstrapped with a UI page (foreign but
-          # meant to be overwritten), so it must not block the first publish.
-          last_sync=$(git log -1 --format='%H' --author="${SYNC_BOT_EMAIL}" 2>/dev/null || true)
-          if [ -n "$last_sync" ]; then
-            foreign_commits=$(git log "${last_sync}..HEAD" \
-              --pretty=format:'%ae%x09%h %an <%ae> %s' \
-              | awk -F'\t' -v bot="${SYNC_BOT_EMAIL}" '$1 != bot {print $2}')
-          else
-            foreign_commits=""
-          fi
-
-          if [ -n "$foreign_commits" ]; then
-            # Direct edits exist on top of our last sync. Only block if the
-            # live wiki content actually differs from what we'd push; if it
-            # already matches, the edits are reconciled and safe.
-            if ! diff -r --exclude='.git' "$src" . >/dev/null 2>&1; then
-              {
-                echo "::error::Unreconciled wiki edits detected on ${TARGET_REPO}."
-                echo "The wiki has commit(s) made after the last sync that the sync bot"
-                echo "did not author, and its content differs from this repo's wiki/."
-                echo "Publishing now would overwrite that work."
-                echo
-                echo "Direct (non-sync) commits on ${TARGET_REPO}.wiki.git:"
-                echo "${foreign_commits}"
-                echo
-                echo "To reconcile: clone ${TARGET_REPO}.wiki.git, copy the changed"
-                echo "pages/images into this repo's wiki/ directory, open a PR to main,"
-                echo "then re-run this workflow."
-              } >&2
-              exit 1
-            fi
-            echo "Direct commits exist but content already matches wiki/; proceeding."
-          fi
 
           find . -mindepth 1 -maxdepth 1 ! -name '.git' -exec rm -rf {} +
           rsync -a "$src"/ ./
