@@ -96,8 +96,7 @@ export function feedbackPrBody(head: string, releaseUrl: string): string {
 }
 
 export type EnsureFeedbackPrResult =
-  | { ok: true; created: boolean }
-  | { ok: false; reason: string }
+  { ok: true; created: boolean } | { ok: false; reason: string }
 
 // Open the assignment's Feedback PR at accept time (issue #228): base = the
 // frozen `feedback` branch at the accept commit, head = the repo's settled

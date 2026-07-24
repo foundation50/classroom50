@@ -58,7 +58,10 @@ describe("feedback PR contract parity vs ensure_feedback_pr.py", () => {
     // backfill_release_link() rewrites any OPEN PR body lacking the
     // releases/latest link — an accept-time body without it would be
     // clobbered on the first submission.
-    const body = feedbackPrBody("main", "https://github.com/o/r/releases/latest")
+    const body = feedbackPrBody(
+      "main",
+      "https://github.com/o/r/releases/latest",
+    )
     expect(body).toContain("https://github.com/o/r/releases/latest")
   })
 
@@ -104,47 +107,52 @@ function fakeClient(opts: {
   const calls: Call[] = []
   let refPatched = false
 
-  const request = vi.fn(async (url: string, init?: { method?: string; body?: unknown }) => {
-    const method = init?.method ?? "GET"
-    calls.push({ url, method, body: init?.body })
+  const request = vi.fn(
+    async (url: string, init?: { method?: string; body?: unknown }) => {
+      const method = init?.method ?? "GET"
+      calls.push({ url, method, body: init?.body })
 
-    if (url.startsWith("/repos/o/r/pulls?")) {
-      return opts.existingPr ? [opts.existingPr] : []
-    }
-    if (url === "/repos/o/r/pulls" && method === "POST") {
-      if (opts.failPrCreate) {
-        throw apiError(403, "Resource not accessible by integration")
+      if (url.startsWith("/repos/o/r/pulls?")) {
+        return opts.existingPr ? [opts.existingPr] : []
       }
-      if (!opts.headHasDiff && !refPatched) {
-        throw apiError(422, "No commits between feedback and main")
+      if (url === "/repos/o/r/pulls" && method === "POST") {
+        if (opts.failPrCreate) {
+          throw apiError(403, "Resource not accessible by integration")
+        }
+        if (!opts.headHasDiff && !refPatched) {
+          throw apiError(422, "No commits between feedback and main")
+        }
+        return {
+          number: 1,
+          state: "open",
+          html_url: "https://github.com/o/r/pull/1",
+        }
       }
-      return { number: 1, state: "open", html_url: "https://github.com/o/r/pull/1" }
-    }
-    if (url === "/repos/o/r/git/refs" && method === "POST") return {}
-    if (url === "/repos/o/r/git/ref/heads/main") {
-      return { object: { sha: "accept-sha" } }
-    }
-    if (url === "/repos/o/r/git/commits/accept-sha") {
-      return { sha: "accept-sha", tree: { sha: "tree-sha" } }
-    }
-    if (url === "/repos/o/r/git/commits" && method === "POST") {
-      return { sha: "empty-sha" }
-    }
-    if (url === "/repos/o/r/git/refs/heads/main" && method === "PATCH") {
-      refPatched = true
-      return {}
-    }
-    if (url === "/repos/o/r/labels" && method === "POST") return {}
-    if (url === "/repos/o/r/issues/1/labels" && method === "POST") return []
-    throw new Error(`unexpected request: ${method} ${url}`)
-  })
+      if (url === "/repos/o/r/git/refs" && method === "POST") return {}
+      if (url === "/repos/o/r/git/ref/heads/main") {
+        return { object: { sha: "accept-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits/accept-sha") {
+        return { sha: "accept-sha", tree: { sha: "tree-sha" } }
+      }
+      if (url === "/repos/o/r/git/commits" && method === "POST") {
+        return { sha: "empty-sha" }
+      }
+      if (url === "/repos/o/r/git/refs/heads/main" && method === "PATCH") {
+        refPatched = true
+        return {}
+      }
+      if (url === "/repos/o/r/labels" && method === "POST") return {}
+      if (url === "/repos/o/r/issues/1/labels" && method === "POST") return []
+      throw new Error(`unexpected request: ${method} ${url}`)
+    },
+  )
 
   const client = { request } as unknown as GitHubClient
   return { client, calls }
 }
 
-const writeCalls = (calls: Call[]) =>
-  calls.filter((c) => c.method !== "GET")
+const writeCalls = (calls: Call[]) => calls.filter((c) => c.method !== "GET")
 
 describe("ensureFeedbackPullRequest", () => {
   it("fresh accept: freezes base, lands ONE [skip ci] empty commit, retries the PR, labels it", async () => {
@@ -237,7 +245,9 @@ describe("ensureFeedbackPullRequest", () => {
     })
     expect(result).toEqual({ ok: true, created: true })
     expect(
-      calls.filter((c) => c.url === "/repos/o/r/git/commits" && c.method === "POST"),
+      calls.filter(
+        (c) => c.url === "/repos/o/r/git/commits" && c.method === "POST",
+      ),
     ).toHaveLength(0)
   })
 

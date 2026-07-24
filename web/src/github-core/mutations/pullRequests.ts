@@ -119,7 +119,10 @@ export function addIssueLabels(params: {
 // (mirrors the CLI's is422AlreadyExists).
 export function is422AlreadyExists(err: unknown): boolean {
   if (!(err instanceof GitHubAPIError) || err.status !== 422) return false
-  return apiErrorMentions(err, "already exists") || apiErrorMentions(err, "already_exists")
+  return (
+    apiErrorMentions(err, "already exists") ||
+    apiErrorMentions(err, "already_exists")
+  )
 }
 
 // The "no commits between base and head" 422 GitHub returns for a zero-diff
