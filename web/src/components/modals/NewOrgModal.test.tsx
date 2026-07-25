@@ -76,6 +76,12 @@ function renderModal(orgs: Classroom50OrgSummary[]) {
   )
 }
 
+// Row order as rendered, so sort assertions don't depend on the input order.
+const orgOrder = () =>
+  Array.from(document.querySelectorAll("li button > span > span:first-child"))
+    .map((el) => el.textContent)
+    .filter((text): text is string => Boolean(text))
+
 beforeEach(() => {
   navigate.mockReset()
   plansResult = { byLogin: {}, pending: new Set() }
@@ -192,5 +198,96 @@ describe("NewOrgModal", () => {
     expect(refresh.closest("details")).toBeNull()
     fireEvent.click(refresh)
     expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
+
+  it("sorts by login, since GitHub's membership order is arbitrary", () => {
+    plansResult = {
+      byLogin: { zeta: "team", alpha: "team", mid: "team" },
+      pending: new Set(),
+    }
+    renderModal([summary("zeta"), summary("alpha"), summary("mid")])
+
+    expect(orgOrder()).toEqual(["alpha", "mid", "zeta"])
+    expect(screen.queryByText("orgs.newOrg.newBadge")).toBeNull()
+  })
+
+  it("floats an org that appears after opening to the top, badged New", () => {
+    plansResult = {
+      byLogin: { alpha: "team", zeta: "team" },
+      pending: new Set(),
+    }
+    const { rerender } = renderModal([summary("alpha")])
+    expect(orgOrder()).toEqual(["alpha"])
+
+    // The grant-page return refreshes the list mid-open; zeta wasn't in the
+    // snapshot taken when the modal mounted, so it's the just-granted one.
+    rerender(
+      <NewOrgModal
+        open
+        needsSetupOrgs={[summary("alpha"), summary("zeta")]}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(orgOrder()).toEqual(["zeta", "alpha"])
+    expect(screen.getAllByText("orgs.newOrg.newBadge")).toHaveLength(1)
+  })
+
+  it("badges nothing when the list was empty on open", () => {
+    // No baseline to contrast against — every org would otherwise look new.
+    const { rerender } = renderModal([])
+    plansResult = {
+      byLogin: { alpha: "team", zeta: "team" },
+      pending: new Set(),
+    }
+    rerender(
+      <NewOrgModal
+        open
+        needsSetupOrgs={[summary("zeta"), summary("alpha")]}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(orgOrder()).toEqual(["alpha", "zeta"])
+    expect(screen.queryByText("orgs.newOrg.newBadge")).toBeNull()
+  })
+
+  it("resets the New baseline when the modal is reopened", () => {
+    plansResult = {
+      byLogin: { alpha: "team", zeta: "team" },
+      pending: new Set(),
+    }
+    const orgs = [summary("alpha"), summary("zeta")]
+    const { rerender } = renderModal([summary("alpha")])
+    rerender(
+      <NewOrgModal
+        open
+        needsSetupOrgs={orgs}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getAllByText("orgs.newOrg.newBadge")).toHaveLength(1)
+
+    const reopen = (open: boolean) =>
+      rerender(
+        <NewOrgModal
+          open={open}
+          needsSetupOrgs={orgs}
+          refreshing={false}
+          onRefresh={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      )
+    reopen(false)
+    reopen(true)
+
+    expect(screen.queryByText("orgs.newOrg.newBadge")).toBeNull()
+    expect(orgOrder()).toEqual(["alpha", "zeta"])
   })
 })
