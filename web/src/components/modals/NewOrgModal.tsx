@@ -62,7 +62,13 @@ function NewOrgModal({
         </div>
 
         <div className="mt-6">
-          <MissingOrgNotice refreshing={refreshing} onRefresh={onRefresh} />
+          <MissingOrgNotice
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // Nothing to set up means a missing grant is the likeliest answer,
+            // so don't make the teacher find the disclosure first.
+            defaultOpen={needsSetupOrgs.length === 0}
+          />
         </div>
 
         {needsSetupOrgs.length === 0 ? (

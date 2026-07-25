@@ -31,7 +31,6 @@ import { GitHubLink } from "@/components/GitHubLink"
 import { Badge, Button, Card, Toolbar } from "@/components/ui"
 import { EmptyState, NoSearchResults, ViewToggle } from "@/components/list"
 import NewOrgModal from "@/components/modals/NewOrgModal"
-import MissingOrgNotice from "@/components/MissingOrgNotice"
 import Spinner from "@/components/Spinner"
 import { EnterDiv, PresenceCardDiv } from "@/lib/motionComponents"
 import { orgListPrefs, type OrgSortKey } from "@/lib/orgListPrefs"
@@ -630,17 +629,6 @@ const OrgsPage = () => {
                     {t("orgs.setUpFirst.cta")}
                   </Button>
                 }
-              />
-            )}
-
-            {/* Not only in the setup modal: a teacher whose org GitHub never
-                reported has no reason to open that modal (#403). A search that
-                matched nothing isn't a missing grant. */}
-            {!noSearchResults && (
-              <MissingOrgNotice
-                refreshing={isFetching}
-                onRefresh={handleRefresh}
-                defaultOpen={!hasAnyOrgs}
               />
             )}
           </>

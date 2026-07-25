@@ -69,8 +69,11 @@ describe("MissingOrgNotice", () => {
     )
 
     expect(screen.getByText("orgs.missingNotice.steps.grant")).toBeTruthy()
-    expect(screen.getByText("orgs.missingNotice.steps.approve")).toBeTruthy()
     expect(screen.getByText("orgs.missingNotice.steps.refresh")).toBeTruthy()
+    // The rarer causes (owner approval, SSO) hide behind a help tooltip.
+    expect(
+      screen.getByLabelText("orgs.missingNotice.steps.grantHelp"),
+    ).toBeTruthy()
   })
 
   it("expands and collapses on a single click", () => {

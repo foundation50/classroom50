@@ -4,13 +4,14 @@ import { useTranslation } from "react-i18next"
 
 import { githubOAuthGrantUrl } from "@/auth/constants"
 import { useGithubAuth } from "@/auth/useGithubAuth"
-import { Button } from "@/components/ui"
+import { Button, HelpTooltip } from "@/components/ui"
 import useRefreshOnReturn from "@/hooks/useRefreshOnReturn"
 
 // A missing org is almost never a membership problem: GitHub only reports orgs
 // this OAuth app was granted, and the per-org "Grant" lives on the app's own
-// authorization page, which teachers can't guess (discussions #352, #403).
-// Rendered open when the org list is empty, collapsed otherwise.
+// authorization page, which teachers can't guess (discussions #352, #403). The
+// rarer causes (owner approval, SAML SSO, a token predating the membership) sit
+// behind tooltips so the common path stays two steps.
 function MissingOrgNotice({
   refreshing,
   onRefresh,
@@ -38,16 +39,16 @@ function MissingOrgNotice({
           e.preventDefault()
           setOpen((wasOpen) => !wasOpen)
         }}
-        className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm"
+        className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 text-sm hover:bg-info/10"
       >
         <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.missingNotice.title")}
         </span>
         <Button
-          variant="ghost"
+          variant="outline"
           size="xs"
-          disabled={refreshing}
+          loading={refreshing}
           onClick={(e) => {
             // Inside <summary>: suppress the native toggle and keep the click
             // from reaching the handler above, so refreshing doesn't also
@@ -57,10 +58,7 @@ function MissingOrgNotice({
             onRefresh()
           }}
         >
-          <RefreshCw
-            aria-hidden="true"
-            className={["size-3.5", refreshing ? "animate-spin" : ""].join(" ")}
-          />
+          {!refreshing && <RefreshCw aria-hidden="true" className="size-3.5" />}
           {refreshing
             ? t("orgs.missingNotice.refreshing")
             : t("orgs.missingNotice.refresh")}
@@ -75,33 +73,35 @@ function MissingOrgNotice({
         <p className="text-sm leading-6 text-base-content/70">
           {t("orgs.missingNotice.body")}
         </p>
-        <ol className="mt-3 list-decimal space-y-1.5 ps-5 text-sm leading-6 text-base-content/70">
-          <li>{t("orgs.missingNotice.steps.grant")}</li>
-          <li>{t("orgs.missingNotice.steps.approve")}</li>
+        <ol className="mt-2 list-decimal space-y-1 ps-5 text-sm leading-6 text-base-content/70">
+          <li>
+            {t("orgs.missingNotice.steps.grant")}
+            <HelpTooltip help={t("orgs.missingNotice.steps.grantHelp")} />
+          </li>
           <li>{t("orgs.missingNotice.steps.refresh")}</li>
         </ol>
-        <div className="mt-4 flex flex-wrap items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <Button
             as="a"
             href={githubOAuthGrantUrl()}
             target="_blank"
             rel="noreferrer"
             variant="primary"
+            size="sm"
             onClick={() => armRefreshOnReturn()}
           >
             {t("orgs.missingNotice.manageOauth")}
             <ExternalLink aria-hidden="true" className="size-4" />
           </Button>
-          <Button variant="ghost" size="sm" onClick={() => void startWebFlow()}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void startWebFlow()}
+          >
             {t("auth.reauthorize")}
           </Button>
+          <HelpTooltip help={t("orgs.missingNotice.reauthorizeHelp")} />
         </div>
-        <p className="mt-3 text-xs leading-5 text-base-content/60">
-          {t("orgs.missingNotice.ssoHint")}
-        </p>
-        <p className="mt-1 text-xs leading-5 text-base-content/60">
-          {t("orgs.missingNotice.pendingHint")}
-        </p>
       </div>
     </details>
   )
