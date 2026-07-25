@@ -194,23 +194,25 @@ function NewOrgModal({
           </div>
         </div>
 
-        <div className="mt-6">
-          <MissingOrgNotice
-            onRefresh={onRefresh}
-            // Nothing to set up means a missing grant is the likeliest answer,
-            // so don't make the teacher find the disclosure first.
-            defaultOpen={needsSetupOrgs.length === 0}
-          />
-        </div>
-
         {open && (
-          <OrgPicker
-            needsSetupOrgs={needsSetupOrgs}
-            refreshing={refreshing}
-            onRefresh={onRefresh}
-            onSelect={handleSelect}
-            onFreePlan={setFreePlanOrg}
-          />
+          <>
+            <div className="mt-6">
+              <MissingOrgNotice
+                onRefresh={onRefresh}
+                // Nothing to set up means a missing grant is the likeliest
+                // answer, so don't make the teacher find the disclosure first.
+                defaultOpen={needsSetupOrgs.length === 0}
+              />
+            </div>
+
+            <OrgPicker
+              needsSetupOrgs={needsSetupOrgs}
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              onSelect={handleSelect}
+              onFreePlan={setFreePlanOrg}
+            />
+          </>
         )}
 
         <div className="modal-action">

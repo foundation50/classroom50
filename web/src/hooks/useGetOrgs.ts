@@ -1,5 +1,9 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { keepPreviousData, useQuery } from "@tanstack/react-query"
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import {
@@ -12,47 +16,46 @@ import {
 // duplicate calls.
 export const orgMembershipsQueryKey = ["orgs", "memberships"]
 
+const orgMembershipsQuery = (client: GitHubClient) => ({
+  queryKey: orgMembershipsQueryKey,
+  queryFn: () => listAuthedOrgMemberships(client),
+  staleTime: 10 * 60 * 1000,
+})
+
 const useOrgMemberships = (client: GitHubClient) =>
-  useQuery({
-    queryKey: orgMembershipsQueryKey,
-    queryFn: () => listAuthedOrgMemberships(client),
-    staleTime: 10 * 60 * 1000,
-  })
+  useQuery(orgMembershipsQuery(client))
+
+const fetchActiveSummaries = async (
+  queryClient: QueryClient,
+  client: GitHubClient,
+) => {
+  const list = await queryClient.fetchQuery(orgMembershipsQuery(client))
+  return Promise.all(
+    list
+      .filter((membership) => membership.state === "active")
+      .map((membership) => getClassroom50OrgSummary(client, membership)),
+  )
+}
 
 const useGetOrgs = () => {
   const client = useGitHubClient()
+  const queryClient = useQueryClient()
   const memberships = useOrgMemberships(client)
 
-  const active = (memberships.data ?? []).filter(
-    (membership) => membership.state === "active",
-  )
-
   const summaries = useQuery({
-    // Keyed on the membership list it derives from: an unkeyed queryFn would run
-    // against the stale list, dropping a just-granted org until a second refresh.
-    queryKey: [
-      "orgs",
-      "active-summaries",
-      active.map((m) => m.organization.login).join(","),
-    ],
-    enabled: memberships.data !== undefined,
-    queryFn: () =>
-      Promise.all(
-        active.map((membership) =>
-          getClassroom50OrgSummary(client, membership),
-        ),
-      ),
-    // The key changes with the membership list; without kept-previous data
-    // `data` blanks for a render and flashes the page's full-screen spinner.
-    placeholderData: keepPreviousData,
+    queryKey: ["orgs", "active-summaries"],
+    // Pull the membership list through the cache instead of deriving it from a
+    // render: keying on the list meant one invalidation refetched the old key
+    // against the pre-refresh list, running the whole fan-out twice and
+    // dropping a just-granted org until a second refresh.
+    queryFn: () => fetchActiveSummaries(queryClient, client),
     staleTime: 10 * 60 * 1000,
   })
 
   return {
     ...summaries,
-    // The summaries query is disabled until memberships resolve; a disabled
-    // query reports isLoading=false, so fold in the memberships fetch to keep
-    // the page's spinner covering the whole chain (no empty-state flash).
+    // The summaries fetch subsumes the memberships one, so fold the latter's
+    // states in to keep the page's spinner covering the whole chain.
     isLoading: memberships.isLoading || summaries.isLoading,
     isFetching: memberships.isFetching || summaries.isFetching,
   }

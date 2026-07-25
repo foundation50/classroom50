@@ -9,7 +9,7 @@ const invalidated = (client: QueryClient, key: readonly unknown[]) =>
   client.getQueryState(key)?.isInvalidated ?? false
 
 describe("invalidateViewerOrgs", () => {
-  it("drops every cache the org list derives", () => {
+  it("drops every cache the org list derives, and nothing else", () => {
     const client = new QueryClient()
     const seeded: Record<string, readonly unknown[]> = {
       memberships: ["orgs", "memberships"],
@@ -19,9 +19,12 @@ describe("invalidateViewerOrgs", () => {
       // "Updated …" line / last-modified sort.
       configRepo: githubKeys.repo("acme", CONFIG_REPO),
     }
-    // Repos other than classroom50 are the reason the config-repo sweep is
-    // predicate-scoped rather than a plain [.., "repo"] prefix.
+    // The per-org member lists also live under the ["orgs"] prefix, and
+    // orgMembersAll pages to exhaustion — a home-page refresh must not bill it.
     const untouched: Record<string, readonly unknown[]> = {
+      orgMembers: githubKeys.orgMembers("acme"),
+      orgMembersAll: githubKeys.orgMembersAll("acme"),
+      orgAdmins: githubKeys.orgAdmins("acme"),
       otherRepo: githubKeys.repo("acme", "some-assignment"),
       viewer: githubKeys.viewer(),
     }

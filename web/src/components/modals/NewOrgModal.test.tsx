@@ -200,6 +200,34 @@ describe("NewOrgModal", () => {
     expect(onRefresh).toHaveBeenCalledTimes(1)
   })
 
+  it("mounts the notice only while open, so defaultOpen sees the loaded list", () => {
+    plansResult = { byLogin: { acme: "team" }, pending: new Set() }
+    const { rerender } = render(
+      <NewOrgModal
+        open={false}
+        needsSetupOrgs={[]}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    // Modal renders children regardless of `open`, so without the guard the
+    // notice would latch defaultOpen from the pre-load empty list.
+    expect(screen.queryByText("orgs.missingNotice.title")).toBeNull()
+
+    rerender(
+      <NewOrgModal
+        open
+        needsSetupOrgs={[summary("acme")]}
+        refreshing={false}
+        onRefresh={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+    expect(screen.getByText("orgs.missingNotice.title")).toBeTruthy()
+    expect(document.querySelector("details")?.open).toBe(false)
+  })
+
   it("sorts by login, since GitHub's membership order is arbitrary", () => {
     plansResult = {
       byLogin: { zeta: "team", alpha: "team", mid: "team" },

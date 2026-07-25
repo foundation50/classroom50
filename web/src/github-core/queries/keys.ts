@@ -171,9 +171,12 @@ export const githubKeys = {
 // Refresh everything the viewer's org list derives from. The membership +
 // summary caches alone leave the per-org plan name and config-repo read on
 // their own 10-minute clocks, so a Free -> Team upgrade kept showing "Not
-// supported" after a refresh (#330).
+// supported" after a refresh (#330). The two org-list caches are named rather
+// than swept by the ["orgs"] prefix, which also matches the per-org member
+// lists (orgMembers/orgMembersAll/orgAdmins) the list doesn't derive from.
 export function invalidateViewerOrgs(queryClient: QueryClient) {
-  queryClient.invalidateQueries({ queryKey: ["orgs"] })
+  queryClient.invalidateQueries({ queryKey: ["orgs", "memberships"] })
+  queryClient.invalidateQueries({ queryKey: ["orgs", "active-summaries"] })
   queryClient.invalidateQueries({ queryKey: [...githubKeys.all, "orgs"] })
   queryClient.invalidateQueries({
     queryKey: [...githubKeys.all, "repo"],

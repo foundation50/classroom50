@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { GitHubAPIError } from "@/github-core/errors"
 
 let activeLogins: string[] = []
+const requests: string[] = []
 
 const membership = (login: string) => ({
   state: "active",
@@ -24,6 +25,7 @@ const membership = (login: string) => ({
 vi.mock("@/context/github/GitHubProvider", () => ({
   useGitHubClient: () => ({
     request: (path: string) => {
+      requests.push(path)
       if (path.startsWith("/user/memberships/orgs")) {
         return Promise.resolve(activeLogins.map(membership))
       }
@@ -56,6 +58,7 @@ const logins = (data: ReturnType<typeof useGetOrgs>["data"]) =>
 
 beforeEach(() => {
   activeLogins = ["alpha"]
+  requests.length = 0
 })
 
 afterEach(() => {
@@ -109,10 +112,34 @@ describe("useGetOrgs", () => {
       expect(logins(result.current.data)).toEqual(["alpha", "zeta"]),
     )
 
-    // The membership change gives the summaries query a new key, so without
-    // kept-previous data `data` blanks for a render and the page flashes its
-    // full-screen spinner mid-refresh.
+    // A refresh must not blank `data`, or the page flashes its full-screen
+    // spinner mid-refresh.
     expect(seen).not.toContain(undefined)
     expect(seen).not.toContain("")
+  })
+
+  it("probes each org's config repo once per refresh", async () => {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const { result } = renderOrgs(client)
+    await waitFor(() => expect(logins(result.current.data)).toEqual(["alpha"]))
+
+    requests.length = 0
+    activeLogins = ["alpha", "zeta"]
+    await client.invalidateQueries({ queryKey: ["orgs"] })
+    await waitFor(() =>
+      expect(logins(result.current.data)).toEqual(["alpha", "zeta"]),
+    )
+
+    // Keying the summaries query on the membership list made the ["orgs"]
+    // prefix refetch the OLD key first, against the pre-refresh list — running
+    // the whole per-org fan-out twice and discarding the first pass.
+    expect(
+      requests.filter((path) => path.startsWith("/repos/alpha/")),
+    ).toHaveLength(1)
+    expect(
+      requests.filter((path) => path.startsWith("/user/memberships/orgs")),
+    ).toHaveLength(1)
   })
 })
