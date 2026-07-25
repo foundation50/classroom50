@@ -79,9 +79,9 @@ describe("isSameGitHubUser", () => {
   })
 
   // The id and login checks are OR'd, so a login hit wins even when the ids
-  // positively disagree. Pinned because it is the load-bearing consequence of
-  // supporting pre-id roster rows: a recycled/transferred login is read as the
-  // same person. Change this only deliberately.
+  // positively disagree. Deliberately permissive: every caller uses the result to
+  // refuse or skip a destructive action, so an over-match only declines it while a
+  // missed match carries it out.
   it("matches on login even when the github_id positively conflicts", () => {
     expect(
       isSameGitHubUser(
@@ -107,12 +107,22 @@ describe("parseGitHubId", () => {
     expect(parseGitHubId("Infinity")).toBeNull()
   })
 
-  // Number() coercion is wider than "positive integer": these pass the guard
-  // today. Pinned so tightening it to integers-only is a visible change.
-  it("also accepts numeric forms that are not plain positive integers", () => {
-    expect(parseGitHubId("12.5")).toBe(12.5)
-    expect(parseGitHubId("1e3")).toBe(1000)
-    expect(parseGitHubId("0x10")).toBe(16)
+  // These all coerce to a valid-looking number via Number(), so they must be
+  // rejected on shape: a malformed cell that silently became 1000 or 16 would be
+  // sent as an `invitee_id` and invite a stranger into the org.
+  it("rejects numeric-ish forms that are not plain positive integers", () => {
+    expect(parseGitHubId("12.5")).toBeNull()
+    expect(parseGitHubId("1e3")).toBeNull()
+    expect(parseGitHubId("0x10")).toBeNull()
+    expect(parseGitHubId("1,000")).toBeNull()
+    expect(parseGitHubId("42abc")).toBeNull()
+    expect(parseGitHubId("+42")).toBeNull()
+  })
+
+  // Beyond 2^53 an id can no longer round-trip exactly, so it would address the
+  // wrong account rather than fail loudly.
+  it("rejects an id too large to represent exactly", () => {
+    expect(parseGitHubId("9007199254740993")).toBeNull()
   })
 })
 
