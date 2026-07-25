@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from "react"
+import { useCallback, useEffect, useEffectEvent, useRef } from "react"
 
 // Refreshes once when the tab regains focus, but only after arm() — GitHub's
 // grant page opens in a new tab, so coming back here is the only signal the
@@ -6,18 +6,14 @@ import { useCallback, useEffect, useRef } from "react"
 // freshly granted org hidden until the teacher hits Refresh.
 export function useRefreshOnReturn(onRefresh: () => void) {
   const armed = useRef(false)
-  const latest = useRef(onRefresh)
+
+  const handleVisibility = useEffectEvent(() => {
+    if (!armed.current || document.visibilityState !== "visible") return
+    armed.current = false
+    onRefresh()
+  })
 
   useEffect(() => {
-    latest.current = onRefresh
-  }, [onRefresh])
-
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (!armed.current || document.visibilityState !== "visible") return
-      armed.current = false
-      latest.current()
-    }
     document.addEventListener("visibilitychange", handleVisibility)
     return () =>
       document.removeEventListener("visibilitychange", handleVisibility)

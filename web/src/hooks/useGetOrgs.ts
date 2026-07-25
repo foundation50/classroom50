@@ -1,5 +1,5 @@
 import { useGitHubClient } from "@/context/github/GitHubProvider"
-import { useQuery } from "@tanstack/react-query"
+import { keepPreviousData, useQuery } from "@tanstack/react-query"
 import type { GitHubClient } from "@/github-core/client"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import {
@@ -44,7 +44,7 @@ const useGetOrgs = () => {
       ),
     // The key changes with the membership list; without kept-previous data
     // `data` blanks for a render and flashes the page's full-screen spinner.
-    placeholderData: (previous) => previous,
+    placeholderData: keepPreviousData,
     staleTime: 10 * 60 * 1000,
   })
 
