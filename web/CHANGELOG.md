@@ -17,6 +17,19 @@ classroom50.org (see `.github/workflows/web-release-please.yaml`). You no longer
 edit this file or tag by hand; write Conventional Commit messages and
 release-please compiles the notes.
 
+## [1.16.0](https://github.com/foundation50/classroom50/compare/web-v1.15.0...web-v1.16.0) (2026-07-25)
+
+
+### Features
+
+* **web:** add Open Graph social preview tags and image ([#405](https://github.com/foundation50/classroom50/issues/405)) ([6439925](https://github.com/foundation50/classroom50/commit/6439925188aa11a36ee9b66a0ceff8b98573f4f1))
+
+
+### Bug Fixes
+
+* **web:** clear Sync-now stale state after a completed collect ([#408](https://github.com/foundation50/classroom50/issues/408)) ([d12cba3](https://github.com/foundation50/classroom50/commit/d12cba3c77decfe696c089416a53e265dbd1092f))
+* **web:** deep-link the OAuth org grant when an organization is missing ([#410](https://github.com/foundation50/classroom50/issues/410)) ([400fabb](https://github.com/foundation50/classroom50/commit/400fabb63de37ffd39ceecff807680ab8ac7f247))
+
 ## [1.15.0](https://github.com/foundation50/classroom50/compare/web-v1.14.0...web-v1.15.0) (2026-07-24)
 
 
