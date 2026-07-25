@@ -1,0 +1,312 @@
+import { describe, expect, it } from "vitest"
+import {
+  STUDENT_CSV_FIELDS,
+  formatRosterProblems,
+  normalizeStudentRow,
+  parseRosterCsv,
+  parseStudentsCsv,
+  splitName,
+  stringifyStudentsCsv,
+  type StudentCsvRow,
+} from "./rosterCsv"
+
+// Characterization tests for the roster.csv parse/serialize layer that every
+// roster import, sync, and write goes through. The short-row tolerance rule and
+// the formula guarding are the subtle parts — they are pinned explicitly so a
+// future parser change can't silently corrupt or drop a teacher's roster.
+
+const HEADER = STUDENT_CSV_FIELDS.join(",")
+
+const row = (over: Partial<StudentCsvRow> = {}): StudentCsvRow =>
+  normalizeStudentRow({
+    username: "octocat",
+    first_name: "Grace",
+    last_name: "Hopper",
+    email: "grace@example.com",
+    section: "Section A",
+    github_id: "583231",
+    role: "student",
+    ...over,
+  })
+
+describe("normalizeStudentRow", () => {
+  it("trims every column and defaults missing ones to empty string", () => {
+    expect(
+      normalizeStudentRow({ username: "  octocat  ", first_name: " Grace " }),
+    ).toEqual({
+      username: "octocat",
+      first_name: "Grace",
+      last_name: "",
+      email: "",
+      section: "",
+      github_id: "",
+      role: "",
+    })
+  })
+
+  it("coerces non-string and null values (a pre-role file has no role column)", () => {
+    expect(
+      normalizeStudentRow({
+        username: 123,
+        github_id: 583231,
+        first_name: null,
+        role: undefined,
+      }),
+    ).toMatchObject({
+      username: "123",
+      github_id: "583231",
+      first_name: "",
+      role: "",
+    })
+  })
+
+  it("does not lowercase or otherwise rewrite values", () => {
+    expect(normalizeStudentRow({ email: "  Grace@Example.IO  " }).email).toBe(
+      "Grace@Example.IO",
+    )
+  })
+})
+
+describe("splitName", () => {
+  it("takes the first token as first_name and the rest as last_name", () => {
+    expect(splitName("Grace Hopper")).toEqual({
+      first_name: "Grace",
+      last_name: "Hopper",
+    })
+    expect(splitName("Mary Ann Evans")).toEqual({
+      first_name: "Mary",
+      last_name: "Ann Evans",
+    })
+  })
+
+  it("collapses irregular whitespace", () => {
+    expect(splitName("  Grace   Hopper  ")).toEqual({
+      first_name: "Grace",
+      last_name: "Hopper",
+    })
+  })
+
+  it("handles a single token, empty input, and a null display name", () => {
+    expect(splitName("Grace")).toEqual({ first_name: "Grace", last_name: "" })
+    expect(splitName("")).toEqual({ first_name: "", last_name: "" })
+    expect(splitName("   ")).toEqual({ first_name: "", last_name: "" })
+    expect(splitName(null)).toEqual({ first_name: "", last_name: "" })
+  })
+})
+
+describe("parseRosterCsv", () => {
+  it("parses a well-formed file with no problems", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student\n`
+    expect(parseRosterCsv(csv)).toEqual({
+      rows: [
+        {
+          username: "octo",
+          first_name: "Grace",
+          last_name: "Hopper",
+          email: "g@x.io",
+          section: "Section A",
+          github_id: "583231",
+          role: "student",
+        },
+      ],
+      problems: [],
+    })
+  })
+
+  it("returns no rows and no problems for an empty or header-only file", () => {
+    expect(parseRosterCsv("")).toEqual({ rows: [], problems: [] })
+    expect(parseRosterCsv(`${HEADER}\n`)).toEqual({ rows: [], problems: [] })
+  })
+
+  it("honors quoted fields containing commas and trims padded headers", () => {
+    const csv =
+      " username , first_name ,last_name,email,section,github_id,role\n" +
+      'octo,"Hopper, Grace",X,g@x.io,"Section, A",1,student\n'
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+    expect(rows[0]).toMatchObject({
+      username: "octo",
+      first_name: "Hopper, Grace",
+      section: "Section, A",
+    })
+  })
+
+  it("skips blank lines and rows carrying no identity column", () => {
+    const csv = `${HEADER}\n\n,,,,,,\nocto,A,B,,,,\n\n`
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ username: "octo" })
+  })
+
+  it("keeps a row whose only identity is an email or a github_id", () => {
+    const csv = `${HEADER}\n,,,only@x.io,,,\n,,,,,583231,\n`
+    const { rows } = parseRosterCsv(csv)
+    expect(rows).toHaveLength(2)
+    expect(rows[0]).toMatchObject({ username: "", email: "only@x.io" })
+    expect(rows[1]).toMatchObject({ username: "", github_id: "583231" })
+  })
+
+  // The deliberate tolerance: short by exactly one column is the benign
+  // "trailing role/github_id omitted" case, so a sync must not abort on it.
+  it("tolerates a row short by exactly one column (dropped trailing field)", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toEqual([])
+    expect(rows[0]).toMatchObject({ github_id: "583231", role: "" })
+  })
+
+  // Short by 2+ can't be a single dropped trailing field, and Papa maps
+  // positionally, so tolerating it would silently shift values into the wrong
+  // columns and corrupt the identity/email join. It must be reported.
+  it("reports a row short by two or more columns rather than dropping it silently", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A\n`
+    const { rows, problems } = parseRosterCsv(csv)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatchObject({ line: 2 })
+    expect(problems[0].message).toMatch(/too few fields/i)
+    // The row is still returned; the caller decides whether to refuse.
+    expect(rows).toHaveLength(1)
+  })
+
+  it("reports a row with too many fields", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    const { problems } = parseRosterCsv(csv)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatchObject({ line: 2 })
+    expect(problems[0].message).toMatch(/too many fields/i)
+  })
+
+  // One short-by-one row alone is benign, but the tolerance is all-or-nothing:
+  // once any row is short by 2+, no short row is excused, so the benign row is
+  // reported too. Pinned because it is the non-obvious half of the rule.
+  it("stops excusing short-by-one rows once another row is short by two", () => {
+    const csv =
+      `${HEADER}\n` +
+      "octo,Grace,Hopper,g@x.io,Section A,583231\n" +
+      "mona,M,L,m@x.io,Section B\n"
+    const { problems } = parseRosterCsv(csv)
+    expect(problems.map((p) => p.line)).toEqual([2, 3])
+  })
+
+  it("numbers problem lines against the file, counting the header as line 1", () => {
+    const csv =
+      `${HEADER}\n` +
+      "ok,A,B,a@x.io,S,1,student\n" +
+      "bad,A,B,b@x.io,S,2,student,EXTRA\n"
+    const { problems } = parseRosterCsv(csv)
+    expect(problems).toHaveLength(1)
+    expect(problems[0].line).toBe(3)
+  })
+})
+
+describe("formatRosterProblems", () => {
+  it("renders each problem with its line number, joined by semicolons", () => {
+    expect(
+      formatRosterProblems([
+        { line: 2, message: "Too many fields" },
+        { line: 5, message: "Too few fields" },
+      ]),
+    ).toBe("line 2: Too many fields; line 5: Too few fields")
+  })
+
+  it("renders an empty list as an empty string", () => {
+    expect(formatRosterProblems([])).toBe("")
+  })
+})
+
+describe("parseStudentsCsv", () => {
+  it("returns rows for a well-formed file", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student\n`
+    expect(parseStudentsCsv(csv)).toHaveLength(1)
+  })
+
+  it("throws with the formatted problems when the file is malformed", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231,student,EXTRA\n`
+    expect(() => parseStudentsCsv(csv)).toThrow(/Could not parse roster\.csv/)
+    expect(() => parseStudentsCsv(csv)).toThrow(/line 2:/)
+  })
+
+  it("does not throw on the tolerated short-by-one row", () => {
+    const csv = `${HEADER}\nocto,Grace,Hopper,g@x.io,Section A,583231\n`
+    expect(() => parseStudentsCsv(csv)).not.toThrow()
+  })
+})
+
+describe("stringifyStudentsCsv", () => {
+  it("writes the canonical header and one line per row", () => {
+    const csv = stringifyStudentsCsv([row({ username: "octo" })])
+    const [header, first] = csv.split("\n")
+    expect(header).toBe(HEADER)
+    expect(first).toBe(
+      "octo,Grace,Hopper,grace@example.com,Section A,583231,student",
+    )
+    expect(csv.endsWith("\n")).toBe(true)
+  })
+
+  // Papa.unparse omits the header for an empty array, which would commit a
+  // header-less file the CLI/skeleton readers reject.
+  it("still writes the header for an emptied roster", () => {
+    expect(stringifyStudentsCsv([])).toBe(`${HEADER}\n`)
+  })
+
+  it("drops rows with no identity column", () => {
+    const csv = stringifyStudentsCsv([
+      row({ username: "keep" }),
+      normalizeStudentRow({ first_name: "no identity" }),
+    ])
+    expect(csv.trim().split("\n")).toHaveLength(2)
+    expect(csv).toContain("keep")
+    expect(csv).not.toContain("no identity")
+  })
+
+  it("round-trips rows through parse without changing them", () => {
+    const rows = [
+      row({ username: "octo", github_id: "1" }),
+      row({ username: "mona", github_id: "2", role: "" }),
+    ]
+    expect(parseStudentsCsv(stringifyStudentsCsv(rows))).toEqual(rows)
+  })
+
+  it("round-trips values containing commas and quotes", () => {
+    const rows = [
+      row({ first_name: 'Grace "Amazing"', section: "Section A, B" }),
+    ]
+    expect(parseStudentsCsv(stringifyStudentsCsv(rows))).toEqual(rows)
+  })
+
+  // Formula guarding defangs free text AND email (a verified GitHub email is
+  // member-controlled), but must NOT touch github_id, which round-trips exact.
+  it("defangs formula-leading free-text and email cells", () => {
+    const csv = stringifyStudentsCsv([
+      normalizeStudentRow({
+        username: "user",
+        first_name: "=1+1",
+        last_name: "-x",
+        section: "@SUM(1)",
+        email: "=a@evil.com",
+        github_id: "583231",
+      }),
+    ])
+    const data = csv.split("\n")[1]
+    expect(data).toContain("'=1+1")
+    expect(data).toContain("'-x")
+    expect(data).toContain("'@SUM(1)")
+    expect(data).toContain("'=a@evil.com")
+  })
+
+  it("leaves github_id byte-exact so identity joins keep matching", () => {
+    const csv = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "user", github_id: "=99" }),
+    ])
+    expect(csv.split("\n")[1]).toContain(",=99,")
+  })
+
+  it("is idempotent for an already-guarded value", () => {
+    const once = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "user", first_name: "=1+1" }),
+    ])
+    const twice = stringifyStudentsCsv(parseStudentsCsv(once))
+    expect(twice).toBe(once)
+  })
+})
