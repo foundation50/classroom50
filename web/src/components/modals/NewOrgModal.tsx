@@ -6,7 +6,7 @@ import { useTranslation } from "react-i18next"
 import PlanBadge from "@/components/PlanBadge"
 import MissingOrgNotice from "@/components/MissingOrgNotice"
 import FreePlanInfoModal from "@/components/modals/FreePlanInfoModal"
-import { Badge, Button, Modal, Spinner } from "@/components/ui"
+import { Badge, Button, Modal, Spinner, cx } from "@/components/ui"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
 import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import useScrollFade from "@/hooks/useScrollFade"
@@ -79,12 +79,16 @@ function NewOrgModal({
           <Button
             variant="outline"
             size="xs"
-            loading={refreshing}
+            disabled={refreshing}
             onClick={onRefresh}
           >
-            {!refreshing && (
-              <RefreshCw aria-hidden="true" className="size-3.5" />
-            )}
+            {/* Spin the icon rather than Button's `loading` spinner: at btn-xs
+                daisyUI's loading-xs outsizes this 14px icon. The adjacent label
+                announces the busy state, so the icon stays aria-hidden. */}
+            <RefreshCw
+              aria-hidden="true"
+              className={cx("size-3.5", refreshing && "animate-spin")}
+            />
             {refreshing
               ? t("orgs.newOrg.refreshing")
               : t("orgs.newOrg.refresh")}
