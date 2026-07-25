@@ -28,10 +28,8 @@ const useGetOrgs = () => {
   )
 
   const summaries = useQuery({
-    // Keyed on the membership list it derives from, not just ["orgs"]: one
-    // invalidation refetches both, and an unkeyed summaries queryFn would run
-    // against the stale list — dropping a just-granted org until a second
-    // refresh.
+    // Keyed on the membership list it derives from: an unkeyed queryFn would run
+    // against the stale list, dropping a just-granted org until a second refresh.
     queryKey: [
       "orgs",
       "active-summaries",
@@ -44,8 +42,8 @@ const useGetOrgs = () => {
           getClassroom50OrgSummary(client, membership),
         ),
       ),
-    // The key changes whenever the membership list does, which would otherwise
-    // blank `data` for a render and flash the page's full-screen spinner.
+    // The key changes with the membership list; without kept-previous data
+    // `data` blanks for a render and flashes the page's full-screen spinner.
     placeholderData: (previous) => previous,
     staleTime: 10 * 60 * 1000,
   })

@@ -12,11 +12,9 @@ import useNeedsSetupPlans from "@/hooks/useNeedsSetupPlans"
 import useScrollFade from "@/hooks/useScrollFade"
 import { classifyPlan } from "@/lib/orgPlan"
 
-// The pickable orgs plus the control that reloads them. Mounted only while the
-// modal is open, so the "which orgs did we start with" snapshot resets on every
-// open: GitHub exposes no grant timestamp, so an org that shows up mid-session
-// (the notice's auto-refresh after a grant) is the closest thing to
-// "just granted" — those sort first and carry a New badge.
+// The pickable orgs plus the control that reloads them. GitHub exposes no grant
+// timestamp, so an org that appears mid-open (the notice's auto-refresh after a
+// grant) is the closest thing to "just granted": it sorts first with a New badge.
 function OrgPicker({
   needsSetupOrgs,
   refreshing,
@@ -45,8 +43,7 @@ function OrgPicker({
   )
 
   // Newly appeared first, then A-Z — GitHub returns memberships in no useful
-  // order, and the home page already sorts by name. Not memoized: this list is
-  // a handful of rows and feeds nothing but the render below.
+  // order, and the home page already sorts by name.
   const sorted = [...needsSetupOrgs].sort(
     (a, b) =>
       Number(newLogins.has(b.org.login)) - Number(newLogins.has(a.org.login)) ||
@@ -55,12 +52,12 @@ function OrgPicker({
 
   return (
     <>
-      <div className="mt-6 flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
-          {needsSetupOrgs.length > 0
-            ? t("orgs.newOrg.pickPrompt", { count: needsSetupOrgs.length })
-            : null}
-        </p>
+      <div className="mt-6 flex items-center justify-end gap-3">
+        {needsSetupOrgs.length > 0 && (
+          <p className="me-auto text-xs font-semibold uppercase tracking-wide text-base-content/60">
+            {t("orgs.newOrg.pickPrompt", { count: needsSetupOrgs.length })}
+          </p>
+        )}
         <Button
           variant="outline"
           size="xs"
@@ -68,8 +65,7 @@ function OrgPicker({
           onClick={onRefresh}
         >
           {/* Spin the icon rather than Button's `loading` spinner: at btn-xs
-              daisyUI's loading-xs outsizes this 14px icon. The adjacent label
-              announces the busy state, so the icon stays aria-hidden. */}
+              daisyUI's loading-xs outsizes this 14px icon. */}
           <RefreshCw
             aria-hidden="true"
             className={cx("size-3.5", refreshing && "animate-spin")}

@@ -7,12 +7,9 @@ import { useGithubAuth } from "@/auth/useGithubAuth"
 import { Button, HelpTooltip } from "@/components/ui"
 import useRefreshOnReturn from "@/hooks/useRefreshOnReturn"
 
-// A missing org is almost never a membership problem: GitHub only reports orgs
-// this OAuth app was granted, and the per-org "Grant" lives on the app's own
-// authorization page, which teachers can't guess (discussions #352, #403). The
-// rarer causes (owner approval, SAML SSO, a token predating the membership) sit
-// behind tooltips so the common path stays two steps. `onRefresh` is not a
-// button here — the list owns that control; this arms it for the return trip.
+// GitHub only reports orgs this OAuth app was granted, and the per-org "Grant"
+// lives on the app's own authorization page, which teachers can't guess
+// (discussions #352, #403).
 function MissingOrgNotice({
   onRefresh,
   defaultOpen = false,
@@ -31,9 +28,8 @@ function MissingOrgNotice({
       className="group rounded-xl border border-info/20 bg-info/5"
     >
       <summary
-        // Controlled disclosure: driving <details> from its toggle event fights
-        // React's `open` prop (closed sections need two clicks), so intercept
-        // the summary click and own the state here — as LanguageSwitcher does.
+        // React owns `open`; letting the native toggle through too would need
+        // two clicks to reopen.
         onClick={(e) => {
           e.preventDefault()
           setOpen((wasOpen) => !wasOpen)
@@ -69,7 +65,7 @@ function MissingOrgNotice({
             rel="noreferrer"
             variant="primary"
             size="sm"
-            onClick={() => armRefreshOnReturn()}
+            onClick={armRefreshOnReturn}
           >
             {t("orgs.missingNotice.manageOauth")}
             <ExternalLink aria-hidden="true" className="size-4" />

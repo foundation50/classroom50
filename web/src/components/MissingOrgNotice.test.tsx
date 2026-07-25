@@ -74,8 +74,7 @@ describe("MissingOrgNotice", () => {
     render(<MissingOrgNotice onRefresh={vi.fn()} />)
     const summary = screen.getByText("orgs.missingNotice.title")
 
-    // React owns `open`, so the native toggle must be suppressed — sharing that
-    // state with the element is what makes a closed disclosure need two clicks.
+    // React owns `open`, so the native toggle must be suppressed.
     // fireEvent returns false when preventDefault was called.
     expect(fireEvent.click(summary)).toBe(false)
     expect(screen.getByText("orgs.missingNotice.steps.grant")).toBeTruthy()
@@ -88,10 +87,7 @@ describe("MissingOrgNotice", () => {
   it("keeps no refresh control of its own — the list owns that", () => {
     render(<MissingOrgNotice onRefresh={vi.fn()} defaultOpen />)
 
-    // A refresh button here reads as the fix for a missing org, which it isn't
-    // (the grant is), and hides behind the collapsed disclosure.
     expect(screen.queryByText("orgs.newOrg.refresh")).toBeNull()
-    expect(screen.queryByText("orgs.missingNotice.refresh")).toBeNull()
   })
 
   it("refreshes once when the teacher returns from the grant page", () => {

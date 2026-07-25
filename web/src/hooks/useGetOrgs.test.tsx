@@ -1,10 +1,6 @@
 // @vitest-environment happy-dom
-// Regression for "granted an org, came back, refresh fired, org still missing".
-//
-// The summaries query derives from the memberships query but keyed neither on it
-// nor its result, so one ["orgs"] invalidation refetched both in parallel and
-// the summaries queryFn ran against the PREVIOUS membership list — dropping the
-// org that was just granted until a second refresh.
+// Regression: the summaries query wasn't keyed on the membership list it derives
+// from, so a just-granted org stayed hidden until a second refresh.
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { renderHook, waitFor } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
