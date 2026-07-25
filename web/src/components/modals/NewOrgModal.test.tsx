@@ -34,6 +34,12 @@ vi.mock("@/hooks/useNeedsSetupPlans", () => ({
   default: () => plansResult,
 }))
 
+// MissingOrgNotice (rendered inside the modal) offers re-authorization, and
+// useGithubAuth throws outside its provider.
+vi.mock("@/auth/useGithubAuth", () => ({
+  useGithubAuth: () => ({ startWebFlow: vi.fn() }),
+}))
+
 import NewOrgModal from "./NewOrgModal"
 
 const summary = (

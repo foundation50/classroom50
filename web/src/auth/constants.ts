@@ -30,6 +30,15 @@ export const githubOrgOAuthPolicyUrl = (org: string) =>
 export const GITHUB_OAUTH_CLIENT_ID: string =
   import.meta.env.VITE_GITHUB_CLIENT_ID ?? ""
 
+const GITHUB_OAUTH_APPS_URL =
+  "https://github.com/settings/connections/applications"
+
+// This app's own entry on the user's authorized-apps page — the only place the
+// per-org "Grant" button lives (discussions #352, #403). Without an injected
+// client id (self-hosted/dev builds) only the app list is knowable.
+export const githubOAuthGrantUrl = (clientId = GITHUB_OAUTH_CLIENT_ID) =>
+  clientId ? `${GITHUB_OAUTH_APPS_URL}/${clientId}` : GITHUB_OAUTH_APPS_URL
+
 export const GITHUB_OAUTH_WORKER_BASE =
   import.meta.env.VITE_GITHUB_OAUTH_WORKER_BASE ??
   "https://tiny-bonus-7dc1.fifty-foundation.workers.dev"

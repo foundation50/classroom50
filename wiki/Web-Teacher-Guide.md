@@ -41,7 +41,9 @@ At [classroom50.org](https://classroom50.org), sign in with GitHub using
 
 When authorizing, grant access to any organization you'll use with Classroom 50.
 If you don't own the organization, you may need to request access and have an
-owner approve it in the organization's OAuth settings.
+owner approve it in the organization's OAuth settings. If an organization you
+belong to is missing later, see
+[My organization doesn't appear](Troubleshooting#my-organization-doesnt-appear).
 
 ![Classroom 50 login flow](images/web_login_flow.png)
 
@@ -57,8 +59,9 @@ After signing in, you'll see the organizations you can use. Each shows a status:
 | **Needs service token** | Set up, but a service token is still required before score collection works. |
 | **Uninitialized** | Not set up yet. Appears under "Set up new organization". |
 
-Don't see your organization? Grant it access in Classroom 50's
-[OAuth settings](https://github.com/settings/connections/applications).
+Don't see your organization? GitHub only reports organizations you've granted
+Classroom 50 access to — see
+[My organization doesn't appear](Troubleshooting#my-organization-doesnt-appear).
 
 ## Set up an organization (one-time)
 

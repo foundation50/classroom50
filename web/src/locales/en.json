@@ -602,7 +602,14 @@
     },
     "missingNotice": {
       "title": "Not seeing your organization?",
-      "body": "Classroom 50 can only show GitHub organizations that you have explicitly granted access to during sign-in. If an organization is missing, you may need to update your OAuth permissions.",
+      "body": "GitHub only reports organizations you've granted Classroom 50 access to — an organization you belong to stays hidden here until that grant exists, even with a GitHub Education account.",
+      "steps": {
+        "grant": "Open your GitHub OAuth settings below and select Grant next to the organization.",
+        "approve": "If the organization restricts third-party apps, an organization owner has to approve the request instead — the same page shows Request access.",
+        "refresh": "Come back to this tab and refresh; the organization should appear."
+      },
+      "ssoHint": "Using SAML single sign-on? On that same page, use Configure SSO to authorize the organization.",
+      "pendingHint": "Waiting on an invitation? Unaccepted invitations show up under pending invitations, not in this list.",
       "manageOauth": "Manage GitHub OAuth access",
       "refreshing": "Refreshing…",
       "refresh": "Refresh list"
