@@ -588,8 +588,11 @@
       "pickPrompt_other": "Organizations ready to set up ({{count}})",
       "createOnGitHub": "Create an organization on GitHub",
       "allSetUp": "All organizations we can see are already set up.",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
       "setUp": "Set up",
       "notSupportedBadge": "Not supported",
+      "newBadge": "New",
       "details": "Details",
       "freePlanInfo": {
         "title": "This organization is on the Free plan",
@@ -602,10 +605,14 @@
     },
     "missingNotice": {
       "title": "Not seeing your organization?",
-      "body": "Classroom 50 can only show GitHub organizations that you have explicitly granted access to during sign-in. If an organization is missing, you may need to update your OAuth permissions.",
-      "manageOauth": "Manage GitHub OAuth access",
-      "refreshing": "Refreshing…",
-      "refresh": "Refresh list"
+      "body": "GitHub only lists organizations you've granted Classroom 50 access to — a GitHub Education account isn't enough on its own.",
+      "steps": {
+        "grant": "In your GitHub OAuth settings, select Grant next to the organization.",
+        "grantHelp": "If the organization restricts third-party apps you'll see Request access instead, and an organization owner has to approve it. With SAML single sign-on, use Configure SSO on that same page.",
+        "refresh": "Come back here and refresh the list."
+      },
+      "reauthorizeHelp": "No organizations listed at all? Re-authorize — a token issued before you joined can't see them. An invitation you haven't accepted shows under pending invitations instead.",
+      "manageOauth": "Manage GitHub OAuth access"
     },
     "card": {
       "noAccessBadge": "No <code>classroom50</code> access",

@@ -8,6 +8,7 @@ export {
   githubKeys,
   invalidateInviteQueries,
   invalidateClassroomTeam,
+  invalidateViewerOrgs,
 } from "./queries/keys"
 export {
   sleep,

@@ -19,6 +19,43 @@ GH_DEBUG=api gh teacher invite <org> <username>
 
 Commands with informational output also accept `--quiet` / `-q`.
 
+## My organization doesn't appear
+
+GitHub only reports organizations you've granted Classroom 50 access to. A
+GitHub Education account doesn't change this — an organization you own can stay
+invisible until that grant exists. Work through these in order:
+
+1. **Grant the organization.** Open
+   [Classroom 50's OAuth settings](https://github.com/settings/connections/applications/Ov23liDFFyDtm0pO5NN5)
+   and select **Grant** next to the organization. Classroom 50 also links this
+   from the "Not seeing your organization?" notice on its home page.
+2. **Have an owner approve it.** If the organization restricts third-party
+   applications, the same page offers **Request access** instead of **Grant**;
+   an owner then approves it under
+   `https://github.com/organizations/<org>/settings/oauth_application_policy`.
+3. **Authorize SAML SSO.** On that same page, use **Configure SSO** to authorize
+   the organization.
+4. **Accept the invitation.** An unaccepted invitation shows under pending
+   invitations, not in the organization list. Check
+   [your organizations](https://github.com/settings/organizations).
+5. **Sign out and back in.** A token issued before the membership existed
+   authenticates fine but can't see the organization.
+
+Then return to Classroom 50 and use **Refresh list** — the organization list is
+cached for ten minutes.
+
+To check independently from a terminal:
+
+```sh
+gh auth refresh -s read:org,admin:org
+gh api user/memberships/orgs --paginate \
+  --jq '.[] | [.organization.login, .state, .role] | @tsv'
+```
+
+The organization should be listed `active` (and `admin` if you're setting it
+up). The CLI token and the web app's token are separate, so a passing check here
+still leaves the browser grant to do.
+
 ## "Missing scope" / 403 on `gh teacher invite`
 
 Org invitations need the `admin:org` scope, which a plain `gh auth login`

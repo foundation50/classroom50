@@ -1,46 +1,45 @@
-import { ChevronDown, ExternalLink, Info, RefreshCw } from "lucide-react"
+import { ChevronDown, ExternalLink, Info } from "lucide-react"
+import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
-import { Button } from "@/components/ui"
+import { githubOAuthGrantUrl } from "@/auth/constants"
+import { useGithubAuth } from "@/auth/useGithubAuth"
+import { Button, HelpTooltip } from "@/components/ui"
+import useRefreshOnReturn from "@/hooks/useRefreshOnReturn"
 
-// Collapsible notice explaining that GitHub only surfaces orgs the OAuth grant
-// covers, with a link to manage that access and a refresh. Shared by the orgs
-// page and the new-org modal so the "grant access" fix is always one click away
-// when an org is missing.
+// GitHub only reports orgs this OAuth app was granted, and the per-org "Grant"
+// lives on the app's own authorization page, which teachers can't guess
+// (discussions #352, #403).
 function MissingOrgNotice({
-  refreshing,
   onRefresh,
+  defaultOpen = false,
 }: {
-  refreshing: boolean
   onRefresh: () => void
+  defaultOpen?: boolean
 }) {
   const { t } = useTranslation()
+  const { startWebFlow } = useGithubAuth()
+  const [open, setOpen] = useState(defaultOpen)
+  const armRefreshOnReturn = useRefreshOnReturn(onRefresh)
+
   return (
-    <details className="group rounded-xl border border-info/20 bg-info/5">
-      <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-2.5 text-sm">
+    <details
+      open={open}
+      className="group rounded-xl border border-info/20 bg-info/5"
+    >
+      <summary
+        // React owns `open`; letting the native toggle through too would need
+        // two clicks to reopen.
+        onClick={(e) => {
+          e.preventDefault()
+          setOpen((wasOpen) => !wasOpen)
+        }}
+        className="flex cursor-pointer list-none items-center gap-2 rounded-xl px-4 py-2.5 text-sm hover:bg-info/10"
+      >
         <Info aria-hidden="true" className="size-4 shrink-0 text-info" />
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.missingNotice.title")}
         </span>
-        <Button
-          variant="ghost"
-          size="xs"
-          disabled={refreshing}
-          onClick={(e) => {
-            // The button lives inside <summary>; stop the click from toggling
-            // the disclosure so refreshing doesn't also expand/collapse it.
-            e.preventDefault()
-            onRefresh()
-          }}
-        >
-          <RefreshCw
-            aria-hidden="true"
-            className={["size-3.5", refreshing ? "animate-spin" : ""].join(" ")}
-          />
-          {refreshing
-            ? t("orgs.missingNotice.refreshing")
-            : t("orgs.missingNotice.refresh")}
-        </Button>
         <ChevronDown
           aria-hidden="true"
           className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"
@@ -51,18 +50,35 @@ function MissingOrgNotice({
         <p className="text-sm leading-6 text-base-content/70">
           {t("orgs.missingNotice.body")}
         </p>
-        <Button
-          as="a"
-          href="https://github.com/settings/connections/applications"
-          target="_blank"
-          rel="noreferrer"
-          variant="info"
-          size="sm"
-          className="mt-3"
-        >
-          {t("orgs.missingNotice.manageOauth")}
-          <ExternalLink aria-hidden="true" className="size-4" />
-        </Button>
+        <ol className="mt-2 list-decimal space-y-1 ps-5 text-sm leading-6 text-base-content/70">
+          <li>
+            {t("orgs.missingNotice.steps.grant")}
+            <HelpTooltip help={t("orgs.missingNotice.steps.grantHelp")} />
+          </li>
+          <li>{t("orgs.missingNotice.steps.refresh")}</li>
+        </ol>
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            as="a"
+            href={githubOAuthGrantUrl()}
+            target="_blank"
+            rel="noreferrer"
+            variant="primary"
+            size="sm"
+            onClick={armRefreshOnReturn}
+          >
+            {t("orgs.missingNotice.manageOauth")}
+            <ExternalLink aria-hidden="true" className="size-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => void startWebFlow()}
+          >
+            {t("auth.reauthorize")}
+          </Button>
+          <HelpTooltip help={t("orgs.missingNotice.reauthorizeHelp")} />
+        </div>
       </div>
     </details>
   )
