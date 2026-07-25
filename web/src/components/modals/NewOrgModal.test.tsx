@@ -172,4 +172,25 @@ describe("NewOrgModal", () => {
     expect(screen.getByText("orgs.newOrg.allSetUp")).toBeTruthy()
     expect(screen.getByText("orgs.missingNotice.title")).toBeTruthy()
   })
+
+  it("refreshes from the list header, outside the notice disclosure", () => {
+    const onRefresh = vi.fn()
+    plansResult = { byLogin: { acme: "team" }, pending: new Set() }
+    render(
+      <NewOrgModal
+        open
+        needsSetupOrgs={[summary("acme")]}
+        refreshing={false}
+        onRefresh={onRefresh}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const refresh = screen.getByText("orgs.newOrg.refresh")
+    // Must sit beside the list heading, not inside the collapsible notice —
+    // otherwise it reads as the fix for a missing org and can be hidden.
+    expect(refresh.closest("details")).toBeNull()
+    fireEvent.click(refresh)
+    expect(onRefresh).toHaveBeenCalledTimes(1)
+  })
 })

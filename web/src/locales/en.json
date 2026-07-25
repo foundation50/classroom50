@@ -588,6 +588,8 @@
       "pickPrompt_other": "Organizations ready to set up ({{count}})",
       "createOnGitHub": "Create an organization on GitHub",
       "allSetUp": "All organizations we can see are already set up.",
+      "refresh": "Refresh",
+      "refreshing": "Refreshing…",
       "setUp": "Set up",
       "notSupportedBadge": "Not supported",
       "details": "Details",
@@ -609,9 +611,7 @@
         "refresh": "Come back here and refresh the list."
       },
       "reauthorizeHelp": "No organizations listed at all? Re-authorize — a token issued before you joined can't see them. An invitation you haven't accepted shows under pending invitations instead.",
-      "manageOauth": "Manage GitHub OAuth access",
-      "refreshing": "Refreshing…",
-      "refresh": "Refresh list"
+      "manageOauth": "Manage GitHub OAuth access"
     },
     "card": {
       "noAccessBadge": "No <code>classroom50</code> access",

@@ -1,5 +1,5 @@
 import { useNavigate } from "@tanstack/react-router"
-import { ExternalLink } from "lucide-react"
+import { ExternalLink, RefreshCw } from "lucide-react"
 import { useId, useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -63,7 +63,6 @@ function NewOrgModal({
 
         <div className="mt-6">
           <MissingOrgNotice
-            refreshing={refreshing}
             onRefresh={onRefresh}
             // Nothing to set up means a missing grant is the likeliest answer,
             // so don't make the teacher find the disclosure first.
@@ -71,80 +70,96 @@ function NewOrgModal({
           />
         </div>
 
+        <div className="mt-6 flex items-center justify-between gap-3">
+          <p className="text-xs font-semibold uppercase tracking-wide text-base-content/60">
+            {needsSetupOrgs.length > 0
+              ? t("orgs.newOrg.pickPrompt", { count: needsSetupOrgs.length })
+              : null}
+          </p>
+          <Button
+            variant="outline"
+            size="xs"
+            loading={refreshing}
+            onClick={onRefresh}
+          >
+            {!refreshing && (
+              <RefreshCw aria-hidden="true" className="size-3.5" />
+            )}
+            {refreshing
+              ? t("orgs.newOrg.refreshing")
+              : t("orgs.newOrg.refresh")}
+          </Button>
+        </div>
+
         {needsSetupOrgs.length === 0 ? (
-          <p className="mt-6 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
+          <p className="mt-2 rounded-box border border-base-300 bg-base-200/50 p-4 text-sm text-base-content/70">
             {t("orgs.newOrg.allSetUp")}
           </p>
         ) : (
-          <>
-            <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-base-content/60">
-              {t("orgs.newOrg.pickPrompt", { count: needsSetupOrgs.length })}
-            </p>
-            <ul
-              ref={listRef}
-              className="scroll-fade-y mt-2 flex max-h-80 flex-col gap-2"
-            >
-              {needsSetupOrgs.map((summary) => {
-                const { org } = summary
-                const planName = plans[org.login]
-                const planLoading = pendingPlans.has(org.login)
-                const isFree = classifyPlan(planName) === "free"
-                return (
-                  <li key={org.id}>
-                    <button
-                      type="button"
-                      disabled={planLoading}
-                      onClick={() =>
-                        isFree
-                          ? setFreePlanOrg(org.login)
-                          : handleSelect(org.login)
-                      }
-                      className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
-                    >
-                      <img
-                        src={org.avatar_url}
-                        alt=""
-                        className="size-9 shrink-0 rounded-lg border border-base-300"
-                      />
-                      <span className="min-w-0 flex-1">
-                        <span className="block truncate font-semibold">
-                          {org.login}
-                        </span>
-                        {org.description && (
-                          <span className="block truncate text-sm text-base-content/60">
-                            {org.description}
-                          </span>
-                        )}
+          <ul
+            ref={listRef}
+            className="scroll-fade-y mt-2 flex max-h-80 flex-col gap-2"
+          >
+            {needsSetupOrgs.map((summary) => {
+              const { org } = summary
+              const planName = plans[org.login]
+              const planLoading = pendingPlans.has(org.login)
+              const isFree = classifyPlan(planName) === "free"
+              return (
+                <li key={org.id}>
+                  <button
+                    type="button"
+                    disabled={planLoading}
+                    onClick={() =>
+                      isFree
+                        ? setFreePlanOrg(org.login)
+                        : handleSelect(org.login)
+                    }
+                    className="flex w-full items-center gap-3 rounded-xl border border-base-300 p-3 text-start transition-colors hover:bg-base-200 disabled:cursor-wait disabled:opacity-60 disabled:hover:bg-transparent"
+                  >
+                    <img
+                      src={org.avatar_url}
+                      alt=""
+                      className="size-9 shrink-0 rounded-lg border border-base-300"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">
+                        {org.login}
                       </span>
-                      {planName && !isFree && (
-                        <PlanBadge
-                          name={planName}
-                          title={t("orgs.card.planTitlePaid")}
-                          className="shrink-0"
-                        />
-                      )}
-                      {planLoading ? (
-                        <Spinner size="sm" className="shrink-0" />
-                      ) : isFree ? (
-                        <>
-                          <Badge tone="warning" size="sm" className="shrink-0">
-                            {t("orgs.newOrg.notSupportedBadge")}
-                          </Badge>
-                          <span className="btn btn-outline btn-xs shrink-0">
-                            {t("orgs.newOrg.details")}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="btn btn-primary btn-xs shrink-0">
-                          {t("orgs.newOrg.setUp")}
+                      {org.description && (
+                        <span className="block truncate text-sm text-base-content/60">
+                          {org.description}
                         </span>
                       )}
-                    </button>
-                  </li>
-                )
-              })}
-            </ul>
-          </>
+                    </span>
+                    {planName && !isFree && (
+                      <PlanBadge
+                        name={planName}
+                        title={t("orgs.card.planTitlePaid")}
+                        className="shrink-0"
+                      />
+                    )}
+                    {planLoading ? (
+                      <Spinner size="sm" className="shrink-0" />
+                    ) : isFree ? (
+                      <>
+                        <Badge tone="warning" size="sm" className="shrink-0">
+                          {t("orgs.newOrg.notSupportedBadge")}
+                        </Badge>
+                        <span className="btn btn-outline btn-xs shrink-0">
+                          {t("orgs.newOrg.details")}
+                        </span>
+                      </>
+                    ) : (
+                      <span className="btn btn-primary btn-xs shrink-0">
+                        {t("orgs.newOrg.setUp")}
+                      </span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
         )}
 
         <div className="modal-action">

@@ -1,4 +1,4 @@
-import { ChevronDown, ExternalLink, Info, RefreshCw } from "lucide-react"
+import { ChevronDown, ExternalLink, Info } from "lucide-react"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -11,13 +11,12 @@ import useRefreshOnReturn from "@/hooks/useRefreshOnReturn"
 // this OAuth app was granted, and the per-org "Grant" lives on the app's own
 // authorization page, which teachers can't guess (discussions #352, #403). The
 // rarer causes (owner approval, SAML SSO, a token predating the membership) sit
-// behind tooltips so the common path stays two steps.
+// behind tooltips so the common path stays two steps. `onRefresh` is not a
+// button here — the list owns that control; this arms it for the return trip.
 function MissingOrgNotice({
-  refreshing,
   onRefresh,
   defaultOpen = false,
 }: {
-  refreshing: boolean
   onRefresh: () => void
   defaultOpen?: boolean
 }) {
@@ -45,24 +44,6 @@ function MissingOrgNotice({
         <span className="min-w-0 flex-1 truncate font-medium text-base-content">
           {t("orgs.missingNotice.title")}
         </span>
-        <Button
-          variant="outline"
-          size="xs"
-          loading={refreshing}
-          onClick={(e) => {
-            // Inside <summary>: suppress the native toggle and keep the click
-            // from reaching the handler above, so refreshing doesn't also
-            // expand/collapse the disclosure.
-            e.preventDefault()
-            e.stopPropagation()
-            onRefresh()
-          }}
-        >
-          {!refreshing && <RefreshCw aria-hidden="true" className="size-3.5" />}
-          {refreshing
-            ? t("orgs.missingNotice.refreshing")
-            : t("orgs.missingNotice.refresh")}
-        </Button>
         <ChevronDown
           aria-hidden="true"
           className="size-4 shrink-0 text-base-content/50 transition-transform group-open:rotate-180"

@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe("MissingOrgNotice", () => {
   it("links the app's own GitHub authorization page in a new tab", () => {
-    render(<MissingOrgNotice refreshing={false} onRefresh={vi.fn()} />)
+    render(<MissingOrgNotice onRefresh={vi.fn()} />)
 
     const link = grantLink()
     expect(link?.getAttribute("href")).toContain(
@@ -51,22 +51,16 @@ describe("MissingOrgNotice", () => {
   })
 
   it("stays collapsed by default and opens on request", () => {
-    const { unmount } = render(
-      <MissingOrgNotice refreshing={false} onRefresh={vi.fn()} />,
-    )
+    const { unmount } = render(<MissingOrgNotice onRefresh={vi.fn()} />)
     expect(disclosure()?.open).toBe(false)
     unmount()
 
-    render(
-      <MissingOrgNotice refreshing={false} onRefresh={vi.fn()} defaultOpen />,
-    )
+    render(<MissingOrgNotice onRefresh={vi.fn()} defaultOpen />)
     expect(disclosure()?.open).toBe(true)
   })
 
   it("spells out the grant steps", () => {
-    render(
-      <MissingOrgNotice refreshing={false} onRefresh={vi.fn()} defaultOpen />,
-    )
+    render(<MissingOrgNotice onRefresh={vi.fn()} defaultOpen />)
 
     expect(screen.getByText("orgs.missingNotice.steps.grant")).toBeTruthy()
     expect(screen.getByText("orgs.missingNotice.steps.refresh")).toBeTruthy()
@@ -77,7 +71,7 @@ describe("MissingOrgNotice", () => {
   })
 
   it("expands and collapses on a single click", () => {
-    render(<MissingOrgNotice refreshing={false} onRefresh={vi.fn()} />)
+    render(<MissingOrgNotice onRefresh={vi.fn()} />)
     const summary = screen.getByText("orgs.missingNotice.title")
 
     // React owns `open`, so the native toggle must be suppressed — sharing that
@@ -91,25 +85,18 @@ describe("MissingOrgNotice", () => {
     expect(disclosure()?.open).toBe(false)
   })
 
-  it("refreshes without letting the click toggle the disclosure", () => {
-    const onRefresh = vi.fn()
-    render(<MissingOrgNotice refreshing={false} onRefresh={onRefresh} />)
+  it("keeps no refresh control of its own — the list owns that", () => {
+    render(<MissingOrgNotice onRefresh={vi.fn()} defaultOpen />)
 
-    // The refresh control sits inside <summary>, so the click's default action
-    // (toggling the disclosure) has to be suppressed. fireEvent returns false
-    // when preventDefault was called.
-    const defaultAllowed = fireEvent.click(
-      screen.getByText("orgs.missingNotice.refresh"),
-    )
-    expect(onRefresh).toHaveBeenCalledTimes(1)
-    expect(defaultAllowed).toBe(false)
+    // A refresh button here reads as the fix for a missing org, which it isn't
+    // (the grant is), and hides behind the collapsed disclosure.
+    expect(screen.queryByText("orgs.newOrg.refresh")).toBeNull()
+    expect(screen.queryByText("orgs.missingNotice.refresh")).toBeNull()
   })
 
   it("refreshes once when the teacher returns from the grant page", () => {
     const onRefresh = vi.fn()
-    render(
-      <MissingOrgNotice refreshing={false} onRefresh={onRefresh} defaultOpen />,
-    )
+    render(<MissingOrgNotice onRefresh={onRefresh} defaultOpen />)
 
     document.dispatchEvent(new Event("visibilitychange"))
     expect(onRefresh).not.toHaveBeenCalled()
@@ -123,9 +110,7 @@ describe("MissingOrgNotice", () => {
   })
 
   it("offers re-authorization for a token that predates the membership", () => {
-    render(
-      <MissingOrgNotice refreshing={false} onRefresh={vi.fn()} defaultOpen />,
-    )
+    render(<MissingOrgNotice onRefresh={vi.fn()} defaultOpen />)
 
     fireEvent.click(screen.getByText("auth.reauthorize"))
     expect(startWebFlow).toHaveBeenCalledTimes(1)
