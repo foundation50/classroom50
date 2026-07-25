@@ -1,5 +1,7 @@
 import type { QueryClient } from "@tanstack/react-query"
 
+import { CONFIG_REPO } from "@/util/configRepo"
+
 // The cache-key factory for every github-core read. This is the leaf of the
 // queries module: every *Query sub-module imports these keys, and this file
 // imports nothing from them, so the split stays cycle-free (import-x/no-cycle).
@@ -164,6 +166,19 @@ export const githubKeys = {
   // The org's Actions spending budget classification (hard-stop cap set?).
   orgActionsBudget: (owner: string) =>
     [...githubKeys.all, "orgActionsBudget", owner] as const,
+}
+
+// Refresh everything the viewer's org list derives from. The membership +
+// summary caches alone leave the per-org plan name and config-repo read on
+// their own 10-minute clocks, so a Free -> Team upgrade kept showing "Not
+// supported" after a refresh (#330).
+export function invalidateViewerOrgs(queryClient: QueryClient) {
+  queryClient.invalidateQueries({ queryKey: ["orgs"] })
+  queryClient.invalidateQueries({ queryKey: [...githubKeys.all, "orgs"] })
+  queryClient.invalidateQueries({
+    queryKey: [...githubKeys.all, "repo"],
+    predicate: (query) => query.queryKey[3] === CONFIG_REPO,
+  })
 }
 
 // Refresh a single classroom team's members + pending invitations after a

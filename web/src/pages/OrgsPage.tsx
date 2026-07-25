@@ -6,6 +6,7 @@ import { useAcceptOrgInvite } from "@/hooks/mutations/useAcceptOrgInvite"
 import { useToast } from "@/context/notifications/NotificationProvider"
 import { useHiddenOrgs } from "@/context/hiddenOrgs/HiddenOrgsProvider"
 import type { Classroom50OrgSummary } from "@/github-core/queries"
+import { invalidateViewerOrgs } from "@/github-core/queries"
 import type { GitHubOrgMembership } from "@/github-core/types"
 import useGetOrgs, { usePendingOrgInvites } from "@/hooks/useGetOrgs"
 import useOrgDisplayName from "@/hooks/useOrgDisplayName"
@@ -495,8 +496,7 @@ const OrgsPage = () => {
     }
   }, [filtered, sortKey, lastModified])
 
-  const handleRefresh = () =>
-    queryClient.invalidateQueries({ queryKey: ["orgs"] })
+  const handleRefresh = () => invalidateViewerOrgs(queryClient)
 
   const hasAnyOrgs = cl50Orgs.length > 0
   const hasInvites = pendingInvites.length > 0
