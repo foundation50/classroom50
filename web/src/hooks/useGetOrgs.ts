@@ -23,19 +23,30 @@ const useGetOrgs = () => {
   const client = useGitHubClient()
   const memberships = useOrgMemberships(client)
 
+  const active = (memberships.data ?? []).filter(
+    (membership) => membership.state === "active",
+  )
+
   const summaries = useQuery({
-    queryKey: ["orgs", "active-summaries"],
+    // Keyed on the membership list it derives from, not just ["orgs"]: one
+    // invalidation refetches both, and an unkeyed summaries queryFn would run
+    // against the stale list — dropping a just-granted org until a second
+    // refresh.
+    queryKey: [
+      "orgs",
+      "active-summaries",
+      active.map((m) => m.organization.login).join(","),
+    ],
     enabled: memberships.data !== undefined,
-    queryFn: () => {
-      const active = (memberships.data ?? []).filter(
-        (membership) => membership.state === "active",
-      )
-      return Promise.all(
+    queryFn: () =>
+      Promise.all(
         active.map((membership) =>
           getClassroom50OrgSummary(client, membership),
         ),
-      )
-    },
+      ),
+    // The key changes whenever the membership list does, which would otherwise
+    // blank `data` for a render and flash the page's full-screen spinner.
+    placeholderData: (previous) => previous,
     staleTime: 10 * 60 * 1000,
   })
 
