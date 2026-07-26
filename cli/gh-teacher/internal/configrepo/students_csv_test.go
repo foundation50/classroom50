@@ -55,6 +55,24 @@ func TestParseRoster_HeaderOnly(t *testing.T) {
 	}
 }
 
+func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
+	// Both readers trim, then require digits only, so a whitespace-padded cell is
+	// valid on both sides. Pinned because ParseInt alone would reject it.
+	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+		"alice,A,A,,s, 42 ,student\n" +
+		"bob,B,B,,s,9007199254740991,student\n")
+	rows, err := ParseRoster(in)
+	if err != nil {
+		t.Fatalf("ParseRoster: %v", err)
+	}
+	if rows[0].GitHubID != 42 {
+		t.Errorf("padded github_id = %d, want 42", rows[0].GitHubID)
+	}
+	if rows[1].GitHubID != maxSafeGitHubID {
+		t.Errorf("largest safe github_id = %d, want %d", rows[1].GitHubID, int64(maxSafeGitHubID))
+	}
+}
+
 func TestParseRoster_RejectsBadInputs(t *testing.T) {
 	cases := []struct {
 		name        string
@@ -67,6 +85,12 @@ func TestParseRoster_RejectsBadInputs(t *testing.T) {
 		{"renamed first column", "user,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,1,student\n", "unexpected header"},
 		{"username empty", "username,first_name,last_name,email,section,github_id,role\n,A,A,,s,1,student\n", "username column is empty"},
 		{"non-numeric github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,nope,student\n", "invalid github_id"},
+		// Shapes ParseInt would accept but the web reader rejects; both sides must
+		// agree on which cells are valid (web/src/util/identity.ts parseGitHubId).
+		{"signed github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,+42,student\n", "invalid github_id"},
+		{"negative github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,-5,student\n", "invalid github_id"},
+		{"zero github_id", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,0,student\n", "invalid github_id"},
+		{"github_id past 2^53", "username,first_name,last_name,email,section,github_id,role\nalice,A,A,,s,9007199254740993,student\n", "invalid github_id"},
 		{"wrong field count", "username,first_name,last_name,email,section,github_id,role\nalice,A,A\n", "wrong number"},
 	}
 	for _, tc := range cases {

@@ -47,6 +47,10 @@ func isCanonicalColumn(name string) bool {
 // push the file past the contents API's 1 MB ceiling.
 const maxFieldBytes = 320
 
+// maxSafeGitHubID is JavaScript's Number.MAX_SAFE_INTEGER: beyond it the web
+// app can't represent an id exactly, so it would address the wrong account.
+const maxSafeGitHubID = 1<<53 - 1
+
 // utf8BOM is what Excel prepends to "CSV UTF-8" exports. encoding/csv doesn't
 // strip it, so without trimming the first header field becomes "\ufeffusername"
 // and the header check fails on two identical-looking slices.
@@ -283,7 +287,7 @@ func recordToRow(record []string, canonicalLen int, extraColumns []string, line 
 		return RosterRow{}, fmt.Errorf("line %d: username column is empty", line)
 	}
 	if record[5] != "" {
-		id, err := strconv.ParseInt(record[5], 10, 64)
+		id, err := parseGitHubID(record[5])
 		if err != nil {
 			return RosterRow{}, fmt.Errorf("line %d: invalid github_id %q: %w", line, record[5], err)
 		}
@@ -504,6 +508,28 @@ func checkFieldLengths(line int, record []string) error {
 		return fmt.Errorf("line %d: %s exceeds maximum length of %d bytes", line, col, maxFieldBytes)
 	}
 	return nil
+}
+
+// parseGitHubID accepts only a plain positive digit string, mirroring the web
+// app's parseGitHubId (web/src/util/identity.ts): both trim, then require digits
+// only. ParseInt alone would take a signed "+42"/"-5" and any int64, so the two
+// readers would disagree on which cells are valid. Capped at 2^53-1 because the
+// web side is JSON-number bound and can't represent more exactly.
+func parseGitHubID(s string) (int64, error) {
+	trimmed := strings.TrimSpace(s)
+	for _, r := range trimmed {
+		if r < '0' || r > '9' {
+			return 0, fmt.Errorf("must be a plain positive integer")
+		}
+	}
+	id, err := strconv.ParseInt(trimmed, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	if id <= 0 || id > maxSafeGitHubID {
+		return 0, fmt.Errorf("must be a plain positive integer")
+	}
+	return id, nil
 }
 
 // isFormulaTrigger reports whether `b` would be parsed as a formula prefix by
