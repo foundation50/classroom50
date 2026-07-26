@@ -19,6 +19,7 @@ import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
 import { EmptyRosterNotice } from "@/components/EmptyRosterNotice"
+import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import { ClaimTeacherNotice } from "./classes/ClaimTeacherNotice"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
 import { ReuseFromClassroomModal } from "@/components/modals/ReuseFromClassroomModal"
@@ -200,6 +201,10 @@ export const TeacherAssignmentsView = ({
           hasRosterRows={emptyRoster.hasRosterRows}
         />
       ) : null}
+      {/* Catches the drift-after-creation case the create/edit pages can't: a
+          teacher who created assignments before the setting flipped never
+          reopens those forms, and students accept days later. */}
+      <OrgRepoCreationNotice org={org} />
       {showToolbar && (
         <AssignmentsToolbar
           query={query}

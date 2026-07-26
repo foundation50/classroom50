@@ -5,6 +5,7 @@ import Breadcrumb from "@/components/breadcrumb"
 import PageHeader from "@/components/PageHeader"
 import PageShell from "@/components/PageShell"
 import { ArchivedClassroomNotice } from "@/components/ArchivedClassroomNotice"
+import { OrgRepoCreationNotice } from "@/components/OrgRepoCreationNotice"
 import { Spinner } from "@/components/Spinner"
 import { Alert, AnimatedAlert, Button, Card } from "@/components/ui"
 import { useDocumentTitle } from "@/hooks/useDocumentTitle"
@@ -217,37 +218,40 @@ const EditAssignmentPage = () => {
         </ArchivedClassroomNotice>
       )}
       {isStaff && org && classroom && assignment && (
-        <EditAssignmentForm
-          org={org}
-          classroom={classroom}
-          assignment={assignment}
-          defaultData={assignmentData}
-          readOnly={archived || !canAuthor}
-          onCancel={() => {
-            router.history.back()
-          }}
-          onMutate={() => {
-            // Clear prior banners so a re-edit never shows stale state.
-            setEditSuccess(false)
-            setEditWarning("")
-            setEditError("")
-          }}
-          onError={(error) => {
-            setEditError(error.message)
-            window.scrollTo({ top: 0, behavior: "smooth" })
-          }}
-          onSuccess={(result) => {
-            // Surface a non-fatal template-grant warning inline; else show
-            // the success banner.
-            if (result?.templateGrantWarning) {
-              setEditWarning(result.templateGrantWarning)
-            } else {
-              setEditSuccess(true)
-              setTimeout(() => setEditSuccess(false), 3000)
-            }
-            window.scrollTo({ top: 0, behavior: "smooth" })
-          }}
-        />
+        <>
+          <OrgRepoCreationNotice org={org} />
+          <EditAssignmentForm
+            org={org}
+            classroom={classroom}
+            assignment={assignment}
+            defaultData={assignmentData}
+            readOnly={archived || !canAuthor}
+            onCancel={() => {
+              router.history.back()
+            }}
+            onMutate={() => {
+              // Clear prior banners so a re-edit never shows stale state.
+              setEditSuccess(false)
+              setEditWarning("")
+              setEditError("")
+            }}
+            onError={(error) => {
+              setEditError(error.message)
+              window.scrollTo({ top: 0, behavior: "smooth" })
+            }}
+            onSuccess={(result) => {
+              // Surface a non-fatal template-grant warning inline; else show
+              // the success banner.
+              if (result?.templateGrantWarning) {
+                setEditWarning(result.templateGrantWarning)
+              } else {
+                setEditSuccess(true)
+                setTimeout(() => setEditSuccess(false), 3000)
+              }
+              window.scrollTo({ top: 0, behavior: "smooth" })
+            }}
+          />
+        </>
       )}
       {isStudent && org && classroom && assignment && (
         <EditAssignmentFormStudent

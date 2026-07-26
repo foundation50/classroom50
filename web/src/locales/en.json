@@ -2144,6 +2144,11 @@
         "empty": "This classroom has no students yet. An assignment's accept link only works for students who are members of the <org>{{org}}</org> organization, so add and enroll students before sharing it.",
         "manageRoster": "Manage roster",
         "addStudents": "Add students"
+      },
+      "orgRepoCreation": {
+        "master": "<org>{{org}}</org> doesn't let its members create repositories, so accepting an assignment will fail for every student. Re-run organization setup, or under <memberPrivileges>Member privileges → Repository creation</memberPrivileges> allow members to create repositories and check \"Private\" (leave \"Public\" unchecked). If an enterprise policy pins that setting, only an enterprise owner can change it.",
+        "private": "<org>{{org}}</org> doesn't let its members create private repositories, so accepting an assignment will fail for every student. Re-run organization setup, or under <memberPrivileges>Member privileges → Repository creation</memberPrivileges> check \"Private\" (leave \"Public\" unchecked). If an enterprise policy pins that setting, only an enterprise owner can change it.",
+        "action": "Organization settings"
       }
     },
     "confirmModal": {
