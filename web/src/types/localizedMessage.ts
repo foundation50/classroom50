@@ -72,12 +72,10 @@ export function describeLocalizedMessage(message: LocalizedMessage): string {
   return detail ? `${message.key} (${detail})` : message.key
 }
 
-// Attach a deferred message to an error the view may render. Additive on
-// purpose: `fallbackMessage` keeps `Error.message` as-is for consumers that
-// still render it, while a descriptor-aware view (the accept page) resolves
-// `localized` instead. Lets a layer below the view name a message without
-// owning a translator.
-export function withLocalizedMessage<E extends Error>(
+// Attach a deferred message to an error. Additive on purpose: `Error.message`
+// stays as-is for log/outage consumers, while a descriptor-aware view (the accept
+// page) resolves `localized` instead.
+function withLocalizedMessage<E extends Error>(
   err: E,
   localized: LocalizedMessage,
 ): E {

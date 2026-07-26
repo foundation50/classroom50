@@ -93,19 +93,18 @@ export async function createAssignmentRepo(params: {
       }
       if (err.isForbidden || err.isNotFound) {
         const inOrg = templateOwner.toLowerCase() === owner.toLowerCase()
-        // The only signal that GitHub reworded the destination-org refusal: the
-        // match stops firing, students silently get the template message again,
-        // and the tests can't catch it (they assert our own fixture).
-        log.warn(
-          "accept: template-copy refused, classified by template location",
-          {
+        // Tripwire for GitHub rewording the destination-org 403: the match stops
+        // firing, students silently get the template message again, and the tests
+        // can't catch it (they assert our own fixture). A 404 is not evidence of
+        // that, so it stays out of the warn.
+        if (err.isForbidden) {
+          log.warn("accept: repo create 403 fell through to template blame", {
             org: owner,
             templateOwner,
             inOrg,
-            status: err.status,
             githubMessage: err.message,
-          },
-        )
+          })
+        }
         throw inOrg
           ? inOrgTemplateError(
               templateOwner,
@@ -197,19 +196,19 @@ async function createEmptyAssignmentRepo(params: {
       }
     }
 
-    // Template-less and empty_repo assignments hit this path, where the same
-    // destination-org refusal used to rethrow raw and degrade to the generic
-    // step text.
-    if (err instanceof GitHubAPIError && isOrgRepoCreationDenied(err)) {
-      throw orgRepoCreationDeniedError(owner, err.status, err.message)
-    }
-
-    if (err instanceof GitHubAPIError && err.isForbidden) {
-      log.warn("accept: repo create refused, no classification matched", {
-        org: owner,
-        status: err.status,
-        githubMessage: err.message,
-      })
+    if (err instanceof GitHubAPIError) {
+      // Template-less and empty_repo assignments hit this path, where the same
+      // destination-org refusal used to rethrow raw and degrade to generic text.
+      if (isOrgRepoCreationDenied(err)) {
+        throw orgRepoCreationDeniedError(owner, err.status, err.message)
+      }
+      if (err.isForbidden) {
+        // Same tripwire as the templated path above.
+        log.warn("accept: repo create 403 fell through unclassified", {
+          org: owner,
+          githubMessage: err.message,
+        })
+      }
     }
 
     throw err

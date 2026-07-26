@@ -96,18 +96,22 @@ export async function withAcceptStep<T>(
       throw new AcceptStepError(message, cause)
     }
 
-    if (err instanceof TemplateAccessError) {
-      log.warn(`accept step "${id}" failed (typed)`, { step: id })
-      onStepUpdate?.({ id, status: "error", error: err.localizedStep })
-      throw err
-    }
-    if (err instanceof AcceptStepError) {
-      log.warn(`accept step "${id}" failed (typed)`, { step: id })
-      onStepUpdate?.({ id, status: "error", error: err.localized })
+    if (err instanceof TemplateAccessError || err instanceof AcceptStepError) {
+      log.warn("accept step failed (typed)", { step: id })
+      // TemplateAccessError carries a shorter form for the checklist row, which
+      // sits beside six others and can't absorb a paragraph.
+      onStepUpdate?.({
+        id,
+        status: "error",
+        error:
+          err instanceof TemplateAccessError
+            ? err.localizedStep
+            : err.localized,
+      })
       throw err
     }
     if (err instanceof GitHubAPIError) {
-      log.error(`Accept step "${id}" failed`, { err })
+      log.error("accept step failed", { step: id, err })
 
       if (err.isRateLimited) {
         fail({ key: "accept.stepErrors.rateLimited", params: { label } }, err)
@@ -129,7 +133,7 @@ export async function withAcceptStep<T>(
     // unpublished assignment or malformed autograder is actionable advice a
     // generic "safe to retry" line would throw away. Rethrown unwrapped so the
     // outage classifier still sees the original error, not a wrapper.
-    log.error(`accept step "${id}" failed (unexpected)`, { err })
+    log.error("accept step failed (unexpected)", { step: id, err })
     onStepUpdate?.({
       id,
       status: "error",

@@ -74,10 +74,9 @@ export function AcceptLinkModal({
         />
 
         {/* Sharing the link is the last moment before students hit the
-            accept-time 403, and an org that refuses member repo creation breaks
-            every accept regardless of how ready the roster is — so this sits
-            beside the roster notice rather than replacing it. No margin: the
-            wrapper's `gap-4` owns the spacing. */}
+            accept-time 403, and a locked-down org breaks every accept however
+            ready the roster is — so this sits beside the roster notice rather
+            than replacing it. No margin: the wrapper's `gap-4` owns the spacing. */}
         <OrgRepoCreationNotice org={org} className="" />
 
         {hasSecret ? (

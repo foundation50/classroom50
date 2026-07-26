@@ -36,21 +36,12 @@ type MemberDefaultSetting struct {
 	// members_can_create_public_repositories is NOT enterprise-only: it must be
 	// audited on every plan, only with a different value. See nonEnterpriseOverrides.
 	enterpriseOnly bool
-	// Writable is false for a field whose desired value is real and verifiable
-	// but that must NOT be sent in the PATCH, because GitHub derives it. Only
-	// Team/Free's granular repo-creation booleans qualify — see
-	// nonEnterpriseOverrides. Zero value (false) would mean "skip", so callers
-	// must read this through IsWritable.
-	writable *bool
+	// VerifyOnly marks a field whose desired value is real and verifiable but
+	// that must NOT be sent in PATCH /orgs/{org}, because GitHub derives it.
+	// Only Team/Free's granular repo-creation booleans qualify — see
+	// nonEnterpriseOverrides.
+	VerifyOnly bool
 }
-
-// IsWritable reports whether the setting may be sent in PATCH /orgs/{org}.
-// Defaults to true; only nonEnterpriseOverrides marks a field verify-only.
-func (s MemberDefaultSetting) IsWritable() bool {
-	return s.writable == nil || *s.writable
-}
-
-func boolPtr(b bool) *bool { return &b }
 
 // nonEnterpriseOverrides holds settings whose desired VALUE and writability
 // depend on the plan, rather than being skipped off-enterprise. Only repo
@@ -71,19 +62,13 @@ func boolPtr(b bool) *bool { return &b }
 // members_allowed_repository_creation_type="all" and thereby sets both booleans
 // true. So both granular fields are verify-only here: still audited, never sent.
 // Mirrors the web's NON_ENTERPRISE_OVERRIDES.
-var nonEnterpriseOverrides = map[string]struct {
-	Value     any
-	Desc      string
-	ManualFix string
-	Critical  bool
-	Writable  bool
-}{
+var nonEnterpriseOverrides = map[string]MemberDefaultSetting{
 	"members_can_create_private_repositories": {
-		Value:     true,
-		Desc:      "private repo creation enabled",
-		ManualFix: `under "Repository creation", allow members to create repositories — on this plan "Private" is enabled together with "Public"`,
-		Critical:  false,
-		Writable:  false,
+		Value:      true,
+		Desc:       "private repo creation enabled",
+		ManualFix:  `under "Repository creation", allow members to create repositories — on this plan "Private" is enabled together with "Public"`,
+		Critical:   false,
+		VerifyOnly: true,
 	},
 	"members_can_create_public_repositories": {
 		Value:     true,
@@ -91,8 +76,8 @@ var nonEnterpriseOverrides = map[string]struct {
 		ManualFix: `under "Repository creation", allow members to create repositories — on this plan "Public" cannot be unchecked while "Private" is checked`,
 		// An enabling field, like private-repo creation: the master switch
 		// already carries the critical verdict for repo creation being off.
-		Critical: false,
-		Writable: false,
+		Critical:   false,
+		VerifyOnly: true,
 	},
 }
 
@@ -112,11 +97,11 @@ func MemberDefaultSettings(plan string) []MemberDefaultSetting {
 			continue
 		}
 		if o, ok := nonEnterpriseOverrides[s.Field]; ok {
-			s.Value = o.Value
-			s.Desc = o.Desc
-			s.ManualFix = o.ManualFix
-			s.Critical = o.Critical
-			s.writable = boolPtr(o.Writable)
+			// Field, enterpriseOnly and the rest of the canonical entry stay; the
+			// override supplies only the plan-dependent half.
+			o.Field = s.Field
+			o.enterpriseOnly = s.enterpriseOnly
+			s = o
 		}
 		filtered = append(filtered, s)
 	}

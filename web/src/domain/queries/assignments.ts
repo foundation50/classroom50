@@ -8,11 +8,7 @@ import {
 import type { Assignment } from "@/types/classroom"
 import { decodeBase64Utf8 } from "@/util/github"
 import { CONFIG_REPO } from "@/util/configRepo"
-import {
-  localizedError,
-  withLocalizedMessage,
-  type LocalizedMessage,
-} from "@/types/localizedMessage"
+import { localizedError, type LocalizedMessage } from "@/types/localizedMessage"
 
 export type GetAssignmentsFileInput = {
   org: string
@@ -46,42 +42,29 @@ export async function getAssignmentsFile(
   return JSON.parse(json) as AssignmentsFile
 }
 
+// `label` names what failed for the reader (e.g. the autograder). It is a
+// descriptor, not English, so the message renders in the student's language; the
+// thrown errors carry the diagnostic form in `Error.message` for logs.
 export async function fetchTextWithFriendlyErrors(
   url: string,
-  label: string,
-  // Names `label` for a descriptor-aware renderer (the accept page). Optional so
-  // the English `label` stays the fallback for any other consumer.
-  labelMessage?: LocalizedMessage,
+  label: LocalizedMessage,
 ): Promise<string> {
   const response = await fetch(url)
-  const named = (key: string, params?: Record<string, string | number>) => ({
-    key,
-    params: { ...params, label: labelMessage ?? label },
-  })
+  const named = (key: string, params?: Record<string, string | number>) =>
+    localizedError({ key, params: { ...params, label } })
 
   if (response.status === 404) {
-    throw withLocalizedMessage(
-      new Error(
-        `${label} is not published yet. Ask your teacher to confirm the file exists in the config repo and that publish-pages.yaml has been run.`,
-      ),
-      named("pagesErrors.notPublished"),
-    )
+    throw named("pagesErrors.notPublished")
   }
 
   if (!response.ok) {
-    throw withLocalizedMessage(
-      new Error(`Failed to fetch ${label}: ${response.status}`),
-      named("pagesErrors.fetchFailed", { status: response.status }),
-    )
+    throw named("pagesErrors.fetchFailed", { status: response.status })
   }
 
   const text = await response.text()
 
   if (!text.trim()) {
-    throw withLocalizedMessage(
-      new Error("Pages deployment may still be in flight. Retry in a minute."),
-      { key: "pagesErrors.deployInFlight" },
-    )
+    throw localizedError({ key: "pagesErrors.deployInFlight" })
   }
 
   return text

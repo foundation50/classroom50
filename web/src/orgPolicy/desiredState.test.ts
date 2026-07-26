@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   classifyDefaults,
+  isWritable,
   manualHardeningSteps,
   memberDefaultSettings,
 } from "./desiredState"
@@ -81,21 +82,35 @@ describe("memberDefaultSettings", () => {
       const byField = new Map(
         memberDefaultSettings(plan).map((s) => [s.field, s]),
       )
-      expect(byField.get(PLAN_DEPENDENT_FIELD)?.writable).toBe(false)
+      expect(isWritable(byField.get(PLAN_DEPENDENT_FIELD)!)).toBe(false)
       expect(
-        byField.get("members_can_create_private_repositories")?.writable,
+        isWritable(byField.get("members_can_create_private_repositories")!),
       ).toBe(false)
-      expect(byField.get("members_can_create_repositories")?.writable).not.toBe(
-        false,
+      expect(isWritable(byField.get("members_can_create_repositories")!)).toBe(
+        true,
       )
     },
   )
 
   it("keeps every enterprise setting writable", () => {
     for (const s of memberDefaultSettings("enterprise")) {
-      expect(s.writable, `${s.field} writability`).not.toBe(false)
+      expect(isWritable(s), `${s.field} writability`).toBe(true)
     }
   })
+
+  // The remedy for the private checkbox must not survive off-enterprise: that
+  // checkbox can't be set independently there, so the canonical wording would
+  // send a teacher somewhere useless. Parity with the CLI mirror's override.
+  it.each(["team", "free", "", undefined])(
+    "rewords the private-repo manual fix on %s",
+    (plan) => {
+      const setting = memberDefaultSettings(plan).find(
+        (s) => s.field === "members_can_create_private_repositories",
+      )
+      expect(setting?.manualFix).toContain("enabled together with")
+      expect(setting?.manualFix).not.toContain('check "Private"')
+    },
+  )
 
   it("keeps the private-only lockdown on enterprise", () => {
     const setting = memberDefaultSettings("enterprise").find(

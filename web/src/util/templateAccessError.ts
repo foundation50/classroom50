@@ -116,9 +116,17 @@ export function orgRepoCreationDeniedError(
   status: number,
   githubMessage?: string,
 ): TemplateAccessError {
-  const params = { org, status, detail: githubSaid(githubMessage) }
   return new TemplateAccessError(
-    { key: "accept.templateErrors.orgRepoCreationDenied", params },
-    { key: "accept.templateErrors.orgRepoCreationDeniedStep", params },
+    {
+      key: "accept.templateErrors.orgRepoCreationDenied",
+      params: { org, status, detail: githubSaid(githubMessage) },
+    },
+    // The step key interpolates only org and status, so it must not carry the
+    // detail clause: nothing would render it and the two keys' params would be
+    // coupled.
+    {
+      key: "accept.templateErrors.orgRepoCreationDeniedStep",
+      params: { org, status },
+    },
   )
 }

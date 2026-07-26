@@ -140,7 +140,6 @@ export async function resolveAutograderWorkflow(params: {
 
   const workflow = await fetchTextWithFriendlyErrors(
     pagesAutograderUrl({ org, classroom, name: autograderName, secret }),
-    `autograder ${autograderName}`,
     { key: "pagesErrors.autograderLabel", params: { autograderName } },
   )
 

@@ -8,6 +8,16 @@
 
 export type MemberDefaultValue = boolean | string
 
+// The repo-creation field names, exported because the write path, the audit and
+// the teacher pre-flight warning all need to name them.
+export const MEMBERS_CAN_CREATE_REPOSITORIES = "members_can_create_repositories"
+export const MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES =
+  "members_can_create_private_repositories"
+export const MEMBERS_CAN_CREATE_PUBLIC_REPOSITORIES =
+  "members_can_create_public_repositories"
+export const MEMBERS_CAN_CREATE_INTERNAL_REPOSITORIES =
+  "members_can_create_internal_repositories"
+
 export type MemberDefaultSetting = {
   field: string
   value: MemberDefaultValue
@@ -15,11 +25,10 @@ export type MemberDefaultSetting = {
   manualFix: string
   critical: boolean
   enterpriseOnly: boolean
-  // False for a field whose desired value is real and verifiable but that must
-  // NOT be sent in the PATCH, because GitHub derives it. Only Team/Free's
-  // granular repo-creation booleans qualify: see NON_ENTERPRISE_OVERRIDES.
-  // Undefined means writable.
-  writable?: boolean
+  // Marks a field whose desired value is real and verifiable but that must NOT
+  // be sent in the PATCH, because GitHub derives it. Only Team/Free's granular
+  // repo-creation booleans qualify: see NON_ENTERPRISE_OVERRIDES.
+  verifyOnly?: boolean
 }
 
 // The 15 member-default fields, in the CLI's order. Criticality and
@@ -188,11 +197,14 @@ const ALL_MEMBER_DEFAULT_SETTINGS: readonly MemberDefaultSetting[] = [
 const NON_ENTERPRISE_OVERRIDES: Readonly<
   Record<string, Partial<MemberDefaultSetting>>
 > = {
-  members_can_create_private_repositories: {
-    // Derived from the master switch on this plan, so verify but never write.
-    writable: false,
+  [MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES]: {
+    // The canonical remedy names a "Private" checkbox that can't be set
+    // independently on this plan, so it would send a teacher somewhere useless.
+    manualFix:
+      'under "Repository creation", allow members to create repositories — on this plan "Private" is enabled together with "Public"',
+    verifyOnly: true,
   },
-  members_can_create_public_repositories: {
+  [MEMBERS_CAN_CREATE_PUBLIC_REPOSITORIES]: {
     value: true,
     desc: "public repo creation enabled (Team/Free couples it to private)",
     manualFix:
@@ -200,8 +212,14 @@ const NON_ENTERPRISE_OVERRIDES: Readonly<
     // An enabling field, like private-repo creation: the master switch already
     // carries the critical verdict for repo creation being off.
     critical: false,
-    writable: false,
+    verifyOnly: true,
   },
+}
+
+// Whether a setting may be sent in PATCH /orgs/{org}. Mirrors the CLI's
+// MemberDefaultSetting.VerifyOnly so the write paths can't drift.
+export function isWritable(setting: MemberDefaultSetting): boolean {
+  return !setting.verifyOnly
 }
 
 // memberDefaultSettings returns the in-scope settings for a plan. "enterprise"

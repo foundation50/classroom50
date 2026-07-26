@@ -143,13 +143,9 @@ export function createGitHubClient(args: {
           ? body.message
           : `GitHub API request failed with ${res.status}`
 
-      // Trace the failure with non-sensitive fields only: the status, the
-      // endpoint, GitHub's request id for support correlation, and — for a 422
-      // — the validation reasons. Never the whole body (it can carry IP allow
-      // lists or SAML detail); `githubValidationReasons` extracts only the
-      // `errors[].message`/`.field`/`.code` triples, which is the difference
-      // between "PATCH /orgs 422" and "Private-only repository creation policy
-      // is not allowed for this organization."
+      // Non-sensitive fields only — never the whole body, which can carry IP
+      // allow lists or SAML detail. A 422 also gets its validation reasons (see
+      // githubValidationReasons for why those are worth the extra field).
       log.debug("api error", {
         method,
         path,

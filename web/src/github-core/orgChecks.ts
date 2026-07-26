@@ -8,7 +8,12 @@ import type { GitHubClient } from "./client"
 import { GitHubAPIError } from "./errors"
 import {
   classifyDefaults,
+  isWritable,
   memberDefaultSettings,
+  MEMBERS_CAN_CREATE_INTERNAL_REPOSITORIES,
+  MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES,
+  MEMBERS_CAN_CREATE_PUBLIC_REPOSITORIES,
+  MEMBERS_CAN_CREATE_REPOSITORIES,
   type ClassifyResult,
   type MemberDefaultSetting,
 } from "@/orgPolicy/desiredState"
@@ -386,17 +391,16 @@ export type OrgDefaultsRepairResult = {
   message: string
 }
 
-// The PATCH body for a set of settings. Skips verify-only fields (`writable:
-// false`): on Team/Free the granular repo-creation booleans are derived from the
-// master switch, and sending one makes GitHub reject the whole request with 422
-// "Private-only repository creation policy is not allowed for this organization."
-// They are still classified on the read-back, just never written.
+// The PATCH body for a set of settings, skipping verify-only fields: on Team/Free
+// the granular repo-creation booleans are derived from the master switch, and
+// sending one makes GitHub reject the whole request with 422 "Private-only
+// repository creation policy is not allowed for this organization." They are
+// still classified on the read-back, just never written.
 function orgDefaultsBody(
   settings: MemberDefaultSetting[],
 ): Record<string, unknown> {
   const body: Record<string, unknown> = {}
-  for (const s of settings) {
-    if (s.writable === false) continue
+  for (const s of settings.filter(isWritable)) {
     body[s.field] = s.value
   }
   return body
@@ -518,11 +522,11 @@ export async function repairOrgDefaults(
 // makes GitHub recompute that legacy field from the partial input and silently
 // reset the omitted ones. They must always be PATCHed together.
 // (https://github.com/integrations/terraform-provider-github/issues/3429)
-const REPO_CREATION_FIELDS = new Set([
-  "members_can_create_repositories",
-  "members_can_create_private_repositories",
-  "members_can_create_public_repositories",
-  "members_can_create_internal_repositories",
+const REPO_CREATION_FIELDS = new Set<string>([
+  MEMBERS_CAN_CREATE_REPOSITORIES,
+  MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES,
+  MEMBERS_CAN_CREATE_PUBLIC_REPOSITORIES,
+  MEMBERS_CAN_CREATE_INTERNAL_REPOSITORIES,
 ])
 
 // Per-field fallback for when the combined PATCH is rejected. Sends each field
@@ -566,20 +570,14 @@ async function repairOrgDefaultsPerField(
       const body = orgDefaultsBody(repoCreation)
       // On Team/Free only the master switch is writable, so the group can reduce
       // to one field; if every member is verify-only there is nothing to send.
-      if (Object.keys(body).length > 0) {
-        const accepted = await patchBody(body)
+      if (Object.keys(body).length > 0 && !(await patchBody(body))) {
         // Only writable fields can be "rejected" — a verify-only field was never
         // attempted, so marking it rejected would suppress the enterprise-pinned
         // signal that the read-back is supposed to produce.
-        if (!accepted) {
-          for (const s of repoCreation) {
-            if (s.writable !== false) rejected.add(s.field)
-          }
-        }
+        for (const s of repoCreation.filter(isWritable)) rejected.add(s.field)
       }
     }
-    for (const s of rest) {
-      if (s.writable === false) continue
+    for (const s of rest.filter(isWritable)) {
       const accepted = await patchBody({ [s.field]: s.value })
       if (!accepted) rejected.add(s.field)
     }

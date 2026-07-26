@@ -97,8 +97,9 @@ const NOTICE = "components.notices.orgRepoCreation.master"
 
 // This page has no RequireRole wrapper and renders a student form on the student
 // branch, so the notice's placement inside the isStaff branch is the only thing
-// keeping a student from seeing a warning about org member privileges — and from
-// firing an org read they could never act on.
+// keeping a student from seeing a warning about org member privileges they can't
+// act on. (It does not save a request: every org-scoped page's sidebar already
+// issues the same shared org read, for students too.)
 describe("EditAssignmentPage org repo-creation warning", () => {
   it("renders the notice for a staff role", () => {
     orgRepoCreationWarning.mockReturnValue({ show: true, field: "master" })
@@ -112,7 +113,7 @@ describe("EditAssignmentPage org repo-creation warning", () => {
     render(<EditAssignmentPage />)
 
     expect(screen.queryByText(NOTICE)).toBeNull()
-    // Not merely hidden: the org read never runs for a student.
+    // Not merely hidden by CSS: the notice never mounts on the student branch.
     expect(orgRepoCreationWarning).not.toHaveBeenCalled()
   })
 

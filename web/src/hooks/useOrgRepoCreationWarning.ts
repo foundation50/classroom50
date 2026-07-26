@@ -1,13 +1,9 @@
 import useGetOrgPlanDetails from "@/hooks/useGetOrgPlanDetails"
-import { classifyDefaults } from "@/orgPolicy/desiredState"
-
-// The two member-privilege fields that decide whether a student can create their
-// assignment repository. The master switch gates repo creation at all; the
-// private switch decides whether the private repo accept asks for is allowed. On
-// Team/Free the granular booleans are slaved to the master switch, which is why
-// the verdicts come from classifyDefaults rather than a hand-rolled read.
-const MASTER_SWITCH = "members_can_create_repositories"
-const PRIVATE_SWITCH = "members_can_create_private_repositories"
+import {
+  classifyDefaults,
+  MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES,
+  MEMBERS_CAN_CREATE_REPOSITORIES,
+} from "@/orgPolicy/desiredState"
 
 export type OrgRepoCreationWarning =
   | { show: false }
@@ -19,11 +15,18 @@ export type OrgRepoCreationWarning =
 // Whether to warn a teacher that the org will refuse student repo creation,
 // before a student hits the accept-time 403 (issue #413).
 //
-// Reuses the org-policy seam: `classifyDefaults` is the single source of truth
-// for interpreting a GET /orgs/{org} response, already marks the master switch
-// `critical`, and already encodes the Team/Free master-switch slaving. This is the
-// assignment-scoped view of the same signal OrgPreflightNotice shows owners on
-// ClassesPage — keep the two copies in step.
+// Scope comes from `classifyDefaults`, the single source of truth for which
+// settings apply to a plan, so a field the plan filters out can never warn.
+//
+// Fails open on the value: warn only when GitHub reports the field as explicitly
+// `false`. This deliberately inverts `classifyDefaults`' fail-closed reading,
+// where an absent field counts as unenforced — right for an audit, wrong here,
+// because GitHub omits the member-privilege fields for non-admins and a teacher
+// who cannot read the setting cannot be told anything useful about it.
+//
+// The read is shared: `useGetOrgPlanDetails` keys on githubKeys.orgDetails with a
+// 10-minute staleTime, and every org-scoped page already issues it, so mounting
+// the notice on several surfaces costs no extra request.
 const useOrgRepoCreationWarning = (
   org: string | undefined,
 ): OrgRepoCreationWarning => {
@@ -31,23 +34,23 @@ const useOrgRepoCreationWarning = (
 
   if (!org || isPending || isError || !data) return { show: false }
 
-  // Deliberately inverts classifyDefaults' fail-closed reading for this one
-  // consumer: there, an absent field reads as unenforced (`live[field] === value`
-  // is false), which is right for an audit. Here it would fire on every
-  // non-admin, since GitHub omits the member-privilege fields for them — and a
-  // teacher who can't read the setting can't be told anything useful about it.
-  // So warn only when the field is explicitly false.
-  const live = data as unknown as Record<string, unknown>
-  const explicitlyOff = (field: string) => live[field] === false
+  const inScope = new Set(
+    classifyDefaults(
+      data as unknown as Record<string, unknown>,
+      data.plan?.name,
+    ).verdicts.map((v) => v.setting.field),
+  )
 
-  const { verdicts } = classifyDefaults(live, data.plan?.name)
-  const unenforced = (field: string) =>
-    verdicts.some((v) => v.setting.field === field && !v.enforced)
-
-  if (unenforced(MASTER_SWITCH) && explicitlyOff(MASTER_SWITCH)) {
+  if (
+    inScope.has(MEMBERS_CAN_CREATE_REPOSITORIES) &&
+    data.members_can_create_repositories === false
+  ) {
     return { show: true, field: "master" }
   }
-  if (unenforced(PRIVATE_SWITCH) && explicitlyOff(PRIVATE_SWITCH)) {
+  if (
+    inScope.has(MEMBERS_CAN_CREATE_PRIVATE_REPOSITORIES) &&
+    data.members_can_create_private_repositories === false
+  ) {
     return { show: true, field: "private" }
   }
   return { show: false }

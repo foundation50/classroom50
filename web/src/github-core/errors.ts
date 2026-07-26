@@ -205,16 +205,17 @@ export function githubValidationReasons(body: unknown): string | undefined {
   if (typeof errors === "string") return errors || undefined
   if (!Array.isArray(errors)) return undefined
 
+  const str = (value: unknown) => (typeof value === "string" ? value : "")
   const reasons = errors
     .map((item) => {
       if (typeof item === "string") return item
       if (typeof item !== "object" || item === null) return ""
       const { field, code, message } = item as Record<string, unknown>
-      const text = typeof message === "string" && message ? message : ""
-      const codeText = typeof code === "string" && code ? code : ""
-      const fieldText = typeof field === "string" && field ? field : ""
-      const detail = text || codeText
+      // `code` is GitHub's machine reason (e.g. "already_exists"), used when the
+      // item carries no prose.
+      const detail = str(message) || str(code)
       if (!detail) return ""
+      const fieldText = str(field)
       return fieldText ? `${fieldText}: ${detail}` : detail
     })
     .filter(Boolean)

@@ -668,54 +668,52 @@ func classroomFromRepo(repoName string) string {
 	return repoName
 }
 
-// is422AlreadyExists matches "already exists" (case-insensitive) in
-// the 422 message or any Errors[] item.
-func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
-	if strings.Contains(strings.ToLower(httpErr.Message), "already exists") {
+// httpErrorMentions reports whether needle (lower-case) appears in the error's
+// top-level message or in any Errors[] item. GitHub puts the reason in either
+// slot depending on the endpoint.
+func httpErrorMentions(httpErr *githubapi.HTTPError, needle string) bool {
+	if strings.Contains(strings.ToLower(httpErr.Message), needle) {
 		return true
 	}
 	for _, item := range httpErr.Errors {
-		if strings.Contains(strings.ToLower(item.Message), "already exists") {
+		if strings.Contains(strings.ToLower(item.Message), needle) {
 			return true
 		}
 	}
 	return false
+}
+
+func is422AlreadyExists(httpErr *githubapi.HTTPError) bool {
+	return httpErrorMentions(httpErr, "already exists")
 }
 
 // The one 403 message GitHub was observed to return when the destination org
-// refuses the create (issue #413). Mirrors the web app's
-// isOrgRepoCreationDenied; add a variant only alongside a cited GitHub response
-// showing the same cause, since the plausible alternatives (enterprise or
-// ruleset blocks) are ones this remedy cannot fix.
+// refuses the create (issue #413). Add a variant only alongside a cited GitHub
+// response showing the same cause, since the plausible alternatives (enterprise
+// or ruleset blocks) are ones this remedy cannot fix.
 const orgRepoCreationDeniedSignature = "admin access to the organization"
 
-// is403OrgRepoCreationDenied matches the destination-org repo-creation refusal
-// in the message or any Errors[] item. Message matching only: every caller must
-// exclude a throttle with ghutil.IsRateLimited first, since a rate limit also
-// surfaces as 403.
-func is403OrgRepoCreationDenied(httpErr *githubapi.HTTPError) bool {
-	if strings.Contains(strings.ToLower(httpErr.Message), orgRepoCreationDeniedSignature) {
-		return true
+// is403OrgRepoCreationDenied reports whether err is the destination org refusing
+// to let a member create the repo. Owns its own exclusions (mirroring the web's
+// isOrgRepoCreationDenied) so no call site can forget one: a rate limit also
+// surfaces as 403, and rendering a throttle as "your org blocks repo creation" is
+// the mislabeling #413 exists to remove.
+func is403OrgRepoCreationDenied(err error) bool {
+	httpErr, ok := errors.AsType[*githubapi.HTTPError](err)
+	if !ok || httpErr.StatusCode != http.StatusForbidden {
+		return false
 	}
-	for _, item := range httpErr.Errors {
-		if strings.Contains(strings.ToLower(item.Message), orgRepoCreationDeniedSignature) {
-			return true
-		}
+	if ghutil.IsRateLimited(err) {
+		return false
 	}
-	return false
+	return httpErrorMentions(httpErr, orgRepoCreationDeniedSignature)
 }
 
-// orgRepoCreationDeniedError is the shared remedy for that refusal, kept in one
-// place so both creation paths word it identically. Hedged ("may not allow")
-// because the cause is inferred from GitHub's message text alone: a pending
-// invitation or an enterprise policy produce the same string. Deliberately a
-// diagnosis rather than a how-to, since the student running accept can't change
-// an org setting; the full remedy lives in the wiki's Troubleshooting page and
-// the teacher-facing web notice. Kept in step with the web copy at
-// accept.templateErrors.orgRepoCreationDenied, except that the wrapped cause
-// still trails GitHub's raw text: that is the Go convention here (and keeps the
-// error chain), and a terminal reader expects the API detail after the colon,
-// whereas the web alert suppresses it to avoid contradicting the diagnosis.
+// orgRepoCreationDeniedError is the shared remedy, kept in step with the web copy
+// at accept.templateErrors.orgRepoCreationDenied (see that key's factory for why
+// it hedges and stays a diagnosis rather than a how-to). Unlike the web alert this
+// lets the wrapped cause trail GitHub's raw text: a terminal reader expects the
+// API detail after the colon, and it keeps the error chain intact.
 func orgRepoCreationDeniedError(org string, cause error) error {
 	return fmt.Errorf("`%s` may not allow members to create private repositories, so your "+
 		"assignment repository couldn't be created. Ask your teacher to enable it, "+
@@ -831,10 +829,8 @@ func createTemplatedPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI
 					tmpl.Owner, tmpl.Repo)
 			case http.StatusForbidden:
 				// The refusal is about the destination org, not the template, so
-				// it is classified here rather than blamed on `tmpl`. A throttle
-				// also surfaces as 403, and rendering that as "your org blocks
-				// repo creation" is the mislabeling #413 reports.
-				if !ghutil.IsRateLimited(err) && is403OrgRepoCreationDenied(httpErr) {
+				// it is classified here rather than blamed on `tmpl`.
+				if is403OrgRepoCreationDenied(err) {
 					return "", "", "", false, orgRepoCreationDeniedError(org, err)
 				}
 			}
@@ -919,9 +915,8 @@ func createEmptyPrivateAssignmentRepoInOrg(client githubapi.Client, u *ui.UI, ve
 				}
 			case http.StatusForbidden:
 				// Serves both the template-less shim path and empty_repo, which
-				// previously wrapped this 403 raw. Guarded against a throttle for
-				// the same reason as the templated path.
-				if !ghutil.IsRateLimited(err) && is403OrgRepoCreationDenied(httpErr) {
+				// previously wrapped this 403 raw.
+				if is403OrgRepoCreationDenied(err) {
 					return "", "", "", false, orgRepoCreationDeniedError(org, err)
 				}
 			}
