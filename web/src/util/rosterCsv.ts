@@ -1,6 +1,7 @@
 import Papa from "papaparse"
 
 import { escapeCsvFormulaInjection } from "@/util/csv"
+import { parseGitHubId } from "@/util/identity"
 
 // The pure roster.csv parse/serialize layer, lifted out of the mutation module
 // so problem detection lives next to the other pure roster helpers (teamRoster)
@@ -156,15 +157,17 @@ function tooFewFieldsAreTrailingOnly(
 // Which student fields to defang. Applied to name/section free text AND email —
 // email is a member-controlled GitHub profile field written verbatim by
 // syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
-// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open. NOT
-// applied to github_id/tokens/hashes/timestamps, which must round-trip
-// byte-exact.
+// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open.
 //
 // NOTE: this writes the leading quote into the STORED value, so any consumer of
 // roster.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
-// these fields. The Go writer defangs the same set; keep them in lockstep.
-// Email matching keys on the normalized (trim+lowercase) email, so guarding the
-// cell doesn't affect match-by-email.
+// these fields. Email matching keys on the normalized (trim+lowercase) email, so
+// guarding the cell doesn't affect match-by-email.
+//
+// github_id is deliberately absent and must stay absent: the Go reader parses
+// that column with a bare `strconv.ParseInt`, so a defang quote there would fail
+// the WHOLE roster rather than one cell. It needs no guard because a non-numeric
+// value never reaches the column — sanitizeGitHubId drops it on write.
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
   "last_name",
@@ -172,12 +175,20 @@ const FORMULA_GUARDED_FIELDS = [
   "email",
 ] as const
 
+// Only a parseable id is worth storing, so anything else is written blank. That
+// keeps a formula-leading cell (from an uploaded CSV) out of roster.csv without a
+// defang quote the Go reader would choke on, and leaves the row to the blank-id
+// backfill. A valid id round-trips byte-exact, which the identity join needs.
+function sanitizeGitHubId(githubId: string): string {
+  return parseGitHubId(githubId) === null ? "" : githubId
+}
+
 export function stringifyStudentsCsv(rows: StudentCsvRow[]) {
   const normalizedRows = rows
     .map((row) => normalizeStudentRow(row))
     .filter((row) => row.username || row.github_id || row.email)
     .map((row) => {
-      const guarded = { ...row }
+      const guarded = { ...row, github_id: sanitizeGitHubId(row.github_id) }
       for (const field of FORMULA_GUARDED_FIELDS) {
         guarded[field] = escapeCsvFormulaInjection(guarded[field])
       }

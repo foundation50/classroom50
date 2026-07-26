@@ -304,11 +304,29 @@ describe("stringifyStudentsCsv", () => {
     expect(data).toContain("'=a@evil.com")
   })
 
-  it("leaves github_id byte-exact so identity joins keep matching", () => {
-    const csv = stringifyStudentsCsv([
+  // A valid id must survive verbatim (the identity join compares the raw string),
+  // but an unparseable one is dropped rather than defanged: a leading quote in
+  // this column would fail the Go reader's bare ParseInt for the whole file.
+  it("keeps a valid github_id byte-exact and blanks an unusable one", () => {
+    const valid = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "user", github_id: "583231" }),
+    ])
+    expect(valid.split("\n")[1]).toContain(",583231,")
+
+    const injected = stringifyStudentsCsv([
       normalizeStudentRow({ username: "user", github_id: "=99" }),
     ])
-    expect(csv.split("\n")[1]).toContain(",=99,")
+    const data = injected.split("\n")[1]
+    expect(data).not.toContain("=99")
+    expect(data).not.toContain("'")
+    expect(parseStudentsCsv(injected)[0].github_id).toBe("")
+  })
+
+  it("blanks a github_id that would coerce to a wrong id", () => {
+    const csv = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "user", github_id: "1e3" }),
+    ])
+    expect(parseStudentsCsv(csv)[0].github_id).toBe("")
   })
 
   it("is idempotent for an already-guarded value", () => {
