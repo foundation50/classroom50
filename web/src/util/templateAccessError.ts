@@ -1,13 +1,34 @@
-import i18n from "@/i18n"
+import {
+  describeLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 
-// A template-generate failure at accept time, with a plain-text message the
-// accept page renders as-is. Messages point students at their teacher (they
-// can't approve an OAuth app or grant team read themselves).
+// An accept-time failure that needs teacher action (not a retry the student can
+// do). `localized` names the full remedy the accept page renders; `localizedStep`
+// is a one-sentence form for the progress checklist row, which sits beside six
+// other rows and can't absorb a paragraph. `Error.message` stays populated with a
+// diagnostic (never-rendered) form so logs and githubHealthStore keep working.
 export class TemplateAccessError extends Error {
-  constructor(message: string) {
-    super(message)
+  localized: LocalizedMessage
+  localizedStep: LocalizedMessage
+
+  constructor(localized: LocalizedMessage, localizedStep?: LocalizedMessage) {
+    super(describeLocalizedMessage(localized))
     this.name = "TemplateAccessError"
+    this.localized = localized
+    this.localizedStep = localizedStep ?? localized
   }
+}
+
+// GitHub's own words, quoted into a remedy. Not translatable (it's GitHub's
+// English), so it nests as a param rather than being assembled here.
+function githubSaid(githubMessage?: string): LocalizedMessage | string {
+  return githubMessage
+    ? {
+        key: "accept.templateErrors.githubSaid",
+        params: { message: githubMessage },
+      }
+    : ""
 }
 
 // Out-of-org template: the owning org likely restricts third-party apps, but a
@@ -19,17 +40,15 @@ export function outOfOrgTemplateError(
   status: number,
   githubMessage?: string,
 ): TemplateAccessError {
-  const detail = githubMessage
-    ? i18n.t("accept.templateErrors.githubSaid", { message: githubMessage })
-    : ""
-  return new TemplateAccessError(
-    i18n.t("accept.templateErrors.outOfOrg", {
+  return new TemplateAccessError({
+    key: "accept.templateErrors.outOfOrg",
+    params: {
       owner: templateOwner,
       repo: templateRepo,
       status,
-      detail,
-    }),
-  )
+      detail: githubSaid(githubMessage),
+    },
+  })
 }
 
 // In-org template: the classroom team likely lacks read on a private template.
@@ -39,15 +58,13 @@ export function inOrgTemplateError(
   status: number,
   githubMessage?: string,
 ): TemplateAccessError {
-  const detail = githubMessage
-    ? i18n.t("accept.templateErrors.githubSaid", { message: githubMessage })
-    : ""
-  return new TemplateAccessError(
-    i18n.t("accept.templateErrors.inOrg", {
+  return new TemplateAccessError({
+    key: "accept.templateErrors.inOrg",
+    params: {
       owner: templateOwner,
       repo: templateRepo,
       status,
-      detail,
-    }),
-  )
+      detail: githubSaid(githubMessage),
+    },
+  })
 }

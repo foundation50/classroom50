@@ -99,7 +99,16 @@ vi.mock("react-i18next", async (importOriginal) => {
   const actual = await importOriginal<typeof import("react-i18next")>()
   return {
     ...actual,
-    useTranslation: () => ({ t: (key: string) => key }),
+    // Renders the key plus its resolved params, so a test can tell a resolved
+    // descriptor (params already substituted) from a leaked raw key.
+    useTranslation: () => ({
+      t: (key: string, params?: Record<string, string | number>) =>
+        params
+          ? `${key}:${Object.entries(params)
+              .map(([name, value]) => `${name}=${String(value)}`)
+              .join(",")}`
+          : key,
+    }),
   }
 })
 
@@ -270,6 +279,121 @@ describe("AcceptAssignmentPage secret selection", () => {
       "cs101",
       undefined,
     )
+  })
+})
+
+describe("AcceptAssignmentPage step messages", () => {
+  // Every step label, done-message, and remedy is a { key, params } descriptor
+  // resolved here — the domain never assembles English, so a non-English student
+  // no longer watches translated placeholders flip to English mid-run.
+  const STEP_IDS = [
+    "account",
+    "membership",
+    "assignment",
+    "autograder",
+    "repo",
+    "access",
+    "setup",
+  ] as const
+
+  const renderWithStepFailure = async (
+    id: (typeof STEP_IDS)[number],
+    error: { key: string; params?: Record<string, string | number> },
+  ) => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    acceptAssignment.mockImplementation(
+      (params: { onStepUpdate?: (u: unknown) => void }) => {
+        params.onStepUpdate?.({ id, status: "error", error })
+        return Promise.reject(
+          Object.assign(new Error("diagnostic"), {
+            localized: error,
+          }),
+        )
+      },
+    )
+    renderPage(client)
+    fireEvent.click(screen.getByRole("button", { name: "accept.acceptButton" }))
+    await waitFor(() =>
+      expect(screen.queryByText("accept.errorTitle")).not.toBeNull(),
+    )
+  }
+
+  it.each(STEP_IDS)(
+    "renders the resolved remedy, not a raw key, for the %s step",
+    async (id) => {
+      await renderWithStepFailure(id, {
+        key: "accept.stepErrors.generic",
+        params: { label: `accept.steps.${id}`, status: 403 },
+      })
+
+      // Present once in the checklist row and once in the error alert.
+      expect(
+        screen.queryAllByText(
+          `accept.stepErrors.generic:label=accept.steps.${id},status=403`,
+        ).length,
+      ).toBeGreaterThan(0)
+      // The pending placeholder for the failed step is replaced, not appended.
+      expect(screen.queryByText(`accept.steps.${id}`)).toBeNull()
+    },
+  )
+
+  it("renders a nested descriptor param (GitHub's own words) in the alert", async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    acceptAssignment.mockRejectedValue(
+      Object.assign(new Error("diagnostic"), {
+        localized: {
+          key: "accept.templateErrors.orgRepoCreationDenied",
+          params: {
+            org: "acme",
+            status: 403,
+            detail: {
+              key: "accept.templateErrors.githubSaid",
+              params: { message: "You need admin access" },
+            },
+          },
+        },
+      }),
+    )
+    renderPage(client)
+    fireEvent.click(screen.getByRole("button", { name: "accept.acceptButton" }))
+    await waitFor(() =>
+      expect(screen.queryByText("accept.errorTitle")).not.toBeNull(),
+    )
+
+    expect(
+      screen.queryByText(
+        "accept.templateErrors.orgRepoCreationDenied:org=acme,status=403,detail=accept.templateErrors.githubSaid:message=You need admin access",
+      ),
+    ).not.toBeNull()
+  })
+
+  it("falls back to the generic copy for an error carrying no descriptor", async () => {
+    const client = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+        mutations: { retry: false },
+      },
+    })
+    acceptAssignment.mockRejectedValue(new TypeError("Failed to fetch"))
+    renderPage(client)
+    fireEvent.click(screen.getByRole("button", { name: "accept.acceptButton" }))
+    await waitFor(() =>
+      expect(screen.queryByText("accept.errorTitle")).not.toBeNull(),
+    )
+
+    expect(screen.queryByText("accept.errorGeneric")).not.toBeNull()
+    // The browser's own English never reaches the student.
+    expect(screen.queryByText("Failed to fetch")).toBeNull()
   })
 })
 

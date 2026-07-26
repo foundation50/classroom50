@@ -1660,6 +1660,37 @@
       "access": "Granting you access",
       "setup": "Setting up autograding"
     },
+    "stepDone": {
+      "account": "Checked your GitHub account",
+      "membership": "Confirmed your classroom membership",
+      "assignment": "Found assignment {{assignmentSlug}}",
+      "autograder": "Resolved the autograder",
+      "autograderDisabled": "Autograding is disabled for this assignment",
+      "repo": "Created {{org}}/{{repo}}",
+      "repoExists": "Repository already exists: {{org}}/{{repo}}",
+      "repoIncomplete": "Found incomplete setup: {{org}}/{{repo}}",
+      "access": "Granted you access to your repository",
+      "setup": "Autograding configured",
+      "setupSkippedEmptyRepo": "No setup needed — this assignment uses an empty repository"
+    },
+    "stepActions": {
+      "account": "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
+      "membership": "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your teacher to confirm your invitation.",
+      "assignment": "Couldn't load assignment \"{{assignmentSlug}}\" for {{org}}/{{classroom}}. Check the link, or ask your teacher to confirm the assignment is published.",
+      "autograder": "Couldn't resolve the autograder for \"{{assignmentSlug}}\". Ask your teacher to confirm it's published, then accept again.",
+      "repo": "Couldn't create {{org}}/{{repo}}. Confirm you're a member of {{org}} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.",
+      "access": "Your repository {{org}}/{{repo}} was created, but adding you ({{username}}) as a collaborator failed. This usually means your GitHub username changed or you left {{org}}. Confirm you're a member of {{org}}, then use \"Re-run setup\".",
+      "setup": "Your repository {{org}}/{{repo}} exists, but writing the setup files to branch \"{{branch}}\" failed. The repository may still be initializing — wait a minute and use \"Re-run setup\"."
+    },
+    "stepErrors": {
+      "rateLimited": "{{label}} hit GitHub's rate limit. Wait a minute, then try accepting again.",
+      "unauthorized": "{{label}} failed because your GitHub session expired (HTTP 401). Sign out and sign back in, then accept again.",
+      "generic": "{{label}} failed (HTTP {{status}}). {{actions}}",
+      "unexpected": "{{label}} failed unexpectedly. This is safe to retry."
+    },
+    "errors": {
+      "emptyRepoWithTemplate": "Assignment \"{{assignmentSlug}}\" sets both an empty repository and a template — the entry is invalid; ask your teacher to re-run assignment setup."
+    },
     "progress": {
       "error": "Setup failed — review the steps",
       "complete": "Assignment accepted",

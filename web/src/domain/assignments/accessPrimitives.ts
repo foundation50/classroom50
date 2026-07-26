@@ -7,6 +7,10 @@ import { isDefiniteOutageError } from "@/lib/githubHealth/githubHealthStore"
 import type { GitHubRepo } from "@/github-core/types"
 import { githubOrgOAuthPolicyUrl } from "@/auth/constants"
 import { TemplateAccessError } from "@/util/templateAccessError"
+import {
+  describeLocalizedMessage,
+  type LocalizedMessage,
+} from "@/types/localizedMessage"
 import { prefixCommit } from "@/util/commit"
 import { logger } from "@/lib/logger"
 
@@ -20,12 +24,17 @@ export const ACCEPT_COMMIT_SUBJECT = prefixCommit(
   "Initialize .classroom50.yaml and autograde workflow (gh student accept)",
 )
 
-// Student-facing accept failure: the accept page renders `error.message`
-// verbatim, so a raw GitHub "Not Found" never reaches a student.
+// Student-facing accept failure: `localized` names the message the accept page
+// renders, so a raw GitHub "Not Found" never reaches a student. `Error.message`
+// keeps a diagnostic form for logs and outage classification (which unwraps
+// `.cause`), but the view renders `localized`, never this.
 export class AcceptStepError extends Error {
-  constructor(message: string, cause?: unknown) {
-    super(message)
+  localized: LocalizedMessage
+
+  constructor(localized: LocalizedMessage, cause?: unknown) {
+    super(describeLocalizedMessage(localized))
     this.name = "AcceptStepError"
+    this.localized = localized
     if (cause !== undefined) {
       this.cause = cause
     }
@@ -49,8 +58,8 @@ export type AcceptStepUpdate = {
   status: AcceptStepStatus
   // Step label; on resolution can override the default (e.g., "Repository
   // already exists").
-  message?: string
-  error?: string
+  message?: LocalizedMessage
+  error?: LocalizedMessage
 }
 
 export type OnAcceptStepUpdate = (update: AcceptStepUpdate) => void
@@ -58,14 +67,15 @@ export type OnAcceptStepUpdate = (update: AcceptStepUpdate) => void
 // Run one accept step, emitting progress around it. Translates a raw
 // GitHubAPIError into a student-facing, actionable message (`actions`) so a
 // bare "Not Found" never reaches the student; already-friendly errors pass
-// through untouched.
+// through untouched. Every message is a `{ key, params }` descriptor — this
+// layer names messages, the accept page renders them.
 export async function withAcceptStep<T>(
   params: {
     id: AcceptStepId
-    label: string
-    actions: string
+    label: LocalizedMessage
+    actions: LocalizedMessage
     onStepUpdate?: OnAcceptStepUpdate
-    doneMessage?: string
+    doneMessage?: LocalizedMessage
   },
   fn: () => Promise<T>,
 ): Promise<T> {
@@ -80,40 +90,47 @@ export async function withAcceptStep<T>(
     onStepUpdate?.({ id, status: "complete", message: doneMessage ?? label })
     return result
   } catch (err) {
-    const fail = (message: string, cause?: unknown): never => {
+    const fail = (message: LocalizedMessage, cause?: unknown): never => {
       onStepUpdate?.({ id, status: "error", error: message })
       throw new AcceptStepError(message, cause)
     }
 
-    if (err instanceof TemplateAccessError || err instanceof AcceptStepError) {
-      log.warn(`accept step "${label}" failed (typed)`, { step: id })
-      onStepUpdate?.({ id, status: "error", error: err.message })
+    if (err instanceof TemplateAccessError) {
+      log.warn(`accept step "${id}" failed (typed)`, { step: id })
+      onStepUpdate?.({ id, status: "error", error: err.localizedStep })
+      throw err
+    }
+    if (err instanceof AcceptStepError) {
+      log.warn(`accept step "${id}" failed (typed)`, { step: id })
+      onStepUpdate?.({ id, status: "error", error: err.localized })
       throw err
     }
     if (err instanceof GitHubAPIError) {
-      log.error(`Accept step "${label}" failed`, { err })
+      log.error(`Accept step "${id}" failed`, { err })
 
       if (err.isRateLimited) {
-        fail(
-          `${label} hit GitHub's rate limit. Wait a minute, then try accepting again.`,
-          err,
-        )
+        fail({ key: "accept.stepErrors.rateLimited", params: { label } }, err)
       }
       if (err.isUnauthorized) {
-        fail(
-          `${label} failed because your GitHub session expired (HTTP 401). Sign out and sign back in, then accept again.`,
-          err,
-        )
+        fail({ key: "accept.stepErrors.unauthorized", params: { label } }, err)
       }
-      fail(`${label} failed (HTTP ${err.status}). ${actions}`, err)
+      fail(
+        {
+          key: "accept.stepErrors.generic",
+          params: { label, status: err.status, actions },
+        },
+        err,
+      )
     }
     // Unexpected non-GitHub error (network/parse/etc.): surface it so the
-    // checklist row leaves "running" instead of spinning forever.
-    log.error(`accept step "${label}" failed (unexpected)`, { err })
+    // checklist row leaves "running" instead of spinning forever. GitHub never
+    // saw this request, so there is no status or remedy to name — the row shows
+    // the step's own label with an error icon.
+    log.error(`accept step "${id}" failed (unexpected)`, { err })
     onStepUpdate?.({
       id,
       status: "error",
-      error: err instanceof Error ? err.message : "Unexpected error",
+      error: { key: "accept.stepErrors.unexpected", params: { label } },
     })
     throw err
   }

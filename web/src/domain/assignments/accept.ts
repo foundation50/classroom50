@@ -21,6 +21,7 @@ import { isOwnerGitHubOrgRole } from "@/authz"
 import {
   log,
   withAcceptStep,
+  AcceptStepError,
   repoContentsPathExists,
   resolveConfigRepoDefaultBranch,
   freshRepoNotReadyError,
@@ -148,9 +149,12 @@ function grantFounderAccessStep(params: {
   return withAcceptStep(
     {
       id: "access",
-      label: "Granting you access to your repository",
-      actions: `Your repository ${org}/${repo} was created, but adding you (${username}) as a collaborator failed. This usually means your GitHub username changed or you left ${org}. Confirm you're a member of ${org}, then use "Re-run setup".`,
-      doneMessage: "Granted you access to your repository",
+      label: { key: "accept.steps.access" },
+      actions: {
+        key: "accept.stepActions.access",
+        params: { org, repo, username },
+      },
+      doneMessage: { key: "accept.stepDone.access" },
       onStepUpdate,
     },
     async () => {
@@ -211,9 +215,12 @@ async function provisionAcceptedRepo(params: {
   await withAcceptStep(
     {
       id: "setup",
-      label: "Setting up autograding",
-      actions: `Your repository ${org}/${repo.name} exists, but writing the setup files to branch "${branch}" failed. The repository may still be initializing — wait a minute and use "Re-run setup".`,
-      doneMessage: "Autograding configured",
+      label: { key: "accept.steps.setup" },
+      actions: {
+        key: "accept.stepActions.setup",
+        params: { org, repo: repo.name, branch },
+      },
+      doneMessage: { key: "accept.stepDone.setup" },
       onStepUpdate,
     },
     () =>
@@ -250,10 +257,9 @@ export async function acceptAssignment(params: {
   const user = await withAcceptStep(
     {
       id: "account",
-      label: "Checking your GitHub account",
-      actions:
-        "Couldn't read your GitHub account. Sign out and sign back in, then accept again.",
-      doneMessage: "Checked your GitHub account",
+      label: { key: "accept.steps.account" },
+      actions: { key: "accept.stepActions.account" },
+      doneMessage: { key: "accept.stepDone.account" },
       onStepUpdate,
     },
     () => getAuthenticatedUser(client),
@@ -268,10 +274,9 @@ export async function acceptAssignment(params: {
   const membership = await withAcceptStep(
     {
       id: "membership",
-      label: "Confirming your classroom membership",
-      actions:
-        "Couldn't confirm your membership. If your organization uses single sign-on (SSO), authorize it for this org (or open this link from your LMS), then accept again. Otherwise ask your teacher to confirm your invitation.",
-      doneMessage: "Confirmed your classroom membership",
+      label: { key: "accept.steps.membership" },
+      actions: { key: "accept.stepActions.membership" },
+      doneMessage: { key: "accept.stepDone.membership" },
       onStepUpdate,
     },
     () => acceptAndVerifyOrgMembership(client, org),
@@ -285,9 +290,15 @@ export async function acceptAssignment(params: {
   const assignment = await withAcceptStep(
     {
       id: "assignment",
-      label: `Looking up ${assignmentSlug}`,
-      actions: `Couldn't load assignment "${assignmentSlug}" for ${org}/${classroom}. Check the link, or ask your teacher to confirm the assignment is published.`,
-      doneMessage: `Found assignment ${assignmentSlug}`,
+      label: { key: "accept.steps.assignment" },
+      actions: {
+        key: "accept.stepActions.assignment",
+        params: { assignmentSlug, org, classroom },
+      },
+      doneMessage: {
+        key: "accept.stepDone.assignment",
+        params: { assignmentSlug },
+      },
       onStepUpdate,
     },
     () => fetchAssignmentFromPages(org, classroom, assignmentSlug, secret),
@@ -307,9 +318,10 @@ export async function acceptAssignment(params: {
   // both. Fail closed rather than half-apply (template content with no
   // control files). Mirrors the CLI's guard.
   if (isEmptyRepo && assignment.template) {
-    throw new Error(
-      `Assignment "${assignmentSlug}" sets both empty_repo and a template — the entry is invalid; ask your teacher to re-run assignment setup.`,
-    )
+    throw new AcceptStepError({
+      key: "accept.errors.emptyRepoWithTemplate",
+      params: { assignmentSlug },
+    })
   }
 
   // Best-effort: resolve the template owner's immutable id (org or user). Never
@@ -335,9 +347,12 @@ export async function acceptAssignment(params: {
     : await withAcceptStep(
         {
           id: "autograder",
-          label: "Resolving the autograder",
-          actions: `Couldn't resolve the autograder for "${assignmentSlug}". Ask your teacher to confirm it's published, then accept again.`,
-          doneMessage: "Resolved the autograder",
+          label: { key: "accept.steps.autograder" },
+          actions: {
+            key: "accept.stepActions.autograder",
+            params: { assignmentSlug },
+          },
+          doneMessage: { key: "accept.stepDone.autograder" },
           onStepUpdate,
         },
         () =>
@@ -355,7 +370,7 @@ export async function acceptAssignment(params: {
     onStepUpdate?.({
       id: "autograder",
       status: "complete",
-      message: "Autograding is disabled for this assignment",
+      message: { key: "accept.stepDone.autograderDisabled" },
     })
   }
 
@@ -381,9 +396,15 @@ export async function acceptAssignment(params: {
   const created = await withAcceptStep(
     {
       id: "repo",
-      label: "Creating your repository",
-      actions: `Couldn't create ${org}/${studentRepoNameValue}. Confirm you're a member of ${org} and ask your teacher to verify the assignment's template repository is configured correctly, then accept again.`,
-      doneMessage: `Created ${org}/${studentRepoNameValue}`,
+      label: { key: "accept.steps.repo" },
+      actions: {
+        key: "accept.stepActions.repo",
+        params: { org, repo: studentRepoNameValue },
+      },
+      doneMessage: {
+        key: "accept.stepDone.repo",
+        params: { org, repo: studentRepoNameValue },
+      },
       onStepUpdate,
     },
     () =>
@@ -415,7 +436,10 @@ export async function acceptAssignment(params: {
       onStepUpdate?.({
         id: "repo",
         status: "complete",
-        message: `Repository already exists: ${org}/${created.repo.name}`,
+        message: {
+          key: "accept.stepDone.repoExists",
+          params: { org, repo: created.repo.name },
+        },
       })
       try {
         await patchRepoSurface(client, org, created.repo.name)
@@ -452,7 +476,7 @@ export async function acceptAssignment(params: {
     onStepUpdate?.({
       id: "setup",
       status: "complete",
-      message: "No setup needed — this assignment uses an empty repository",
+      message: { key: "accept.stepDone.setupSkippedEmptyRepo" },
     })
 
     return {
@@ -532,7 +556,10 @@ export async function acceptAssignment(params: {
       onStepUpdate?.({
         id: "repo",
         status: "complete",
-        message: `Repository already exists: ${org}/${created.repo.name}`,
+        message: {
+          key: "accept.stepDone.repoExists",
+          params: { org, repo: created.repo.name },
+        },
       })
       onStepUpdate?.({ id: "access", status: "complete" })
       onStepUpdate?.({ id: "setup", status: "complete" })
@@ -554,7 +581,10 @@ export async function acceptAssignment(params: {
     onStepUpdate?.({
       id: "repo",
       status: "complete",
-      message: `Found incomplete setup: ${org}/${created.repo.name}`,
+      message: {
+        key: "accept.stepDone.repoIncomplete",
+        params: { org, repo: created.repo.name },
+      },
     })
 
     await provisionAcceptedRepo({
