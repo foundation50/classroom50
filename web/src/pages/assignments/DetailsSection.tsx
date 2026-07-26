@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { useTranslation } from "react-i18next"
 import { slugify } from "@/util/slug"
 import { Card, FormField, Input, Textarea } from "@/components/ui"
+import { FeedbackPrNotice } from "@/components/FeedbackPrNotice"
 import { TemplateField } from "./TemplateField"
 import { FieldLabel, ToggleRow } from "./AdvancedRuntimeFields"
 import { GROUP_SIZE_MAX, GROUP_SIZE_MIN } from "@/types/classroom"
@@ -314,6 +315,17 @@ export const DetailsSection = ({
                             ? t("assignments.form.feedbackPrEmptyRepoHelp")
                             : t("assignments.form.feedbackPrHelp")
                         }
+                      />
+                      {/* A paused org blocks the PR, but unlike empty_repo the
+                          block is transient — leave the toggle settable so the
+                          flag persists for when autograding resumes. */}
+                      <FeedbackPrNotice
+                        org={org}
+                        assignment={{
+                          feedback_pr: field.state.value,
+                          empty_repo: emptyRepo,
+                        }}
+                        variant="inline"
                       />
                     </div>
                   )}

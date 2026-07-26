@@ -22,6 +22,12 @@ vi.mock("@/hooks/useGetRepoCollaborators", () => ({
 vi.mock("@/hooks/useGetFeedbackPr", () => ({
   default: () => ({ refetch: vi.fn() }),
 }))
+// The Review modal explains an org Actions block as the reason no PR exists;
+// irrelevant to row rendering, and it owns a useQuery this provider-free test
+// doesn't mount.
+vi.mock("@/hooks/useFeedbackPrWarning", () => ({
+  default: () => ({ show: false }),
+}))
 vi.mock("@/hooks/useTriggerRegrade", () => ({
   default: () => ({ regrade: vi.fn(), phase: "idle", anyRegrading: false }),
 }))

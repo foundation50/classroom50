@@ -2163,6 +2163,11 @@
         "master": "<org>{{org}}</org> doesn't allow members to create repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
         "private": "<org>{{org}}</org> doesn't allow members to create private repositories, so no student can accept an assignment. Re-run organization setup, or allow private (not public) repository creation under <memberPrivileges>Member privileges</memberPrivileges>. An enterprise policy can override this setting.",
         "action": "Organization settings"
+      },
+      "feedbackPr": {
+        "paused": "Autograding is paused for <org>{{org}}</org>, so feedback pull requests won't open. The pull request is created by the autograder inside each student repository, which is blocked while paused. Existing feedback pull requests stay open and reviewable.",
+        "disabled": "GitHub Actions is off for <org>{{org}}</org>, so feedback pull requests won't open. The pull request is created by the autograder inside each student repository, which can't run while Actions is off. Existing feedback pull requests stay open and reviewable.",
+        "action": "Organization settings"
       }
     },
     "confirmModal": {

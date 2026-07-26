@@ -56,6 +56,7 @@ import { GroupCollaboratorsModal } from "@/components/modals/GroupCollaboratorsM
 import { StudentProfileModal } from "@/components/modals/StudentProfileModal"
 import type { SubmissionAttempt, SubmissionRow } from "@/hooks/useGetScores"
 import useGetFeedbackPr from "@/hooks/useGetFeedbackPr"
+import useFeedbackPrWarning from "@/hooks/useFeedbackPrWarning"
 import useTriggerRegrade from "@/hooks/useTriggerRegrade"
 import type { Student } from "@/types/classroom"
 import { EnterDiv } from "@/lib/motionComponents"
@@ -126,7 +127,17 @@ const HistoryLink = ({
 // workflow) when one exists, else opens an info modal. The PR is the source of
 // truth. The /pulls lookup is deferred until Review is clicked (an eager per-row
 // query would fan out to one request per repo on mount); on click we refetch.
-const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
+const ReviewButton = ({
+  org,
+  repo,
+  feedbackPr,
+}: {
+  org: string
+  repo: string
+  // The assignment's feedback_pr opt-in, so a blocked org can explain why no PR
+  // exists instead of the generic "not opened yet" message.
+  feedbackPr?: boolean
+}) => {
   const { t } = useTranslation()
   const dialogRef = useRef<HTMLDialogElement | null>(null)
   const titleId = useId()
@@ -134,6 +145,13 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
   // enabled: false — driven by refetch() on click, never on mount.
   const { refetch } = useGetFeedbackPr(org, repo, false)
+  // Why the PR is missing, when the org's Actions policy is the cause. The
+  // button stays enabled either way: a PR opened before the pause is still
+  // reachable and reviewable.
+  const blocked = useFeedbackPrWarning(org, {
+    feedback_pr: feedbackPr,
+    empty_repo: false,
+  })
 
   const handleReview = async () => {
     setResolving(true)
@@ -198,6 +216,19 @@ const ReviewButton = ({ org, repo }: { org: string; repo: string }) => {
                 components={{ repo: <MonoLtr /> }}
               />
             </p>
+            {blocked.show && (
+              <p className="mt-2 text-sm leading-6 text-base-content/70">
+                <Trans
+                  i18nKey={
+                    blocked.reason === "paused"
+                      ? "components.notices.feedbackPr.paused"
+                      : "components.notices.feedbackPr.disabled"
+                  }
+                  values={{ org }}
+                  components={{ org: <EmphasisLtr /> }}
+                />
+              </p>
+            )}
           </>
         )}
         <div className="modal-action">
@@ -424,6 +455,7 @@ const SubmissionsTable = ({
   filtered = false,
   onClearFilters,
   emptyRepo = false,
+  feedbackPr = false,
   initialLoading = false,
   nonSubmittersLoading = false,
   page = 0,
@@ -461,6 +493,9 @@ const SubmissionsTable = ({
   // empty_repo assignment: never autogrades, so score badges and the
   // Feedback-PR/regrade actions are hidden (repos + accept state stay useful).
   emptyRepo?: boolean
+  // The assignment's feedback_pr opt-in, so the Review modal can name an org
+  // Actions block as the reason no PR exists.
+  feedbackPr?: boolean
   // Core data (snapshot + roster) is still loading on first paint; render a
   // loading state rather than the "no submissions" empty state, which would
   // otherwise flash before data arrives.
@@ -710,7 +745,7 @@ const SubmissionsTable = ({
               />
               {!emptyRepo && (
                 <>
-                  <ReviewButton org={org} repo={repo} />
+                  <ReviewButton org={org} repo={repo} feedbackPr={feedbackPr} />
                   <ActionIconLink
                     href={safeHttpUrl(rest.release)}
                     icon={ScrollText}

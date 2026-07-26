@@ -971,6 +971,7 @@ const SubmissionsPageContent = () => {
         filtered={hasActiveFilter}
         onClearFilters={clearFilters}
         emptyRepo={isEmptyRepoAssignment}
+        feedbackPr={assignmentInfo?.feedback_pr ?? false}
         initialLoading={initialLoading}
         nonSubmittersLoading={
           !nonSubmittersReady &&
