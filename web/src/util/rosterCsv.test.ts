@@ -304,29 +304,33 @@ describe("stringifyStudentsCsv", () => {
     expect(data).toContain("'=a@evil.com")
   })
 
-  // A valid id must survive verbatim (the identity join compares the raw string),
-  // but an unparseable one is dropped rather than defanged: a leading quote in
-  // this column would fail the Go reader's bare ParseInt for the whole file.
-  it("keeps a valid github_id byte-exact and blanks an unusable one", () => {
-    const valid = stringifyStudentsCsv([
-      normalizeStudentRow({ username: "user", github_id: "583231" }),
+  // github_id round-trips byte-exact, valid or not: the identity join compares the
+  // raw string, and the serializer must not rewrite a cell the teacher owns (a
+  // roster write touches EVERY row, so silently "fixing" one would corrupt the
+  // rest). A malformed value is refused at the point of use instead.
+  it("round-trips github_id byte-exact, including an unusable value", () => {
+    const csv = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "valid", github_id: "583231" }),
+      normalizeStudentRow({ username: "bad", github_id: "1e3" }),
+      normalizeStudentRow({ username: "injected", github_id: "=99" }),
     ])
-    expect(valid.split("\n")[1]).toContain(",583231,")
-
-    const injected = stringifyStudentsCsv([
-      normalizeStudentRow({ username: "user", github_id: "=99" }),
+    expect(parseStudentsCsv(csv).map((r) => r.github_id)).toEqual([
+      "583231",
+      "1e3",
+      "=99",
     ])
-    const data = injected.split("\n")[1]
-    expect(data).not.toContain("=99")
-    expect(data).not.toContain("'")
-    expect(parseStudentsCsv(injected)[0].github_id).toBe("")
   })
 
-  it("blanks a github_id that would coerce to a wrong id", () => {
+  // Regression: blanking an unusable id inside the serializer emitted `,,,,,,`
+  // for a row whose ONLY identity was that id, deleting the student on re-read
+  // (and the blank-username line fails the Go reader outright).
+  it("keeps a row whose only identity is an unusable github_id", () => {
     const csv = stringifyStudentsCsv([
-      normalizeStudentRow({ username: "user", github_id: "1e3" }),
+      normalizeStudentRow({ username: "keep", github_id: "583231" }),
+      normalizeStudentRow({ github_id: "1e3" }),
     ])
-    expect(parseStudentsCsv(csv)[0].github_id).toBe("")
+    expect(csv).not.toContain("\n,,,,,,")
+    expect(parseStudentsCsv(csv)).toHaveLength(2)
   })
 
   it("is idempotent for an already-guarded value", () => {

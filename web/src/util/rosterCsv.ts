@@ -1,7 +1,6 @@
 import Papa from "papaparse"
 
 import { escapeCsvFormulaInjection } from "@/util/csv"
-import { parseGitHubId } from "@/util/identity"
 
 // The pure roster.csv parse/serialize layer, lifted out of the mutation module
 // so problem detection lives next to the other pure roster helpers (teamRoster)
@@ -164,10 +163,11 @@ function tooFewFieldsAreTrailingOnly(
 // these fields. Email matching keys on the normalized (trim+lowercase) email, so
 // guarding the cell doesn't affect match-by-email.
 //
-// github_id is deliberately absent and must stay absent: the Go reader parses
-// that column with a bare `strconv.ParseInt`, so a defang quote there would fail
-// the WHOLE roster rather than one cell. It needs no guard because a non-numeric
-// value never reaches the column — sanitizeGitHubId drops it on write.
+// github_id must stay out: it has to round-trip byte-exact for the identity join,
+// and the Go reader parses that column as a number, so a defang quote there would
+// fail the whole roster rather than one cell. Nothing writes an attacker-chosen
+// value into it — every writer uses String(<GitHub id>), and an uploaded roster's
+// github_id is ignored on import (parseRosterImportFile).
 const FORMULA_GUARDED_FIELDS = [
   "first_name",
   "last_name",
@@ -175,20 +175,12 @@ const FORMULA_GUARDED_FIELDS = [
   "email",
 ] as const
 
-// Only a parseable id is worth storing, so anything else is written blank. That
-// keeps a formula-leading cell (from an uploaded CSV) out of roster.csv without a
-// defang quote the Go reader would choke on, and leaves the row to the blank-id
-// backfill. A valid id round-trips byte-exact, which the identity join needs.
-function sanitizeGitHubId(githubId: string): string {
-  return parseGitHubId(githubId) === null ? "" : githubId
-}
-
 export function stringifyStudentsCsv(rows: StudentCsvRow[]) {
   const normalizedRows = rows
     .map((row) => normalizeStudentRow(row))
     .filter((row) => row.username || row.github_id || row.email)
     .map((row) => {
-      const guarded = { ...row, github_id: sanitizeGitHubId(row.github_id) }
+      const guarded = { ...row }
       for (const field of FORMULA_GUARDED_FIELDS) {
         guarded[field] = escapeCsvFormulaInjection(guarded[field])
       }
