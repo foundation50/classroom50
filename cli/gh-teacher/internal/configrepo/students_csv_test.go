@@ -56,8 +56,9 @@ func TestParseRoster_HeaderOnly(t *testing.T) {
 }
 
 func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
-	// Both readers trim, then require digits only, so a whitespace-padded cell is
-	// valid on both sides. Pinned because ParseInt alone would reject it.
+	// Both readers trim, so a WHITESPACE-padded cell is valid on both sides.
+	// Pinned because ParseInt alone would reject it. Zero padding is the one
+	// deliberate divergence (see parseGitHubID).
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
 		"alice,A,A,,s, 42 ,student\n" +
 		"bob,B,B,,s,9007199254740991,student\n")
@@ -78,23 +79,28 @@ func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
 
 // A signed cell resolves to the same account and is rewritten canonically, so the
 // two readers converge rather than diverge: Go normalizes "+42" to "42", which the
-// web reader then accepts.
-func TestParseRoster_SignedGitHubIDNormalizes(t *testing.T) {
-	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
-		"alice,A,A,,s,+42,student\n")
-	rows, err := ParseRoster(in)
-	if err != nil {
-		t.Fatalf("ParseRoster: %v", err)
-	}
-	if rows[0].GitHubID != 42 {
-		t.Errorf("GitHubID = %d, want 42", rows[0].GitHubID)
-	}
-	encoded, err := EncodeRoster(rows)
-	if err != nil {
-		t.Fatalf("EncodeRoster: %v", err)
-	}
-	if !strings.Contains(string(encoded), ",42,") {
-		t.Errorf("want a canonical 42 on rewrite, got:\n%s", encoded)
+// web reader then accepts. Same for a zero-padded cell, which the web deliberately
+// rejects (its id joins compare the raw string) and a CLI rewrite repairs.
+func TestParseRoster_NonCanonicalGitHubIDNormalizes(t *testing.T) {
+	for _, tc := range []struct{ cell, want string }{
+		{"+42", ",42,"},
+		{"0000583231", ",583231,"},
+	} {
+		t.Run(tc.cell, func(t *testing.T) {
+			in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
+				"alice,A,A,,s," + tc.cell + ",student\n")
+			rows, err := ParseRoster(in)
+			if err != nil {
+				t.Fatalf("ParseRoster: %v", err)
+			}
+			encoded, err := EncodeRoster(rows)
+			if err != nil {
+				t.Fatalf("EncodeRoster: %v", err)
+			}
+			if !strings.Contains(string(encoded), tc.want) {
+				t.Errorf("want a canonical %s on rewrite, got:\n%s", tc.want, encoded)
+			}
+		})
 	}
 }
 
@@ -800,6 +806,40 @@ func TestFullRosterHeader(t *testing.T) {
 	gotHeader, _, _ := strings.Cut(string(encoded), "\n")
 	if gotHeader != want {
 		t.Fatalf("EncodeRoster header = %q, want %q", gotHeader, want)
+	}
+}
+
+// TestEncodeRoster_DefangsEveryColumnButGitHubID is the Go leg of the
+// formula-guard lockstep (the web leg lives in web/src/util/rosterCsv.test.ts).
+// The guarded set and the trigger set are hand-mirrored across the two writers,
+// so a one-sided change must fail here rather than leave both suites green while
+// a guarded cell stops being un-defanged by the other reader.
+func TestEncodeRoster_DefangsEveryColumnButGitHubID(t *testing.T) {
+	row := RosterRow{
+		Username: "=u", FirstName: "=f", LastName: "=l",
+		Email: "=e@x.io", Section: "=s", GitHubID: 583231, Role: "=student",
+	}
+	encoded, err := EncodeRoster([]RosterRow{row})
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	_, data, _ := strings.Cut(string(encoded), "\n")
+	for _, want := range []string{"'=u", "'=f", "'=l", "'=e@x.io", "'=s", "'=student"} {
+		if !strings.Contains(data, want) {
+			t.Errorf("want defanged %q in:\n%s", want, data)
+		}
+	}
+	if !strings.Contains(data, ",583231,") {
+		t.Errorf("github_id must round-trip byte-exact, got:\n%s", data)
+	}
+
+	for _, trigger := range []byte{'=', '+', '-', '@', '\t', '\r'} {
+		if !isFormulaTrigger(trigger) {
+			t.Errorf("isFormulaTrigger(%q) = false, want true", trigger)
+		}
+	}
+	if isFormulaTrigger('\'') || isFormulaTrigger('a') {
+		t.Error("isFormulaTrigger must not match a non-trigger byte")
 	}
 }
 

@@ -526,8 +526,11 @@ func checkFieldLengths(line int, record []string) error {
 // cell strconv itself rejects, which was fatal before this change too.
 //
 // The usable set mirrors the web app's parseGitHubId (web/src/util/identity.ts):
-// digits only after trimming, positive, and <= 2^53-1, past which the web side
-// can no longer represent an id exactly.
+// positive, and <= 2^53-1, past which the web side can no longer represent an id
+// exactly. A zero-padded cell is the one deliberate difference: the web rejects
+// it (its id-keyed joins compare the raw string, which padding breaks) while Go
+// resolves it and EncodeRoster writes it back canonically — so a rewrite repairs
+// the cell instead of stranding it, and the two readers converge.
 func parseGitHubID(s string) (int64, error) {
 	id, err := strconv.ParseInt(strings.TrimSpace(s), 10, 64)
 	if err != nil {

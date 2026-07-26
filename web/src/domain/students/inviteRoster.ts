@@ -7,10 +7,11 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import { assertClassroomNotArchived } from "../classrooms"
 import { getUser, sleep, REPO_READ_CONCURRENCY } from "@/github-core/queries"
 import { GitHubAPIError } from "@/github-core/errors"
-import { parseGitHubId } from "@/util/students"
+import { resolveGitHubId } from "@/util/students"
 import { mapWithConcurrency } from "@/util/concurrency"
 import { githubOrgRoleForRole, type ClassroomRole } from "@/util/teamRoster"
 import { retryDeferred, resolveTeamIdByRole } from "./rosterPrimitives"
+import i18n from "@/i18n"
 
 export type InviteRosterStudentsInput = {
   org: string
@@ -111,9 +112,22 @@ export async function inviteRosterStudents(
     | { skip: "already-member" | "already-pending" }
   > => {
     const { username, role } = target
-    const inviteeId =
-      parseGitHubId(target.github_id ?? "") ??
-      (await getUser(client, username)).id
+    // A present cell resolves to its account even when spelled non-canonically;
+    // only a BLANK one may fall back to the mutable login. Falling back for an
+    // unusable cell would send the org invite (and its team, hence repo access)
+    // to whoever holds that login today, which is what github_id exists to
+    // prevent — the same reasoning as runRosterImport's id threading.
+    const raw = (target.github_id ?? "").trim()
+    const resolvedId = resolveGitHubId(raw)
+    if (raw !== "" && resolvedId === null) {
+      throw new Error(
+        i18n.t("students.inviteRosterMalformedId", {
+          username,
+          githubId: raw,
+        }),
+      )
+    }
+    const inviteeId = resolvedId ?? (await getUser(client, username)).id
     const teamId = teamIdByRole[role]
     const result = await ensureOrgMembership(client, {
       org,

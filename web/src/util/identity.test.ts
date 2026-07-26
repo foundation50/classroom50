@@ -5,6 +5,7 @@ import {
   memberIdSet,
   memberIdentitySets,
   parseGitHubId,
+  resolveGitHubId,
   rosterClaimSet,
   studentKey,
 } from "./identity"
@@ -123,10 +124,47 @@ describe("parseGitHubId", () => {
     )
   })
 
-  // The parsed number drops the padding, so it no longer equals the string
-  // memberIdSet/rosterClaimSet compare on.
-  it("accepts a zero-padded id, dropping the padding", () => {
-    expect(parseGitHubId("0583231")).toBe(583231)
+  // A padded id parses but never equals the raw string the id-keyed joins compare
+  // (String(member.id) is unpadded), so it would read as unenrolled forever.
+  // Actions use resolveGitHubId, which does resolve it.
+  it("rejects a zero-padded id, which the identity joins could never match", () => {
+    expect(parseGitHubId("0583231")).toBeNull()
+    expect(parseGitHubId("007")).toBeNull()
+  })
+})
+
+describe("resolveGitHubId", () => {
+  it("resolves a zero-padded cell to the account it addresses", () => {
+    expect(resolveGitHubId("0583231")).toBe(583231)
+    expect(resolveGitHubId("007")).toBe(7)
+    expect(resolveGitHubId(" 0042 ")).toBe(42)
+  })
+
+  it("agrees with parseGitHubId on every canonical cell", () => {
+    for (const cell of ["583231", " 42 ", String(Number.MAX_SAFE_INTEGER)]) {
+      expect(resolveGitHubId(cell)).toBe(parseGitHubId(cell))
+    }
+  })
+
+  // Tolerating padding must not widen into coercion: these address no account,
+  // so resolving one would invite a stranger.
+  it("still refuses a cell that addresses no account", () => {
+    for (const cell of [
+      "",
+      "   ",
+      "0",
+      "000",
+      "-5",
+      "+42",
+      "1e3",
+      "0x10",
+      "12.5",
+      "octocat",
+      "9007199254740993",
+    ]) {
+      expect(resolveGitHubId(cell)).toBeNull()
+    }
+    expect(resolveGitHubId(undefined)).toBeNull()
   })
 })
 
