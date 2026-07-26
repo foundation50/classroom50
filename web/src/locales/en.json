@@ -309,6 +309,7 @@
     "changeRoleFailed": "Couldn't change {{label}}'s role: {{error}}",
     "manageOwnerOnly": "Managing invitations and membership is available to organization owners only.",
     "inviteRosterFailed": "Couldn't invite {{label}}: {{error}}",
+    "inviteRosterMalformedId": "Can't invite {{username}}: \"{{githubId}}\" isn't a valid GitHub id. Fix the github_id cell in roster.csv.",
     "inviteRosterNoUsername": "{{label}} has no GitHub username on file — add one before inviting.",
     "inviteRosterDeferred": "GitHub rate-limited the invitation to {{label}} — try again shortly.",
     "inviteRosterNoneSent": "No invitation was sent to {{label}} — try again.",

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 import {
+  FORMULA_GUARDED_FIELDS,
   STUDENT_CSV_FIELDS,
   formatRosterProblems,
   normalizeStudentRow,
@@ -9,11 +10,30 @@ import {
   stringifyStudentsCsv,
   type StudentCsvRow,
 } from "./rosterCsv"
+import { FORMULA_LEAD_SOURCE } from "./csv"
 
 // Characterization tests for the roster.csv parse/serialize layer that every
 // roster import, sync, and write goes through.
 
 const HEADER = STUDENT_CSV_FIELDS.join(",")
+
+// The guard is only useful if both writers defang the same columns on the same
+// triggers: a cell one side guards and the other doesn't un-defang keeps the
+// quote as data. Pinning the source-of-truth constants (mirroring the header
+// lockstep in students.test.ts) fails loudly on a one-sided change instead of
+// leaving both suites green.
+describe("csv formula-guard lockstep (web leg)", () => {
+  it("guards every canonical column except github_id", () => {
+    expect([...FORMULA_GUARDED_FIELDS]).toEqual(
+      STUDENT_CSV_FIELDS.filter((f) => f !== "github_id"),
+    )
+  })
+
+  // Mirrors isFormulaTrigger in cli/gh-teacher/internal/configrepo/students_csv.go.
+  it("matches the Go trigger set verbatim", () => {
+    expect(FORMULA_LEAD_SOURCE).toBe("^[=+\\-@\\t\\r]")
+  })
+})
 
 const row = (over: Partial<StudentCsvRow> = {}): StudentCsvRow =>
   normalizeStudentRow({

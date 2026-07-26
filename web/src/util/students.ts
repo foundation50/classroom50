@@ -3,9 +3,10 @@ import {
   isMalformedGitHubId,
   isSameGitHubUser,
   parseGitHubId,
+  resolveGitHubId,
 } from "@/util/identity"
 
-export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId }
+export { isMalformedGitHubId, isSameGitHubUser, parseGitHubId, resolveGitHubId }
 
 export const capitalize = (s: string) =>
   s ? s.charAt(0).toUpperCase() + s.slice(1) : ""

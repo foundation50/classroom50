@@ -2,7 +2,7 @@ import type { GitHubClient } from "@/github-core/client"
 import { createOrgInvitation } from "@/github-core/mutations"
 import { getErrorMessage } from "@/github-core/errorMessage"
 import { getUserById } from "@/github-core/queries"
-import { isMalformedGitHubId, parseGitHubId } from "@/util/students"
+import { isMalformedGitHubId, resolveGitHubId } from "@/util/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
 import i18n from "@/i18n"
@@ -23,7 +23,7 @@ export async function inviteMemberToOrg(
   input: { org: string; row: OrgMemberRow },
 ): Promise<InviteToOrgResult> {
   const { org, row } = input
-  const inviteeId = parseGitHubId(row.github_id)
+  const inviteeId = resolveGitHubId(row.github_id)
   if (inviteeId === null) {
     const who = row.username || row.email
     throw new Error(

@@ -6,6 +6,9 @@
 // round-trip byte-exact (ids, tokens, hashes, timestamps).
 const FORMULA_LEAD = /^[=+\-@\t\r]/
 
+// Hand-mirrors the CLI's isFormulaTrigger; a drift test pins the two together.
+export const FORMULA_LEAD_SOURCE = FORMULA_LEAD.source
+
 export function escapeCsvFormulaInjection(value: string): string {
   if (!value) return value
   if (value.startsWith("'") && FORMULA_LEAD.test(value.slice(1))) return value

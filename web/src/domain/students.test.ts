@@ -2439,6 +2439,28 @@ describe("syncRosterFromTeam — identity-only backfill", () => {
     })
   })
 
+  it("canonicalizes a zero-padded github_id from its own digits, not the login", async () => {
+    // A padded cell already addresses account 127826836, so the repair must come
+    // from the cell — re-deriving it from the login would repoint the row onto
+    // whoever holds that login now (a recycled login after a rename).
+    const { client, committed } = makeTeamClient({
+      startingCsv: HEADER + "student1,,,,,0127826836,student\n",
+      users: {},
+      teamHas: [{ login: "student1", id: 999 }],
+    })
+
+    const result = await syncRosterFromTeam(client, {
+      org: "acme",
+      classroom: "cs101",
+    })
+
+    expect(result.noop).toBe(false)
+    const repaired = rowsFromCsv(committed.content!).find(
+      (r) => r.username === "student1",
+    )
+    expect(repaired?.github_id).toBe("127826836")
+  })
+
   it("never overwrites an existing github_id (renamed-login safety)", async () => {
     // The CSV row already has an id; a team member sharing the login but a
     // DIFFERENT id must not repoint the row onto the other account.
@@ -3056,6 +3078,42 @@ describe("inviteRosterStudents — fresh invites for not_in_org students", () =>
 
     expect(res.invited).toEqual([{ username: "octocat", role: "student" }])
     expect(invitations).toEqual([{ invitee_id: 1, role: "direct_member" }])
+  })
+
+  it("resolves a zero-padded github_id to its account, never via the login", async () => {
+    // The cell addresses account 1 unambiguously. Falling back to GET
+    // /users/{login} would invite whoever holds that login today, which is what
+    // storing an immutable id is for.
+    const { client, invitations } = makeInviteClient({
+      members: [],
+      users: { octocat: { id: 999 } },
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "octocat", github_id: "0000001" }],
+    })
+
+    expect(res.invited).toEqual([{ username: "octocat", role: "student" }])
+    expect(invitations).toEqual([{ invitee_id: 1, role: "direct_member" }])
+  })
+
+  it("refuses a malformed github_id instead of falling back to the login", async () => {
+    const { client, invitations } = makeInviteClient({
+      members: [],
+      users: { octocat: { id: 999 } },
+    })
+
+    const res = await inviteRosterStudents(client, {
+      org: "acme",
+      classroom: "cs101",
+      students: [{ username: "octocat", github_id: "1e3" }],
+    })
+
+    expect(res.invited).toEqual([])
+    expect(invitations).toEqual([])
+    expect(res.failed[0]?.message).toMatch(/isn't a valid GitHub id/)
   })
 
   it("resolves the id from the username when github_id is missing", async () => {

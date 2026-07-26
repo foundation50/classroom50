@@ -19,7 +19,7 @@ import { getErrorMessage } from "@/github-core/errorMessage"
 import {
   isMalformedGitHubId,
   nameFromParts,
-  parseGitHubId,
+  resolveGitHubId,
 } from "@/util/students"
 import { rosterRowInitials } from "@/util/memberRow"
 import {
@@ -316,7 +316,7 @@ const RosterMemberModal = ({
 
   const handleResend = async () => {
     if (resending) return
-    const inviteeId = parseGitHubId(row.github_id)
+    const inviteeId = resolveGitHubId(row.github_id)
     if (inviteeId === null || !row.username) {
       const username = row.username || row.email
       onError(

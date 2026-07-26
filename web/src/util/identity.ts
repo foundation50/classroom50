@@ -32,17 +32,16 @@ export function isSameGitHubUser(
   )
 }
 
-// Parse a roster row's github_id into a positive numeric id, else null. Accepts
-// only a canonical digit string: `Number()` alone would coerce a malformed cell
-// like "1e3" or "0x10" into a valid-LOOKING id (1000, 16) that callers then send
-// as `invitee_id`, inviting a stranger into the org.
+// Whether a github_id cell is spelled the way this app stores one: a canonical
+// digit string. `Number()` alone would coerce a malformed cell like "1e3" or
+// "0x10" into a valid-LOOKING id (1000, 16) that callers then send as
+// `invitee_id`, inviting a stranger into the org.
 //
-// A leading zero is rejected too, even though it parses. `String(member.id)` is
-// never padded, and the id-keyed joins (memberIdSet, rosterClaimSet, and the
-// membership/"Mark enrolled" comparisons) match the RAW cell — so "0583231"
-// would invite the right account while reading as unenrolled forever. Rejecting
-// routes it to the malformed-id message and the backfill, which rewrites the
-// cell canonically from the login.
+// This is the JOIN predicate, so a leading zero is rejected even though it
+// parses: `String(member.id)` is never padded and the id-keyed joins
+// (memberIdSet, rosterClaimSet, and the membership/"Mark enrolled"
+// comparisons) match the RAW cell, so "0583231" would read as unenrolled
+// forever. Use resolveGitHubId to act on such a cell.
 export function parseGitHubId(githubId: string): number | null {
   const trimmed = githubId.trim()
   if (!/^[1-9]\d*$/.test(trimmed)) return null
@@ -50,9 +49,22 @@ export function parseGitHubId(githubId: string): number | null {
   return Number.isSafeInteger(id) ? id : null
 }
 
-// A github_id that is present but rejected by parseGitHubId. Distinguished from
-// a blank one because a corrupted cell needs a different remedy than an absent
-// one ("re-add them to the roster" would not fix it).
+// The account a github_id cell addresses, tolerating a non-canonical spelling
+// the join predicate refuses. Only leading zeros are tolerated — "0583231" and
+// "583231" are the same account, unambiguously.
+//
+// Callers taking an ACTION (invite, resend, enroll) want this one: the
+// alternative is falling back to the mutable login, which after a rename can
+// carry repo access to whoever took the freed login. Mirrors the Go reader,
+// which resolves the same cells and rewrites them canonically on the next
+// write, so both tools converge on the account rather than on the spelling.
+export function resolveGitHubId(githubId: string | undefined): number | null {
+  return parseGitHubId((githubId ?? "").trim().replace(/^0+(?=\d)/, ""))
+}
+
+// A github_id that is present but not canonical (see parseGitHubId).
+// Distinguished from a blank one because a corrupted cell needs a different
+// remedy than an absent one ("re-add them to the roster" would not fix it).
 export function isMalformedGitHubId(githubId: string | undefined): boolean {
   const trimmed = githubId?.trim() ?? ""
   return trimmed !== "" && parseGitHubId(trimmed) === null

@@ -164,11 +164,8 @@ function tooFewFieldsAreTrailingOnly(
 // obvious case, but email matters too — it's a member-controlled GitHub profile
 // field written verbatim by syncRosterFromTeam/bulk import, so a formula-leading
 // verified email (e.g. `=1+1@evil.com`) would otherwise reach roster.csv and
-// execute on open. `username` and `role` can't hold a formula lead through any
-// normal path (isLikelyGithubUsername forbids one; roles are a fixed vocabulary),
-// so guarding them is a no-op for valid data — but the Go writer defangs the same
-// six columns, and a set that only ALMOST matches is the kind of drift nobody
-// notices. Keep them in lockstep.
+// execute on open. Must stay in lockstep with the Go writer's set (a drift test
+// pins both).
 //
 // NOTE: this writes the leading quote into the STORED value, so parseRosterCsv
 // strips it back off on read (mirroring the CLI's undefang) and matching keys on
@@ -176,10 +173,8 @@ function tooFewFieldsAreTrailingOnly(
 //
 // github_id must stay out: it has to round-trip byte-exact for the identity join,
 // and the Go reader parses that column as a number, so a defang quote there would
-// fail the whole roster rather than one cell. Nothing writes an attacker-chosen
-// value into it — every writer uses String(<GitHub id>), and an uploaded roster's
-// github_id is ignored on import (parseRosterImportFile).
-const FORMULA_GUARDED_FIELDS = [
+// fail the whole roster rather than one cell.
+export const FORMULA_GUARDED_FIELDS = [
   "username",
   "first_name",
   "last_name",

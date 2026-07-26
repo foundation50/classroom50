@@ -56,8 +56,9 @@ func TestParseRoster_HeaderOnly(t *testing.T) {
 }
 
 func TestParseRoster_GitHubIDShapeMatchesWeb(t *testing.T) {
-	// Both readers trim, then require digits only, so a whitespace-padded cell is
-	// valid on both sides. Pinned because ParseInt alone would reject it.
+	// Both readers trim, so a WHITESPACE-padded cell is valid on both sides.
+	// Pinned because ParseInt alone would reject it. Zero padding is the one
+	// deliberate divergence (see parseGitHubID).
 	in := []byte("username,first_name,last_name,email,section,github_id,role\n" +
 		"alice,A,A,,s, 42 ,student\n" +
 		"bob,B,B,,s,9007199254740991,student\n")
@@ -805,6 +806,40 @@ func TestFullRosterHeader(t *testing.T) {
 	gotHeader, _, _ := strings.Cut(string(encoded), "\n")
 	if gotHeader != want {
 		t.Fatalf("EncodeRoster header = %q, want %q", gotHeader, want)
+	}
+}
+
+// TestEncodeRoster_DefangsEveryColumnButGitHubID is the Go leg of the
+// formula-guard lockstep (the web leg lives in web/src/util/rosterCsv.test.ts).
+// The guarded set and the trigger set are hand-mirrored across the two writers,
+// so a one-sided change must fail here rather than leave both suites green while
+// a guarded cell stops being un-defanged by the other reader.
+func TestEncodeRoster_DefangsEveryColumnButGitHubID(t *testing.T) {
+	row := RosterRow{
+		Username: "=u", FirstName: "=f", LastName: "=l",
+		Email: "=e@x.io", Section: "=s", GitHubID: 583231, Role: "=student",
+	}
+	encoded, err := EncodeRoster([]RosterRow{row})
+	if err != nil {
+		t.Fatalf("EncodeRoster: %v", err)
+	}
+	_, data, _ := strings.Cut(string(encoded), "\n")
+	for _, want := range []string{"'=u", "'=f", "'=l", "'=e@x.io", "'=s", "'=student"} {
+		if !strings.Contains(data, want) {
+			t.Errorf("want defanged %q in:\n%s", want, data)
+		}
+	}
+	if !strings.Contains(data, ",583231,") {
+		t.Errorf("github_id must round-trip byte-exact, got:\n%s", data)
+	}
+
+	for _, trigger := range []byte{'=', '+', '-', '@', '\t', '\r'} {
+		if !isFormulaTrigger(trigger) {
+			t.Errorf("isFormulaTrigger(%q) = false, want true", trigger)
+		}
+	}
+	if isFormulaTrigger('\'') || isFormulaTrigger('a') {
+		t.Error("isFormulaTrigger must not match a non-trigger byte")
 	}
 }
 
