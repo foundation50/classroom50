@@ -1985,6 +1985,8 @@
   },
   "orgMembers": {
     "heading": "Members",
+    "inviteMissingId": "Can't invite {{who}}: no GitHub id on file.",
+    "inviteMalformedId": "Can't invite {{who}}: \"{{githubId}}\" isn't a valid GitHub id. Fix the github_id cell in roster.csv.",
     "subtitle": "Everyone in the <orgLink>{{org}}</orgLink> GitHub organization and the classrooms they belong to.",
     "manageMembersOnGitHub": "Manage organization members on GitHub",
     "discrepancy_one": "{{count}} student is on a roster but not an organization member.",

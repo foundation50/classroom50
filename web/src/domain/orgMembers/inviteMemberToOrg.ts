@@ -5,6 +5,7 @@ import { getUserById } from "@/github-core/queries"
 import { isMalformedGitHubId, parseGitHubId } from "@/util/students"
 import type { OrgMemberRow } from "@/util/orgMembers"
 import { logger } from "@/lib/logger"
+import i18n from "@/i18n"
 
 const log = logger.scope("orgMembers:inviteMemberToOrg")
 
@@ -27,8 +28,11 @@ export async function inviteMemberToOrg(
     const who = row.username || row.email
     throw new Error(
       isMalformedGitHubId(row.github_id)
-        ? `Can't invite ${who}: "${row.github_id.trim()}" isn't a valid GitHub id. Fix the github_id cell in roster.csv.`
-        : `Can't invite ${who}: no GitHub id on file.`,
+        ? i18n.t("orgMembers.inviteMalformedId", {
+            who,
+            githubId: row.github_id.trim(),
+          })
+        : i18n.t("orgMembers.inviteMissingId", { who }),
     )
   }
 
