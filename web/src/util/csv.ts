@@ -11,3 +11,13 @@ export function escapeCsvFormulaInjection(value: string): string {
   if (value.startsWith("'") && FORMULA_LEAD.test(value.slice(1))) return value
   return FORMULA_LEAD.test(value) ? `'${value}` : value
 }
+
+// Inverse of escapeCsvFormulaInjection, mirroring the gh-teacher CLI's
+// undefangCSVCell: strip the guard quote so the in-memory value is the real one
+// rather than the on-disk representation. Only the exact `'<trigger>` shape is
+// stripped, so a user-typed apostrophe ("'tis") survives.
+export function unescapeCsvFormulaInjection(value: string): string {
+  return value.startsWith("'") && FORMULA_LEAD.test(value.slice(1))
+    ? value.slice(1)
+    : value
+}

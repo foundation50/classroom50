@@ -1,6 +1,9 @@
 import Papa from "papaparse"
 
-import { escapeCsvFormulaInjection } from "@/util/csv"
+import {
+  escapeCsvFormulaInjection,
+  unescapeCsvFormulaInjection,
+} from "@/util/csv"
 
 // The pure roster.csv parse/serialize layer, lifted out of the mutation module
 // so problem detection lives next to the other pure roster helpers (teamRoster)
@@ -23,17 +26,21 @@ export type StudentCsvRow = Record<StudentCsvField, string>
 export function normalizeStudentRow(
   row: Partial<Record<StudentCsvField, unknown>>,
 ): StudentCsvRow {
+  const cell = (value: unknown) =>
+    unescapeCsvFormulaInjection(String(value ?? "").trim())
   return {
-    username: String(row.username ?? "").trim(),
-    first_name: String(row.first_name ?? "").trim(),
-    last_name: String(row.last_name ?? "").trim(),
-    email: String(row.email ?? "").trim(),
-    section: String(row.section ?? "").trim(),
+    username: cell(row.username),
+    first_name: cell(row.first_name),
+    last_name: cell(row.last_name),
+    email: cell(row.email),
+    section: cell(row.section),
+    // Not undefanged: github_id is never guarded on write, so a leading quote
+    // here is the teacher's own (malformed) value, not our escaping.
     github_id: String(row.github_id ?? "").trim(),
     // Best-effort recorded metadata (teacher/ta/student, or ""), refreshed
     // from the classroom's GitHub teams on sync. A pre-role file has no role
     // column, so this coerces to "".
-    role: String(row.role ?? "").trim(),
+    role: cell(row.role),
   }
 }
 
@@ -153,15 +160,19 @@ function tooFewFieldsAreTrailingOnly(
     )
 }
 
-// Which student fields to defang. Applied to name/section free text AND email —
-// email is a member-controlled GitHub profile field written verbatim by
-// syncRosterFromTeam/bulk import, so a formula-leading verified email (e.g.
-// `=1+1@evil.com`) would otherwise reach roster.csv and execute on open.
+// Which student fields to defang: every column except github_id. Free text is the
+// obvious case, but email matters too — it's a member-controlled GitHub profile
+// field written verbatim by syncRosterFromTeam/bulk import, so a formula-leading
+// verified email (e.g. `=1+1@evil.com`) would otherwise reach roster.csv and
+// execute on open. `username` and `role` can't hold a formula lead through any
+// normal path (isLikelyGithubUsername forbids one; roles are a fixed vocabulary),
+// so guarding them is a no-op for valid data — but the Go writer defangs the same
+// six columns, and a set that only ALMOST matches is the kind of drift nobody
+// notices. Keep them in lockstep.
 //
-// NOTE: this writes the leading quote into the STORED value, so any consumer of
-// roster.csv (this app's parse layer, the gh-teacher CLI) must tolerate it on
-// these fields. Email matching keys on the normalized (trim+lowercase) email, so
-// guarding the cell doesn't affect match-by-email.
+// NOTE: this writes the leading quote into the STORED value, so parseRosterCsv
+// strips it back off on read (mirroring the CLI's undefang) and matching keys on
+// normalized values, so guarding a cell doesn't affect the joins.
 //
 // github_id must stay out: it has to round-trip byte-exact for the identity join,
 // and the Go reader parses that column as a number, so a defang quote there would
@@ -169,10 +180,12 @@ function tooFewFieldsAreTrailingOnly(
 // value into it — every writer uses String(<GitHub id>), and an uploaded roster's
 // github_id is ignored on import (parseRosterImportFile).
 const FORMULA_GUARDED_FIELDS = [
+  "username",
   "first_name",
   "last_name",
-  "section",
   "email",
+  "section",
+  "role",
 ] as const
 
 export function stringifyStudentsCsv(rows: StudentCsvRow[]) {

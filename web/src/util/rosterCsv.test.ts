@@ -284,24 +284,43 @@ describe("stringifyStudentsCsv", () => {
     expect(parseStudentsCsv(stringifyStudentsCsv(rows))).toEqual(rows)
   })
 
-  // Formula guarding defangs free text AND email (a verified GitHub email is
-  // member-controlled), but must NOT touch github_id, which round-trips exact.
-  it("defangs formula-leading free-text and email cells", () => {
-    const csv = stringifyStudentsCsv([
-      normalizeStudentRow({
-        username: "user",
-        first_name: "=1+1",
-        last_name: "-x",
-        section: "@SUM(1)",
-        email: "=a@evil.com",
-        github_id: "583231",
-      }),
-    ])
+  // Every column except github_id is defanged, matching the Go writer's set. The
+  // guard quote lives in the STORED value, so the read path strips it back off —
+  // a teacher never sees the escaping we added.
+  it("defangs every column but github_id, and undefangs on read", () => {
+    const row = normalizeStudentRow({
+      username: "user",
+      first_name: "=1+1",
+      last_name: "-x",
+      section: "@SUM(1)",
+      email: "=a@evil.com",
+      github_id: "583231",
+      role: "=student",
+    })
+    const csv = stringifyStudentsCsv([row])
     const data = csv.split("\n")[1]
     expect(data).toContain("'=1+1")
     expect(data).toContain("'-x")
     expect(data).toContain("'@SUM(1)")
     expect(data).toContain("'=a@evil.com")
+    expect(data).toContain("'=student")
+    expect(data).toContain(",583231,")
+    expect(parseStudentsCsv(csv)[0]).toEqual(row)
+  })
+
+  it("defangs a formula-leading username", () => {
+    const csv = stringifyStudentsCsv([
+      normalizeStudentRow({ username: "=cmd|'/c calc'!A1", email: "a@x.io" }),
+    ])
+    expect(csv.split("\n")[1]).toMatch(/^'=cmd/)
+  })
+
+  // A user-typed apostrophe is not our escaping, so it must survive the read.
+  it("leaves a leading apostrophe that isn't a formula guard alone", () => {
+    const row = normalizeStudentRow({ username: "user", last_name: "'tis" })
+    expect(parseStudentsCsv(stringifyStudentsCsv([row]))[0].last_name).toBe(
+      "'tis",
+    )
   })
 
   // github_id round-trips byte-exact, valid or not: the identity join compares the
